@@ -6,11 +6,10 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
+    mutate,
     Row,
     Stack,
     Switch,
-    set,
     view,
 } from "tur:std";
 import {
@@ -42,13 +41,13 @@ function EditorAndViewer(): Element {
         children: [
             // Editor pane
             Switch({
-                value: derive(() => get(layoutMode$)),
+                value: derive((ctx) => ctx.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
                         child: () =>
                             Container({
-                                width: derive(() => get(editorWidth$)),
+                                width: derive((ctx) => ctx.get(editorWidth$)),
                                 children: [Editor()],
                             }),
                     },
@@ -61,21 +60,21 @@ function EditorAndViewer(): Element {
             }),
             // Divider — only in split mode
             Condition({
-                condition: derive(() => get(layoutMode$) === "split"),
+                condition: derive((ctx) => ctx.get(layoutMode$) === "split"),
                 child: () =>
                     VDivider({
-                        onDrag: (ev) => {
+                        onDrag: mutate((ctx, ev) => {
                             const next = Math.max(
                                 100,
-                                get(editorWidth$) + ev.deltaFromLast.x,
+                                ctx.get(editorWidth$) + ev.deltaFromLast.x,
                             );
-                            set(editorWidth$, next);
-                        },
+                            ctx.set(editorWidth$, next);
+                        }),
                     }),
             }),
             // Viewer pane
             Switch({
-                value: derive(() => get(layoutMode$)),
+                value: derive((ctx) => ctx.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
@@ -109,8 +108,8 @@ export const Shell: Element = view(() =>
                                     Toolbar(),
                                     Expanded({
                                         child: Switch({
-                                            value: derive(() =>
-                                                get(mobileTab$),
+                                            value: derive((ctx) =>
+                                                ctx.get(mobileTab$),
                                             ),
                                             cases: [
                                                 {
@@ -143,24 +142,27 @@ export const Shell: Element = view(() =>
                                             children: [
                                                 Sidebar(),
                                                 VDivider({
-                                                    onDrag: (ev) => {
-                                                        const next = Math.max(
-                                                            120,
-                                                            Math.min(
-                                                                480,
-                                                                get(
-                                                                    sidebarWidth$,
-                                                                ) +
-                                                                    ev
-                                                                        .deltaFromLast
-                                                                        .x,
-                                                            ),
-                                                        );
-                                                        set(
-                                                            sidebarWidth$,
-                                                            next,
-                                                        );
-                                                    },
+                                                    onDrag: mutate(
+                                                        (ctx, ev) => {
+                                                            const next =
+                                                                Math.max(
+                                                                    120,
+                                                                    Math.min(
+                                                                        480,
+                                                                        ctx.get(
+                                                                            sidebarWidth$,
+                                                                        ) +
+                                                                            ev
+                                                                                .deltaFromLast
+                                                                                .x,
+                                                                    ),
+                                                                );
+                                                            ctx.set(
+                                                                sidebarWidth$,
+                                                                next,
+                                                            );
+                                                        },
+                                                    ),
                                                 }),
                                                 Expanded({
                                                     child: EditorAndViewer(),

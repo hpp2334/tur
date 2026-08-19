@@ -2,9 +2,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     PointerInteract,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 export default view(() =>
     Column({

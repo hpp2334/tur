@@ -3,7 +3,6 @@ import {
     Container,
     derive,
     type Element,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     Row,
@@ -25,8 +24,8 @@ function StatusDot(): Element {
         width: 6,
         height: 6,
         borderRadius: 999,
-        color: derive(() =>
-            get(status$) === "error"
+        color: derive((ctx) =>
+            ctx.get(status$) === "error"
                 ? tokens.status.error
                 : tokens.status.success,
         ),
@@ -53,10 +52,10 @@ export function StatusBar(): Element {
                                     StatusDot(),
                                     SizedBox({ width: 6 }),
                                     Text({
-                                        text: derive(() => get(status$)),
+                                        text: derive((ctx) => ctx.get(status$)),
                                         fontSize: 11,
-                                        color: derive(() =>
-                                            get(status$) === "error"
+                                        color: derive((ctx) =>
+                                            ctx.get(status$) === "error"
                                                 ? tokens.status.error
                                                 : tokens.status.success,
                                         ),
@@ -90,8 +89,8 @@ export function StatusBar(): Element {
                                     SizedBox({ width: 12 }),
                                     Text({
                                         text: derive(
-                                            () =>
-                                                `compiled ${relativeTime(get(lastCompiledAtMs$), get(now$))}`,
+                                            (ctx) =>
+                                                `compiled ${relativeTime(ctx.get(lastCompiledAtMs$), ctx.get(now$))}`,
                                         ),
                                         fontSize: 11,
                                         color: tokens.text.tertiary,
@@ -108,8 +107,8 @@ export function StatusBar(): Element {
                                 mainAxisSize: MainAxisSize.Min,
                                 children: [
                                     Text({
-                                        text: derive(() =>
-                                            get(autoRun$)
+                                        text: derive((ctx) =>
+                                            ctx.get(autoRun$)
                                                 ? "auto-run on"
                                                 : "\u2318S to run",
                                         ),

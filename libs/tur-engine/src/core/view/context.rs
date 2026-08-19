@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsValue};
 
-use crate::core::edgy::reactive::{ReactiveReadStore, Readable, SubscriberId};
+use crate::core::edgy::reactive::{ReactiveReadStore, Readable, Store, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree};
 use crate::core::js_runtime::TurInstanceContext;
@@ -28,27 +28,35 @@ impl SharedViewCx {
 
     // ----- reactive store -----------------------------------------------------
 
-    /// Read-only view of the reactive store for resolving atom values.
+    /// The **mounted** store — the store the most recent `mount(store, view)`
+    /// bound to the tree (the engine store before any mount). Declarations
+    /// materialize into this store from every build-time read/subscribe path.
+    pub fn mounted_store(&self) -> Store {
+        self.js_ctx.element_tree.store()
+    }
+
+    /// Read-only view of the mounted store for resolving atom values.
     pub fn store_read_only(&self) -> ReactiveReadStore {
-        self.js_ctx.store.read_only()
+        self.mounted_store().read_only()
     }
 
     /// Read an atom's current value as a raw `JsValue` (untracked).
     pub fn read_atom_raw<T>(&self, readable: Readable<T>, boa: &mut Context) -> JsValue {
-        self.js_ctx.store.read_only().read(readable, boa)
+        self.store_read_only().read(readable, boa)
     }
 
     /// Create a `SubscribeCx` scoped to a fragment, so the fragment can
     /// declare its reactive atom deps at build time. On drop, the deps are
     /// atomically swapped into the subscriber graph.
     pub fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
-        let sub_index = self.js_ctx.store.subscriber_index();
+        let sub_index = self.mounted_store().subscriber_index();
         SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
     /// atom is lazily read from the store (untracked).  Used during the effect
     /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
+    /// Declaration ids materialize into the mounted store.
     pub fn read_val<T: crate::core::view::FromJs + Clone + 'static>(
         &self,
         val: &crate::core::view::Val<T>,
@@ -58,7 +66,7 @@ impl SharedViewCx {
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let js = self.js_ctx.store.read_only().read(*readable, boa);
+                let js = self.store_read_only().read(*readable, boa);
                 T::from_js(&js).ok()
             }
         }

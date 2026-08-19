@@ -2,11 +2,13 @@
  * @tur-ng/core — ambient type declarations for the native tur reactive core.
  *
  * Runtime is a synthetic boa module registered by tur-engine
- * (`core::bridge::module_loader`) under the specifier `"tur:core"`.
- * It exports only the reactive substrate + event framework: atom primitives
- * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the `mount` view-tree entry
- * point, and the opaque meta-types (`Element`/`Source`/`Derived`/`Mutation`/
- * `Readable`/`Val`/`ReadonlyStoreCtx`/`StoreCtx`).
+ * (`core::js_runtime::module_loader`, wired in `core::runtime`) under the
+ * specifier `"tur:core"`. It exports the reactive substrate + view entry:
+ * atom declarations (`source`/`derive`/`mutate` — pure handles carrying no
+ * state), the store object (`createStore` — the KV container), `view`, and
+ * the `mount(store, root)` view-tree entry point, plus the opaque meta-types
+ * (`Element`/`Source`/`Derived`/`Mutation`/`Readable`/`Val`/`Store`/
+ * `ReadonlyStoreCtx`/`StoreCtx`).
  *
  * This is the authoritative contract for the engine's reactive layer. The
  * widget library (`tur:std`, declared in `@tur-ng/std`) re-exports
@@ -14,12 +16,42 @@
  * Consumers normally import from `tur:std`; `@tur-ng/animation` and
  * other low-level libraries may import directly from `tur:core`.
  *
- * Handles (`Element`, `Source`, `Derived`, `Mutation`) are opaque — the engine
- * hands out Rust-owned `JsObject` opaques; callers must treat them as opaque.
+ * Handles (`Element`, `Source`, `Derived`, `Mutation`, `Store`) are opaque —
+ * the engine hands out Rust-owned `JsObject` opaques; callers must treat
+ * them as opaque.
+ *
+ * THE STORE IS THE KV: `source(v)` / `derive(fn)` / `mutate(fn)` return pure
+ * declarations — no state is stored. A `Store` (from `createStore()`) holds
+ * the values; reading/writing a declaration through a store materializes it
+ * there. The same declaration in two stores is two independent atoms. A
+ * module mounts its tree with `mount(store, view)`, binding the tree's
+ * declarations to that store. Engine-minted atoms (e.g. `viewportSize$`)
+ * have a single engine-owned home and are readable through any store.
+ *
+ * THERE IS NO "CURRENT STORE" GETTER: reactive access happens through the
+ * ctx handed to `derive`/`mutate` closures (and callback props like
+ * `onTick`/`onClick`, which are mutations). The ctx is a stable store-bound
+ * reader/writer, so code that needs reactive access outside a closure —
+ * helper functions, `launch` generator bodies — threads/captures the ctx
+ * from the enclosing mutation instead:
+ *
+ *     const startLoop = mutate((ctx) => {
+ *         launch(function* () {
+ *             while (ctx.get(running$)) { yield sleep(1000); ctx.set(n$, ...); }
+ *         });
+ *     });
+ *
+ * Side-effecting helpers are declared as mutations themselves and composed
+ * by dispatch: `ctx.set(action, ...args)` (or `store.set(action, ...args)`
+ * from outside). The engine's flush is a fixed-point loop, so a mutation
+ * dispatched from inside another mutation runs within the same frame:
+ *
+ *     const save = mutate((ctx, name) => { ... });
+ *     const commit = mutate((ctx) => { ...; ctx.set(save, name); });
  *
  * The event framework is two functions: `mutate` (declare a handler as a
- * deferred `Mutation` atom) and `set` (dispatch it). The concrete event
- * payload shapes (`PointerInteractEvent`, `KeyEvent`, …) live in
+ * deferred `Mutation` atom) and `store.set` (dispatch it). The concrete
+ * event payload shapes (`PointerInteractEvent`, `KeyEvent`, …) live in
  * `tur:std` — core is event-type-agnostic.
  *
  * `derive` callbacks receive a `ReadonlyStoreCtx` (get-only); `mutate` and
@@ -35,18 +67,21 @@ declare module "tur:core" {
      *  Opaque — the engine owns the underlying `ElementTree` node. */
     export interface Element {}
 
-    /** A writable reactive atom holding a value of type `T` — created via
-     *  `source()`. `T` is recovered at the call site by the generic primitives
-     *  (`get`, `set`) — no runtime field. */
+    /** A reactive atom declaration holding a value of type `T` — created via
+     *  `source()`. Carries no state: the initial value seeds whichever store
+     *  first materializes the declaration. `T` is recovered at the call site
+     *  by the generic primitives (`store.get`, `store.set`) — no runtime
+     *  field. */
     export interface Source<T> {}
 
-    /** A read-only computed atom holding a value of type `T` — created via
+    /** A computed atom declaration holding a value of type `T` — created via
      *  `derive()`. Its value is recomputed by the engine from its declared
-     *  dependencies; `set` rejects derived atoms at runtime. */
+     *  dependencies (tracked automatically from closure reads);
+     *  `store.set` rejects derived atoms at runtime. */
     export interface Derived<T> {}
 
     /** A mutation atom: a deferred callback `(ctx, ...Args) => R`. This is the
-     *  event-handler type — `mutate` creates one, `set` invokes it. */
+     *  event-handler type — `mutate` creates one, `store.set` invokes it. */
     export interface Mutation<Args extends unknown[] = [], R = void> {}
 
     /** Anything you can read a current value from (a source or derived atom). */
@@ -57,11 +92,24 @@ declare module "tur:core" {
     export type Val<T> = T | Readable<T>;
 
     // ---------------------------------------------------------------------------
-    // Store context — handed to `derive` / `mutate` closures as their first arg.
-    // `derive` is pure (read-only); `mutate` (and other side-effecting callbacks)
-    // may also write. The split is type-level only — the runtime ctx object is the
-    // same `{ get, set }`; this just guides callers away from calling `set` inside
-    // a `derive` (which could trigger a recompute loop).
+    // Store — the KV container for atom state (from `createStore()`).
+    // Opaque handle; reads/writes accept declarations
+    // (materialized into THIS store) and engine-owned atoms (routed).
+    // ---------------------------------------------------------------------------
+
+    export interface Store {
+        get<T>(a: Readable<T>): T;
+        set<T>(s: Source<T>, value: T): void;
+        set<Args extends unknown[], R>(m: Mutation<Args, R>, ...args: Args): R;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Store context — handed to `derive` / `mutate` closures as their first
+    // arg. `derive` is pure (read-only); `mutate` (and other side-effecting
+    // callbacks) may also write. The split is type-level only — the runtime
+    // ctx object is the same `{ get, set }`; this just guides callers away
+    // from calling `set` inside a `derive` (which could trigger a recompute
+    // loop).
     // ---------------------------------------------------------------------------
 
     /** Read-only view of the store context. Handed to `derive` closures. */
@@ -77,7 +125,8 @@ declare module "tur:core" {
     }
 
     // ---------------------------------------------------------------------------
-    // Reactive primitives
+    // Reactive primitives — declarations only; no state is stored until a
+    // store materializes them.
     // ---------------------------------------------------------------------------
 
     export function source<T>(value: T): Source<T>;
@@ -85,17 +134,20 @@ declare module "tur:core" {
     export function mutate<Args extends unknown[], R>(
         fn: (ctx: StoreCtx, ...args: Args) => R,
     ): Mutation<Args, R>;
-    export function get<T>(a: Readable<T>): T;
-    export function set<T>(s: Source<T>, value: T): void;
-    export function set<Args extends unknown[], R>(
-        m: Mutation<Args, R>,
-        ...args: Args
-    ): R;
+
+    /** Create a store — the KV container for atom values. Declarations read
+     *  or written through it materialize there; the same declaration in two
+     *  stores is two independent atoms. Pass it to `mount(store, view)`. */
+    export function createStore(): Store;
+
     export function view(f: () => Element): Element;
 
     // ---------------------------------------------------------------------------
     // Mounting
     // ---------------------------------------------------------------------------
 
-    export function mount(root: Element): void;
+    /** Mount the view tree, binding `store` as the tree's store (declarations
+     *  in the tree materialize into it). Replaces any previously mounted
+     *  root. */
+    export function mount(store: Store, root: Element): void;
 }

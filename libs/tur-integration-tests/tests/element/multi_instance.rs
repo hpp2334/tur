@@ -49,11 +49,12 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     (runtime, driver, pool)
 }
 
-const SET_ID_JS: &str = r#"
-    import { Text, mount } from "tur:std";
+const SET_ID_JS: &str = r#"const store = createStore();
+
+    import { createStore, Text, mount } from "tur:std";
     export function start() {
         globalThis.__instanceId = "VALUE";
-        mount(Text({ text: "VALUE" }));
+        mount(store, Text({ text: "VALUE" }));
     }
 "#;
 
@@ -110,10 +111,11 @@ fn instances_have_isolated_element_trees() {
 
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_module(
-        r#"
-            import { Text, mount } from "tur:std";
+        r#"const store = createStore();
+
+            import { createStore, Text, mount } from "tur:std";
             export function start() {
-                mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
+                mount(store, Text({ text: "only-in-A", queryKey: ["a_only"] }));
             }
         "#,
     ))
@@ -150,11 +152,12 @@ fn headless_instance_runs_js_without_rendering() {
 
     // JS executes; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_module(
-        r#"
-        import { source, get } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         export function start() {
             globalThis.__val = source(42);
-            const v = get(globalThis.__val);
+            const v = store.get(globalThis.__val);
             globalThis.__readBack = v;
         }
     "#,
@@ -184,11 +187,12 @@ fn build_headless_runs_engine_on_worker() {
 
     // JS executes via the worker RPC path.
     futures::executor::block_on(app.load_module(
-        r#"
-        import { source, get } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         export function start() {
             globalThis.__val = source(7);
-            globalThis.__readBack = get(globalThis.__val);
+            globalThis.__readBack = store.get(globalThis.__val);
         }
     "#,
     ))
@@ -417,9 +421,11 @@ fn platform_events_route_to_the_correct_instance() {
     // on globalThis, then read it back with eval_js.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
         let _ = futures::executor::block_on(app.load_module(
-            r#"import { viewportSize$, get } from "tur:std";
+            r#"import { createStore, viewportSize$ } from "tur:std";
+const store = createStore();
+
                export function start() {
-                   globalThis.__vp = JSON.stringify(get(viewportSize$));
+                   globalThis.__vp = JSON.stringify(store.get(viewportSize$));
                }"#,
         ));
         eval_js(app, "globalThis.__vp").unwrap_or_default()
@@ -454,12 +460,16 @@ fn reactive_stores_are_isolated_per_instance() {
         .build()
         .expect("B");
 
-    // Create a source in A and set a value.
+    // Create a source in A and set a value. The store is stashed on
+    // globalThis so the read-back module below reads through the SAME store
+    // (a fresh store would materialize the declaration independently).
     futures::executor::block_on(app_a.load_module(
-        r#"import { source, set } from "tur:std";
+        r#"import { createStore, source } from "tur:std";
+           const store = createStore();
+           globalThis.__store = store;
            export function start() {
                globalThis.__atom = source("from-A");
-               set(globalThis.__atom, "A2");
+               store.set(globalThis.__atom, "A2");
            }"#,
     ))
     .expect("setup A");
@@ -478,9 +488,8 @@ fn reactive_stores_are_isolated_per_instance() {
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
     futures::executor::block_on(app_a.load_module(
-        r#"import { get } from "tur:std";
-           export function start() {
-               globalThis.__r = get(globalThis.__atom);
+        r#"export function start() {
+               globalThis.__r = globalThis.__store.get(globalThis.__atom);
            }"#,
     ))
     .expect("read A");

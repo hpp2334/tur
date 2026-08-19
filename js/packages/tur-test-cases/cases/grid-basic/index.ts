@@ -1,4 +1,6 @@
-import { Color, Container, Grid, view } from "tur:std";
+import { Color, Container, createStore, Grid, view } from "tur:std";
+
+export const store = createStore();
 
 // Static `Grid`: 12 cells tiled row-major. The column count is derived from
 // `maxCrossAxisExtent` (140) and the available width — e.g. a 800px viewport

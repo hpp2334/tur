@@ -6,7 +6,6 @@ import {
     CrossAxisAlignment,
     derive,
     type Element,
-    get,
     Image,
     MainAxisAlignment,
     MainAxisSize,
@@ -48,9 +47,11 @@ const SUGGESTIONS: Repo[] = [
 // Responsive: cap the card to the available width (viewport minus the outer
 // padding from index.ts) so it never overflows on mobile. Desktop viewports
 // are wide enough that this stays at 440.
-const isMobile = derive(() => get<ViewportSize>(viewportSize$).width < 720);
-const cardWidth = derive(() =>
-    Math.min(440, get<ViewportSize>(viewportSize$).width - 44),
+const isMobile = derive(
+    (ctx) => ctx.get<ViewportSize>(viewportSize$).width < 720,
+);
+const cardWidth = derive((ctx) =>
+    Math.min(440, ctx.get<ViewportSize>(viewportSize$).width - 44),
 );
 
 function Suggestion({ repo }: { repo: Repo }): Element {
@@ -61,7 +62,7 @@ function Suggestion({ repo }: { repo: Repo }): Element {
                 repoCtrl.setSpans([{ content: repo.fullName }]);
                 ctx.set(repoDraft$, repo.fullName);
                 ctx.set(repoError$, null);
-                openRepo(ctx, repo);
+                ctx.set(openRepo, repo);
             }),
             child: Container({
                 padding: 7,
@@ -135,7 +136,7 @@ export function LandingScreen(): Element {
                             // Inline validation error.
                             Condition({
                                 condition: derive(
-                                    () => get(repoError$) !== null,
+                                    (ctx) => ctx.get(repoError$) !== null,
                                 ),
                                 child: () =>
                                     Column({
@@ -146,7 +147,9 @@ export function LandingScreen(): Element {
                                             SizedBox({ height: 8 }),
                                             Text({
                                                 text: derive(
-                                                    () => get(repoError$) ?? "",
+                                                    (ctx) =>
+                                                        ctx.get(repoError$) ??
+                                                        "",
                                                 ),
                                                 fontSize: 12,
                                                 color: COLORS.danger,

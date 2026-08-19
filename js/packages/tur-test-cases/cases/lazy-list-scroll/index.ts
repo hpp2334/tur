@@ -1,4 +1,6 @@
-import { Axis, Color, Container, LazyList, view } from "tur:std";
+import { Axis, Color, Container, createStore, LazyList, view } from "tur:std";
+
+export const store = createStore();
 
 const ITEM_HEIGHT = 50;
 const ITEM_COUNT = 100;

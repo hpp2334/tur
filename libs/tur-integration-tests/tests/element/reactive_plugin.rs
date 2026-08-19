@@ -40,7 +40,10 @@ fn plugin_can_mint_source_readable_from_js() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(MintSourcePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"import { get } from "tur:std"; globalThis.__v = get(globalThis.rustSource);"#,
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+            globalThis.__v = store.get(globalThis.rustSource);
+"#,
     )
     .expect("eval");
     app.wait_for_timeout(Duration::ZERO);
@@ -56,10 +59,11 @@ fn plugin_minted_source_is_writable_from_js_via_set() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(MintSourcePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"
-        import { get, set } from "tur:std";
-        set(globalThis.rustSource, 99);
-        globalThis.__v = get(globalThis.rustSource);
+        r#"const store = createStore();
+
+        import { createStore } from "tur:std";
+        store.set(globalThis.rustSource, 99);
+        globalThis.__v = store.get(globalThis.rustSource);
         "#,
     )
     .expect("eval");
@@ -111,7 +115,10 @@ fn plugin_build_derive_recomputes_via_rust_closure() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(BuildDerivePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"import { get } from "tur:std"; globalThis.__sum = get(globalThis.sum$);"#,
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+            globalThis.__sum = store.get(globalThis.sum$);
+"#,
     )
     .expect("eval");
     app.wait_for_timeout(Duration::ZERO);
@@ -123,10 +130,11 @@ fn plugin_build_derive_recomputes_via_rust_closure() {
 
     // Update one source; the derive must recompute lazily on the next read.
     app.eval_module_source(
-        r#"
-        import { set, get } from "tur:std";
-        set(globalThis.a$, 100);
-        globalThis.__sum = get(globalThis.sum$);
+        r#"const store = createStore();
+
+        import { createStore } from "tur:std";
+        store.set(globalThis.a$, 100);
+        globalThis.__sum = store.get(globalThis.sum$);
         "#,
     )
     .expect("eval");
@@ -150,11 +158,11 @@ fn plugin_build_derive_dirty_propagation_across_multiple_updates() {
 
     for (set_a, set_b, expected) in [(5.0, 5.0, 10.0), (50.0, 50.0, 100.0), (-1.0, 1.0, 0.0)] {
         app.eval_module_source(&format!(
-            r#"
-            import {{ set, get }} from "tur:std";
-            set(globalThis.a$, {set_a});
-            set(globalThis.b$, {set_b});
-            globalThis.__sum = get(globalThis.sum$);
+            r#"import {{ createStore }} from "tur:std";
+const store = createStore();
+            store.set(globalThis.a$, {set_a});
+            store.set(globalThis.b$, {set_b});
+            globalThis.__sum = store.get(globalThis.sum$);
             "#,
         ))
         .expect("eval");
@@ -212,7 +220,10 @@ fn plugin_build_mutate_runs_rust_closure_on_js_set() {
 
     let read_flag = |app: &TurTestApp| -> bool {
         app.eval_module_source(
-            r#"import { get } from "tur:std"; globalThis.__f = get(globalThis.flag$);"#,
+            r#"import { createStore } from "tur:std";
+const store = createStore();
+globalThis.__f = store.get(globalThis.flag$);
+"#,
         )
         .expect("eval");
         app.wait_for_timeout(Duration::ZERO);
@@ -221,16 +232,26 @@ fn plugin_build_mutate_runs_rust_closure_on_js_set() {
 
     assert!(!read_flag(&app), "flag$ starts false");
 
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.toggle);"#)
-        .expect("eval");
+    app.eval_module_source(
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+store.set(globalThis.toggle);
+"#,
+    )
+    .expect("eval");
     app.wait_for_timeout(Duration::ZERO);
     assert!(
         read_flag(&app),
         "flag$ should flip to true after one toggle"
     );
 
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.toggle);"#)
-        .expect("eval");
+    app.eval_module_source(
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+store.set(globalThis.toggle);
+"#,
+    )
+    .expect("eval");
     app.wait_for_timeout(Duration::ZERO);
     assert!(
         !read_flag(&app),
@@ -270,10 +291,11 @@ fn plugin_build_mutate_receives_user_args_verbatim() {
             .expect("app build");
 
     app.eval_module_source(
-        r#"
-        import { set, get } from "tur:std";
-        set(globalThis.writeMsg, "hello", "ignored-extra");
-        globalThis.__v = get(globalThis.sink$);
+        r#"const store = createStore();
+
+        import { createStore } from "tur:std";
+        store.set(globalThis.writeMsg, "hello", "ignored-extra");
+        globalThis.__v = store.get(globalThis.sink$);
         "#,
     )
     .expect("eval");
@@ -338,7 +360,10 @@ fn plugin_subsystem_writes_to_minted_source_observable_from_js() {
     app.wait_for_timeout(Duration::from_millis(64));
 
     app.eval_module_source(
-        r#"import { get } from "tur:std"; globalThis.__c = get(globalThis.counter$);"#,
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+globalThis.__c = store.get(globalThis.counter$);
+"#,
     )
     .expect("eval");
     app.wait_for_timeout(Duration::ZERO);

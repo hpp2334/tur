@@ -3,12 +3,11 @@ import {
     Container,
     derive,
     type Element,
-    get,
     MouseRegion,
+    type Mutation,
     mutate,
     type Point,
     PointerInteract,
-    set,
     source,
 } from "tur:std";
 import { tokens } from "../theme/tokens";
@@ -41,7 +40,11 @@ export interface PointerDragEvent {
  * The grab target is 8px wide (easy to hit); the visible bar is 1px.
  */
 export function VDivider(opts: {
-    onDrag: (event: PointerDragEvent) => void;
+    /** Drag handler, dispatched as a mutation with the pixel deltas (same
+     *  flush — the engine's fixed-point loop drains the queued invocation
+     *  before laying out). Receives the mutation ctx, so it can read/write
+     *  atoms directly. */
+    onDrag: Mutation<[PointerDragEvent], void>;
 }): Element {
     const myId = ++dividerCounter;
     let dragStart: Point | null = null;
@@ -49,13 +52,14 @@ export function VDivider(opts: {
     return MouseRegion({
         cursor: "col-resize",
         child: PointerInteract({
-            onPointerDown: mutate((_ctx, ev) => {
-                set(dragOwner$, myId);
+            onPointerDown: mutate((ctx, ev) => {
+                ctx.set(dragOwner$, myId);
                 dragStart = { x: ev.global.x, y: ev.global.y };
                 dragLast = { x: ev.global.x, y: ev.global.y };
             }),
-            onPointerMove: mutate((_ctx, ev) => {
-                if (get(dragOwner$) !== myId || !dragStart || !dragLast) return;
+            onPointerMove: mutate((ctx, ev) => {
+                if (ctx.get(dragOwner$) !== myId || !dragStart || !dragLast)
+                    return;
                 const event: PointerDragEvent = {
                     deltaFromStart: {
                         x: ev.global.x - dragStart.x,
@@ -71,27 +75,27 @@ export function VDivider(opts: {
                     event.deltaFromLast.x !== 0 ||
                     event.deltaFromLast.y !== 0
                 ) {
-                    opts.onDrag(event);
+                    ctx.set(opts.onDrag, event);
                 }
             }),
-            onPointerUp: mutate((_ctx, _ev) => {
-                if (get(dragOwner$) !== myId) return;
-                set(dragOwner$, null);
+            onPointerUp: mutate((ctx, _ev) => {
+                if (ctx.get(dragOwner$) !== myId) return;
+                ctx.set(dragOwner$, null);
                 dragStart = null;
                 dragLast = null;
             }),
             child: Container({
                 width: 8,
-                color: derive(() =>
-                    get(dragOwner$) === myId
+                color: derive((ctx) =>
+                    ctx.get(dragOwner$) === myId
                         ? Color.hex("#0ea5e922")
                         : Color.hex("#00000000"),
                 ),
                 children: [
                     Container({
                         width: 1,
-                        color: derive(() =>
-                            get(dragOwner$) === myId
+                        color: derive((ctx) =>
+                            ctx.get(dragOwner$) === myId
                                 ? tokens.accent.solid
                                 : tokens.border.subtle,
                         ),

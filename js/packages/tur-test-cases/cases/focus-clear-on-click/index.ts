@@ -1,8 +1,8 @@
 import {
     Column,
+    createStore,
     createTextEditingController,
     derive,
-    get,
     Input,
     mutate,
     PointerInteract,
@@ -10,6 +10,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // Regression fixture for the github-viewer crash: a focused `Input` (editable,
 // focusable) above a non-focusable `PointerInteract` button. Clicking the
@@ -31,8 +32,8 @@ export default view(() =>
                 queryKey: ["editable"],
             }),
             PointerInteract({
-                onClick: mutate(({ get, set }) =>
-                    set(clicks$, get(clicks$) + 1),
+                onClick: mutate((ctx) =>
+                    ctx.set(clicks$, ctx.get(clicks$) + 1),
                 ),
                 child: Text({
                     text: derive((ctx) => `clicks: ${ctx.get(clicks$)}`),

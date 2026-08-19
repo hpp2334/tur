@@ -7,17 +7,18 @@ import * as rspack from "@rspack/core";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.resolve(__dirname, "cases");
 
-// Each case source `export default`s a view and no longer calls
-// `mount()`. The Rust integration tests eval `dist/<name>.js` which must
-// satisfy the module lifecycle contract (a `start()` export), so the
-// in-memory wrapper (rspack's VirtualModulesPlugin) imports the default
-// export and mounts it inside `start()` — no generated files on disk.
+// Each case source `export default`s a view and exports its `store`
+// (`createStore()`); it never calls `mount()` itself. The Rust integration
+// tests eval `dist/<name>.js` which must satisfy the module lifecycle
+// contract (a `start()` export), so the in-memory wrapper (rspack's
+// VirtualModulesPlugin) imports the case's default export + store and mounts
+// them together inside `start()` — no generated files on disk.
 const entries: Record<string, string> = {};
 const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
     virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../cases/${name}/index";\nimport { mount } from "tur:std";\nexport function start() {\n    mount(Case);\n}\n`;
+        `import Case, { store } from "../cases/${name}/index";\nimport { mount } from "tur:std";\nexport function start() {\n    mount(store, Case);\n}\n`;
     entries[name] = `./virtual-entries/${name}.ts`;
 }
 

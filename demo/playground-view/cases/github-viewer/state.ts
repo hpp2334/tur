@@ -5,12 +5,10 @@ import {
     createSvgResource,
     createTextEditingController,
     derive,
-    get,
     launch,
     mutate,
     type Readable,
     type StoreCtx,
-    set,
     sleep,
     source,
     type Task,
@@ -95,7 +93,7 @@ const spinCtrl = createAnimationController({
     duration: 900,
     curve: "linear",
     repeat: "infinite",
-    onTick: mutate((_ctx: StoreCtx, v: number) => set(spinProgress$, v)),
+    onTick: mutate((ctx: StoreCtx, v: number) => ctx.set(spinProgress$, v)),
 });
 
 // ---------------------------------------------------------------------------
@@ -105,12 +103,12 @@ const spinCtrl = createAnimationController({
 /** Immediate children of the current path — computed locally from the flat
  *  tree + `pathSegments$`. No HTTP. Folder clicks / breadcrumbs just mutate
  *  `pathSegments$` and this recomputes instantly. */
-export const entries$: Readable<DirEntry[]> = derive(() => {
-    const tree = get(fileTree$);
+export const entries$: Readable<DirEntry[]> = derive((ctx) => {
+    const tree = ctx.get(fileTree$);
     if (!tree) return [];
-    const segments = get(pathSegments$);
-    const repo = get(repo$);
-    const ver = get(version$);
+    const segments = ctx.get(pathSegments$);
+    const repo = ctx.get(repo$);
+    const ver = ctx.get(version$);
     const prefix = segments.length === 0 ? "" : `${segments.join("/")}/`;
     const seen = new Map<string, DirEntry>();
     for (const f of tree) {
@@ -169,10 +167,10 @@ export const entries$: Readable<DirEntry[]> = derive(() => {
     return list;
 });
 
-export const selectedEntry$: Readable<DirEntry | null> = derive(() => {
-    const path = get(selectedPath$);
+export const selectedEntry$: Readable<DirEntry | null> = derive((ctx) => {
+    const path = ctx.get(selectedPath$);
     if (!path) return null;
-    return get(entries$).find((e) => e.path === path) ?? null;
+    return ctx.get(entries$).find((e) => e.path === path) ?? null;
 });
 
 // ---------------------------------------------------------------------------
@@ -183,7 +181,7 @@ export const selectedEntry$: Readable<DirEntry | null> = derive(() => {
 export const repoCtrl = createTextEditingController({
     onInput: mutate((ctx: StoreCtx, text: string, enter: boolean) => {
         ctx.set(repoDraft$, text);
-        if (enter) openRepoFromDraft(ctx);
+        if (enter) ctx.set(openRepoFromDraft);
     }),
 });
 
@@ -278,13 +276,14 @@ function pickVersion(body: JsDelivrVersion): string | null {
 }
 
 /** Fetch the flat file tree for a repo, stash it, and switch to the explorer.
- *  Runs as two sequential HTTP calls (version resolve → tree). */
-function loadRepo(target: Repo): void {
-    set(loading$, true);
-    set(error$, null);
-    set(fileTree$, null);
-    set(selectedPath$, null);
-    set(version$, null);
+ *  Runs as two sequential HTTP calls (version resolve → tree). Dispatched by
+ *  `openRepo` / `refresh`; the fetch generator captures the mutation ctx. */
+const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
+    ctx.set(loading$, true);
+    ctx.set(error$, null);
+    ctx.set(fileTree$, null);
+    ctx.set(selectedPath$, null);
+    ctx.set(version$, null);
 
     const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
 
@@ -296,26 +295,29 @@ function loadRepo(target: Repo): void {
                 responseType: "text",
             })) as HttpResponse;
             if (rVer.status === 404) {
-                set(error$, `Repository not found: ${target.fullName}`);
+                ctx.set(error$, `Repository not found: ${target.fullName}`);
                 return;
             }
             if (rVer.status !== 200) {
-                set(error$, `HTTP ${rVer.status} ${rVer.statusText}`.trim());
+                ctx.set(
+                    error$,
+                    `HTTP ${rVer.status} ${rVer.statusText}`.trim(),
+                );
                 return;
             }
             let parsed: JsDelivrVersion;
             try {
                 parsed = JSON.parse(rVer.bodyText ?? "{}");
             } catch {
-                set(error$, "Bad response from jsDelivr");
+                ctx.set(error$, "Bad response from jsDelivr");
                 return;
             }
             const ver = pickVersion(parsed);
             if (!ver) {
-                set(error$, `No published versions for ${target.fullName}`);
+                ctx.set(error$, `No published versions for ${target.fullName}`);
                 return;
             }
-            set(version$, ver);
+            ctx.set(version$, ver);
             const rTree = (yield http({
                 method: "GET",
                 url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
@@ -339,41 +341,41 @@ function loadRepo(target: Repo): void {
                 } catch {
                     /* keep HTTP status string */
                 }
-                set(error$, msg);
+                ctx.set(error$, msg);
                 return;
             }
             let parsedTree: JsDelivrTree;
             try {
                 parsedTree = JSON.parse(rTree.bodyText ?? "{}");
             } catch {
-                set(error$, "Bad file-tree response from jsDelivr");
+                ctx.set(error$, "Bad file-tree response from jsDelivr");
                 return;
             }
-            set(fileTree$, parsedTree.files ?? []);
+            ctx.set(fileTree$, parsedTree.files ?? []);
         } catch (e) {
-            set(error$, errMsg(e));
+            ctx.set(error$, errMsg(e));
         } finally {
-            set(loading$, false);
+            ctx.set(loading$, false);
         }
     });
-}
+});
 
 // ---------------------------------------------------------------------------
 // Navigation — all local (mutates `pathSegments$`; `entries$` recomputes).
 // ---------------------------------------------------------------------------
 
-export function openRepo(ctx: StoreCtx, repo: Repo): void {
+export const openRepo = mutate((ctx: StoreCtx, repo: Repo) => {
     ctx.set(repo$, repo);
     ctx.set(pathSegments$, []);
     ctx.set(view$, "explorer");
     ctx.set(error$, null);
-    loadRepo(repo);
-}
+    ctx.set(loadRepo, repo);
+});
 
 /** Landing-screen submit: parse the draft and open the repo, or surface
- *  an inline format error. Runs inside a mutation context. */
-export function openRepoFromDraft(ctx: StoreCtx): void {
-    const draft = get(repoDraft$);
+ *  an inline format error. */
+export const openRepoFromDraft = mutate((ctx: StoreCtx) => {
+    const draft = ctx.get(repoDraft$);
     const repo = parseRepo(draft);
     if (!repo) {
         ctx.set(
@@ -383,56 +385,56 @@ export function openRepoFromDraft(ctx: StoreCtx): void {
         return;
     }
     ctx.set(repoError$, null);
-    openRepo(ctx, repo);
-}
+    ctx.set(openRepo, repo);
+});
 
-export function backToLanding(): void {
+export const backToLanding = mutate((ctx: StoreCtx) => {
     spinCtrl.stop();
     statusTask?.cancel();
     statusTask = null;
-    set(view$, "landing");
-    set(repo$, null);
-    set(version$, null);
-    set(fileTree$, null);
-    set(pathSegments$, []);
-    set(selectedPath$, null);
-    set(error$, null);
-    set(downloadStatus$, "idle");
-}
+    ctx.set(view$, "landing");
+    ctx.set(repo$, null);
+    ctx.set(version$, null);
+    ctx.set(fileTree$, null);
+    ctx.set(pathSegments$, []);
+    ctx.set(selectedPath$, null);
+    ctx.set(error$, null);
+    ctx.set(downloadStatus$, "idle");
+});
 
 /** Navigate into a sub-folder (a row click on a directory). Local. */
-export function openFolder(entry: DirEntry): void {
+export const openFolder = mutate((ctx: StoreCtx, entry: DirEntry) => {
     if (!entry.isDir) return;
-    set(pathSegments$, [...get(pathSegments$), entry.name]);
-    set(selectedPath$, null);
-}
+    ctx.set(pathSegments$, [...ctx.get(pathSegments$), entry.name]);
+    ctx.set(selectedPath$, null);
+});
 
 /** Up one folder level; if already at the repo root, return to landing. */
-export function navigateUp(): void {
-    const segs = get(pathSegments$);
+export const navigateUp = mutate((ctx: StoreCtx) => {
+    const segs = ctx.get(pathSegments$);
     if (segs.length === 0) {
-        backToLanding();
+        ctx.set(backToLanding);
         return;
     }
-    set(pathSegments$, segs.slice(0, -1));
-    set(selectedPath$, null);
-}
+    ctx.set(pathSegments$, segs.slice(0, -1));
+    ctx.set(selectedPath$, null);
+});
 
 /** Navigate to the repo root (the breadcrumb's repo-name crumb). */
-export function navigateToRoot(): void {
-    set(pathSegments$, []);
-    set(selectedPath$, null);
-}
+export const navigateToRoot = mutate((ctx: StoreCtx) => {
+    ctx.set(pathSegments$, []);
+    ctx.set(selectedPath$, null);
+});
 
 /** Re-fetch the tree (the only nav-adjacent HTTP call). */
-export function refresh(): void {
-    const repo = get(repo$);
-    if (repo) loadRepo(repo);
-}
+export const refresh = mutate((ctx: StoreCtx) => {
+    const repo = ctx.get(repo$);
+    if (repo) ctx.set(loadRepo, repo);
+});
 
-export function selectEntry(entry: DirEntry): void {
-    set(selectedPath$, entry.path);
-}
+export const selectEntry = mutate((ctx: StoreCtx, entry: DirEntry) => {
+    ctx.set(selectedPath$, entry.path);
+});
 
 // ---------------------------------------------------------------------------
 // Download — fetch the file's raw bytes via cdn.jsdelivr.net and hand them
@@ -443,9 +445,9 @@ export function selectEntry(entry: DirEntry): void {
  *  sees the "Saved" / "Failed" flash before the label resets. */
 const STATUS_FLASH_MS = 1800;
 let statusTask: Task | null = null;
-function flashStatus(status: DownloadStatus): void {
+const flashStatus = mutate((ctx: StoreCtx, status: DownloadStatus) => {
     statusTask?.cancel();
-    set(downloadStatus$, status);
+    ctx.set(downloadStatus$, status);
     if (status === "error") {
         // Keep error$ set — the banner will show it.
     }
@@ -453,22 +455,22 @@ function flashStatus(status: DownloadStatus): void {
         statusTask = launch(function* () {
             yield sleep(STATUS_FLASH_MS);
             statusTask = null;
-            set(downloadStatus$, "idle");
+            ctx.set(downloadStatus$, "idle");
         });
     }
-}
+});
 
-export function doDownload(): void {
+export const doDownload = mutate((ctx: StoreCtx) => {
     // Guard re-entry: ignore clicks while a download or its flash is active.
-    if (get(downloadStatus$) !== "idle") return;
+    if (ctx.get(downloadStatus$) !== "idle") return;
     const save = filePicker.saveFile;
-    const entry = get(selectedEntry$);
+    const entry = ctx.get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
     // Capture the narrowed string before the closure — TS does not preserve
     // property narrowing across generator/callback boundaries.
     const downloadUrl = entry.downloadUrl;
-    set(error$, null);
-    flashStatus("loading");
+    ctx.set(error$, null);
+    ctx.set(flashStatus, "loading");
     spinCtrl.forward();
     launch(function* () {
         try {
@@ -485,22 +487,22 @@ export function doDownload(): void {
                 // `<a>.click()` fires — that download side-effect can briefly
                 // stall the frame loop, and without the defer the stall would
                 // prevent the done-state flush from rendering.
-                flashStatus("done");
+                ctx.set(flashStatus, "done");
                 const bytes = r.bodyBytes;
                 const name = entry.name;
                 yield sleep(500);
                 save(name, bytes as ArrayBuffer);
             } else {
-                set(error$, `Download failed: HTTP ${r.status}`);
-                flashStatus("error");
+                ctx.set(error$, `Download failed: HTTP ${r.status}`);
+                ctx.set(flashStatus, "error");
             }
         } catch (e) {
             spinCtrl.stop();
-            set(error$, errMsg(e));
-            flashStatus("error");
+            ctx.set(error$, errMsg(e));
+            ctx.set(flashStatus, "error");
         }
     });
-}
+});
 
 // ---------------------------------------------------------------------------
 // SVG icons — rasterised up front via createSvgResource.

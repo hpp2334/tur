@@ -4,7 +4,6 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -14,7 +13,6 @@ import {
     Row,
     SizedBox,
     Stack,
-    set,
     Text,
 } from "tur:std";
 import {
@@ -37,15 +35,15 @@ import { resetIconId, runIconId } from "./icons";
 function RunButton(): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(runHovered$, true)),
-        onExit: mutate((_ctx, _ev) => set(runHovered$, false)),
+        onEnter: mutate((ctx, _ev) => ctx.set(runHovered$, true)),
+        onExit: mutate((ctx, _ev) => ctx.set(runHovered$, false)),
         child: PointerInteract({
-            onClick: mutate((_ctx, _ev) => recompile()),
+            onClick: mutate((_ctx, _ev) => _ctx.set(recompile)),
             child: Container({
                 padding: 6,
                 borderRadius: 6,
-                color: derive(() =>
-                    get(runHovered$)
+                color: derive((ctx) =>
+                    ctx.get(runHovered$)
                         ? tokens.bg.button.primaryHover
                         : tokens.bg.button.primary,
                 ),
@@ -77,15 +75,15 @@ function RunButton(): Element {
 function ResetButton(): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(resetHovered$, true)),
-        onExit: mutate((_ctx, _ev) => set(resetHovered$, false)),
+        onEnter: mutate((ctx, _ev) => ctx.set(resetHovered$, true)),
+        onExit: mutate((ctx, _ev) => ctx.set(resetHovered$, false)),
         child: PointerInteract({
-            onClick: mutate((_ctx, _ev) => resetCase()),
+            onClick: mutate((_ctx, _ev) => _ctx.set(resetCase)),
             child: Container({
                 padding: 6,
                 borderRadius: 6,
-                color: derive(() =>
-                    get(resetHovered$)
+                color: derive((ctx) =>
+                    ctx.get(resetHovered$)
                         ? tokens.bg.hover
                         : tokens.bg.button.ghost,
                 ),
@@ -127,15 +125,15 @@ function AutoRunToggle(): Element {
             MouseRegion({
                 cursor: "pointer",
                 child: PointerInteract({
-                    onClick: mutate((_ctx, _ev) =>
-                        set(autoRun$, !get(autoRun$)),
+                    onClick: mutate((ctx, _ev) =>
+                        ctx.set(autoRun$, !ctx.get(autoRun$)),
                     ),
                     child: Container({
                         width: 28,
                         height: 16,
                         borderRadius: 999,
-                        color: derive(() =>
-                            get(autoRun$)
+                        color: derive((ctx) =>
+                            ctx.get(autoRun$)
                                 ? tokens.bg.button.primary
                                 : tokens.bg.hover,
                         ),
@@ -144,8 +142,8 @@ function AutoRunToggle(): Element {
                                 children: [
                                     Positioned({
                                         top: 2,
-                                        left: derive(() =>
-                                            get(autoRun$) ? 14 : 2,
+                                        left: derive((ctx) =>
+                                            ctx.get(autoRun$) ? 14 : 2,
                                         ),
                                         child: Container({
                                             width: 12,
@@ -169,15 +167,15 @@ function AutoRunToggle(): Element {
 function LayoutButton(mode: LayoutMode, label: string): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(layoutHovered$, mode)),
-        onExit: mutate((_ctx, _ev) => set(layoutHovered$, null)),
+        onEnter: mutate((ctx, _ev) => ctx.set(layoutHovered$, mode)),
+        onExit: mutate((ctx, _ev) => ctx.set(layoutHovered$, null)),
         child: PointerInteract({
-            onClick: mutate((_ctx, _ev) => set(layoutMode$, mode)),
+            onClick: mutate((ctx, _ev) => ctx.set(layoutMode$, mode)),
             child: Container({
                 padding: 6,
-                color: derive(() => {
-                    const selected = get(layoutMode$) === mode;
-                    const hovered = get(layoutHovered$) === mode;
+                color: derive((ctx) => {
+                    const selected = ctx.get(layoutMode$) === mode;
+                    const hovered = ctx.get(layoutHovered$) === mode;
                     if (selected) return tokens.bg.controlSelected;
                     if (hovered) return tokens.bg.controlTrayHover;
                     return tokens.bg.controlTray;
@@ -186,8 +184,8 @@ function LayoutButton(mode: LayoutMode, label: string): Element {
                     Text({
                         text: label,
                         fontSize: 11,
-                        color: derive(() =>
-                            get(layoutMode$) === mode
+                        color: derive((ctx) =>
+                            ctx.get(layoutMode$) === mode
                                 ? tokens.text.primary
                                 : tokens.text.secondary,
                         ),
@@ -217,7 +215,6 @@ function LayoutControl(): Element {
 // --- Toolbar (composite) ---------------------------------------------------
 
 export function Toolbar(): Element {
-    const pad = (): number => (get(isMobile$) ? 8 : 12);
     return Container({
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,
@@ -227,7 +224,7 @@ export function Toolbar(): Element {
                 children: [
                     // Brand.
                     Container({
-                        padding: derive(pad),
+                        padding: derive((ctx) => (ctx.get(isMobile$) ? 8 : 12)),
                         children: [
                             Row({
                                 mainAxisSize: MainAxisSize.Min,
@@ -241,7 +238,7 @@ export function Toolbar(): Element {
                                     // to reclaim horizontal space.
                                     Condition({
                                         condition: derive(
-                                            () => !get(isMobile$),
+                                            (ctx) => !ctx.get(isMobile$),
                                         ),
                                         child: () =>
                                             Row({
@@ -265,10 +262,14 @@ export function Toolbar(): Element {
                     // Case name (center, expands).
                     Expanded({
                         child: Container({
-                            padding: derive(pad),
+                            padding: derive((ctx) =>
+                                ctx.get(isMobile$) ? 8 : 12,
+                            ),
                             children: [
                                 Text({
-                                    text: derive(() => get(selectedCase$)),
+                                    text: derive((ctx) =>
+                                        ctx.get(selectedCase$),
+                                    ),
                                     fontSize: 13,
                                     color: tokens.text.body,
                                 }),
@@ -277,7 +278,7 @@ export function Toolbar(): Element {
                     }),
                     // Actions.
                     Container({
-                        padding: derive(pad),
+                        padding: derive((ctx) => (ctx.get(isMobile$) ? 8 : 12)),
                         children: [
                             Row({
                                 mainAxisSize: MainAxisSize.Min,
@@ -291,7 +292,7 @@ export function Toolbar(): Element {
                                     // (mobile uses the bottom tab bar).
                                     Condition({
                                         condition: derive(
-                                            () => !get(isMobile$),
+                                            (ctx) => !ctx.get(isMobile$),
                                         ),
                                         child: () =>
                                             Row({

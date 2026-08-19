@@ -3,12 +3,14 @@ import {
     type Brush,
     Color,
     Container,
+    createStore,
     derive,
     mutate,
     PointerInteract,
     source,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);
@@ -23,7 +25,7 @@ export default view(() =>
         padding: 20,
         children: [
             PointerInteract({
-                onClick: mutate(({ set }, _ev) => set(checked$, false)),
+                onClick: mutate((ctx, _ev) => ctx.set(checked$, false)),
                 child: Container({
                     width: 40,
                     height: 40,

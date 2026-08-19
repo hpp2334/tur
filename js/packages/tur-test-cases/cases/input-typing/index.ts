@@ -1,4 +1,12 @@
-import { Container, createTextEditingController, Input, view } from "tur:std";
+import {
+    Container,
+    createStore,
+    createTextEditingController,
+    Input,
+    view,
+} from "tur:std";
+
+export const store = createStore();
 
 const controller = createTextEditingController({});
 

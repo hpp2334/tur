@@ -32,9 +32,10 @@ use tur_integration_tests::TurTestApp;
 fn focus_changed_handler_fires_on_editable_focus() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(
-        r#"
-        import { Input, mount } from "tur:std";
-        mount(Input({
+        r#"const store = createStore();
+
+        import { createStore, Input, mount } from "tur:std";
+        mount(store, Input({
             text: "",
             width: 200,
             height: 44,

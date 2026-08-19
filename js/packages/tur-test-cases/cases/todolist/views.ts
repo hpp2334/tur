@@ -8,7 +8,6 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     HitTestBehavior,
     Image,
     Input,
@@ -362,10 +361,10 @@ export function ConfirmRemoveModal(): Element {
                         }),
                         SizedBox({ height: 8 }),
                         Text({
-                            text: derive(() => {
-                                const idx = get(removeTarget$);
+                            text: derive((ctx) => {
+                                const idx = ctx.get(removeTarget$);
                                 if (idx === null) return "";
-                                const tasks = get(tasks$);
+                                const tasks = ctx.get(tasks$);
                                 return tasks[idx]
                                     ? `"${tasks[idx].title}" will be permanently removed.`
                                     : "";

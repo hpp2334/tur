@@ -1,4 +1,6 @@
-import { Container, SizedBox, view } from "tur:std";
+import { Container, createStore, SizedBox, view } from "tur:std";
+
+export const store = createStore();
 
 export default view(() =>
     Container({

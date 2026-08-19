@@ -5,7 +5,6 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -162,7 +161,7 @@ function menuItems(): Element {
  *  root so it paints on top. Renders nothing when the menu is closed. */
 export function ContextMenuOverlay(): Element {
     return Condition({
-        condition: derive(() => get(contextMenuOpen$)),
+        condition: derive((ctx) => ctx.get(contextMenuOpen$)),
         child: () =>
             Stack({
                 children: [
@@ -185,8 +184,8 @@ export function ContextMenuOverlay(): Element {
                         }),
                     }),
                     Positioned({
-                        left: derive(() => get(contextMenuX$)),
-                        top: derive(() => get(contextMenuY$)),
+                        left: derive((ctx) => ctx.get(contextMenuX$)),
+                        top: derive((ctx) => ctx.get(contextMenuY$)),
                         child: menuItems(),
                     }),
                 ],

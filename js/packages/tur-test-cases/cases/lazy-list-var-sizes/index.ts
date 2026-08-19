@@ -5,11 +5,11 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     Each,
     type Element,
     Expanded,
-    get,
     LazyList,
     MainAxisSize,
     MouseRegion,
@@ -22,6 +22,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Variable width + height LazyList" — items with DIFFERENT main-axis extents
@@ -198,8 +199,8 @@ function ToggleButton(): Element {
                 color: Color.hex("#4f46e5"),
                 children: [
                     Text({
-                        text: derive(() =>
-                            get(axis$) === Axis.Vertical
+                        text: derive((ctx) =>
+                            ctx.get(axis$) === Axis.Vertical
                                 ? "Axis: Vertical  (click to flip)"
                                 : "Axis: Horizontal  (click to flip)",
                         ),
@@ -233,7 +234,9 @@ export default view(() =>
                                     // the new axis. This is the canonical
                                     // rebuild-on-change idiom in this codebase.
                                     Each({
-                                        items: derive(() => [get(axis$)]),
+                                        items: derive((ctx) => [
+                                            ctx.get(axis$),
+                                        ]),
                                         build: (axis: Axis) =>
                                             LazyList({
                                                 axis,

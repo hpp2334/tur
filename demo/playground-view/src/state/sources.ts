@@ -1,11 +1,12 @@
 import {
     derive,
-    get,
     launch,
+    type Mutation,
+    mutate,
     type Source,
-    set,
     sleep,
     source,
+    type Task,
     type ViewportSize,
     viewportSize$,
 } from "tur:std";
@@ -74,7 +75,7 @@ export const layoutMode$ = source<LayoutMode>("split");
 // the canvas resize handler). Below 720px CSS width the playground switches to
 // the mobile single-pane + bottom-tab layout (see views/shell.ts).
 export const isMobile$ = derive(
-    () => get<ViewportSize>(viewportSize$).width < 720,
+    (ctx) => ctx.get<ViewportSize>(viewportSize$).width < 720,
 );
 
 // Active pane on mobile (bottom tab bar). Desktop uses `layoutMode$` instead.
@@ -92,11 +93,25 @@ export const editorWidth$ = source(600);
 // status bar stays fresh without manual refresh.
 export const lastCompiledAtMs$ = source<number>(Date.now());
 export const now$: Source<number> = source<number>(Date.now());
-// Permanent ticker: never cancelled. A `launch` coroutine loop replaces the
-// old `setInterval` — no timer id to manage.
-launch(function* () {
-    for (;;) {
-        yield sleep(5000);
-        set(now$, Date.now());
-    }
+
+// The ticker is a mutation so its `launch` loop can capture the mutation ctx
+// (the store-bound writer) — there is no module store to write through. The
+// entry point dispatches it once after `mount`; the returned module cleanup
+// cancels the task so a reload doesn't leak the previous loop.
+let nowTask: Task | null = null;
+
+export const startNowTicker: Mutation<[], void> = mutate((ctx) => {
+    nowTask?.cancel();
+    nowTask = launch(function* () {
+        for (;;) {
+            yield sleep(5000);
+            ctx.set(now$, Date.now());
+        }
+    });
 });
+
+/** Cancel the `now$` ticker (module cleanup, run by the entry point). */
+export function stopNowTicker(): void {
+    nowTask?.cancel();
+    nowTask = null;
+}

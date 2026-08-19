@@ -4,9 +4,9 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     Expanded,
-    get,
     MainAxisAlignment,
     mutate,
     PointerInteract,
@@ -16,6 +16,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const tab$ = source("red");
 
@@ -54,8 +55,8 @@ export default view(() =>
                             mainAlignment: MainAxisAlignment.Center,
                             children: TABS.map((c) =>
                                 PointerInteract({
-                                    onClick: mutate(({ set }, _ev) =>
-                                        set(tab$, c),
+                                    onClick: mutate((ctx, _ev) =>
+                                        ctx.set(tab$, c),
                                     ),
                                     child: Container({
                                         color: Color.hex(HEX[c]),
@@ -111,8 +112,8 @@ export default view(() =>
                             children: [
                                 Text({
                                     text: derive(
-                                        () =>
-                                            `Switch sees: ${get(tab$).toUpperCase()}`,
+                                        (ctx) =>
+                                            `Switch sees: ${ctx.get(tab$).toUpperCase()}`,
                                     ),
                                     fontSize: 20,
                                     color: Color.hex("#e2e8f0"),

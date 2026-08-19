@@ -4,6 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     MouseRegion,
     mutate,
@@ -11,6 +12,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const state$ = source("idle");
 
@@ -20,8 +22,8 @@ export default view(() =>
         children: [
             MouseRegion({
                 cursor: "col-resize",
-                onEnter: mutate(({ set }, _ev) => set(state$, "entered")),
-                onExit: mutate(({ set }, _ev) => set(state$, "exited")),
+                onEnter: mutate((ctx, _ev) => ctx.set(state$, "entered")),
+                onExit: mutate((ctx, _ev) => ctx.set(state$, "exited")),
                 child: Container({
                     width: 100,
                     height: 50,

@@ -281,10 +281,11 @@ fn heavy_daemon_work_does_not_stall_other_pools() {
     // thread), this block_on would queue behind the busy loop and only
     // return after it finished.
     futures::executor::block_on(ui_app.load_module(
-        r#"
-            import { source, get } from "tur:std";
+        r#"const store = createStore();
+
+            import { createStore, source } from "tur:std";
             export function start() {
-                globalThis.__uiVal = get(source(42));
+                globalThis.__uiVal = store.get(source(42));
             }
         "#,
     ))

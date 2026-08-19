@@ -1,4 +1,13 @@
-import { Color, Container, mutate, PointerInteract, view } from "tur:std";
+import {
+    Color,
+    Container,
+    createStore,
+    mutate,
+    PointerInteract,
+    view,
+} from "tur:std";
+
+export const store = createStore();
 
 // Mirrors the drag-delta tracking logic in the playground's VDivider:
 // tracks the press position (dragStart) and the previous move position

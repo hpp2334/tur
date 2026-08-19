@@ -1,4 +1,12 @@
-import { Container, createImageResource, Image, view } from "tur:std";
+import {
+    Container,
+    createImageResource,
+    createStore,
+    Image,
+    view,
+} from "tur:std";
+
+export const store = createStore();
 
 const pngBytes = new Uint8Array([
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,

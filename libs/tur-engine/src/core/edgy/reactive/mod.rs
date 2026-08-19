@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -14,15 +13,26 @@ mod store;
 
 pub use store::Store;
 pub use store::{
-    FlushEngineStore, ReactiveBridgeStore, ReactiveCore, ReactiveReadJsContext, ReactiveReadStore,
-    SubscriberIndexStore,
+    FlushEngineStore, ReactiveBridgeStore, ReactiveReadJsContext, ReactiveReadStore,
+    SharedReactive, StoreKv, SubscriberIndexStore,
 };
 
-/// Unique identifier for a reactive atom. Private to the reactive module —
-/// all biz code addresses atoms via the typed handles (`Source<T>`,
-/// `Derived<T>`, `Mutation`, `Readable<T>`) or the erased `AnyReadable`.
+/// Unique identifier for a reactive atom — the single id space for ALL atoms
+/// of an instance, allocated from one shared counter (so every map keyed by
+/// bare `AtomId` is collision-free across stores). Private to the reactive
+/// module — all biz code addresses atoms via the typed handles
+/// (`Source<T>`, `Derived<T>`, `Mutation`, `Readable<T>`) or the erased
+/// `AnyReadable`.
+///
+/// An id's **seed** (initial value for a source, closure for a derived /
+/// mutation) lives in the shared registry ([`SharedReactive`]). Its **value**
+/// lives in a store's KV: engine/plugin-minted atoms are *owned* by exactly
+/// one store (the engine store — reads from anywhere route there via the
+/// owner map); JS `source()`/`derive()`/`mutate()` declarations have no owner
+/// and materialize into whichever store first reads/writes them (the same id
+/// in two stores = two independent values).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct AtomId(u32);
+pub(crate) struct AtomId(u32);
 
 // ---------------------------------------------------------------------------
 // JsValue marshaling.
@@ -61,6 +71,12 @@ impl SubscriberId {
 // `T` is a phantom type parameter: it exists only for compile-time type
 // safety.  The Store stores `JsValue` for all atoms; `T` is erased to
 // `PhantomData<fn() -> T>` (covariant, no Send/Sync/'static overhead).
+//
+// A handle is a bare id: for engine-minted atoms it addresses an owned slot
+// in the engine store's KV; for JS `source()`/`derive()`/`mutate()`
+// declarations it addresses a seed in the shared registry that materializes
+// into whichever store first touches it. Callers never distinguish — the
+// store resolves on read/write.
 //
 // The inner `AtomId` and the `.id()` / `from_id` accessors are module-private:
 // external code addresses handles opaquely (passing them to store methods) or
@@ -144,6 +160,12 @@ impl<T> Hash for Derived<T> {
 /// Handle for a mutation atom (callable side-effect closure).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Mutation(AtomId);
+
+impl Mutation {
+    pub(crate) fn id(&self) -> AtomId {
+        self.0
+    }
+}
 
 /// Read-only reference to either a [`Source<T>`] or a [`Derived<T>`].  Used by
 /// `Val<T>::Reactive`, `Store::read`, and the subscriber graph.
@@ -231,6 +253,10 @@ impl<T> From<Derived<T>> for Readable<T> {
 // kind tag is needed.  All wrap/unwrap goes through the `IntoJs` /
 // `FromJs` traits below — the wrappers are never named outside this
 // module.
+//
+// JS-visible handles are ALWAYS these opaques, whether the id came from a JS
+// declaration (`source(v)` / `derive(fn)` / `mutate(fn)`) or a Rust-minted
+// atom — one id space, one opaque per kind.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -244,6 +270,13 @@ struct JsDerived(AtomId);
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 struct JsMutation(AtomId);
+
+/// JS-opaque wrapper for a [`Store`] — the object `createStore()` hands to
+/// JS, carrying `get`/`set` methods. Same `unsafe_empty_trace` soundness
+/// note as `TurInstanceContext` (pure-Rust state behind `Rc`s).
+#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct JsStore(pub Store);
 
 fn wrap_opaque<T: boa_engine::object::NativeObject>(data: T, ctx: &mut Context) -> JsValue {
     let proto = ctx.intrinsics().constructors().object().prototype();
@@ -345,22 +378,27 @@ fn any_readable_of(id: AtomId) -> AnyReadable {
 }
 
 /// Build the per-store `{ get, set }` JS context object that closures receive
-/// as their first argument. Takes the reactive core directly — `get`/`set`
-/// only ever call `read` / `set_source` / `invoke_mutation` (core-only), never
-/// the subscriber graph, so the independent `SubscriberGraph` need not be
-/// threaded in here.
+/// as their first argument.
+///
+/// `shared` is the instance-wide reactive machinery; `default` is the KV of
+/// the store that owns the atom being computed/invoked — declarations read or
+/// written through this ctx materialize into that store (tree-driven flows:
+/// the mounted store). Engine-owned atoms route to their owner KV, so
+/// `ctx.get(viewportSize$)` works from any store.
 pub fn build_store_context_object(
     context: &mut Context,
-    core: Rc<RefCell<ReactiveCore>>,
+    shared: Rc<SharedReactive>,
+    default: Rc<StoreKv>,
 ) -> JsResult<JsObject> {
     let proto = context.intrinsics().constructors().object().prototype();
     let obj = JsObject::from_proto_and_data(proto, ());
 
-    let core_for_get = core.clone();
+    let shared_for_get = shared.clone();
+    let kv_for_get = default.clone();
     let get_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-            Ok(core_for_get.borrow().read(readable, ctx))
+            Ok(shared_for_get.read_by_id(readable.id(), &kv_for_get, ctx))
         })
     };
     let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
@@ -375,7 +413,8 @@ pub fn build_store_context_object(
         .build();
     obj.insert_property(js_string!("get"), get_desc);
 
-    let core_for_set = core.clone();
+    let shared_for_set = shared.clone();
+    let kv_for_set = default;
     let set_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let v = args.get_or_undefined(0);
@@ -384,15 +423,18 @@ pub fn build_store_context_object(
                 // and prepends it for `Js`-variant closures; pass only the
                 // user args (no recursive ctx_obj construction here).
                 let user_args = args.get(1..).unwrap_or(&[]);
-                return core_for_set
-                    .borrow()
-                    .invoke_mutation(mutation, user_args, ctx);
+                return shared_for_set.invoke_mutation_by_id(
+                    mutation.id(),
+                    &kv_for_set,
+                    user_args,
+                    ctx,
+                );
             }
             if let Ok(readable) = AnyReadable::from_js(v) {
                 return match readable {
-                    AnyReadable::Source(source) => {
+                    AnyReadable::Source(_) => {
                         let value = args.get_or_undefined(1).clone();
-                        core_for_set.borrow().set_source(source, value);
+                        shared_for_set.write_by_id(readable.id(), &kv_for_set, value);
                         Ok(JsValue::undefined())
                     }
                     AnyReadable::Derived(_) => Err(JsError::from(
@@ -418,6 +460,88 @@ pub fn build_store_context_object(
     obj.insert_property(js_string!("set"), set_desc);
 
     Ok(obj)
+}
+
+/// Build the JS `Store` object (the `createStore()` result): a
+/// `JsStore`-opaque carrying the `Store` handle, with `get` / `set` methods
+/// that extract the store off `this`. Both methods accept declaration ids
+/// (materialized into THIS store) and engine-owned atoms (routed).
+pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
+    let proto = context.intrinsics().constructors().object().prototype();
+    let obj = JsObject::from_proto_and_data(proto, JsStore(store.clone()));
+
+    let get_store = store.clone();
+    let get_fn = unsafe {
+        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
+            let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
+            let s = get_store.clone();
+            Ok(s.shared().read_by_id(readable.id(), &s.kv_handle(), ctx))
+        })
+    };
+    let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
+        .name(js_string!("get"))
+        .length(1)
+        .build();
+    obj.insert_property(
+        js_string!("get"),
+        PropertyDescriptor::builder()
+            .value(get_obj)
+            .writable(true)
+            .enumerable(false)
+            .configurable(true)
+            .build(),
+    );
+
+    let set_store = store;
+    let set_fn = unsafe {
+        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
+            let v = args.get_or_undefined(0);
+            if let Ok(mutation) = Mutation::from_js(v) {
+                let user_args = args.get(1..).unwrap_or(&[]);
+                return set_store.invoke_mutation(mutation, user_args, ctx);
+            }
+            if let Ok(readable) = AnyReadable::from_js(v) {
+                return match readable {
+                    AnyReadable::Source(_) => {
+                        let value = args.get_or_undefined(1).clone();
+                        set_store.shared().write_by_id(
+                            readable.id(),
+                            &set_store.kv_handle(),
+                            value,
+                        );
+                        Ok(JsValue::undefined())
+                    }
+                    AnyReadable::Derived(_) => Err(JsError::from(
+                        JsNativeError::typ().with_message("cannot set a derived atom"),
+                    )),
+                };
+            }
+            Err(JsError::from(
+                JsNativeError::typ().with_message("expected an atom handle"),
+            ))
+        })
+    };
+    let set_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), set_fn)
+        .name(js_string!("set"))
+        .length(2)
+        .build();
+    obj.insert_property(
+        js_string!("set"),
+        PropertyDescriptor::builder()
+            .value(set_obj)
+            .writable(true)
+            .enumerable(false)
+            .configurable(true)
+            .build(),
+    );
+
+    obj
+}
+
+/// Extract a [`Store`] out of a JS value (a `JsStore` opaque).
+pub fn extract_store(value: &JsValue) -> Option<Store> {
+    let obj = value.as_object()?;
+    obj.downcast_ref::<JsStore>().map(|s| s.0.clone())
 }
 
 /// Convenience alias used by some view helpers — `Attribute::all()` etc.

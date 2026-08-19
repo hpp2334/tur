@@ -10,7 +10,6 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -21,7 +20,6 @@ import {
     SizedBox,
     type StoreCtx,
     Switch,
-    set,
     source,
     Text,
     Transform,
@@ -71,23 +69,23 @@ function FileRow({
                 : SizedBox({ height: 4 }),
             MouseRegion({
                 cursor: "pointer",
-                onEnter: mutate((_ctx: StoreCtx, _ev) => {
-                    set(hoveredPath$, entry.path);
+                onEnter: mutate((ctx: StoreCtx, _ev) => {
+                    ctx.set(hoveredPath$, entry.path);
                 }),
-                onExit: mutate((_ctx: StoreCtx, _ev) => {
-                    set(hoveredPath$, null);
+                onExit: mutate((ctx: StoreCtx, _ev) => {
+                    ctx.set(hoveredPath$, null);
                 }),
                 child: PointerInteract({
-                    onClick: mutate((_ctx: StoreCtx, _ev) => {
-                        if (entry.isDir) openFolder(entry);
-                        else selectEntry(entry);
+                    onClick: mutate((ctx: StoreCtx, _ev) => {
+                        if (entry.isDir) ctx.set(openFolder, entry);
+                        else ctx.set(selectEntry, entry);
                     }),
                     child: Container({
                         padding: 9,
                         borderRadius: 8,
-                        color: derive(() => {
-                            const sel = get(selectedPath$);
-                            const hov = get(hoveredPath$);
+                        color: derive((ctx) => {
+                            const sel = ctx.get(selectedPath$);
+                            const hov = ctx.get(hoveredPath$);
                             if (sel === entry.path) return COLORS.rowSelected;
                             if (hov === entry.path) return COLORS.rowHover;
                             return COLORS.panel;
@@ -135,12 +133,12 @@ function RepoCrumb(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((_ctx: StoreCtx, _ev) => navigateToRoot()),
+            onClick: mutate((ctx: StoreCtx, _ev) => ctx.set(navigateToRoot)),
             child: Container({
                 padding: 4,
                 children: [
                     Text({
-                        text: derive(() => get(repo$)?.fullName ?? ""),
+                        text: derive((ctx) => ctx.get(repo$)?.fullName ?? ""),
                         fontSize: 13,
                         color: COLORS.accent,
                     }),
@@ -157,7 +155,7 @@ function RepoCrumb(): Element {
 
 function Spinner(): Element {
     return Transform({
-        rotate: derive(() => get(spinProgress$) * 2 * Math.PI),
+        rotate: derive((ctx) => ctx.get(spinProgress$) * 2 * Math.PI),
         child: Image({
             resourceId: getIcon("spinner"),
             width: 14,
@@ -203,13 +201,10 @@ function DownloadButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((_ctx: StoreCtx, _ev) => {
-                if (get(downloadStatus$) !== "idle") return;
-                const e = get(selectedEntry$);
-                if (e && !e.isDir) doDownload();
-            }),
+            // doDownload self-guards against re-entry.
+            onClick: mutate((_ctx: StoreCtx, _ev) => _ctx.set(doDownload)),
             child: Switch({
-                value: derive(() => get(downloadStatus$)),
+                value: derive((ctx) => ctx.get(downloadStatus$)),
                 cases: [
                     {
                         key: "loading",
@@ -244,14 +239,14 @@ function DownloadButton(): Element {
                 ],
                 fallback: () =>
                     dlShell(
-                        derive(() => {
-                            const e = get(selectedEntry$);
+                        derive((ctx) => {
+                            const e = ctx.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accent
                                 : COLORS.subtleButton;
                         }),
-                        derive(() => {
-                            const e = get(selectedEntry$);
+                        derive((ctx) => {
+                            const e = ctx.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accentFg
                                 : COLORS.textSubtle;
@@ -279,15 +274,15 @@ export function ExplorerScreen(): Element {
                 children: [
                     IconButton({
                         resourceId: getIcon("back"),
-                        onClick: (_ctx) => navigateUp(),
+                        onClick: navigateUp,
                     }),
                     SizedBox({ width: 8 }),
                     RepoCrumb(),
                     // Path segments as a single reactive Text (avoids `Each`
                     // inflating this content-sized Row).
                     Text({
-                        text: derive(() => {
-                            const segs = get(pathSegments$);
+                        text: derive((ctx) => {
+                            const segs = ctx.get(pathSegments$);
                             return segs.length ? ` / ${segs.join(" / ")}` : "";
                         }),
                         fontSize: 13,
@@ -311,7 +306,7 @@ export function ExplorerScreen(): Element {
             }),
             SizedBox({ height: 8 }),
             Condition({
-                condition: derive(() => get(error$) !== null),
+                condition: derive((ctx) => ctx.get(error$) !== null),
                 child: () =>
                     Container({
                         padding: 10,
@@ -319,7 +314,7 @@ export function ExplorerScreen(): Element {
                         color: COLORS.dangerSoft,
                         children: [
                             Text({
-                                text: derive(() => get(error$) ?? ""),
+                                text: derive((ctx) => ctx.get(error$) ?? ""),
                                 fontSize: 12,
                                 color: COLORS.danger,
                             }),
@@ -343,11 +338,11 @@ function fileListView(): Element {
         padding: 4,
         children: [
             Switch({
-                value: derive(() => {
-                    if (get(loading$) && get(entries$).length === 0)
+                value: derive((ctx) => {
+                    if (ctx.get(loading$) && ctx.get(entries$).length === 0)
                         return "loading";
-                    if (get(entries$).length === 0)
-                        return get(error$) !== null ? "blank" : "empty";
+                    if (ctx.get(entries$).length === 0)
+                        return ctx.get(error$) !== null ? "blank" : "empty";
                     return "list";
                 }),
                 cases: [

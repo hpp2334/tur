@@ -6,14 +6,12 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
     mutate,
     PointerInteract,
     Row,
-    set,
     Text,
 } from "tur:std";
 import { type MobileTab, mobileTab$ } from "../state";
@@ -23,12 +21,11 @@ import { tokens } from "../theme/tokens";
  *  the active tab shows a 2px accent indicator at the top and an
  *  accent-colored label. Tapping sets `mobileTab$`. */
 function MobileTabButton(tab: MobileTab, label: string): Element {
-    const isActive = () => get(mobileTab$) === tab;
     return Expanded({
         child: MouseRegion({
             cursor: "pointer",
             child: PointerInteract({
-                onClick: mutate((_ctx, _ev) => set(mobileTab$, tab)),
+                onClick: mutate((ctx, _ev) => ctx.set(mobileTab$, tab)),
                 child: Container({
                     children: [
                         Column({
@@ -37,8 +34,8 @@ function MobileTabButton(tab: MobileTab, label: string): Element {
                                 // Top accent indicator — full width, 2px.
                                 Container({
                                     height: 2,
-                                    color: derive(() =>
-                                        isActive()
+                                    color: derive((ctx) =>
+                                        ctx.get(mobileTab$) === tab
                                             ? tokens.accent.solid
                                             : Color.rgba(0, 0, 0, 0),
                                     ),
@@ -55,8 +52,9 @@ function MobileTabButton(tab: MobileTab, label: string): Element {
                                                 Text({
                                                     text: label,
                                                     fontSize: 12,
-                                                    color: derive(() =>
-                                                        isActive()
+                                                    color: derive((ctx) =>
+                                                        ctx.get(mobileTab$) ===
+                                                        tab
                                                             ? tokens.accent
                                                                   .solid
                                                             : tokens.text

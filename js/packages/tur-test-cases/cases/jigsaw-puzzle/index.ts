@@ -9,24 +9,25 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MouseRegion,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
     Positioned,
+    type ReadonlyStoreCtx,
     Row,
     Stack,
-    set,
     source,
     Text,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.
@@ -179,16 +180,18 @@ const dragScale$ = source(1.0);
 const liftCtrl: AnimationController = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
-    onTick: mutate((_ctx, v: number) => {
-        set(dragScale$, 1 + v * (LIFT_MAX - 1));
+    onTick: mutate((ctx, v: number) => {
+        ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
 // --- Reactive state --------------------------------------------------------
 
 const pieces$ = source<Piece[]>(initialPieces());
-const placedCount$ = derive(() => get(pieces$).filter((p) => p.placed).length);
-const done$ = derive(() => get(placedCount$) === GRID * GRID);
+const placedCount$ = derive(
+    (ctx) => ctx.get(pieces$).filter((p) => p.placed).length,
+);
+const done$ = derive((ctx) => ctx.get(placedCount$) === GRID * GRID);
 
 // Drag tracking lives in plain module state, NOT reactive sources. Mutation
 // handlers fire synchronously back-to-back (down → move → move → … → up) and
@@ -205,14 +208,14 @@ let dragOffset = { dx: 0, dy: 0 };
 // Returns the current scale for piece `id`: the animated `dragScale$` value
 // for the actively-dragged piece AND the just-released piece (during settle),
 // 1.0 for everything else.
-function pieceScale(id: number): number {
-    const scale = get(dragScale$);
+function pieceScale(ctx: ReadonlyStoreCtx, id: number): number {
+    const scale = ctx.get(dragScale$);
     if (dragId === id || lastDragId === id) return scale;
     return 1;
 }
 
-function pieceDragging(id: number): boolean {
-    return (dragId === id || lastDragId === id) && get(dragScale$) > 1.001;
+function pieceDragging(ctx: ReadonlyStoreCtx, id: number): boolean {
+    return (dragId === id || lastDragId === id) && ctx.get(dragScale$) > 1.001;
 }
 
 // --- Per-piece drag handlers (close over `id`) -----------------------------
@@ -271,26 +274,26 @@ const resetPuzzle = mutate((ctx, _ev: PointerInteractEvent) => {
     dragId = null;
     lastDragId = null;
     liftCtrl.stop();
-    set(dragScale$, 1);
+    ctx.set(dragScale$, 1);
 });
 
 // --- View helpers ----------------------------------------------------------
 
-function pieceById(id: number): Piece {
+function pieceById(ctx: ReadonlyStoreCtx, id: number): Piece {
     // `pieces$` is created in id order (initialPieces uses `.map((slot, id))`)
     // and every mutation uses `.map((p) => p.id === id ? ... : p)` which
     // preserves array order — so indexing by id is always correct.
-    return get(pieces$)[id];
+    return ctx.get(pieces$)[id];
 }
 
 function makePiece(id: number): Element {
     return Positioned({
-        left: derive(() => pieceById(id).x),
-        top: derive(() => pieceById(id).y),
+        left: derive((ctx) => pieceById(ctx, id).x),
+        top: derive((ctx) => pieceById(ctx, id).y),
         width: PIECE,
         height: PIECE,
         child: Transform({
-            scale: derive(() => pieceScale(id)),
+            scale: derive((ctx) => pieceScale(ctx, id)),
             child: PointerInteract({
                 onPointerDown: onPieceDown(id),
                 onPointerMove: onPieceMove(id),
@@ -298,8 +301,8 @@ function makePiece(id: number): Element {
                 child: Container({
                     width: PIECE,
                     height: PIECE,
-                    color: derive(() => {
-                        const me = pieceById(id);
+                    color: derive((ctx) => {
+                        const me = pieceById(ctx, id);
                         return pieceColor(me.slot, me.placed);
                     }),
                     borderRadius: 14,
@@ -308,25 +311,28 @@ function makePiece(id: number): Element {
                     // Placed pieces glow in their own hue; unplaced pieces
                     // cast a soft neutral shadow. Dragged pieces cast a
                     // stronger, deeper shadow to reinforce the lift.
-                    shadowColor: derive(() => {
-                        const me = pieceById(id);
-                        if (pieceDragging(id)) return Color.rgba(0, 0, 0, 180);
+                    shadowColor: derive((ctx) => {
+                        const me = pieceById(ctx, id);
+                        if (pieceDragging(ctx, id))
+                            return Color.rgba(0, 0, 0, 180);
                         if (!me.placed) return Color.rgba(0, 0, 0, 110);
                         const c = pieceRgb(me.slot);
                         return Color.rgba(c.r, c.g, c.b, 140);
                     }),
-                    shadowOffset: derive(() =>
-                        pieceDragging(id) ? [0, 12] : [0, 4],
+                    shadowOffset: derive((ctx) =>
+                        pieceDragging(ctx, id) ? [0, 12] : [0, 4],
                     ),
-                    shadowBlur: derive(() => {
-                        const me = pieceById(id);
-                        if (pieceDragging(id)) return 28;
+                    shadowBlur: derive((ctx) => {
+                        const me = pieceById(ctx, id);
+                        if (pieceDragging(ctx, id)) return 28;
                         return me.placed ? 18 : 10;
                     }),
                     alignment: Alignment.Center,
                     children: [
                         Text({
-                            text: derive(() => `${pieceById(id).slot + 1}`),
+                            text: derive(
+                                (ctx) => `${pieceById(ctx, id).slot + 1}`,
+                            ),
                             fontSize: 28,
                             color: Color.hex("#ffffff"),
                         }),
@@ -445,7 +451,7 @@ function TopBar(): Element {
                     children: [
                         Text({
                             text: derive(
-                                () => `${get(placedCount$)} / 9 placed`,
+                                (ctx) => `${ctx.get(placedCount$)} / 9 placed`,
                             ),
                             fontSize: 14,
                             color: Color.hex("#e2e8f0"),

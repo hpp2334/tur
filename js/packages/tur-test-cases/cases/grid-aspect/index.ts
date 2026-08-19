@@ -1,4 +1,6 @@
-import { Color, Container, Grid, Text, view } from "tur:std";
+import { Color, Container, createStore, Grid, Text, view } from "tur:std";
+
+export const store = createStore();
 
 // `Grid` with `childAspectRatio: 2` → each cell is twice as wide as it is
 // tall (cell_main = cell_cross / 2). Also exercises `mainAxisExtent` on the

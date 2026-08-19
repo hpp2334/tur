@@ -1,5 +1,5 @@
 import { clipboard } from "tur:clipboard";
-import { launch, mutate, set, source } from "tur:std";
+import { launch, mutate, source } from "tur:std";
 import { editorCtrl } from "./case-store";
 
 // ---------------------------------------------------------------------------
@@ -31,22 +31,22 @@ interface ContextMenuEvent {
 /** Open the menu at canvas-relative coordinates (from the right-click event).
  *  Coerce to numbers immediately so we don't hold the event object across
  *  `set` calls. */
-export const openContextMenu = mutate((_ctx, ev: ContextMenuEvent) => {
+export const openContextMenu = mutate((ctx, ev: ContextMenuEvent) => {
     const g = ev?.global ?? { x: 0, y: 0 };
-    set(contextMenuX$, Number(g.x) || 0);
-    set(contextMenuY$, Number(g.y) || 0);
-    set(contextMenuOpen$, true);
+    ctx.set(contextMenuX$, Number(g.x) || 0);
+    ctx.set(contextMenuY$, Number(g.y) || 0);
+    ctx.set(contextMenuOpen$, true);
 });
 
 /** Close the menu (click-outside, escape, or after an action runs). */
-export const closeContextMenu = mutate(() => {
-    set(contextMenuOpen$, false);
+export const closeContextMenu = mutate((ctx) => {
+    ctx.set(contextMenuOpen$, false);
 });
 
 /** Cut: copy selection to clipboard then delete it. The actual clipboard
  *  write is performed by the engine when Cmd+X is pressed; for the menu
  *  action we simulate by calling `clipboard.writeText` directly. */
-export const cutSelection = mutate(() => {
+export const cutSelection = mutate((ctx) => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         editorCtrl.deleteSelection();
@@ -56,20 +56,20 @@ export const cutSelection = mutate(() => {
             yield clipboard.writeText(text);
         });
     }
-    set(contextMenuOpen$, false);
+    ctx.set(contextMenuOpen$, false);
 });
 
-export const copySelection = mutate(() => {
+export const copySelection = mutate((ctx) => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         launch(function* () {
             yield clipboard.writeText(text);
         });
     }
-    set(contextMenuOpen$, false);
+    ctx.set(contextMenuOpen$, false);
 });
 
-export const pasteFromClipboard = mutate(() => {
+export const pasteFromClipboard = mutate((ctx) => {
     // Paste via the clipboard bridge. The engine handles Cmd+V natively
     // via the paste event on the hidden textarea, but the context-menu
     // action needs an explicit call. `clipboard.readText` returns a
@@ -83,10 +83,10 @@ export const pasteFromClipboard = mutate(() => {
             /* clipboard denied — ignore */
         }
     });
-    set(contextMenuOpen$, false);
+    ctx.set(contextMenuOpen$, false);
 });
 
-export const selectAll = mutate(() => {
+export const selectAll = mutate((ctx) => {
     editorCtrl.setSelection(0, editorCtrl.text.length);
-    set(contextMenuOpen$, false);
+    ctx.set(contextMenuOpen$, false);
 });

@@ -12,9 +12,10 @@ use tur_integration_tests::TurTestApp;
 fn std_module_imports_and_renders() {
     let mut app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
-        r#"
-            import { Column, SizedBox, CrossAxisAlignment, mount, view } from "tur:std";
-            mount(view(() =>
+        r#"const store = createStore();
+
+            import { createStore, Column, SizedBox, CrossAxisAlignment, mount, view } from "tur:std";
+            mount(store, view(() =>
                 Column({
                     crossAlignment: CrossAxisAlignment.Start,
                     children: [ SizedBox({ height: 50 }), SizedBox({ height: 30 }) ],
@@ -47,12 +48,13 @@ fn std_module_imports_and_renders() {
 fn std_re_exports_core_primitives() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
-        r#"
-            import { source, get, set } from "tur:std";
+        r#"const store = createStore();
+
+            import { createStore, source } from "tur:std";
             const a = source(42);
-            globalThis.__val = get(a);
-            set(a, 7);
-            globalThis.__val2 = get(a);
+            globalThis.__val = store.get(a);
+            store.set(a, 7);
+            globalThis.__val2 = store.get(a);
         "#,
     )
     .unwrap();

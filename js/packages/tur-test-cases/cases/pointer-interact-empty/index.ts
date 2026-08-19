@@ -1,3 +1,5 @@
-import { PointerInteract, view } from "tur:std";
+import { createStore, PointerInteract, view } from "tur:std";
+
+export const store = createStore();
 
 export default view(() => PointerInteract({}));

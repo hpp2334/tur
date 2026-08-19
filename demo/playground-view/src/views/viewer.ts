@@ -5,7 +5,6 @@ import {
     derive,
     Each,
     type Element,
-    get,
     SizedBox,
     Switch,
     Text,
@@ -45,10 +44,10 @@ function ReadyViewer(): Element {
             // array identity changes — Switch can't do this because its case
             // keys are static.
             Each({
-                items: derive(() => [
+                items: derive((ctx) => [
                     {
-                        name: get(selectedCase$),
-                        v: get(compileVersion$),
+                        name: ctx.get(selectedCase$),
+                        v: ctx.get(compileVersion$),
                     },
                 ]),
                 build: (item) =>
@@ -90,7 +89,7 @@ function ErrorPanel(): Element {
                     }),
                     SizedBox({ height: 8 }),
                     Text({
-                        text: derive(() => get(errorMsg$)),
+                        text: derive((ctx) => ctx.get(errorMsg$)),
                         fontSize: 12,
                         color: tokens.text.onDanger,
                     }),

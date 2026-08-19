@@ -3,12 +3,15 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    createStore,
     Positioned,
     SizedBox,
     Stack,
     Transform,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Target is wrapped in a `Transform` (paint-only translate). Layout places the
 // Transform at (20, 20); the translate (50, 10) is applied at paint only. The

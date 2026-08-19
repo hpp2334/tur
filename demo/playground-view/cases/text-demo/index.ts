@@ -5,9 +5,9 @@ import {
     CrossAxisAlignment,
     derive,
     type Element,
-    get,
     MainAxisSize,
     MouseRegion,
+    type Mutation,
     mutate,
     PointerInteract,
     Row,
@@ -46,11 +46,11 @@ const BROWN = "The quick brown fox jumps over the lazy dog.";
 
 const maxLines$ = source<number>(2);
 
-function cycleMaxLines(ctx: StoreCtx): void {
+const cycleMaxLines = mutate((ctx: StoreCtx) => {
     const cur = ctx.get(maxLines$);
     // 2 → 1 → 3 → 2 (cycles through interesting truncation regimes).
     ctx.set(maxLines$, cur === 2 ? 1 : cur === 1 ? 3 : 2);
-}
+});
 
 /// A titled, content-sized card. `mainAxisSize: MainAxisSize.Min` keeps the
 /// card as short as its children (the bug fixed: a string `"min"` here used
@@ -87,12 +87,12 @@ function PrimaryButton({
     onClick,
 }: {
     label: Val<string>;
-    onClick: (ctx: StoreCtx) => void;
+    onClick: Mutation<[], void>;
 }): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx, _ev) => onClick(ctx)),
+            onClick: mutate((ctx, _ev) => ctx.set(onClick)),
             child: Container({
                 padding: 10,
                 borderRadius: 8,
@@ -132,7 +132,7 @@ function OverflowCard({
                         text: BROWN,
                         fontSize: 12,
                         color: C.text,
-                        maxLines: derive(() => get(maxLines$)),
+                        maxLines: derive((ctx) => ctx.get(maxLines$)),
                         overflow,
                     }),
                 ],
@@ -311,8 +311,8 @@ export default view(() =>
                             children: [
                                 Text({
                                     text: derive(
-                                        () =>
-                                            `maxLines = ${get(maxLines$)}  ·  width = 100px`,
+                                        (ctx) =>
+                                            `maxLines = ${ctx.get(maxLines$)}  ·  width = 100px`,
                                     ),
                                     fontSize: 11,
                                     color: C.textMuted,
@@ -332,8 +332,8 @@ export default view(() =>
                                 SizedBox({ height: 10 }),
                                 PrimaryButton({
                                     label: derive(
-                                        () =>
-                                            `cycle maxLines (now ${get(maxLines$)})`,
+                                        (ctx) =>
+                                            `cycle maxLines (now ${ctx.get(maxLines$)})`,
                                     ),
                                     onClick: cycleMaxLines,
                                 }),

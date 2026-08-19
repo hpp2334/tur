@@ -8,7 +8,6 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -17,7 +16,6 @@ import {
     Row,
     ScrollView,
     SizedBox,
-    set,
     Text,
     type Val,
 } from "tur:std";
@@ -64,18 +62,16 @@ function SidebarHeader(): Element {
  *  bar when selected; multi-file cases expand an indented file list below
  *  the row when active. */
 function NavItem(name: string): Element {
-    const isSelected = () => get(selectedCase$) === name;
-
     return Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
             SizedBox({ height: 2 }),
             MouseRegion({
                 cursor: "pointer",
-                onEnter: mutate((_ctx, _ev) => set(hoveredCase$, name)),
-                onExit: mutate((_ctx, _ev) => set(hoveredCase$, null)),
+                onEnter: mutate((ctx, _ev) => ctx.set(hoveredCase$, name)),
+                onExit: mutate((ctx, _ev) => ctx.set(hoveredCase$, null)),
                 child: PointerInteract({
-                    onClick: mutate((_ctx, _ev) => loadCase(name)),
+                    onClick: mutate((ctx, _ev) => ctx.set(loadCase, name)),
                     child: Container({
                         // Horizontal inset so the rounded card floats in
                         // the sidebar rather than bleeding to the edge.
@@ -92,8 +88,8 @@ function NavItem(name: string): Element {
                                         width: 3,
                                         height: 20,
                                         borderRadius: 2,
-                                        color: derive(() =>
-                                            isSelected()
+                                        color: derive((ctx) =>
+                                            ctx.get(selectedCase$) === name
                                                 ? tokens.accent.solid
                                                 : null,
                                         ) as unknown as Brush,
@@ -103,10 +99,13 @@ function NavItem(name: string): Element {
                                         child: Container({
                                             borderRadius: 5,
                                             padding: 7,
-                                            color: derive(() => {
-                                                const selected = isSelected();
+                                            color: derive((ctx) => {
+                                                const selected =
+                                                    ctx.get(selectedCase$) ===
+                                                    name;
                                                 const hovered =
-                                                    get(hoveredCase$) === name;
+                                                    ctx.get(hoveredCase$) ===
+                                                    name;
                                                 if (selected)
                                                     return hovered
                                                         ? tokens.bg.strongHover
@@ -123,21 +122,24 @@ function NavItem(name: string): Element {
                                                         Text({
                                                             text: name,
                                                             fontSize: 13,
-                                                            color: derive(() =>
-                                                                isSelected()
-                                                                    ? tokens
-                                                                          .text
-                                                                          .primary
-                                                                    : get(
-                                                                            hoveredCase$,
-                                                                        ) ===
-                                                                        name
-                                                                      ? tokens
-                                                                            .text
-                                                                            .primary
-                                                                      : tokens
-                                                                            .text
-                                                                            .body,
+                                                            color: derive(
+                                                                (ctx) =>
+                                                                    ctx.get(
+                                                                        selectedCase$,
+                                                                    ) === name
+                                                                        ? tokens
+                                                                              .text
+                                                                              .primary
+                                                                        : ctx.get(
+                                                                                hoveredCase$,
+                                                                            ) ===
+                                                                            name
+                                                                          ? tokens
+                                                                                .text
+                                                                                .primary
+                                                                          : tokens
+                                                                                .text
+                                                                                .body,
                                                             ),
                                                         }),
                                                         // Edited indicator —
@@ -148,11 +150,13 @@ function NavItem(name: string): Element {
                                                         // version.
                                                         Condition({
                                                             condition: derive(
-                                                                () =>
-                                                                    get(
+                                                                (ctx) =>
+                                                                    ctx.get(
                                                                         edited$,
                                                                     ) &&
-                                                                    isSelected(),
+                                                                    ctx.get(
+                                                                        selectedCase$,
+                                                                    ) === name,
                                                             ),
                                                             child: () =>
                                                                 Container({
@@ -184,7 +188,9 @@ function NavItem(name: string): Element {
             // files, indented under the case row.
             Condition({
                 condition: derive(
-                    () => isSelected() && getCaseFileNames(name).length > 1,
+                    (ctx) =>
+                        ctx.get(selectedCase$) === name &&
+                        getCaseFileNames(name).length > 1,
                 ),
                 child: () =>
                     Container({
@@ -228,19 +234,18 @@ function NavItem(name: string): Element {
 
 /** A file tab in the nested file list. Only shown for multi-file cases. */
 function FileItem(filename: string): Element {
-    const isSelected = () => get(selectedFile$) === filename;
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(hoveredFile$, filename)),
-        onExit: mutate((_ctx, _ev) => set(hoveredFile$, null)),
+        onEnter: mutate((ctx, _ev) => ctx.set(hoveredFile$, filename)),
+        onExit: mutate((ctx, _ev) => ctx.set(hoveredFile$, null)),
         child: PointerInteract({
-            onClick: mutate((_ctx, _ev) => selectFile(filename)),
+            onClick: mutate((ctx, _ev) => ctx.set(selectFile, filename)),
             child: Container({
                 padding: 5,
                 borderRadius: 4,
-                color: derive(() => {
-                    const selected = isSelected();
-                    const hovered = get(hoveredFile$) === filename;
+                color: derive((ctx) => {
+                    const selected = ctx.get(selectedFile$) === filename;
+                    const hovered = ctx.get(hoveredFile$) === filename;
                     if (selected) return tokens.bg.strongHover;
                     return hovered ? tokens.bg.hover : null;
                 }) as unknown as Brush,
@@ -251,17 +256,20 @@ function FileItem(filename: string): Element {
                             Text({
                                 text: filename,
                                 fontSize: 12,
-                                color: derive(() =>
-                                    isSelected()
+                                color: derive((ctx) =>
+                                    ctx.get(selectedFile$) === filename
                                         ? tokens.text.primary
-                                        : get(hoveredFile$) === filename
+                                        : ctx.get(hoveredFile$) === filename
                                           ? tokens.text.primary
                                           : tokens.text.secondary,
                                 ),
                             }),
                             // Active file marker — small accent dot.
                             Condition({
-                                condition: derive(() => isSelected()),
+                                condition: derive(
+                                    (ctx) =>
+                                        ctx.get(selectedFile$) === filename,
+                                ),
                                 child: () =>
                                     Container({
                                         width: 4,
@@ -286,8 +294,8 @@ export function Sidebar(): Element {
         // `null` resolves to `None` at layout time → the container fills its
         // parent's main axis. The cast escapes the `number | null` type since
         // `Val<number>` isn't nullable in the prop signature.
-        width: derive(() =>
-            get(isMobile$) ? null : get(sidebarWidth$),
+        width: derive((ctx) =>
+            ctx.get(isMobile$) ? null : ctx.get(sidebarWidth$),
         ) as unknown as Val<number>,
         color: tokens.bg.panel,
         children: [

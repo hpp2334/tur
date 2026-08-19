@@ -6,7 +6,6 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
     Input,
     MouseRegion,
     type Mutation,
@@ -15,7 +14,6 @@ import {
     Row,
     Scrollbar,
     ScrollView,
-    set,
     source,
 } from "tur:std";
 import {
@@ -55,17 +53,17 @@ function scrollableEditor(): Element {
             }),
             // Dedicated 10px scrollbar column.
             MouseRegion({
-                onEnter: mutate(() =>
-                    set(trackHovered$, true),
+                onEnter: mutate((ctx) =>
+                    ctx.set(trackHovered$, true),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
-                onExit: mutate(() =>
-                    set(trackHovered$, false),
+                onExit: mutate((ctx) =>
+                    ctx.set(trackHovered$, false),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
                 child: Scrollbar({
                     controller,
                     color: tokens.text.placeholder,
-                    trackColor: derive(() =>
-                        get(trackHovered$)
+                    trackColor: derive((ctx) =>
+                        ctx.get(trackHovered$)
                             ? tokens.bg.strongHover
                             : Color.rgba(0, 0, 0, 0),
                     ),
@@ -87,8 +85,11 @@ export function Editor(): Element {
             // changes so it re-reads the controller spans (reset by
             // loadCase / selectFile).
             Each({
-                items: derive(() => [
-                    { case: get(selectedCase$), file: get(selectedFile$) },
+                items: derive((ctx) => [
+                    {
+                        case: ctx.get(selectedCase$),
+                        file: ctx.get(selectedFile$),
+                    },
                 ]),
                 build: () => scrollableEditor(),
             }),

@@ -4,8 +4,8 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    createStore,
     derive,
-    get,
     type Mutation,
     mutate,
     PointerInteract,
@@ -13,10 +13,10 @@ import {
     Positioned,
     SizedBox,
     Stack,
-    set,
     source,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // Reactive anchor: `targetAnchor` is driven by a source. A button flips it
 // from TopLeft to BottomRight; the follower must relocate to the target's
@@ -38,7 +38,7 @@ export default view(() => {
             }),
             CompositedTransformFollower({
                 link,
-                targetAnchor: derive(() => get(anchor$)),
+                targetAnchor: derive((ctx) => ctx.get(anchor$)),
                 child: Container({ width: 20, height: 20, color: "red" }),
             }),
             // Button at (20, 540), 60×30 — click flips the anchor.
@@ -46,8 +46,8 @@ export default view(() => {
                 left: 20,
                 top: 540,
                 child: PointerInteract({
-                    onClick: mutate(() =>
-                        set(anchor$, Alignment.BottomRight),
+                    onClick: mutate((ctx) =>
+                        ctx.set(anchor$, Alignment.BottomRight),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
                     child: Container({
                         width: 60,
