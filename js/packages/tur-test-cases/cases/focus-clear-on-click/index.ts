@@ -32,8 +32,8 @@ export default view(() =>
                 queryKey: ["editable"],
             }),
             PointerInteract({
-                onClick: mutate((_ctx) =>
-                    store.set(clicks$, store.get(clicks$) + 1),
+                onClick: mutate((ctx) =>
+                    ctx.set(clicks$, ctx.get(clicks$) + 1),
                 ),
                 child: Text({
                     text: derive((ctx) => `clicks: ${ctx.get(clicks$)}`),

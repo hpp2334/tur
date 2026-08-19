@@ -18,7 +18,7 @@ export default view(() =>
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             PointerInteract({
-                onClick: mutate((_ctx, _ev) => store.set(content$, "after")),
+                onClick: mutate((ctx, _ev) => ctx.set(content$, "after")),
                 child: Text({
                     text: derive((ctx) => ctx.get(content$)),
                     queryKey: ["click-text"],

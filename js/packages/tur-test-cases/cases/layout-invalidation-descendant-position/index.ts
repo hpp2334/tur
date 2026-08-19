@@ -43,7 +43,7 @@ Object.assign(globalThis, {
 // position after a divider drag).
 export default view(() =>
     Container({
-        width: derive(() => store.get(width$)),
+        width: derive((ctx) => ctx.get(width$)),
         children: [
             Row({
                 mainAlignment: MainAxisAlignment.End,

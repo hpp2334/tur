@@ -5,10 +5,10 @@
  * (`core::js_runtime::module_loader`, wired in `core::runtime`) under the
  * specifier `"tur:core"`. It exports the reactive substrate + view entry:
  * atom declarations (`source`/`derive`/`mutate` — pure handles carrying no
- * state), the store objects (`createStore`/`getStore` — the KV containers),
- * `view`, and the `mount(store, root)` view-tree entry point, plus the
- * opaque meta-types (`Element`/`Source`/`Derived`/`Mutation`/`Readable`/
- * `Val`/`Store`/`ReadonlyStoreCtx`/`StoreCtx`).
+ * state), the store object (`createStore` — the KV container), `view`, and
+ * the `mount(store, root)` view-tree entry point, plus the opaque meta-types
+ * (`Element`/`Source`/`Derived`/`Mutation`/`Readable`/`Val`/`Store`/
+ * `ReadonlyStoreCtx`/`StoreCtx`).
  *
  * This is the authoritative contract for the engine's reactive layer. The
  * widget library (`tur:std`, declared in `@tur-ng/std`) re-exports
@@ -27,6 +27,19 @@
  * module mounts its tree with `mount(store, view)`, binding the tree's
  * declarations to that store. Engine-minted atoms (e.g. `viewportSize$`)
  * have a single engine-owned home and are readable through any store.
+ *
+ * THERE IS NO "CURRENT STORE" GETTER: reactive access happens through the
+ * ctx handed to `derive`/`mutate` closures (and callback props like
+ * `onTick`/`onClick`, which are mutations). The ctx is a stable store-bound
+ * reader/writer, so code that needs reactive access outside a closure —
+ * helper functions, `launch` generator bodies — threads/captures the ctx
+ * from the enclosing mutation instead:
+ *
+ *     const startLoop = mutate((ctx) => {
+ *         launch(function* () {
+ *             while (ctx.get(running$)) { yield sleep(1000); ctx.set(n$, ...); }
+ *         });
+ *     });
  *
  * The event framework is two functions: `mutate` (declare a handler as a
  * deferred `Mutation` atom) and `store.set` (dispatch it). The concrete
@@ -71,8 +84,8 @@ declare module "tur:core" {
     export type Val<T> = T | Readable<T>;
 
     // ---------------------------------------------------------------------------
-    // Store — the KV container for atom state (from `createStore()` /
-    // `getStore()`). Opaque handle; reads/writes accept declarations
+    // Store — the KV container for atom state (from `createStore()`).
+    // Opaque handle; reads/writes accept declarations
     // (materialized into THIS store) and engine-owned atoms (routed).
     // ---------------------------------------------------------------------------
 
@@ -118,13 +131,6 @@ declare module "tur:core" {
      *  or written through it materialize there; the same declaration in two
      *  stores is two independent atoms. Pass it to `mount(store, view)`. */
     export function createStore(): Store;
-
-    /** The currently mounted store — the one passed to the most recent
-     *  `mount(store, view)` (the engine store before any mount). Library
-     *  code embedded in another module's tree (e.g. in-realm compiled
-     *  cases) uses this so its declarations share the host's store. Full
-     *  modules should create + export their own store instead. */
-    export function getStore(): Store;
 
     export function view(f: () => Element): Element;
 

@@ -23,20 +23,20 @@ export default view(() =>
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             PointerInteract({
-                onPointerDown: mutate((_ctx, ev) => {
-                    store.set(lastX$, Math.round(ev.global.x));
-                    store.set(lastY$, Math.round(ev.global.y));
-                    store.set(phase$, "down");
+                onPointerDown: mutate((ctx, ev) => {
+                    ctx.set(lastX$, Math.round(ev.global.x));
+                    ctx.set(lastY$, Math.round(ev.global.y));
+                    ctx.set(phase$, "down");
                 }),
-                onPointerMove: mutate((_ctx, ev) => {
-                    store.set(lastX$, Math.round(ev.global.x));
-                    store.set(lastY$, Math.round(ev.global.y));
-                    store.set(phase$, "move");
+                onPointerMove: mutate((ctx, ev) => {
+                    ctx.set(lastX$, Math.round(ev.global.x));
+                    ctx.set(lastY$, Math.round(ev.global.y));
+                    ctx.set(phase$, "move");
                 }),
-                onPointerUp: mutate((_ctx, ev) => {
-                    store.set(lastX$, Math.round(ev.global.x));
-                    store.set(lastY$, Math.round(ev.global.y));
-                    store.set(phase$, "up");
+                onPointerUp: mutate((ctx, ev) => {
+                    ctx.set(lastX$, Math.round(ev.global.x));
+                    ctx.set(lastY$, Math.round(ev.global.y));
+                    ctx.set(phase$, "up");
                 }),
                 child: Container({
                     width: 100,

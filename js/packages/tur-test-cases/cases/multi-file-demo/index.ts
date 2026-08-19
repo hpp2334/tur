@@ -31,8 +31,8 @@ export default view(() =>
                         color: COLORS.text,
                     }),
                     PointerInteract({
-                        onClick: mutate((_ctx, _ev) =>
-                            store.set(count$, store.get(count$) + 1),
+                        onClick: mutate((ctx, _ev) =>
+                            ctx.set(count$, ctx.get(count$) + 1),
                         ),
                         child: Container({
                             width: 120,

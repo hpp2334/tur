@@ -8,17 +8,19 @@
  * `AnimatedPositioned`, `Tween`, `ColorTween`).
  *
  * The widgets are composed entirely from `tur:std` primitives
- * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — the only
- * native elements involved (`Opacity`/`Transform`/`Container`/`Positioned`)
- * all ship as part of `tur:std`.
+ * (`Tween` + `derive` + `createAnimationController`) — the elements involved
+ * (`Opacity`/`Transform`/`Container`/`Positioned`) all ship as part of
+ * `tur:std`.
  *
- * Each animatable prop becomes a "channel": a Tween/ColorTween seeded at the
- * prop's initial value, displayed as `tween.lerp(progress)`. One
- * `AnimationController` drives a shared `progress` source via `onTick`. When a
- * reactive target changes, `ReadableSubscribe.onUpdate$` rebases each
- * channel's `begin` to its currently-displayed value, sets `end` to the new
- * target, and restarts the controller. Static (non-readable) props never
- * retarget — they pass through.
+ * Each animatable prop becomes a "channel": a `derive` closure over a
+ * Tween/ColorTween displayed as `tween.lerp(progress)`, where one shared
+ * `AnimationController` drives a `progress` source via `onTick`. The closure
+ * detects the reactive target by probing `ctx.get(target)` (which throws for
+ * non-atoms, so static props pass through) and compares against the
+ * last-seen target value: on change it rebases `begin` to the currently
+ * displayed value, sets `end` to the new target, and restarts the
+ * controller — Flutter's `ImplicitlyAnimatedWidget` retarget, inline in the
+ * derive. `duration` / `curve` are static (parsed once at build).
  */
 
 import { createAnimationController } from "tur:animation/native";
@@ -27,11 +29,8 @@ import {
     Container,
     Opacity,
     Positioned,
-    ReadableSubscribe,
-    Transform,
     colorLerp,
     derive,
-    getStore,
     mutate,
     source,
 } from "tur:std";
@@ -100,66 +99,55 @@ export function ColorTween(opts) {
 // AnimatedContainer / AnimatedOpacity / AnimatedPositioned
 // ---------------------------------------------------------------------------
 
-// Precisely detects reactive atom handles by probing `get`, which the store
-// validates and rejects (throws) for non-atoms. Carries the current value so
-// callers avoid a second read. Reads through the mounted store — factory fns
-// run during view build, when the mounted store is the widget's store.
-function probeAtom(v) {
-    if (typeof v !== "object" || v === null) return { atom: false };
-    try {
-        const handle = v;
-        return { atom: true, handle, value: getStore().get(handle) };
-    } catch {
-        return { atom: false };
-    }
-}
-
-// Resolve a `Val<T>` to its current static value (read once, then fixed).
-function resolveStatic(v, fallback) {
-    if (v == null) return fallback;
-    const probe = probeAtom(v);
-    return probe.atom ? probe.value : v;
-}
-
-// Register one animatable channel: returns a `derive(() => tween.lerp(progress))`
-// for reactive props, or the static value unchanged for non-reactive props.
-function animChannel(target, progress, makeTween, retargets, readables) {
-    const probe = probeAtom(target);
-    if (!probe.atom) return target;
-    readables.push(probe.handle);
-    const tween = makeTween(probe.value);
-    const handle = probe.handle;
-    retargets.push(() => {
-        const store = getStore();
-        tween.begin = tween.lerp(store.get(progress));
-        tween.end = store.get(handle);
+// Register one animatable channel: returns a `derive` closure that detects
+// the reactive target inline — `ctx.get(target)` throws for non-atoms, so
+// static props pass through unchanged. When the target's value changes, the
+// closure rebases the tween (`begin` = currently-displayed value, `end` = new
+// target) and restarts the shared controller, then returns the displayed
+// value for this frame. No store access happens at factory/build time — the
+// closure ctx is the only reactive surface.
+function animChannel(target, progress, makeTween, ctrl) {
+    let tween = null;
+    let lastTarget;
+    return derive((ctx) => {
+        let v;
+        try {
+            v = ctx.get(target);
+        } catch {
+            // Not an atom handle — a static prop; never retargets.
+            return target;
+        }
+        if (!tween) {
+            tween = makeTween(v);
+            lastTarget = v;
+        } else if (v !== lastTarget) {
+            tween.begin = tween.lerp(ctx.get(progress));
+            tween.end = v;
+            lastTarget = v;
+            ctrl.forward();
+        }
+        return tween.lerp(ctx.get(progress));
     });
-    // The derive closure reads through its ctx, so `progress` materializes
-    // into the owning atom's store (the mounted store for tree-driven flows).
-    return derive((ctx) => tween.lerp(ctx.get(progress)));
-}
-
-function runRetargets(retargets, ctrl) {
-    for (const r of retargets) r();
-    ctrl.forward();
 }
 
 export function AnimatedContainer(props) {
-    const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic(props.curve, "linear");
+    const duration = props.duration ?? 300;
+    const curve = props.curve ?? "linear";
     const progress$ = source(1.0);
-    const retargets = [];
-    const readables = [];
-    const num = (i) => Tween({ begin: i, end: i });
     // `color` props accept solid `Color`s; gradients / null snap to the new
     // target (no interpolation).
+    const num = (i) => Tween({ begin: i, end: i });
     const col = (i) => ColorTween({ begin: i, end: i });
-    const ch = (v, mk) =>
-        v != null
-            ? animChannel(v, progress$, mk, retargets, readables)
-            : undefined;
 
-    const child = Container({
+    const ctrl = createAnimationController({
+        duration,
+        curve,
+        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
+        onEnd: props.onEnd,
+    });
+
+    const ch = (v, mk) => (v != null ? animChannel(v, progress$, mk, ctrl) : undefined);
+    return Container({
         width: ch(props.width, num),
         height: ch(props.height, num),
         padding: ch(props.padding, num),
@@ -175,36 +163,14 @@ export function AnimatedContainer(props) {
         queryKey: props.queryKey,
         children: props.children,
     });
-
-    const ctrl = createAnimationController({
-        duration,
-        curve,
-        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
-        onEnd: props.onEnd,
-    });
-
-    return ReadableSubscribe({
-        readables,
-        onUpdate$: mutate(() => runRetargets(retargets, ctrl)),
-        child,
-    });
 }
 
 export function AnimatedOpacity(props) {
-    const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic(props.curve, "linear");
+    const duration = props.duration ?? 300;
+    const curve = props.curve ?? "linear";
     const progress$ = source(1.0);
-    const retargets = [];
-    const readables = [];
     const num = (i) => Tween({ begin: i, end: i });
 
-    const value = animChannel(
-        props.value,
-        progress$,
-        num,
-        retargets,
-        readables,
-    );
     const ctrl = createAnimationController({
         duration,
         curve,
@@ -212,26 +178,26 @@ export function AnimatedOpacity(props) {
         onEnd: props.onEnd,
     });
 
-    return ReadableSubscribe({
-        readables,
-        onUpdate$: mutate(() => runRetargets(retargets, ctrl)),
-        child: Opacity({ value, child: props.child, queryKey: props.queryKey }),
-    });
+    const value =
+        props.value != null ? animChannel(props.value, progress$, num, ctrl) : undefined;
+    return Opacity({ value, child: props.child, queryKey: props.queryKey });
 }
 
 export function AnimatedPositioned(props) {
-    const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic(props.curve, "linear");
+    const duration = props.duration ?? 300;
+    const curve = props.curve ?? "linear";
     const progress$ = source(1.0);
-    const retargets = [];
-    const readables = [];
     const num = (i) => Tween({ begin: i, end: i });
-    const ch = (v) =>
-        v != null
-            ? animChannel(v, progress$, num, retargets, readables)
-            : undefined;
 
-    const child = Positioned({
+    const ctrl = createAnimationController({
+        duration,
+        curve,
+        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
+        onEnd: props.onEnd,
+    });
+
+    const ch = (v) => (v != null ? animChannel(v, progress$, num, ctrl) : undefined);
+    return Positioned({
         left: ch(props.left),
         top: ch(props.top),
         right: ch(props.right),
@@ -239,18 +205,5 @@ export function AnimatedPositioned(props) {
         width: ch(props.width),
         height: ch(props.height),
         child: props.child,
-    });
-
-    const ctrl = createAnimationController({
-        duration,
-        curve,
-        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
-        onEnd: props.onEnd,
-    });
-
-    return ReadableSubscribe({
-        readables,
-        onUpdate$: mutate(() => runRetargets(retargets, ctrl)),
-        child,
     });
 }

@@ -32,8 +32,8 @@ const dragScale$ = source(1.0);
 const liftCtrl = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
-    onTick: mutate((_ctx, v: number) => {
-        store.set(dragScale$, 1 + v * (LIFT_MAX - 1));
+    onTick: mutate((ctx, v: number) => {
+        ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
@@ -50,7 +50,7 @@ Object.assign(globalThis, {
 
 export default view(() =>
     Transform({
-        scale: derive(() => store.get(dragScale$)),
+        scale: derive((ctx) => ctx.get(dragScale$)),
         child: PointerInteract({
             onPointerDown: mutate((_ctx, ev) => {
                 dragStart = { x: ev.global.x, y: ev.global.y };

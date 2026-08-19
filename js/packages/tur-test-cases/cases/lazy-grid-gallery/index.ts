@@ -91,8 +91,8 @@ function Pill(props: {
             child: Container({
                 padding: 7,
                 borderRadius: 7,
-                color: derive(() =>
-                    store.get(props.active)
+                color: derive((ctx) =>
+                    ctx.get(props.active)
                         ? Color.hex("#6366f1")
                         : Color.hex("#1e293b"),
                 ),
@@ -134,27 +134,27 @@ export default view(() =>
                             Pill({
                                 label: "Square",
                                 active: derive(
-                                    () =>
-                                        Math.abs(store.get(aspect$) - 1) < 0.01,
+                                    (ctx) =>
+                                        Math.abs(ctx.get(aspect$) - 1) < 0.01,
                                 ),
-                                onClick: mutate(() => {
-                                    store.set(aspect$, 1);
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 1);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Wide",
-                                active: derive(() => store.get(aspect$) > 1),
-                                onClick: mutate(() => {
-                                    store.set(aspect$, 2);
+                                active: derive((ctx) => ctx.get(aspect$) > 1),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 2);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Tall",
-                                active: derive(() => store.get(aspect$) < 1),
-                                onClick: mutate(() => {
-                                    store.set(aspect$, 0.5);
+                                active: derive((ctx) => ctx.get(aspect$) < 1),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 0.5);
                                 }),
                             }),
                         ],
@@ -165,17 +165,17 @@ export default view(() =>
                         children: [
                             Pill({
                                 label: "Normal",
-                                active: derive(() => !store.get(dense$)),
-                                onClick: mutate(() => {
-                                    store.set(dense$, false);
+                                active: derive((ctx) => !ctx.get(dense$)),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(dense$, false);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Dense",
-                                active: derive(() => store.get(dense$)),
-                                onClick: mutate(() => {
-                                    store.set(dense$, true);
+                                active: derive((ctx) => ctx.get(dense$)),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(dense$, true);
                                 }),
                             }),
                         ],
@@ -189,11 +189,11 @@ export default view(() =>
                                 LazyGrid({
                                     axis: Axis.Vertical,
                                     itemCount: ITEM_COUNT,
-                                    maxCrossAxisExtent: derive(() =>
-                                        store.get(dense$) ? 85 : 140,
+                                    maxCrossAxisExtent: derive((ctx) =>
+                                        ctx.get(dense$) ? 85 : 140,
                                     ),
-                                    childAspectRatio: derive(() =>
-                                        store.get(aspect$),
+                                    childAspectRatio: derive((ctx) =>
+                                        ctx.get(aspect$),
                                     ),
                                     crossAxisSpacing: 4,
                                     mainAxisSpacing: 4,

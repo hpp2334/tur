@@ -11,16 +11,16 @@ use crate::core::js_runtime::js_value::IntoJs;
 ///
 /// `source` / `derive` / `mutate` mint **declarations** — pure handles that
 /// hold no state; a store materializes them on first touch. Reading/writing
-/// happens through a store (`createStore()` / `getStore()` object's `get` /
-/// `set`) or the `{get, set}` ctx handed to derive/mutate closures — there
-/// are no module-level `get` / `set` functions.
+/// happens through a store (`createStore()` object's `get` / `set`) or the
+/// `{get, set}` ctx handed to derive/mutate closures — there are no
+/// module-level `get` / `set` functions and no way to grab "the current
+/// store" (embedded code threads ctx through from its closures).
 pub fn fns() -> Vec<FnEntry> {
     vec![
         ("source", 2, tur_source as Ptr),
         ("derive", 2, tur_derive as Ptr),
         ("mutate", 2, tur_mutate as Ptr),
         ("createStore", 1, tur_create_store as Ptr),
-        ("getStore", 1, tur_get_store as Ptr),
         ("view", 1, tur_view as Ptr),
     ]
 }
@@ -66,18 +66,6 @@ fn tur_mutate(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsRes
 fn tur_create_store(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let store = js_ctx.store.spawn();
-    let obj = make_store_js_object(context, store);
-    Ok(obj.into())
-}
-
-/// `getStore()` — the currently **mounted** store (the store the most recent
-/// `mount(store, view)` bound to the tree; the engine store before any
-/// mount). Library code embedded in another app's tree (e.g. in-realm
-/// compiled playground cases) uses this so its declarations share the host's
-/// store. Full modules should create + export their own store instead.
-fn tur_get_store(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_js_ctx(args)?;
-    let store = js_ctx.element_tree.store();
     let obj = make_store_js_object(context, store);
     Ok(obj.into())
 }

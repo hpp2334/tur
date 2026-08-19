@@ -20,7 +20,7 @@ export const store = createStore();
 const value$ = source("hunter2");
 const pwCtrl = createTextEditingController({
     initialText: "hunter2",
-    onInput: mutate((_ctx, text: string) => store.set(value$, text)),
+    onInput: mutate((ctx, text: string) => ctx.set(value$, text)),
 });
 const plainCtrl = createTextEditingController({});
 
@@ -53,7 +53,7 @@ export default view(() =>
                         queryKey: ["password"],
                     }),
                     Text({
-                        text: derive(() => `value: "${store.get(value$)}"`),
+                        text: derive((ctx) => `value: "${ctx.get(value$)}"`),
                         fontSize: 12,
                         color: Color.rgb(100, 116, 139),
                     }),

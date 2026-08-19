@@ -16,6 +16,7 @@ import {
     PointerInteract,
     type PointerInteractEvent,
     type Readable,
+    type ReadonlyStoreCtx,
     Row,
     ScrollView,
     SizedBox,
@@ -92,8 +93,8 @@ function Pill(props: {
             child: Container({
                 padding: 7,
                 borderRadius: 7,
-                color: derive(() =>
-                    store.get(props.active)
+                color: derive((ctx) =>
+                    ctx.get(props.active)
                         ? Color.hex("#6366f1")
                         : Color.hex("#1e293b"),
                 ),
@@ -115,13 +116,15 @@ function tile(i: number): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((_ctx) => {
-                store.set(selected$, i);
+            onClick: mutate((ctx) => {
+                ctx.set(selected$, i);
             }),
             child: Container({
                 color: base,
                 borderRadius: 8,
-                borderWidth: derive(() => (store.get(selected$) === i ? 3 : 0)),
+                borderWidth: derive((ctx) =>
+                    ctx.get(selected$) === i ? 3 : 0,
+                ),
                 borderColor: Color.hex("#ffffff"),
                 children: [
                     Text({
@@ -135,8 +138,8 @@ function tile(i: number): Element {
     });
 }
 
-function aspectLabel(): string {
-    const a = store.get(aspect$);
+function aspectLabel(ctx: ReadonlyStoreCtx): string {
+    const a = ctx.get(aspect$);
     if (Math.abs(a - 1) < 0.01) return "1:1";
     if (a > 1) return "16:9";
     return "9:16";
@@ -158,8 +161,8 @@ export default view(() =>
                     SizedBox({ height: 4 }),
                     Text({
                         text: derive(
-                            () =>
-                                `tile #${store.get(selected$)} · ${aspectLabel()} · maxExtent ${store.get(maxExtent$)}`,
+                            (ctx) =>
+                                `tile #${ctx.get(selected$)} · ${aspectLabel(ctx)} · maxExtent ${ctx.get(maxExtent$)}`,
                         ),
                         fontSize: 12,
                         color: Color.hex("#94a3b8"),
@@ -171,27 +174,27 @@ export default view(() =>
                             Pill({
                                 label: "1:1",
                                 active: derive(
-                                    () =>
-                                        Math.abs(store.get(aspect$) - 1) < 0.01,
+                                    (ctx) =>
+                                        Math.abs(ctx.get(aspect$) - 1) < 0.01,
                                 ),
-                                onClick: mutate((_ctx) => {
-                                    store.set(aspect$, 1);
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 1);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "16:9",
-                                active: derive(() => store.get(aspect$) > 1),
-                                onClick: mutate((_ctx) => {
-                                    store.set(aspect$, 16 / 9);
+                                active: derive((ctx) => ctx.get(aspect$) > 1),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 16 / 9);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "9:16",
-                                active: derive(() => store.get(aspect$) < 1),
-                                onClick: mutate((_ctx) => {
-                                    store.set(aspect$, 9 / 16);
+                                active: derive((ctx) => ctx.get(aspect$) < 1),
+                                onClick: mutate((ctx) => {
+                                    ctx.set(aspect$, 9 / 16);
                                 }),
                             }),
                         ],
@@ -203,30 +206,30 @@ export default view(() =>
                             Pill({
                                 label: "Dense",
                                 active: derive(
-                                    () => store.get(maxExtent$) === 95,
+                                    (ctx) => ctx.get(maxExtent$) === 95,
                                 ),
-                                onClick: mutate((_ctx) => {
-                                    store.set(maxExtent$, 95);
+                                onClick: mutate((ctx) => {
+                                    ctx.set(maxExtent$, 95);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Normal",
                                 active: derive(
-                                    () => store.get(maxExtent$) === 150,
+                                    (ctx) => ctx.get(maxExtent$) === 150,
                                 ),
-                                onClick: mutate((_ctx) => {
-                                    store.set(maxExtent$, 150);
+                                onClick: mutate((ctx) => {
+                                    ctx.set(maxExtent$, 150);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Sparse",
                                 active: derive(
-                                    () => store.get(maxExtent$) === 220,
+                                    (ctx) => ctx.get(maxExtent$) === 220,
                                 ),
-                                onClick: mutate((_ctx) => {
-                                    store.set(maxExtent$, 220);
+                                onClick: mutate((ctx) => {
+                                    ctx.set(maxExtent$, 220);
                                 }),
                             }),
                         ],
@@ -241,11 +244,11 @@ export default view(() =>
                                 ScrollView({
                                     axis: Axis.Vertical,
                                     child: Grid({
-                                        maxCrossAxisExtent: derive(() =>
-                                            store.get(maxExtent$),
+                                        maxCrossAxisExtent: derive((ctx) =>
+                                            ctx.get(maxExtent$),
                                         ),
-                                        childAspectRatio: derive(() =>
-                                            store.get(aspect$),
+                                        childAspectRatio: derive((ctx) =>
+                                            ctx.get(aspect$),
                                         ),
                                         crossAxisSpacing: 8,
                                         mainAxisSpacing: 8,

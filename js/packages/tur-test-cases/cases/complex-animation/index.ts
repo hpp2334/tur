@@ -69,11 +69,11 @@ function createController(
         duration: 2400,
         curve,
         repeat: looping ? "infinite" : 1,
-        onTick: mutate((_ctx, v: number) => {
-            store.set(progress$, v);
+        onTick: mutate((ctx, v: number) => {
+            ctx.set(progress$, v);
         }),
-        onEnd: mutate(() => {
-            store.set(status$, ctrl.status);
+        onEnd: mutate((ctx) => {
+            ctx.set(status$, ctrl.status);
         }),
     });
 }
@@ -93,47 +93,47 @@ const colorTween = ColorTween({
 // Mutations
 // ---------------------------------------------------------------------------
 
-const playForward = mutate(() => {
+const playForward = mutate((ctx) => {
     ctrl.forward();
-    store.set(status$, ctrl.status);
+    ctx.set(status$, ctrl.status);
 });
-const playReverse = mutate(() => {
+const playReverse = mutate((ctx) => {
     ctrl.reverse();
-    store.set(status$, ctrl.status);
+    ctx.set(status$, ctrl.status);
 });
-const pause = mutate(() => {
+const pause = mutate((ctx) => {
     ctrl.pause();
-    store.set(status$, ctrl.status);
+    ctx.set(status$, ctrl.status);
 });
-const resume = mutate(() => {
+const resume = mutate((ctx) => {
     ctrl.resume();
-    store.set(status$, ctrl.status);
+    ctx.set(status$, ctrl.status);
 });
-const stop = mutate(() => {
+const stop = mutate((ctx) => {
     ctrl.stop();
-    store.set(status$, ctrl.status);
-    store.set(progress$, ctrl.value);
+    ctx.set(status$, ctrl.status);
+    ctx.set(progress$, ctrl.value);
 });
-const setSpeed = mutate((_ctx, factor: number, label: string) => {
+const setSpeed = mutate((ctx, factor: number, label: string) => {
     ctrl.setSpeed(factor);
-    store.set(speedLabel$, label);
+    ctx.set(speedLabel$, label);
 });
 const setCurve = mutate(
-    (_ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
-        const t = store.get(progress$);
-        ctrl = createController(curve, store.get(looping$));
+    (ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
+        const t = ctx.get(progress$);
+        ctrl = createController(curve, ctx.get(looping$));
         ctrl.seek(t);
-        store.set(curveLabel$, curve);
-        store.set(status$, ctrl.status);
+        ctx.set(curveLabel$, curve);
+        ctx.set(status$, ctrl.status);
     },
 );
-const toggleLooping = mutate(() => {
-    const next = !store.get(looping$);
-    const t = store.get(progress$);
-    ctrl = createController(store.get(curveLabel$), next);
+const toggleLooping = mutate((ctx) => {
+    const next = !ctx.get(looping$);
+    const t = ctx.get(progress$);
+    ctrl = createController(ctx.get(curveLabel$), next);
     ctrl.seek(t);
-    store.set(looping$, next);
-    store.set(status$, ctrl.status);
+    ctx.set(looping$, next);
+    ctx.set(status$, ctrl.status);
 });
 
 // ---------------------------------------------------------------------------
@@ -147,10 +147,10 @@ function Card(): Element {
     // the value interpolation that previously needed hand-rolled `lerp`.
     return Container({
         // Width: 120 → 280
-        width: derive(() => widthTween.lerp(store.get(progress$))),
+        width: derive((ctx) => widthTween.lerp(ctx.get(progress$))),
         height: 160,
-        borderRadius: derive(() => radiusTween.lerp(store.get(progress$))),
-        color: derive(() => colorTween.lerp(store.get(progress$))),
+        borderRadius: derive((ctx) => radiusTween.lerp(ctx.get(progress$))),
+        color: derive((ctx) => colorTween.lerp(ctx.get(progress$))),
         shadowColor: Color.rgba(15, 23, 42, 80),
         shadowBlur: 24,
         shadowOffset: [0, 8],
@@ -158,7 +158,7 @@ function Card(): Element {
         children: [
             // Rotating inner shape — demonstrates the Transform element.
             Transform({
-                rotate: derive(() => store.get(progress$) * 2 * Math.PI),
+                rotate: derive((ctx) => ctx.get(progress$) * 2 * Math.PI),
                 child: Container({
                     width: 60,
                     height: 60,
@@ -174,10 +174,10 @@ function OrbitingDot(): Element {
     // A dot that orbits around the card center.
     return Positioned({
         left: derive(
-            () => 140 + 80 * Math.cos(2 * Math.PI * store.get(progress$)),
+            (ctx) => 140 + 80 * Math.cos(2 * Math.PI * ctx.get(progress$)),
         ),
         top: derive(
-            () => 80 + 80 * Math.sin(2 * Math.PI * store.get(progress$)),
+            (ctx) => 80 + 80 * Math.sin(2 * Math.PI * ctx.get(progress$)),
         ),
         child: Container({
             width: 20,
@@ -193,7 +193,7 @@ function OrbitingDot(): Element {
 
 function ProgressReadout(): Element {
     return Text({
-        text: derive(() => `${Math.round(store.get(progress$) * 100)}%`),
+        text: derive((ctx) => `${Math.round(ctx.get(progress$) * 100)}%`),
         fontSize: 12,
         color: Color.rgba(71, 85, 105, 255),
     });
@@ -203,8 +203,8 @@ function StatusBadge(): Element {
     return Container({
         padding: 6,
         borderRadius: 999,
-        color: derive(() => {
-            const s = store.get(status$);
+        color: derive((ctx) => {
+            const s = ctx.get(status$);
             if (s === "forward" || s === "reverse") {
                 return Color.rgba(34, 197, 94, 255);
             }
@@ -214,7 +214,7 @@ function StatusBadge(): Element {
         }),
         children: [
             Text({
-                text: derive(() => store.get(status$).toUpperCase()),
+                text: derive((ctx) => ctx.get(status$).toUpperCase()),
                 fontSize: 10,
                 color: Color.rgba(255, 255, 255, 255),
             }),
@@ -254,14 +254,14 @@ function SpeedButton(factor: number, label: string): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate(() =>
-                store.set(setSpeed, factor, label),
+            onClick: mutate((ctx) =>
+                ctx.set(setSpeed, factor, label),
             ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
-                color: derive(() =>
-                    store.get(speedLabel$) === label
+                color: derive((ctx) =>
+                    ctx.get(speedLabel$) === label
                         ? Color.hex("#1e293b")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -269,8 +269,8 @@ function SpeedButton(factor: number, label: string): Element {
                     Text({
                         text: label,
                         fontSize: 10,
-                        color: derive(() =>
-                            store.get(speedLabel$) === label
+                        color: derive((ctx) =>
+                            ctx.get(speedLabel$) === label
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -288,14 +288,14 @@ function CurveButton(
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate(() =>
-                store.set(setCurve, curve),
+            onClick: mutate((ctx) =>
+                ctx.set(setCurve, curve),
             ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
-                color: derive(() =>
-                    store.get(curveLabel$) === curve
+                color: derive((ctx) =>
+                    ctx.get(curveLabel$) === curve
                         ? Color.hex("#0d9488")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -303,8 +303,8 @@ function CurveButton(
                     Text({
                         text: label,
                         fontSize: 10,
-                        color: derive(() =>
-                            store.get(curveLabel$) === curve
+                        color: derive((ctx) =>
+                            ctx.get(curveLabel$) === curve
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -319,25 +319,25 @@ function LoopButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate(() => {
-                store.set(toggleLooping);
+            onClick: mutate((ctx) => {
+                ctx.set(toggleLooping);
             }) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
-                color: derive(() =>
-                    store.get(looping$)
+                color: derive((ctx) =>
+                    ctx.get(looping$)
                         ? Color.hex("#db2777")
                         : Color.hex("#e2e8f0"),
                 ),
                 children: [
                     Text({
-                        text: derive(() =>
-                            store.get(looping$) ? "Loop ✓" : "Loop",
+                        text: derive((ctx) =>
+                            ctx.get(looping$) ? "Loop ✓" : "Loop",
                         ),
                         fontSize: 10,
-                        color: derive(() =>
-                            store.get(looping$)
+                        color: derive((ctx) =>
+                            ctx.get(looping$)
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),

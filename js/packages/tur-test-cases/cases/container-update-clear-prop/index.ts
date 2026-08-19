@@ -25,7 +25,7 @@ export default view(() =>
         padding: 20,
         children: [
             PointerInteract({
-                onClick: mutate((_ctx, _ev) => store.set(checked$, false)),
+                onClick: mutate((ctx, _ev) => ctx.set(checked$, false)),
                 child: Container({
                     width: 40,
                     height: 40,

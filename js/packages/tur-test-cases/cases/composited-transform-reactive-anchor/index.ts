@@ -38,7 +38,7 @@ export default view(() => {
             }),
             CompositedTransformFollower({
                 link,
-                targetAnchor: derive(() => store.get(anchor$)),
+                targetAnchor: derive((ctx) => ctx.get(anchor$)),
                 child: Container({ width: 20, height: 20, color: "red" }),
             }),
             // Button at (20, 540), 60×30 — click flips the anchor.
@@ -46,8 +46,8 @@ export default view(() => {
                 left: 20,
                 top: 540,
                 child: PointerInteract({
-                    onClick: mutate(() =>
-                        store.set(anchor$, Alignment.BottomRight),
+                    onClick: mutate((ctx) =>
+                        ctx.set(anchor$, Alignment.BottomRight),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
                     child: Container({
                         width: 60,

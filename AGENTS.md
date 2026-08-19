@@ -11,7 +11,7 @@ A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls i
 - The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: `mount` replaces any existing root, and module teardown clears it. A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
 - Cleanup also runs (best-effort) at instance destroy.
 
-Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell with the shared root store (`mount(store, Shell)` — the store from `src/state/store.ts`); the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded cases share the host's store via `getStore()`, rewritten by `scripts/gen-cases.cjs`); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
+Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell with the shared root store (`mount(store, Shell)` — the store from `src/state/store.ts`); the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded case code is **ctx-only**: reactive access flows through `derive`/`mutate` closure ctx, which the engine binds to the host's mounted store; `scripts/gen-cases.cjs` de-exports the case's own store line for the embedded copy); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
 
 ## Architecture
 
@@ -322,10 +322,13 @@ atoms minted by JS. JS reads/writes via `store.get(atom)` /
 **The store is the KV.** JS `source(v)` / `derive(fn)` / `mutate(fn)` return
 *pure declarations* — no state is stored at call time; the seed (initial
 value / closure) lives in the instance-wide registry. A `Store` (from
-`createStore()`, or `getStore()` for the currently mounted one) materializes
-each declaration on first read/write — the same declaration in two stores is
-two independent atoms. `mount(store, view)` binds the tree's declarations to
-that store (free module-level `get`/`set` exports are gone). Rust-minted
+`createStore()`) materializes each declaration on first read/write — the
+same declaration in two stores is two independent atoms. `mount(store, view)`
+binds the tree's declarations to that store (free module-level `get`/`set`
+exports are gone, and there is no `getStore()` either: reactive access
+outside a store goes through the closure ctx of `derive`/`mutate`, which the
+engine binds to the mounted store — code needing reactive access in helpers
+or `launch` generators threads/captures that ctx). Rust-minted
 atoms (`bridge.source(...)` etc.) are *owned* by the engine store: one value
 home, readable through any store via the shared owner map. Atom ids come
 from one per-instance counter, so the derived graph / subscriber index /
@@ -623,7 +626,7 @@ libs/
                              #   Source/Derived/AnyReadable handles) +
                              #   mutation/ (MutationHandle/
                              #   PendingMutationInvocationQueue) +
-                             #   source/derive/mutate/createStore/getStore/
+                             #   source/derive/mutate/createStore/
                              #   view bridge + ReadableSubscribe (the
                              #   engine's own tur:core)
         element.rs           # ElementKind / ElementNodeId / NodeId /

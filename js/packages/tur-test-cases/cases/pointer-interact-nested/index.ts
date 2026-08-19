@@ -26,8 +26,8 @@ export default view(() =>
         mainAxisSize: MainAxisSize.Min,
         children: [
             PointerInteract({
-                onClick: mutate((_ctx, _ev) =>
-                    store.set(outerClicks$, store.get(outerClicks$) + 1),
+                onClick: mutate((ctx, _ev) =>
+                    ctx.set(outerClicks$, ctx.get(outerClicks$) + 1),
                 ),
                 child: Container({
                     queryKey: ["outer-opaque"],
@@ -37,10 +37,10 @@ export default view(() =>
                         Row({
                             children: [
                                 PointerInteract({
-                                    onClick: mutate((_ctx, _ev) =>
-                                        store.set(
+                                    onClick: mutate((ctx, _ev) =>
+                                        ctx.set(
                                             innerClicks$,
-                                            store.get(innerClicks$) + 1,
+                                            ctx.get(innerClicks$) + 1,
                                         ),
                                     ),
                                     child: Container({
@@ -55,10 +55,10 @@ export default view(() =>
                 }),
             }),
             PointerInteract({
-                onClick: mutate((_ctx, _ev) =>
-                    store.set(
+                onClick: mutate((ctx, _ev) =>
+                    ctx.set(
                         translucentOuterClicks$,
-                        store.get(translucentOuterClicks$) + 1,
+                        ctx.get(translucentOuterClicks$) + 1,
                     ),
                 ),
                 child: Container({
@@ -70,10 +70,10 @@ export default view(() =>
                             children: [
                                 PointerInteract({
                                     behavior: HitTestBehavior.Translucent,
-                                    onClick: mutate((_ctx, _ev) =>
-                                        store.set(
+                                    onClick: mutate((ctx, _ev) =>
+                                        ctx.set(
                                             translucentInnerClicks$,
-                                            store.get(translucentInnerClicks$) +
+                                            ctx.get(translucentInnerClicks$) +
                                                 1,
                                         ),
                                     ),

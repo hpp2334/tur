@@ -45,7 +45,7 @@ export const store = createStore();
 
 const DURATION = 600;
 const expanded$ = source(false);
-const toggle = mutate(() => store.set(expanded$, !store.get(expanded$)));
+const toggle = mutate((ctx) => ctx.set(expanded$, !ctx.get(expanded$)));
 
 function Card(): Element {
     return Stack({
@@ -54,28 +54,28 @@ function Card(): Element {
             // children resolve against known bounds.
             Container({ width: 340, height: 220 }),
             AnimatedPositioned({
-                left: derive(() => (store.get(expanded$) ? 160 : 30)),
+                left: derive((ctx) => (ctx.get(expanded$) ? 160 : 30)),
                 top: 30,
                 duration: DURATION,
                 curve: "easeInOut",
                 child: AnimatedOpacity({
-                    value: derive(() => (store.get(expanded$) ? 1.0 : 0.45)),
+                    value: derive((ctx) => (ctx.get(expanded$) ? 1.0 : 0.45)),
                     duration: DURATION,
                     curve: "easeInOut",
                     child: AnimatedContainer({
                         width: 150,
                         height: 160,
-                        borderRadius: derive(() =>
-                            store.get(expanded$) ? 40 : 12,
+                        borderRadius: derive((ctx) =>
+                            ctx.get(expanded$) ? 40 : 12,
                         ),
-                        color: derive(() =>
-                            store.get(expanded$)
+                        color: derive((ctx) =>
+                            ctx.get(expanded$)
                                 ? Color.rgb(99, 102, 241)
                                 : Color.rgb(14, 165, 233),
                         ),
                         shadowColor: Color.rgba(15, 23, 42, 120),
-                        shadowBlur: derive(() =>
-                            store.get(expanded$) ? 32 : 16,
+                        shadowBlur: derive((ctx) =>
+                            ctx.get(expanded$) ? 32 : 16,
                         ),
                         shadowOffset: [0, 8],
                         duration: DURATION,
@@ -83,10 +83,8 @@ function Card(): Element {
                         alignment: Alignment.Center,
                         children: [
                             Text({
-                                text: derive(() =>
-                                    store.get(expanded$)
-                                        ? "Expanded"
-                                        : "Compact",
+                                text: derive((ctx) =>
+                                    ctx.get(expanded$) ? "Expanded" : "Compact",
                                 ),
                                 fontSize: 18,
                                 color: Color.rgb(255, 255, 255),
@@ -113,8 +111,8 @@ function ToggleButton(): Element {
                 color: Color.rgb(30, 41, 59),
                 children: [
                     Text({
-                        text: derive(() =>
-                            store.get(expanded$) ? "◀ Compact" : "Expand ▶",
+                        text: derive((ctx) =>
+                            ctx.get(expanded$) ? "◀ Compact" : "Expand ▶",
                         ),
                         fontSize: 12,
                         color: Color.rgb(226, 232, 240),

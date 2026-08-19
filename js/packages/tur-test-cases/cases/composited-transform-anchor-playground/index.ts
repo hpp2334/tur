@@ -19,6 +19,7 @@ import {
     type PointerInteractEvent,
     type PointerRegionEvent,
     Positioned,
+    type ReadonlyStoreCtx,
     Row,
     SizedBox,
     Stack,
@@ -149,11 +150,11 @@ export default view(() => {
             // 3. The follower — anchors + offset are fully reactive.
             CompositedTransformFollower({
                 link,
-                targetAnchor: derive(() => store.get(targetAnchor$)),
-                followerAnchor: derive(() => store.get(followerAnchor$)),
-                targetOffset: derive(() => ({
-                    x: store.get(offsetX$),
-                    y: store.get(offsetY$),
+                targetAnchor: derive((ctx) => ctx.get(targetAnchor$)),
+                followerAnchor: derive((ctx) => ctx.get(followerAnchor$)),
+                targetOffset: derive((ctx) => ({
+                    x: ctx.get(offsetX$),
+                    y: ctx.get(offsetY$),
                 })),
                 child: Container({
                     width: 48,
@@ -170,7 +171,7 @@ export default view(() => {
             // 4. Click-outside backdrop (below the panel so triggers stay
             //    clickable while a menu is open; catches canvas clicks).
             Condition({
-                condition: derive(() => store.get(openMenu$) !== null),
+                condition: derive((ctx) => ctx.get(openMenu$) !== null),
                 child: () =>
                     Positioned({
                         left: 0,
@@ -180,7 +181,7 @@ export default view(() => {
                         child: PointerInteract({
                             behavior: HitTestBehavior.Opaque,
                             onClick: click(
-                                mutate(() => store.set(openMenu$, null)),
+                                mutate((ctx) => ctx.set(openMenu$, null)),
                             ),
                             child: SizedBox({ width: 400, height: 600 }),
                         }),
@@ -199,7 +200,7 @@ export default view(() => {
                 left: MENU1_X,
                 top: MENU1_Y,
                 child: Condition({
-                    condition: derive(() => store.get(openMenu$) === "target"),
+                    condition: derive((ctx) => ctx.get(openMenu$) === "target"),
                     child: () => MenuList(targetAnchor$),
                 }),
             }),
@@ -208,7 +209,7 @@ export default view(() => {
                 top: MENU2_Y,
                 child: Condition({
                     condition: derive(
-                        () => store.get(openMenu$) === "follower",
+                        (ctx) => ctx.get(openMenu$) === "follower",
                     ),
                     child: () => MenuList(followerAnchor$),
                 }),
@@ -242,8 +243,8 @@ function ControlsPanel() {
                     SizedBox({ height: 10 }),
                     Text({
                         text: derive(
-                            () =>
-                                `t:${labelFor(store.get(targetAnchor$))}  f:${labelFor(store.get(followerAnchor$))}  off:(${store.get(offsetX$)},${store.get(offsetY$)})`,
+                            (ctx) =>
+                                `t:${labelFor(ctx.get(targetAnchor$))}  f:${labelFor(ctx.get(followerAnchor$))}  off:(${ctx.get(offsetX$)},${ctx.get(offsetY$)})`,
                         ),
                         fontSize: 10,
                         color: C.textMuted,
@@ -261,10 +262,10 @@ function TriggerChip(
 ) {
     return PointerInteract({
         onClick: click(
-            mutate(() =>
-                store.set(
+            mutate((ctx) =>
+                ctx.set(
                     openMenu$,
-                    store.get(openMenu$) === menuKey ? null : menuKey,
+                    ctx.get(openMenu$) === menuKey ? null : menuKey,
                 ),
             ),
         ),
@@ -274,8 +275,8 @@ function TriggerChip(
             borderRadius: 6,
             borderWidth: 1,
             borderColor: C.slate,
-            color: derive(() =>
-                store.get(openMenu$) === menuKey ? C.indigoSoft : C.white,
+            color: derive((ctx) =>
+                ctx.get(openMenu$) === menuKey ? C.indigoSoft : C.white,
             ),
             padding: 6,
             alignment: Alignment.CenterLeft,
@@ -288,7 +289,7 @@ function TriggerChip(
                             color: C.textMid,
                         }),
                         Text({
-                            text: derive(() => labelFor(store.get(value$))),
+                            text: derive((ctx) => labelFor(ctx.get(value$))),
                             fontSize: 11,
                             color: C.text,
                         }),
@@ -325,38 +326,43 @@ function OptionRow(
     opt: { label: string; value: Alignment },
     value$: typeof targetAnchor$,
 ) {
-    const isSel = () => store.get(value$) === opt.value;
-    const isHover = () => store.get(hoveredOpt$) === opt.label;
+    const isSel = (ctx: ReadonlyStoreCtx) => ctx.get(value$) === opt.value;
+    const isHover = (ctx: ReadonlyStoreCtx) =>
+        ctx.get(hoveredOpt$) === opt.label;
     return MouseRegion({
         cursor: "pointer",
         behavior: HitTestBehavior.Translucent,
-        onEnter: hover(mutate(() => store.set(hoveredOpt$, opt.label))),
+        onEnter: hover(mutate((ctx) => ctx.set(hoveredOpt$, opt.label))),
         onExit: hover(
-            mutate(() => {
-                if (store.get(hoveredOpt$) === opt.label)
-                    store.set(hoveredOpt$, null);
+            mutate((ctx) => {
+                if (ctx.get(hoveredOpt$) === opt.label)
+                    ctx.set(hoveredOpt$, null);
             }),
         ),
         child: PointerInteract({
             onClick: click(
-                mutate(() => {
-                    store.set(value$, opt.value);
-                    store.set(openMenu$, null);
-                    store.set(hoveredOpt$, null);
+                mutate((ctx) => {
+                    ctx.set(value$, opt.value);
+                    ctx.set(openMenu$, null);
+                    ctx.set(hoveredOpt$, null);
                 }),
             ),
             child: Container({
                 width: MENU_W,
                 height: ROW_H,
                 padding: 6,
-                color: derive(() =>
-                    isSel() ? C.indigo : isHover() ? C.indigoSofter : C.white,
+                color: derive((ctx) =>
+                    isSel(ctx)
+                        ? C.indigo
+                        : isHover(ctx)
+                          ? C.indigoSofter
+                          : C.white,
                 ),
                 children: [
                     Text({
                         text: opt.label,
                         fontSize: 11,
-                        color: derive(() => (isSel() ? C.white : C.text)),
+                        color: derive((ctx) => (isSel(ctx) ? C.white : C.text)),
                     }),
                 ],
             }),
@@ -371,18 +377,18 @@ function Stepper(label: string, value$: typeof offsetX$, step: number) {
             SizedBox({ width: 6 }),
             SmallButton(
                 "−",
-                mutate(() => store.set(value$, store.get(value$) - step)),
+                mutate((ctx) => ctx.set(value$, ctx.get(value$) - step)),
             ),
             SizedBox({ width: 6 }),
             Text({
-                text: derive(() => `${store.get(value$)}`),
+                text: derive((ctx) => `${ctx.get(value$)}`),
                 fontSize: 11,
                 color: C.text,
             }),
             SizedBox({ width: 6 }),
             SmallButton(
                 "+",
-                mutate(() => store.set(value$, store.get(value$) + step)),
+                mutate((ctx) => ctx.set(value$, ctx.get(value$) + step)),
             ),
         ],
     });

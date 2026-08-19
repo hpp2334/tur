@@ -233,33 +233,68 @@ fn declared_derive_over_engine_atom_updates_on_resize() {
     assert_eq!(after, "500x700");
 }
 
-/// `getStore()` returns the mounted store — library code embedded in another
-/// module's tree (in-realm cases) shares the host's store.
+/// `getStore` is not exported (import fails at link time) — embedded code
+/// threads the closure ctx through instead (see `ctx_threads_the_mounted_store`).
 #[test]
-fn get_store_returns_mounted_store() {
+fn get_store_is_not_exported() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+
+    let get_store_gone = app
+        .load_module_raw(r#"import { getStore } from "tur:std"; export function start() {}"#)
+        .is_err();
+    assert!(
+        get_store_gone,
+        "importing `getStore` from tur:std must fail at link time"
+    );
+}
+
+/// The pattern that replaces `getStore()`: the `{get, set}` ctx handed to a
+/// mutate closure is a stable store-bound reader/writer, so it can be
+/// threaded into helper functions and captured by `launch` generators —
+/// reads/writes flow to the mounted store without ever holding the store.
+#[test]
+fn ctx_threads_the_mounted_store() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { createStore, getStore, mount, source, view, Text } from "tur:std";
+        import {
+            createStore, launch, mount, mutate, sleep, source, view, Text,
+        } from "tur:std";
         const store = createStore();
-        const n = source(7);
+        const n = source(0);
+        const ticks = source(0);
         globalThis.__n = n;
+        globalThis.__store = store;
+
+        // Helper takes ctx (never the store). The generator captures it too.
+        function runLoop(ctx, rounds) {
+            launch(function* () {
+                for (let i = 0; i < rounds; i++) {
+                    yield sleep(0);
+                    ctx.set(n, ctx.get(n) + 1);
+                    ctx.set(ticks, i + 1);
+                }
+            });
+        }
+
+        const startLoop = mutate((ctx, rounds) => runLoop(ctx, rounds));
+        globalThis.__startLoop = startLoop;
+
         export function start() {
-            mount(store, view(() => Text({ text: "g" })));
-            globalThis.__host = getStore();
+            mount(store, view(() => Text({ text: "loop" })));
         }
         "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // Behavior check (not object identity): getStore().set writes the atom
-    // the mounted tree reads.
-    app.eval_js("globalThis.__host.set(globalThis.__n, 11); 'ok'");
+    // Invoke through the module's own store (as an event dispatch would).
+    app.eval_js("globalThis.__store.set(globalThis.__startLoop, 3); 'ok'");
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let val = app.eval_js("globalThis.__host.get(globalThis.__n).toString()");
+
+    let val = app.eval_js("globalThis.__store.get(globalThis.__n).toString()");
     assert_eq!(
-        val, "11",
-        "getStore() must read/write the store passed to mount"
+        val, "3",
+        "ctx captured into a launch generator must read/write the mounted store"
     );
 }

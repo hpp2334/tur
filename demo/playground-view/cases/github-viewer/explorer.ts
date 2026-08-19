@@ -10,7 +10,6 @@ import {
     Each,
     type Element,
     Expanded,
-    getStore,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -48,8 +47,6 @@ import {
 import { COLORS } from "./theme";
 import { IconButton } from "./ui";
 
-const store = getStore();
-
 // Per-row hover state (single source, not per-instance — keeps the
 // subscription graph flat).
 const hoveredPath$ = source<string | null>(null);
@@ -72,23 +69,23 @@ function FileRow({
                 : SizedBox({ height: 4 }),
             MouseRegion({
                 cursor: "pointer",
-                onEnter: mutate((_ctx: StoreCtx, _ev) => {
-                    store.set(hoveredPath$, entry.path);
+                onEnter: mutate((ctx: StoreCtx, _ev) => {
+                    ctx.set(hoveredPath$, entry.path);
                 }),
-                onExit: mutate((_ctx: StoreCtx, _ev) => {
-                    store.set(hoveredPath$, null);
+                onExit: mutate((ctx: StoreCtx, _ev) => {
+                    ctx.set(hoveredPath$, null);
                 }),
                 child: PointerInteract({
-                    onClick: mutate((_ctx: StoreCtx, _ev) => {
-                        if (entry.isDir) openFolder(entry);
-                        else selectEntry(entry);
+                    onClick: mutate((ctx: StoreCtx, _ev) => {
+                        if (entry.isDir) openFolder(ctx, entry);
+                        else selectEntry(ctx, entry);
                     }),
                     child: Container({
                         padding: 9,
                         borderRadius: 8,
-                        color: derive(() => {
-                            const sel = store.get(selectedPath$);
-                            const hov = store.get(hoveredPath$);
+                        color: derive((ctx) => {
+                            const sel = ctx.get(selectedPath$);
+                            const hov = ctx.get(hoveredPath$);
                             if (sel === entry.path) return COLORS.rowSelected;
                             if (hov === entry.path) return COLORS.rowHover;
                             return COLORS.panel;
@@ -136,12 +133,12 @@ function RepoCrumb(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((_ctx: StoreCtx, _ev) => navigateToRoot()),
+            onClick: mutate((ctx: StoreCtx, _ev) => navigateToRoot(ctx)),
             child: Container({
                 padding: 4,
                 children: [
                     Text({
-                        text: derive(() => store.get(repo$)?.fullName ?? ""),
+                        text: derive((ctx) => ctx.get(repo$)?.fullName ?? ""),
                         fontSize: 13,
                         color: COLORS.accent,
                     }),
@@ -158,7 +155,7 @@ function RepoCrumb(): Element {
 
 function Spinner(): Element {
     return Transform({
-        rotate: derive(() => store.get(spinProgress$) * 2 * Math.PI),
+        rotate: derive((ctx) => ctx.get(spinProgress$) * 2 * Math.PI),
         child: Image({
             resourceId: getIcon("spinner"),
             width: 14,
@@ -204,13 +201,13 @@ function DownloadButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((_ctx: StoreCtx, _ev) => {
-                if (store.get(downloadStatus$) !== "idle") return;
-                const e = store.get(selectedEntry$);
-                if (e && !e.isDir) doDownload();
+            onClick: mutate((ctx: StoreCtx, _ev) => {
+                if (ctx.get(downloadStatus$) !== "idle") return;
+                const e = ctx.get(selectedEntry$);
+                if (e && !e.isDir) doDownload(ctx);
             }),
             child: Switch({
-                value: derive(() => store.get(downloadStatus$)),
+                value: derive((ctx) => ctx.get(downloadStatus$)),
                 cases: [
                     {
                         key: "loading",
@@ -245,14 +242,14 @@ function DownloadButton(): Element {
                 ],
                 fallback: () =>
                     dlShell(
-                        derive(() => {
-                            const e = store.get(selectedEntry$);
+                        derive((ctx) => {
+                            const e = ctx.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accent
                                 : COLORS.subtleButton;
                         }),
-                        derive(() => {
-                            const e = store.get(selectedEntry$);
+                        derive((ctx) => {
+                            const e = ctx.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accentFg
                                 : COLORS.textSubtle;
@@ -280,15 +277,15 @@ export function ExplorerScreen(): Element {
                 children: [
                     IconButton({
                         resourceId: getIcon("back"),
-                        onClick: (_ctx) => navigateUp(),
+                        onClick: (ctx: StoreCtx) => navigateUp(ctx),
                     }),
                     SizedBox({ width: 8 }),
                     RepoCrumb(),
                     // Path segments as a single reactive Text (avoids `Each`
                     // inflating this content-sized Row).
                     Text({
-                        text: derive(() => {
-                            const segs = store.get(pathSegments$);
+                        text: derive((ctx) => {
+                            const segs = ctx.get(pathSegments$);
                             return segs.length ? ` / ${segs.join(" / ")}` : "";
                         }),
                         fontSize: 13,
@@ -312,7 +309,7 @@ export function ExplorerScreen(): Element {
             }),
             SizedBox({ height: 8 }),
             Condition({
-                condition: derive(() => store.get(error$) !== null),
+                condition: derive((ctx) => ctx.get(error$) !== null),
                 child: () =>
                     Container({
                         padding: 10,
@@ -320,7 +317,7 @@ export function ExplorerScreen(): Element {
                         color: COLORS.dangerSoft,
                         children: [
                             Text({
-                                text: derive(() => store.get(error$) ?? ""),
+                                text: derive((ctx) => ctx.get(error$) ?? ""),
                                 fontSize: 12,
                                 color: COLORS.danger,
                             }),
@@ -344,11 +341,11 @@ function fileListView(): Element {
         padding: 4,
         children: [
             Switch({
-                value: derive(() => {
-                    if (store.get(loading$) && store.get(entries$).length === 0)
+                value: derive((ctx) => {
+                    if (ctx.get(loading$) && ctx.get(entries$).length === 0)
                         return "loading";
-                    if (store.get(entries$).length === 0)
-                        return store.get(error$) !== null ? "blank" : "empty";
+                    if (ctx.get(entries$).length === 0)
+                        return ctx.get(error$) !== null ? "blank" : "empty";
                     return "list";
                 }),
                 cases: [

@@ -5,7 +5,6 @@ import {
     CrossAxisAlignment,
     derive,
     type Element,
-    getStore,
     MainAxisSize,
     MouseRegion,
     mutate,
@@ -19,8 +18,6 @@ import {
     type Val,
     view,
 } from "tur:std";
-
-const store = getStore();
 
 // Comprehensive `Text` demo: font size, font weight, color, rich-text spans
 // (`weight` / `italic` / `underline` / `fontSize` / `color` per run), and the
@@ -134,7 +131,7 @@ function OverflowCard({
                         text: BROWN,
                         fontSize: 12,
                         color: C.text,
-                        maxLines: derive(() => store.get(maxLines$)),
+                        maxLines: derive((ctx) => ctx.get(maxLines$)),
                         overflow,
                     }),
                 ],
@@ -313,8 +310,8 @@ export default view(() =>
                             children: [
                                 Text({
                                     text: derive(
-                                        () =>
-                                            `maxLines = ${store.get(maxLines$)}  ·  width = 100px`,
+                                        (ctx) =>
+                                            `maxLines = ${ctx.get(maxLines$)}  ·  width = 100px`,
                                     ),
                                     fontSize: 11,
                                     color: C.textMuted,
@@ -334,8 +331,8 @@ export default view(() =>
                                 SizedBox({ height: 10 }),
                                 PrimaryButton({
                                     label: derive(
-                                        () =>
-                                            `cycle maxLines (now ${store.get(maxLines$)})`,
+                                        (ctx) =>
+                                            `cycle maxLines (now ${ctx.get(maxLines$)})`,
                                     ),
                                     onClick: cycleMaxLines,
                                 }),

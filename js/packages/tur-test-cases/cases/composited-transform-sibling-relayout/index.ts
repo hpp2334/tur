@@ -47,7 +47,7 @@ export default view(() => {
             // Stack's max child height changes, forcing a genuine relayout.
             Container({
                 width: 40,
-                height: derive(() => (store.get(tall$) ? 120 : 10)),
+                height: derive((ctx) => (ctx.get(tall$) ? 120 : 10)),
                 color: "#4f46e5",
             }),
             // Button (Positioned, away from the follower/target) to flip tall$.
@@ -55,8 +55,8 @@ export default view(() => {
                 left: 300,
                 top: 540,
                 child: PointerInteract({
-                    onClick: mutate(() =>
-                        store.set(tall$, true),
+                    onClick: mutate((ctx) =>
+                        ctx.set(tall$, true),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
                     child: Container({
                         width: 60,

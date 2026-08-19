@@ -199,8 +199,8 @@ function ToggleButton(): Element {
                 color: Color.hex("#4f46e5"),
                 children: [
                     Text({
-                        text: derive(() =>
-                            store.get(axis$) === Axis.Vertical
+                        text: derive((ctx) =>
+                            ctx.get(axis$) === Axis.Vertical
                                 ? "Axis: Vertical  (click to flip)"
                                 : "Axis: Horizontal  (click to flip)",
                         ),
@@ -234,7 +234,9 @@ export default view(() =>
                                     // the new axis. This is the canonical
                                     // rebuild-on-change idiom in this codebase.
                                     Each({
-                                        items: derive(() => [store.get(axis$)]),
+                                        items: derive((ctx) => [
+                                            ctx.get(axis$),
+                                        ]),
                                         build: (axis: Axis) =>
                                             LazyList({
                                                 axis,

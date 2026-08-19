@@ -25,7 +25,7 @@ export default view(() =>
     Column({
         children: [
             MouseRegion({
-                cursor: derive(() => store.get(cursor$)),
+                cursor: derive((ctx) => ctx.get(cursor$)),
                 child: Container({
                     width: 100,
                     height: 50,

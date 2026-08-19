@@ -65,8 +65,8 @@ function Header(): Element {
                     }),
                     SizedBox({ height: 4 }),
                     Text({
-                        text: derive(() => {
-                            const tasks = store.get(tasks$);
+                        text: derive((ctx) => {
+                            const tasks = ctx.get(tasks$);
                             const done = tasks.filter(
                                 (t) => t.completed,
                             ).length;
@@ -171,7 +171,7 @@ export default view(() =>
                         }),
                 }),
                 Condition({
-                    condition: derive(() => store.get(removeTarget$) !== null),
+                    condition: derive((ctx) => ctx.get(removeTarget$) !== null),
                     child: () =>
                         Positioned({
                             top: 0,

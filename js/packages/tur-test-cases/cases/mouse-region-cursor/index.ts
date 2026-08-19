@@ -22,8 +22,8 @@ export default view(() =>
         children: [
             MouseRegion({
                 cursor: "col-resize",
-                onEnter: mutate((_ctx, _ev) => store.set(state$, "entered")),
-                onExit: mutate((_ctx, _ev) => store.set(state$, "exited")),
+                onEnter: mutate((ctx, _ev) => ctx.set(state$, "entered")),
+                onExit: mutate((ctx, _ev) => ctx.set(state$, "exited")),
                 child: Container({
                     width: 100,
                     height: 50,

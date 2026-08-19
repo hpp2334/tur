@@ -56,49 +56,27 @@ function collectFrom(casesDir, { embed } = { embed: false }) {
 }
 
 // The shared engine cases are written to be ROOT-MOUNTED (their dist wrapper
-// does `mount(store, Case)` with the case's own `export const store`). When
-// the same source is EMBEDDED in the playground's tree (compiled in-realm via
-// the compiler bridge, published through `__setCaseView`), the case must
-// share the HOST's mounted store instead — a second store would hold
-// independent values for the same declarations (the store IS the KV), so
-// module-level `store.set` would never reach the tree.
+// does `mount(store, Case)` with the case's own `export const store`). Their
+// view/logic code is ctx-only — all reactive reads/writes flow through the
+// closure ctx of `derive`/`mutate`, which the engine binds to the MOUNTED
+// store. The module store object serves only the wrapper's `mount` and the
+// Rust-test `globalThis.__*` hooks (which are inert here).
 //
-// This rewrites the embedded copy: `export const store = createStore();` →
-// `const store = getStore();` and swaps the import binding. `getStore()`
-// returns the store the host `mount`ed, so case code runs against exactly
-// the atoms the tree reads.
+// So embedding needs exactly ONE rewrite: drop the `export` keyword from the
+// store declaration. The embedded copy keeps an inert store (nothing view-
+// reactive touches it), and every ctx closure resolves against the HOST's
+// mounted store — the same atoms the tree reads.
 function embedTransform(src) {
-    let out = src.replace(
+    return src.replace(
         /export const store = createStore\(\);/,
-        "const store = getStore();",
+        "const store = createStore();",
     );
-    if (out !== src) {
-        out = out.replace(
-            /import \{([^}]*)\} from "(tur:std|tur:core)"/,
-            (_m, names, mod) => {
-                const items = names
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter((n) => n && n !== "createStore");
-                items.push("getStore");
-                items.sort(
-                    (a, b) =>
-                        (a.startsWith("type ") ? 1 : 0) -
-                            (b.startsWith("type ") ? 1 : 0) ||
-                        a.localeCompare(b),
-                );
-                return `import { ${items.join(", ")} } from "${mod}"`;
-            },
-        );
-    }
-    return out;
 }
 
 // Local (playground-only) cases take precedence on name collisions; otherwise
 // the order just affects stable output ordering (each set is pre-sorted).
-// Engine cases are embedded (root-mount source → host-store rewrite); local
-// playground cases are written embedding-aware already (they use `getStore()`
-// directly).
+// Engine cases are embedded (root-mount source → de-export the store line);
+// local playground cases are written embedding-aware already (ctx-only).
 const entries = [
     ...collectFrom(engineCasesDir, { embed: true }),
     ...collectFrom(localCasesDir),

@@ -6,7 +6,6 @@ import {
     CrossAxisAlignment,
     derive,
     type Element,
-    getStore,
     Image,
     MainAxisAlignment,
     MainAxisSize,
@@ -31,8 +30,6 @@ import {
 } from "./state";
 import { COLORS } from "./theme";
 import { Button, Field } from "./ui";
-
-const store = getStore();
 
 // Quick-pick suggestions — all under jsDelivr's 50 MB tree cap (verified).
 // Clicking one opens the repo directly. Kept short so all three fit on one
@@ -139,7 +136,7 @@ export function LandingScreen(): Element {
                             // Inline validation error.
                             Condition({
                                 condition: derive(
-                                    () => store.get(repoError$) !== null,
+                                    (ctx) => ctx.get(repoError$) !== null,
                                 ),
                                 child: () =>
                                     Column({
@@ -150,8 +147,8 @@ export function LandingScreen(): Element {
                                             SizedBox({ height: 8 }),
                                             Text({
                                                 text: derive(
-                                                    () =>
-                                                        store.get(repoError$) ??
+                                                    (ctx) =>
+                                                        ctx.get(repoError$) ??
                                                         "",
                                                 ),
                                                 fontSize: 12,

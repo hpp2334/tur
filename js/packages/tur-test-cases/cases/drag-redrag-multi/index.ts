@@ -7,6 +7,7 @@ import {
     mutate,
     PointerInteract,
     Positioned,
+    type ReadonlyStoreCtx,
     Stack,
     source,
     Transform,
@@ -32,8 +33,8 @@ export const store = createStore();
 // test can assert that a second drag, started right after the first release,
 // still fires onPointerDown / onPointerMove on the OTHER tile.
 //
-// Reads use the `store.get(src)` import (NOT `src.get()` — a source exposes no
-// `.get()` method), matching the puzzle / drag-delta-tracking convention.
+// Reads flow through the closure ctx (`ctx.get(src)`) or the module store
+// (test hooks), matching the puzzle / drag-delta-tracking convention.
 // ---------------------------------------------------------------------------
 
 const LIFT_MS = 180;
@@ -44,8 +45,8 @@ const dragScale$ = source(1.0);
 const liftCtrl = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
-    onTick: mutate((_ctx, v: number) => {
-        store.set(dragScale$, 1 + v * (LIFT_MAX - 1));
+    onTick: mutate((ctx, v: number) => {
+        ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
@@ -67,8 +68,8 @@ let dragId: number | null = null;
 let lastDragId: number | null = null;
 let dragOffset = { dx: 0, dy: 0 };
 
-function readTile(id: number): TileState {
-    return store.get(tilePos$[id]);
+function readTile(r: ReadonlyStoreCtx, id: number): TileState {
+    return r.get(tilePos$[id]);
 }
 
 Object.assign(globalThis, {
@@ -76,7 +77,7 @@ Object.assign(globalThis, {
     __getTileEvents: (id: number): string => events[id].join(","),
     // "x,y" current position of tile `id`.
     __getTilePos: (id: number): string => {
-        const p = readTile(id);
+        const p = readTile(store, id);
         return `${p.x},${p.y}`;
     },
     __resetDrag: (): void => {
@@ -89,22 +90,22 @@ Object.assign(globalThis, {
 // Mirrors the puzzle's `pieceScale`: the actively-dragged tile AND the
 // just-released tile (during settle) read the animated `dragScale$`; every
 // other tile stays at 1.0.
-function tileScale(id: number): number {
-    if (dragId === id || lastDragId === id) return store.get(dragScale$);
+function tileScale(r: ReadonlyStoreCtx, id: number): number {
+    if (dragId === id || lastDragId === id) return r.get(dragScale$);
     return 1;
 }
 
 function makeTile(id: number) {
     return Positioned({
-        left: derive(() => readTile(id).x),
-        top: derive(() => readTile(id).y),
+        left: derive((ctx) => readTile(ctx, id).x),
+        top: derive((ctx) => readTile(ctx, id).y),
         width: TILE,
         height: TILE,
         child: Transform({
-            scale: derive(() => tileScale(id)),
+            scale: derive((ctx) => tileScale(ctx, id)),
             child: PointerInteract({
-                onPointerDown: mutate((_ctx, ev) => {
-                    const me = readTile(id);
+                onPointerDown: mutate((ctx, ev) => {
+                    const me = readTile(ctx, id);
                     dragOffset = {
                         dx: ev.global.x - me.x,
                         dy: ev.global.y - me.y,
@@ -114,9 +115,9 @@ function makeTile(id: number) {
                     events[id].push("down");
                     liftCtrl.forward();
                 }),
-                onPointerMove: mutate((_ctx, ev) => {
+                onPointerMove: mutate((ctx, ev) => {
                     if (dragId !== id) return;
-                    store.set(tilePos$[id], {
+                    ctx.set(tilePos$[id], {
                         x: ev.global.x - dragOffset.dx,
                         y: ev.global.y - dragOffset.dy,
                     });

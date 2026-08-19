@@ -27,14 +27,14 @@ export default view(() =>
     Row({
         children: [
             Expanded({
-                flex: derive(() => store.get(flexA$)),
+                flex: derive((ctx) => ctx.get(flexA$)),
                 child: Container({
                     color: Color.hex("#ef4444"),
                     queryKey: ["a"],
                 }),
             }),
             Expanded({
-                flex: derive(() => store.get(flexB$)),
+                flex: derive((ctx) => ctx.get(flexB$)),
                 child: Container({
                     color: Color.hex("#22c55e"),
                     queryKey: ["b"],

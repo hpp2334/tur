@@ -22,8 +22,8 @@ export default view(() =>
     Column({
         children: [
             MouseRegion({
-                onEnter: mutate((_ctx, _ev) => store.set(hover$, "A")),
-                onExit: mutate((_ctx, _ev) => store.set(hover$, "")),
+                onEnter: mutate((ctx, _ev) => ctx.set(hover$, "A")),
+                onExit: mutate((ctx, _ev) => ctx.set(hover$, "")),
                 child: Container({
                     width: 100,
                     height: 50,
@@ -32,8 +32,8 @@ export default view(() =>
                 }),
             }),
             MouseRegion({
-                onEnter: mutate((_ctx, _ev) => store.set(hover$, "B")),
-                onExit: mutate((_ctx, _ev) => store.set(hover$, "")),
+                onEnter: mutate((ctx, _ev) => ctx.set(hover$, "B")),
+                onExit: mutate((ctx, _ev) => ctx.set(hover$, "")),
                 child: Container({
                     width: 100,
                     height: 50,

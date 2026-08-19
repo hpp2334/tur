@@ -271,8 +271,8 @@ struct JsDerived(AtomId);
 #[boa_gc(unsafe_empty_trace)]
 struct JsMutation(AtomId);
 
-/// JS-opaque wrapper for a [`Store`] — the object `createStore()` / `getStore()`
-/// hand to JS, carrying `get`/`set` methods. Same `unsafe_empty_trace` soundness
+/// JS-opaque wrapper for a [`Store`] — the object `createStore()` hands to
+/// JS, carrying `get`/`set` methods. Same `unsafe_empty_trace` soundness
 /// note as `TurInstanceContext` (pure-Rust state behind `Rc`s).
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -462,7 +462,7 @@ pub fn build_store_context_object(
     Ok(obj)
 }
 
-/// Build the JS `Store` object (`createStore()` / `getStore()` result): a
+/// Build the JS `Store` object (the `createStore()` result): a
 /// `JsStore`-opaque carrying the `Store` handle, with `get` / `set` methods
 /// that extract the store off `this`. Both methods accept declaration ids
 /// (materialized into THIS store) and engine-owned atoms (routed).

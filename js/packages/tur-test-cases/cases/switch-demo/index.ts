@@ -55,8 +55,8 @@ export default view(() =>
                             mainAlignment: MainAxisAlignment.Center,
                             children: TABS.map((c) =>
                                 PointerInteract({
-                                    onClick: mutate((_ctx, _ev) =>
-                                        store.set(tab$, c),
+                                    onClick: mutate((ctx, _ev) =>
+                                        ctx.set(tab$, c),
                                     ),
                                     child: Container({
                                         color: Color.hex(HEX[c]),
@@ -112,8 +112,8 @@ export default view(() =>
                             children: [
                                 Text({
                                     text: derive(
-                                        () =>
-                                            `Switch sees: ${store.get(tab$).toUpperCase()}`,
+                                        (ctx) =>
+                                            `Switch sees: ${ctx.get(tab$).toUpperCase()}`,
                                     ),
                                     fontSize: 20,
                                     color: Color.hex("#e2e8f0"),

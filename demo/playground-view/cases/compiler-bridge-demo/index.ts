@@ -1,12 +1,4 @@
-import {
-    Color,
-    Column,
-    Container,
-    Expanded,
-    getStore,
-    Text,
-    view,
-} from "tur:std";
+import { Color, Column, Container, Expanded, Text, view } from "tur:std";
 import { tokenizeTsx, transpileTsx } from "tur-ext/demo-helper";
 
 const SRC = "const x: number = 42;";
