@@ -16,7 +16,6 @@ import {
     selectedCase$,
     status$,
 } from "../state";
-import { store } from "../state/store";
 import { FadeIn } from "../state/transitions";
 import { tokens } from "../theme/tokens";
 
@@ -45,10 +44,10 @@ function ReadyViewer(): Element {
             // array identity changes — Switch can't do this because its case
             // keys are static.
             Each({
-                items: derive(() => [
+                items: derive((ctx) => [
                     {
-                        name: store.get(selectedCase$),
-                        v: store.get(compileVersion$),
+                        name: ctx.get(selectedCase$),
+                        v: ctx.get(compileVersion$),
                     },
                 ]),
                 build: (item) =>
@@ -90,7 +89,7 @@ function ErrorPanel(): Element {
                     }),
                     SizedBox({ height: 8 }),
                     Text({
-                        text: derive(() => store.get(errorMsg$)),
+                        text: derive((ctx) => ctx.get(errorMsg$)),
                         fontSize: 12,
                         color: tokens.text.onDanger,
                     }),

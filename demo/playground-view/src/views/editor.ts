@@ -23,7 +23,6 @@ import {
     selectedCase$,
     selectedFile$,
 } from "../state";
-import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 const editorInput: Element = Input({
@@ -54,17 +53,17 @@ function scrollableEditor(): Element {
             }),
             // Dedicated 10px scrollbar column.
             MouseRegion({
-                onEnter: mutate(() =>
-                    store.set(trackHovered$, true),
+                onEnter: mutate((ctx) =>
+                    ctx.set(trackHovered$, true),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
-                onExit: mutate(() =>
-                    store.set(trackHovered$, false),
+                onExit: mutate((ctx) =>
+                    ctx.set(trackHovered$, false),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
                 child: Scrollbar({
                     controller,
                     color: tokens.text.placeholder,
-                    trackColor: derive(() =>
-                        store.get(trackHovered$)
+                    trackColor: derive((ctx) =>
+                        ctx.get(trackHovered$)
                             ? tokens.bg.strongHover
                             : Color.rgba(0, 0, 0, 0),
                     ),
@@ -86,10 +85,10 @@ export function Editor(): Element {
             // changes so it re-reads the controller spans (reset by
             // loadCase / selectFile).
             Each({
-                items: derive(() => [
+                items: derive((ctx) => [
                     {
-                        case: store.get(selectedCase$),
-                        file: store.get(selectedFile$),
+                        case: ctx.get(selectedCase$),
+                        file: ctx.get(selectedFile$),
                     },
                 ]),
                 build: () => scrollableEditor(),

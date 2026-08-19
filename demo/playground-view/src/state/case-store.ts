@@ -4,6 +4,7 @@ import {
     type Element,
     type KeyEvent,
     launch,
+    type Mutation,
     mutate,
     sleep,
     type Task,
@@ -24,7 +25,6 @@ import {
     selectedFile$,
     status$,
 } from "./sources";
-import { store } from "./store";
 import { triggerFadeIn } from "./transitions";
 import type { CaseFileMap, EditorController } from "./types";
 
@@ -88,21 +88,20 @@ let autoRunTask: Task | null = null;
 // ---------------------------------------------------------------------------
 
 export const editorCtrl = createTextEditingController({
-    onInput: mutate((_ctx, _text: string, _enter: boolean) => {
+    onInput: mutate((ctx, _text: string, _enter: boolean) => {
         editorCtrl.setSpansPreserveCursor(buildHighlightSpans(editorCtrl.text));
-        saveCurrentFileText();
-        refreshEditedState();
-        if (store.get(autoRun$)) {
+        saveCurrentFileText(ctx.get(selectedCase$), ctx.get(selectedFile$));
+        if (ctx.get(autoRun$)) {
             autoRunTask?.cancel();
             autoRunTask = launch(function* () {
                 yield sleep(300);
-                recompile();
+                ctx.set(recompile);
             });
         }
     }),
-    onKeyDown: mutate((_ctx, ev: KeyEvent) => {
+    onKeyDown: mutate((ctx, ev: KeyEvent) => {
         if (ev.key === "s" && (ev.meta || ev.ctrl)) {
-            recompile();
+            ctx.set(recompile);
         }
     }),
 });
@@ -111,10 +110,9 @@ export const editorCtrl = createTextEditingController({
  *  the `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
 export const editorUndo = createUndoController();
 
-/** Save the current editor text back to the per-case file cache. */
-function saveCurrentFileText(): void {
-    const name = store.get(selectedCase$);
-    const filename = store.get(selectedFile$);
+/** Save the current editor text back to the per-case file cache. Pure cache
+ *  write — callers read the case/file atoms from their ctx and pass values. */
+function saveCurrentFileText(name: string, filename: string): void {
     let cache = caseFileCache.get(name);
     if (!cache) {
         cache = {};
@@ -123,88 +121,94 @@ function saveCurrentFileText(): void {
     cache[filename] = editorCtrl.text;
 }
 
-function refreshEditedState(): void {
-    const name = store.get(selectedCase$);
-    const filename = store.get(selectedFile$);
+/** Pure: does the current editor text differ from the last-compiled source
+ *  for this case+file? Callers `ctx.set(edited$, …)` with the result. */
+function isEdited(name: string, filename: string): boolean {
     const baseline = lastCompiledFiles.get(name)?.[filename] ?? "";
-    store.set(edited$, editorCtrl.text !== baseline);
+    return editorCtrl.text !== baseline;
 }
 
 // ---------------------------------------------------------------------------
-// Case lifecycle
+// Case lifecycle — every action is a `mutate` declaration; callers dispatch
+// via `ctx.set(action, ...args)` (same-flush: the engine's fixed-point loop
+// drains newly-queued mutations in the next iteration).
 // ---------------------------------------------------------------------------
 
-export function loadCase(name: string): void {
-    if (!CASE_SOURCES[name]) return;
-    store.set(selectedCase$, name);
-    store.set(selectedFile$, "index.ts");
+export const loadCase: Mutation<[string], void> = mutate(
+    (ctx, name: string) => {
+        if (!CASE_SOURCES[name]) return;
+        ctx.set(selectedCase$, name);
+        ctx.set(selectedFile$, "index.ts");
 
-    // On mobile, jump to the viewer so the user sees the rendered case right
-    // after picking it from the Cases tab.
-    if (store.get(isMobile$)) {
-        store.set(mobileTab$, "view");
-    }
+        // On mobile, jump to the viewer so the user sees the rendered case
+        // right after picking it from the Cases tab.
+        if (ctx.get(isMobile$)) {
+            ctx.set(mobileTab$, "view");
+        }
 
-    // Ensure file cache is populated.
-    if (!caseFileCache.has(name)) {
-        caseFileCache.set(name, { ...CASE_SOURCES[name] });
-    }
+        // Ensure file cache is populated.
+        if (!caseFileCache.has(name)) {
+            caseFileCache.set(name, { ...CASE_SOURCES[name] });
+        }
 
-    const files = caseFileCache.get(name) ?? {};
-    const entryText = files["index.ts"] ?? "";
-    editorCtrl.setSpans(buildHighlightSpans(entryText));
-    store.set(status$, "ready");
-    store.set(errorMsg$, "");
-    refreshEditedState();
-    triggerFadeIn();
-}
+        const files = caseFileCache.get(name) ?? {};
+        const entryText = files["index.ts"] ?? "";
+        editorCtrl.setSpans(buildHighlightSpans(entryText));
+        ctx.set(status$, "ready");
+        ctx.set(errorMsg$, "");
+        ctx.set(edited$, isEdited(name, "index.ts"));
+        triggerFadeIn();
+    },
+);
 
 /** Switch to a different file within the current case. Saves the current
  *  editor text, loads the new file. */
-export function selectFile(filename: string): void {
-    saveCurrentFileText();
-    const name = store.get(selectedCase$);
-    const files = caseFileCache.get(name) ?? {};
-    const text = files[filename] ?? "";
-    store.set(selectedFile$, filename);
-    editorCtrl.setSpans(buildHighlightSpans(text));
-    refreshEditedState();
-}
+export const selectFile: Mutation<[string], void> = mutate(
+    (ctx, filename: string) => {
+        saveCurrentFileText(ctx.get(selectedCase$), ctx.get(selectedFile$));
+        const files = caseFileCache.get(ctx.get(selectedCase$)) ?? {};
+        const text = files[filename] ?? "";
+        ctx.set(selectedFile$, filename);
+        editorCtrl.setSpans(buildHighlightSpans(text));
+        ctx.set(edited$, isEdited(ctx.get(selectedCase$), filename));
+    },
+);
 
-export function recompile(): void {
+export const recompile: Mutation<[], void> = mutate((ctx) => {
     autoRunTask?.cancel();
     autoRunTask = null;
-    const name = store.get(selectedCase$);
+    const name = ctx.get(selectedCase$);
 
     // Save current editor text to the file cache before compiling.
-    saveCurrentFileText();
+    saveCurrentFileText(name, ctx.get(selectedFile$));
     const files = caseFileCache.get(name) ?? {};
 
     const result = compileCase(files);
     if (result.error || !result.start) {
-        store.set(status$, "error");
-        store.set(errorMsg$, result.error ?? "unknown error");
+        ctx.set(status$, "error");
+        ctx.set(errorMsg$, result.error ?? "unknown error");
         return;
     }
     invokeCaseStart(name, result.start);
     lastCompiledFiles.set(name, { ...files });
-    store.set(lastCompiledAtMs$, Date.now());
-    store.set(status$, "ready");
-    store.set(errorMsg$, "");
-    store.set(edited$, false);
-    store.set(compileVersion$, store.get(compileVersion$) + 1);
+    ctx.set(lastCompiledAtMs$, Date.now());
+    ctx.set(status$, "ready");
+    ctx.set(errorMsg$, "");
+    ctx.set(edited$, false);
+    ctx.set(compileVersion$, ctx.get(compileVersion$) + 1);
     triggerFadeIn();
-}
+});
 
-export function resetCase(): void {
-    const name = store.get(selectedCase$);
+export const resetCase: Mutation<[], void> = mutate((ctx) => {
+    const name = ctx.get(selectedCase$);
     const original = CASE_SOURCES[name] ?? {};
     caseFileCache.set(name, { ...original });
     lastCompiledFiles.set(name, { ...original });
-    const filename = store.get(selectedFile$);
-    editorCtrl.setSpans(buildHighlightSpans(original[filename] ?? ""));
-    recompile();
-}
+    editorCtrl.setSpans(
+        buildHighlightSpans(original[ctx.get(selectedFile$)] ?? ""),
+    );
+    ctx.set(recompile);
+});
 
 /** Look up the cached view handle for a case (or undefined). Used by
  *  the viewer pane to render the active case. */

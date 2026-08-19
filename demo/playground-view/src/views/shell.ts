@@ -6,6 +6,7 @@ import {
     derive,
     type Element,
     Expanded,
+    mutate,
     Row,
     Stack,
     Switch,
@@ -18,7 +19,6 @@ import {
     mobileTab$,
     sidebarWidth$,
 } from "../state";
-import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { ContextMenuOverlay } from "./context-menu";
 import { VDivider } from "./divider";
@@ -41,13 +41,13 @@ function EditorAndViewer(): Element {
         children: [
             // Editor pane
             Switch({
-                value: derive(() => store.get(layoutMode$)),
+                value: derive((ctx) => ctx.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
                         child: () =>
                             Container({
-                                width: derive(() => store.get(editorWidth$)),
+                                width: derive((ctx) => ctx.get(editorWidth$)),
                                 children: [Editor()],
                             }),
                     },
@@ -60,21 +60,21 @@ function EditorAndViewer(): Element {
             }),
             // Divider — only in split mode
             Condition({
-                condition: derive(() => store.get(layoutMode$) === "split"),
+                condition: derive((ctx) => ctx.get(layoutMode$) === "split"),
                 child: () =>
                     VDivider({
-                        onDrag: (ev) => {
+                        onDrag: mutate((ctx, ev) => {
                             const next = Math.max(
                                 100,
-                                store.get(editorWidth$) + ev.deltaFromLast.x,
+                                ctx.get(editorWidth$) + ev.deltaFromLast.x,
                             );
-                            store.set(editorWidth$, next);
-                        },
+                            ctx.set(editorWidth$, next);
+                        }),
                     }),
             }),
             // Viewer pane
             Switch({
-                value: derive(() => store.get(layoutMode$)),
+                value: derive((ctx) => ctx.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
@@ -108,8 +108,8 @@ export const Shell: Element = view(() =>
                                     Toolbar(),
                                     Expanded({
                                         child: Switch({
-                                            value: derive(() =>
-                                                store.get(mobileTab$),
+                                            value: derive((ctx) =>
+                                                ctx.get(mobileTab$),
                                             ),
                                             cases: [
                                                 {
@@ -142,24 +142,27 @@ export const Shell: Element = view(() =>
                                             children: [
                                                 Sidebar(),
                                                 VDivider({
-                                                    onDrag: (ev) => {
-                                                        const next = Math.max(
-                                                            120,
-                                                            Math.min(
-                                                                480,
-                                                                store.get(
-                                                                    sidebarWidth$,
-                                                                ) +
-                                                                    ev
-                                                                        .deltaFromLast
-                                                                        .x,
-                                                            ),
-                                                        );
-                                                        store.set(
-                                                            sidebarWidth$,
-                                                            next,
-                                                        );
-                                                    },
+                                                    onDrag: mutate(
+                                                        (ctx, ev) => {
+                                                            const next =
+                                                                Math.max(
+                                                                    120,
+                                                                    Math.min(
+                                                                        480,
+                                                                        ctx.get(
+                                                                            sidebarWidth$,
+                                                                        ) +
+                                                                            ev
+                                                                                .deltaFromLast
+                                                                                .x,
+                                                                    ),
+                                                                );
+                                                            ctx.set(
+                                                                sidebarWidth$,
+                                                                next,
+                                                            );
+                                                        },
+                                                    ),
                                                 }),
                                                 Expanded({
                                                     child: EditorAndViewer(),

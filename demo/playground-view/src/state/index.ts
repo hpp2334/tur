@@ -45,6 +45,8 @@ export {
     selectedCase$,
     selectedFile$,
     sidebarWidth$,
+    startNowTicker,
     status$,
+    stopNowTicker,
 } from "./sources";
 export type { EditorController, LayoutMode, MobileTab } from "./types";

@@ -7,6 +7,7 @@ import {
     type Element,
     MainAxisSize,
     MouseRegion,
+    type Mutation,
     mutate,
     PointerInteract,
     Row,
@@ -45,11 +46,11 @@ const BROWN = "The quick brown fox jumps over the lazy dog.";
 
 const maxLines$ = source<number>(2);
 
-function cycleMaxLines(ctx: StoreCtx): void {
+const cycleMaxLines = mutate((ctx: StoreCtx) => {
     const cur = ctx.get(maxLines$);
     // 2 → 1 → 3 → 2 (cycles through interesting truncation regimes).
     ctx.set(maxLines$, cur === 2 ? 1 : cur === 1 ? 3 : 2);
-}
+});
 
 /// A titled, content-sized card. `mainAxisSize: MainAxisSize.Min` keeps the
 /// card as short as its children (the bug fixed: a string `"min"` here used
@@ -86,12 +87,12 @@ function PrimaryButton({
     onClick,
 }: {
     label: Val<string>;
-    onClick: (ctx: StoreCtx) => void;
+    onClick: Mutation<[], void>;
 }): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx, _ev) => onClick(ctx)),
+            onClick: mutate((ctx, _ev) => ctx.set(onClick)),
             child: Container({
                 padding: 10,
                 borderRadius: 8,

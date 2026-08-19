@@ -11,7 +11,7 @@ A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls i
 - The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: `mount` replaces any existing root, and module teardown clears it. A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
 - Cleanup also runs (best-effort) at instance destroy.
 
-Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell with the shared root store (`mount(store, Shell)` — the store from `src/state/store.ts`); the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded case code is **ctx-only**: reactive access flows through `derive`/`mutate` closure ctx, which the engine binds to the host's mounted store; `scripts/gen-cases.cjs` de-exports the case's own store line for the embedded copy); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
+Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that creates the store inline (`mount(createStore(), Shell)`), dispatches the one boot mutation that needs a writer (the `now$` ticker), and returns its cancellation as the module cleanup — no store module is saved anywhere, and all playground code is ctx-only: `derive` closures read, `mutate` closures write, and side-effecting actions are `mutate` declarations composed by dispatching one another via `ctx.set(action, …args)`; the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded case code is **ctx-only**: reactive access flows through `derive`/`mutate` closure ctx, which the engine binds to the host's mounted store; `scripts/gen-cases.cjs` de-exports the case's own store line for the embedded copy); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
 
 ## Architecture
 
@@ -328,7 +328,11 @@ binds the tree's declarations to that store (free module-level `get`/`set`
 exports are gone, and there is no `getStore()` either: reactive access
 outside a store goes through the closure ctx of `derive`/`mutate`, which the
 engine binds to the mounted store — code needing reactive access in helpers
-or `launch` generators threads/captures that ctx). Rust-minted
+or `launch` generators threads/captures that ctx; side-effecting helpers
+are declared as mutations themselves and dispatched via
+`ctx.set(action, …args)` — the flush's fixed-point loop drains nested
+dispatches within the same frame, so composing actions costs no latency).
+Rust-minted
 atoms (`bridge.source(...)` etc.) are *owned* by the engine store: one value
 home, readable through any store via the shared owner map. Atom ids come
 from one per-instance counter, so the derived graph / subscriber index /

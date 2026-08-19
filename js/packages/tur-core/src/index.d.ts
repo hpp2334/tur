@@ -41,6 +41,14 @@
  *         });
  *     });
  *
+ * Side-effecting helpers are declared as mutations themselves and composed
+ * by dispatch: `ctx.set(action, ...args)` (or `store.set(action, ...args)`
+ * from outside). The engine's flush is a fixed-point loop, so a mutation
+ * dispatched from inside another mutation runs within the same frame:
+ *
+ *     const save = mutate((ctx, name) => { ... });
+ *     const commit = mutate((ctx) => { ...; ctx.set(save, name); });
+ *
  * The event framework is two functions: `mutate` (declare a handler as a
  * deferred `Mutation` atom) and `store.set` (dispatch it). The concrete
  * event payload shapes (`PointerInteractEvent`, `KeyEvent`, …) live in

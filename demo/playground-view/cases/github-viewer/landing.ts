@@ -62,7 +62,7 @@ function Suggestion({ repo }: { repo: Repo }): Element {
                 repoCtrl.setSpans([{ content: repo.fullName }]);
                 ctx.set(repoDraft$, repo.fullName);
                 ctx.set(repoError$, null);
-                openRepo(ctx, repo);
+                ctx.set(openRepo, repo);
             }),
             child: Container({
                 padding: 7,

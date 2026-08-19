@@ -77,8 +77,8 @@ function FileRow({
                 }),
                 child: PointerInteract({
                     onClick: mutate((ctx: StoreCtx, _ev) => {
-                        if (entry.isDir) openFolder(ctx, entry);
-                        else selectEntry(ctx, entry);
+                        if (entry.isDir) ctx.set(openFolder, entry);
+                        else ctx.set(selectEntry, entry);
                     }),
                     child: Container({
                         padding: 9,
@@ -133,7 +133,7 @@ function RepoCrumb(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => navigateToRoot(ctx)),
+            onClick: mutate((ctx: StoreCtx, _ev) => ctx.set(navigateToRoot)),
             child: Container({
                 padding: 4,
                 children: [
@@ -201,11 +201,8 @@ function DownloadButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => {
-                if (ctx.get(downloadStatus$) !== "idle") return;
-                const e = ctx.get(selectedEntry$);
-                if (e && !e.isDir) doDownload(ctx);
-            }),
+            // doDownload self-guards against re-entry.
+            onClick: mutate((_ctx: StoreCtx, _ev) => _ctx.set(doDownload)),
             child: Switch({
                 value: derive((ctx) => ctx.get(downloadStatus$)),
                 cases: [
@@ -277,7 +274,7 @@ export function ExplorerScreen(): Element {
                 children: [
                     IconButton({
                         resourceId: getIcon("back"),
-                        onClick: (ctx: StoreCtx) => navigateUp(ctx),
+                        onClick: navigateUp,
                     }),
                     SizedBox({ width: 8 }),
                     RepoCrumb(),

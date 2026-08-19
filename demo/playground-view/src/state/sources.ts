@@ -1,14 +1,16 @@
 import {
     derive,
     launch,
+    type Mutation,
+    mutate,
     type Source,
     sleep,
     source,
+    type Task,
     type ViewportSize,
     viewportSize$,
 } from "tur:std";
 import { CASE_SOURCES } from "../cases";
-import { store } from "./store";
 import type { LayoutMode, MobileTab } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -91,11 +93,25 @@ export const editorWidth$ = source(600);
 // status bar stays fresh without manual refresh.
 export const lastCompiledAtMs$ = source<number>(Date.now());
 export const now$: Source<number> = source<number>(Date.now());
-// Permanent ticker: never cancelled. A `launch` coroutine loop replaces the
-// old `setInterval` — no timer id to manage.
-launch(function* () {
-    for (;;) {
-        yield sleep(5000);
-        store.set(now$, Date.now());
-    }
+
+// The ticker is a mutation so its `launch` loop can capture the mutation ctx
+// (the store-bound writer) — there is no module store to write through. The
+// entry point dispatches it once after `mount`; the returned module cleanup
+// cancels the task so a reload doesn't leak the previous loop.
+let nowTask: Task | null = null;
+
+export const startNowTicker: Mutation<[], void> = mutate((ctx) => {
+    nowTask?.cancel();
+    nowTask = launch(function* () {
+        for (;;) {
+            yield sleep(5000);
+            ctx.set(now$, Date.now());
+        }
+    });
 });
+
+/** Cancel the `now$` ticker (module cleanup, run by the entry point). */
+export function stopNowTicker(): void {
+    nowTask?.cancel();
+    nowTask = null;
+}

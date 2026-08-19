@@ -1,6 +1,5 @@
 import { createAnimationController } from "tur:animation";
 import { type Element, mutate, Opacity, source } from "tur:std";
-import { store } from "./store";
 
 // ---------------------------------------------------------------------------
 // FadeIn — opacity transition used when the playground's active case content
@@ -15,11 +14,12 @@ import { store } from "./store";
 // ------------------------------------
 // `onTick` is dispatched via the engine's mutation queue, NOT synchronously
 // from inside `forward()`. The old synchronous path held a `RefMut<
-// AnimationController>` while firing the JS callback; the callback's `store.set(
+// AnimationController>` while firing the JS callback; the callback's `ctx.set(
 // fadeT$, t)` triggered a reactive flush that re-entered the controller via
 // a `downcast_ref`, panicking with boa's `BorrowError`. The new
 // queue-based dispatch releases all borrows before invoking the callback,
-// so the flush can safely walk the controller tree.
+// so the flush can safely walk the controller tree. The callback writes
+// through its mutation ctx — no store reference needed.
 // ---------------------------------------------------------------------------
 
 const FADE_DURATION_MS = 200;
@@ -29,8 +29,8 @@ const fadeT$ = source(1);
 const fadeCtrl = createAnimationController({
     duration: FADE_DURATION_MS,
     curve: "easeOut",
-    onTick: mutate((_ctx, t: number) => {
-        store.set(fadeT$, t);
+    onTick: mutate((ctx, t: number) => {
+        ctx.set(fadeT$, t);
     }),
 });
 

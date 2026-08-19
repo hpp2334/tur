@@ -9,16 +9,17 @@ import {
     Input,
     MainAxisSize,
     MouseRegion,
+    type Mutation,
     mutate,
     PointerInteract,
     SizedBox,
-    type StoreCtx,
     Text,
     type TextController,
 } from "tur:std";
 import { COLORS } from "./theme";
 
-/** Standard text / accent button. `onClick` runs within a mutation context. */
+/** Standard text / accent button. `onClick` is a mutation declaration the
+ *  button dispatches on click (with the mutation ctx). */
 export function Button({
     label,
     bg,
@@ -30,14 +31,14 @@ export function Button({
     label: string;
     bg: Color;
     fg: Color;
-    onClick: (ctx: StoreCtx) => void;
+    onClick: Mutation<[], void>;
     padding?: number;
     shadow?: boolean;
 }): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => onClick(ctx)),
+            onClick: mutate((ctx, _ev) => ctx.set(onClick)),
             child: Container({
                 padding,
                 borderRadius: 7,
@@ -57,12 +58,12 @@ export function IconButton({
     onClick,
 }: {
     resourceId: number;
-    onClick: (ctx: StoreCtx) => void;
+    onClick: Mutation<[], void>;
 }): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => onClick(ctx)),
+            onClick: mutate((ctx, _ev) => ctx.set(onClick)),
             child: Container({
                 width: 32,
                 height: 32,
