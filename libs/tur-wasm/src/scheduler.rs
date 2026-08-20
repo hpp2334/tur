@@ -172,7 +172,7 @@ impl WorkerSpawner for WasmWorkerSpawner {
         let join: Box<dyn FnOnce()> = Box::new(move || {
             // Join = this app's slot released; terminate the worker when
             // the last app is gone (in practice join is never called by
-            // the engine — AppBackend holds the ticket for its lifetime —
+            // the engine — HostBackend holds the ticket for its lifetime —
             // so reaping normally happens lazily at the next spawn).
             if live.get() > 0 {
                 live.set(live.get() - 1);

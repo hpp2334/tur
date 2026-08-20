@@ -622,8 +622,8 @@ pub mod ops {
     ///
     /// Must be called on the instance's own thread — `Rc<TurApp>` and the
     /// underlying boa `Context` are `!Send` / `!Sync` (same constraint as
-    /// every other op here). Mirrors `TurApp::with_element` /
-    /// `TurApp::with_boa_context` in the engine.
+    /// every other op here). Mirrors `TurApp::with_boa_context` in the
+    /// engine.
     pub fn with_app<R>(handle: jlong, f: impl FnOnce(&TurApp) -> R) -> Option<R> {
         let instance = handle_to_instance(handle)?;
         Some(f(&instance.app))

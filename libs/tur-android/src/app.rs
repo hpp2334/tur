@@ -301,7 +301,7 @@ mod imp {
         /// this function after the closure returns, so the embedder cannot
         /// accidentally override it. Pass `|b| b` for the no-op default.
         ///
-        /// Architecture: the engine runs on a worker thread; `AppBackend`
+        /// Architecture: the engine runs on a worker thread; `HostBackend`
         /// owns the wgpu `VelloRenderer` on the caller thread (main) and
         /// drives it directly — command batches, incremental image uploads,
         /// and resize-on-event.
@@ -361,7 +361,7 @@ mod imp {
             // Apply the embedder's pre-build customization (e.g.
             // `.instance_data(...)`, `.worker_pool(...)`), then attach the
             // surface-backed renderer and build. The engine runs on a
-            // worker; `AppBackend` owns the wgpu renderer on main and
+            // worker; `HostBackend` owns the wgpu renderer on main and
             // drives it directly (render batches, image uploads,
             // resize-on-event).
             let app = configure_instance(

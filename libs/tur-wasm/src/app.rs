@@ -128,7 +128,7 @@ impl WasmRuntime {
         // factory-message scheme). The WebGL renderer stays on the host
         // thread (web-sys types are realm-local); the worker ships
         // `Vec<RenderCommand>` batches to the host thread each frame and
-        // `AppBackend` applies them to the renderer.
+        // `HostBackend` applies them to the renderer.
         //
         // Build-side config (in `.cargo/config.toml` + `rust-toolchain.toml`
         // + `[profile.wasm-dev]` in workspace `Cargo.toml`):
@@ -139,7 +139,7 @@ impl WasmRuntime {
         //   • `--export=__tls_*` / `__wasm_init_tls` (thread-id injection)
         //
         // No JS-side `initThreadPool(n)` is required: workers spawn on
-        // demand from Rust (driven by `AppBackend::new`).
+        // demand from Rust (driven by `HostBackend::new`).
 
         let worker_spawner = crate::scheduler::WasmWorkerSpawner::new();
         let vsync_source = crate::scheduler::WasmVsyncSource::new();
@@ -445,7 +445,7 @@ impl WasmApp {
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
 
         // Spawn an isolated engine instance. The engine runs on a worker
-        // thread; `AppBackend` owns the WebGL renderer on main and drives
+        // thread; `HostBackend` owns the WebGL renderer on main and drives
         // it directly (render batches, image uploads, resize-on-event) —
         // `build` pushes the initial Resize
         // internally.
@@ -1066,7 +1066,8 @@ impl WasmApp {
             };
             s.app.clone()
         };
-        app.load_module(js_source)
+        app.backend()
+            .load_module(js_source)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         // The worker self-paints on load (dirty state → coalesced self-wake);

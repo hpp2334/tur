@@ -1,6 +1,6 @@
 //! Worker ↔ host message vocabulary.
 //!
-//! The engine runs on a worker thread (see [`crate::core::runtime::AppBackend`]);
+//! The engine runs on a worker thread (see [`crate::core::runtime::HostBackend`]);
 //! the embedder drives it from the host thread via [`WorkerMsg`]s and receives
 //! [`HostMsg`] replies. Every public `TurApp` method is a thin wrapper
 //! that builds a `WorkerMsg`, sends it via the channel, and awaits the
@@ -36,8 +36,7 @@ use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
 use crate::core::cursor::Cursor;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{NodeTreeData, NodeTreeSnapshot};
+use crate::core::elements::NodeTreeData;
 use crate::core::focus::FocusManager;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
@@ -93,45 +92,16 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<String>,
     },
-    /// Dev-tool: full element-tree snapshot (every node, with kind +
-    /// children + computed_layout). Used by `TurTestApp::element_tree` to
-    /// serve the legacy `NodeTreeData`-shaped read surface from the worker
-    /// side (the live `NodeTreeData` is `!Send` because `ElementObject`
-    /// owns a boxed `AnyElement`).
-    QueryTreeSnapshot {
-        reply: ReplySender<NodeTreeSnapshot>,
-    },
-    /// Query the focused-element id.
-    QueryFocusedElement {
-        reply: ReplySender<Option<ElementNodeId>>,
-    },
-    /// Path-based element lookup. `key` is the path segments.
-    QueryElement {
-        key: Vec<String>,
-        reply: ReplySender<Option<NodeId>>,
-    },
-    /// Test-only: run a closure against the worker's live `NodeTreeData`.
-    /// The closure runs on the worker thread (where the tree + its boxed
-    /// `AnyElement`s live), so it can do typed introspection that isn't
-    /// serializable across the thread boundary (e.g.
-    /// `element.cast::<TextElement>().spans()`). The closure receives
-    /// `&NodeTreeData` and is responsible for shipping its result via a
-    /// reply channel it captures — there's no generic return on the variant
-    /// so the enum stays monomorphic.
-    ///
-    /// `id` is passed for ergonomics (and so the variant is `Debug`); the
-    /// closure looks the element up itself.
-    WithElement {
-        id: ElementNodeId,
-        runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
-    },
     /// Test-only: run a closure against the worker's live `NodeTreeData`
     /// AND `FocusManager` — everything needed to reconstruct the former
     /// per-field focus/dev-tool queries (`focused_cursor_rect`,
-    /// `focused_is_editable`, `dev_tool_get_element`, ...) on the caller
-    /// side. Same reply-channel pattern as [`WorkerMsg::WithElement`]: the
-    /// closure ships its result via a reply channel it captures, so the
-    /// enum stays monomorphic.
+    /// `focused_is_editable`, `focused_element`, `query_element`,
+    /// `dev_tool_get_element`, ...) on the caller side: the closure runs
+    /// on the worker thread (where the tree + its boxed `AnyElement`s
+    /// live), so it can do typed introspection that isn't serializable
+    /// across the thread boundary (e.g. `element.cast::<TextElement>()
+    /// .spans()`). The closure ships its result via a reply channel it
+    /// captures, so the enum stays monomorphic.
     WithTree { runner: TreeRunner },
     /// Event bus — embedder → JS bytes on `channel_id`. Worker pushes into the
     /// `EventBus` `embedder_to_js` queue; `EmbedderBusSubsystem` drains it on the
@@ -151,7 +121,7 @@ pub enum WorkerMsg {
 /// response to a [`WorkerMsg`] RPC (`Reply<T>` slots).
 pub enum HostMsg {
     /// One frame's worth of paint state. Main applies the batch to its
-    /// renderer (owned by `AppBackend`) directly.
+    /// renderer (owned by `HostBackend`) directly.
     ///
     /// Images are NOT shipped here — they travel once per new resource via
     /// [`HostMsg::UploadImage`] (main uploads them into its atlas
@@ -186,7 +156,7 @@ pub enum HostMsg {
         cursor_rect: Option<(f64, f64, f64, f64)>,
     },
     /// Event bus — JS → embedder bytes on `channel_id`. Worker ships one
-    /// `HostMsg` per `eventBus.send` dispatch; `AppBackend` dispatches to
+    /// `HostMsg` per `eventBus.send` dispatch; `HostBackend` dispatches to
     /// handlers registered on `channel_id` on the host-side
     /// `EventBusHandle`.
     EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
@@ -257,13 +227,7 @@ impl fmt::Debug for WorkerMsg {
                 .debug_struct("EvalJs")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
-            Self::QueryTreeSnapshot { .. } => f.debug_struct("QueryTreeSnapshot").finish(),
-            Self::WithElement { id, .. } => f.debug_struct("WithElement").field("id", id).finish(),
             Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
-            Self::QueryFocusedElement { .. } => f.debug_struct("QueryFocusedElement").finish(),
-            Self::QueryElement { key, .. } => {
-                f.debug_struct("QueryElement").field("key", &key).finish()
-            }
             Self::EventBusToJs {
                 channel_id,
                 payload,

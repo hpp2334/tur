@@ -963,9 +963,10 @@ impl ElementSnapshot {
     }
 }
 
-/// Owned snapshot of the entire element tree — what
-/// [`crate::core::runtime::AppBackend::query_tree_snapshot`] ships from the
-/// worker to main. The accessor surface mirrors the read-only methods on
+/// Owned snapshot of the entire element tree — what test harnesses build
+/// from the worker's live [`NodeTreeData`] via `NodeTreeData::tree_snapshot`
+/// (e.g. through the `WithTree` escape hatch). The accessor surface mirrors
+/// the read-only methods on
 /// [`NodeTreeData`] (root_element / get_element / element_count / …) so
 /// existing test code keeps compiling when `TurTestApp::element_tree()` is
 /// retyped from `Ref<'_, NodeTreeData>` to an owned `NodeTreeSnapshot`.

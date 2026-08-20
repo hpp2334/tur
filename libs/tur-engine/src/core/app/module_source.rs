@@ -5,7 +5,7 @@
 //! an `Arc<str>`, so a source created on the embedder's Rust side (e.g. an
 //! APK asset read directly in native code, a bundle file read by a desktop
 //! host) can be registered once and then loaded into any instance via
-//! [`TurApp::load_module`](crate::TurApp::load_module) /
+//! [`HostBackend::load_module`](crate::core::runtime::HostBackend::load_module) /
 //! [`TurApp::load_module_source`](crate::TurApp::load_module_source)
 //! **without ever crossing an embedder boundary as a string** — the host
 //! language (Kotlin glue, JS glue, etc.) only ever sees the opaque `u64`

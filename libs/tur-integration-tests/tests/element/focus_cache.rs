@@ -11,7 +11,7 @@
 //! the code editor.
 //!
 //! The fix unified both paths on a single handler
-//! (`AppBackend::apply_msg`) and replaced the engine-side focus cache
+//! (`HostBackend::apply_msg`) and replaced the engine-side focus cache
 //! with a push handler the embedder registers. These tests pin that: after
 //! an editable is focused, the handler must fire with `is_editable == true`
 //! on the `pump` path. Because `run_loop` routes every message through the

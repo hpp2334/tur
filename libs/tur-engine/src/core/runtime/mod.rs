@@ -26,12 +26,12 @@ use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
-pub use backend::AppBackend;
+pub use backend::HostBackend;
 // `WorkerBackend` is `pub(crate)` — internal to the engine, only
-// `AppBackend` (which owns a worker running `WorkerBackend`) is public.
+// `HostBackend` (which owns a worker running `WorkerBackend`) is public.
 pub(crate) use backend::WorkerBackend;
 // `MsgOutcome` is `pub(crate)` — the result of the single shared message
-// handler (`AppBackend::apply_msg`), consumed by both `pump` and
+// handler (`HostBackend::apply_msg`), consumed by both `pump` and
 // `TurApp::run_loop` (the latter lives in `lib.rs`).
 pub(crate) use backend::MsgOutcome;
 
@@ -154,7 +154,7 @@ pub struct TurRuntime {
     plugins: Arc<Vec<Box<dyn Plugin>>>,
     /// Worker hosting — hosts each app's loop in a registered pool
     /// (single role: see [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner)).
-    /// Cloned into each `AppBackend` at `app_builder().build(...)`.
+    /// Cloned into each `HostBackend` at `app_builder().build(...)`.
     worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
     /// Default per-instance frame cadence. Cloned into each `TurApp`;
     /// embedders with per-instance scheduling replace it via
@@ -200,9 +200,9 @@ impl TurRuntime {
     /// [`TurAppBuilder::build`] (rendering) or
     /// [`TurAppBuilder::build_headless`] (no renderer).
     ///
-    /// The engine runs on a worker thread (via [`AppBackend`]); the
-    /// renderer lives on the main thread and is owned by `AppBackend`
-    /// (passed to `build`). `AppBackend` applies each `Vec<RenderCommand>`
+    /// The engine runs on a worker thread (via [`HostBackend`]); the
+    /// renderer lives on the main thread and is owned by `HostBackend`
+    /// (passed to `build`). `HostBackend` applies each `Vec<RenderCommand>`
     /// batch directly to the renderer, uploads new image resources
     /// incrementally, and calls `renderer.resize(...)` on viewport-change
     /// events only.
@@ -271,7 +271,7 @@ impl TurRuntime {
             )
             .expect("threaded backend factory failed")
         };
-        let backend = AppBackend::new(
+        let backend = HostBackend::new(
             self.worker_spawner.clone(),
             renderer,
             worker_pool,
@@ -328,7 +328,7 @@ pub struct TurAppBuilder<'rt> {
 impl<'rt> TurAppBuilder<'rt> {
     /// Group the rendering surface — renderer, viewport, dpr — onto this
     /// builder. A non-headless app must supply all three together; the
-    /// terminal [`Self::build`] then takes no arguments. `AppBackend`
+    /// terminal [`Self::build`] then takes no arguments. `HostBackend`
     /// owns the renderer on the host thread and drives it directly (render batches,
     /// image uploads, resize-on-event).
     ///
@@ -452,7 +452,7 @@ impl<'rt> TurAppBuilder<'rt> {
     /// Terminal: build a headless instance (no renderer, no rendering).
     /// The instance still runs JS, owns a reactive store, accepts platform
     /// events if fed any, and can use capabilities (http, clipboard, etc.).
-    /// The engine runs on a worker thread (via [`AppBackend`]) — JS
+    /// The engine runs on a worker thread (via [`HostBackend`]) — JS
     /// execution, frame flushes, and every `async` RPC round-trip through
     /// the same main↔worker channel as a rendering instance; the only
     /// difference is the host-side [`Renderer`](crate::core::render::Renderer)
