@@ -46,42 +46,44 @@ function Body(): Element {
     });
 }
 
-function CaseRoot(): Element {
-    return Expanded({
-        child: Stack({
-            children: [
-                Container({
-                    color: COLORS.pageBg,
-                    padding: 22,
-                    children: [
-                        Column({
-                            crossAlignment: CrossAxisAlignment.Stretch,
-                            children: [
-                                Condition({
-                                    condition: hasHttp,
-                                    child: () => Body(),
-                                    elseChild: () => Unsupported(),
-                                }),
-                            ],
-                        }),
-                    ],
-                }),
-            ],
+/** The viewer component — a plain user-defined component that owns the
+ *  `target$` watcher: `lifecycleView` wraps the layout it returns, so
+ *  `repoWatch.start$` fires when the component mounts and
+ *  `repoWatch.stop$` when it is torn down (case switch / recompile /
+ *  module reload). This is the general user shape — any component that
+ *  owns side-effecting resources (watchers, subscriptions) ties their
+ *  lifetime to its own subtree this way, from inside the component. */
+function GithubViewer(): Element {
+    return lifecycleView(() => ({
+        element: Expanded({
+            child: Stack({
+                children: [
+                    Container({
+                        color: COLORS.pageBg,
+                        padding: 22,
+                        children: [
+                            Column({
+                                crossAlignment: CrossAxisAlignment.Stretch,
+                                children: [
+                                    Condition({
+                                        condition: hasHttp,
+                                        child: () => Body(),
+                                        elseChild: () => Unsupported(),
+                                    }),
+                                ],
+                            }),
+                        ],
+                    }),
+                ],
+            }),
         }),
-    });
+        onMounted$: repoWatch.start$,
+        beforeDestroy$: repoWatch.stop$,
+    }));
 }
 
 /** Advanced case: an explicit `start()` (wins over the default-export
- *  wrapper). The root is wrapped in `lifecycleView` so the `target$` watcher
- *  (`repoWatch`) starts when this case's view mounts and stops when it is
- *  torn down (case switch / recompile / module reload) — the watcher lives
- *  exactly as long as the tree that owns it. */
+ *  wrapper) — it just mounts the component, like any other view. */
 export function start() {
-    __setCaseView(
-        lifecycleView(() => ({
-            element: CaseRoot(),
-            onMounted$: repoWatch.start$,
-            beforeDestroy$: repoWatch.stop$,
-        })),
-    );
+    __setCaseView(GithubViewer());
 }

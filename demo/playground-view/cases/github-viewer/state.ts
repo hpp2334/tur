@@ -366,9 +366,9 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
 // Load flow — a `watch` on `target$`. Writing a fresh target object (any
 // change of `repo` or `nonce`) re-runs the fetch; the nonce forces a
 // refetch of the same repo because writes compare object values by
-// reference (`refresh` bumps it). Started/stopped by the case's
-// lifecycleView (index.ts) so the watcher lives exactly as long as the
-// mounted case. The callback (`onTargetChange`) only dispatches `loadRepo`
+// reference (`refresh` bumps it). Started/stopped by the GithubViewer
+// component's own lifecycleView (index.ts) so the watcher lives exactly as
+// long as the component's subtree. The callback (`onTargetChange`) only dispatches `loadRepo`
 // — it never writes `target$`, satisfying the watch-loop rule.
 // ---------------------------------------------------------------------------
 
