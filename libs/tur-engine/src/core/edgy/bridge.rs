@@ -1,11 +1,12 @@
 use std::rc::Rc;
 
+use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsArgs, JsResult, JsValue};
+use boa_engine::{Context, JsArgs, JsResult, JsValue, js_string};
 
-use crate::core::edgy::reactive::{Derived, Source, make_store_js_object};
+use crate::core::edgy::reactive::{AnyReadable, Derived, Mutation, Source, make_store_js_object};
 use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
-use crate::core::js_runtime::js_value::IntoJs;
+use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 
 /// Bridge function table entries for the reactive primitives domain.
 ///
@@ -15,11 +16,15 @@ use crate::core::js_runtime::js_value::IntoJs;
 /// `{get, set}` ctx handed to derive/mutate closures — there are no
 /// module-level `get` / `set` functions and no way to grab "the current
 /// store" (embedded code threads ctx through from its closures).
+///
+/// `watch(readable, cb)` registers a non-element subscriber over an atom and
+/// returns `{ start$, stop$ }` control mutations (see `edgy::watch`).
 pub fn fns() -> Vec<FnEntry> {
     vec![
         ("source", 2, tur_source as Ptr),
         ("derive", 2, tur_derive as Ptr),
         ("mutate", 2, tur_mutate as Ptr),
+        ("watch", 3, tur_watch as Ptr),
         ("createStore", 1, tur_create_store as Ptr),
         ("view", 1, tur_view as Ptr),
     ]
@@ -58,6 +63,31 @@ fn tur_mutate(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsRes
     let closure = require_callable(args, 1)?;
     let mutation = js_ctx.store.bridge().decl_mutate(closure);
     Ok(mutation.into_js(context))
+}
+
+/// `watch(readable, cb)` — register a watcher over a source or derived atom
+/// and return `{ start$, stop$ }`. `cb` is a **mutation handle** (create one
+/// with `mutate((ctx) => …)` — the same convention as `onTick` /
+/// `onUpdate$` / `onClick`); while started, the flush loop invokes it
+/// whenever the watched atom is dirtied (same rail as every other mutation
+/// — mounted-store ctx, same-frame delivery). Change-only: starting does not
+/// fire it.
+fn tur_watch(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+    let js_ctx = extract_js_ctx(args)?;
+    let watched = AnyReadable::from_js(args.get_or_undefined(1))?;
+    let callback = Mutation::from_js(args.get_or_undefined(2)).map_err(|_| {
+        boa_engine::JsError::from(boa_engine::JsNativeError::typ().with_message(
+            "watch(atom, cb) expects a mutation handle — create one with mutate((ctx) => …)",
+        ))
+    })?;
+    let bridge = js_ctx.store.bridge();
+    let (start, stop) = bridge.register_watch(watched, callback);
+
+    let proto = context.intrinsics().constructors().object().prototype();
+    let obj = JsObject::from_proto_and_data(proto, ());
+    obj.create_data_property_or_throw(js_string!("start$"), start.into_js(context), context)?;
+    obj.create_data_property_or_throw(js_string!("stop$"), stop.into_js(context), context)?;
+    Ok(obj.into())
 }
 
 /// `createStore()` — mint a fresh store over this instance's shared reactive

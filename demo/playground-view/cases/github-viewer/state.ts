@@ -12,6 +12,7 @@ import {
     sleep,
     source,
     type Task,
+    watch,
 } from "tur:std";
 
 // ---------------------------------------------------------------------------
@@ -277,7 +278,8 @@ function pickVersion(body: JsDelivrVersion): string | null {
 
 /** Fetch the flat file tree for a repo, stash it, and switch to the explorer.
  *  Runs as two sequential HTTP calls (version resolve → tree). Dispatched by
- *  `openRepo` / `refresh`; the fetch generator captures the mutation ctx. */
+ *  the `target$` watcher on every target change; the fetch generator
+ *  captures the mutation ctx. */
 const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
     ctx.set(loading$, true);
     ctx.set(error$, null);
@@ -361,6 +363,33 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
 });
 
 // ---------------------------------------------------------------------------
+// Load flow — a `watch` on `target$`. Writing a fresh target object (any
+// change of `repo` or `nonce`) re-runs the fetch; the nonce forces a
+// refetch of the same repo because writes compare object values by
+// reference (`refresh` bumps it). Started/stopped by the GithubViewer
+// component's own lifecycleView (index.ts) so the watcher lives exactly as
+// long as the component's subtree. The callback (`onTargetChange`) only dispatches `loadRepo`
+// — it never writes `target$`, satisfying the watch-loop rule.
+// ---------------------------------------------------------------------------
+
+interface LoadTarget {
+    repo: Repo;
+    nonce: number;
+}
+
+export const target$ = source<LoadTarget | null>(null);
+
+/** The watcher callback: dispatches `loadRepo` for the current target. A
+ *  mutation like any other (`onMounted$`-style convention — `watch` takes
+ *  the handle, not a raw closure). */
+const onTargetChange = mutate((ctx: StoreCtx) => {
+    const target = ctx.get(target$);
+    if (target) ctx.set(loadRepo, target.repo);
+});
+
+export const repoWatch = watch(target$, onTargetChange);
+
+// ---------------------------------------------------------------------------
 // Navigation — all local (mutates `pathSegments$`; `entries$` recomputes).
 // ---------------------------------------------------------------------------
 
@@ -369,7 +398,7 @@ export const openRepo = mutate((ctx: StoreCtx, repo: Repo) => {
     ctx.set(pathSegments$, []);
     ctx.set(view$, "explorer");
     ctx.set(error$, null);
-    ctx.set(loadRepo, repo);
+    ctx.set(target$, { repo, nonce: 0 });
 });
 
 /** Landing-screen submit: parse the draft and open the repo, or surface
@@ -426,10 +455,14 @@ export const navigateToRoot = mutate((ctx: StoreCtx) => {
     ctx.set(selectedPath$, null);
 });
 
-/** Re-fetch the tree (the only nav-adjacent HTTP call). */
+/** Re-fetch the tree (the only nav-adjacent HTTP call). Bumps the target's
+ *  nonce so even the same repo produces a fresh (reference-unequal) target
+ *  object — the write would otherwise be equality-gated away. */
 export const refresh = mutate((ctx: StoreCtx) => {
     const repo = ctx.get(repo$);
-    if (repo) ctx.set(loadRepo, repo);
+    if (!repo) return;
+    const prev = ctx.get(target$);
+    ctx.set(target$, { repo, nonce: (prev?.nonce ?? 0) + 1 });
 });
 
 export const selectEntry = mutate((ctx: StoreCtx, entry: DirEntry) => {

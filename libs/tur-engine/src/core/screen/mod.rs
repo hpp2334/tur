@@ -97,6 +97,11 @@ impl Screen {
         }
         self.last.set((width, height));
         let value = Self::size_js(width, height, boa);
-        self.store.bridge().set_source(src, value);
+        // A resize can never be a watch loop (it originates from the platform
+        // event queue, never inside a watcher callback delivery), so an error
+        // here would be an engine invariant violation — log, don't crash.
+        if let Err(e) = self.store.bridge().set_source(src, value) {
+            tracing::error!("viewportSize$ sync failed: {e}");
+        }
     }
 }

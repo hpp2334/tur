@@ -321,7 +321,7 @@ impl TurAppInternal {
             // `do_update(dirties)` to the mounted root. This may mutate
             // the ElementTree, which sets `dirty`/`need_paint` for the next
             // layout pass.
-            let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);
+            let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context, frame_id);
 
             // LazyList remount now happens *inside* `perform_layout` (it uses
             // the real viewport from constraints), so there is no separate
@@ -433,7 +433,16 @@ impl TurAppInternal {
     /// subscriber graph. Returns `(reactive_changed, dirty_element_ids)`:
     /// the element ids whose subscribed atoms changed this flush — used by
     /// the flush loop to fire `on_updated` lifecycle hooks after layout.
-    fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> (bool, Vec<ElementNodeId>) {
+    ///
+    /// Also delivers `watch()` callbacks: due watchers (their watched atom is
+    /// dirtied, at most once per `frame_id`) are pushed onto the mutation
+    /// queue, so `flush_pending_mutations` invokes them later this iteration
+    /// — same rail, same frame, against the mounted store.
+    fn flush_reactive(
+        &self,
+        boa_context: &mut boa_engine::Context,
+        frame_id: u64,
+    ) -> (bool, Vec<ElementNodeId>) {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {
@@ -442,6 +451,20 @@ impl TurAppInternal {
         let dirties = flush_engine.flush_atoms();
         if dirties.is_empty() {
             return (false, Vec::new());
+        }
+
+        // Watchers (non-element subscribers) — queue due callbacks before the
+        // element work below; the mutation drain later this iteration invokes
+        // them with the mounted store's ctx.
+        let due_callbacks = store.watch_dispatch().due_callbacks(&dirties, frame_id);
+        if !due_callbacks.is_empty() {
+            let mut queue = self.js_context.mutation_queue.borrow_mut();
+            for callback in due_callbacks {
+                queue.push(
+                    crate::core::edgy::mutation::MutationHandle::<()>::new(callback),
+                    (),
+                );
+            }
         }
 
         let dirty_subs = store.subscriber_index().dirty_subscribers(&dirties);
@@ -663,7 +686,11 @@ impl TurAppInternal {
         let mounted = self.js_context.element_tree.store();
         for inv in invs {
             let args = inv.args.to_js_args(boa_context);
-            let _ = mounted.invoke_mutation(inv.mutation, &args, boa_context);
+            // A failed invocation (e.g. a watch loop rejected a write, or user
+            // code threw) must not stall the flush — log and keep draining.
+            if let Err(e) = mounted.invoke_mutation(inv.mutation, &args, boa_context) {
+                tracing::error!("mutation invocation failed: {e}");
+            }
         }
         true
     }
