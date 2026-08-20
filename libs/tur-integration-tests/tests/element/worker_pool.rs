@@ -280,7 +280,7 @@ fn heavy_daemon_work_does_not_stall_other_pools() {
     // while the daemon is mid-loop. If pools were broken (both apps on one
     // thread), this block_on would queue behind the busy loop and only
     // return after it finished.
-    futures::executor::block_on(ui_app.load_module(
+    futures::executor::block_on(ui_app.backend().load_module(
         r#"const store = createStore();
 
             import { createStore, source } from "tur:std";

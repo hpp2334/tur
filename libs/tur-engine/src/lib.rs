@@ -25,9 +25,9 @@ pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an isolated
-// `TurApp` instance (engine on a worker thread; `AppBackend` owns the renderer
+// `TurApp` instance (engine on a worker thread; `HostBackend` owns the renderer
 // on the host thread and drives it directly).
-pub use crate::core::runtime::{AppBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+pub use crate::core::runtime::{HostBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type
 // without reaching into `core::plugin`. OS-API backends receive an
@@ -70,10 +70,10 @@ pub struct FocusedState {
 
 /// A running tur engine instance.
 ///
-/// Wraps a [`AppBackend`] that owns a worker thread (running a
+/// Wraps a [`HostBackend`] that owns a worker thread (running a
 /// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the host-side
 /// renderer (passed to `TurRuntime::app_builder().build(...)`). Main drives
-/// the renderer directly from [`AppBackend`].
+/// the renderer directly from [`HostBackend`].
 /// Everything else (boa `Context`, element tree, reactive store, layout,
 /// subsystems) lives on the worker.
 ///
@@ -88,7 +88,7 @@ pub struct FocusedState {
 /// - On native (Android JNI, integration tests), `futures::executor::block_on`
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
-    backend: AppBackend,
+    backend: HostBackend,
     /// Per-instance frame cadence. Cloned from the runtime at
     /// construction; embedders with per-instance cadence (Android's
     /// per-`FrameLoop` sources) replace it via [`Self::set_vsync_source`]
@@ -110,18 +110,18 @@ pub struct TurApp {
 /// [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
-/// Per-focus-change hook fired from [`AppBackend::apply_msg`](core::runtime::AppBackend::apply_msg)
+/// Per-focus-change hook fired from [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg)
 /// when the worker ships a deduped `HostMsg::FocusedStateChanged`. See
 /// [`TurApp::set_focus_changed_handler`].
 pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`AppBackend`] + vsync
-    /// source. The runtime calls this from
+    /// Construct a `TurApp` backed by the given [`HostBackend`] + vsync
+    /// source. `pub(crate)`: instances are only constructed by
     /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
     /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
-    /// embedders normally don't call it directly.
-    pub fn new(backend: AppBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
+    /// — embedders never call it directly.
+    pub(crate) fn new(backend: HostBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
         Self {
             backend,
             vsync: RefCell::new(vsync),
@@ -140,37 +140,23 @@ impl TurApp {
         *self.vsync.borrow_mut() = source;
     }
 
-    /// Direct accessor on the underlying [`AppBackend`]. Embedders use it
+    /// Direct accessor on the underlying [`HostBackend`]. Embedders use it
     /// to install the cursor backend after construction.
-    pub fn backend(&self) -> &AppBackend {
+    pub fn backend(&self) -> &HostBackend {
         &self.backend
     }
 
-    /// Parse + evaluate `source` as an ES module and invoke its `start()`
-    /// export (the module lifecycle contract: `start` returns an optional
-    /// cleanup function; the engine runs it before the next load and at
-    /// destroy).
+    /// Handle-based module load: resolve `handle` in `registry` and load
+    /// the shared source via [`HostBackend::load_module`] (parse + evaluate
+    /// as an ES module and invoke its `start()` export — the module
+    /// lifecycle contract: `start` returns an optional cleanup function;
+    /// the engine runs it before the next load and at destroy).
     ///
-    /// Accepts `&str` / `String` / `Arc<str>`. Passing an already-shared
-    /// `Arc<str>` (e.g. a module-source handle resolved from a registry) is
-    /// zero-copy — the refcounted source flows to the worker untouched.
-    pub async fn load_module(
-        &self,
-        source: impl Into<std::sync::Arc<str>>,
-    ) -> Result<(), TurError> {
-        let source = source.into();
-        tracing::info!("load_module: evaluating module ({} bytes)", source.len());
-        self.backend
-            .load_module(source)
-            .await
-            .map_err(TurError::from)
-    }
-
-    /// Handle-based variant of [`load_module`](Self::load_module): resolve
-    /// `handle` in `registry` and load the shared source. The natural pair
-    /// for [`ModuleSourceRegistry`] — embedders that register sources Rust-
-    /// side (APK assets, bundle files) load them by opaque id, so the source
-    /// never crosses an embedder boundary as a string.
+    /// The natural pair for [`ModuleSourceRegistry`] — embedders that
+    /// register sources Rust-side (APK assets, bundle files) load them by
+    /// opaque id, so the source never crosses an embedder boundary as a
+    /// string. String-based embedders (the wasm host, tests) call
+    /// [`HostBackend::load_module`] directly.
     ///
     /// An unknown / released handle is an error (never UB — registry handles
     /// are monotonic ids, so a stale value can only miss).
@@ -182,7 +168,10 @@ impl TurApp {
         let source = registry
             .get(handle)
             .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
-        self.load_module(source).await
+        self.backend
+            .load_module(source)
+            .await
+            .map_err(TurError::from)
     }
 
     /// Read rendered pixels back from the owned renderer (screenshot
@@ -244,7 +233,7 @@ impl TurApp {
     /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
     ///   N+1 while main encodes N), then paint the latest buffered batch
     ///   (vsync-aligned, latest-wins).
-    /// - **worker msg** — dispatch via [`AppBackend::apply_msg`](core::runtime::AppBackend::apply_msg),
+    /// - **worker msg** — dispatch via [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg),
     ///   the single shared handler. `RenderCommands` is buffered into
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
@@ -378,45 +367,6 @@ impl TurApp {
         self.vsync.borrow().request_frame();
     }
 
-    /// Run `cb` against the live `AnyElement` at `id`, on the worker
-    /// thread. The closure executes where the element actually lives, so
-    /// it can do typed introspection that can't be serialized across the
-    /// thread boundary (e.g. `e.cast::<TextElement>().spans()`). Returns
-    /// `None` if the id is unknown or the node has no element (fragment
-    /// host).
-    ///
-    /// Constraints:
-    /// - `R: Send + 'static` — the result crosses the worker→host channel.
-    /// - `cb: Send + 'static` — the closure crosses host→worker.
-    ///
-    /// Production code should never call this — it pins test-only typed
-    /// element access to the worker. Use `query_tree_snapshot` for a
-    /// serializable snapshot.
-    pub async fn with_element<R: Send + 'static>(
-        &self,
-        id: core::element::ElementNodeId,
-        cb: impl FnOnce(&core::elements::AnyElement) -> R + Send + 'static,
-    ) -> Option<R> {
-        use core::app::comm::{Reply, WorkerMsg};
-        use core::elements::NodeTreeData;
-
-        let (tx, rx) = Reply::<Option<R>>::pair();
-        let runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static> = Box::new(move |tree| {
-            let result = tree
-                .get_element(id)
-                .and_then(|node| node.element.as_ref())
-                .map(cb);
-            tx.send(result);
-        });
-        // Best-effort send — returns Err if the worker is gone. In that case
-        // we'll just await on `rx` which yields None.
-        let _ = self
-            .backend
-            .worker_tx()
-            .unbounded_send(WorkerMsg::WithElement { id, runner });
-        rx.rx.await.unwrap_or(None)
-    }
-
     /// Test-only: run `cb` against the worker's live `NodeTreeData` AND
     /// `FocusManager`. This is the general escape hatch the former
     /// per-field queries (`focused_cursor_rect`, `focused_is_editable`,
@@ -425,9 +375,8 @@ impl TurApp {
     /// `dev_tool_node` / `root_element_id`, focus's `focused()`, the
     /// `focused_is_editable` helper in [`core::focus::helper`]).
     ///
-    /// Returns `None` if the worker is gone. Same constraints as
-    /// [`Self::with_element`] (`R: Send + 'static`, `cb: Send + 'static`).
-    /// Production code should never call this.
+    /// Returns `None` if the worker is gone (`R: Send + 'static`,
+    /// `cb: Send + 'static`). Production code should never call this.
     pub async fn with_tree<R: Send + 'static>(
         &self,
         cb: impl FnOnce(&core::elements::NodeTreeData, &core::focus::FocusManager) -> R + Send + 'static,
@@ -445,21 +394,13 @@ impl TurApp {
         rx.rx.await.unwrap_or(None)
     }
 
-    pub async fn query_element(&self, key: &[&str]) -> Option<core::element::NodeId> {
-        self.backend.query_element(key).await
-    }
-
-    pub async fn focused_element(&self) -> Option<core::element::ElementNodeId> {
-        self.backend.focused_element().await
-    }
-
     /// Install a handler fired whenever the worker ships a deduped
     /// `HostMsg::FocusedStateChanged` (i.e. the focused element's
     /// editable-ness or caret rect changes). The engine retains no focus
     /// cache — this push path is the only production way to read focus
     /// state (tests may use [`Self::with_tree`]). Pass `None` to clear.
     ///
-    /// The handler runs inside [`Self::apply_msg`](core::runtime::AppBackend::apply_msg),
+    /// The handler runs inside [`Self::apply_msg`](core::runtime::HostBackend::apply_msg),
     /// so it observes identical state on the `run_loop` path. Used by the
     /// wasm embedder (textarea focus / caret positioning) and Android
     /// (soft-keyboard sync via a JNI callback into the Kotlin `FrameLoop`).

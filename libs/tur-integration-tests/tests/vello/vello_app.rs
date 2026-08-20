@@ -169,7 +169,7 @@ impl TurVelloApp {
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
 
-        // Threaded engine: worker produces command batches; `AppBackend`
+        // Threaded engine: worker produces command batches; `HostBackend`
         // owns the VelloRenderer on main and applies them via `run_loop`.
         let app = runtime
             .app_builder()
@@ -221,7 +221,14 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        futures::executor::block_on(self.inner.borrow().app.load_module(source.as_str()))?;
+        futures::executor::block_on(
+            self.inner
+                .borrow()
+                .app
+                .backend()
+                .load_module(source.as_str()),
+        )
+        .map_err(TurError::from)?;
         // Drive the module's initial render to quiescence.
         self.wait_for_timeout(Duration::ZERO);
         Ok(())

@@ -200,7 +200,7 @@ impl TurAppContext {
     ///
     /// The caller is responsible for shipping the batch to whichever
     /// thread/realm owns the actual renderer. The worker stores it in
-    /// `TurAppInternal::pending_render_batch` for `AppBackend::worker_loop`
+    /// `TurAppInternal::pending_render_batch` for `HostBackend::worker_loop`
     /// to drain and ship via `HostMsg::RenderCommands`.
     pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();

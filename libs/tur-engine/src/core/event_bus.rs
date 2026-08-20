@@ -152,20 +152,20 @@ type MainHostHandler = Box<dyn FnMut(Vec<u8>) + Send>;
 
 /// Shared handler list keyed by `channel_id` — all clones of an
 /// `EventBusHandle` see the same map, so a handler registered on one
-/// clone fires when `AppBackend` dispatches on its own clone for the
+/// clone fires when `HostBackend` dispatches on its own clone for the
 /// matching `channel_id`.
 type SharedHostHandlers = Arc<Mutex<HashMap<u64, Vec<MainHostHandler>>>>;
 
 /// Main-side handle to the event bus. Holds the worker
 /// `Sender<WorkerMsg>`: `emit_to_js` ships via `WorkerMsg::EventBusToJs`,
 /// and JS→host messages come back as `HostMsg::EventBusToEmbedder`, which
-/// `AppBackend` dispatches into the shared `embedder_handlers` map.
+/// `HostBackend` dispatches into the shared `embedder_handlers` map.
 #[derive(Clone)]
 pub struct EventBusHandle {
     worker_tx: crate::core::app::WorkerTx,
     /// Shared handler list keyed by `channel_id` — all clones of an
     /// `EventBusHandle` see the same map, so a handler registered on one
-    /// clone fires when `AppBackend` dispatches on its own clone for the
+    /// clone fires when `HostBackend` dispatches on its own clone for the
     /// matching `channel_id`.
     embedder_handlers: SharedHostHandlers,
 }
@@ -191,7 +191,7 @@ impl EventBusHandle {
 
     /// Register a host-side handler for JS→host messages on `channel_id`.
     /// The handler is stored in a shared `Arc<Mutex>` and fires when
-    /// `AppBackend` dispatches a `HostMsg::EventBusToEmbedder` for
+    /// `HostBackend` dispatches a `HostMsg::EventBusToEmbedder` for
     /// `channel_id`.
     pub fn on_bus_event(&self, channel_id: u64, handler: impl FnMut(Vec<u8>) + Send + 'static) {
         self.embedder_handlers
@@ -203,7 +203,7 @@ impl EventBusHandle {
     }
 
     /// Dispatch JS→host bytes on `channel_id` to handlers registered on
-    /// `channel_id`. Called by `AppBackend` when it receives
+    /// `channel_id`. Called by `HostBackend` when it receives
     /// `HostMsg::EventBusToEmbedder`.
     pub(crate) fn dispatch_to_host(&self, channel_id: u64, bytes: Vec<u8>) {
         let mut handlers = self.embedder_handlers.lock().unwrap();

@@ -4,7 +4,7 @@ A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls i
 
 ## Module lifecycle contract
 
-`load_module(source)` is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
+`load_module(source)` (on the app's backend — `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources; the string-based `HostBackend::load_module` RPC is the raw entry) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
 
 - The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree, then evaluates the new module and calls its `start()`.
 - Missing / non-function `start` fails the load (`ModuleError::Eval`); a throwing `start` fails it too. `start` returning undefined is fine (no cleanup).
@@ -445,7 +445,7 @@ platform (zero `panic!`/`unimplemented!` stubs):
   effects are observable; wasm returns immediately (the JS main thread can't
   block) and embedders confirm readiness via the first RPC await. The native
   rendezvous lives in `NativeWorkerPools::spawn_app` (a `started_tx` handshake
-  per `LaneMsg::SpawnApp`), NOT in the engine — `AppBackend::new` is
+  per `LaneMsg::SpawnApp`), NOT in the engine — `HostBackend::new` is
   platform-uniform. `WorkerTicket` = per-app
   slot claim: `join()` signals that app's loop completion + `wake()` is the
   cross-thread kick called after every host→worker send (no-op native,
@@ -600,7 +600,7 @@ Elements are type-erased via `AnyElement` (private `Erased` trait with blanket i
 2. `ElementTree::compute_layout()` lays out dirty nodes: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the store's atom→subscriber index)
 3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
 4. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
-5. The worker records the paint walk into a `RenderCommandBatch`; `AppBackend` applies it host-side via `Renderer::render_commands` + `present`
+5. The worker records the paint walk into a `RenderCommandBatch`; `HostBackend` applies it host-side via `Renderer::render_commands` + `present`
 
 ## Directory structure
 
@@ -933,7 +933,7 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 ### Renderer trait
 
 The `Renderer` trait is defined in `tur-engine::core::render`. The renderer
-lives on the host thread (owned by `AppBackend`); the worker ships it a
+lives on the host thread (owned by `HostBackend`); the worker ships it a
 `RenderCommandBatch` (one frame's recorded paint ops):
 
 ```rust

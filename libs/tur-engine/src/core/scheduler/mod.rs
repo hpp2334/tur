@@ -165,7 +165,7 @@ impl WorkerTicket {
         (self.join)()
     }
 
-    /// Clone of the cross-thread wake callback. The engine's `AppBackend`
+    /// Clone of the cross-thread wake callback. The engine's `HostBackend`
     /// calls it after every host→worker send.
     pub fn wake(&self) -> Rc<dyn Fn()> {
         self.wake.clone()

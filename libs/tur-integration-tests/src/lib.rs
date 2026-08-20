@@ -566,7 +566,7 @@ impl TurTestApp {
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         // Case dist files are ES modules that import `tur:std` (resolved by
         // the engine's module loader) and call `render(<case default>)`.
-        block_on(self.inner.load_module(source.as_str()))?;
+        block_on(self.inner.backend().load_module(source.as_str()))?;
         // Drive the module's initial render to quiescence (frozen clock)
         // before the test starts interacting.
         self.wait_for_timeout(Duration::ZERO);
@@ -659,13 +659,15 @@ impl TurTestApp {
         });
     }
 
-    /// Snapshot of the live element tree, fetched via RPC from the worker.
-    /// Returns an owned value (not a `Ref`) — the live tree lives on the
-    /// worker thread; main can only see snapshots of it. Tests should call
-    /// this once per `render()` / input step they want to inspect (the
-    /// snapshot is not auto-refreshed).
+    /// Snapshot of the live element tree, built on the worker via the
+    /// `with_tree` escape hatch. Returns an owned value (not a `Ref`) —
+    /// the live tree lives on the worker thread; main can only see
+    /// snapshots of it. Tests should call this once per `render()` /
+    /// input step they want to inspect (the snapshot is not
+    /// auto-refreshed).
     pub fn element_tree(&self) -> NodeTreeSnapshot {
-        block_on(self.inner.backend().query_tree_snapshot())
+        self.with_tree(|tree, _focus| tree.tree_snapshot())
+            .expect("worker gone")
     }
 
     /// Fire-and-forget: push a pointer-down + pointer-up (a full click) onto
@@ -936,7 +938,12 @@ impl TurTestApp {
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        block_on(self.inner.query_element(key))
+        let key_owned: Vec<String> = key.iter().map(|s| s.to_string()).collect();
+        self.with_tree(move |tree, _focus| {
+            let refs: Vec<&str> = key_owned.iter().map(String::as_str).collect();
+            tree.query_element(&refs)
+        })
+        .flatten()
     }
 
     /// Absolute bounds of the node (translation of its world affine +
@@ -954,7 +961,7 @@ impl TurTestApp {
     }
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
-        block_on(self.inner.focused_element())
+        self.with_tree(|_tree, focus| focus.focused()).flatten()
     }
 
     /// Logical-space `(x, y, w, h)` of the focused element's caret —
@@ -988,12 +995,21 @@ impl TurTestApp {
     /// Constraints:
     /// - `R: Send + 'static` — the result crosses worker→main.
     /// - `cb: Send + 'static` — the closure crosses main→worker.
+    ///
+    /// Engine-side this is a test-only surface: it's built on
+    /// [`Self::with_tree`] (the `NodeTreeData` + `FocusManager` escape
+    /// hatch), which is the engine's only test RPC.
     pub fn with_element<R: Send + 'static>(
         &self,
         id: ElementNodeId,
         cb: impl FnOnce(&AnyElement) -> R + Send + 'static,
     ) -> Option<R> {
-        block_on(self.inner.with_element(id, cb))
+        self.with_tree(move |tree, _focus| {
+            tree.get_element(id)
+                .and_then(|node| node.element.as_ref())
+                .map(cb)
+        })
+        .flatten()
     }
 
     /// Like [`Self::with_element`], but the closure receives the whole
@@ -1135,13 +1151,13 @@ impl TurTestApp {
     /// [`load_module_raw`](Self::load_module_raw) for the strict path.
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         let wrapped = wrap_legacy_start(source);
-        block_on(self.inner.load_module(wrapped.as_str()))
+        block_on(self.inner.backend().load_module(wrapped.as_str())).map_err(TurError::from)
     }
 
     /// Strict module-lifecycle path: loads `source` verbatim — it MUST
     /// export `function start()` (missing/invalid `start` fails the load).
     pub fn load_module_raw(&self, source: &str) -> Result<(), TurError> {
-        block_on(self.inner.load_module(source))
+        block_on(self.inner.backend().load_module(source)).map_err(TurError::from)
     }
 
     /// Structured dev-tool snapshot of the root node, or `None` if no tree

@@ -89,7 +89,7 @@ pub struct TurAppInternal {
     /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Worker → main render-command batch produced by the last `flush()`
-    /// that painted. Drained by `AppBackend`'s `worker_loop` and shipped
+    /// that painted. Drained by `HostBackend`'s `worker_loop` and shipped
     /// to main via `HostMsg::RenderCommands`. `None` if no paint happened
     /// this flush (or already drained).
     pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
@@ -404,7 +404,7 @@ impl TurAppInternal {
 
         if needs_paint {
             // Record the paint pass into a `Vec<RenderCommand>`; main
-            // applies it to its renderer (`AppBackend::render_batch`).
+            // applies it to its renderer (`HostBackend::render_batch`).
             let batch = self.app_context.borrow_mut().build_render_batch();
             *self.pending_render_batch.borrow_mut() = Some(batch);
         }
@@ -664,7 +664,7 @@ impl TurAppInternal {
     }
 
     /// Drain the render-command batch produced by the last `flush()`, if any.
-    /// `AppBackend::worker_loop` calls this after each `pump()` to ship the
+    /// `HostBackend::worker_loop` calls this after each `pump()` to ship the
     /// batch to main via `HostMsg::RenderCommands`. Returns `None` if no
     /// paint happened this flush (or already drained).
     pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {

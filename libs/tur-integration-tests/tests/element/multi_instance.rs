@@ -75,10 +75,18 @@ fn instances_have_isolated_js_realms() {
         .expect("app B");
 
     // Load different state into each instance.
-    futures::executor::block_on(app_a.load_module(SET_ID_JS.replace("VALUE", "A").as_str()))
-        .expect("load A");
-    futures::executor::block_on(app_b.load_module(SET_ID_JS.replace("VALUE", "B").as_str()))
-        .expect("load B");
+    futures::executor::block_on(
+        app_a
+            .backend()
+            .load_module(SET_ID_JS.replace("VALUE", "A").as_str()),
+    )
+    .expect("load A");
+    futures::executor::block_on(
+        app_b
+            .backend()
+            .load_module(SET_ID_JS.replace("VALUE", "B").as_str()),
+    )
+    .expect("load B");
 
     // Each instance reads back its OWN global — they must differ.
     let id_a = eval_js(&app_a, "globalThis.__instanceId").expect("eval A");
@@ -110,7 +118,7 @@ fn instances_have_isolated_element_trees() {
     let looper_a = RawAppLooper::new(app_a.clone(), driver.clone());
 
     // Mount a tree only in A.
-    futures::executor::block_on(app_a.load_module(
+    futures::executor::block_on(app_a.backend().load_module(
         r#"const store = createStore();
 
             import { createStore, Text, mount } from "tur:std";
@@ -151,7 +159,7 @@ fn headless_instance_runs_js_without_rendering() {
     let looper = RawAppLooper::new(app.clone(), driver);
 
     // JS executes; a frame runs without panic even with a zero viewport.
-    futures::executor::block_on(app.load_module(
+    futures::executor::block_on(app.backend().load_module(
         r#"const store = createStore();
 
         import { createStore, source } from "tur:std";
@@ -186,7 +194,7 @@ fn build_headless_runs_engine_on_worker() {
     let looper = RawAppLooper::new(app.clone(), driver);
 
     // JS executes via the worker RPC path.
-    futures::executor::block_on(app.load_module(
+    futures::executor::block_on(app.backend().load_module(
         r#"const store = createStore();
 
         import { createStore, source } from "tur:std";
@@ -420,7 +428,7 @@ fn platform_events_route_to_the_correct_instance() {
     // mode (no imports), so do the import in a module eval and stash the JSON
     // on globalThis, then read it back with eval_js.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
-        let _ = futures::executor::block_on(app.load_module(
+        let _ = futures::executor::block_on(app.backend().load_module(
             r#"import { createStore, viewportSize$ } from "tur:std";
 const store = createStore();
 
@@ -463,7 +471,7 @@ fn reactive_stores_are_isolated_per_instance() {
     // Create a source in A and set a value. The store is stashed on
     // globalThis so the read-back module below reads through the SAME store
     // (a fresh store would materialize the declaration independently).
-    futures::executor::block_on(app_a.load_module(
+    futures::executor::block_on(app_a.backend().load_module(
         r#"import { createStore, source } from "tur:std";
            const store = createStore();
            globalThis.__store = store;
@@ -487,7 +495,7 @@ fn reactive_stores_are_isolated_per_instance() {
 
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
-    futures::executor::block_on(app_a.load_module(
+    futures::executor::block_on(app_a.backend().load_module(
         r#"export function start() {
                globalThis.__r = globalThis.__store.get(globalThis.__atom);
            }"#,

@@ -1,5 +1,5 @@
 //! Backend types: `WorkerBackend` (engine state on the worker thread) and
-//! `AppBackend` (the public backend owned by `TurApp`, spawns + dispatches
+//! `HostBackend` (the public backend owned by `TurApp`, spawns + dispatches
 //! to the worker).
 //!
 //! ## Architecture
@@ -9,10 +9,10 @@
 //!   `pump()` runs one flush and produces a `Vec<RenderCommand>` batch
 //!   (stored in `TurAppInternal::pending_render_batch`).
 //!
-//! - [`AppBackend`] is public: `TurApp` owns one. It spawns a worker
+//! - [`HostBackend`] is public: `TurApp` owns one. It spawns a worker
 //!   (via the platform `WorkerSpawner`) hosting a `WorkerBackend`,
 //!   dispatches input via `futures::channel`, and receives [`HostMsg`]
-//!   replies. `AppBackend` owns the host-side [`Renderer`] (passed to
+//!   replies. `HostBackend` owns the host-side [`Renderer`] (passed to
 //!   `TurRuntime::app_builder().build(...)`); it applies each
 //!   `HostMsg::RenderCommands` batch directly to the renderer.
 //!
@@ -42,7 +42,6 @@ use crate::core::app::{HostMsg, HostRx, HostTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::cursor::CursorBackend;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::NodeTreeSnapshot;
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
@@ -60,7 +59,7 @@ use crate::error::TurError;
 /// can capture `!Send` types like `Rc<dyn Clock>` and `boa::Context` —
 /// these never cross threads. Once constructed, [`WorkerBackend::pump`]
 /// runs one flush and stores the resulting `Vec<RenderCommand>` batch in
-/// `TurAppInternal::pending_render_batch`, where [`AppBackend`]'s
+/// `TurAppInternal::pending_render_batch`, where [`HostBackend`]'s
 /// `worker_loop` drains it and ships to main.
 pub(crate) struct WorkerBackend {
     pub(crate) boa_context: RefCell<Context>,
@@ -252,16 +251,6 @@ impl WorkerBackend {
                 let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
                 reply.send(display);
             }
-            WorkerMsg::QueryTreeSnapshot { reply } => {
-                reply.send(self.query_tree_snapshot());
-            }
-            WorkerMsg::WithElement { id, runner } => {
-                let tree = self.internal.js_context.element_tree.borrow();
-                runner(&tree);
-                // `id` is informational only (the closure did its own
-                // lookup); reference it so the variant's bind stays useful.
-                let _ = id;
-            }
             WorkerMsg::WithTree { runner } => {
                 // Co-borrow is safe: `element_tree` and `focus_manager`
                 // are distinct RefCells (the sync `focused_is_editable`
@@ -269,13 +258,6 @@ impl WorkerBackend {
                 let tree = self.internal.js_context.element_tree.borrow();
                 let focus = self.internal.js_context.focus_manager.borrow();
                 runner(&tree, &focus);
-            }
-            WorkerMsg::QueryFocusedElement { reply } => {
-                reply.send(self.focused_element());
-            }
-            WorkerMsg::QueryElement { key, reply } => {
-                let key_refs: Vec<&str> = key.iter().map(|s| s.as_str()).collect();
-                reply.send(self.query_element(&key_refs));
             }
             WorkerMsg::EventBusToJs {
                 channel_id,
@@ -366,30 +348,14 @@ impl WorkerBackend {
         let focus = self.internal.js_context.focus_manager.borrow();
         helper::focused_is_editable(&tree, &focus)
     }
-
-    pub(crate) fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .query_element(key)
-    }
-
-    pub(crate) fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .tree_snapshot()
-    }
 }
 
 // ---------------------------------------------------------------------------
-// AppBackend — TurApp's backend. Owns the worker + RPC plumbing + renderer
+// HostBackend — TurApp's backend. Owns the worker + RPC plumbing + renderer
 // ---------------------------------------------------------------------------
 
 /// Result of dispatching one worker→host [`HostMsg`] through
-/// [`AppBackend::apply_msg`] — the single message handler driven by
+/// [`HostBackend::apply_msg`] — the single message handler driven by
 /// `TurApp::run_loop`.
 ///
 /// `apply_msg` performs every side-effect that is independent of *when* the
@@ -422,18 +388,18 @@ pub(crate) enum MsgOutcome {
 ///
 /// ## Async rpc
 ///
-/// All public methods on `AppBackend` are `async fn`. The embedder
+/// All public methods on `HostBackend` are `async fn`. The embedder
 /// supplies the runtime — `wasm_bindgen_futures::spawn_local` on wasm
 /// (so the JS main thread never blocks), `futures::executor::block_on`
 /// on native (so the calling thread parks until the worker replies).
 ///
 /// ## Renderer ownership
 ///
-/// `AppBackend` owns the host-side [`Renderer`] — passed to
+/// `HostBackend` owns the host-side [`Renderer`] — passed to
 /// `TurRuntime::app_builder().renderer(Box<dyn Renderer>, …).build()` and
 /// stored here, exactly like `main`'s
 /// `app_builder().renderer(Box::new(renderer), …).build()`. Both
-/// `AppBackend` and the renderer live on the main thread, so there is no
+/// `HostBackend` and the renderer live on the main thread, so there is no
 /// callback indirection: each `HostMsg::RenderCommands` batch is applied
 /// directly via [`Self::render_batch`] (renderer only). Resize is
 /// driven by the embedder at event-receipt time via
@@ -449,10 +415,10 @@ pub(crate) enum MsgOutcome {
 /// changes to an embedder-installed handler (see [`Self::set_focus_changed_handler`]).
 /// The engine retains no focus cache — embedders read focus from the
 /// handler (push, the only production path).
-pub struct AppBackend {
+pub struct HostBackend {
     worker_tx: WorkerTx,
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
-    /// requires `&mut self`, but `AppBackend` is held inside `Rc<TurApp>`
+    /// requires `&mut self`, but `HostBackend` is held inside `Rc<TurApp>`
     /// on wasm + android (single-threaded ownership). The borrow is held
     /// across the `next().await` in `run_loop` — safe because the wasm main
     /// thread is single-threaded and `Rc<TurApp>` itself enforces
@@ -489,7 +455,7 @@ pub struct AppBackend {
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
 }
 
-impl AppBackend {
+impl HostBackend {
     /// Host an app loop in `worker_pool` via the runtime's
     /// [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner). The entry runs
     /// on the chosen worker (lane thread / Web Worker — platform-defined)
@@ -649,7 +615,7 @@ impl AppBackend {
 
     /// Borrow the worker→host channel sender. Used by call sites that
     /// build a `WorkerMsg` carrying a closure / reply slot directly (e.g.
-    /// [`TurApp::with_element`](crate::TurApp::with_element)).
+    /// [`TurApp::with_tree`](crate::TurApp::with_tree)).
     pub(crate) fn worker_tx(&self) -> &WorkerTx {
         &self.worker_tx
     }
@@ -726,11 +692,10 @@ impl AppBackend {
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), ModuleError> {
-        self.rpc(|tx| WorkerMsg::LoadModule {
-            source: source.into(),
-            reply: tx,
-        })
-        .await
+        let source = source.into();
+        tracing::info!("load_module: evaluating module ({} bytes)", source.len());
+        self.rpc(|tx| WorkerMsg::LoadModule { source, reply: tx })
+            .await
     }
 
     /// Synchronous JS expression evaluation. Test-only — production code
@@ -742,26 +707,6 @@ impl AppBackend {
             reply: tx,
         })
         .await
-    }
-
-    pub async fn focused_element(&self) -> Option<ElementNodeId> {
-        self.rpc(|tx| WorkerMsg::QueryFocusedElement { reply: tx })
-            .await
-    }
-
-    pub async fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        let key_owned: Vec<String> = key.iter().map(|s| s.to_string()).collect();
-        self.rpc(|tx| WorkerMsg::QueryElement {
-            key: key_owned,
-            reply: tx,
-        })
-        .await
-    }
-
-    /// Test/dev-tool RPC: full element-tree snapshot.
-    pub async fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
-        self.rpc(|tx| WorkerMsg::QueryTreeSnapshot { reply: tx })
-            .await
     }
 
     /// Count of image resources retained on main (pixel `Blob`s). Test-only
