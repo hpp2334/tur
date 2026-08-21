@@ -16,8 +16,8 @@ use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::ShellEvent;
 use tur_engine::renderer::NoopRenderer;
 use tur_integration_tests::MutexFixedClock;
-use tur_integration_tests::RawAppLooper;
 use tur_integration_tests::TestSchedulerDriver;
+use tur_integration_tests::{RawAppLooper, TestShell};
 use tur_native::NativeFontLoader;
 
 /// Eval a JS script on a `TurApp` and return the result as a string.
@@ -37,7 +37,6 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     let pool = WorkerPoolHandle::new("test", usize::MAX);
     let runtime = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -107,6 +106,7 @@ fn instances_have_isolated_element_trees() {
         .app_builder()
         .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .shell(TestShell::new(driver.vsync_source()))
         .build()
         .expect("app A");
     let (app_b, _engine_looper_b) = runtime
@@ -154,6 +154,7 @@ fn headless_instance_runs_js_without_rendering() {
         .app_builder()
         .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
+        .shell(TestShell::new(driver.vsync_source()))
         .build()
         .expect("headless");
     let looper = RawAppLooper::new(app.clone(), engine_looper, driver);
@@ -189,6 +190,7 @@ fn build_headless_runs_engine_on_worker() {
     let (app, engine_looper) = runtime
         .app_builder()
         .worker_pool(pool.clone())
+        .shell(TestShell::new(driver.vsync_source()))
         .build_headless((0.0, 0.0))
         .expect("headless_app");
     let looper = RawAppLooper::new(app.clone(), engine_looper, driver);
@@ -289,7 +291,6 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -345,7 +346,6 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -404,12 +404,14 @@ fn platform_events_route_to_the_correct_instance() {
         .app_builder()
         .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .shell(TestShell::new(driver.vsync_source()))
         .build()
         .expect("A");
     let (app_b, engine_looper_b) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .shell(TestShell::new(driver.vsync_source()))
         .build()
         .expect("B");
     let looper_a = RawAppLooper::new(app_a.clone(), engine_looper_a, driver.clone());

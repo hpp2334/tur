@@ -163,7 +163,6 @@ impl TurVelloApp {
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);
         let runtime = TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
@@ -174,11 +173,13 @@ impl TurVelloApp {
 
         // Threaded engine: worker produces command batches; `HostBackend`
         // owns the VelloRenderer on main and applies them via the
-        // autonomous loop.
+        // autonomous loop. The shell is minimal but carries the driver's
+        // vsync source — `drive_one_frame` advances via `fire_vsync`.
         let (app, looper) = runtime
             .app_builder()
             .worker_pool(pool)
             .renderer(Box::new(renderer), (width, height), dpr)
+            .shell(tur_integration_tests::TestShell::new(driver.vsync_source()))
             .build()?;
         Ok((app, looper, driver, window))
     }

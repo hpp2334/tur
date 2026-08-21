@@ -44,7 +44,6 @@ fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedu
     let driver = TestSchedulerDriver::new();
     let mut builder = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -123,7 +122,6 @@ fn zero_max_workers_errors_at_runtime_build() {
     let msg = expect_err_msg(
         TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -143,7 +141,6 @@ fn duplicate_pool_name_errors_at_runtime_build() {
     let msg = expect_err_msg(
         TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))

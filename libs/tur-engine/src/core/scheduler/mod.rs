@@ -8,7 +8,8 @@
 //! - [`WorkerSpawner`] (runtime-level) — host app loops in named
 //!   [`WorkerPoolHandle`] pools.
 //! - [`VsyncSource`] (per-instance) — frame cadence: subscribe + arm.
-//!   Swappable per app via [`crate::TurAppLooper::set_vsync_source`].
+//!   Supplied by the instance's shell ([`Shell::take_vsync`](crate::core::shell::Shell::take_vsync));
+//!   [`NoopVsyncSource`] never fires.
 //! - [`HostLoop`] (runtime-level) — spawn tasks on the host thread (the
 //!   platform main thread; drives the engine's internal host-thread drain).
 //! - [`WorkerExecutor`] (worker-side) — the surface an app loop runs on:
@@ -176,21 +177,40 @@ impl WorkerTicket {
 // Vsync — per-instance
 // ---------------------------------------------------------------------------
 
-/// Frame cadence for one app. Per-instance: each [`crate::TurApp`] holds
-/// one and the embedder may replace it after build (Android installs one
-/// bound to the instance's own Kotlin `FrameLoop` via
-/// [`crate::TurAppLooper::set_vsync_source`]) — swap before
-/// [`crate::TurAppLooper::run`] starts, since the loop subscribes once at
-/// startup.
+/// Frame cadence for one app. Per-instance: supplied by the instance's
+/// [`Shell`](crate::core::shell::Shell) (the engine takes it via
+/// [`Shell::take_vsync`](crate::core::shell::Shell::take_vsync) exactly
+/// once, at construction) — e.g. Android's shell binds one to the
+/// instance's own Kotlin `FrameLoop`, wasm's to `requestAnimationFrame`.
 pub trait VsyncSource: 'static {
-    /// Subscribe to vsync events. Each item is one vsync tick. Call once
-    /// at loop startup; events only fire when armed via
-    /// [`Self::request_frame`].
+    /// Subscribe to vsync events. Each item is one vsync tick. The engine
+    /// subscribes exactly once, at construction; events only fire when
+    /// armed via [`Self::request_frame`].
     fn subscribe(&self) -> VsyncEvents;
 
     /// Arm the next vsync. Idempotent — multiple calls before the next
     /// vsync are coalesced into one rAF/Choreographer request.
     fn request_frame(&self);
+}
+
+/// A [`VsyncSource`] that never fires — [`NoopShell`]'s
+/// (crate::core::shell::NoopShell) frame clock. `request_frame` no-ops and
+/// the subscribed stream never resolves, so the engine's loop progresses
+/// on worker messages only (idle/headless instances already behave this
+/// way — `destroy` covers shutdown).
+pub struct NoopVsyncSource;
+
+impl VsyncSource for NoopVsyncSource {
+    fn subscribe(&self) -> VsyncEvents {
+        // Hand out a stream that never closes (a closed stream is the
+        // loop's termination signal) and never fires: the sender is
+        // intentionally leaked so the receiver stays pending forever.
+        let (tx, rx) = futures::channel::mpsc::unbounded();
+        std::mem::forget(tx);
+        VsyncEvents(rx)
+    }
+
+    fn request_frame(&self) {}
 }
 
 // ---------------------------------------------------------------------------

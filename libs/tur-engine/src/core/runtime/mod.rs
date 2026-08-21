@@ -160,10 +160,6 @@ pub struct TurRuntime {
     /// (single role: see [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner)).
     /// Cloned into each `HostBackend` at `app_builder().build(...)`.
     worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
-    /// Default per-instance frame cadence. Cloned into each `TurApp`;
-    /// embedders with per-instance scheduling replace it via
-    /// [`TurAppLooper::set_vsync_source`](crate::TurAppLooper::set_vsync_source).
-    vsync_source: Rc<dyn crate::core::scheduler::VsyncSource>,
     /// Main-thread task spawner. Roots the engine-internal main-thread
     /// drain at `build()`; embedders may reuse it for their own
     /// main-thread tasks.
@@ -248,6 +244,21 @@ impl TurRuntime {
         worker_pool: WorkerPoolHandle,
         instance_data_definer: Option<InstanceDataDefiner>,
     ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
+        // The shell owns the window's frame clock — take it exactly once
+        // here (a second take returns `None`) and subscribe the loop's
+        // tick stream at build time, so ticks fired between `build()` and
+        // the loop's first poll queue instead of dropping.
+        let mut shell = shell;
+        let vsync: Rc<dyn crate::core::scheduler::VsyncSource> =
+            shell.take_vsync().ok_or_else(|| {
+                TurError::Other(
+                    "the instance's Shell must supply a vsync source on the first \
+                      Shell::take_vsync (embedders that don't care supply \
+                      NoopVsyncSource explicitly)"
+                        .to_string(),
+                )
+            })?;
+        let vsync_events = vsync.subscribe();
         let clock = self.clock.clone();
         let font_context = self.font_context.clone();
         let font_loader = self.font_loader.clone();
@@ -285,18 +296,18 @@ impl TurRuntime {
             backend_factory,
         );
         // The app handle and its looper share the backend (both `&self`
-        // users), the vsync slot (the app re-arms it from input paths while
-        // the loop runs) and the destroyed flag (the app sets it, the loop
-        // polls it).
+        // users) and the destroyed flag (the app sets it, the loop polls
+        // it). The frame clock is shared too: the app re-arms it from the
+        // input paths while the loop runs; the looper additionally owns
+        // the already-subscribed tick stream (`vsync_events`).
         let backend = Rc::new(backend);
-        let vsync = Rc::new(std::cell::RefCell::new(self.vsync_source.clone()));
         let destroyed = Rc::new(std::cell::Cell::new(false));
         let app = Rc::new(TurApp::new(
             backend.clone(),
             vsync.clone(),
             destroyed.clone(),
         ));
-        let looper = TurAppLooper::new(backend, host_rx, vsync, destroyed);
+        let looper = TurAppLooper::new(backend, host_rx, vsync, vsync_events, destroyed);
         // Bootstrap the viewport: resize the host-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
         // frame 1 (the forwarded shell `Resize` event does the worker
@@ -496,7 +507,7 @@ impl<'rt> TurAppBuilder<'rt> {
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(renderer, shell, viewport, dpr, pool, instance_data_definer)
     }
@@ -527,7 +538,7 @@ impl<'rt> TurAppBuilder<'rt> {
             instance_data_definer,
             ..
         } = self;
-        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
@@ -694,7 +705,6 @@ pub struct TurRuntimeBuilder {
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
     worker_spawner: Option<Rc<dyn crate::core::scheduler::WorkerSpawner>>,
-    vsync_source: Option<Rc<dyn crate::core::scheduler::VsyncSource>>,
     host_loop: Option<Rc<dyn crate::core::scheduler::HostLoop>>,
     worker_pools: Vec<WorkerPoolHandle>,
 }
@@ -713,7 +723,6 @@ impl TurRuntimeBuilder {
             plugins: Vec::new(),
             capability_builders: Vec::new(),
             worker_spawner: None,
-            vsync_source: None,
             host_loop: None,
             worker_pools: Vec::new(),
         }
@@ -817,17 +826,6 @@ impl TurRuntimeBuilder {
         self
     }
 
-    /// Set the default vsync source. Required before `build()`. The source
-    /// implements [`VsyncSource`](crate::core::scheduler::VsyncSource)
-    /// (rAF on wasm, Choreographer `FrameLoop` on Android, a manual
-    /// channel in tests). Per-instance replacement: Android installs a
-    /// per-`FrameLoop` source via
-    /// [`TurAppLooper::set_vsync_source`](crate::TurAppLooper::set_vsync_source).
-    pub fn vsync_source(mut self, source: Rc<dyn crate::core::scheduler::VsyncSource>) -> Self {
-        self.vsync_source = Some(source);
-        self
-    }
-
     /// Set the main-thread task spawner. Required before `build()`. Roots
     /// the engine's internal main-thread drain (the
     /// [`HostExecutor`](crate::HostExecutor) hop) plus any
@@ -878,9 +876,6 @@ impl TurRuntimeBuilder {
         let worker_spawner = self
             .worker_spawner
             .expect("worker_spawner must be set (use TurRuntimeBuilder::worker_spawner)");
-        let vsync_source = self
-            .vsync_source
-            .expect("vsync_source must be set (use TurRuntimeBuilder::vsync_source)");
         let host_loop = self
             .host_loop
             .expect("host_loop must be set (use TurRuntimeBuilder::host_loop)");
@@ -978,7 +973,6 @@ impl TurRuntimeBuilder {
             capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),
             worker_spawner,
-            vsync_source,
             host_loop,
             worker_pools: self.worker_pools,
             main_cx,

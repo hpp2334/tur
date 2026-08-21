@@ -362,9 +362,14 @@ impl Rect {
 /// engine. Installed via `TurAppBuilder::shell` — the engine emits
 /// `HostMsg::Shell(SetCursor)` and `HostMsg::Shell(RequestTextInput)`;
 /// `apply_msg` applies them here.
+/// Test `Shell`: records cursor + text-input egress into shared slots
+/// (drained via `take_current_cursor` / `take_current_text_input_state`)
+/// and carries the driver's manual vsync source as the frame clock
+/// (handed to the engine at construction; `pump` fires it per frame).
 struct RecordingShell {
     cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
     text_input_slot: std::sync::Arc<std::sync::Mutex<Option<TextInputState>>>,
+    vsync: Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>>,
 }
 
 impl tur_engine::Shell for RecordingShell {
@@ -373,6 +378,35 @@ impl tur_engine::Shell for RecordingShell {
     }
     fn request_text_input(&mut self, state: TextInputState) {
         *self.text_input_slot.lock().unwrap() = Some(state);
+    }
+    fn take_vsync(&mut self) -> Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync.take()
+    }
+}
+
+/// Minimal [`tur_engine::Shell`] for raw-builder tests: no-op egress
+/// (cursor / text-input requests dropped) + a caller-supplied frame
+/// clock, handed to the engine at construction. Prefer [`TurTestApp`]
+/// unless the test builds its own runtime; tests that inspect shell
+/// egress define their own shell type (or use the harness's
+/// `new_with_shell`).
+pub struct TestShell {
+    vsync: Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>>,
+}
+
+impl TestShell {
+    /// Boxed shell carrying `vsync` as the frame clock — pass the
+    /// driver's shared source so `driver.fire_vsync()` advances frames.
+    pub fn new(vsync: std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>) -> Box<Self> {
+        Box::new(Self { vsync: Some(vsync) })
+    }
+}
+
+impl tur_engine::Shell for TestShell {
+    fn set_cursor(&mut self, _cursor: Cursor) {}
+    fn request_text_input(&mut self, _state: TextInputState) {}
+    fn take_vsync(&mut self) -> Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync.take()
     }
 }
 
@@ -407,19 +441,30 @@ impl TurTestApp {
     /// (replacing the default `RecordingShell`). Cursor /
     /// `take_current_cursor` / `take_current_text_input_state` recorders
     /// are absent — the supplied shell owns all egress observation.
+    ///
+    /// The factory receives the harness's vsync source and MUST embed it
+    /// as the shell's frame clock (returned from `Shell::take_vsync`) —
+    /// `pump` / `wait_for` advance frames by firing it.
     pub fn new_with_shell(
         width: f64,
         height: f64,
-        shell: impl tur_engine::Shell + 'static,
+        shell_factory: impl FnOnce(
+            std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>,
+        ) -> Box<dyn tur_engine::Shell>,
     ) -> Result<Self, TurError> {
-        Self::build(
+        // Reserve the driver's source for the factory before `build`
+        // constructs its own.
+        let driver = TestSchedulerDriver::new();
+        let shell = shell_factory(driver.vsync_source());
+        Self::build_with_driver(
             width,
             height,
             None,
             None,
             Vec::new(),
             None,
-            Some(Box::new(shell)),
+            Some(shell),
+            driver,
         )
     }
 
@@ -489,9 +534,34 @@ impl TurTestApp {
         renderer: Option<Box<dyn Renderer>>,
         shell: Option<Box<dyn tur_engine::Shell>>,
     ) -> Result<Self, TurError> {
+        Self::build_with_driver(
+            width,
+            height,
+            http,
+            filepicker,
+            extra_plugins,
+            renderer,
+            shell,
+            TestSchedulerDriver::new(),
+        )
+    }
+
+    /// `build` with a caller-chosen driver — `new_with_shell` needs the
+    /// driver BEFORE building so its factory can hand the shell the
+    /// driver's vsync source (the harness fires it per driven frame).
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+    fn build_with_driver(
+        width: f64,
+        height: f64,
+        http: Option<RecordingHttp>,
+        filepicker: Option<RecordingFilePicker>,
+        extra_plugins: Vec<Box<dyn Plugin>>,
+        renderer: Option<Box<dyn Renderer>>,
+        shell: Option<Box<dyn tur_engine::Shell>>,
+        driver: Rc<TestSchedulerDriver>,
+    ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
-        let driver = TestSchedulerDriver::new();
         // Default pool: effectively uncapped → every harness app gets its
         // own dedicated lane thread (the historical threading).
         let worker_pool = WorkerPoolHandle::new("test", usize::MAX);
@@ -499,7 +569,6 @@ impl TurTestApp {
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .worker_pool(worker_pool.clone())
             .capability({
@@ -528,14 +597,17 @@ impl TurTestApp {
         // `core::shell`), installed at construction exactly like an
         // embedder would. Default: a `RecordingShell` capturing cursor +
         // text-input state (drained via `take_current_cursor` /
-        // `take_current_text_input_state`); tests pass their own via
-        // `new_with_shell`.
+        // `take_current_text_input_state`) and carrying the driver's
+        // manual vsync source as the frame clock; tests pass their own
+        // shell via `new_with_shell` (which must then carry a vsync
+        // source itself).
         let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let text_input_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let shell: Box<dyn tur_engine::Shell> = shell.unwrap_or_else(|| {
             Box::new(RecordingShell {
                 cursor_slot: cursor_slot.clone(),
                 text_input_slot: text_input_slot.clone(),
+                vsync: Some(driver.vsync_source()),
             })
         });
         let (inner, mut looper) = runtime

@@ -68,6 +68,9 @@ struct WasmState {
 /// requests here during the frame loop. Cursor goes to the canvas CSS;
 /// text-input positions the hidden `<textarea>` for IME composition.
 ///
+/// Also carries the window's frame clock (rAF) — the engine takes it once
+/// at construction via `take_vsync`.
+///
 /// Holds a `Weak<RefCell<...>>` into the wasm state so there is no
 /// reference cycle — `request_text_input` is a no-op if the state has
 /// been dropped.
@@ -75,6 +78,8 @@ struct WasmShell {
     canvas: web_sys::HtmlCanvasElement,
     /// Weak ref into the wasm state for textarea focus / caret positioning.
     state_weak: std::rc::Weak<std::cell::RefCell<Option<WasmState>>>,
+    /// The window's frame clock, handed to the engine at construction.
+    vsync: Option<Rc<crate::scheduler::WasmVsyncSource>>,
 }
 
 // SAFETY: `WasmShell` is only ever accessed from the wasm main thread
@@ -108,6 +113,12 @@ impl tur_engine::Shell for WasmShell {
                 let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
             }
         }
+    }
+
+    fn take_vsync(&mut self) -> Option<Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync
+            .take()
+            .map(|v| v as Rc<dyn tur_engine::core::scheduler::VsyncSource>)
     }
 }
 
@@ -170,7 +181,6 @@ impl WasmRuntime {
         // demand from Rust (driven by `HostBackend::new`).
 
         let worker_spawner = crate::scheduler::WasmWorkerSpawner::new();
-        let vsync_source = crate::scheduler::WasmVsyncSource::new();
         let host_loop = Rc::new(crate::scheduler::WasmHostLoop);
         // Built-in default pool: effectively uncapped → one dedicated Web
         // Worker per app (the historical behavior) unless the embedder
@@ -178,7 +188,6 @@ impl WasmRuntime {
         let default_worker_pool = WorkerPoolHandle::new("default", usize::MAX);
         let builder = tur_engine::TurRuntime::builder()
             .worker_spawner(worker_spawner)
-            .vsync_source(vsync_source)
             .host_loop(host_loop)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
@@ -477,15 +486,17 @@ impl WasmApp {
         // it directly (render batches, image uploads, resize-on-event) —
         // `build` pushes the initial Resize
         // internally.
-        // Build a WasmShell that handles cursor + text-input egress.
-        // The shell is created before the app so it can be passed at
-        // construction time — the worker's first pump already ships an
-        // initial TextInputState, so a shell installed after build() could
-        // miss it.
+        // Build a WasmShell that handles cursor + text-input egress
+        // AND carries the window's frame clock (rAF). The shell is
+        // created before the app so it can be passed at construction
+        // time — the worker's first pump already ships an initial
+        // TextInputState, so a shell installed after build() could miss
+        // it; the engine likewise takes the vsync source once, here.
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
         let wasm_shell = WasmShell {
             canvas: canvas.clone(),
             state_weak: state_weak.clone(),
+            vsync: Some(crate::scheduler::WasmVsyncSource::new()),
         };
         let (app, looper) = runtime
             .runtime

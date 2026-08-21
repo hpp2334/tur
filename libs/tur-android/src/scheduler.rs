@@ -20,11 +20,10 @@
 //! ## Frame loop ownership
 //!
 //! Each `AndroidInstance` owns its own Kotlin `FrameLoop` (Choreographer
-//! callback), so the vsync source is **per-instance**:
-//! `AndroidRuntime::build` installs a base source with no frame loop
-//! (its `request_frame` no-ops — the worker thread is all it needs), and
-//! each instance replaces the app's vsync source via
-//! `TurAppLooper::set_vsync_source` with one bound to its own `FrameLoop`.
+//! callback), so the vsync source is **per-instance**: `AndroidShell`
+//! carries an [`AndroidVsyncSource`] bound to the instance's `FrameLoop`
+//! and hands it to the engine at construction (`Shell::take_vsync`); the
+//! embedder keeps a clone for JNI `fire_vsync` + the pump wake fn.
 //! Multiple subscribers per source are supported (broadcast).
 //!
 //! ## Timers
@@ -110,21 +109,18 @@ struct AndroidVsyncInner {
     vsync_armed: std::sync::atomic::AtomicBool,
 }
 
-/// Per-instance vsync source bound to the instance's Kotlin `FrameLoop`
-/// (or `None` for the runtime's base source — no Choreographer, used only
-/// to host workers + serve timers at runtime-build time).
+/// Per-instance vsync source bound to the instance's Kotlin `FrameLoop`.
+/// Carried by `AndroidShell` and handed to the engine at construction
+/// (the embedder keeps a clone for JNI `fire_vsync` + the pump wake fn).
 pub struct AndroidVsyncSource {
     inner: Arc<AndroidVsyncInner>,
     /// JNI `FrameLoop` global ref. The source's `request_frame` calls
-    /// `scheduleVsync()` on this object. `None` for the runtime base
-    /// source (no frame loop at runtime-build time; instances install
-    /// their own via `TurAppLooper::set_vsync_source`).
-    frame_loop: Option<FrameLoopRef>,
+    /// `scheduleVsync()` on this object.
+    frame_loop: FrameLoopRef,
 }
 
 impl AndroidVsyncSource {
-    /// Construct. `frame_loop` is `None` for the runtime's base source.
-    pub fn new(frame_loop: Option<FrameLoopRef>) -> Rc<Self> {
+    pub fn new(frame_loop: FrameLoopRef) -> Rc<Self> {
         Rc::new(Self {
             inner: Arc::new(AndroidVsyncInner {
                 vsync_txs: Mutex::new(Vec::new()),
@@ -160,10 +156,7 @@ impl AndroidVsyncSource {
     /// [`VsyncSource::request_frame`](Self::request_frame), i.e. by the
     /// engine's `FrameOutcome.schedule == Vsync` decision.
     pub fn make_vsync_wake_fn(&self) -> Arc<dyn Fn() + Send + Sync> {
-        let Some(frame_loop) = self.frame_loop.as_ref() else {
-            return Arc::new(|| {});
-        };
-        let kotlin_loop = frame_loop.kotlin_loop.clone();
+        let kotlin_loop = self.frame_loop.kotlin_loop.clone();
         Arc::new(move || {
             let Some(vm) = crate::java_vm() else { return };
             let Ok(mut env) = vm.attach_current_thread() else {
@@ -183,11 +176,6 @@ impl VsyncSource for AndroidVsyncSource {
     }
 
     fn request_frame(&self) {
-        // Base source (no frame loop) never schedules — instances install
-        // their own via `TurAppLooper::set_vsync_source`.
-        let Some(frame_loop) = self.frame_loop.as_ref() else {
-            return;
-        };
         // Idempotent: no-op if a vsync is already armed.
         if self
             .inner
@@ -200,7 +188,7 @@ impl VsyncSource for AndroidVsyncSource {
         let Ok(mut env) = vm.attach_current_thread() else {
             return;
         };
-        let loop_obj = unsafe { JObject::from_raw(frame_loop.kotlin_loop.as_raw()) };
+        let loop_obj = unsafe { JObject::from_raw(self.frame_loop.kotlin_loop.as_raw()) };
         let _ = env.call_method(&loop_obj, "scheduleVsync", "()V", &[]);
     }
 }

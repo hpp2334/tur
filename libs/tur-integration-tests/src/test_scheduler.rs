@@ -1,9 +1,9 @@
 //! Test-harness scheduling objects.
 //!
 //! Three single-role implementations for the integration tests:
-//! - [`TestVsyncSource`] — manual vsync channel
-//!   ([`TurAppLooper::set_vsync_source`](tur_engine::TurAppLooper::set_vsync_source)
-//!   accepts one; the harness fires it per driven frame).
+//! - [`TestVsyncSource`] — manual vsync channel, carried by each app's
+//!   shell (handed to the engine at construction); the harness fires it
+//!   per driven frame.
 //! - [`TestHostLoop`] — main-thread task spawner backed by a thread-local
 //!   tokio `LocalSet` (drives the engine's autonomous loop + the engine's
 //!   main-thread drain).
@@ -199,12 +199,10 @@ impl VsyncSource for TestVsyncSource {
     fn subscribe(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
         // Unconditionally deliver one bootstrap tick to each new
-        // subscriber. The loop subscribes on its first poll (which
-        // happens during the first `block_on`, AFTER any `fire_vsync`),
-        // so a fire-before-subscribe would otherwise be lost. This
-        // per-subscriber bootstrap tick makes the first frame reachable
-        // for every loop — including the multi-instance case where
-        // several loops share one source.
+        // subscriber so the first frame is reachable for every loop —
+        // including the multi-instance case where several loops share
+        // one source (the engine subscribes once per instance, at
+        // construction).
         let _ = tx.unbounded_send(());
         self.vsync_txs.lock().unwrap().push(tx);
         VsyncEvents(rx)
@@ -239,15 +237,18 @@ impl HostLoop for TestHostLoop {
 // ---------------------------------------------------------------------------
 
 /// Bundles the harness's three scheduling objects + the shared virtual
-/// clock. Hand the single-role pieces to the runtime builder:
+/// clock. Hand the single-role pieces to the runtime builder; the vsync
+/// source goes into each app's shell instead (the engine takes it at
+/// construction):
 ///
 /// ```text
 /// let driver = TestSchedulerDriver::new();
 /// TurRuntime::builder()
 ///     .worker_spawner(driver.worker_spawner())
-///     .vsync_source(driver.vsync_source())
 ///     .host_loop(driver.host_loop())
 ///     …
+/// // per app:
+/// shell = Shell { vsync: Some(driver.vsync_source()), … };
 /// ```
 pub struct TestSchedulerDriver {
     vsync: Rc<TestVsyncSource>,

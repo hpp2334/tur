@@ -22,14 +22,19 @@
 //! routes every message through the same `apply_msg`, the Android/wasm
 //! path is covered by construction.
 
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
+use tur_engine::core::scheduler::VsyncSource;
 use tur_engine::core::shell::{Cursor, Shell, TextInputState};
 use tur_integration_tests::TurTestApp;
 
-/// Shell that records every text-input state the engine pushed.
+/// Shell that records every text-input state the engine pushed. Carries
+/// the harness-supplied vsync source as its frame clock (the factory in
+/// `new_with_shell` receives it).
 struct CaptureTextInput {
     states: Arc<Mutex<Vec<TextInputState>>>,
+    vsync: Option<Rc<dyn VsyncSource>>,
 }
 
 impl Shell for CaptureTextInput {
@@ -37,6 +42,10 @@ impl Shell for CaptureTextInput {
 
     fn request_text_input(&mut self, state: TextInputState) {
         self.states.lock().unwrap().push(state);
+    }
+
+    fn take_vsync(&mut self) -> Option<Rc<dyn VsyncSource>> {
+        self.vsync.take()
     }
 }
 
@@ -47,13 +56,12 @@ impl Shell for CaptureTextInput {
 #[test]
 fn text_input_requests_fire_on_editable_focus() {
     let states: Arc<Mutex<Vec<TextInputState>>> = Arc::new(Mutex::new(Vec::new()));
-    let mut app = TurTestApp::new_with_shell(
-        200.0,
-        100.0,
-        CaptureTextInput {
+    let mut app = TurTestApp::new_with_shell(200.0, 100.0, |vsync| {
+        Box::new(CaptureTextInput {
             states: states.clone(),
-        },
-    )
+            vsync: Some(vsync),
+        })
+    })
     .unwrap();
     app.eval_module_source(
         r#"const store = createStore();

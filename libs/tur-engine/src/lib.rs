@@ -54,7 +54,7 @@ pub use crate::core::app::ModuleSourceRegistry;
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
 pub use crate::core::scheduler::WorkerPoolHandle;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 
 use error::TurError;
@@ -92,12 +92,13 @@ pub struct TurApp {
     /// the loop applies worker messages + renders. Every `HostBackend`
     /// method is `&self`, so `Rc`-sharing is borrow-free.
     backend: Rc<HostBackend>,
-    /// Per-instance frame cadence, cloned from the runtime at construction.
-    /// Shared with [`TurAppLooper`] (which subscribes once at `run` start
-    /// and re-arms it on `FrameOutcome`s) because the app re-arms it from
-    /// the input paths ([`Self::push_platform_event`], [`Self::resize`],
-    /// [`Self::push_app_event`]) while the loop is running.
-    vsync: Rc<RefCell<Rc<dyn core::scheduler::VsyncSource>>>,
+    /// Per-instance frame cadence — taken from the instance's shell at
+    /// construction (see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
+    /// Shared with [`TurAppLooper`] because the app re-arms it from the
+    /// input paths ([`Self::push_platform_event`], [`Self::resize`],
+    /// [`Self::push_app_event`]) while the loop is running. Both trait
+    /// methods are `&self`, so sharing needs no interior mutability.
+    vsync: Rc<dyn core::scheduler::VsyncSource>,
     /// Set by [`Self::destroy`]. Shared with [`TurAppLooper`], whose vsync
     /// wake-ups poll it to stop after destroy.
     destroyed: Rc<Cell<bool>>,
@@ -116,7 +117,7 @@ impl TurApp {
     /// — embedders never call it directly.
     pub(crate) fn new(
         backend: Rc<HostBackend>,
-        vsync: Rc<RefCell<Rc<dyn core::scheduler::VsyncSource>>>,
+        vsync: Rc<dyn core::scheduler::VsyncSource>,
         destroyed: Rc<Cell<bool>>,
     ) -> Self {
         Self {
@@ -226,7 +227,7 @@ impl TurApp {
     /// Re-arm an idle autonomous loop: ask the vsync source for one
     /// wake-up on the next frame. Idempotent at the source (armed flag).
     fn request_frame(&self) {
-        self.vsync.borrow().request_frame();
+        self.vsync.request_frame();
     }
 
     /// Test-only: run `cb` against the worker's live `NodeTreeData` AND
@@ -272,14 +273,15 @@ impl TurApp {
 ///   `wasm_bindgen_futures::spawn_local`, type-erasable to
 ///   `Pin<Box<dyn Future>>` for Android's poll-per-`pump` driving) and a
 ///   second `run` is a compile error, not a runtime assert.
-/// - Pre-run configuration ([`Self::set_vsync_source`],
-///   [`Self::set_after_frame_hook`]) is exclusive (`&mut self`) and
-///   structurally impossible after `run` takes the looper — matching the
-///   build-time installment philosophy of
-///   [`TurAppBuilder::shell`](core::runtime::TurAppBuilder::shell).
+/// - Pre-run configuration ([`Self::set_after_frame_hook`]) is exclusive
+///   (`&mut self`) and structurally impossible after `run` takes the
+///   looper — matching the build-time installment philosophy of
+///   [`TurAppBuilder::shell`](core::runtime::TurAppBuilder::shell), which
+///   also covers the frame clock (the shell hands it over once, at
+///   construction — see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
 ///
 /// The app handle keeps the mid-loop `&self` surface (input, RPC,
-/// `destroy`); the two share the `HostBackend`, the vsync source (the app
+/// `destroy`); the two share the `HostBackend`, the frame clock (the app
 /// re-arms it from input paths while the loop runs) and the destroyed
 /// flag.
 pub struct TurAppLooper {
@@ -291,8 +293,13 @@ pub struct TurAppLooper {
     /// owned outright, no `RefCell`, no borrow held across `.await`.
     host_rx: core::app::HostRx,
     /// Per-instance frame cadence, shared with the app handle (see
-    /// [`TurApp`]'s field docs).
-    vsync: Rc<RefCell<Rc<dyn core::scheduler::VsyncSource>>>,
+    /// [`TurApp`]'s field docs); used to re-arm on `FrameOutcome`s.
+    vsync: Rc<dyn core::scheduler::VsyncSource>,
+    /// The cadence's tick stream — subscribed **once, at construction**
+    /// (`Shell::take_vsync` → `VsyncSource::subscribe` in
+    /// `spawn_instance`), owned outright from then on. No subscribe
+    /// happens at run time.
+    vsync_events: core::scheduler::VsyncEvents,
     /// Set by `TurApp::destroy`; polled at each vsync wake-up.
     destroyed: Rc<Cell<bool>>,
     /// Embedder-installed callback fired after each autonomous frame —
@@ -303,35 +310,29 @@ pub struct TurAppLooper {
 
 impl TurAppLooper {
     /// Construct the looper sharing `backend` / `vsync` / `destroyed` with
-    /// its app handle. `pub(crate)`: built only by
+    /// its app handle, owning the build-time-subscribed `vsync_events`.
+    /// `pub(crate)`: built only by
     /// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build).
     pub(crate) fn new(
         backend: Rc<HostBackend>,
         host_rx: core::app::HostRx,
-        vsync: Rc<RefCell<Rc<dyn core::scheduler::VsyncSource>>>,
+        vsync: Rc<dyn core::scheduler::VsyncSource>,
+        vsync_events: core::scheduler::VsyncEvents,
         destroyed: Rc<Cell<bool>>,
     ) -> Self {
         Self {
             backend,
             host_rx,
             vsync,
+            vsync_events,
             destroyed,
             after_frame: None,
         }
     }
 
-    /// Replace the per-instance vsync source. Used by embedders that need
-    /// per-instance frame cadence (e.g. Android, where each instance has
-    /// its own JNI `FrameLoop`). Pre-run only: the loop subscribes to the
-    /// installed source once at [`Self::run`] startup, and after that the
-    /// looper is consumed.
-    pub fn set_vsync_source(&mut self, source: Rc<dyn core::scheduler::VsyncSource>) {
-        *self.vsync.borrow_mut() = source;
-    }
-
     /// Install a callback fired at the end of each loop iteration, after
     /// the frame's render/schedule side-effects are applied. Pre-run only
-    /// (see [`Self::set_vsync_source`]).
+    /// (`run` consumes the looper).
     pub fn set_after_frame_hook(&mut self, hook: Option<AfterFrameHook>) {
         self.after_frame = hook;
     }
@@ -339,8 +340,9 @@ impl TurAppLooper {
     /// The autonomous frame loop — driven by the embedder's platform loop
     /// (Choreographer-polled on Android, `spawn_local`'d on wasm). The
     /// engine owns all frame logic; the platform only supplies the wake-up
-    /// cadence via [`VsyncSource::subscribe`](core::scheduler::VsyncSource::subscribe)
-    /// + [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
+    /// cadence — the tick stream (subscribed once at construction) races
+    /// the worker messages, and each `Vsync`-scheduled outcome re-arms via
+    /// [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
     ///
     /// Each iteration races the platform vsync stream against the worker's
     /// `HostMsg` stream:
@@ -367,10 +369,11 @@ impl TurAppLooper {
             backend,
             mut host_rx,
             vsync,
+            vsync_events,
             destroyed,
             after_frame,
         } = self;
-        let mut vsync_rx = vsync.borrow().subscribe();
+        let mut vsync_rx = vsync_events;
 
         use crate::core::runtime::MsgOutcome;
         use futures::future::{Either, select};
@@ -418,7 +421,7 @@ impl TurAppLooper {
                             // frame. The hook is the last thing the loop
                             // does for this message.
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
-                                vsync.borrow().request_frame();
+                                vsync.request_frame();
                                 false
                             } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                                 // Quiescence: no vsync is armed (nothing

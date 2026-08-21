@@ -52,7 +52,6 @@ fn build_runtime() -> (Rc<TurRuntime>, WorkerPoolHandle) {
     let driver = TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -70,7 +69,6 @@ fn build_runtime_with(extra: Box<dyn Plugin>) -> (Rc<TurRuntime>, WorkerPoolHand
     let driver = TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
