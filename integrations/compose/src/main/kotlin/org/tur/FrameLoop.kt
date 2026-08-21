@@ -13,8 +13,8 @@ import android.view.Choreographer
  * engine's `pump`), completing the loop:
  *
  * ```
- * engine run_loop() → schedule == Vsync → FrameLoop.scheduleVsync()
- *   → Choreographer frame → FrameLoop.onVsync() → nativePump() → engine run_loop() → …
+ * engine loop (TurAppLooper.run) → schedule == Vsync → FrameLoop.scheduleVsync()
+ *   → Choreographer frame → FrameLoop.onVsync() → nativePump() → engine loop → …
  * ```
  *
  * Separately, worker→main messages and main-loop tasks that merely need the

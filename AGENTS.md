@@ -220,7 +220,7 @@ let runtime = TurRuntime::builder()
 // Spawn isolated instances (each its own JS realm + renderer), each into a
 // declared pool (apps in one pool share ≤ max_workers workers; different
 // pools never share threads):
-let app = runtime
+let (app, looper) = runtime
     .app_builder()
     .worker_pool(ui)                              // required — explicit assignment
     // Optional: define build-time per-instance data readable/updateable by
@@ -235,10 +235,15 @@ let app = runtime
     //   })
     .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
     .shell(Box::new(WasmShell { canvas, state }))       // per-instance OS surface
-    .build()?;
+    .build()?;                                    // (Rc<TurApp>, TurAppLooper)
+
+// Spawn the autonomous frame loop exactly once per instance (the future
+// is 'static; `run` consumes the looper by value, so double-spawn is a
+// compile error):
+//   spawn_local(looper.run());
 
 // Or a headless instance (no rendering):
-let headless = runtime
+let (headless, headless_looper) = runtime
     .app_builder()
     .worker_pool(daemon)                          // heavy daemons share 2 threads
     .build_headless((0.0, 0.0))?;
@@ -415,16 +420,23 @@ The engine has a **one runtime, many instances** architecture:
   `System` are all `Arc`-backed), the `Clock` (one shared time source), the
   `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
   registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
-- **`TurApp`** — an isolated instance spawned from a runtime via
-  `runtime.app_builder().worker_pool(pool).build(renderer, viewport, dpr)`
+- **`TurApp` + `TurAppLooper`** — an isolated instance spawned from a
+  runtime via `runtime.app_builder().worker_pool(pool).renderer(...).build()`
   (rendering, attached to a surface) or
   `runtime.app_builder().worker_pool(pool).build_headless(viewport)` (no
   rendering — JS + capabilities + events only, backed by `NoopRenderer`).
+  Both terminals return `(Rc<TurApp>, TurAppLooper)`: the **app handle**
+  carries the mid-loop `&self` surface (input, RPC, `destroy`), the
+  **looper** owns the worker→host message stream and drives the
+  autonomous frame loop via `run(self)` — by value, so the returned
+  future is `'static` (spawnable / type-erasable) and a second `run` is a
+  compile error. Pre-run loop config (`set_vsync_source`,
+  `set_after_frame_hook`) is exclusive `&mut self` on the looper.
   Each instance gets its own boa `Context` (JS realm), element tree,
   reactive store, focus manager, event queues, subsystems, screen, and
   vsync source (per-instance frame cadence — e.g. Android instances
   install their own JNI `FrameLoop`-bound source via
-  `TurApp::set_vsync_source`). Plugins are re-registered into each
+  `TurAppLooper::set_vsync_source`). Plugins are re-registered into each
   instance's fresh realm (the same plugin objects — `register` takes
   `&self`, so no factory needed).
 
@@ -460,8 +472,8 @@ platform (zero `panic!`/`unimplemented!` stubs):
   cross-thread kick called after every host→worker send (no-op native,
   `postMessage(0)` wasm).
 - `VsyncSource` (per-instance) — `subscribe()` + `request_frame()` frame
-  cadence. Swappable per app via `TurApp::set_vsync_source` (swap **before**
-  `run_loop` — the loop subscribes once at startup).
+  cadence. Swappable per app via `TurAppLooper::set_vsync_source` (swap
+  **before** `run` — the loop subscribes once at startup).
 - `HostLoop` (runtime-level, required) — `spawn_local` on the host thread (the platform main thread);
   roots the engine-internal main-thread drain (the `HostExecutor`
   hop) + embedder main-thread tasks.

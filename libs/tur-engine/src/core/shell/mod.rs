@@ -36,9 +36,10 @@ pub use event::{ImeEvent, PointerDeviceKind, PointerInput, ShellEvent};
 /// [`NoopShell`] is the default when none is supplied.
 ///
 /// Both methods run on the **host thread** inside `HostBackend::apply_msg`
-/// (identical on the `pump` and `run_loop` paths), so implementations may
-/// touch host-thread-only OS APIs (the DOM on wasm, the JNI/Kotlin main
-/// looper on Android) directly.
+/// (identical on every driving path — the autonomous
+/// `TurAppLooper::run` loop and test-harness pumping alike), so
+/// implementations may touch host-thread-only OS APIs (the DOM on wasm,
+/// the JNI/Kotlin main looper on Android) directly.
 pub trait Shell {
     /// The resolved pointer shape changed (deepest painted `MouseRegion`
     /// claim, deduped — only shipped on change).

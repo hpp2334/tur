@@ -7,8 +7,8 @@ use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerInput};
-use tur_engine::core::shell::ShellEvent;
 use tur_engine::core::scheduler::WorkerPoolHandle;
+use tur_engine::core::shell::ShellEvent;
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
@@ -101,7 +101,10 @@ impl tur_engine::Shell for WasmShell {
         if state.is_editable {
             let _ = wasm.textarea.focus();
             if let Some((x, y, _w, _h)) = state.cursor_rect {
-                let _ = wasm.textarea.style().set_property("left", &format!("{x}px"));
+                let _ = wasm
+                    .textarea
+                    .style()
+                    .set_property("left", &format!("{x}px"));
                 let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
             }
         }
@@ -484,7 +487,7 @@ impl WasmApp {
             canvas: canvas.clone(),
             state_weak: state_weak.clone(),
         };
-        let app = runtime
+        let (app, looper) = runtime
             .runtime
             .app_builder()
             .worker_pool(worker_pool)
@@ -496,8 +499,6 @@ impl WasmApp {
             .shell(Box::new(wasm_shell))
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -768,14 +769,13 @@ impl WasmApp {
                     let guard = touch_end_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_platform_event(ShellEvent::Pointer(
-                            PointerInput::PointerUp {
+                        s.app
+                            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                                 position: Offset::new(0.0, 0.0),
                                 button: tur_engine::core::layout::MouseButton::Left,
                                 device: tur_engine::core::platform::PointerDeviceKind::Touch,
                                 time_ms,
-                            },
-                        ));
+                            }));
                     }
                     return;
                 };
@@ -808,11 +808,10 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                 let guard = touch_cancel_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(ShellEvent::Pointer(
-                        PointerInput::PointerCancel {
+                    s.app
+                        .push_platform_event(ShellEvent::Pointer(PointerInput::PointerCancel {
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
-                        },
-                    ));
+                        }));
                 }
             });
 
@@ -930,18 +929,19 @@ impl WasmApp {
             .err_to_jsval()?;
 
         let comp_update_state = state_clone.clone();
-        let compositionupdate_closure =
-            Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
-                move |event: web_sys::CompositionEvent| {
-                    let guard = comp_update_state.borrow();
-                    if let Some(s) = guard.as_ref() {
-                        let text = event.data().unwrap_or_default();
-                        s.app.push_platform_event(ShellEvent::Ime(
-                            ImeEvent::CompositionUpdate { text, cursor: None },
-                        ));
-                    }
-                },
-            );
+        let compositionupdate_closure = Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
+            move |event: web_sys::CompositionEvent| {
+                let guard = comp_update_state.borrow();
+                if let Some(s) = guard.as_ref() {
+                    let text = event.data().unwrap_or_default();
+                    s.app
+                        .push_platform_event(ShellEvent::Ime(ImeEvent::CompositionUpdate {
+                            text,
+                            cursor: None,
+                        }));
+                }
+            },
+        );
 
         textarea
             .add_event_listener_with_callback(
@@ -1041,20 +1041,12 @@ impl WasmApp {
         // we pass here. We use `wasm_bindgen_futures::spawn_local`, which
         // runs the future cooperatively on the JS event loop — the wasm
         // main thread never blocks (no `Atomics.wait`).
-        let app = state_clone
-            .borrow()
-            .as_ref()
-            .expect("wasm state just set")
-            .app
-            .clone();
-
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
         // loop bootstraps automatically: `app_builder().build(...)` pushed
         // an initial resize → worker pumps → FrameOutcome arrives → main requests
         // the next vsync. No manual kick needed.
-        let app_clone = app.clone();
-        wasm_bindgen_futures::spawn_local(app_clone.run_loop());
+        wasm_bindgen_futures::spawn_local(looper.run());
 
         Ok(WasmApp { state: state_clone })
     }

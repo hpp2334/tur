@@ -217,7 +217,7 @@ impl WasmVsyncInner {
 /// Per-instance vsync source backed by `requestAnimationFrame`. The rAF
 /// closure is driver-owned (constructed once in
 /// [`WasmVsyncSource::new`]); on fire it pushes an event into the
-/// subscribed channel. The engine subscribes once at `run_loop` startup.
+/// subscribed channel. The engine subscribes once at `TurAppLooper::run` startup.
 pub struct WasmVsyncSource {
     inner: Rc<WasmVsyncInner>,
 }

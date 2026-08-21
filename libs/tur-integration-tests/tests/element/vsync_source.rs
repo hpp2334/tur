@@ -1,6 +1,6 @@
-//! Per-instance vsync sources: `TurApp::set_vsync_source` swaps the frame
+//! Per-instance vsync sources: `TurAppLooper::set_vsync_source` swaps the frame
 //! cadence after build (the Android per-`FrameLoop` pattern). Frames must
-//! flow from the source installed at `run_loop` start.
+//! flow from the source installed at loop (`run`) start.
 
 use std::rc::Rc;
 
@@ -26,23 +26,23 @@ fn per_instance_vsync_source_drives_frames() {
         .build()
         .expect("runtime build");
 
-    let app = runtime
+    let (_app, mut looper) = runtime
         .app_builder()
         .worker_pool(pool)
         .build_headless((0.0, 0.0))
         .expect("headless app build");
 
     let (frame_tx, mut frame_rx) = mpsc::unbounded();
-    app.set_after_frame_hook(Some(Rc::new(move |o| {
+    looper.set_after_frame_hook(Some(Rc::new(move |o| {
         let _ = frame_tx.unbounded_send(o);
     })));
 
     // Swap in a brand-new vsync source BEFORE the loop starts (the Android
-    // pattern: install_frame_loop → set_vsync_source → run_loop).
+    // pattern: install_frame_loop → set_vsync_source → run).
     let fresh = TestVsyncSource::new();
-    app.set_vsync_source(fresh.clone());
+    looper.set_vsync_source(fresh.clone());
 
-    driver.spawn_local(Box::pin(app.clone().run_loop()));
+    driver.spawn_local(Box::pin(looper.run()));
 
     // Frames flow from the swapped-in source — twice, proving cadence
     // continuity rather than a bootstrap fluke.

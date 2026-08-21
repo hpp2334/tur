@@ -24,7 +24,7 @@
 //! `AndroidRuntime::build` installs a base source with no frame loop
 //! (its `request_frame` no-ops — the worker thread is all it needs), and
 //! each instance replaces the app's vsync source via
-//! `TurApp::set_vsync_source` with one bound to its own `FrameLoop`.
+//! `TurAppLooper::set_vsync_source` with one bound to its own `FrameLoop`.
 //! Multiple subscribers per source are supported (broadcast).
 //!
 //! ## Timers
@@ -118,7 +118,7 @@ pub struct AndroidVsyncSource {
     /// JNI `FrameLoop` global ref. The source's `request_frame` calls
     /// `scheduleVsync()` on this object. `None` for the runtime base
     /// source (no frame loop at runtime-build time; instances install
-    /// their own via `TurApp::set_vsync_source`).
+    /// their own via `TurAppLooper::set_vsync_source`).
     frame_loop: Option<FrameLoopRef>,
 }
 
@@ -184,7 +184,7 @@ impl VsyncSource for AndroidVsyncSource {
 
     fn request_frame(&self) {
         // Base source (no frame loop) never schedules — instances install
-        // their own via `TurApp::set_vsync_source`.
+        // their own via `TurAppLooper::set_vsync_source`.
         let Some(frame_loop) = self.frame_loop.as_ref() else {
             return;
         };

@@ -59,7 +59,7 @@ pub type WorkerRx = futures::channel::mpsc::UnboundedReceiver<WorkerMsg>;
 /// coordinating with the host side. The host side drains them in the run loop's recv loop.
 pub type HostTx = futures::channel::mpsc::UnboundedSender<HostMsg>;
 /// worker → host channel receiver. Held by the host thread; drained by
-/// [`TurApp::run_loop`](crate::TurApp::run_loop).
+/// [`TurAppLooper::run`](crate::TurAppLooper::run).
 pub type HostRx = futures::channel::mpsc::UnboundedReceiver<HostMsg>;
 
 /// host → worker. All input that can drive the engine flows through one of

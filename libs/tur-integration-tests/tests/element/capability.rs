@@ -134,7 +134,7 @@ fn build_app(
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone());
     let runtime = configure(builder).build()?;
-    let app = runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool)
         .renderer(

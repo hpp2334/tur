@@ -94,24 +94,26 @@ fn build_headless_with_data<F>(
 where
     F: FnOnce(&mut InstanceDataCx) + Send + 'static,
 {
-    runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .instance_data(definer)
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
-        .expect("app build")
+        .expect("app build");
+    app
 }
 
 /// Build a headless app off the given runtime, with no build-time data
 /// defined.
 fn build_headless(runtime: &Rc<TurRuntime>, pool: &WorkerPoolHandle) -> Rc<tur_engine::TurApp> {
-    runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
-        .expect("app build")
+        .expect("app build");
+    app
 }
 
 // ---------- Plugins that exercise the worker-side API -----------------------

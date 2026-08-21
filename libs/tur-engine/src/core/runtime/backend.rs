@@ -23,7 +23,7 @@
 //! worker's lifetime (native: the lane executor's task loop; wasm: the
 //! cooperative JS-event-loop mini-executor), so the worker awaits on
 //! `worker_rx.recv()` instead of blocking on a Mutex + Condvar.
-//! Main-thread `run_loop` and `rpc` are `async fn`; the embedder
+//! Main-thread `TurAppLooper::run` and `rpc` are `async fn`; the embedder
 //! supplies the driving executor (`wasm_bindgen_futures::spawn_local` on
 //! wasm, `block_on` on the test/native caller thread).
 
@@ -353,11 +353,11 @@ impl WorkerBackend {
 
 /// Result of dispatching one worker→host [`HostMsg`] through
 /// [`HostBackend::apply_msg`] — the single message handler driven by
-/// `TurApp::run_loop`.
+/// [`TurAppLooper::run`](crate::TurAppLooper::run).
 ///
 /// `apply_msg` performs every side-effect that is independent of *when* the
 /// batch is painted (cursor backend apply, focus-change handler, image
-/// upload, event-bus dispatch) and returns this enum so `run_loop` can
+/// upload, event-bus dispatch) and returns this enum so the loop can
 /// apply its vsync-aligned render policy:
 /// - [`Render`] is buffered for pipelining (latest-wins) and rendered at
 ///   the next vsync, or flushed at quiescence if no vsync is armed.
@@ -415,13 +415,6 @@ pub(crate) enum MsgOutcome {
 /// retains no cursor / text-input cache on the host side.
 pub struct HostBackend {
     worker_tx: WorkerTx,
-    /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
-    /// requires `&mut self`, but `HostBackend` is held inside `Rc<TurApp>`
-    /// on wasm + android (single-threaded ownership). The borrow is held
-    /// across the `next().await` in `run_loop` — safe because the wasm main
-    /// thread is single-threaded and `Rc<TurApp>` itself enforces
-    /// single-threaded access.
-    pub(crate) host_rx: RefCell<HostRx>,
     /// Holds the app's worker-slot claim alive for the backend's
     /// lifetime so the hosting worker doesn't reclaim the slot.
     _worker_ticket: WorkerTicket,
@@ -467,6 +460,12 @@ impl HostBackend {
     /// blocking implementations return only after the entry's synchronous
     /// prologue completed; wasm returns immediately and embedders confirm
     /// via the first RPC await.
+    ///
+    /// Returns the backend **plus** the worker→host message stream
+    /// (`HostRx`) it spawned — the receiving half belongs to the
+    /// instance's [`TurAppLooper`](crate::TurAppLooper) (the autonomous
+    /// loop), which drains it exclusively, so the backend itself keeps
+    /// only the sending-side plumbing.
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
         renderer: Box<dyn Renderer>,
@@ -479,7 +478,7 @@ impl HostBackend {
         ) -> WorkerBackend
         + Send
         + 'static,
-    ) -> Self {
+    ) -> (Self, HostRx) {
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (host_tx, host_rx) = futures::channel::mpsc::unbounded::<HostMsg>();
 
@@ -513,18 +512,20 @@ impl HostBackend {
         // `Atomics.wait`). Called after every host→worker send below.
         let worker_wake = worker_ticket.wake();
 
-        Self {
-            worker_tx: worker_tx.clone(),
-            host_rx: RefCell::new(host_rx),
-            _worker_ticket: worker_ticket,
-            worker_wake,
-            shell: RefCell::new(shell),
-            event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
-            renderer: RefCell::new(renderer),
-            image_resource_map: RefCell::new(
-                crate::core::image_resource::ImageResourceMap::default(),
-            ),
-        }
+        (
+            Self {
+                worker_tx: worker_tx.clone(),
+                _worker_ticket: worker_ticket,
+                worker_wake,
+                shell: RefCell::new(shell),
+                event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
+                renderer: RefCell::new(renderer),
+                image_resource_map: RefCell::new(
+                    crate::core::image_resource::ImageResourceMap::default(),
+                ),
+            },
+            host_rx,
+        )
     }
 
     /// Cross-thread event bus handle (queues mode is unused; the worker's
@@ -550,7 +551,7 @@ impl HostBackend {
     }
 
     /// Apply a render-command batch to the owned renderer (encode +
-    /// present). Called from `TurApp::run_loop` (both the vsync-aligned
+    /// present). Called from `TurAppLooper::run` (both the vsync-aligned
     /// pipelining path and the quiescence flush) — single source of truth
     /// for render application.
     pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
@@ -597,7 +598,7 @@ impl HostBackend {
 
     /// The single worker→host message handler. Pure dispatch + side-effects
     /// for rendering policy: `RenderCommands` is handed back as
-    /// [`MsgOutcome::Render`] so `run_loop` can buffer it for vsync-aligned
+    /// [`MsgOutcome::Render`] so the loop can buffer it for vsync-aligned
     /// pipelining. All backend mutations (`shell`,
     /// image uploads, event-bus dispatch) happen
     /// here.

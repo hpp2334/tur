@@ -8,7 +8,7 @@
 //! - [`WorkerSpawner`] (runtime-level) — host app loops in named
 //!   [`WorkerPoolHandle`] pools.
 //! - [`VsyncSource`] (per-instance) — frame cadence: subscribe + arm.
-//!   Swappable per app via [`crate::TurApp::set_vsync_source`].
+//!   Swappable per app via [`crate::TurAppLooper::set_vsync_source`].
 //! - [`HostLoop`] (runtime-level) — spawn tasks on the host thread (the
 //!   platform main thread; drives the engine's internal host-thread drain).
 //! - [`WorkerExecutor`] (worker-side) — the surface an app loop runs on:
@@ -23,7 +23,7 @@
 //!
 //! Engine → scheduler, one-way. Implementations have zero engine
 //! knowledge — they expose primitives (spawn, vsync events, sleep
-//! futures) and the engine drives itself via [`crate::TurApp::run_loop`].
+//! futures) and the engine drives itself via [`crate::TurAppLooper::run`].
 
 pub mod pool;
 
@@ -58,7 +58,7 @@ impl Future for Sleep {
 
 /// Stream of vsync events. Each item is one vsync tick. The source pushes
 /// events into the underlying channel when the platform fires rAF /
-/// Choreographer; the engine reads them inside [`crate::TurApp::run_loop`].
+/// Choreographer; the engine reads them inside [`crate::TurAppLooper::run`].
 ///
 /// Events only fire when armed via [`VsyncSource::request_frame`].
 pub struct VsyncEvents(pub futures::channel::mpsc::UnboundedReceiver<()>);
@@ -179,8 +179,8 @@ impl WorkerTicket {
 /// Frame cadence for one app. Per-instance: each [`crate::TurApp`] holds
 /// one and the embedder may replace it after build (Android installs one
 /// bound to the instance's own Kotlin `FrameLoop` via
-/// [`crate::TurApp::set_vsync_source`]) — swap before
-/// [`crate::TurApp::run_loop`] starts, since the loop subscribes once at
+/// [`crate::TurAppLooper::set_vsync_source`]) — swap before
+/// [`crate::TurAppLooper::run`] starts, since the loop subscribes once at
 /// startup.
 pub trait VsyncSource: 'static {
     /// Subscribe to vsync events. Each item is one vsync tick. Call once
@@ -202,7 +202,7 @@ pub trait VsyncSource: 'static {
 /// (rooting its internal host-thread drain at `build()`); embedders may
 /// use it for their own host-thread tasks.
 ///
-/// The engine core itself drives [`crate::TurApp::run_loop`] directly
+/// The engine core itself drives [`crate::TurAppLooper::run`] directly
 /// (`wasm_bindgen_futures::spawn_local` on wasm, JNI `pump` polling on
 /// Android, `block_on` in tests) — this trait exists for tasks the engine
 /// must root, not for the frame loop.

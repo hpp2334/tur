@@ -18,7 +18,7 @@ mod imp {
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+    use tur_engine::{TurApp, TurAppBuilder, TurAppLooper, TurRuntime, TurRuntimeBuilder};
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that
@@ -152,7 +152,7 @@ mod imp {
 
             // Scheduling: worker hosting on native lane pools (tokio
             // timers); base vsync with no frame loop (per-instance — each
-            // instance installs its own via `TurApp::set_vsync_source`);
+            // instance installs its own via `TurAppLooper::set_vsync_source`);
             // main-loop tasks polled from each instance's `pump_loop`.
             let worker_spawner = crate::scheduler::worker_spawner(tokio.handle().clone());
             let base_vsync = AndroidVsyncSource::new(None);
@@ -217,9 +217,10 @@ mod imp {
         pub module_sources: ModuleSourceRegistry,
         /// The runtime's main-thread task spawner, polled each `pump`.
         host_loop: Rc<AndroidHostLoop>,
-        /// The autonomous `run_loop` future. `TurApp` is `Rc`-based
-        /// (!Send — the boa realm lives on the main thread), so the loop
-        /// cannot run on a spawned thread: JNI `pump` polls it once per
+        /// The autonomous frame loop future (`TurAppLooper::run`). The
+        /// boa realm lives on the worker, but the loop itself is `!Send`
+        /// host-thread state (it owns the worker→host message stream), so
+        /// it cannot run on a spawned thread: JNI `pump` polls it once per
         /// Choreographer tick.
         loop_task: std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
         /// `Send + Sync` closure that requests a main-loop pump. Used
@@ -233,8 +234,8 @@ mod imp {
 
     impl AndroidInstance {
         /// Install the per-instance vsync source (bound to this instance's
-        /// Kotlin `FrameLoop`) and stash the autonomous `run_loop`
-        /// future for poll-per-`pump` driving. Arms the first vsync so the
+        /// Kotlin `FrameLoop`) and stash the autonomous loop future for
+        /// poll-per-`pump` driving. Arms the first vsync so the
         /// bootstrap `FrameOutcome` (from `app_builder().build(...)`'s
         /// initial resize) kicks the loop off. Also registers the message
         /// wake fn with the runtime's main loop so pending main-thread
@@ -245,6 +246,7 @@ mod imp {
         /// see [`AndroidShell`].
         fn install_frame_loop(
             app: &Rc<TurApp>,
+            mut looper: TurAppLooper,
             frame_loop: FrameLoopRef,
             host_loop: &Rc<AndroidHostLoop>,
         ) -> (
@@ -253,7 +255,7 @@ mod imp {
             std::sync::Arc<dyn Fn() + Send + Sync>,
         ) {
             let vsync = AndroidVsyncSource::new(Some(frame_loop));
-            app.set_vsync_source(vsync.clone());
+            looper.set_vsync_source(vsync.clone());
             // Bootstrap: arm the first Choreographer callback. Subsequent
             // frames re-arm via the engine's `request_frame` on a
             // `FrameOutcome { schedule: Vsync }`.
@@ -263,7 +265,7 @@ mod imp {
             // this instance → the next `pump_loop` polls them.
             host_loop.add_wake_fn(vsync_wake_fn.clone());
             let loop_task = std::cell::RefCell::new(Some(
-                Box::pin(app.clone().run_loop()) as Pin<Box<dyn Future<Output = ()>>>
+                Box::pin(looper.run()) as Pin<Box<dyn Future<Output = ()>>>
             ));
             (vsync, loop_task, vsync_wake_fn)
         }
@@ -377,7 +379,7 @@ mod imp {
             // worker; `HostBackend` owns the wgpu renderer on main and
             // drives it directly (render batches, image uploads,
             // resize-on-event).
-            let app = configure_instance(
+            let (app, looper) = configure_instance(
                 runtime
                     .runtime
                     .app_builder()
@@ -394,7 +396,7 @@ mod imp {
             .build()?;
 
             let (vsync, loop_task, vsync_wake_fn) =
-                Self::install_frame_loop(&app, frame_loop, &runtime.host_loop);
+                Self::install_frame_loop(&app, looper, frame_loop, &runtime.host_loop);
 
             Ok(Self {
                 app,
@@ -420,7 +422,7 @@ mod imp {
             frame_loop: FrameLoopRef,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
-            let app = configure_instance(
+            let (app, looper) = configure_instance(
                 runtime
                     .runtime
                     .app_builder()
@@ -428,7 +430,7 @@ mod imp {
             )
             .build_headless((0.0, 0.0))?;
             let (vsync, loop_task, vsync_wake_fn) =
-                Self::install_frame_loop(&app, frame_loop, &runtime.host_loop);
+                Self::install_frame_loop(&app, looper, frame_loop, &runtime.host_loop);
 
             Ok(Self {
                 app,

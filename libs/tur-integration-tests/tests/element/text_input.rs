@@ -2,7 +2,7 @@
 //! (`Shell::request_text_input`, delivered via construction-time
 //! `TurAppBuilder::shell`).
 //!
-//! Background: the engine's `run_loop` (autonomous; Choreographer-polled on
+//! Background: the engine's autonomous loop (Choreographer-polled on
 //! Android, `spawn_local`'d on wasm — driven frame-by-frame by the harness
 //! `pump` in these tests) used to dispatch `HostMsg`s through *separate*
 //! handlers depending on the entry point, and only the single-frame path's
@@ -18,7 +18,7 @@
 //! (the construction-time guarantee — a shell installed after `build()`
 //! could miss the worker's first push on platforms where `build() returns
 //! before worker readiness), and after an editable is focused the shell
-//! receives `is_editable == true` on the `pump` path. Because `run_loop`
+//! receives `is_editable == true` on the `pump` path. Because the loop
 //! routes every message through the same `apply_msg`, the Android/wasm
 //! path is covered by construction.
 
@@ -47,9 +47,13 @@ impl Shell for CaptureTextInput {
 #[test]
 fn text_input_requests_fire_on_editable_focus() {
     let states: Arc<Mutex<Vec<TextInputState>>> = Arc::new(Mutex::new(Vec::new()));
-    let mut app = TurTestApp::new_with_shell(200.0, 100.0, CaptureTextInput {
-        states: states.clone(),
-    })
+    let mut app = TurTestApp::new_with_shell(
+        200.0,
+        100.0,
+        CaptureTextInput {
+            states: states.clone(),
+        },
+    )
     .unwrap();
     app.eval_module_source(
         r#"const store = createStore();
@@ -82,7 +86,7 @@ fn text_input_requests_fire_on_editable_focus() {
 
     // Tap inside the Input → the focus manager focuses it. `click` is
     // fire-and-forget, so wait until the shell reports an editable is
-    // focused (run_loop routes the worker's shell command through the
+    // focused (the loop routes the worker's shell command through the
     // shared `apply_msg`, firing `request_text_input`).
     app.click(10.0, 10.0);
     let focused = app.wait_for(|_| {

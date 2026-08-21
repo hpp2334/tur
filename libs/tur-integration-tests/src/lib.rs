@@ -44,7 +44,6 @@ impl MutexFixedClock {
         self.0.lock().unwrap().forward(millis);
     }
 }
-use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
@@ -53,6 +52,7 @@ use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
+use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
@@ -358,7 +358,6 @@ impl Rect {
     }
 }
 
-
 /// Records shell-layer egress (cursor + text-input state) pushed by the
 /// engine. Installed via `TurAppBuilder::shell` — the engine emits
 /// `HostMsg::Shell(SetCursor)` and `HostMsg::Shell(RequestTextInput)`;
@@ -387,7 +386,7 @@ pub struct TurTestApp {
     /// The scheduler driver's virtual clock. Advanced alongside `clock`
     /// so `sleep()` futures fire on the same virtual timeline.
     driver: Rc<TestSchedulerDriver>,
-    /// Per-frame outcomes shipped by the engine's `run_loop` via the
+    /// Per-frame outcomes shipped by the engine's autonomous loop via the
     /// `after_frame` hook. `pump` awaits one item per vsync kick;
     /// `wait_for` / `wait_for_timeout` build on `pump`.
     frame_rx: RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
@@ -413,7 +412,15 @@ impl TurTestApp {
         height: f64,
         shell: impl tur_engine::Shell + 'static,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new(), None, Some(Box::new(shell)))
+        Self::build(
+            width,
+            height,
+            None,
+            None,
+            Vec::new(),
+            None,
+            Some(Box::new(shell)),
+        )
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -482,7 +489,6 @@ impl TurTestApp {
         renderer: Option<Box<dyn Renderer>>,
         shell: Option<Box<dyn tur_engine::Shell>>,
     ) -> Result<Self, TurError> {
-
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         let driver = TestSchedulerDriver::new();
@@ -532,20 +538,21 @@ impl TurTestApp {
                 text_input_slot: text_input_slot.clone(),
             })
         });
-        let inner = runtime
+        let (inner, mut looper) = runtime
             .app_builder()
             .worker_pool(worker_pool)
             .renderer(renderer, (width, height), 1.0)
             .shell(shell)
             .build()?;
-        // Drive the production `run_loop` (the same loop wasm/Android drive).
-        // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
-        // `pump` pairs one `fire_vsync` with one awaited outcome.
+        // Drive the production autonomous loop (the same loop wasm/Android
+        // drive via `TurAppLooper::run`). The `after_frame` hook ships each
+        // `FrameOutcome` into `frame_rx`; `pump` pairs one `fire_vsync`
+        // with one awaited outcome.
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
-        inner.set_after_frame_hook(Some(Rc::new(move |o| {
+        looper.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
         })));
-        driver.spawn_local(Box::pin(inner.clone().run_loop()));
+        driver.spawn_local(Box::pin(looper.run()));
         let app = Self {
             inner,
             frame_rx: RefCell::new(frame_rx),
@@ -629,10 +636,10 @@ impl TurTestApp {
         &self.inner
     }
 
-    /// Drive the production `run_loop` forward by exactly one frame: fire one
-    /// vsync, then block (driving the `LocalSet` + the spawned `run_loop`)
+    /// Drive the production loop forward by exactly one frame: fire one
+    /// vsync, then block (driving the `LocalSet` + the spawned loop)
     /// until the `after_frame` hook reports a completed frame. The worker
-    /// pumps once per Wake; `run_loop` renders + dispatches all side-effects
+    /// pumps once per Wake; the loop renders + dispatches all side-effects
     /// (cursor / focus / images) via the shared `apply_msg`, so this path is
     /// identical to what wasm/Android drive. The single frame primitive every
     /// sync helper builds on.
@@ -640,7 +647,7 @@ impl TurTestApp {
         pump_one(&self.driver, &self.frame_rx)
     }
 
-    /// The condition-wait primitive. Drives `run_loop` one frame at a time,
+    /// The condition-wait primitive. Drives the loop one frame at a time,
     /// advancing the virtual clock by `FRAME_STEP_MS` per step, checking
     /// `predicate` after each drive — so time-based observables (a `sleep`
     /// resolving, an animation threshold) resolve as virtual time progresses.
@@ -665,7 +672,7 @@ impl TurTestApp {
     }
 
     /// The time-advance primitive. Advances the virtual clock by `timeout` in
-    /// `FRAME_STEP_MS` ticks, driving `run_loop` to **quiescence** at each tick.
+    /// `FRAME_STEP_MS` ticks, driving the loop to **quiescence** at each tick.
     /// `timeout == ZERO` is the pure quiescence form: drive frames at a
     /// frozen clock until the engine reports no immediately-available work —
     /// this is what event-syncs use, since it doesn't perturb time-sensitive
@@ -695,12 +702,11 @@ impl TurTestApp {
     /// Fire-and-forget: push a viewport resize. Driven by a subsequent
     /// `wait_for` (exercising the full relayout path).
     pub fn resize(&mut self, width: f64, height: f64) {
-        self.inner
-            .push_platform_event(ShellEvent::Resize {
-                logical_width: width as u32,
-                logical_height: height as u32,
-                dpr: 1.0,
-            });
+        self.inner.push_platform_event(ShellEvent::Resize {
+            logical_width: width as u32,
+            logical_height: height as u32,
+            dpr: 1.0,
+        });
     }
 
     /// Snapshot of the live element tree, built on the worker via the
@@ -864,12 +870,11 @@ impl TurTestApp {
 
     /// Fire-and-forget: push a wheel event. Driven by a subsequent `wait_for`.
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
-        self.inner
-            .push_platform_event(ShellEvent::Wheel {
-                delta_x,
-                delta_y,
-                position: Offset::new(x, y),
-            });
+        self.inner.push_platform_event(ShellEvent::Wheel {
+            delta_x,
+            delta_y,
+            position: Offset::new(x, y),
+        });
     }
 
     /// Simulate a touch drag from `start` to `end` in `steps` moves, advancing
@@ -1255,9 +1260,9 @@ fn pump_one(
 
 /// Run-loop driver for tests that hold a raw `Rc<TurApp>` (multi-instance,
 /// custom runtime). Mirrors `TurTestApp`'s driving: spawns the production
-/// `run_loop` once, installs an `after_frame` hook feeding a frame channel,
-/// and exposes the same `pump` / `wait_for` / `wait_for_timeout` primitives.
-/// Construct one per app instance.
+/// autonomous loop once, installs an `after_frame` hook feeding a frame
+/// channel, and exposes the same `pump` / `wait_for` / `wait_for_timeout`
+/// primitives. Construct one per app instance.
 pub struct RawAppLooper {
     app: Rc<TurApp>,
     driver: Rc<TestSchedulerDriver>,
@@ -1265,13 +1270,21 @@ pub struct RawAppLooper {
 }
 
 impl RawAppLooper {
-    /// Spawn `run_loop` for `app` (driven by `driver`) and bootstrap one frame.
-    pub fn new(app: Rc<TurApp>, driver: Rc<TestSchedulerDriver>) -> Self {
+    /// Spawn the loop for `app` (driven by `driver`) and bootstrap one
+    /// frame. `looper` is the app's built
+    /// [`TurAppLooper`](tur_engine::TurAppLooper) — passed separately since
+    /// the app handle alone no longer carries it.
+    pub fn new(
+        app: Rc<TurApp>,
+        looper: tur_engine::TurAppLooper,
+        driver: Rc<TestSchedulerDriver>,
+    ) -> Self {
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
-        app.set_after_frame_hook(Some(Rc::new(move |o| {
+        let mut looper = looper;
+        looper.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
         })));
-        driver.spawn_local(Box::pin(app.clone().run_loop()));
+        driver.spawn_local(Box::pin(looper.run()));
         let looper = Self {
             app,
             driver,
@@ -1285,7 +1298,7 @@ impl RawAppLooper {
         &self.app
     }
 
-    /// Drive `run_loop` forward by exactly one frame (see [`TurTestApp::pump`]).
+    /// Drive the loop forward by exactly one frame (see [`TurTestApp::pump`]).
     pub fn pump(&self) -> FrameOutcome {
         pump_one(&self.driver, &self.frame_rx)
     }

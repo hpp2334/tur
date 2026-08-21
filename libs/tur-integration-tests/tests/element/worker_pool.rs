@@ -58,11 +58,12 @@ fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedu
 }
 
 fn spawn_headless(runtime: &Rc<TurRuntime>, pool: &WorkerPoolHandle) -> Rc<tur_engine::TurApp> {
-    runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .build_headless((0.0, 0.0))
-        .expect("headless app build")
+        .expect("headless app build");
+    app
 }
 
 fn tid_of(app: &Rc<tur_engine::TurApp>) -> String {
