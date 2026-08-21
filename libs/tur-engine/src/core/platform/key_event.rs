@@ -1,5 +1,5 @@
 //! Keyboard event payloads — engine contract types shared by the platform
-//! layer (`PlatformEvent::Key` wraps [`KeyEvent`]) and the input subsystems
+//! layer (`ShellEvent::Key` wraps [`KeyEvent`]) and the input subsystems
 //! that route key events to the focused element.
 //!
 //! JS-callback argument payloads ([`KeydownEvent`] / [`KeyupEvent`]) for

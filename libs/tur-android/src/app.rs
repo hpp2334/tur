@@ -18,7 +18,7 @@ mod imp {
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{FocusedState, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+    use tur_engine::{TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that
@@ -40,13 +40,14 @@ mod imp {
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
 
-    /// Push the engine's focused-element editable flag to Kotlin's
-    /// `FrameLoop.onFocusChanged(boolean)` via JNI. Called from the engine's
-    /// focus-change handler (installed in [`AndroidInstance::install_frame_loop`])
-    /// on the main thread, so `attach_current_thread` is a cheap no-op (the
-    /// main looper thread is already attached). Kotlin retains the value so
-    /// the per-frame `syncIme` poll reads it without a JNI round-trip.
-    fn push_focus_to_kotlin(frame_loop: &FrameLoopRef, is_editable: bool) {
+    /// Push the engine's text-input state (editable focused flag) to
+    /// Kotlin's `FrameLoop.onTextInputChanged(boolean)` via JNI. Called
+    /// from the engine's [`AndroidShell`] (installed at
+    /// `app_builder().shell(...)`) on the main thread, so
+    /// `attach_current_thread` is a cheap no-op (the main looper thread is
+    /// already attached). Kotlin retains the value so the per-frame
+    /// `syncIme` poll reads it without a JNI round-trip.
+    fn push_text_input_to_kotlin(frame_loop: &FrameLoopRef, is_editable: bool) {
         let Some(vm) = crate::java_vm() else {
             return;
         };
@@ -54,12 +55,32 @@ mod imp {
             return;
         };
         let loop_obj = unsafe { JObject::from_raw(frame_loop.kotlin_loop.as_raw()) };
-        let _ = env.call_method(
+        if let Err(e) = env.call_method(
             &loop_obj,
-            "onFocusChanged",
+            "onTextInputChanged",
             "(Z)V",
             &[JValue::Bool(is_editable as jni::sys::jboolean)],
-        );
+        ) {
+            // A mismatch here would silently kill the soft-keyboard sync —
+            // log loudly instead of swallowing it.
+            tracing::error!("FrameLoop.onTextInputChanged JNI call failed: {e}");
+        }
+    }
+
+    /// Android's [`tur_engine::Shell`]: forwards text-input (IME session)
+    /// state to Kotlin so the per-frame IME sync can raise/lower the soft
+    /// keyboard. Cursor output is a no-op (touch devices have no pointer
+    /// cursor).
+    struct AndroidShell {
+        frame_loop: FrameLoopRef,
+    }
+
+    impl tur_engine::Shell for AndroidShell {
+        fn set_cursor(&mut self, _cursor: tur_engine::core::shell::Cursor) {}
+
+        fn request_text_input(&mut self, state: tur_engine::core::shell::TextInputState) {
+            push_text_input_to_kotlin(&self.frame_loop, state.is_editable);
+        }
     }
 
     #[derive(Debug, thiserror::Error)]
@@ -212,14 +233,16 @@ mod imp {
 
     impl AndroidInstance {
         /// Install the per-instance vsync source (bound to this instance's
-        /// Kotlin `FrameLoop`), the focus-change handler (pushes focused-
-        /// element state into Kotlin so the per-frame IME sync can read it
-        /// without a JNI round-trip), and stash the autonomous `run_loop`
+        /// Kotlin `FrameLoop`) and stash the autonomous `run_loop`
         /// future for poll-per-`pump` driving. Arms the first vsync so the
         /// bootstrap `FrameOutcome` (from `app_builder().build(...)`'s
         /// initial resize) kicks the loop off. Also registers the message
         /// wake fn with the runtime's main loop so pending main-thread
         /// tasks (the engine's drain) get a prompt pump.
+        ///
+        /// Text-input state reaches Kotlin through the shell installed at
+        /// construction (`app_builder().shell(AndroidShell { .. })`) —
+        /// see [`AndroidShell`].
         fn install_frame_loop(
             app: &Rc<TurApp>,
             frame_loop: FrameLoopRef,
@@ -229,16 +252,6 @@ mod imp {
             std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
             std::sync::Arc<dyn Fn() + Send + Sync>,
         ) {
-            // Clone the FrameLoopRef before it's moved into the source —
-            // the focus handler captures one to call `FrameLoop.onFocusChanged`
-            // via JNI. The handler runs inside `apply_msg` on the main thread
-            // (the JNI thread), so `attach_current_thread` is a cheap no-op
-            // there, mirroring the source's `request_frame` path.
-            let frame_loop_for_focus = frame_loop.clone();
-            app.set_focus_changed_handler(Some(Rc::new(move |state: FocusedState| {
-                push_focus_to_kotlin(&frame_loop_for_focus, state.is_editable);
-            })));
-
             let vsync = AndroidVsyncSource::new(Some(frame_loop));
             app.set_vsync_source(vsync.clone());
             // Bootstrap: arm the first Choreographer callback. Subsequent
@@ -375,6 +388,9 @@ mod imp {
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .shell(Box::new(AndroidShell {
+                frame_loop: frame_loop.clone(),
+            }))
             .build()?;
 
             let (vsync, loop_task, vsync_wake_fn) =

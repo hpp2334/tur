@@ -11,6 +11,7 @@ use crate::core::focus::helper::find_focusable_in_path;
 use crate::core::hit_test::HitTest;
 use crate::core::layout::{MouseButton, Offset};
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub use composer::ClickKind;
@@ -51,12 +52,12 @@ impl Default for GestureSubsystem {
 impl Subsystem for GestureSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         match event {
-            PlatformEvent::Pointer(PointerInput::PointerDown {
+            PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
                 position,
                 button,
                 time_ms,
                 device,
-            }) => match device {
+            })) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_down(cx, *position, *button, *time_ms, *device);
                 }
@@ -64,11 +65,11 @@ impl Subsystem for GestureSubsystem {
                     self.handle_touch_pointer_down(cx, *position, *time_ms);
                 }
             },
-            PlatformEvent::Pointer(PointerInput::PointerMove {
+            PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
                 position,
                 device,
                 time_ms,
-            }) => match device {
+            })) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_move(cx, *position, *device);
                 }
@@ -76,12 +77,12 @@ impl Subsystem for GestureSubsystem {
                     self.handle_touch_pointer_move(cx, *position, *time_ms);
                 }
             },
-            PlatformEvent::Pointer(PointerInput::PointerUp {
+            PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
                 position,
                 button,
                 device,
                 time_ms,
-            }) => match device {
+            })) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_up(cx, *position, *button, *device);
                 }
@@ -89,14 +90,16 @@ impl Subsystem for GestureSubsystem {
                     self.handle_touch_pointer_up(cx, *position, *time_ms);
                 }
             },
-            PlatformEvent::Pointer(PointerInput::PointerCancel { device }) => match device {
-                PointerDeviceKind::Mouse => {
-                    self.handle_mouse_pointer_cancel(cx, *device);
+            PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerCancel { device })) => {
+                match device {
+                    PointerDeviceKind::Mouse => {
+                        self.handle_mouse_pointer_cancel(cx, *device);
+                    }
+                    PointerDeviceKind::Touch => {
+                        self.handle_touch_pointer_cancel(cx);
+                    }
                 }
-                PointerDeviceKind::Touch => {
-                    self.handle_touch_pointer_cancel(cx);
-                }
-            },
+            }
             _ => {}
         }
     }

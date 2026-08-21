@@ -12,7 +12,7 @@
 //!
 //! This is also where **derived** scrolling lives: when the gesture arena
 //! resolves a touch drag to scroll it emits [`AppEvent::Scroll`] here (rather
-//! than faking a `PlatformEvent::Wheel`), so the wheel handler can process
+//! than faking a `ShellEvent::Wheel`), so the wheel handler can process
 //! real and derived scroll through one path.
 //!
 //! Domain-specific app events (e.g. clipboard write / paste) travel inside
@@ -59,7 +59,7 @@ pub enum AppEvent {
     /// Derived scroll delta produced by the gesture arena (e.g. a touch drag
     /// that the arena resolved to scroll). Consumed by the wheel handler and
     /// routed through the exact same pipeline as a real
-    /// [`PlatformEvent::Wheel`](crate::core::platform::PlatformEvent::Wheel).
+    /// [`ShellEvent::Wheel`](crate::core::shell::ShellEvent::Wheel).
     Scroll {
         delta_x: f64,
         delta_y: f64,

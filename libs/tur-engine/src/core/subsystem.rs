@@ -194,7 +194,7 @@ pub struct SubsystemFlushContext<'a> {
     pub app_event_queue: &'a mut AppEventQueue,
     /// Engine screen state — the canvas logical size + the `viewportSize$`
     /// atom. Driven by [`crate::core::screen::ResizeSubsystem`] on
-    /// `PlatformEvent::Resize` (it sets the size, pushes the atom via
+    /// the shell `Resize` event (it sets the size, pushes the atom via
     /// [`Screen::sync_source`], and requests a paint). Other subsystems may
     /// read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
     pub screen: &'a mut Screen,

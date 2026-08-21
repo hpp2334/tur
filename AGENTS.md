@@ -2,6 +2,14 @@
 
 A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
 
+## Roleplay
+
+You are a professional software engineer.
+
+## Requirement
+
+Clean design and architecture.
+
 ## Module lifecycle contract
 
 `load_module(source)` (on the app's backend — `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources; the string-based `HostBackend::load_module` RPC is the raw entry) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
@@ -64,13 +72,18 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   │             BlurEvent/FocusEvent/FocusChange)   │
 │  │   ├── screen/   (Screen + viewportSize$ source +    │
 │  │   │             ResizeSubsystem)                    │
-│  │   ├── cursor/   (Cursor enum + CursorBackend trait  │
-│  │   │             + NoopCursor — the window's cursor- │
-│  │   │             output egress seam)                 │
-│  │   ├── platform/ (PlatformEvent/PointerInput/Ime +   │
-│  │   │             key_event: KeyEvent/Modifiers/      │
-│  │   │             KeydownEvent/KeyupEvent — input     │
-│  │   │             events from the host only)          │
+│  │   ├── shell/    (the app↔OS interactive layer:      │
+│  │   │             Shell trait [set_cursor +           │
+│  │   │             request_text_input] + NoopShell +   │
+│  │   │             TextInputState + Cursor enum +      │
+│  │   │             ShellEvent ingress — per-instance,  │
+│  │   │             host-thread, provided at build via  │
+│  │   │             `TurAppBuilder::shell`)             │
+│  │   ├── platform/ (PlatformEvent envelope { Shell(    │
+│  │   │             ShellEvent), Custom } + key_event:   │
+│  │   │             KeyEvent/Modifiers/KeydownEvent/    │
+│  │   │             KeyupEvent — input events from the  │
+│  │   │             host only)                          │
 │  │   ├── subsystem.rs (Subsystem trait + flush_pre/post_layout hooks)   │
 │  │   ├── text/     (TextLayoutData, FontManager —      │
 │  │   │             paint/layout contract types only)   │
@@ -127,10 +140,6 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │    (ClipboardBackend trait + Clipboard cap +        │
 │  │    tur:clipboard + engine-internal          │
 │  │    subsystems + event payloads)                     │
-│  │  • Cursor      — `core::cursor` (NOT a capability: │
-│  │    CursorBackend trait + Cursor enum; per-instance │
-│  │    egress seam applied host-side via               │
-│  │    `TurApp::set_cursor_backend`)                   │
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
 │     │   tur:net)                               │
@@ -161,7 +170,7 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  libs/tur-wasm (pure rlib — the reusable wasm embedder) │
 │  No #[wasm_bindgen] surface, no playground code.       │
 │  Owns all DOM wiring + the WebGL2 renderer + WasmClock  │
-│  / WasmFontLoader / WasmCursor + the standard           │
+│  / WasmFontLoader / WasmShell + the standard            │
 │  capability backends (WasmClipboard / WasmHttp /        │
 │  WasmFilePicker).                                       │
 │  Exposes WasmAppHandle::create(WasmAppConfig) — a        │
@@ -183,7 +192,7 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &HostExecutor| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal host-thread channel) and receives an `HostExecutor` — the engine's host-thread hop. Backends that need to run OS-API calls on the host thread (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_host(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance and NOT a capability (set via `TurApp::set_cursor_backend` after `app_builder().build(...)`, since it targets a specific window — the resolved cursor ships to the host thread as `HostMsg::CursorChanged`):
+Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &HostExecutor| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal host-thread channel) and receives an `HostExecutor` — the engine's host-thread hop. Backends that need to run OS-API calls on the host thread (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_host(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The **shell** (cursor output + text-input requests) is per-instance and NOT a capability — it targets a specific window, so it's supplied at construction via `TurAppBuilder::shell(Box<dyn Shell>)` (defaults to `NoopShell`); the worker ships deduped egress to the host thread as `HostMsg::Shell(ShellCommand)`:
 
 ```rust
 let ui = WorkerPoolHandle::new("ui", 4);              // at most 4 shared workers
@@ -225,8 +234,8 @@ let app = runtime
     //       cx.define::<PluginId>(PluginId("com.example.foo".into()));
     //   })
     .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
+    .shell(Box::new(WasmShell { canvas, state }))       // per-instance OS surface
     .build()?;
-app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
 
 // Or a headless instance (no rendering):
 let headless = runtime
@@ -280,9 +289,9 @@ let headless = runtime
   Lives entirely in the worker.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
-  `HttpBackend`, `FilePickerBackend`, `CursorBackend`). Cursor is NOT a
-  capability (see `core::cursor` above) — it targets a specific window, not
-  the process.
+  `HttpBackend`, `FilePickerBackend`). The shell is NOT a capability (see
+  `core::shell` above) — it targets a specific window, not the process,
+  and is supplied per-instance at construction.
 
 
 ### Reactive substrate (plugin-facing atom minting)
@@ -423,10 +432,10 @@ The `Plugin` trait has two phases: `compile` (called once on the runtime —
 pre-validate/cache) and `register` (called per instance — into the fresh boa
 `Context`). boa `Module`s are realm-bound, so the actual JS parse happens per
 instance in `register`; `compile` is the seam for future caching + fail-fast
-validation. The renderer is **not** on the runtime builder — it's the
-mandatory argument to the builder's `build(...)` terminal (one renderer per
-surface). The cursor backend is per-instance (set via
-`TurApp::set_cursor_backend` after spawn, since it targets a specific window).
+validation. The renderer and the shell are **not** on the runtime
+builder — they're the per-instance builder's `renderer(...)` argument +
+optional `shell(...)` (one renderer + one shell per surface/window,
+supplied at construction since they target a specific window).
 
 ### Scheduling contract (single-role traits, worker vocabulary)
 
@@ -674,10 +683,12 @@ libs/
                              #   primitives (Constraints/Offset/Size/
                              #   EdgeInsets/Axis/MainAxisAlignment/…),
                              #   SubscribeCx
-        cursor/             # Cursor/CursorBackend/NoopCursor — the
-                             #   window's cursor-output egress seam
-        platform/            # PlatformEvent/PointerInput/ImeEvent +
-                             #   PlatformEventQueue (raw input from embedder) +
+        shell/              # Shell trait (set_cursor + request_text_input)
+                             #   + NoopShell + TextInputState + Cursor +
+                             #   ShellEvent — the app↔OS interactive layer
+        platform/            # PlatformEvent envelope { Shell(ShellEvent),
+                             #   Custom } + PlatformEventQueue (raw input
+                             #   from embedder) +
                              #   key_event.rs (KeyEvent/Modifiers/
                              #   KeyEventType/KeydownEvent/KeyupEvent —
                              #   engine contract types)
@@ -693,9 +704,7 @@ libs/
                              #   RGB types + JS bindings)
         screen/              # Screen struct (logical_size + viewportSize$
                              #   source atom) + ResizeSubsystem (handles
-                             #   PlatformEvent::Resize)
-        cursor/             # Cursor/CursorBackend/NoopCursor — the
-                             #   window's cursor-output egress seam
+                             #   the shell Resize event)
         frame_env/          # FrameEnv (clock + pointer + cursor-resolve
                              #   state) + PaintEnv + CursorSink
         subsystem.rs         # Subsystem trait (flush_pre_layout +
@@ -785,7 +794,7 @@ libs/
     tur-wasm/                  # Pure reusable rlib (NOT a cdylib): the wasm
                               #   embedder lib. Owns all DOM wiring + the
                               #   WebGL2 renderer + WasmClock / WasmFontLoader /
-                              #   WasmCursor + standard capability backends
+                              #   WasmShell + standard capability backends
                               #   (WasmClipboard / WasmHttp / WasmFilePicker). NO
                               #   #[wasm_bindgen] surface, NO playground code.
                               #   Exposes WasmAppHandle::create(WasmAppConfig)
@@ -1001,11 +1010,10 @@ Verify with `git status` — only the intended source changes should remain. Nev
 
 ## Invoking the git-end subagent
 
-When the user asks to commit/push/PR (e.g. `@git-end`, "commit and push", "open a PR"), dispatch the **git-end** subagent via the Task tool with `subagent_type: "git-end"` — but **do NOT pass any prompt**. The agent is hard-coded to ignore prompt contents and follow only its own workflow (rebase → commit → push → create/update PR → run local CI). It derives the commit message and PR title/body directly from `git diff` and `git diff main...HEAD --stat`, so a prompt is at best redundant and at worst misleading.
+When the user asks to commit/push/PR (e.g. `@git-end`, "commit and push", "open a PR"), dispatch the **git-end** subagent via the Task tool with `subagent_type: "git-end"` and the fixed prompt:
 
-Concretely:
-- Pass an empty/minimal `prompt` (e.g. the empty string or a single space — the field is required by the tool schema, but the agent discards it).
-- Do **not** pre-stage files, write the commit message, draft the PR body, or summarize "what we did" in the prompt — git-end inspects the tree itself.
-- The agent's full workflow lives in `.opencode/agents/git-end.md`.
+```
+You are git-end agent.
+```
 
-
+Do not append anything else — the agent's workflow lives in `.opencode/agents/git-end.md`.

@@ -6,7 +6,8 @@ use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
 use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
+use tur_engine::core::platform::{ImeEvent, PointerInput};
+use tur_engine::core::shell::ShellEvent;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
@@ -63,23 +64,47 @@ struct WasmState {
     _paste_closure: Closure<dyn Fn(web_sys::ClipboardEvent)>,
 }
 
-/// Embedder-side `CursorBackend`: the engine pushes the resolved cursor here
-/// during the frame loop, and we apply it to the host canvas.
-struct WasmCursor {
+/// Embedder-side `Shell`: the engine pushes cursor and text-input
+/// requests here during the frame loop. Cursor goes to the canvas CSS;
+/// text-input positions the hidden `<textarea>` for IME composition.
+///
+/// Holds a `Weak<RefCell<...>>` into the wasm state so there is no
+/// reference cycle — `request_text_input` is a no-op if the state has
+/// been dropped.
+struct WasmShell {
     canvas: web_sys::HtmlCanvasElement,
+    /// Weak ref into the wasm state for textarea focus / caret positioning.
+    state_weak: std::rc::Weak<std::cell::RefCell<Option<WasmState>>>,
 }
 
-// SAFETY: `WasmCursor` is only ever accessed from the main thread (it's
-// installed via `app.set_cursor_backend` after construction and invoked
-// from `HostMsg::CursorChanged` inside main's pump). The `HtmlCanvasElement`
-// isn't `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
+// SAFETY: `WasmShell` is only ever accessed from the wasm main thread
+// (it's installed via `.shell()` at build time and invoked from
+// `HostMsg::Shell` inside main's pump). The `HtmlCanvasElement` isn't
+// `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
 // our usage is single-threaded so the unsafe impl is sound.
-unsafe impl Send for WasmCursor {}
-unsafe impl Sync for WasmCursor {}
+unsafe impl Send for WasmShell {}
+unsafe impl Sync for WasmShell {}
 
-impl tur_engine::CursorBackend for WasmCursor {
-    fn set_cursor(&mut self, cursor: tur_engine::core::cursor::Cursor) {
+impl tur_engine::Shell for WasmShell {
+    fn set_cursor(&mut self, cursor: tur_engine::core::shell::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
+    }
+
+    fn request_text_input(&mut self, state: tur_engine::core::shell::TextInputState) {
+        let Some(s) = self.state_weak.upgrade() else {
+            return;
+        };
+        let mut guard = s.borrow_mut();
+        let Some(wasm) = guard.as_mut() else {
+            return;
+        };
+        if state.is_editable {
+            let _ = wasm.textarea.focus();
+            if let Some((x, y, _w, _h)) = state.cursor_rect {
+                let _ = wasm.textarea.style().set_property("left", &format!("{x}px"));
+                let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
+            }
+        }
     }
 }
 
@@ -357,7 +382,7 @@ impl WasmApp {
 
         // Claim touch gestures for the app. With `touch-action: none` the
         // browser will not pan/zoom the page on touch-drag (we translate
-        // touchmove → PlatformEvent::Wheel below). Taps are handled
+        // touchmove → ShellEvent::Wheel below). Taps are handled
         // entirely in-engine: the gesture arena synthesizes the click
         // (see `TouchUpOutcome::Tap`), and soft-keyboard focus flows from
         // the engine's focus manager to the hidden textarea via the
@@ -449,6 +474,16 @@ impl WasmApp {
         // it directly (render batches, image uploads, resize-on-event) —
         // `build` pushes the initial Resize
         // internally.
+        // Build a WasmShell that handles cursor + text-input egress.
+        // The shell is created before the app so it can be passed at
+        // construction time — the worker's first pump already ships an
+        // initial TextInputState, so a shell installed after build() could
+        // miss it.
+        let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
+        let wasm_shell = WasmShell {
+            canvas: canvas.clone(),
+            state_weak: state_weak.clone(),
+        };
         let app = runtime
             .runtime
             .app_builder()
@@ -458,15 +493,11 @@ impl WasmApp {
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .shell(Box::new(wasm_shell))
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        // The cursor backend is per-instance (it targets this canvas's DOM
-        // element), so it can't be a shared runtime capability. Override the
-        // host-side cursor backend now that the instance exists.
-        app.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
-            canvas: canvas.clone(),
-        })));
+
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -532,7 +563,7 @@ impl WasmApp {
                     // (double/triple) classification.
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                        .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                             position: Offset::new(x, y),
                             button,
                             time_ms,
@@ -559,7 +590,7 @@ impl WasmApp {
                     let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                        .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
@@ -585,7 +616,7 @@ impl WasmApp {
                     let y = event.client_y() as f64 - rect.top();
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                        .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                             position: Offset::new(x, y),
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
@@ -609,7 +640,7 @@ impl WasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = event.client_x() as f64 - rect.left();
                     let y = event.client_y() as f64 - rect.top();
-                    s.app.push_platform_event(PlatformEvent::Wheel {
+                    s.app.push_platform_event(ShellEvent::Wheel {
                         delta_x: event.delta_x(),
                         delta_y: event.delta_y(),
                         position: Offset::new(x, y),
@@ -654,8 +685,8 @@ impl WasmApp {
         //
         // Soft-keyboard / caret focus does NOT depend on the browser's
         // synthesized clicks: the engine's focus manager (driven by the
-        // engine-synthesized click) emits a `FocusedStateChanged` event,
-        // which the focus-change handler (registered below) consumes to
+        // engine-synthesized click) triggers a text-input state push,
+        // which the shell (registered at build time) consumes to
         // call `textarea.focus()` + position the caret.
         let touch_start_state = state_clone.clone();
         let touch_start_closure =
@@ -672,7 +703,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                    .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         time_ms,
@@ -703,7 +734,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                    .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                         position: Offset::new(x, y),
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
@@ -737,7 +768,7 @@ impl WasmApp {
                     let guard = touch_end_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_platform_event(PlatformEvent::Pointer(
+                        s.app.push_platform_event(ShellEvent::Pointer(
                             PointerInput::PointerUp {
                                 position: Offset::new(0.0, 0.0),
                                 button: tur_engine::core::layout::MouseButton::Left,
@@ -757,7 +788,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                    .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
@@ -777,7 +808,7 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                 let guard = touch_cancel_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(PlatformEvent::Pointer(
+                    s.app.push_platform_event(ShellEvent::Pointer(
                         PointerInput::PointerCancel {
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         },
@@ -827,7 +858,7 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
+                    s.app.push_platform_event(ShellEvent::Key(KeyEvent {
                         key: event.key(),
                         code: event.code(),
                         modifiers: Modifiers {
@@ -857,7 +888,7 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
+                    s.app.push_platform_event(ShellEvent::Key(KeyEvent {
                         key: event.key(),
                         code: event.code(),
                         modifiers: Modifiers {
@@ -886,7 +917,7 @@ impl WasmApp {
                 if let Some(s) = guard.as_ref() {
                     s.is_composing.set(true);
                     s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionStart));
+                        .push_platform_event(ShellEvent::Ime(ImeEvent::CompositionStart));
                 }
             },
         );
@@ -905,7 +936,7 @@ impl WasmApp {
                     let guard = comp_update_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let text = event.data().unwrap_or_default();
-                        s.app.push_platform_event(PlatformEvent::Ime(
+                        s.app.push_platform_event(ShellEvent::Ime(
                             ImeEvent::CompositionUpdate { text, cursor: None },
                         ));
                     }
@@ -927,7 +958,7 @@ impl WasmApp {
                     s.is_composing.set(false);
                     let text = event.data().unwrap_or_default();
                     s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionEnd { text }));
+                        .push_platform_event(ShellEvent::Ime(ImeEvent::CompositionEnd { text }));
                     s.textarea.set_value("");
                 }
             },
@@ -1002,7 +1033,7 @@ impl WasmApp {
         // DOM side-effects that depend on focus state (textarea focus /
         // caret positioning) live in the `focus_changed_handler`
         // registered below, which fires exactly when the worker ships a
-        // deduped `FocusedStateChanged` (on editable↔non-editable
+        // deduped text-input state (on editable↔non-editable
         // transitions *and* caret moves).
         //
         // Async pump: the wake trampoline the engine installs hands a
@@ -1016,32 +1047,7 @@ impl WasmApp {
             .expect("wasm state just set")
             .app
             .clone();
-        let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
-        // Focus-change handler: positions the hidden `<textarea>` (focus it
-        // + set caret coords) whenever the focused element's editable-ness
-        // or caret rect changes. Pushed by the engine from `apply_msg`, so
-        // it's identical on both the pump and run_loop paths. Holds a
-        // `Weak` into `state` so there's no reference cycle.
-        let focus_changed: Rc<dyn Fn(tur_engine::FocusedState)> = {
-            let state_weak = state_weak.clone();
-            Rc::new(move |focus| {
-                let Some(state) = state_weak.upgrade() else {
-                    return;
-                };
-                let mut guard = state.borrow_mut();
-                let Some(s) = guard.as_mut() else {
-                    return;
-                };
-                if focus.is_editable {
-                    let _ = s.textarea.focus();
-                    if let Some((x, y, _w, _h)) = focus.cursor_rect {
-                        let _ = s.textarea.style().set_property("left", &format!("{x}px"));
-                        let _ = s.textarea.style().set_property("top", &format!("{y}px"));
-                    }
-                }
-            })
-        };
-        app.set_focus_changed_handler(Some(focus_changed));
+
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
         // loop bootstraps automatically: `app_builder().build(...)` pushed

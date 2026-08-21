@@ -4,11 +4,13 @@ pub mod renderer;
 
 pub mod error;
 
-// Re-export cursor-output types at the crate root so embedders can write
-// `tur_engine::CursorBackend`, `tur_engine::NoopCursor` without reaching
-// into `core::cursor`. The std plugin itself (`TurStdPlugin`) lives in
+// Re-export shell-layer types at the crate root so embedders can write
+// `tur_engine::Shell`, `tur_engine::NoopShell`, `tur_engine::Cursor`,
+// `tur_engine::TextInputState`, `tur_engine::ShellCommand` without reaching
+// into `core::shell`. The std plugin itself (`TurStdPlugin`) lives in
 // `builtin_plugins::std`.
-pub use crate::core::cursor::{CursorBackend, NoopCursor};
+pub use crate::core::app::ShellCommand;
+pub use crate::core::shell::{Cursor, NoopShell, Shell, ShellEvent, TextInputState};
 // Re-export the clipboard plugin surface at the crate root so embedders /
 // external backend crates can write `tur_engine::Clipboard`,
 // `tur_engine::ClipboardBackend`, `tur_engine::TurClipboardPlugin`,
@@ -57,23 +59,13 @@ use error::TurError;
 
 use core::app::FrameOutcome;
 
-/// Snapshot of focused-element state — single struct for the two-value
-/// `focused_is_editable` + `focused_cursor_rect` pair. Delivered to
-/// embedders via [`TurApp::set_focus_changed_handler`] (push, on change).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FocusedState {
-    pub is_editable: bool,
-    /// Logical-space `(x, y, w, h)` of the focused element's caret, or
-    /// `None` if no editable is focused.
-    pub cursor_rect: Option<(f64, f64, f64, f64)>,
-}
-
 /// A running tur engine instance.
 ///
 /// Wraps a [`HostBackend`] that owns a worker thread (running a
 /// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the host-side
-/// renderer (passed to `TurRuntime::app_builder().build(...)`). Main drives
-/// the renderer directly from [`HostBackend`].
+/// renderer + shell (both passed to `TurRuntime::app_builder()...build(...)`).
+/// Main drives the renderer directly from [`HostBackend`]; shell requests
+/// (`HostMsg::Shell`) are applied there too.
 /// Everything else (boa `Context`, element tree, reactive store, layout,
 /// subsystems) lives on the worker.
 ///
@@ -109,11 +101,6 @@ pub struct TurApp {
 /// (after the frame's render/schedule side-effects are applied). See
 /// [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
-
-/// Per-focus-change hook fired from [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg)
-/// when the worker ships a deduped `HostMsg::FocusedStateChanged`. See
-/// [`TurApp::set_focus_changed_handler`].
-pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
     /// Construct a `TurApp` backed by the given [`HostBackend`] + vsync
@@ -188,28 +175,32 @@ impl TurApp {
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
-    /// wheel, key, IME, or paste. Re-arms an idle autonomous loop.
-    pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
+    /// wheel, key, IME, or paste. Accepts anything that converts into a
+    /// [`PlatformEvent`](core::platform::PlatformEvent): pass a
+    /// [`ShellEvent`](core::shell::ShellEvent) directly for raw input, or
+    /// a `Custom` payload wrapper for domain events. Re-arms an idle
+    /// autonomous loop.
+    pub fn push_platform_event(&self, event: impl Into<core::platform::PlatformEvent>) {
         self.backend
-            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event));
+            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event.into()));
         self.request_frame();
     }
 
     /// Resize the surface. The embedder calls this at resize-event-receipt
     /// time (DOM `ResizeObserver` / winit / JNI): it resizes the host-side
     /// renderer directly (no flush + worker→host round-trip — lower
-    /// latency) AND forwards `PlatformEvent::Resize` to the worker so
+    /// latency) AND forwards the shell `Resize` event to the worker so
     /// `ResizeSubsystem` updates `Screen` / `viewportSize$` for layout.
     /// Event-driven, not per-frame, so no dedup is needed.
     pub fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
         self.backend.resize(logical_width, logical_height, dpr);
         self.backend
             .send_worker_msg(core::app::WorkerMsg::PlatformEvent(
-                core::platform::PlatformEvent::Resize {
+                core::platform::PlatformEvent::Shell(core::shell::ShellEvent::Resize {
                     logical_width,
                     logical_height,
                     dpr,
-                },
+                }),
             ));
         self.request_frame();
     }
@@ -237,8 +228,8 @@ impl TurApp {
     ///   the single shared handler. `RenderCommands` is buffered into
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
-    ///   quiescence). Side-effects (cursor, focus-change handler, image
-    ///   uploads) are applied inside `apply_msg`.
+    ///   quiescence). Side-effects (shell commands, image uploads) are
+    ///   applied inside `apply_msg`.
     ///
     /// The bootstrap is automatic: `app_builder().build(...)` pushes an
     /// initial resize event to the worker, the worker pumps + ships
@@ -392,28 +383,5 @@ impl TurApp {
             .worker_tx()
             .unbounded_send(WorkerMsg::WithTree { runner });
         rx.rx.await.unwrap_or(None)
-    }
-
-    /// Install a handler fired whenever the worker ships a deduped
-    /// `HostMsg::FocusedStateChanged` (i.e. the focused element's
-    /// editable-ness or caret rect changes). The engine retains no focus
-    /// cache — this push path is the only production way to read focus
-    /// state (tests may use [`Self::with_tree`]). Pass `None` to clear.
-    ///
-    /// The handler runs inside [`Self::apply_msg`](core::runtime::HostBackend::apply_msg),
-    /// so it observes identical state on the `run_loop` path. Used by the
-    /// wasm embedder (textarea focus / caret positioning) and Android
-    /// (soft-keyboard sync via a JNI callback into the Kotlin `FrameLoop`).
-    pub fn set_focus_changed_handler(&self, handler: Option<FocusChangedHook>) {
-        self.backend.set_focus_changed_handler(handler);
-    }
-
-    /// Override the host-side cursor backend. The worker emits
-    /// `HostMsg::CursorChanged` on cursor state change; main applies here.
-    pub fn set_cursor_backend(
-        &self,
-        backend: std::sync::Arc<std::sync::Mutex<dyn core::cursor::CursorBackend + Send + Sync>>,
-    ) {
-        self.backend.set_cursor_backend(backend);
     }
 }

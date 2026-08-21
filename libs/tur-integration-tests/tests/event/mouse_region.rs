@@ -1,6 +1,6 @@
 use tur_engine::builtin_plugins::text::elements::TextElement;
-use tur_engine::core::cursor::Cursor;
 use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::shell::Cursor;
 use tur_integration_tests::TurTestApp;
 
 fn build(app: &mut TurTestApp) -> ElementNodeId {
