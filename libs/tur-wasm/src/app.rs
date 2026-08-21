@@ -562,14 +562,14 @@ impl WasmApp {
                     // (double/triple) classification.
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                        .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
                             position: Offset::new(x, y),
                             button,
                             time_ms,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                         }));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -589,14 +589,14 @@ impl WasmApp {
                     let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                        .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
                         }));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -615,13 +615,13 @@ impl WasmApp {
                     let y = event.client_y() as f64 - rect.top();
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                        .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
                             position: Offset::new(x, y),
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
                         }));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -639,13 +639,13 @@ impl WasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = event.client_x() as f64 - rect.left();
                     let y = event.client_y() as f64 - rect.top();
-                    s.app.push_platform_event(PlatformEvent::Wheel {
+                    s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Wheel {
                         delta_x: event.delta_x(),
                         delta_y: event.delta_y(),
                         position: Offset::new(x, y),
                     });
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback("wheel", wheel_closure.as_ref().unchecked_ref())
@@ -702,13 +702,13 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                    .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         time_ms,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                     }));
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -733,12 +733,12 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                    .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
                         position: Offset::new(x, y),
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
                     }));
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -767,7 +767,7 @@ impl WasmApp {
                     let guard = touch_end_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_platform_event(PlatformEvent::Pointer(
+                        s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(
                             PointerInput::PointerUp {
                                 position: Offset::new(0.0, 0.0),
                                 button: tur_engine::core::layout::MouseButton::Left,
@@ -787,13 +787,13 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                    .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
                     }));
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -807,13 +807,13 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                 let guard = touch_cancel_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(PlatformEvent::Pointer(
+                    s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(
                         PointerInput::PointerCancel {
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         },
                     ));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback(
@@ -857,7 +857,7 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
+                    s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Key(KeyEvent {
                         key: event.key(),
                         code: event.code(),
                         modifiers: Modifiers {
@@ -869,7 +869,7 @@ impl WasmApp {
                         event_type: KeyEventType::Down,
                     }));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref())
@@ -887,7 +887,7 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
+                    s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Key(KeyEvent {
                         key: event.key(),
                         code: event.code(),
                         modifiers: Modifiers {
@@ -899,7 +899,7 @@ impl WasmApp {
                         event_type: KeyEventType::Up,
                     }));
                 }
-            });
+            })));
 
         canvas
             .add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref())
@@ -916,10 +916,10 @@ impl WasmApp {
                 if let Some(s) = guard.as_ref() {
                     s.is_composing.set(true);
                     s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionStart));
+                        .push_platform_event(PlatformEvent::Shell(ShellEvent::Ime(ImeEvent::CompositionStart));
                 }
             },
-        );
+        )));
 
         textarea
             .add_event_listener_with_callback(
@@ -935,12 +935,12 @@ impl WasmApp {
                     let guard = comp_update_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let text = event.data().unwrap_or_default();
-                        s.app.push_platform_event(PlatformEvent::Ime(
+                        s.app.push_platform_event(PlatformEvent::Shell(ShellEvent::Ime(
                             ImeEvent::CompositionUpdate { text, cursor: None },
                         ));
                     }
                 },
-            );
+            )));
 
         textarea
             .add_event_listener_with_callback(
@@ -957,11 +957,11 @@ impl WasmApp {
                     s.is_composing.set(false);
                     let text = event.data().unwrap_or_default();
                     s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionEnd { text }));
+                        .push_platform_event(PlatformEvent::Shell(ShellEvent::Ime(ImeEvent::CompositionEnd { text }));
                     s.textarea.set_value("");
                 }
             },
-        );
+        )));
 
         textarea
             .add_event_listener_with_callback(
