@@ -123,7 +123,7 @@ The engine ships with every standard plugin available to register from your
 | `tur:net` | `TurNetPlugin` |
 
 `tur_android::ops::create_runtime` pre-registers Android-default capabilities
-(`NoopCursor`, `AndroidClipboard`, `NativeHttp`) + native fonts and wall-clock
+(`AndroidClipboard`, `NativeHttp`) + native fonts and wall-clock
 — your `configure` callback only adds plugins.
 
 ## Multi-instance
@@ -155,5 +155,5 @@ and `abiFilters` entries is straightforward if you need them.
 - **Surface re-attach** on `surfaceDestroyed` → `surfaceCreated` tears down and
   rebuilds the instance; a live-edit-friendly renderer swap (preserving JS state)
   is a follow-up.
-- **Multi-touch** is single-pointer (the engine's `PlatformEvent::Pointer` is
+- **Multi-touch** is single-pointer (the engine's `ShellEvent::Pointer` is
   single-position). The primary pointer is tracked.

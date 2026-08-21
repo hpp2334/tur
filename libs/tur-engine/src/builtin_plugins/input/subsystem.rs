@@ -8,7 +8,7 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::focus::focusable::FocusableElement;
 
-/// Routes `PlatformEvent::Key` to the focused element synchronously (mutating
+/// Routes `ShellEvent::Key` to the focused element synchronously (mutating
 /// the element's text buffer / caret in place), then bubbles the key event up
 /// the focus chain via `onKeyDown` mutations.
 ///

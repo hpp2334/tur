@@ -35,8 +35,10 @@ use crate::error::TurError;
 /// arbitrary types.
 ///
 /// Convention: capability newtypes are named after the service they wrap
-/// (`Clipboard`, `Http`, `Cursor`), with the backend trait suffixed `Backend`
-/// (`ClipboardBackend`, `HttpBackend`, `CursorBackend`).
+/// (`Clipboard`, `Http`), with the backend trait suffixed `Backend`
+/// (`ClipboardBackend`, `HttpBackend`). Window-targeting surfaces (the
+/// shell: cursor output + text-input requests) are NOT capabilities —
+/// they are per-instance and host-thread-only (see `core::shell`).
 pub trait Capability: Any + Clone + 'static {}
 
 /// Cheaply-cloned view over the type-erased capability registry.

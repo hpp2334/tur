@@ -12,6 +12,7 @@ use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
+use tur_engine::core::shell::ShellEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::renderer::NoopRenderer;
@@ -416,7 +417,7 @@ fn platform_events_route_to_the_correct_instance() {
     let looper_b = RawAppLooper::new(app_b.clone(), driver);
 
     // Push a Resize to A only.
-    app_a.push_platform_event(PlatformEvent::Resize {
+    app_a.push_platform_event(ShellEvent::Resize {
         logical_width: 250,
         logical_height: 180,
         dpr: 1.0,

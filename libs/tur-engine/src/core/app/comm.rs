@@ -35,11 +35,11 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
-use crate::core::shell::{Cursor, TextInputState};
 use crate::core::elements::NodeTreeData;
 use crate::core::focus::FocusManager;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
+use crate::core::shell::{Cursor, TextInputState};
 
 /// Type-erased closure run against the worker's live tree + focus state
 /// (see [`WorkerMsg::WithTree`]). Ships its result via a `Reply` channel

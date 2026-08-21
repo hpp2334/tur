@@ -402,7 +402,7 @@ pub(crate) enum MsgOutcome {
 /// driven by the embedder at event-receipt time via
 /// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
 /// / JNI), which calls [`Self::resize`] directly and forwards
-/// `PlatformEvent::Resize` to the worker for layout — no `HostMsg` round-trip.
+/// the shell `Resize` event to the worker for layout — no `HostMsg` round-trip.
 ///
 /// ## Shell egress
 ///
@@ -526,8 +526,6 @@ impl HostBackend {
             ),
         }
     }
-
-
 
     /// Cross-thread event bus handle (queues mode is unused; the worker's
     /// `EventBus` isn't reachable from main).
@@ -694,7 +692,7 @@ impl HostBackend {
 /// `host_tx` clone held in `TurInstanceContext` (one ship per decode, FIFO).
 /// `HostMsg::Resized` is also not shipped — the embedder resizes the
 /// host-side renderer directly at event-receipt time and forwards
-/// `PlatformEvent::Resize` here for layout.
+/// the shell `Resize` event here for layout.
 ///
 /// All other variants (`PlatformEvent`, RPCs) are
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
@@ -723,9 +721,9 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 let current_cursor = backend.last_applied_cursor();
                 if current_cursor != last_cursor {
                     last_cursor = current_cursor;
-                    let _ = host_tx.unbounded_send(HostMsg::Shell(
-                        ShellCommand::SetCursor(current_cursor.unwrap_or_default()),
-                    ));
+                    let _ = host_tx.unbounded_send(HostMsg::Shell(ShellCommand::SetCursor(
+                        current_cursor.unwrap_or_default(),
+                    )));
                 }
                 // Ship text-input state changes (deduped against the last
                 // emitted).
@@ -733,9 +731,9 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 let focus_key = (current_focus.is_editable, current_focus.cursor_rect);
                 if Some(focus_key) != last_focus {
                     last_focus = Some(focus_key);
-                    let _ = host_tx.unbounded_send(HostMsg::Shell(
-                        ShellCommand::RequestTextInput(current_focus),
-                    ));
+                    let _ = host_tx.unbounded_send(HostMsg::Shell(ShellCommand::RequestTextInput(
+                        current_focus,
+                    )));
                 }
             }
             WorkerMsg::Destroy { reply } => {

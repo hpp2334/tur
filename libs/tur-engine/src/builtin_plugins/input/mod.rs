@@ -4,7 +4,7 @@
 //! - [`KeyboardSubsystem`] — synchronously dispatches key events to the
 //!   focused element (`ElementOnKeyboard::on_keyboard_event`), then walks the
 //!   focus chain bubbling `onKeyDown$` mutations on `Focusable` ancestors.
-//! - [`ImeSubsystem`] — routes `PlatformEvent::Ime` to the focused element
+//! - [`ImeSubsystem`] — routes `ShellEvent::Ime` to the focused element
 //!   (typically a tur-text `EditableTextElement`). The element owns the text
 //!   editing logic; this subsystem just forwards the event.
 //!
@@ -15,7 +15,7 @@
 //! The event payload types themselves (`KeyEvent`, `KeyEventType`,
 //! `Modifiers`, `KeydownEvent`, `KeyupEvent`) live in
 //! `crate::core::platform::key_event` (engine contract types) since
-//! `PlatformEvent::Key` wraps them.
+//! `ShellEvent::Key` wraps them.
 
 pub(in crate::builtin_plugins) mod ime;
 pub(in crate::builtin_plugins) mod subsystem;

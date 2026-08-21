@@ -86,13 +86,13 @@ class TurInstance(
     }
 
     /**
-     * Whether the focused element is an editable text field. Read from the
-     * [FrameLoop]'s retained value (pushed from native via
-     * `FrameLoop.onFocusChanged`), so this is a cheap Kotlin field read — no
-     * JNI round-trip.
+     * Whether an editable text field is focused (an active text-input /
+     * IME session). Read from the [FrameLoop]'s retained value (pushed
+     * from native via `FrameLoop.onTextInputChanged`), so this is a cheap
+     * Kotlin field read — no JNI round-trip.
      */
-    fun focusedIsEditable(): Boolean =
-        handle != 0L && frameLoop.focusedIsEditable
+    fun textInputActive(): Boolean =
+        handle != 0L && frameLoop.textInputActive
 
     /**
      * Push an IME composition event. [kind]: `0=Start`, `1=Update`, `2=End`.

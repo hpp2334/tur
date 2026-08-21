@@ -226,9 +226,9 @@ fn init_logger_once() {
 /// - [`register_module_source`] / [`release_module_source`] /
 ///   `load_module`/`pump`/`resize`/`push_*`/`destroy`
 ///   operate on **instance** handles (module sources register on the
-///   **runtime**, then load into any of its instances by handle). (Focused-
-///   element state is pushed to Kotlin via `FrameLoop.onFocusChanged` from
-///   the engine's focus-change handler — no `focused_is_editable` JNI poll.)
+///   **runtime**, then load into any of its instances by handle). (Text-
+///   input state is pushed to Kotlin via `FrameLoop.onTextInputChanged`
+///   from the engine's shell — no `focused_is_editable` JNI poll.)
 /// - [`destroy_runtime`] drops the runtime.
 ///
 /// Runtime creation varies per embedder (plugin set), so [`create_runtime`]
@@ -244,7 +244,8 @@ pub mod ops {
     use jni::sys::{jdouble, jint, jlong};
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-    use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+    use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
+    use tur_engine::core::shell::ShellEvent;
     use tur_engine::{TurApp, TurAppBuilder, TurRuntimeBuilder};
 
     use crate::app::{AndroidInstance, AndroidRuntime};
@@ -513,7 +514,7 @@ pub mod ops {
     }
 
     /// Resize the surface. Resizes the host-side renderer directly AND
-    /// forwards `PlatformEvent::Resize` to the worker for layout (single
+    /// forwards the shell `Resize` event to the worker for layout (single
     /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
     /// for the instance lifetime; full surface re-attach with a renderer
     /// swap is a follow-up.)
@@ -564,7 +565,7 @@ pub mod ops {
                 3 => PointerInput::PointerCancel { device },
                 _ => return Ok(()),
             };
-            instance.app.push_platform_event(PlatformEvent::Pointer(ev));
+            instance.app.push_platform_event(ShellEvent::Pointer(ev));
             Ok(())
         });
     }
@@ -593,7 +594,7 @@ pub mod ops {
             };
             instance
                 .app
-                .push_platform_event(PlatformEvent::Key(KeyEvent {
+                .push_platform_event(ShellEvent::Key(KeyEvent {
                     key,
                     code,
                     modifiers: Modifiers {
@@ -652,9 +653,9 @@ pub mod ops {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
             let text: String = env.get_string(&text)?.into();
             let ime = match kind {
-                0 => PlatformEvent::Ime(ImeEvent::CompositionStart),
-                1 => PlatformEvent::Ime(ImeEvent::CompositionUpdate { text, cursor: None }),
-                _ => PlatformEvent::Ime(ImeEvent::CompositionEnd { text }),
+                0 => ShellEvent::Ime(ImeEvent::CompositionStart),
+                1 => ShellEvent::Ime(ImeEvent::CompositionUpdate { text, cursor: None }),
+                _ => ShellEvent::Ime(ImeEvent::CompositionEnd { text }),
             };
             instance.app.push_platform_event(ime);
             Ok(())

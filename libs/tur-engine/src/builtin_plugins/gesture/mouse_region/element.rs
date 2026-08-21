@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
-use crate::core::shell::Cursor;
 use crate::core::layout::{HitTestBehavior, Offset};
+use crate::core::shell::Cursor;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 

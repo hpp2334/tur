@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::core::shell::Cursor;
 use crate::core::layout::Offset;
+use crate::core::shell::Cursor;
 use boa_engine::context::time::Clock;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.

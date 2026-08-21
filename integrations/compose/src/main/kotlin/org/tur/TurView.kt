@@ -212,8 +212,8 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
                 rt.createInstance(holder.surface, w, h, dprValue).also {
                     it.loadModule(sourceHandle)
                     // After each frame, sync the soft keyboard with the
-                    // engine's focused-element state (reads the value native
-                    // pushed into the FrameLoop via onFocusChanged).
+                    // engine's text-input state (reads the value native
+                    // pushed into the FrameLoop via onTextInputChanged).
                     it.setAfterPump { syncIme() }
                 }
             } catch (e: Throwable) {
@@ -276,9 +276,9 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     // without any platform IME. The missing piece is raising the soft
     // keyboard and routing its text back. We declare the surface a text editor
     // and supply a minimal `InputConnection` that turns IME commits into
-    // engine events. The engine pushes its focused-element state into the
-    // FrameLoop (via `onFocusChanged`, from the focus-change handler installed
-    // at instance build); the per-frame `syncIme` (set up in `bind`) reads that
+    // engine events. The engine pushes its text-input state into the
+    // FrameLoop (via `onTextInputChanged`, from the shell installed at
+    // instance build); the per-frame `syncIme` (set up in `bind`) reads that
     // retained value and drives `showSoftInput` / `hideSoftInput`.
 
     override fun onCheckIsTextEditor(): Boolean = true
@@ -324,20 +324,21 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     }
 
     /**
-     * Raise/lower the soft keyboard to match the engine's focused-element
-     * state. The focused editable flag is pushed from native into the
-     * [FrameLoop] ([onFocusChanged], fired by the engine's focus-change
-     * handler each time focus / caret rect changes); this reads the retained
-     * value and reconciles the IMM. State-gated so the IMM is only touched on
-     * show↔hide transitions, not every frame. Suppressed until the user has
-     * actually touched the surface ([userInteracted]) so a launch-time
-     * programmatic focus doesn't pop the keyboard unprompted.
+     * Raise/lower the soft keyboard to match the engine's text-input
+     * state. The editable-focused flag is pushed from native into the
+     * [FrameLoop] ([onTextInputChanged], fired by the engine's shell each
+     * time the focused editable / caret rect changes); this reads the
+     * retained value and reconciles the IMM. State-gated so the IMM is
+     * only touched on show↔hide transitions, not every frame. Suppressed
+     * until the user has actually touched the surface ([userInteracted])
+     * so a launch-time programmatic focus doesn't pop the keyboard
+     * unprompted.
      */
     private fun syncIme() {
         val inst = instance ?: return
         val imm = context
             .getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        if (inst.focusedIsEditable() && userInteracted) {
+        if (inst.textInputActive() && userInteracted) {
             if (!hasFocus()) requestFocus()
             if (!imeActive) {
                 imm.showSoftInput(this, 0)

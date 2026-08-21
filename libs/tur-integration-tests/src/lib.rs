@@ -44,12 +44,12 @@ impl MutexFixedClock {
         self.0.lock().unwrap().forward(millis);
     }
 }
-use tur_engine::core::shell::{Cursor, TextInputState};
+use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
@@ -401,7 +401,19 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new(), None)
+        Self::build(width, height, None, None, Vec::new(), None, None)
+    }
+
+    /// Construct with a custom [`Shell`] installed at construction time
+    /// (replacing the default `RecordingShell`). Cursor /
+    /// `take_current_cursor` / `take_current_text_input_state` recorders
+    /// are absent — the supplied shell owns all egress observation.
+    pub fn new_with_shell(
+        width: f64,
+        height: f64,
+        shell: impl tur_engine::Shell + 'static,
+    ) -> Result<Self, TurError> {
+        Self::build(width, height, None, None, Vec::new(), None, Some(Box::new(shell)))
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -415,6 +427,7 @@ impl TurTestApp {
             Some(RecordingHttp::new()),
             None,
             Vec::new(),
+            None,
             None,
         )
     }
@@ -431,6 +444,7 @@ impl TurTestApp {
             Some(RecordingFilePicker::new()),
             Vec::new(),
             None,
+            None,
         )
     }
 
@@ -443,7 +457,7 @@ impl TurTestApp {
         height: f64,
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, extra_plugins, None)
+        Self::build(width, height, None, None, extra_plugins, None, None)
     }
 
     /// Construct with a custom [`Renderer`] (instead of the default
@@ -455,7 +469,7 @@ impl TurTestApp {
         height: f64,
         renderer: Box<dyn Renderer>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new(), Some(renderer))
+        Self::build(width, height, None, None, Vec::new(), Some(renderer), None)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -466,6 +480,7 @@ impl TurTestApp {
         filepicker: Option<RecordingFilePicker>,
         extra_plugins: Vec<Box<dyn Plugin>>,
         renderer: Option<Box<dyn Renderer>>,
+        shell: Option<Box<dyn tur_engine::Shell>>,
     ) -> Result<Self, TurError> {
 
         let clipboard = RecordingClipboard::new();
@@ -503,19 +518,25 @@ impl TurTestApp {
         }
         let runtime = builder.build()?;
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
-        // Build a RecordingShell that captures cursor + text-input state
-        // pushed by the engine (host-side egress seam, identical to what
-        // wasm/Android do with their Shell impls).
+        // Shell egress is a per-instance host-side surface (see
+        // `core::shell`), installed at construction exactly like an
+        // embedder would. Default: a `RecordingShell` capturing cursor +
+        // text-input state (drained via `take_current_cursor` /
+        // `take_current_text_input_state`); tests pass their own via
+        // `new_with_shell`.
         let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let text_input_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let shell: Box<dyn tur_engine::Shell> = shell.unwrap_or_else(|| {
+            Box::new(RecordingShell {
+                cursor_slot: cursor_slot.clone(),
+                text_input_slot: text_input_slot.clone(),
+            })
+        });
         let inner = runtime
             .app_builder()
             .worker_pool(worker_pool)
             .renderer(renderer, (width, height), 1.0)
-            .shell(Box::new(RecordingShell {
-                cursor_slot: cursor_slot.clone(),
-                text_input_slot: text_input_slot.clone(),
-            }))
+            .shell(shell)
             .build()?;
         // Drive the production `run_loop` (the same loop wasm/Android drive).
         // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
@@ -675,11 +696,11 @@ impl TurTestApp {
     /// `wait_for` (exercising the full relayout path).
     pub fn resize(&mut self, width: f64, height: f64) {
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Resize {
+            .push_platform_event(ShellEvent::Resize {
                 logical_width: width as u32,
                 logical_height: height as u32,
                 dpr: 1.0,
-            }));
+            });
     }
 
     /// Snapshot of the live element tree, built on the worker via the
@@ -700,14 +721,14 @@ impl TurTestApp {
     pub fn click(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -718,7 +739,7 @@ impl TurTestApp {
     /// Fire-and-forget: push a key-down event. Driven by a subsequent
     /// `wait_for` / `wait_for_timeout`.
     pub fn send_key(&mut self, key: &str) {
-        self.inner.push_platform_event(PlatformEvent::Shell(ShellEvent::Key(KeyEvent {
+        self.inner.push_platform_event(ShellEvent::Key(KeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers::default(),
@@ -728,7 +749,7 @@ impl TurTestApp {
 
     /// Fire-and-forget: push an IME event. Driven by a subsequent `wait_for`.
     pub fn send_ime(&mut self, event: ImeEvent) {
-        self.inner.push_platform_event(PlatformEvent::Shell(ShellEvent::Ime(event));
+        self.inner.push_platform_event(ShellEvent::Ime(event));
     }
 
     pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
@@ -738,7 +759,7 @@ impl TurTestApp {
     /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
     /// Use this for Cmd+C / Cmd+V / Cmd+S tests. Fire-and-forget.
     pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
-        self.inner.push_platform_event(PlatformEvent::Shell(ShellEvent::Key(KeyEvent {
+        self.inner.push_platform_event(ShellEvent::Key(KeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers {
@@ -756,7 +777,7 @@ impl TurTestApp {
     pub fn pointer_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -786,7 +807,7 @@ impl TurTestApp {
     pub fn pointer_move(&mut self, x: f64, y: f64) {
         let time_ms = self.synthetic_time_ms;
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
                 time_ms,
@@ -798,7 +819,7 @@ impl TurTestApp {
     pub fn pointer_up(&mut self, x: f64, y: f64) {
         let time_ms = self.synthetic_time_ms;
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -812,7 +833,7 @@ impl TurTestApp {
     pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button,
                 time_ms,
@@ -824,7 +845,7 @@ impl TurTestApp {
     pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.synthetic_time_ms;
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button,
                 device: PointerDeviceKind::Mouse,
@@ -844,11 +865,11 @@ impl TurTestApp {
     /// Fire-and-forget: push a wheel event. Driven by a subsequent `wait_for`.
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Wheel {
+            .push_platform_event(ShellEvent::Wheel {
                 delta_x,
                 delta_y,
                 position: Offset::new(x, y),
-            }));
+            });
     }
 
     /// Simulate a touch drag from `start` to `end` in `steps` moves, advancing
@@ -860,7 +881,7 @@ impl TurTestApp {
     pub fn touch_drag(&mut self, start: (f64, f64), end: (f64, f64), steps: usize) {
         let time_ms = self.clock.now().millis_since_epoch();
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(start.0, start.1),
                 button: MouseButton::Left,
                 time_ms,
@@ -873,7 +894,7 @@ impl TurTestApp {
             let y = start.1 + (end.1 - start.1) * t;
             let time_ms = self.clock.now().millis_since_epoch();
             self.inner
-                .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
+                .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                     position: Offset::new(x, y),
                     device: PointerDeviceKind::Touch,
                     time_ms,
@@ -882,7 +903,7 @@ impl TurTestApp {
         self.advance_clock(FRAME_STEP_MS);
         let time_ms = self.clock.now().millis_since_epoch();
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(end.0, end.1),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Touch,
@@ -897,7 +918,7 @@ impl TurTestApp {
     /// coalescing several touchmoves into one frame).
     pub fn push_touch_down(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -909,7 +930,7 @@ impl TurTestApp {
     /// (fire-and-forget). See [`Self::push_touch_down`].
     pub fn push_touch_move(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Touch,
                 time_ms,
@@ -920,7 +941,7 @@ impl TurTestApp {
     /// (fire-and-forget). See [`Self::push_touch_down`].
     pub fn push_touch_up(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerUp {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Touch,
@@ -933,7 +954,7 @@ impl TurTestApp {
     pub fn touch_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_platform_event(PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerDown {
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,

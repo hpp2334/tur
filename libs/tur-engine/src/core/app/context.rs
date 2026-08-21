@@ -18,10 +18,10 @@ use crate::core::fonts::FontManager;
 use crate::core::frame_env::FrameEnv;
 use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
-use crate::core::shell::ShellEvent;
 use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::scheduler::WorkerContext;
 use crate::core::screen::Screen;
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {

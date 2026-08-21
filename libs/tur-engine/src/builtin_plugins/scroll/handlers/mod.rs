@@ -15,7 +15,7 @@ use crate::builtin_plugins::scroll::scroll_view::ScrollViewElement;
 
 /// Unified scroll subsystem. Owns the entire scroll event pipeline:
 ///
-/// - **Input** — real device wheel (`PlatformEvent::Wheel`) and derived
+/// - **Input** — real device wheel (`ShellEvent::Wheel`) and derived
 ///   scroll produced by the gesture arena (`AppEvent::Scroll`). Both feed
 ///   the same `process_scroll_delta` path: hit-test to the deepest
 ///   wheel-bearing element, dispatch the delta via `dispatch_wheel`, and

@@ -19,7 +19,7 @@ use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 /// buffer + caret have already been updated.
 ///
 /// Subscribes to two event streams:
-/// - `PlatformEvent::Key` / `PlatformEvent::Ime` — keyboard / IME caret moves
+/// - `ShellEvent::Key` / `ShellEvent::Ime` — keyboard / IME caret moves
 ///   happen synchronously in the engine's `KeyboardSubsystem` /
 ///   `ImeSubsystem`, so the post-subsystem can observe them in the same
 ///   platform-event pass.

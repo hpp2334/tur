@@ -283,7 +283,7 @@ impl TurRuntime {
         let app = Rc::new(TurApp::new(backend, self.vsync_source.clone()));
         // Bootstrap the viewport: resize the host-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
-        // frame 1 (the forwarded `PlatformEvent::Resize` does the worker
+        // frame 1 (the forwarded shell `Resize` event does the worker
         // half).
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok(app)
@@ -342,7 +342,7 @@ impl<'rt> TurAppBuilder<'rt> {
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
     /// target; `dpr` is the device pixel ratio. The engine pushes the
-    /// initial `PlatformEvent::Resize` into the worker so `viewportSize$`
+    /// initial shell `Resize` event into the worker so `viewportSize$`
     /// + the host-side renderer are seeded before frame 1.
     pub fn renderer(
         mut self,

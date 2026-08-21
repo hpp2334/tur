@@ -175,10 +175,14 @@ impl TurApp {
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
-    /// wheel, key, IME, or paste. Re-arms an idle autonomous loop.
-    pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
+    /// wheel, key, IME, or paste. Accepts anything that converts into a
+    /// [`PlatformEvent`](core::platform::PlatformEvent): pass a
+    /// [`ShellEvent`](core::shell::ShellEvent) directly for raw input, or
+    /// a `Custom` payload wrapper for domain events. Re-arms an idle
+    /// autonomous loop.
+    pub fn push_platform_event(&self, event: impl Into<core::platform::PlatformEvent>) {
         self.backend
-            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event));
+            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event.into()));
         self.request_frame();
     }
 
@@ -380,5 +384,4 @@ impl TurApp {
             .unbounded_send(WorkerMsg::WithTree { runner });
         rx.rx.await.unwrap_or(None)
     }
-
 }

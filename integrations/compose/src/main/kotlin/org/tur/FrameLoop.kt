@@ -50,19 +50,21 @@ class FrameLoop {
     var onPump: (() -> Unit)? = null
 
     /**
-     * Whether the engine's focused element is an editable text field, pushed
-     * from native via [onFocusChanged] (the engine emits a focus-change event
-     * each time the focused element / caret rect changes). Read by the Compose
-     * integration's per-frame IME sync ([onAfterPump]) to decide whether to
-     * raise the soft keyboard — without a JNI round-trip per frame.
+     * Whether the engine's focused element is an editable text field (an
+     * active text-input / IME session), pushed from native via
+     * [onTextInputChanged] (the engine emits a shell text-input state
+     * change each time the focused editable / caret rect changes). Read by
+     * the Compose integration's per-frame IME sync ([onAfterPump]) to
+     * decide whether to raise the soft keyboard — without a JNI
+     * round-trip per frame.
      */
-    var focusedIsEditable: Boolean = false
+    var textInputActive: Boolean = false
         private set
 
     /**
      * Optional callback fired after [onVsync] / [onPump] in each wake-up. The
      * Compose integration sets this to sync the Android soft-keyboard / IME
-     * with the engine's focused-element state (read [focusedIsEditable], then
+     * with the engine's text-input state (read [textInputActive], then
      * `showSoftInput` / `hideSoftInput`). Runs on the main looper, same as
      * the wake callbacks. `null` by default so non-IME embedders (and tests)
      * are unaffected.
@@ -70,13 +72,14 @@ class FrameLoop {
     var onAfterPump: (() -> Unit)? = null
 
     /**
-     * Called from native (via JNI) when the engine's focused-element state
-     * changes. Stores the editable flag so [onAfterPump]'s IME sync can read
-     * it without a JNI round-trip per frame. The engine is the source of
-     * truth — Kotlin never queries focus state, only consumes this push.
+     * Called from native (via JNI) when the engine's text-input session
+     * state changes. Stores the editable flag so [onAfterPump]'s IME sync
+     * can read it without a JNI round-trip per frame. The engine is the
+     * source of truth — Kotlin never queries focus state, only consumes
+     * this push.
      */
-    fun onFocusChanged(isEditable: Boolean) {
-        focusedIsEditable = isEditable
+    fun onTextInputChanged(isEditable: Boolean) {
+        textInputActive = isEditable
     }
 
     /**
