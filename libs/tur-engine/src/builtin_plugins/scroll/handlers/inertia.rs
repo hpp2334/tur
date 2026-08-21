@@ -23,6 +23,7 @@ use boa_engine::context::time::Clock;
 
 use crate::core::app::AppEvent;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::scroll::event::ScrollFlingEvent;
@@ -99,7 +100,7 @@ impl Subsystem for ScrollInertiaSubsystem {
     ) {
         // Any fresh touch (down or cancel) stops the coast immediately —
         // the user touched the screen to grab the flinging content.
-        if let PlatformEvent::Pointer(input) = event {
+        if let PlatformEvent::Shell(ShellEvent::Pointer(input)) = event {
             let is_touch = match input {
                 PointerInput::PointerDown { device, .. } => *device == PointerDeviceKind::Touch,
                 PointerInput::PointerCancel { device } => *device == PointerDeviceKind::Touch,

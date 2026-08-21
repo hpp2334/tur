@@ -1,7 +1,6 @@
 pub mod app;
 pub mod async_;
 pub mod capability;
-pub mod cursor;
 pub mod dev;
 pub mod edgy;
 pub mod element;
@@ -20,6 +19,7 @@ pub mod render;
 pub mod runtime;
 pub mod scheduler;
 pub mod screen;
+pub mod shell;
 pub mod subsystem;
 pub mod text;
 pub mod view;

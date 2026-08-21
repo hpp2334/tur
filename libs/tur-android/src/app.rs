@@ -18,7 +18,7 @@ mod imp {
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{FocusedState, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+    use tur_engine::{TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that
@@ -229,15 +229,7 @@ mod imp {
             std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
             std::sync::Arc<dyn Fn() + Send + Sync>,
         ) {
-            // Clone the FrameLoopRef before it's moved into the source —
-            // the focus handler captures one to call `FrameLoop.onFocusChanged`
-            // via JNI. The handler runs inside `apply_msg` on the main thread
-            // (the JNI thread), so `attach_current_thread` is a cheap no-op
-            // there, mirroring the source's `request_frame` path.
-            let frame_loop_for_focus = frame_loop.clone();
-            app.set_focus_changed_handler(Some(Rc::new(move |state: FocusedState| {
-                push_focus_to_kotlin(&frame_loop_for_focus, state.is_editable);
-            })));
+
 
             let vsync = AndroidVsyncSource::new(Some(frame_loop));
             app.set_vsync_source(vsync.clone());
@@ -375,6 +367,9 @@ mod imp {
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .shell(Box::new(AndroidShell {
+                frame_loop: frame_loop.clone(),
+            }))
             .build()?;
 
             let (vsync, loop_task, vsync_wake_fn) =

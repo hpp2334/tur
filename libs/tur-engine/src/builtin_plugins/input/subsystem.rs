@@ -3,6 +3,7 @@ use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::platform::PlatformEvent;
 use crate::core::platform::key_event::KeyEvent;
 use crate::core::platform::key_event::KeydownEvent;
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::focus::focusable::FocusableElement;
@@ -19,7 +20,7 @@ pub struct KeyboardSubsystem;
 
 impl Subsystem for KeyboardSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        let PlatformEvent::Key(key_event) = event else {
+        let PlatformEvent::Shell(ShellEvent::Key(key_event)) = event else {
             return;
         };
 

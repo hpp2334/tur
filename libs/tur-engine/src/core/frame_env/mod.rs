@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::core::cursor::Cursor;
+use crate::core::shell::Cursor;
 use crate::core::layout::Offset;
 use boa_engine::context::time::Clock;
 
@@ -54,9 +54,9 @@ impl Default for CursorSink {
 /// `apply_cursor_changes` is the privileged post-paint flush: it resolves
 /// the deepest cursor claim and dedups against the last applied value.
 /// It is pure state — the *application* happens on the host thread: the
-/// worker loop ships each change as `HostMsg::CursorChanged` and the
+/// worker loop ships each change as `HostMsg::Shell(SetCursor)` and the
 /// per-instance backend installed via
-/// [`TurApp::set_cursor_backend`](crate::TurApp::set_cursor_backend)
+/// [`TurAppBuilder::shell`](crate::core::shell::Shell)
 /// applies it. Biz cannot call it.
 ///
 /// [`paint_env`]: FrameEnv::paint_env
@@ -109,8 +109,8 @@ impl FrameEnv {
     /// sink so the next frame starts clean (no separate reset needed).
     ///
     /// Pure state — the worker loop ships the deduped change (see
-    /// `last_applied_cursor`) to the host thread, where the per-instance
-    /// `CursorBackend` applies it.
+    /// `last_applied_cursor`) to the host thread, where the embedder's
+    /// [`Shell`](crate::core::shell::Shell) applies it.
     pub fn apply_cursor_changes(&mut self) {
         let resolved = self.cursor.take().unwrap_or_default();
         let present = self.pointer_position.is_some();
@@ -121,7 +121,8 @@ impl FrameEnv {
 
     /// The most recent cursor resolved via `apply_cursor_changes` (or `None`
     /// if no pointer position was ever recorded). Used by the worker loop to
-    /// ship cursor changes to the host thread via `HostMsg::CursorChanged`.
+    /// ship cursor changes to the host thread via
+    /// `HostMsg::Shell(ShellCommand::SetCursor)`.
     pub fn last_applied_cursor(&self) -> Option<Cursor> {
         self.applied_cursor
     }

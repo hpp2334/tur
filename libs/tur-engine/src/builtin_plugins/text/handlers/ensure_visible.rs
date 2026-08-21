@@ -6,6 +6,7 @@ use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::layout::Axis;
 use crate::core::platform::PlatformEvent;
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
@@ -42,7 +43,7 @@ impl Subsystem for CaretVisibilitySubsystem {
         // events don't move the caret. (Paste is handled in
         // `handle_app_event` — see the struct doc for why.)
         match event {
-            PlatformEvent::Key(_) | PlatformEvent::Ime(_) => {
+            PlatformEvent::Shell(ShellEvent::Key(_)) | PlatformEvent::Shell(ShellEvent::Ime(_)) => {
                 ensure_caret_visible(cx);
             }
             _ => {}

@@ -30,17 +30,14 @@
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, Source};
 use futures::StreamExt;
 
-use crate::FocusedState;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
-use crate::core::app::{HostMsg, HostRx, HostTx, Reply, WorkerRx, WorkerTx};
+use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
-use crate::core::cursor::CursorBackend;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
@@ -88,7 +85,7 @@ impl WorkerBackend {
 
     /// Read the latest cursor applied during the last flush (or `None` if
     /// no pointer was over the surface / no cursor change happened).
-    pub(crate) fn last_applied_cursor(&self) -> Option<crate::core::cursor::Cursor> {
+    pub(crate) fn last_applied_cursor(&self) -> Option<crate::core::shell::Cursor> {
         self.internal
             .app_context
             .borrow()
@@ -310,8 +307,8 @@ impl WorkerBackend {
         self.internal.event_bus.clone()
     }
 
-    pub(crate) fn focused_state(&self) -> FocusedState {
-        FocusedState {
+    pub(crate) fn text_input_state(&self) -> crate::core::shell::TextInputState {
+        crate::core::shell::TextInputState {
             is_editable: self.focused_is_editable(),
             cursor_rect: self.focused_cursor_rect(),
         }
@@ -407,14 +404,15 @@ pub(crate) enum MsgOutcome {
 /// / JNI), which calls [`Self::resize`] directly and forwards
 /// `PlatformEvent::Resize` to the worker for layout — no `HostMsg` round-trip.
 ///
-/// ## Focus-change handler
+/// ## Shell egress
 ///
-/// The worker emits `HostMsg::CursorChanged` and `HostMsg::FocusedStateChanged`
-/// (deduped against the previous frame) alongside the FrameOutcome. `apply_msg`
-/// applies the cursor directly to the cursor backend and forwards focus
-/// changes to an embedder-installed handler (see [`Self::set_focus_changed_handler`]).
-/// The engine retains no focus cache — embedders read focus from the
-/// handler (push, the only production path).
+/// The worker emits `HostMsg::Shell(ShellCommand)` (cursor + text-input
+/// requests, each deduped against the previous frame) alongside the
+/// FrameOutcome. `apply_msg` applies them to the embedder-supplied
+/// [`Shell`](crate::core::shell::Shell) — installed at construction via
+/// [`TurAppBuilder::shell`](crate::core::runtime::TurAppBuilder::shell)
+/// (default [`NoopShell`](crate::core::shell::NoopShell)). The engine
+/// retains no cursor / text-input cache on the host side.
 pub struct HostBackend {
     worker_tx: WorkerTx,
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
@@ -430,17 +428,11 @@ pub struct HostBackend {
     /// Cross-thread wake. Called after every host→worker send. No-op on
     /// native; `worker.postMessage(0)` on wasm.
     worker_wake: Rc<dyn Fn()>,
-    /// Main-side cursor backend. Worker emits `HostMsg::CursorChanged` on
-    /// cursor state change; `apply_msg` applies it directly here. Set via
-    /// `set_cursor_backend` (called by embedder after
-    /// `app_builder().build(...)`).
-    cursor_backend: RefCell<Option<Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>>>,
-    /// Embedder-installed handler fired from `apply_msg` whenever the
-    /// worker ships a deduped `HostMsg::FocusedStateChanged`. The engine
-    /// retains no focus cache — embedders that need the value (wasm's
-    /// textarea positioning, Android's soft-keyboard sync) register a
-    /// handler here (push is the only production path).
-    focus_changed_handler: RefCell<Option<crate::FocusChangedHook>>,
+    /// The embedder-supplied shell — the per-instance host-side OS
+    /// interaction surface (cursor output + text-input requests). Supplied
+    /// at construction via `TurAppBuilder::shell`; owned exclusively here,
+    /// so `apply_msg` can apply commands with a plain `borrow_mut()`.
+    shell: RefCell<Box<dyn crate::core::shell::Shell>>,
     /// Cross-thread event bus handle. Routes `emit_to_js` via
     /// `WorkerMsg::EventBusToJs`.
     event_bus_handle: crate::core::event_bus::EventBusHandle,
@@ -478,6 +470,7 @@ impl HostBackend {
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
         renderer: Box<dyn Renderer>,
+        shell: Box<dyn crate::core::shell::Shell>,
         worker_pool: crate::core::scheduler::WorkerPoolHandle,
         backend_factory: impl FnOnce(
             crate::core::scheduler::WorkerContext,
@@ -525,8 +518,7 @@ impl HostBackend {
             host_rx: RefCell::new(host_rx),
             _worker_ticket: worker_ticket,
             worker_wake,
-            cursor_backend: RefCell::new(None),
-            focus_changed_handler: RefCell::new(None),
+            shell: RefCell::new(shell),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
             renderer: RefCell::new(renderer),
             image_resource_map: RefCell::new(
@@ -535,22 +527,7 @@ impl HostBackend {
         }
     }
 
-    /// Install the host-side cursor backend. Worker emits
-    /// `HostMsg::CursorChanged`; main applies here during `apply_msg`.
-    pub fn set_cursor_backend(
-        &self,
-        backend: Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
-    ) {
-        *self.cursor_backend.borrow_mut() = Some(backend);
-    }
 
-    /// Install a handler fired from [`Self::apply_msg`] whenever the worker
-    /// ships a deduped `HostMsg::FocusedStateChanged`. The engine keeps no
-    /// focus cache — embedders obtain focus state by registering
-    /// here (push, on change). Pass `None` to clear.
-    pub fn set_focus_changed_handler(&self, handler: Option<crate::FocusChangedHook>) {
-        *self.focus_changed_handler.borrow_mut() = handler;
-    }
 
     /// Cross-thread event bus handle (queues mode is unused; the worker's
     /// `EventBus` isn't reachable from main).
@@ -623,8 +600,8 @@ impl HostBackend {
     /// The single worker→host message handler. Pure dispatch + side-effects
     /// for rendering policy: `RenderCommands` is handed back as
     /// [`MsgOutcome::Render`] so `run_loop` can buffer it for vsync-aligned
-    /// pipelining. All backend mutations (`cursor_backend`,
-    /// `focus_changed_handler`, image uploads, event-bus dispatch) happen
+    /// pipelining. All backend mutations (`shell`,
+    /// image uploads, event-bus dispatch) happen
     /// here.
     pub(crate) fn apply_msg(&self, msg: HostMsg) -> MsgOutcome {
         match msg {
@@ -636,28 +613,11 @@ impl HostBackend {
                 self.upload_image_resource(id, &image);
                 MsgOutcome::Continue
             }
-            HostMsg::CursorChanged(cursor) => {
-                #[allow(clippy::collapsible_if)]
-                if let Some(backend) = self.cursor_backend.borrow().as_ref() {
-                    if let Ok(mut b) = backend.lock() {
-                        b.set_cursor(cursor);
-                    }
-                }
-                MsgOutcome::Continue
-            }
-            HostMsg::FocusedStateChanged {
-                is_editable,
-                cursor_rect,
-            } => {
-                // Clone the Rc out before invoking so a handler that
-                // re-enters the backend (or calls a method borrowing the
-                // RefCell) can't panic on a double borrow.
-                let handler = self.focus_changed_handler.borrow().clone();
-                if let Some(handler) = handler {
-                    handler(FocusedState {
-                        is_editable,
-                        cursor_rect,
-                    });
+            HostMsg::Shell(cmd) => {
+                let mut shell = self.shell.borrow_mut();
+                match cmd {
+                    ShellCommand::SetCursor(cursor) => shell.set_cursor(cursor),
+                    ShellCommand::RequestTextInput(state) => shell.request_text_input(state),
                 }
                 MsgOutcome::Continue
             }
@@ -727,8 +687,7 @@ impl HostBackend {
 /// pumps the engine (`backend.pump()`), then ships:
 /// 1. `HostMsg::RenderCommands` (if the flush painted)
 /// 2. `HostMsg::FrameOutcome` (always)
-/// 3. `HostMsg::CursorChanged` (deduped against `last_cursor`)
-/// 4. `HostMsg::FocusedStateChanged` (deduped against `last_focus`)
+/// 3. `HostMsg::Shell(ShellCommand)` (cursor + text-input, each deduped)
 ///
 /// `HostMsg::UploadImage` is **not** shipped here — decoded images are
 /// shipped directly from the `createImageResource` bridge via the shared
@@ -741,7 +700,7 @@ impl HostBackend {
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
 /// `ReplySender`).
 async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: HostTx) {
-    let mut last_cursor: Option<crate::core::cursor::Cursor> = None;
+    let mut last_cursor: Option<crate::core::shell::Cursor> = None;
     type FocusCache = Option<(bool, Option<(f64, f64, f64, f64)>)>;
     let mut last_focus: FocusCache = None;
     while let Some(msg) = worker_rx.next().await {
@@ -764,20 +723,19 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 let current_cursor = backend.last_applied_cursor();
                 if current_cursor != last_cursor {
                     last_cursor = current_cursor;
-                    let _ = host_tx
-                        .unbounded_send(HostMsg::CursorChanged(current_cursor.unwrap_or_default()));
+                    let _ = host_tx.unbounded_send(HostMsg::Shell(
+                        ShellCommand::SetCursor(current_cursor.unwrap_or_default()),
+                    ));
                 }
-                // Ship focus-state changes (deduped against the last
-                // emitted) — `apply_msg` forwards them to an embedder-
-                // installed handler (no engine-side cache).
-                let current_focus = backend.focused_state();
+                // Ship text-input state changes (deduped against the last
+                // emitted).
+                let current_focus = backend.text_input_state();
                 let focus_key = (current_focus.is_editable, current_focus.cursor_rect);
                 if Some(focus_key) != last_focus {
                     last_focus = Some(focus_key);
-                    let _ = host_tx.unbounded_send(HostMsg::FocusedStateChanged {
-                        is_editable: current_focus.is_editable,
-                        cursor_rect: current_focus.cursor_rect,
-                    });
+                    let _ = host_tx.unbounded_send(HostMsg::Shell(
+                        ShellCommand::RequestTextInput(current_focus),
+                    ));
                 }
             }
             WorkerMsg::Destroy { reply } => {

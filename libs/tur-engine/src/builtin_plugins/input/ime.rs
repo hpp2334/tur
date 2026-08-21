@@ -1,12 +1,13 @@
 use crate::core::elements::ElementOnImeContext;
 use crate::core::platform::PlatformEvent;
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct ImeSubsystem;
 
 impl Subsystem for ImeSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        let PlatformEvent::Ime(ime_event) = event else {
+        let PlatformEvent::Shell(ShellEvent::Ime(ime_event)) = event else {
             return;
         };
 

@@ -35,7 +35,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
-use crate::core::cursor::Cursor;
+use crate::core::shell::{Cursor, TextInputState};
 use crate::core::elements::NodeTreeData;
 use crate::core::focus::FocusManager;
 use crate::core::platform::PlatformEvent;
@@ -117,8 +117,8 @@ pub enum WorkerMsg {
 }
 
 /// worker → host. Emitted by the worker either during a flush
-/// ([`HostMsg::RenderCommands`], [`HostMsg::FocusedStateChanged`]) or in
-/// response to a [`WorkerMsg`] RPC (`Reply<T>` slots).
+/// ([`HostMsg::RenderCommands`], [`HostMsg::Shell`]) or in response to a
+/// [`WorkerMsg`] RPC (`Reply<T>` slots).
 pub enum HostMsg {
     /// One frame's worth of paint state. Main applies the batch to its
     /// renderer (owned by `HostBackend`) directly.
@@ -144,17 +144,11 @@ pub enum HostMsg {
     /// directly because its `JsEval` variant holds a boa `JsError` which
     /// is `!Send` — main re-wraps as `TurError::Other`).
     FrameOutcome(Result<FrameOutcome, String>),
-    /// Resolved cursor changed this frame (deduped: only emitted on
-    /// change). Main forwards to its `CursorBackend` and caches it.
-    CursorChanged(Cursor),
-    /// Focused-element state changed (used by main for IME / caret
-    /// placement on platforms where the IME target lives off-engine).
-    /// Pushed once per change, not per frame. Main caches it for
-    /// non-blocking reads from embedder callbacks.
-    FocusedStateChanged {
-        is_editable: bool,
-        cursor_rect: Option<(f64, f64, f64, f64)>,
-    },
+    /// A shell-layer request (cursor / text-input) changed this frame —
+    /// deduped per command kind, shipped only on change. Main applies it
+    /// to the embedder-supplied [`Shell`](crate::core::shell::Shell)
+    /// inside `apply_msg`.
+    Shell(ShellCommand),
     /// Event bus — JS → embedder bytes on `channel_id`. Worker ships one
     /// `HostMsg` per `eventBus.send` dispatch; `HostBackend` dispatches to
     /// handlers registered on `channel_id` on the host-side
@@ -162,6 +156,21 @@ pub enum HostMsg {
     EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
+}
+
+/// A deduped shell-layer request shipped worker → host inside
+/// [`HostMsg::Shell`]. The worker dedups each kind independently against
+/// the last emitted value (cursor / text-input have separate caches), so
+/// each variant arrives only on change.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ShellCommand {
+    /// The resolved pointer shape changed (deepest painted `MouseRegion`
+    /// claim). Applied via [`Shell::set_cursor`](crate::core::shell::Shell::set_cursor).
+    SetCursor(Cursor),
+    /// The focused element's text-input session state changed (IME active
+    /// flag + caret rect). Applied via
+    /// [`Shell::request_text_input`](crate::core::shell::Shell::request_text_input).
+    RequestTextInput(TextInputState),
 }
 
 /// Error returned from module load / eval RPCs.
@@ -251,15 +260,7 @@ impl fmt::Debug for HostMsg {
                 .finish(),
             Self::UploadImage { id, .. } => f.debug_tuple("UploadImage").field(id).finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
-            Self::CursorChanged(c) => f.debug_tuple("CursorChanged").field(c).finish(),
-            Self::FocusedStateChanged {
-                is_editable,
-                cursor_rect,
-            } => f
-                .debug_struct("FocusedStateChanged")
-                .field("is_editable", is_editable)
-                .field("cursor_rect", cursor_rect)
-                .finish(),
+            Self::Shell(cmd) => f.debug_tuple("Shell").field(cmd).finish(),
             Self::EventBusToEmbedder {
                 channel_id,
                 payload,

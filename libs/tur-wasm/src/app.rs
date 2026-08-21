@@ -63,23 +63,47 @@ struct WasmState {
     _paste_closure: Closure<dyn Fn(web_sys::ClipboardEvent)>,
 }
 
-/// Embedder-side `CursorBackend`: the engine pushes the resolved cursor here
-/// during the frame loop, and we apply it to the host canvas.
-struct WasmCursor {
+/// Embedder-side `Shell`: the engine pushes cursor and text-input
+/// requests here during the frame loop. Cursor goes to the canvas CSS;
+/// text-input positions the hidden `<textarea>` for IME composition.
+///
+/// Holds a `Weak<RefCell<...>>` into the wasm state so there is no
+/// reference cycle — `request_text_input` is a no-op if the state has
+/// been dropped.
+struct WasmShell {
     canvas: web_sys::HtmlCanvasElement,
+    /// Weak ref into the wasm state for textarea focus / caret positioning.
+    state_weak: std::rc::Weak<std::cell::RefCell<Option<WasmState>>>,
 }
 
-// SAFETY: `WasmCursor` is only ever accessed from the main thread (it's
-// installed via `app.set_cursor_backend` after construction and invoked
-// from `HostMsg::CursorChanged` inside main's pump). The `HtmlCanvasElement`
-// isn't `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
+// SAFETY: `WasmShell` is only ever accessed from the wasm main thread
+// (it's installed via `.shell()` at build time and invoked from
+// `HostMsg::Shell` inside main's pump). The `HtmlCanvasElement` isn't
+// `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
 // our usage is single-threaded so the unsafe impl is sound.
-unsafe impl Send for WasmCursor {}
-unsafe impl Sync for WasmCursor {}
+unsafe impl Send for WasmShell {}
+unsafe impl Sync for WasmShell {}
 
-impl tur_engine::CursorBackend for WasmCursor {
-    fn set_cursor(&mut self, cursor: tur_engine::core::cursor::Cursor) {
+impl tur_engine::Shell for WasmShell {
+    fn set_cursor(&mut self, cursor: tur_engine::core::shell::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
+    }
+
+    fn request_text_input(&mut self, state: tur_engine::core::shell::TextInputState) {
+        let Some(s) = self.state_weak.upgrade() else {
+            return;
+        };
+        let mut guard = s.borrow_mut();
+        let Some(wasm) = guard.as_mut() else {
+            return;
+        };
+        if state.is_editable {
+            let _ = wasm.textarea.focus();
+            if let Some((x, y, _w, _h)) = state.cursor_rect {
+                let _ = wasm.textarea.style().set_property("left", &format!("{x}px"));
+                let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
+            }
+        }
     }
 }
 
@@ -449,6 +473,16 @@ impl WasmApp {
         // it directly (render batches, image uploads, resize-on-event) —
         // `build` pushes the initial Resize
         // internally.
+        // Build a WasmShell that handles cursor + text-input egress.
+        // The shell is created before the app so it can be passed at
+        // construction time — the worker's first pump already ships an
+        // initial TextInputState, so a shell installed after build() could
+        // miss it.
+        let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
+        let wasm_shell = WasmShell {
+            canvas: canvas.clone(),
+            state_weak: state_weak.clone(),
+        };
         let app = runtime
             .runtime
             .app_builder()
@@ -458,15 +492,11 @@ impl WasmApp {
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .shell(Box::new(wasm_shell))
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        // The cursor backend is per-instance (it targets this canvas's DOM
-        // element), so it can't be a shared runtime capability. Override the
-        // host-side cursor backend now that the instance exists.
-        app.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
-            canvas: canvas.clone(),
-        })));
+
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -654,8 +684,8 @@ impl WasmApp {
         //
         // Soft-keyboard / caret focus does NOT depend on the browser's
         // synthesized clicks: the engine's focus manager (driven by the
-        // engine-synthesized click) emits a `FocusedStateChanged` event,
-        // which the focus-change handler (registered below) consumes to
+        // engine-synthesized click) triggers a text-input state push,
+        // which the shell (registered at build time) consumes to
         // call `textarea.focus()` + position the caret.
         let touch_start_state = state_clone.clone();
         let touch_start_closure =
@@ -1002,7 +1032,7 @@ impl WasmApp {
         // DOM side-effects that depend on focus state (textarea focus /
         // caret positioning) live in the `focus_changed_handler`
         // registered below, which fires exactly when the worker ships a
-        // deduped `FocusedStateChanged` (on editable↔non-editable
+        // deduped text-input state (on editable↔non-editable
         // transitions *and* caret moves).
         //
         // Async pump: the wake trampoline the engine installs hands a
@@ -1016,32 +1046,7 @@ impl WasmApp {
             .expect("wasm state just set")
             .app
             .clone();
-        let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
-        // Focus-change handler: positions the hidden `<textarea>` (focus it
-        // + set caret coords) whenever the focused element's editable-ness
-        // or caret rect changes. Pushed by the engine from `apply_msg`, so
-        // it's identical on both the pump and run_loop paths. Holds a
-        // `Weak` into `state` so there's no reference cycle.
-        let focus_changed: Rc<dyn Fn(tur_engine::FocusedState)> = {
-            let state_weak = state_weak.clone();
-            Rc::new(move |focus| {
-                let Some(state) = state_weak.upgrade() else {
-                    return;
-                };
-                let mut guard = state.borrow_mut();
-                let Some(s) = guard.as_mut() else {
-                    return;
-                };
-                if focus.is_editable {
-                    let _ = s.textarea.focus();
-                    if let Some((x, y, _w, _h)) = focus.cursor_rect {
-                        let _ = s.textarea.style().set_property("left", &format!("{x}px"));
-                        let _ = s.textarea.style().set_property("top", &format!("{y}px"));
-                    }
-                }
-            })
-        };
-        app.set_focus_changed_handler(Some(focus_changed));
+
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
         // loop bootstraps automatically: `app_builder().build(...)` pushed

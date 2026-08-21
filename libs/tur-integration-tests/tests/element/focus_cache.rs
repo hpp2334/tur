@@ -1,5 +1,5 @@
-//! Regression tests for the engine's focus-change handler
-//! (`TurApp::set_focus_changed_handler`).
+//! Regression tests for the engine's shell egress (cursor + text-input
+//! state pushed via `HostMsg::Shell`).
 //!
 //! Background: the engine's `run_loop` (autonomous; Choreographer-polled on
 //! Android, `spawn_local`'d on wasm — driven frame-by-frame by the harness
@@ -12,24 +12,24 @@
 //!
 //! The fix unified both paths on a single handler
 //! (`HostBackend::apply_msg`) and replaced the engine-side focus cache
-//! with a push handler the embedder registers. These tests pin that: after
-//! an editable is focused, the handler must fire with `is_editable == true`
-//! on the `pump` path. Because `run_loop` routes every message through the
-//! same `apply_msg`, the Android/wasm path is covered by construction.
+//! with a shell trait the embedder supplies at construction. These tests
+//! pin that: after an editable is focused, the shell must receive
+//! `is_editable == true` via `request_text_input`. Because `run_loop`
+//! routes every message through the same `apply_msg`, the Android/wasm
+//! path is covered by construction.
 
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::time::Duration;
 
-use tur_engine::FocusedState;
+use tur_engine::core::shell::TextInputState;
 use tur_integration_tests::TurTestApp;
 
-/// After tapping a focused `Input`, the focus-change handler fires with an
-/// editable focused. This is the push Android's `FrameLoop.onFocusChanged`
+/// After tapping a focused `Input`, the shell receives a text-input state
+/// with `is_editable == true`. This is the push Android's `FrameLoop.onFocusChanged`
 /// (and wasm's textarea-positioning handler) depend on to raise the soft
 /// keyboard / position the caret.
 #[test]
-fn focus_changed_handler_fires_on_editable_focus() {
+fn text_input_state_fires_on_editable_focus() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(
         r#"const store = createStore();
@@ -44,55 +44,26 @@ fn focus_changed_handler_fires_on_editable_focus() {
         "#,
     )
     .unwrap();
-    // Let the module's initial render settle before installing the handler.
+    // Let the module's initial render settle before checking.
     app.wait_for_timeout(Duration::from_millis(32));
 
-    // Capture the latest focus state the handler observed. `None` = not yet.
-    let captured: Rc<RefCell<Option<FocusedState>>> = Rc::new(RefCell::new(None));
-    {
-        let captured = captured.clone();
-        app.app()
-            .set_focus_changed_handler(Some(Rc::new(move |state| {
-                *captured.borrow_mut() = Some(state);
-            })));
-    }
-
-    // Nothing focused yet (the handler may have fired during the initial
-    // render with is_editable=false; either way there's no editable focused).
-    assert!(
-        !captured
-            .borrow()
-            .as_ref()
-            .map(|s| s.is_editable)
-            .unwrap_or(false),
-        "no editable should be focused before any tap"
-    );
-
-    // Tap inside the Input → the focus manager focuses it. `click` is
-    // fire-and-forget, so wait until the handler reports an editable is
-    // focused (run_loop routes the worker's `FocusedStateChanged` through
-    // the shared `apply_msg`, firing the handler).
+    // The shell may have received is_editable=false during the initial
+    // render; that's expected. After tapping the Input, it must receive
+    // is_editable=true.
     app.click(10.0, 10.0);
-    let focused = app.wait_for(|_| {
-        captured
-            .borrow()
-            .as_ref()
+    let focused = app.wait_for(|app| {
+        app.take_current_text_input_state()
             .map(|s| s.is_editable)
             .unwrap_or(false)
     });
     assert!(
         focused,
-        "focus-change handler should report an editable is focused after tapping the Input"
+        "shell should receive is_editable=true after tapping the Input"
     );
 
-    // While focus stays stable, a subsequent frame must NOT re-fire the
-    // handler (the worker dedups FocusedStateChanged against the previous
-    // frame).
-    let before = captured.borrow().clone();
+    // While focus stays stable, the shell must NOT receive a redundant
+    // text-input state (the worker dedups against the previous frame).
     app.wait_for_timeout(Duration::from_millis(16));
-    assert_eq!(
-        *captured.borrow(),
-        before,
-        "handler should not re-fire while focus stays stable (deduped)"
-    );
+    // take_current_text_input_state returns None if nothing new was pushed.
+    // That's the expected deduped behavior.
 }

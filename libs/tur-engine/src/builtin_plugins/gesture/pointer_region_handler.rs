@@ -6,6 +6,7 @@ use crate::core::elements::NodeTreeData;
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 /// Tracks `onEnter` / `onExit` callbacks for `MouseRegion`s as the pointer
@@ -32,11 +33,11 @@ impl PointerSubsystem {
 
 impl Subsystem for PointerSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        let PlatformEvent::Pointer(PointerInput::PointerMove {
+        let PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
             time_ms: _,
-        }) = event
+        })) = event
         else {
             return;
         };

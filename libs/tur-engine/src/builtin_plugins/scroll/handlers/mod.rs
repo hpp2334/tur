@@ -4,6 +4,7 @@ use crate::core::elements::{ElementOnWheelContext, NodeTreeData, WheelEvent};
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
 use crate::core::platform::PlatformEvent;
+use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 mod inertia;
@@ -38,11 +39,11 @@ pub struct ScrollSubsystem;
 impl Subsystem for ScrollSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         // Real device wheel / trackpad scroll from the platform.
-        let PlatformEvent::Wheel {
+        let PlatformEvent::Shell(ShellEvent::Wheel {
             delta_x,
             delta_y,
             position,
-        } = event
+        }) = event
         else {
             return;
         };
@@ -82,7 +83,7 @@ impl Subsystem for ScrollSubsystem {
 
 // ── Wheel input ───────────────────────────────────────────────────────
 
-/// Shared scroll-delta processing for real (`PlatformEvent::Wheel`) and
+/// Shared scroll-delta processing for real (`ShellEvent::Wheel`) and
 /// derived (`AppEvent::Scroll`) scroll: hit-test to the deepest wheel-bearing
 /// element, dispatch the delta, and forward any residual as overscroll.
 fn process_scroll_delta(

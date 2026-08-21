@@ -225,6 +225,7 @@ impl TurRuntime {
             renderer: None,
             viewport: None,
             dpr: None,
+            shell: None,
             worker_pool: None,
             instance_data_definer: None,
         }
@@ -237,6 +238,7 @@ impl TurRuntime {
     fn spawn_instance(
         self: &Rc<Self>,
         renderer: Box<dyn crate::core::render::Renderer>,
+        shell: Box<dyn crate::core::shell::Shell>,
         viewport: (f64, f64),
         dpr: f64,
         worker_pool: WorkerPoolHandle,
@@ -274,6 +276,7 @@ impl TurRuntime {
         let backend = HostBackend::new(
             self.worker_spawner.clone(),
             renderer,
+            shell,
             worker_pool,
             backend_factory,
         );
@@ -316,6 +319,11 @@ pub struct TurAppBuilder<'rt> {
     renderer: Option<Box<dyn crate::core::render::Renderer>>,
     viewport: Option<(f64, f64)>,
     dpr: Option<f64>,
+    /// The per-instance OS-interaction surface (cursor output + text-input
+    /// requests), applied host-side. `None` until [`Self::shell`] is
+    /// called; `build` / `build_headless` default it to
+    /// [`NoopShell`](crate::core::shell::NoopShell).
+    shell: Option<Box<dyn crate::core::shell::Shell>>,
     /// The worker pool this app's engine worker is spawned into. **Required**
     /// (see [`Self::worker_pool`]); `build` / `build_headless` error without it.
     worker_pool: Option<WorkerPoolHandle>,
@@ -390,6 +398,23 @@ impl<'rt> TurAppBuilder<'rt> {
         self
     }
 
+    /// Install the per-instance OS-interaction surface — the shell the
+    /// engine pushes cursor changes and text-input (IME) session requests
+    /// to. Host-thread-only (applied inside `HostBackend::apply_msg`), so
+    /// implementations may touch host-thread-only OS APIs (the DOM on
+    /// wasm, the JNI/Kotlin main looper on Android) directly.
+    ///
+    /// Optional: instances without a shell use
+    /// [`NoopShell`](crate::core::shell::NoopShell) (requests silently
+    /// dropped). Construction-time by design — the worker's first pump
+    /// already ships an initial text-input state, and a shell installed
+    /// after `build()` could miss it on platforms where `build()` returns
+    /// before worker readiness (wasm).
+    pub fn shell(mut self, shell: Box<dyn crate::core::shell::Shell>) -> Self {
+        self.shell = Some(shell);
+        self
+    }
+
     /// Assign this app to a worker pool. **Required** — `build` /
     /// `build_headless` return an error without it. The handle must be one
     /// registered on this runtime via
@@ -432,6 +457,7 @@ impl<'rt> TurAppBuilder<'rt> {
             renderer,
             viewport,
             dpr,
+            shell,
             worker_pool,
             instance_data_definer,
         } = self;
@@ -445,8 +471,9 @@ impl<'rt> TurAppBuilder<'rt> {
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
-        runtime.spawn_instance(renderer, viewport, dpr, pool, instance_data_definer)
+        runtime.spawn_instance(renderer, shell, viewport, dpr, pool, instance_data_definer)
     }
 
     /// Terminal: build a headless instance (no renderer, no rendering).
@@ -464,13 +491,16 @@ impl<'rt> TurAppBuilder<'rt> {
     pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
+            shell,
             worker_pool,
             instance_data_definer,
             ..
         } = self;
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
+            shell,
             viewport,
             1.0,
             pool,

@@ -1,18 +1,3 @@
-//! Cursor output — the resolved pointer shape the engine pushes to the
-//! window. This is an **egress** seam (sibling of the renderer, not a
-//! platform input event, not a runtime capability): a cursor targets one
-//! specific window, so the backend is per-instance and applied on the
-//! host thread via [`crate::TurApp::set_cursor_backend`].
-//!
-//! Pipeline: the paint walk accumulates `MouseRegion` cursor claims into
-//! a sink (deepest painted region wins) → `FrameEnv::apply_cursor_changes`
-//! resolves + dedups on the worker → the change ships to the host side as
-//! `HostMsg::CursorChanged` → the host-side `CursorBackend` applies it.
-//!
-//! [`Cursor`] is the single typed representation threaded through the
-//! engine (MouseRegion prop, handler slot, embedder poll) and is consumed
-//! by [`CursorBackend::set_cursor`].
-
 /// The set of OS cursor styles, mirroring the standard CSS cursor
 /// keywords. The embedder maps a `Cursor` back to its keyword via
 /// [`Cursor::as_str`] (e.g. for the web canvas `style.cursor`, or a
@@ -148,20 +133,4 @@ impl Cursor {
             _ => return None,
         })
     }
-}
-
-/// Cursor output capability. The engine resolves the cursor (deepest
-/// painted `MouseRegion` claim) each frame and ships changes to the host
-/// side via `HostMsg::CursorChanged`; the per-instance backend (installed
-/// via [`crate::TurApp::set_cursor_backend`]) applies it — e.g. set the
-/// host canvas CSS cursor in tur-wasm. If no backend is installed, cursor
-/// changes are dropped.
-pub trait CursorBackend: Send + Sync + 'static {
-    fn set_cursor(&mut self, cursor: Cursor);
-}
-
-/// No-op `CursorBackend` default.
-pub struct NoopCursor;
-impl CursorBackend for NoopCursor {
-    fn set_cursor(&mut self, _cursor: Cursor) {}
 }

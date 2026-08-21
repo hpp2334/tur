@@ -1,4 +1,4 @@
-use crate::core::cursor::Cursor;
+use crate::core::shell::Cursor;
 use crate::core::layout::ComputedLayout;
 
 use crate::core::element::ElementNodeId;

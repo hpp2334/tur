@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use vello_common::kurbo::{Affine, Point};
 
-use crate::core::cursor::Cursor;
+use crate::core::shell::Cursor;
 use crate::core::layout::Size;
 
 use crate::core::element::ElementNodeId;

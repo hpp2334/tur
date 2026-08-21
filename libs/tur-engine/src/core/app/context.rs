@@ -18,6 +18,7 @@ use crate::core::fonts::FontManager;
 use crate::core::frame_env::FrameEnv;
 use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
+use crate::core::shell::ShellEvent;
 use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::scheduler::WorkerContext;
 use crate::core::screen::Screen;
@@ -108,11 +109,11 @@ impl TurAppContext {
         subsystems: &mut [Box<dyn Subsystem>],
         signals: &crate::core::subsystem::FlushSignals<'_>,
     ) {
-        if let PlatformEvent::Pointer(PointerInput::PointerMove {
+        if let PlatformEvent::Shell(ShellEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
             time_ms: _,
-        }) = event
+        })) = event
         {
             self.frame_env.set_pointer_position(Some(*position));
             need_paint.set(true);

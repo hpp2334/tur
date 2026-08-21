@@ -1,35 +1,15 @@
-//! Platform-side events: raw input primitives originating from the embedder
-//! (window system, browser DOM).
+//! Platform-side event envelope: everything the embedder pushes into the
+//! engine via [`TurApp::push_platform_event`](crate::TurApp::push_platform_event)
+//! and dispatched to handlers via `Subsystem::handle_platform_event`.
 //!
-//! Pushed into the engine via
-//! [`TurApp::push_platform_event`](crate::TurApp::push_platform_event) and
-//! dispatched to handlers via `Subsystem::handle_platform_event`.
-//!
-//! The platform supplies only **raw primitives**: pointer down/move/up/cancel
-//! (mouse or touch), device wheel, key, ime, resize. **Gestures**
-//! (click, drag, double-click, context-menu, derived scroll, …) are *not*
-//! platform events — they are computed inside the engine by the gesture
-//! arena from [`PointerInput`] and delivered directly to elements as
-//! `ComposedGestureEvent` via `on_gesture_event`. Derived scrolling is routed
-//! on the internal bus as [`crate::core::app::AppEvent::Scroll`] (never faked
-//! as a [`PlatformEvent::Wheel`]).
-//!
-//! Domain-specific platform events (e.g. clipboard paste from the embedder)
-//! travel inside [`PlatformEvent::Custom`] as [`CustomPlatformEvent`]
-//! payloads, keeping the engine free of per-domain variant knowledge.
-
-use crate::core::layout::{MouseButton, Offset};
-use crate::core::platform::key_event::KeyEvent;
-
-/// The physical input device that produced a pointer event. Used by the
-/// gesture arena to apply different disambiguation rules for touch vs
-/// mouse — touch drags go through slop-based arena resolution (scroll
-/// vs drag), while mouse events are dispatched immediately.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum PointerDeviceKind {
-    Mouse,
-    Touch,
-}
+//! Two kinds of payload:
+//! - [`PlatformEvent::Shell`] — raw window-system input (pointer, wheel,
+//!   key, ime, resize) as [`ShellEvent`](crate::core::shell::ShellEvent).
+//!   See the shell event module docs for the semantics (gestures are
+//!   computed *inside* the engine, never faked as shell events).
+//! - [`PlatformEvent::Custom`] — domain-specific platform events (e.g.
+//!   clipboard paste from the embedder) as [`CustomPlatformEvent`]
+//!   payloads, keeping the engine free of per-domain variant knowledge.
 
 /// Trait implemented by payload types carried inside a
 /// [`PlatformEvent::Custom`]. Capability crates use this to inject their own
@@ -54,25 +34,10 @@ pub trait CustomPlatformEvent: std::any::Any + std::fmt::Debug + Send + Sync {
 /// Input events originating from the platform / embedder (window system,
 /// browser DOM). See the [module docs](self) for the full semantics.
 pub enum PlatformEvent {
-    Resize {
-        logical_width: u32,
-        logical_height: u32,
-        dpr: f64,
-    },
-    /// Raw pointer input (mouse or touch). Consumed by the gesture arena to
-    /// produce `ComposedGestureEvent`s.
-    Pointer(PointerInput),
-    /// Device wheel / trackpad scroll from the platform. A touch drag that
-    /// the arena resolves to scroll does NOT use this — it is routed through
-    /// [`crate::core::app::AppEvent::Scroll`] so the wheel pipeline can
-    /// process real and derived scroll uniformly.
-    Wheel {
-        delta_x: f64,
-        delta_y: f64,
-        position: Offset,
-    },
-    Key(KeyEvent),
-    Ime(ImeEvent),
+    /// Raw window-system input — pointer / wheel / key / ime / resize —
+    /// wrapped in the [`ShellEvent`](crate::core::shell::ShellEvent)
+    /// envelope variant (the shell layer's ingress face).
+    Shell(crate::core::shell::ShellEvent),
     /// Domain-specific platform event (e.g. clipboard paste from the
     /// embedder). Capability crates define their own payload types
     /// implementing [`CustomPlatformEvent`]; consumers downcast via
@@ -92,43 +57,8 @@ impl PlatformEvent {
     }
 }
 
-/// Raw pointer primitives supplied by the platform. The gesture arena turns
-/// these into higher-level gestures (`ComposedGestureEvent`) and delivers
-/// them to elements. There is intentionally no `ContextMenu` variant here —
-/// context-menu is a *gesture* derived from a right-button `PointerUp`, not a
-/// platform event.
-pub enum PointerInput {
-    PointerDown {
-        position: Offset,
-        button: MouseButton,
-        time_ms: u64,
-        device: PointerDeviceKind,
-    },
-    PointerUp {
-        position: Offset,
-        button: MouseButton,
-        device: PointerDeviceKind,
-        time_ms: u64,
-    },
-    PointerMove {
-        position: Offset,
-        device: PointerDeviceKind,
-        time_ms: u64,
-    },
-    /// The platform cancelled an in-progress pointer sequence (e.g.
-    /// `touchcancel` from the browser). The arena releases any captured drag
-    /// without firing a click.
-    PointerCancel { device: PointerDeviceKind },
-}
-
-#[derive(Clone, Debug)]
-pub enum ImeEvent {
-    CompositionStart,
-    CompositionUpdate {
-        text: String,
-        cursor: Option<(usize, usize)>,
-    },
-    CompositionEnd {
-        text: String,
-    },
+impl From<crate::core::shell::ShellEvent> for PlatformEvent {
+    fn from(ev: crate::core::shell::ShellEvent) -> Self {
+        Self::Shell(ev)
+    }
 }
