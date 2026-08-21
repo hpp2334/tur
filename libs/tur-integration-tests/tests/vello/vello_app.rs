@@ -32,11 +32,11 @@ pub enum TurVelloError {
 }
 
 /// Test harness that drives a real `VelloRenderer` on the main thread via
-/// the production `TurApp::run_loop`.
+/// the production `TurAppLooper::run`.
 ///
 /// The harness installs an `after_frame` hook feeding a frame channel,
-/// spawns `run_loop` once, and exposes `wait_for` / `wait_for_timeout`.
-/// `run_loop`'s pipelining is safe for pixel readback because each
+/// spawns the loop once, and exposes `wait_for` / `wait_for_timeout`.
+/// The loop's pipelining is safe for pixel readback because each
 /// `RenderCommands` batch is a full scene rebuild (`scene.reset()`), and
 /// the loop flushes the latest batch at quiescence *before* the
 /// `after_frame` hook fires — so `render_to_pixels` taken after
@@ -54,16 +54,18 @@ struct TurVelloAppInner {
 
 impl TurVelloApp {
     pub fn new(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
-        let (app, driver, window) = pollster::block_on(Self::init_async(width, height, dpr))?;
+        let (app, looper, driver, window) =
+            pollster::block_on(Self::init_async(width, height, dpr))?;
 
-        // Spawn the autonomous `run_loop`. The `after_frame` hook ships each
+        // Spawn the autonomous loop. The `after_frame` hook ships each
         // `FrameOutcome` into `frame_rx`; `drive_one_frame` pairs one
         // `fire_vsync` with one awaited outcome.
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
-        app.set_after_frame_hook(Some(Rc::new(move |o| {
+        let mut looper = looper;
+        looper.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
         })));
-        driver.spawn_local(Box::pin(app.clone().run_loop()));
+        driver.spawn_local(Box::pin(looper.run()));
 
         let harness = TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -85,6 +87,7 @@ impl TurVelloApp {
     ) -> Result<
         (
             Rc<TurApp>,
+            tur_engine::TurAppLooper,
             Rc<tur_integration_tests::TestSchedulerDriver>,
             Window,
         ),
@@ -160,7 +163,6 @@ impl TurVelloApp {
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);
         let runtime = TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
@@ -170,13 +172,16 @@ impl TurVelloApp {
             .build()?;
 
         // Threaded engine: worker produces command batches; `HostBackend`
-        // owns the VelloRenderer on main and applies them via `run_loop`.
-        let app = runtime
+        // owns the VelloRenderer on main and applies them via the
+        // autonomous loop. The shell is minimal but carries the driver's
+        // vsync source — `drive_one_frame` advances via `fire_vsync`.
+        let (app, looper) = runtime
             .app_builder()
             .worker_pool(pool)
             .renderer(Box::new(renderer), (width, height), dpr)
+            .shell(tur_integration_tests::TestShell::new(driver.vsync_source()))
             .build()?;
-        Ok((app, driver, window))
+        Ok((app, looper, driver, window))
     }
 
     /// Drive one frame: drain stale self-wake outcomes, kick the vsync, and
@@ -195,7 +200,7 @@ impl TurVelloApp {
 
     /// Drive `frames`-worth of frames, each to quiescence. `ZERO` drives a
     /// single frame to quiescence — sufficient for pixel readback because
-    /// `run_loop` flushes the latest batch before the `after_frame` hook
+    /// The loop flushes the latest batch before the `after_frame` hook
     /// fires.
     pub fn wait_for_timeout(&self, timeout: Duration) {
         let frames = (timeout.as_millis() as u64).div_ceil(16);

@@ -1,5 +1,5 @@
 //! Pins the harness's public single-frame primitive: `TurTestApp::pump`
-//! drives the production `run_loop` forward by exactly one frame and
+//! drives the production loop (`TurAppLooper::run`) forward by exactly one frame and
 //! returns that frame's `FrameOutcome`.
 
 use std::time::Duration;

@@ -44,7 +44,6 @@ fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedu
     let driver = TestSchedulerDriver::new();
     let mut builder = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -58,11 +57,12 @@ fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedu
 }
 
 fn spawn_headless(runtime: &Rc<TurRuntime>, pool: &WorkerPoolHandle) -> Rc<tur_engine::TurApp> {
-    runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .build_headless((0.0, 0.0))
-        .expect("headless app build")
+        .expect("headless app build");
+    app
 }
 
 fn tid_of(app: &Rc<tur_engine::TurApp>) -> String {
@@ -122,7 +122,6 @@ fn zero_max_workers_errors_at_runtime_build() {
     let msg = expect_err_msg(
         TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -142,7 +141,6 @@ fn duplicate_pool_name_errors_at_runtime_build() {
     let msg = expect_err_msg(
         TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))

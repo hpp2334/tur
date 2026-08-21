@@ -7,7 +7,6 @@ use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 
-use crate::TurApp;
 use crate::core::app::TurAppInternal;
 use crate::core::app::mount;
 use crate::core::async_::TurJobExecutor;
@@ -24,6 +23,7 @@ use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::screen::Screen;
 use crate::error::TurError;
+use crate::{TurApp, TurAppLooper};
 
 pub mod backend;
 pub use backend::HostBackend;
@@ -31,8 +31,8 @@ pub use backend::HostBackend;
 // `HostBackend` (which owns a worker running `WorkerBackend`) is public.
 pub(crate) use backend::WorkerBackend;
 // `MsgOutcome` is `pub(crate)` — the result of the single shared message
-// handler (`HostBackend::apply_msg`), consumed by both `pump` and
-// `TurApp::run_loop` (the latter lives in `lib.rs`).
+// handler (`HostBackend::apply_msg`), consumed by `TurAppLooper::run`
+// (which lives in `lib.rs`).
 pub(crate) use backend::MsgOutcome;
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
@@ -120,17 +120,21 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 ///     .build()?;
 ///
 /// // Two isolated instances sharing fonts/clock/capabilities/plugins.
-/// // Each owns its renderer (created by the embedder):
-/// let app_a = runtime
+/// // Each owns its renderer (created by the embedder) and returns an
+/// // `(app, looper)` pair:
+/// let (app_a, looper_a) = runtime
 ///     .app_builder()
 ///     .worker_pool(ui.clone())
 ///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
 ///     .build()?;
-/// let app_b = runtime
+/// let (app_b, looper_b) = runtime
 ///     .app_builder()
 ///     .worker_pool(ui)
 ///     .renderer(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)
 ///     .build()?;
+/// // Drive each autonomous frame loop once on the platform loop:
+/// //   spawn(looper_a.run()); spawn(looper_b.run());
+/// # let _ = (app_a, looper_a, app_b, looper_b);
 /// # Ok(())
 /// # }
 /// ```
@@ -156,10 +160,6 @@ pub struct TurRuntime {
     /// (single role: see [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner)).
     /// Cloned into each `HostBackend` at `app_builder().build(...)`.
     worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
-    /// Default per-instance frame cadence. Cloned into each `TurApp`;
-    /// embedders with per-instance scheduling replace it via
-    /// [`TurApp::set_vsync_source`](crate::TurApp::set_vsync_source).
-    vsync_source: Rc<dyn crate::core::scheduler::VsyncSource>,
     /// Main-thread task spawner. Roots the engine-internal main-thread
     /// drain at `build()`; embedders may reuse it for their own
     /// main-thread tasks.
@@ -243,7 +243,22 @@ impl TurRuntime {
         dpr: f64,
         worker_pool: WorkerPoolHandle,
         instance_data_definer: Option<InstanceDataDefiner>,
-    ) -> Result<Rc<TurApp>, TurError> {
+    ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
+        // The shell owns the window's frame clock — take it exactly once
+        // here (a second take returns `None`) and subscribe the loop's
+        // tick stream at build time, so ticks fired between `build()` and
+        // the loop's first poll queue instead of dropping.
+        let mut shell = shell;
+        let vsync: Rc<dyn crate::core::scheduler::VsyncSource> =
+            shell.take_vsync().ok_or_else(|| {
+                TurError::Other(
+                    "the instance's Shell must supply a vsync source on the first \
+                      Shell::take_vsync (embedders that don't care supply \
+                      NoopVsyncSource explicitly)"
+                        .to_string(),
+                )
+            })?;
+        let vsync_events = vsync.subscribe();
         let clock = self.clock.clone();
         let font_context = self.font_context.clone();
         let font_loader = self.font_loader.clone();
@@ -273,20 +288,32 @@ impl TurRuntime {
             )
             .expect("threaded backend factory failed")
         };
-        let backend = HostBackend::new(
+        let (backend, host_rx) = HostBackend::new(
             self.worker_spawner.clone(),
             renderer,
             shell,
             worker_pool,
             backend_factory,
         );
-        let app = Rc::new(TurApp::new(backend, self.vsync_source.clone()));
+        // The app handle and its looper share the backend (both `&self`
+        // users) and the destroyed flag (the app sets it, the loop polls
+        // it). The frame clock is shared too: the app re-arms it from the
+        // input paths while the loop runs; the looper additionally owns
+        // the already-subscribed tick stream (`vsync_events`).
+        let backend = Rc::new(backend);
+        let destroyed = Rc::new(std::cell::Cell::new(false));
+        let app = Rc::new(TurApp::new(
+            backend.clone(),
+            vsync.clone(),
+            destroyed.clone(),
+        ));
+        let looper = TurAppLooper::new(backend, host_rx, vsync, vsync_events, destroyed);
         // Bootstrap the viewport: resize the host-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
         // frame 1 (the forwarded shell `Resize` event does the worker
         // half).
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
-        Ok(app)
+        Ok((app, looper))
     }
 }
 
@@ -302,11 +329,14 @@ impl TurRuntime {
 /// # use std::rc::Rc;
 /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
 /// let pool = WorkerPoolHandle::new("ui", usize::MAX);
-/// let app = runtime
+/// let (app, looper) = runtime
 ///     .app_builder()
 ///     .worker_pool(pool)
 ///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
 ///     .build()?;
+/// // `app` — the mid-loop handle (input, RPC, destroy).
+/// // `looper.run()` — spawn once to drive the autonomous frame loop.
+/// # let _ = (app, looper);
 /// # Ok(())
 /// # }
 /// /// ```
@@ -432,13 +462,14 @@ impl<'rt> TurAppBuilder<'rt> {
     /// # use std::rc::Rc;
     /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
     /// let ui = WorkerPoolHandle::new("ui", 4);
-    /// let app = runtime
+    /// let (app, looper) = runtime
     ///     .app_builder()
     ///     .worker_pool(ui)
     ///     .instance_data(|cx| {
     ///         cx.define::<u32>(7);
     ///     })
     ///     .build()?;
+    /// # let _ = (app, looper);
     /// # Ok(())
     /// # }
     /// ```
@@ -451,7 +482,12 @@ impl<'rt> TurAppBuilder<'rt> {
     /// been called (a non-headless app supplies renderer + viewport + dpr
     /// together) and [`Self::worker_pool`]. Errors with a clear message
     /// otherwise.
-    pub fn build(self) -> Result<Rc<TurApp>, TurError> {
+    ///
+    /// Returns the app handle (the mid-loop `&self` surface: input, RPC,
+    /// `destroy`) together with its [`TurAppLooper`] — spawn the looper's
+    /// [`TurAppLooper::run`](crate::TurAppLooper::run) exactly once on the
+    /// embedder's platform loop to drive frames.
+    pub fn build(self) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
         let TurAppBuilder {
             runtime,
             renderer,
@@ -471,7 +507,7 @@ impl<'rt> TurAppBuilder<'rt> {
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(renderer, shell, viewport, dpr, pool, instance_data_definer)
     }
@@ -488,7 +524,13 @@ impl<'rt> TurAppBuilder<'rt> {
     ///
     /// `viewport` sets the initial `viewportSize$` (read by JS layout);
     /// pass `(0.0, 0.0)` if layout is irrelevant.
-    pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
+    ///
+    /// Returns the app handle together with its [`TurAppLooper`], like
+    /// [`Self::build`].
+    pub fn build_headless(
+        self,
+        viewport: (f64, f64),
+    ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
         let TurAppBuilder {
             runtime,
             shell,
@@ -496,7 +538,7 @@ impl<'rt> TurAppBuilder<'rt> {
             instance_data_definer,
             ..
         } = self;
-        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell));
+        let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
@@ -663,7 +705,6 @@ pub struct TurRuntimeBuilder {
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
     worker_spawner: Option<Rc<dyn crate::core::scheduler::WorkerSpawner>>,
-    vsync_source: Option<Rc<dyn crate::core::scheduler::VsyncSource>>,
     host_loop: Option<Rc<dyn crate::core::scheduler::HostLoop>>,
     worker_pools: Vec<WorkerPoolHandle>,
 }
@@ -682,7 +723,6 @@ impl TurRuntimeBuilder {
             plugins: Vec::new(),
             capability_builders: Vec::new(),
             worker_spawner: None,
-            vsync_source: None,
             host_loop: None,
             worker_pools: Vec::new(),
         }
@@ -786,17 +826,6 @@ impl TurRuntimeBuilder {
         self
     }
 
-    /// Set the default vsync source. Required before `build()`. The source
-    /// implements [`VsyncSource`](crate::core::scheduler::VsyncSource)
-    /// (rAF on wasm, Choreographer `FrameLoop` on Android, a manual
-    /// channel in tests). Per-instance replacement: Android installs a
-    /// per-`FrameLoop` source via
-    /// [`TurApp::set_vsync_source`](crate::TurApp::set_vsync_source).
-    pub fn vsync_source(mut self, source: Rc<dyn crate::core::scheduler::VsyncSource>) -> Self {
-        self.vsync_source = Some(source);
-        self
-    }
-
     /// Set the main-thread task spawner. Required before `build()`. Roots
     /// the engine's internal main-thread drain (the
     /// [`HostExecutor`](crate::HostExecutor) hop) plus any
@@ -827,7 +856,8 @@ impl TurRuntimeBuilder {
     /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
     /// let ui = WorkerPoolHandle::new("ui", 4);
     /// let daemon = WorkerPoolHandle::new("daemon", 2);
-    /// let _ui_app = runtime.app_builder().worker_pool(ui).build_headless((0.0, 0.0))?;
+    /// let (_ui_app, _ui_looper) =
+    ///     runtime.app_builder().worker_pool(ui).build_headless((0.0, 0.0))?;
     /// # Ok(())
     /// # }
     /// ```
@@ -846,9 +876,6 @@ impl TurRuntimeBuilder {
         let worker_spawner = self
             .worker_spawner
             .expect("worker_spawner must be set (use TurRuntimeBuilder::worker_spawner)");
-        let vsync_source = self
-            .vsync_source
-            .expect("vsync_source must be set (use TurRuntimeBuilder::vsync_source)");
         let host_loop = self
             .host_loop
             .expect("host_loop must be set (use TurRuntimeBuilder::host_loop)");
@@ -946,7 +973,6 @@ impl TurRuntimeBuilder {
             capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),
             worker_spawner,
-            vsync_source,
             host_loop,
             worker_pools: self.worker_pools,
             main_cx,

@@ -44,7 +44,6 @@ impl MutexFixedClock {
         self.0.lock().unwrap().forward(millis);
     }
 }
-use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
@@ -53,6 +52,7 @@ use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
+use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
@@ -358,14 +358,18 @@ impl Rect {
     }
 }
 
-
 /// Records shell-layer egress (cursor + text-input state) pushed by the
 /// engine. Installed via `TurAppBuilder::shell` — the engine emits
 /// `HostMsg::Shell(SetCursor)` and `HostMsg::Shell(RequestTextInput)`;
 /// `apply_msg` applies them here.
+/// Test `Shell`: records cursor + text-input egress into shared slots
+/// (drained via `take_current_cursor` / `take_current_text_input_state`)
+/// and carries the driver's manual vsync source as the frame clock
+/// (handed to the engine at construction; `pump` fires it per frame).
 struct RecordingShell {
     cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
     text_input_slot: std::sync::Arc<std::sync::Mutex<Option<TextInputState>>>,
+    vsync: Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>>,
 }
 
 impl tur_engine::Shell for RecordingShell {
@@ -374,6 +378,35 @@ impl tur_engine::Shell for RecordingShell {
     }
     fn request_text_input(&mut self, state: TextInputState) {
         *self.text_input_slot.lock().unwrap() = Some(state);
+    }
+    fn take_vsync(&mut self) -> Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync.take()
+    }
+}
+
+/// Minimal [`tur_engine::Shell`] for raw-builder tests: no-op egress
+/// (cursor / text-input requests dropped) + a caller-supplied frame
+/// clock, handed to the engine at construction. Prefer [`TurTestApp`]
+/// unless the test builds its own runtime; tests that inspect shell
+/// egress define their own shell type (or use the harness's
+/// `new_with_shell`).
+pub struct TestShell {
+    vsync: Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>>,
+}
+
+impl TestShell {
+    /// Boxed shell carrying `vsync` as the frame clock — pass the
+    /// driver's shared source so `driver.fire_vsync()` advances frames.
+    pub fn new(vsync: std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>) -> Box<Self> {
+        Box::new(Self { vsync: Some(vsync) })
+    }
+}
+
+impl tur_engine::Shell for TestShell {
+    fn set_cursor(&mut self, _cursor: Cursor) {}
+    fn request_text_input(&mut self, _state: TextInputState) {}
+    fn take_vsync(&mut self) -> Option<std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync.take()
     }
 }
 
@@ -387,7 +420,7 @@ pub struct TurTestApp {
     /// The scheduler driver's virtual clock. Advanced alongside `clock`
     /// so `sleep()` futures fire on the same virtual timeline.
     driver: Rc<TestSchedulerDriver>,
-    /// Per-frame outcomes shipped by the engine's `run_loop` via the
+    /// Per-frame outcomes shipped by the engine's autonomous loop via the
     /// `after_frame` hook. `pump` awaits one item per vsync kick;
     /// `wait_for` / `wait_for_timeout` build on `pump`.
     frame_rx: RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
@@ -408,12 +441,31 @@ impl TurTestApp {
     /// (replacing the default `RecordingShell`). Cursor /
     /// `take_current_cursor` / `take_current_text_input_state` recorders
     /// are absent — the supplied shell owns all egress observation.
+    ///
+    /// The factory receives the harness's vsync source and MUST embed it
+    /// as the shell's frame clock (returned from `Shell::take_vsync`) —
+    /// `pump` / `wait_for` advance frames by firing it.
     pub fn new_with_shell(
         width: f64,
         height: f64,
-        shell: impl tur_engine::Shell + 'static,
+        shell_factory: impl FnOnce(
+            std::rc::Rc<dyn tur_engine::core::scheduler::VsyncSource>,
+        ) -> Box<dyn tur_engine::Shell>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new(), None, Some(Box::new(shell)))
+        // Reserve the driver's source for the factory before `build`
+        // constructs its own.
+        let driver = TestSchedulerDriver::new();
+        let shell = shell_factory(driver.vsync_source());
+        Self::build_with_driver(
+            width,
+            height,
+            None,
+            None,
+            Vec::new(),
+            None,
+            Some(shell),
+            driver,
+        )
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -482,10 +534,34 @@ impl TurTestApp {
         renderer: Option<Box<dyn Renderer>>,
         shell: Option<Box<dyn tur_engine::Shell>>,
     ) -> Result<Self, TurError> {
+        Self::build_with_driver(
+            width,
+            height,
+            http,
+            filepicker,
+            extra_plugins,
+            renderer,
+            shell,
+            TestSchedulerDriver::new(),
+        )
+    }
 
+    /// `build` with a caller-chosen driver — `new_with_shell` needs the
+    /// driver BEFORE building so its factory can hand the shell the
+    /// driver's vsync source (the harness fires it per driven frame).
+    #[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+    fn build_with_driver(
+        width: f64,
+        height: f64,
+        http: Option<RecordingHttp>,
+        filepicker: Option<RecordingFilePicker>,
+        extra_plugins: Vec<Box<dyn Plugin>>,
+        renderer: Option<Box<dyn Renderer>>,
+        shell: Option<Box<dyn tur_engine::Shell>>,
+        driver: Rc<TestSchedulerDriver>,
+    ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
-        let driver = TestSchedulerDriver::new();
         // Default pool: effectively uncapped → every harness app gets its
         // own dedicated lane thread (the historical threading).
         let worker_pool = WorkerPoolHandle::new("test", usize::MAX);
@@ -493,7 +569,6 @@ impl TurTestApp {
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .worker_spawner(driver.worker_spawner())
-            .vsync_source(driver.vsync_source())
             .host_loop(driver.host_loop())
             .worker_pool(worker_pool.clone())
             .capability({
@@ -522,30 +597,34 @@ impl TurTestApp {
         // `core::shell`), installed at construction exactly like an
         // embedder would. Default: a `RecordingShell` capturing cursor +
         // text-input state (drained via `take_current_cursor` /
-        // `take_current_text_input_state`); tests pass their own via
-        // `new_with_shell`.
+        // `take_current_text_input_state`) and carrying the driver's
+        // manual vsync source as the frame clock; tests pass their own
+        // shell via `new_with_shell` (which must then carry a vsync
+        // source itself).
         let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let text_input_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let shell: Box<dyn tur_engine::Shell> = shell.unwrap_or_else(|| {
             Box::new(RecordingShell {
                 cursor_slot: cursor_slot.clone(),
                 text_input_slot: text_input_slot.clone(),
+                vsync: Some(driver.vsync_source()),
             })
         });
-        let inner = runtime
+        let (inner, mut looper) = runtime
             .app_builder()
             .worker_pool(worker_pool)
             .renderer(renderer, (width, height), 1.0)
             .shell(shell)
             .build()?;
-        // Drive the production `run_loop` (the same loop wasm/Android drive).
-        // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
-        // `pump` pairs one `fire_vsync` with one awaited outcome.
+        // Drive the production autonomous loop (the same loop wasm/Android
+        // drive via `TurAppLooper::run`). The `after_frame` hook ships each
+        // `FrameOutcome` into `frame_rx`; `pump` pairs one `fire_vsync`
+        // with one awaited outcome.
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
-        inner.set_after_frame_hook(Some(Rc::new(move |o| {
+        looper.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
         })));
-        driver.spawn_local(Box::pin(inner.clone().run_loop()));
+        driver.spawn_local(Box::pin(looper.run()));
         let app = Self {
             inner,
             frame_rx: RefCell::new(frame_rx),
@@ -629,10 +708,10 @@ impl TurTestApp {
         &self.inner
     }
 
-    /// Drive the production `run_loop` forward by exactly one frame: fire one
-    /// vsync, then block (driving the `LocalSet` + the spawned `run_loop`)
+    /// Drive the production loop forward by exactly one frame: fire one
+    /// vsync, then block (driving the `LocalSet` + the spawned loop)
     /// until the `after_frame` hook reports a completed frame. The worker
-    /// pumps once per Wake; `run_loop` renders + dispatches all side-effects
+    /// pumps once per Wake; the loop renders + dispatches all side-effects
     /// (cursor / focus / images) via the shared `apply_msg`, so this path is
     /// identical to what wasm/Android drive. The single frame primitive every
     /// sync helper builds on.
@@ -640,7 +719,7 @@ impl TurTestApp {
         pump_one(&self.driver, &self.frame_rx)
     }
 
-    /// The condition-wait primitive. Drives `run_loop` one frame at a time,
+    /// The condition-wait primitive. Drives the loop one frame at a time,
     /// advancing the virtual clock by `FRAME_STEP_MS` per step, checking
     /// `predicate` after each drive — so time-based observables (a `sleep`
     /// resolving, an animation threshold) resolve as virtual time progresses.
@@ -665,7 +744,7 @@ impl TurTestApp {
     }
 
     /// The time-advance primitive. Advances the virtual clock by `timeout` in
-    /// `FRAME_STEP_MS` ticks, driving `run_loop` to **quiescence** at each tick.
+    /// `FRAME_STEP_MS` ticks, driving the loop to **quiescence** at each tick.
     /// `timeout == ZERO` is the pure quiescence form: drive frames at a
     /// frozen clock until the engine reports no immediately-available work —
     /// this is what event-syncs use, since it doesn't perturb time-sensitive
@@ -695,12 +774,11 @@ impl TurTestApp {
     /// Fire-and-forget: push a viewport resize. Driven by a subsequent
     /// `wait_for` (exercising the full relayout path).
     pub fn resize(&mut self, width: f64, height: f64) {
-        self.inner
-            .push_platform_event(ShellEvent::Resize {
-                logical_width: width as u32,
-                logical_height: height as u32,
-                dpr: 1.0,
-            });
+        self.inner.push_platform_event(ShellEvent::Resize {
+            logical_width: width as u32,
+            logical_height: height as u32,
+            dpr: 1.0,
+        });
     }
 
     /// Snapshot of the live element tree, built on the worker via the
@@ -864,12 +942,11 @@ impl TurTestApp {
 
     /// Fire-and-forget: push a wheel event. Driven by a subsequent `wait_for`.
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
-        self.inner
-            .push_platform_event(ShellEvent::Wheel {
-                delta_x,
-                delta_y,
-                position: Offset::new(x, y),
-            });
+        self.inner.push_platform_event(ShellEvent::Wheel {
+            delta_x,
+            delta_y,
+            position: Offset::new(x, y),
+        });
     }
 
     /// Simulate a touch drag from `start` to `end` in `steps` moves, advancing
@@ -1255,9 +1332,9 @@ fn pump_one(
 
 /// Run-loop driver for tests that hold a raw `Rc<TurApp>` (multi-instance,
 /// custom runtime). Mirrors `TurTestApp`'s driving: spawns the production
-/// `run_loop` once, installs an `after_frame` hook feeding a frame channel,
-/// and exposes the same `pump` / `wait_for` / `wait_for_timeout` primitives.
-/// Construct one per app instance.
+/// autonomous loop once, installs an `after_frame` hook feeding a frame
+/// channel, and exposes the same `pump` / `wait_for` / `wait_for_timeout`
+/// primitives. Construct one per app instance.
 pub struct RawAppLooper {
     app: Rc<TurApp>,
     driver: Rc<TestSchedulerDriver>,
@@ -1265,13 +1342,21 @@ pub struct RawAppLooper {
 }
 
 impl RawAppLooper {
-    /// Spawn `run_loop` for `app` (driven by `driver`) and bootstrap one frame.
-    pub fn new(app: Rc<TurApp>, driver: Rc<TestSchedulerDriver>) -> Self {
+    /// Spawn the loop for `app` (driven by `driver`) and bootstrap one
+    /// frame. `looper` is the app's built
+    /// [`TurAppLooper`](tur_engine::TurAppLooper) — passed separately since
+    /// the app handle alone no longer carries it.
+    pub fn new(
+        app: Rc<TurApp>,
+        looper: tur_engine::TurAppLooper,
+        driver: Rc<TestSchedulerDriver>,
+    ) -> Self {
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
-        app.set_after_frame_hook(Some(Rc::new(move |o| {
+        let mut looper = looper;
+        looper.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
         })));
-        driver.spawn_local(Box::pin(app.clone().run_loop()));
+        driver.spawn_local(Box::pin(looper.run()));
         let looper = Self {
             app,
             driver,
@@ -1285,7 +1370,7 @@ impl RawAppLooper {
         &self.app
     }
 
-    /// Drive `run_loop` forward by exactly one frame (see [`TurTestApp::pump`]).
+    /// Drive the loop forward by exactly one frame (see [`TurTestApp::pump`]).
     pub fn pump(&self) -> FrameOutcome {
         pump_one(&self.driver, &self.frame_rx)
     }

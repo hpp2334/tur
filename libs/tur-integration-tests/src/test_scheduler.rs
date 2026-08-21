@@ -1,11 +1,11 @@
 //! Test-harness scheduling objects.
 //!
 //! Three single-role implementations for the integration tests:
-//! - [`TestVsyncSource`] — manual vsync channel
-//!   ([`TurApp::set_vsync_source`](tur_engine::TurApp::set_vsync_source)
-//!   accepts one; the harness fires it per driven frame).
+//! - [`TestVsyncSource`] — manual vsync channel, carried by each app's
+//!   shell (handed to the engine at construction); the harness fires it
+//!   per driven frame.
 //! - [`TestHostLoop`] — main-thread task spawner backed by a thread-local
-//!   tokio `LocalSet` (drives the engine's `run_loop` + the engine's
+//!   tokio `LocalSet` (drives the engine's autonomous loop + the engine's
 //!   main-thread drain).
 //! - Worker hosting comes from
 //!   [`tur_native::worker_pool::NativeWorkerPools`] (the shared native
@@ -101,7 +101,7 @@ fn init_thread_exec(clock: Arc<Mutex<VirtualClock>>) {
 }
 
 /// Generic `block_on` that drives the current thread's `LocalSet` (and all
-/// `spawn_local`'d tasks on it — e.g. the engine's `run_loop`) until `fut`
+/// `spawn_local`'d tasks on it — e.g. the engine's loop) until `fut`
 /// completes. Unlike `futures::executor::block_on`, this advances the
 /// `LocalSet`, which is required whenever the waited result is produced by a
 /// spawned task rather than directly by the worker thread.
@@ -199,12 +199,10 @@ impl VsyncSource for TestVsyncSource {
     fn subscribe(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
         // Unconditionally deliver one bootstrap tick to each new
-        // subscriber. `run_loop` subscribes on its first poll (which
-        // happens during the first `block_on`, AFTER any `fire_vsync`),
-        // so a fire-before-subscribe would otherwise be lost. This
-        // per-subscriber bootstrap tick makes the first frame reachable
-        // for every run_loop — including the multi-instance case where
-        // several run_loops share one source.
+        // subscriber so the first frame is reachable for every loop —
+        // including the multi-instance case where several loops share
+        // one source (the engine subscribes once per instance, at
+        // construction).
         let _ = tx.unbounded_send(());
         self.vsync_txs.lock().unwrap().push(tx);
         VsyncEvents(rx)
@@ -217,7 +215,7 @@ impl VsyncSource for TestVsyncSource {
 
 /// Main-thread task spawner backed by the current thread's `LocalSet`
 /// (created by [`TestSchedulerDriver::new`]). Drives the engine's
-/// `run_loop` futures + the engine's main-thread drain.
+/// loop futures + the engine's main-thread drain.
 pub struct TestHostLoop;
 
 impl HostLoop for TestHostLoop {
@@ -239,15 +237,18 @@ impl HostLoop for TestHostLoop {
 // ---------------------------------------------------------------------------
 
 /// Bundles the harness's three scheduling objects + the shared virtual
-/// clock. Hand the single-role pieces to the runtime builder:
+/// clock. Hand the single-role pieces to the runtime builder; the vsync
+/// source goes into each app's shell instead (the engine takes it at
+/// construction):
 ///
 /// ```text
 /// let driver = TestSchedulerDriver::new();
 /// TurRuntime::builder()
 ///     .worker_spawner(driver.worker_spawner())
-///     .vsync_source(driver.vsync_source())
 ///     .host_loop(driver.host_loop())
 ///     …
+/// // per app:
+/// shell = Shell { vsync: Some(driver.vsync_source()), … };
 /// ```
 pub struct TestSchedulerDriver {
     vsync: Rc<TestVsyncSource>,
@@ -305,10 +306,10 @@ impl TestSchedulerDriver {
     }
 
     /// Drive the current thread's `LocalSet` (and all `spawn_local`'d tasks
-    /// on it — the engine's `run_loop`) until `fut` completes, returning its
+    /// on it — the engine's loop) until `fut` completes, returning its
     /// output. Use this — not `futures::executor::block_on` — whenever the
     /// waited result is produced by a `LocalSet` task (e.g. waiting for a
-    /// frame the `run_loop` emits via the `after_frame` hook).
+    /// frame the loop emits via the `after_frame` hook).
     pub fn block_on<F: Future>(&self, fut: F) -> F::Output {
         block_on_on_current_thread_typed(fut)
     }

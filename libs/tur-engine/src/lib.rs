@@ -26,9 +26,11 @@ pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
-// `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an isolated
-// `TurApp` instance (engine on a worker thread; `HostBackend` owns the renderer
-// on the host thread and drives it directly).
+// `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an
+// isolated `(Rc<TurApp>, TurAppLooper)` pair (engine on a worker thread;
+// `HostBackend` owns the renderer on the host thread and drives it directly —
+// the app handle carries the mid-loop `&self` surface, the looper carries the
+// autonomous frame loop).
 pub use crate::core::runtime::{HostBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type
@@ -52,7 +54,7 @@ pub use crate::core::app::ModuleSourceRegistry;
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
 pub use crate::core::scheduler::WorkerPoolHandle;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 
 use error::TurError;
@@ -61,7 +63,8 @@ use core::app::FrameOutcome;
 
 /// A running tur engine instance.
 ///
-/// Wraps a [`HostBackend`] that owns a worker thread (running a
+/// Wraps a [`HostBackend`] (shared with the instance's
+/// [`TurAppLooper`]) that owns a worker thread (running a
 /// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the host-side
 /// renderer + shell (both passed to `TurRuntime::app_builder()...build(...)`).
 /// Main drives the renderer directly from [`HostBackend`]; shell requests
@@ -70,7 +73,12 @@ use core::app::FrameOutcome;
 /// subsystems) lives on the worker.
 ///
 /// Construct via [`TurRuntime::app_builder`] then
-/// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build).
+/// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build), which
+/// returns `(Rc<TurApp>, TurAppLooper)` — the handle for the mid-loop
+/// `&self` surface (input, RPC, destroy), the looper for the autonomous
+/// frame loop. This split is the single-loop contract made structural:
+/// the loop consumes its looper by value, so it can be spawned once and
+/// only once.
 ///
 /// ## Async API
 ///
@@ -80,55 +88,47 @@ use core::app::FrameOutcome;
 /// - On native (Android JNI, integration tests), `futures::executor::block_on`
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
-    backend: HostBackend,
-    /// Per-instance frame cadence. Cloned from the runtime at
-    /// construction; embedders with per-instance cadence (Android's
-    /// per-`FrameLoop` sources) replace it via [`Self::set_vsync_source`]
-    /// before `run_loop` starts.
-    vsync: RefCell<Rc<dyn core::scheduler::VsyncSource>>,
-    /// Embedder-installed callback fired after each autonomous frame —
-    /// typically used for DOM side-effects (file-pick resolution, textarea
-    /// focus / caret positioning). `None` in tests.
-    after_frame: RefCell<Option<AfterFrameHook>>,
-    /// Set by [`Self::run_loop`] — guards against double-spawn of the
-    /// autonomous loop.
-    loop_started: Cell<bool>,
-    /// Set by [`Self::destroy`]. Subsequent wake attempts short-circuit.
-    destroyed: Cell<bool>,
+    /// Shared with [`TurAppLooper`] — the app sends (input, RPC) while
+    /// the loop applies worker messages + renders. Every `HostBackend`
+    /// method is `&self`, so `Rc`-sharing is borrow-free.
+    backend: Rc<HostBackend>,
+    /// Per-instance frame cadence — taken from the instance's shell at
+    /// construction (see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
+    /// Shared with [`TurAppLooper`] because the app re-arms it from the
+    /// input paths ([`Self::push_platform_event`], [`Self::resize`],
+    /// [`Self::push_app_event`]) while the loop is running. Both trait
+    /// methods are `&self`, so sharing needs no interior mutability.
+    vsync: Rc<dyn core::scheduler::VsyncSource>,
+    /// Set by [`Self::destroy`]. Shared with [`TurAppLooper`], whose vsync
+    /// wake-ups poll it to stop after destroy.
+    destroyed: Rc<Cell<bool>>,
 }
 
-/// Per-frame hook fired at the end of each iteration of `TurApp::run_loop`
-/// (after the frame's render/schedule side-effects are applied). See
-/// [`TurApp::set_after_frame_hook`].
+/// Per-frame hook fired at the end of each iteration of
+/// [`TurAppLooper::run`] (after the frame's render/schedule side-effects
+/// are applied). See [`TurAppLooper::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`HostBackend`] + vsync
-    /// source. `pub(crate)`: instances are only constructed by
+    /// Construct a `TurApp` sharing `backend` / `vsync` / `destroyed` with
+    /// its looper. `pub(crate)`: instances are only constructed by
     /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
     /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
     /// — embedders never call it directly.
-    pub(crate) fn new(backend: HostBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
+    pub(crate) fn new(
+        backend: Rc<HostBackend>,
+        vsync: Rc<dyn core::scheduler::VsyncSource>,
+        destroyed: Rc<Cell<bool>>,
+    ) -> Self {
         Self {
             backend,
-            vsync: RefCell::new(vsync),
-            after_frame: RefCell::new(None),
-            loop_started: Cell::new(false),
-            destroyed: Cell::new(false),
+            vsync,
+            destroyed,
         }
     }
 
-    /// Replace the per-instance vsync source. Used by embedders that need
-    /// per-instance frame cadence (e.g. Android, where each instance has
-    /// its own JNI `FrameLoop`). Call after
-    /// `runtime.app_builder().build(...)` and **before** `run_loop()` —
-    /// the loop subscribes to the installed source once at startup.
-    pub fn set_vsync_source(&self, source: Rc<dyn core::scheduler::VsyncSource>) {
-        *self.vsync.borrow_mut() = source;
-    }
-
-    /// Direct accessor on the underlying [`HostBackend`]. Embedders use it
-    /// to install the cursor backend after construction.
+    /// Direct accessor on the underlying [`HostBackend`]. Shared with the
+    /// instance's [`TurAppLooper`] — safe to call while the loop runs.
     pub fn backend(&self) -> &HostBackend {
         &self.backend
     }
@@ -213,134 +213,6 @@ impl TurApp {
         self.request_frame();
     }
 
-    /// The autonomous frame loop — driven by the embedder's platform loop
-    /// (Choreographer-polled on Android, `spawn_local`'d on wasm). The
-    /// engine owns all frame logic; the platform only supplies the wake-up
-    /// cadence via [`VsyncSource::subscribe`](core::scheduler::VsyncSource::subscribe)
-    /// + [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
-    ///
-    /// Each iteration races the platform vsync stream against the worker's
-    /// `HostMsg` stream:
-    /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
-    ///   N+1 while main encodes N), then paint the latest buffered batch
-    ///   (vsync-aligned, latest-wins).
-    /// - **worker msg** — dispatch via [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg),
-    ///   the single shared handler. `RenderCommands` is buffered into
-    ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
-    ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
-    ///   quiescence). Side-effects (shell commands, image uploads) are
-    ///   applied inside `apply_msg`.
-    ///
-    /// The bootstrap is automatic: `app_builder().build(...)` pushes an
-    /// initial resize event to the worker, the worker pumps + ships
-    /// `FrameOutcome` back, and the loop requests the next vsync based on
-    /// the outcome. No initial `request_frame()` is needed.
-    ///
-    /// Concurrency: single-loop serialized. The embedder must spawn this
-    /// future exactly once per `TurApp`. Multiple concurrent calls panic.
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn run_loop(self: Rc<Self>) {
-        assert!(
-            !self.loop_started.replace(true),
-            "run_loop called twice on the same TurApp"
-        );
-
-        let mut vsync_rx = self.vsync.borrow().subscribe();
-        // `host_rx` is in a RefCell; borrow for the lifetime of this loop.
-        // Safe: run_loop is called exactly once per app (asserted above).
-        #[allow(clippy::await_holding_refcell_ref)]
-        let mut host_rx = self.backend.host_rx.borrow_mut();
-
-        use crate::core::runtime::MsgOutcome;
-        use futures::future::{Either, select};
-        use futures::stream::StreamExt;
-
-        // Pipelining buffer: the latest un-rendered batch from the worker.
-        let mut pending: Option<core::render::RenderCommandBatch> = None;
-
-        loop {
-            // Race vsync + host_msg streams — first to fire wins.
-            let vsync_fut = vsync_rx.next();
-            let main_fut = host_rx.next();
-            let event = select(vsync_fut, main_fut).await;
-
-            match event {
-                Either::Left((Some(()), _)) => {
-                    if self.destroyed.get() {
-                        break;
-                    }
-                    // 1) Kick the worker for the NEXT frame first — it
-                    //    flushes+records N+1 while main encodes N below.
-                    self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
-                    // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins). Skip empty batches — an empty command
-                    //    list paints a blank frame (clears the surface), which
-                    //    is never desirable.
-                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
-                        self.backend.render_batch(&batch);
-                    }
-                }
-                Either::Left((None, _)) => break,
-                Either::Right((Some(msg), _)) => {
-                    let stop = match self.backend.apply_msg(msg) {
-                        MsgOutcome::Render(batch) => {
-                            // Pipelined: buffer (latest-wins); rendered at
-                            // the next vsync.
-                            pending = Some(batch);
-                            false
-                        }
-                        MsgOutcome::Frame(outcome) => {
-                            // Apply this frame's render/schedule side-effects
-                            // BEFORE firing the after_frame hook, so hook
-                            // observers (test harnesses reading pixels/state,
-                            // embedders syncing DOM) see the fully-applied
-                            // frame. The hook is the last thing the loop
-                            // does for this message.
-                            let stop = if outcome.schedule == core::app::NextFrame::Vsync {
-                                self.vsync.borrow().request_frame();
-                                false
-                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
-                                // Quiescence: no vsync is armed (nothing
-                                // time-driven pending), so the pipeline
-                                // would stall with an un-rendered batch
-                                // (e.g. the initial frame, or a one-shot
-                                // paint request). Flush it now (empty
-                                // batches skipped — they'd paint blank) —
-                                // the next frame only starts on a new input.
-                                self.backend.render_batch(&batch);
-                                false
-                            } else {
-                                // Idle + empty pending: no-op. The loop
-                                // blocks on the next event.
-                                false
-                            };
-                            if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
-                                hook(outcome);
-                            }
-                            stop
-                        }
-                        MsgOutcome::Failed(e) => {
-                            tracing::error!("worker frame error: {e}");
-                            false
-                        }
-                        MsgOutcome::Closed => true,
-                        MsgOutcome::Continue => false,
-                    };
-                    if stop {
-                        break;
-                    }
-                }
-                Either::Right((None, _)) => break,
-            }
-        }
-    }
-
-    /// Install a callback fired at the end of each `run_loop` iteration,
-    /// after the frame's render/schedule side-effects are applied.
-    pub fn set_after_frame_hook(&self, hook: Option<Rc<dyn Fn(FrameOutcome)>>) {
-        *self.after_frame.borrow_mut() = hook;
-    }
-
     /// Mark the app as destroyed. Subsequent `wake` attempts short-circuit.
     /// Sends `WorkerMsg::Destroy` to drain the worker.
     pub fn destroy(&self) {
@@ -355,7 +227,7 @@ impl TurApp {
     /// Re-arm an idle autonomous loop: ask the vsync source for one
     /// wake-up on the next frame. Idempotent at the source (armed flag).
     fn request_frame(&self) {
-        self.vsync.borrow().request_frame();
+        self.vsync.request_frame();
     }
 
     /// Test-only: run `cb` against the worker's live `NodeTreeData` AND
@@ -383,5 +255,207 @@ impl TurApp {
             .worker_tx()
             .unbounded_send(WorkerMsg::WithTree { runner });
         rx.rx.await.unwrap_or(None)
+    }
+}
+
+/// The autonomous frame-loop driver for one [`TurApp`] — the half of a
+/// built instance that owns the worker→host message stream and races it
+/// against the platform vsync source.
+///
+/// Produced together with the app handle by
+/// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build) /
+/// [`TurAppBuilder::build_headless`](core::runtime::TurAppBuilder::build_headless)
+/// as `(Rc<TurApp>, TurAppLooper)`. The split makes the single-loop
+/// contract structural:
+///
+/// - [`Self::run`] consumes the looper **by value**, so the returned
+///   future owns its state — it is `'static` (spawnable via
+///   `wasm_bindgen_futures::spawn_local`, type-erasable to
+///   `Pin<Box<dyn Future>>` for Android's poll-per-`pump` driving) and a
+///   second `run` is a compile error, not a runtime assert.
+/// - Pre-run configuration ([`Self::set_after_frame_hook`]) is exclusive
+///   (`&mut self`) and structurally impossible after `run` takes the
+///   looper — matching the build-time installment philosophy of
+///   [`TurAppBuilder::shell`](core::runtime::TurAppBuilder::shell), which
+///   also covers the frame clock (the shell hands it over once, at
+///   construction — see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
+///
+/// The app handle keeps the mid-loop `&self` surface (input, RPC,
+/// `destroy`); the two share the `HostBackend`, the frame clock (the app
+/// re-arms it from input paths while the loop runs) and the destroyed
+/// flag.
+pub struct TurAppLooper {
+    /// Shared with the app handle — the app sends (input, RPC) while the
+    /// loop applies worker messages + renders. Every `HostBackend` method
+    /// is `&self`, so `Rc`-sharing is borrow-free.
+    backend: Rc<HostBackend>,
+    /// The worker→host message stream, drained **only** by this looper —
+    /// owned outright, no `RefCell`, no borrow held across `.await`.
+    host_rx: core::app::HostRx,
+    /// Per-instance frame cadence, shared with the app handle (see
+    /// [`TurApp`]'s field docs); used to re-arm on `FrameOutcome`s.
+    vsync: Rc<dyn core::scheduler::VsyncSource>,
+    /// The cadence's tick stream — subscribed **once, at construction**
+    /// (`Shell::take_vsync` → `VsyncSource::subscribe` in
+    /// `spawn_instance`), owned outright from then on. No subscribe
+    /// happens at run time.
+    vsync_events: core::scheduler::VsyncEvents,
+    /// Set by `TurApp::destroy`; polled at each vsync wake-up.
+    destroyed: Rc<Cell<bool>>,
+    /// Embedder-installed callback fired after each autonomous frame —
+    /// typically used for DOM side-effects (file-pick resolution,
+    /// textarea focus / caret positioning). `None` in tests.
+    after_frame: Option<AfterFrameHook>,
+}
+
+impl TurAppLooper {
+    /// Construct the looper sharing `backend` / `vsync` / `destroyed` with
+    /// its app handle, owning the build-time-subscribed `vsync_events`.
+    /// `pub(crate)`: built only by
+    /// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build).
+    pub(crate) fn new(
+        backend: Rc<HostBackend>,
+        host_rx: core::app::HostRx,
+        vsync: Rc<dyn core::scheduler::VsyncSource>,
+        vsync_events: core::scheduler::VsyncEvents,
+        destroyed: Rc<Cell<bool>>,
+    ) -> Self {
+        Self {
+            backend,
+            host_rx,
+            vsync,
+            vsync_events,
+            destroyed,
+            after_frame: None,
+        }
+    }
+
+    /// Install a callback fired at the end of each loop iteration, after
+    /// the frame's render/schedule side-effects are applied. Pre-run only
+    /// (`run` consumes the looper).
+    pub fn set_after_frame_hook(&mut self, hook: Option<AfterFrameHook>) {
+        self.after_frame = hook;
+    }
+
+    /// The autonomous frame loop — driven by the embedder's platform loop
+    /// (Choreographer-polled on Android, `spawn_local`'d on wasm). The
+    /// engine owns all frame logic; the platform only supplies the wake-up
+    /// cadence — the tick stream (subscribed once at construction) races
+    /// the worker messages, and each `Vsync`-scheduled outcome re-arms via
+    /// [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
+    ///
+    /// Each iteration races the platform vsync stream against the worker's
+    /// `HostMsg` stream:
+    /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
+    ///   N+1 while main encodes N below), then paint the latest buffered batch
+    ///   (vsync-aligned, latest-wins).
+    /// - **worker msg** — dispatch via [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg),
+    ///   the single shared handler. `RenderCommands` is buffered into
+    ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
+    ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
+    ///   quiescence). Side-effects (shell commands, image uploads) are
+    ///   applied inside `apply_msg`.
+    ///
+    /// The bootstrap is automatic: `app_builder().build(...)` pushes an
+    /// initial resize event to the worker, the worker pumps + ships
+    /// `FrameOutcome` back, and the loop requests the next vsync based on
+    /// the outcome. No initial `request_frame()` is needed.
+    ///
+    /// Concurrency: single-loop serialized, enforced structurally — `run`
+    /// consumes the looper by value, so the future exists at most once
+    /// per instance.
+    pub async fn run(self) {
+        let Self {
+            backend,
+            mut host_rx,
+            vsync,
+            vsync_events,
+            destroyed,
+            after_frame,
+        } = self;
+        let mut vsync_rx = vsync_events;
+
+        use crate::core::runtime::MsgOutcome;
+        use futures::future::{Either, select};
+        use futures::stream::StreamExt;
+
+        // Pipelining buffer: the latest un-rendered batch from the worker.
+        let mut pending: Option<core::render::RenderCommandBatch> = None;
+
+        loop {
+            // Race vsync + host_msg streams — first to fire wins.
+            let vsync_fut = vsync_rx.next();
+            let main_fut = host_rx.next();
+            let event = select(vsync_fut, main_fut).await;
+
+            match event {
+                Either::Left((Some(()), _)) => {
+                    if destroyed.get() {
+                        break;
+                    }
+                    // 1) Kick the worker for the NEXT frame first — it
+                    //    flushes+records N+1 while main encodes N below.
+                    backend.send_worker_msg(core::app::WorkerMsg::Wake);
+                    // 2) Render the latest buffered batch (vsync-aligned,
+                    //    latest-wins). Skip empty batches — an empty command
+                    //    list paints a blank frame (clears the surface), which
+                    //    is never desirable.
+                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
+                        backend.render_batch(&batch);
+                    }
+                }
+                Either::Left((None, _)) => break,
+                Either::Right((Some(msg), _)) => {
+                    let stop = match backend.apply_msg(msg) {
+                        MsgOutcome::Render(batch) => {
+                            // Pipelined: buffer (latest-wins); rendered at
+                            // the next vsync.
+                            pending = Some(batch);
+                            false
+                        }
+                        MsgOutcome::Frame(outcome) => {
+                            // Apply this frame's render/schedule side-effects
+                            // BEFORE firing the after_frame hook, so hook
+                            // observers (test harnesses reading pixels/state,
+                            // embedders syncing DOM) see the fully-applied
+                            // frame. The hook is the last thing the loop
+                            // does for this message.
+                            let stop = if outcome.schedule == core::app::NextFrame::Vsync {
+                                vsync.request_frame();
+                                false
+                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
+                                // Quiescence: no vsync is armed (nothing
+                                // time-driven pending), so the pipeline
+                                // would stall with an un-rendered batch
+                                // (e.g. the initial frame, or a one-shot
+                                // paint request). Flush it now (empty
+                                // batches skipped — they'd paint blank) —
+                                // the next frame only starts on a new input.
+                                backend.render_batch(&batch);
+                                false
+                            } else {
+                                // Idle + empty pending: no-op. The loop
+                                // blocks on the next event.
+                                false
+                            };
+                            if let Some(hook) = after_frame.as_ref() {
+                                hook(outcome);
+                            }
+                            stop
+                        }
+                        MsgOutcome::Failed(e) => {
+                            tracing::error!("worker frame error: {e}");
+                            false
+                        }
+                        MsgOutcome::Closed => true,
+                        MsgOutcome::Continue => false,
+                    };
+                    if stop {
+                        break;
+                    }
+                }
+                Either::Right((None, _)) => break,
+            }
+        }
     }
 }

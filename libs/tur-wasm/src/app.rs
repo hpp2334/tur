@@ -7,8 +7,8 @@ use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerInput};
-use tur_engine::core::shell::ShellEvent;
 use tur_engine::core::scheduler::WorkerPoolHandle;
+use tur_engine::core::shell::ShellEvent;
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
@@ -68,6 +68,9 @@ struct WasmState {
 /// requests here during the frame loop. Cursor goes to the canvas CSS;
 /// text-input positions the hidden `<textarea>` for IME composition.
 ///
+/// Also carries the window's frame clock (rAF) — the engine takes it once
+/// at construction via `take_vsync`.
+///
 /// Holds a `Weak<RefCell<...>>` into the wasm state so there is no
 /// reference cycle — `request_text_input` is a no-op if the state has
 /// been dropped.
@@ -75,6 +78,8 @@ struct WasmShell {
     canvas: web_sys::HtmlCanvasElement,
     /// Weak ref into the wasm state for textarea focus / caret positioning.
     state_weak: std::rc::Weak<std::cell::RefCell<Option<WasmState>>>,
+    /// The window's frame clock, handed to the engine at construction.
+    vsync: Option<Rc<crate::scheduler::WasmVsyncSource>>,
 }
 
 // SAFETY: `WasmShell` is only ever accessed from the wasm main thread
@@ -101,10 +106,19 @@ impl tur_engine::Shell for WasmShell {
         if state.is_editable {
             let _ = wasm.textarea.focus();
             if let Some((x, y, _w, _h)) = state.cursor_rect {
-                let _ = wasm.textarea.style().set_property("left", &format!("{x}px"));
+                let _ = wasm
+                    .textarea
+                    .style()
+                    .set_property("left", &format!("{x}px"));
                 let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
             }
         }
+    }
+
+    fn take_vsync(&mut self) -> Option<Rc<dyn tur_engine::core::scheduler::VsyncSource>> {
+        self.vsync
+            .take()
+            .map(|v| v as Rc<dyn tur_engine::core::scheduler::VsyncSource>)
     }
 }
 
@@ -167,7 +181,6 @@ impl WasmRuntime {
         // demand from Rust (driven by `HostBackend::new`).
 
         let worker_spawner = crate::scheduler::WasmWorkerSpawner::new();
-        let vsync_source = crate::scheduler::WasmVsyncSource::new();
         let host_loop = Rc::new(crate::scheduler::WasmHostLoop);
         // Built-in default pool: effectively uncapped → one dedicated Web
         // Worker per app (the historical behavior) unless the embedder
@@ -175,7 +188,6 @@ impl WasmRuntime {
         let default_worker_pool = WorkerPoolHandle::new("default", usize::MAX);
         let builder = tur_engine::TurRuntime::builder()
             .worker_spawner(worker_spawner)
-            .vsync_source(vsync_source)
             .host_loop(host_loop)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
@@ -474,17 +486,19 @@ impl WasmApp {
         // it directly (render batches, image uploads, resize-on-event) —
         // `build` pushes the initial Resize
         // internally.
-        // Build a WasmShell that handles cursor + text-input egress.
-        // The shell is created before the app so it can be passed at
-        // construction time — the worker's first pump already ships an
-        // initial TextInputState, so a shell installed after build() could
-        // miss it.
+        // Build a WasmShell that handles cursor + text-input egress
+        // AND carries the window's frame clock (rAF). The shell is
+        // created before the app so it can be passed at construction
+        // time — the worker's first pump already ships an initial
+        // TextInputState, so a shell installed after build() could miss
+        // it; the engine likewise takes the vsync source once, here.
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
         let wasm_shell = WasmShell {
             canvas: canvas.clone(),
             state_weak: state_weak.clone(),
+            vsync: Some(crate::scheduler::WasmVsyncSource::new()),
         };
-        let app = runtime
+        let (app, looper) = runtime
             .runtime
             .app_builder()
             .worker_pool(worker_pool)
@@ -496,8 +510,6 @@ impl WasmApp {
             .shell(Box::new(wasm_shell))
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -768,14 +780,13 @@ impl WasmApp {
                     let guard = touch_end_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_platform_event(ShellEvent::Pointer(
-                            PointerInput::PointerUp {
+                        s.app
+                            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                                 position: Offset::new(0.0, 0.0),
                                 button: tur_engine::core::layout::MouseButton::Left,
                                 device: tur_engine::core::platform::PointerDeviceKind::Touch,
                                 time_ms,
-                            },
-                        ));
+                            }));
                     }
                     return;
                 };
@@ -808,11 +819,10 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                 let guard = touch_cancel_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(ShellEvent::Pointer(
-                        PointerInput::PointerCancel {
+                    s.app
+                        .push_platform_event(ShellEvent::Pointer(PointerInput::PointerCancel {
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
-                        },
-                    ));
+                        }));
                 }
             });
 
@@ -930,18 +940,19 @@ impl WasmApp {
             .err_to_jsval()?;
 
         let comp_update_state = state_clone.clone();
-        let compositionupdate_closure =
-            Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
-                move |event: web_sys::CompositionEvent| {
-                    let guard = comp_update_state.borrow();
-                    if let Some(s) = guard.as_ref() {
-                        let text = event.data().unwrap_or_default();
-                        s.app.push_platform_event(ShellEvent::Ime(
-                            ImeEvent::CompositionUpdate { text, cursor: None },
-                        ));
-                    }
-                },
-            );
+        let compositionupdate_closure = Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
+            move |event: web_sys::CompositionEvent| {
+                let guard = comp_update_state.borrow();
+                if let Some(s) = guard.as_ref() {
+                    let text = event.data().unwrap_or_default();
+                    s.app
+                        .push_platform_event(ShellEvent::Ime(ImeEvent::CompositionUpdate {
+                            text,
+                            cursor: None,
+                        }));
+                }
+            },
+        );
 
         textarea
             .add_event_listener_with_callback(
@@ -1041,20 +1052,12 @@ impl WasmApp {
         // we pass here. We use `wasm_bindgen_futures::spawn_local`, which
         // runs the future cooperatively on the JS event loop — the wasm
         // main thread never blocks (no `Atomics.wait`).
-        let app = state_clone
-            .borrow()
-            .as_ref()
-            .expect("wasm state just set")
-            .app
-            .clone();
-
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
         // loop bootstraps automatically: `app_builder().build(...)` pushed
         // an initial resize → worker pumps → FrameOutcome arrives → main requests
         // the next vsync. No manual kick needed.
-        let app_clone = app.clone();
-        wasm_bindgen_futures::spawn_local(app_clone.run_loop());
+        wasm_bindgen_futures::spawn_local(looper.run());
 
         Ok(WasmApp { state: state_clone })
     }

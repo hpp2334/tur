@@ -66,7 +66,6 @@ fn build_runtime(
 ) -> Rc<TurRuntime> {
     let mut builder = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
@@ -107,7 +106,7 @@ fn blocking_work_runs_off_worker_thread_and_returns_value() {
 
     let pool = WorkerPoolHandle::new("offthread", usize::MAX);
     let runtime = build_runtime(&driver, vec![pool.clone()], Some(probe));
-    let _app = runtime
+    let (_app, _looper) = runtime
         .app_builder()
         .worker_pool(pool)
         .build_headless((0.0, 0.0))
@@ -144,13 +143,12 @@ fn blocking_work_does_not_stall_lane_cotenants() {
     let pool = WorkerPoolHandle::new("shared", 1);
     let runtime = build_runtime(&driver, vec![pool.clone()], Some(probe));
 
-    let app_a = runtime
+    let (_app_a, _looper_a) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .build_headless((0.0, 0.0))
         .expect("app A build");
-    let _ = app_a;
-    let app_b = runtime
+    let (app_b, _looper_b) = runtime
         .app_builder()
         .worker_pool(pool.clone())
         .build_headless((0.0, 0.0))

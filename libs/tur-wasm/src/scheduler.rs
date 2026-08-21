@@ -8,7 +8,8 @@
 //!   loop (see [`crate::worker_spawn`]). Apps in different pools never
 //!   share a worker; a cap ≥ the app count degenerates to
 //!   one-worker-per-app.
-//! - [`WasmVsyncSource`] (per-instance) arms a `requestAnimationFrame`
+//! - [`WasmVsyncSource`] (per-instance, carried by `WasmShell` and handed
+//!   to the engine at construction) arms a `requestAnimationFrame`
 //!   callback; on fire it pushes an event into every subscribed channel.
 //! - [`WasmHostLoop`] (runtime-level) spawns main-thread tasks via
 //!   `wasm_bindgen_futures::spawn_local`.
@@ -217,7 +218,8 @@ impl WasmVsyncInner {
 /// Per-instance vsync source backed by `requestAnimationFrame`. The rAF
 /// closure is driver-owned (constructed once in
 /// [`WasmVsyncSource::new`]); on fire it pushes an event into the
-/// subscribed channel. The engine subscribes once at `run_loop` startup.
+/// subscribed channel. Carried by `WasmShell`; the engine takes it once,
+/// at construction, and subscribes there.
 pub struct WasmVsyncSource {
     inner: Rc<WasmVsyncInner>,
 }

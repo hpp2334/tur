@@ -128,13 +128,12 @@ fn build_app(
     let driver = tur_integration_tests::TestSchedulerDriver::new();
     let builder = TurRuntime::builder()
         .worker_spawner(driver.worker_spawner())
-        .vsync_source(driver.vsync_source())
         .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone());
     let runtime = configure(builder).build()?;
-    let app = runtime
+    let (app, _looper) = runtime
         .app_builder()
         .worker_pool(pool)
         .renderer(
