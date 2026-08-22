@@ -14,8 +14,8 @@
 // happen in `derive` closures, side effects in `mutate` closures, and
 // actions compose by dispatching other mutations via `ctx.set(action, …)`.
 
+import type { Store } from "tur:core";
 import { mount } from "tur:std";
-import type { Store } from "@tur-ng/core";
 import { startNowTicker, stopNowTicker } from "./state";
 import { Shell } from "./views/shell";
 

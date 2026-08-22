@@ -1,4 +1,4 @@
-import type { Store } from "@tur-ng/core";
+import type { Store } from "tur:core";
 
 declare global {
     // Test-seam: module-scope helpers reach the instance store via

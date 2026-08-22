@@ -202,19 +202,3 @@ declare module "tur:core" {
      *  the tree materialize into it). Replaces any previously mounted
      *  root. */
     export function mount(root: Element): void;
-}
-
-// Explicit re-exports for consumers importing the package directly
-// (not via the ambient "tur:core" module specifier).
-export type {
-    Derived,
-    Element,
-    Mutation,
-    Readable,
-    ReadonlyStoreCtx,
-    Source,
-    Store,
-    StoreCtx,
-    Val,
-    WatchHandle,
-} from "tur:core";
