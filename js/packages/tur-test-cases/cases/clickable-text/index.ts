@@ -1,7 +1,6 @@
 import {
     Column,
     CrossAxisAlignment,
-    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -9,7 +8,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 const content$ = source("before");
 

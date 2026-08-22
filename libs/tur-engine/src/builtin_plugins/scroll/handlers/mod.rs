@@ -92,13 +92,11 @@ fn process_scroll_delta(
     delta_y: f64,
     position: Offset,
 ) {
-    let (hit_path, target) = {
+    let target = {
         let tree = cx.element_tree.borrow();
         let hit_path = HitTest::new(&tree).path(position);
-        let target = find_deepest_with_wheel(&tree, &hit_path);
-        (hit_path, target)
+        find_deepest_with_wheel(&tree, &hit_path)
     };
-    let _ = hit_path;
 
     let Some(target_id) = target else {
         return;

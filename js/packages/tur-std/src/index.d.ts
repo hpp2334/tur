@@ -87,9 +87,10 @@ declare module "tur:std" {
     }
 
     /** Engine-owned reactive atom holding the live canvas size
-     *  (`{width, height}` in CSS pixels). Updated each frame from the resize
-     *  handler; import from `tur:std`. Read-only to app code — typed as a
-     *  `Derived` so `set(viewportSize$, …)` is rejected at compile time. */
+     *  (`{width, height}` in CSS pixels). Published by the engine on every
+     *  resize (readable through any store of the instance); import from
+     *  `tur:std`. Read-only to app code — typed as a `Derived` so
+     *  `set(viewportSize$, …)` is rejected at compile time. */
     export const viewportSize$: Derived<ViewportSize>;
 
     /** OS cursor keywords (CSS cursor names). Mirrors `tur_engine::core::platform::Cursor`. */

@@ -9,7 +9,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     type Element,
     Expanded,
@@ -27,7 +26,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.

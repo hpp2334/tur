@@ -25,9 +25,8 @@ fn find_text_width(tree: &NodeTreeSnapshot, id: ElementNodeId) -> Option<f64> {
 fn readable_subscribe_propagates_reactive_updates_to_child() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
+        r#"
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
         globalThis.__store = store;
         const flag = globalThis.__flag;
@@ -42,7 +41,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
             onUpdate$: mutate(function () {}),
             child: inner
         });
-        mount(store, tree);
+        mount(tree);
     "#,
     )
     .unwrap();
@@ -76,9 +75,8 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 #[test]
 fn readable_subscribe_inside_stack_positioned_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"const store = createStore();
-
-        import { createStore, source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, mount } from "tur:std";
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
         globalThis.__store = store;
         const flag = globalThis.__flag;
@@ -95,7 +93,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         });
         const positioned = Positioned({ left: 30, top: 30, child: rs });
         const stack = Stack({ children: [ positioned ] });
-        mount(store, stack);
+        mount(stack);
     "#)
     .unwrap();
 
@@ -128,9 +126,8 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 #[test]
 fn animated_container_pattern_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"const store = createStore();
-
-        import { createStore, source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
 
         globalThis.__flag = source(false);
@@ -166,7 +163,7 @@ fn animated_container_pattern_inner_text_still_updates() {
             }),
             child: inner
         });
-        mount(store, tree);
+        mount(tree);
     "#)
     .unwrap();
 
@@ -201,9 +198,8 @@ fn animated_container_pattern_inner_text_still_updates() {
 #[test]
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"const store = createStore();
-
-        import { createStore, source, derive, Container, Text, ReadableSubscribe, mutate, mount, Opacity } from "tur:std";
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, mount, Opacity } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__flag = source(false);
         globalThis.__store = store;
@@ -238,7 +234,7 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
         const layer3 = makeLayer(text, true);
         const layer2 = makeLayer(layer3, false);
         const layer1 = makeLayer(layer2, true);
-        mount(store, layer1);
+        mount(layer1);
     "#)
     .unwrap();
 
@@ -272,9 +268,8 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, derive, Container, ReadableSubscribe, mutate, mount } from "tur:std";
+        r#"
+        import { source, derive, Container, ReadableSubscribe, mutate, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__target = source(100);
         globalThis.__store = store;
@@ -300,7 +295,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
             }),
             child: container
         });
-        mount(store, tree);
+        mount(tree);
     "#,
     )
     .unwrap();

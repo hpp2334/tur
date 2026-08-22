@@ -55,28 +55,23 @@ function collectFrom(casesDir, { embed } = { embed: false }) {
     return out;
 }
 
-// The shared engine cases are written to be ROOT-MOUNTED (their dist wrapper
-// does `mount(store, Case)` with the case's own `export const store`). Their
-// view/logic code is ctx-only — all reactive reads/writes flow through the
-// closure ctx of `derive`/`mutate`, which the engine binds to the MOUNTED
-// store. The module store object serves only the wrapper's `mount` and the
-// Rust-test `globalThis.__*` hooks (which are inert here).
+// The shared engine cases are ROOT-MOUNTED (their dist wrapper does
+// `mount(Case)` inside `start({ store })` with the engine-provided instance
+// store). Their view/logic code is ctx-only — all reactive reads/writes flow
+// through the closure ctx of `derive`/`mutate`, which the engine binds to
+// the instance store; the few module-scope test-seam helpers reach it via
+// `globalThis.__store` (stashed by every entry point's `start`).
 //
-// So embedding needs exactly ONE rewrite: drop the `export` keyword from the
-// store declaration. The embedded copy keeps an inert store (nothing view-
-// reactive touches it), and every ctx closure resolves against the HOST's
-// mounted store — the same atoms the tree reads.
+// So embedding needs NO rewrites: the case sources are already
+// embedding-aware (ctx-only).
 function embedTransform(src) {
-    return src.replace(
-        /export const store = createStore\(\);/,
-        "const store = createStore();",
-    );
+    return src;
 }
 
 // Local (playground-only) cases take precedence on name collisions; otherwise
 // the order just affects stable output ordering (each set is pre-sorted).
-// Engine cases are embedded (root-mount source → de-export the store line);
-// local playground cases are written embedding-aware already (ctx-only).
+// Engine cases are embedded as-is (root-mount source, ctx-only); local
+// playground cases are written embedding-aware already (ctx-only).
 const entries = [
     ...collectFrom(engineCasesDir, { embed: true }),
     ...collectFrom(localCasesDir),

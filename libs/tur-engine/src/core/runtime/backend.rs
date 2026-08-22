@@ -32,7 +32,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, Source};
+use boa_engine::{Context, JsObject, JsValue, Source};
 use futures::StreamExt;
 
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
@@ -62,6 +62,11 @@ pub(crate) struct WorkerBackend {
     pub(crate) boa_context: RefCell<Context>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
+    /// The argument object handed to the loaded module's `start`:
+    /// `{ store }` — the instance store wrapped as a live `{get, set}` JS
+    /// object. Built once at instance build (the tree is born-bound to this
+    /// store), reused for every module load.
+    start_arg: RefCell<JsObject>,
     /// The cleanup function returned by the currently-loaded module's
     /// `start()` (the module lifecycle contract). Runs (best-effort)
     /// before the next `load_module` evaluates and at destroy. Worker-side
@@ -74,11 +79,13 @@ impl WorkerBackend {
         boa_context: Context,
         internal: TurAppInternal,
         executor: Rc<TurJobExecutor>,
+        start_arg: JsObject,
     ) -> Self {
         Self {
             boa_context: RefCell::new(boa_context),
             internal,
             executor,
+            start_arg: RefCell::new(start_arg),
             pending_cleanup: RefCell::new(None),
         }
     }
@@ -99,8 +106,8 @@ impl WorkerBackend {
 
     /// Run the pending module cleanup (best-effort) and clear any leftover
     /// root tree. Called before a new module evaluates and at destroy, so a
-    /// re-load always starts from a clean tree even when the previous
-    /// module's cleanup forgot to `unmount`.
+    /// re-load always starts from a clean root even when the previous
+    /// module's cleanup forgot to unmount.
     fn teardown_current_module(&self) {
         if let Some(cleanup) = self.pending_cleanup.borrow_mut().take() {
             let mut boa = self.boa_context.borrow_mut();
@@ -114,7 +121,8 @@ impl WorkerBackend {
             let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
         }
         // Auto-clear: if the previous module's start mounted a root and its
-        // cleanup didn't unmount it, tear the stale tree down now.
+        // cleanup didn't unmount it, tear the stale root down now. The tree
+        // itself is instance-owned — only the root is cleared.
         let js = &self.internal.js_context;
         let leftover_root = js.element_tree.borrow().root_element_id();
         if let Some(root) = leftover_root {
@@ -122,6 +130,12 @@ impl WorkerBackend {
             js.element_tree.borrow_mut().destroy_subtree(root);
             js.set_dirty();
         }
+        // Fire the removed elements' `before_destroy` hooks and drain the
+        // mutations they queued (invoked against the still-bound instance
+        // store). The next module mounts into the same instance-owned tree
+        // (root-less until then).
+        self.internal
+            .drain_teardown_lifecycle(&mut self.boa_context.borrow_mut());
     }
 
     fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -180,7 +194,11 @@ impl WorkerBackend {
         } else {
             let f = JsFunction::from_object(start.as_object().expect("is_callable checked"))
                 .expect("is_callable checked");
-            f.call(&boa_engine::JsValue::undefined(), &[], &mut boa)
+            // `start({ store })` — the engine hands the module the instance
+            // store (a live `{get, set}` object; the tree is born-bound to
+            // it). Legacy `start()` modules simply ignore the argument.
+            let arg = JsValue::from(self.start_arg.borrow().clone());
+            f.call(&boa_engine::JsValue::undefined(), &[arg], &mut boa)
         };
         let cleanup = match result {
             Ok(v) => v.as_object().and_then(JsFunction::from_object),

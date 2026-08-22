@@ -1,6 +1,5 @@
 import {
     Column,
-    createStore,
     createTextEditingController,
     derive,
     Input,
@@ -10,7 +9,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // Regression fixture for the github-viewer crash: a focused `Input` (editable,
 // focusable) above a non-focusable `PointerInteract` button. Clicking the

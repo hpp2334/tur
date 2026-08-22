@@ -11,8 +11,7 @@ fn set_mutation_receives_ctx_then_args() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { createStore, source, mutate } from "tur:std";
-        const store = createStore();
+        import { source, mutate } from "tur:std";
         globalThis.__store = store;
         // Sink source — captures whatever the mutation writes.
         globalThis.__sink = source("");
@@ -49,8 +48,7 @@ fn set_mutation_with_zero_args_passes_ctx_only() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { createStore, source, mutate } from "tur:std";
-        const store = createStore();
+        import { source, mutate } from "tur:std";
         globalThis.__store = store;
         globalThis.__sink = source("");
         const m = mutate((sctx) => {

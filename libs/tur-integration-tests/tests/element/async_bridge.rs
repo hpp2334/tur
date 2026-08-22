@@ -34,9 +34,8 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
     // the source with the resolved text. `clipboard.readText` is exported
     // by `tur:clipboard` as a method on the `clipboard` object.
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
+        r#"
+        import { source } from "tur:std";
         import { clipboard } from "tur:clipboard";
         globalThis.__sink$ = source("initial");
         clipboard.readText().then((text) => {
@@ -90,9 +89,8 @@ fn http_request_resolves_with_canned_response() {
     app.set_http_response(text_response(200, "body bytes"));
 
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
+        r#"
+        import { source } from "tur:std";
         import { request } from "tur:net";
         globalThis.__status$ = source(0);
         globalThis.__body$ = source("");

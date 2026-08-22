@@ -4,7 +4,6 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
-    createStore,
     derive,
     type Mutation,
     mutate,
@@ -16,7 +15,6 @@ import {
     source,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // Reactive anchor: `targetAnchor` is driven by a source. A button flips it
 // from TopLeft to BottomRight; the follower must relocate to the target's

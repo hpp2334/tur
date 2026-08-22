@@ -1,15 +1,4 @@
-import {
-    Alignment,
-    Color,
-    Column,
-    Container,
-    createStore,
-    Row,
-    Text,
-    view,
-} from "tur:std";
-
-export const store = createStore();
+import { Alignment, Color, Column, Container, Row, Text, view } from "tur:std";
 
 export default view(() =>
     Column({

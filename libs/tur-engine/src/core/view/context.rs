@@ -28,9 +28,10 @@ impl SharedViewCx {
 
     // ----- reactive store -----------------------------------------------------
 
-    /// The **mounted** store — the store the most recent `mount(store, view)`
-    /// bound to the tree (the engine store before any mount). Declarations
-    /// materialize into this store from every build-time read/subscribe path.
+    /// The **mounted** store — the store the tree is currently bound to (the
+    /// instance store from `start({ store })`, or a later explicit
+    /// `mount(store, view)` swap). Declarations materialize into this store
+    /// from every build-time read/subscribe path.
     pub fn mounted_store(&self) -> Store {
         self.js_ctx.element_tree.store()
     }

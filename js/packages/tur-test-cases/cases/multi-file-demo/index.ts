@@ -3,7 +3,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -12,7 +11,6 @@ import {
     view,
 } from "tur:std";
 import { COLORS } from "./utils";
-export const store = createStore();
 
 const count$ = source(0);
 

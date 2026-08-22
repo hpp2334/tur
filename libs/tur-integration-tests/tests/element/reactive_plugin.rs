@@ -26,7 +26,7 @@ struct MintSourcePlugin;
 impl Plugin for MintSourcePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let s: Source<JsValue> = bridge.source(JsValue::new(42.0));
+        let s: Source<JsValue> = bridge.decl_source(JsValue::new(42.0));
         let js_handle = s.into_js(ctx.boa_mut());
         ctx.register_global("rustSource", js_handle);
         Ok(())
@@ -40,9 +40,7 @@ fn plugin_can_mint_source_readable_from_js() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(MintSourcePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-            globalThis.__v = store.get(globalThis.rustSource);
+        r#"globalThis.__v = store.get(globalThis.rustSource);
 "#,
     )
     .expect("eval");
@@ -59,9 +57,7 @@ fn plugin_minted_source_is_writable_from_js_via_set() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(MintSourcePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore } from "tur:std";
+        r#"
         store.set(globalThis.rustSource, 99);
         globalThis.__v = store.get(globalThis.rustSource);
         "#,
@@ -84,8 +80,8 @@ struct BuildDerivePlugin;
 impl Plugin for BuildDerivePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let a: Source<JsValue> = bridge.source(JsValue::new(10.0));
-        let b: Source<JsValue> = bridge.source(JsValue::new(20.0));
+        let a: Source<JsValue> = bridge.decl_source(JsValue::new(10.0));
+        let b: Source<JsValue> = bridge.decl_source(JsValue::new(20.0));
 
         // Rust-native derive that reads both sources. Reads flow through the
         // same `ReactiveCore::read` path as JS closures, so auto-dependency
@@ -115,9 +111,7 @@ fn plugin_build_derive_recomputes_via_rust_closure() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(BuildDerivePlugin)])
         .expect("app build");
     app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-            globalThis.__sum = store.get(globalThis.sum$);
+        r#"globalThis.__sum = store.get(globalThis.sum$);
 "#,
     )
     .expect("eval");
@@ -130,9 +124,7 @@ const store = createStore();
 
     // Update one source; the derive must recompute lazily on the next read.
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore } from "tur:std";
+        r#"
         store.set(globalThis.a$, 100);
         globalThis.__sum = store.get(globalThis.sum$);
         "#,
@@ -158,9 +150,7 @@ fn plugin_build_derive_dirty_propagation_across_multiple_updates() {
 
     for (set_a, set_b, expected) in [(5.0, 5.0, 10.0), (50.0, 50.0, 100.0), (-1.0, 1.0, 0.0)] {
         app.eval_module_source(&format!(
-            r#"import {{ createStore }} from "tur:std";
-const store = createStore();
-            store.set(globalThis.a$, {set_a});
+            r#"store.set(globalThis.a$, {set_a});
             store.set(globalThis.b$, {set_b});
             globalThis.__sum = store.get(globalThis.sum$);
             "#,
@@ -184,19 +174,19 @@ struct BuildMutatePlugin;
 impl Plugin for BuildMutatePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let flag: Source<JsValue> = bridge.source(JsValue::new(false));
+        let flag: Source<JsValue> = bridge.decl_source(JsValue::new(false));
 
-        // Capture clones for the closure: `flag` is `Copy`, `bridge` is
-        // `Clone` (cheap Rc bump). The closure runs on the worker during
-        // `invoke_mutation`, so neither needs to be `Send`.
-        let flag_for_closure = flag;
-        let bridge_for_closure = bridge.clone();
+        // The closure writes through the bridge face it RECEIVES (`b`), which
+        // is bound to the invoking store — so reads/writes land in the same
+        // store JS invoked the mutation through. Capturing the register-time
+        // bridge instead would pin the engine store, and per-store
+        // materialization means JS would never see the write.
         let toggle = bridge.build_mutate(move |b, _args, boa| {
             let current = b
-                .read(Readable::from(flag_for_closure), boa)
+                .read(Readable::from(flag), boa)
                 .as_boolean()
                 .unwrap_or(false);
-            bridge_for_closure.set_source(flag_for_closure, JsValue::new(!current));
+            b.set_source(flag, JsValue::new(!current))?;
             Ok(JsValue::undefined())
         });
 
@@ -211,48 +201,34 @@ impl Plugin for BuildMutatePlugin {
 }
 
 /// `set(mutation)` from JS routes through `invoke_mutation`, which detects
-/// the `MutateRust` variant and calls the closure with the bridge face +
-/// user args (no `{get, set}` JsObject prepended).
+/// the MutateRust variant and calls the closure with the bridge face +
+/// user args (no `{get, set}` JsObject prepended). The instance store is
+/// stashed on globalThis and reused across evals — per-eval fresh state
+/// would read the seed instead of the flip.
 #[test]
 fn plugin_build_mutate_runs_rust_closure_on_js_set() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(BuildMutatePlugin)])
         .expect("app build");
 
+    // Stash the instance store for the toggles below.
+    app.eval_module_source("globalThis.__store = store;");
+    app.wait_for_timeout(Duration::ZERO);
+
     let read_flag = |app: &TurTestApp| -> bool {
-        app.eval_module_source(
-            r#"import { createStore } from "tur:std";
-const store = createStore();
-globalThis.__f = store.get(globalThis.flag$);
-"#,
-        )
-        .expect("eval");
+        app.eval_js("String(globalThis.__store.get(globalThis.flag$))") == "true"
+    };
+    let toggle = |app: &TurTestApp| {
+        app.eval_js("globalThis.__store.set(globalThis.toggle)");
         app.wait_for_timeout(Duration::ZERO);
-        app.eval_js("globalThis.__f") == "true"
     };
 
     assert!(!read_flag(&app), "flag$ starts false");
-
-    app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-store.set(globalThis.toggle);
-"#,
-    )
-    .expect("eval");
-    app.wait_for_timeout(Duration::ZERO);
+    toggle(&app);
     assert!(
         read_flag(&app),
         "flag$ should flip to true after one toggle"
     );
-
-    app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-store.set(globalThis.toggle);
-"#,
-    )
-    .expect("eval");
-    app.wait_for_timeout(Duration::ZERO);
+    toggle(&app);
     assert!(
         !read_flag(&app),
         "flag$ should flip back to false after a second toggle"
@@ -264,13 +240,14 @@ struct BuildMutateWithArgsPlugin;
 impl Plugin for BuildMutateWithArgsPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let sink: Source<JsValue> = bridge.source(JsValue::undefined());
+        let sink: Source<JsValue> = bridge.decl_source(JsValue::undefined());
 
-        let sink_for_closure = sink;
-        let bridge_for_closure = bridge.clone();
-        let write_msg = bridge.build_mutate(move |_b, args, _boa| {
+        // Write through the received face (the invoking store) — see
+        // BuildMutatePlugin for why the register-time bridge must not be
+        // captured.
+        let write_msg = bridge.build_mutate(move |b, args, _boa| {
             let arg = args.get_or_undefined(0).clone();
-            bridge_for_closure.set_source(sink_for_closure, arg);
+            b.set_source(sink, arg)?;
             Ok(JsValue::undefined())
         });
 
@@ -291,11 +268,8 @@ fn plugin_build_mutate_receives_user_args_verbatim() {
             .expect("app build");
 
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore } from "tur:std";
-        store.set(globalThis.writeMsg, "hello", "ignored-extra");
-        globalThis.__v = store.get(globalThis.sink$);
+        r#"store.set(globalThis.writeMsg, "hello", "ignored-extra");
+        globalThis.__v = String(store.get(globalThis.sink$));
         "#,
     )
     .expect("eval");
@@ -315,19 +289,29 @@ fn plugin_build_mutate_receives_user_args_verbatim() {
 struct CounterSubsystem {
     source: Source<JsValue>,
     bridge: ReactiveBridgeStore,
+    last_frame: u64,
     tick: u32,
 }
 
 impl Subsystem for CounterSubsystem {
-    fn flush_pre_layout(&mut self, _cx: &mut SubsystemFlushContext<'_>) {
-        // Cap to avoid runaway growth; the test only needs to observe that
-        // at least one bump made it through.
-        if self.tick >= 5 {
+    fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>) {
+        // Self-gate: at most one tick per frame (the canonical subsystem
+        // pattern — an ungated write would dirty the app on every fixed-point
+        // iteration and the flush loop would never reach quiescence).
+        if self.last_frame == cx.frame_id {
             return;
         }
+        self.last_frame = cx.frame_id;
         self.tick += 1;
+        // Engine-atom pattern: the backing's one home is the ENGINE store,
+        // so the write goes through the ordinary `set_source` rail via the
+        // bridge captured at registration — no tree chase, works pre- and
+        // post-mount. Readers reach the value through the exposed handle
+        // (a derive whose closure reads the backing via the engine face),
+        // exactly like `viewportSize$`.
         self.bridge
-            .set_source(self.source, JsValue::new(self.tick as f64));
+            .set_source(self.source, JsValue::new(self.tick as f64))
+            .ok();
     }
 }
 
@@ -335,40 +319,51 @@ struct SubsystemTickPlugin;
 impl Plugin for SubsystemTickPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let counter: Source<JsValue> = bridge.source(JsValue::new(0.0));
-        let counter_js = counter.into_js(ctx.boa_mut());
+        let counter: Source<JsValue> = bridge.decl_source(JsValue::new(0.0));
+        // The public handle: a derive reading the backing through the
+        // ENGINE store's read face (captured), not the reading store's —
+        // so every store of the instance resolves the same live value.
+        let engine_read = bridge.read_only();
+        let handle = bridge
+            .build_derive(move |_read, boa| Ok(engine_read.read(Readable::from(counter), boa)));
+        let counter_js = handle.into_js(ctx.boa_mut());
         ctx.register_global("counter$", counter_js);
         ctx.register_subsystem(Box::new(CounterSubsystem {
             source: counter,
             bridge,
+            last_frame: 0,
             tick: 0,
         }));
         Ok(())
     }
 }
 
-/// A plugin's subsystem can write to a Rust-minted source each frame via
-/// `bridge.set_source(...)`, and JS observes the updated value. Mirrors the
-/// engine-internal `viewportSize$` pattern (engine-owned source updated by
-/// `Screen::sync_source` on resize).
+/// A plugin's subsystem can publish to an engine atom each frame via the
+/// ordinary write rail (`set_source` through the engine store), and JS
+/// observes the updated value through ANY store — the canonical
+/// engine-atom pattern shared with `viewportSize$`.
 #[test]
 fn plugin_subsystem_writes_to_minted_source_observable_from_js() {
     let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(SubsystemTickPlugin)])
         .expect("app build");
 
-    // Drive a few frames so flush_pre_layout ticks at least once.
-    app.wait_for_timeout(Duration::from_millis(64));
-
     app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-globalThis.__c = store.get(globalThis.counter$);
+        r#"import { mount, view, Text } from "tur:std";
+export function start({ store }) {
+    globalThis.__store = store;
+    mount(view(() => Text({ text: "" })));
+}
 "#,
     )
     .expect("eval");
-    app.wait_for_timeout(Duration::ZERO);
 
-    let v: u32 = app.eval_js("globalThis.__c").parse().unwrap_or(0);
+    // Drive a few frames so flush_pre_layout ticks at least once.
+    app.wait_for_timeout(Duration::from_millis(64));
+
+    let v: u32 = app
+        .eval_js("String(globalThis.__store.get(globalThis.counter$))")
+        .parse()
+        .unwrap_or(0);
     assert!(
         v > 0,
         "subsystem should have bumped counter$ at least once across driven frames (got {v})"
@@ -407,21 +402,25 @@ impl Plugin for SelfReadDerivePlugin {
     }
 }
 
+/// A Rust-native derive reading itself must not recurse natively. The cycle
+/// guard stops the recursion at the re-entrant `read_by_id`; the read
+/// surfaces as `undefined` through the internal Rust face (the swallowing
+/// fallback layout reads rely on — only JS closures propagate their errors),
+/// so the derive materializes `undefined` without overflowing.
 #[test]
 fn rust_derive_self_read_materializes_undefined_without_overflow() {
-    let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(SelfReadDerivePlugin)])
-        .expect("app build");
+    let app =
+        TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(SelfReadDerivePlugin)])
+            .expect("app build");
     app.eval_module_source(
-        r#"import { createStore } from "tur:std";
-const store = createStore();
-            globalThis.__v = store.get(globalThis.cycle$);
+        r#"globalThis.__v = String(store.get(globalThis.cycle$));
 "#,
     )
     .expect("eval");
     app.wait_for_timeout(Duration::ZERO);
 
     assert_eq!(
-        app.eval_js("String(globalThis.__v)"),
+        app.eval_js("globalThis.__v"),
         "undefined",
         "self-reading Rust derive must materialize undefined, not overflow the stack"
     );

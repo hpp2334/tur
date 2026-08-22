@@ -4,7 +4,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     Each,
     type Element,
@@ -31,7 +30,6 @@ import {
     tasks$,
 } from "./state";
 import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./views";
-export const store = createStore();
 
 // --- Light theme palette (Notion / Linear-style) -------------------------
 

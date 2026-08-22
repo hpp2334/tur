@@ -168,6 +168,12 @@ impl TurAppInternal {
         let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker.clone()));
 
         let store = Store::new(dirty.clone());
+        // The instance-owned tree: created at build, born-bound to the
+        // INSTANCE store (the engine-created store handed to the module's
+        // `start({ store })`). It exists for the instance's whole life —
+        // module teardown clears its ROOT (draining the lifecycle), the next
+        // module mounts into the same tree. A `mount(store, view)` with an
+        // explicit store swaps the binding in place.
         let element_tree = NodeTree::new(store.clone());
 
         let js_context = TurInstanceContext::new(
@@ -202,7 +208,6 @@ impl TurAppInternal {
             completion_handle.clone(),
             capabilities,
             clock_rc,
-            store,
         );
 
         Self {
@@ -499,7 +504,9 @@ impl TurAppInternal {
         };
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
-        self.rebuild_fragments(boa_context, &dirty_frag_ids);
+        if !dirty_frag_ids.is_empty() {
+            self.rebuild_fragments(boa_context, &dirty_frag_ids);
+        }
 
         (!dirty_subs.is_empty(), dirty_element_ids)
     }
@@ -676,8 +683,7 @@ impl TurAppInternal {
     /// [`crate::core::edgy::reactive::SharedReactive::invoke_mutation_by_id`]
     /// only for `Js`-variant closures, so here we pass only the user args.
     /// Invocations run against the **mounted** store (the tree's store), so
-    /// declaration atoms touched by the mutation's closure materialize there;
-    /// engine-owned atoms route to their owner either way.
+    /// atoms touched by the mutation's closure materialize there.
     fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let invs = self.js_context.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {
@@ -693,5 +699,15 @@ impl TurAppInternal {
             }
         }
         true
+    }
+
+    /// Teardown support: fire the pending lifecycle hooks (notably
+    /// `before_destroy` for elements removed by the teardown's
+    /// `destroy_subtree`) and drain the mutations they queued — invoked
+    /// against the still-bound mounted store. The caller drops the tree
+    /// right after: it must not outlive its pending lifecycle work.
+    pub(crate) fn drain_teardown_lifecycle(&self, boa_context: &mut boa_engine::Context) {
+        self.run_lifecycle_hooks(boa_context, &[]);
+        self.flush_pending_mutations(boa_context);
     }
 }

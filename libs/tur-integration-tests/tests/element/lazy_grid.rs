@@ -7,10 +7,9 @@ use tur_integration_tests::TurTestApp;
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(store, LazyGrid({
+        r#"
+        import { mount, LazyGrid, Container, createColor } from "tur:std";
+        mount(LazyGrid({
             axis: 0,
             itemCount: 10000,
             maxCrossAxisExtent: 100,
@@ -179,10 +178,9 @@ fn lazy_grid_scroll_clamps_at_content_end() {
 fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(store, LazyGrid({
+        r#"
+        import { mount, LazyGrid, Container, createColor } from "tur:std";
+        mount(LazyGrid({
             axis: 1,
             itemCount: 1000,
             maxCrossAxisExtent: 100,

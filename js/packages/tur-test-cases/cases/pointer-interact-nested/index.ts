@@ -2,7 +2,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -13,7 +12,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 const outerClicks$ = source(0);
 const innerClicks$ = source(0);

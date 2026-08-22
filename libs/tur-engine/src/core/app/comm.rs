@@ -42,8 +42,10 @@ use crate::core::render::RenderCommand;
 use crate::core::shell::{Cursor, TextInputState};
 
 /// Type-erased closure run against the worker's live tree + focus state
-/// (see [`WorkerMsg::WithTree`]). Ships its result via a `Reply` channel
-/// it captures, so `WorkerMsg` stays monomorphic.
+/// (see [`WorkerMsg::WithTree`]). The tree always exists (instance-owned);
+/// it may be root-less before the first `mount` / after teardown. Ships its
+/// result via a `Reply` channel it captures, so `WorkerMsg` stays
+/// monomorphic.
 pub type TreeRunner = Box<dyn FnOnce(&NodeTreeData, &FocusManager) + Send + 'static>;
 
 /// host → worker channel sender. Unbounded — the host side pushes input

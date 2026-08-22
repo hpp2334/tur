@@ -11,7 +11,6 @@ use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
-use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
@@ -25,6 +24,11 @@ use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {
+    /// The instance-owned tree (shared with [`TurInstanceContext`]) —
+    /// created at build born-bound to the instance store. Layout / paint /
+    /// event dispatch operate on it directly; before the first `mount` it is
+    /// simply rootless (empty layout, empty paint — the historical
+    /// pre-mount behavior).
     pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
@@ -77,17 +81,16 @@ impl TurAppContext {
         completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
-        store: Store,
     ) -> Self {
         let font_manager = FontManager::from_context(font_context, font_loader);
         Self {
-            element_tree,
+            element_tree: element_tree.clone(),
             mutation_queue,
             focus_manager,
             image_manager,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
-            screen: Screen::new(store),
+            screen: Screen::new(),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             worker_ctx,
@@ -181,13 +184,14 @@ impl TurAppContext {
         };
 
         let image_manager = self.image_manager.borrow();
+        let node_tree = self.element_tree.clone();
         let mut tree = self.element_tree.borrow_mut();
         tree.compute_layout(
             &constraints,
             &mut self.font_manager,
             &mut self.text_layout_cx,
             &image_manager,
-            self.element_tree.clone(),
+            node_tree,
             self.mutation_queue.clone(),
             dirty,
             boa,

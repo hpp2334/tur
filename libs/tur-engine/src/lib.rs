@@ -238,6 +238,9 @@ impl TurApp {
     /// `dev_tool_node` / `root_element_id`, focus's `focused()`, the
     /// `focused_is_editable` helper in [`core::focus::helper`]).
     ///
+    /// The tree always exists (instance-owned) but may be root-less before
+    /// the first `mount` / after module teardown.
+    ///
     /// Returns `None` if the worker is gone (`R: Send + 'static`,
     /// `cb: Send + 'static`). Production code should never call this.
     pub async fn with_tree<R: Send + 'static>(

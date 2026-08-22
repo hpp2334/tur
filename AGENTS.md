@@ -14,12 +14,12 @@ Clean design and architecture.
 
 `load_module(source)` (on the app's backend — `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources; the string-based `HostBackend::load_module` RPC is the raw entry) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
 
-- The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree, then evaluates the new module and calls its `start()`.
+- The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree (draining its `before_destroy` lifecycle before clearing it), then evaluates the new module and calls its `start({ store })`.
 - Missing / non-function `start` fails the load (`ModuleError::Eval`); a throwing `start` fails it too. `start` returning undefined is fine (no cleanup).
-- The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: `mount` replaces any existing root, and module teardown clears it. A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
+- The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: the tree is **instance-owned** (created at build, permanently bound to the instance store; `mount(view)` builds the root against it), and module teardown drains the root's lifecycle and clears the root (the next module starts root-less). A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
 - Cleanup also runs (best-effort) at instance destroy.
 
-Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that creates the store inline (`mount(createStore(), Shell)`), dispatches the one boot mutation that needs a writer (the `now$` ticker), and returns its cancellation as the module cleanup — no store module is saved anywhere, and all playground code is ctx-only: `derive` closures read, `mutate` closures write, and side-effecting actions are `mutate` declarations composed by dispatching one another via `ctx.set(action, …args)`; the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded case code is **ctx-only**: reactive access flows through `derive`/`mutate` closure ctx, which the engine binds to the host's mounted store; `scripts/gen-cases.cjs` de-exports the case's own store line for the embedded copy); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
+Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start({ store })` that mounts the Shell with the engine-provided instance store (`mount(Shell)`), dispatches the one boot mutation that needs a writer (the `now$` ticker), and returns its cancellation as the module cleanup — no store is created or saved anywhere, and all playground code is ctx-only: `derive` closures read, `mutate` closures write, and side-effecting actions are `mutate` declarations composed by dispatching one another via `ctx.set(action, …args)`; the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded case code is **ctx-only**: reactive access flows through `derive`/`mutate` closure ctx, which the engine binds to the instance store; module-scope test-seam helpers reach it via `globalThis.__store`); `tur-test-cases` dist wrappers mount inside `start({ store })` (`mount(Case)` against the injected instance store). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source` — the wrapper's `start({ store })` binds the fixture body's `store` name); contract tests use `load_module_raw`.
 
 ## Architecture
 
@@ -49,7 +49,9 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   │             mount + RootView/RootElement        │
 │  │   │             generic-root wrapper)               │
 │  │   ├── elements/ (AnyElement, ElementObject,         │
-│  │   │             ElementTree with layout+paint)      │
+│  │   │             ElementTree with layout+paint —     │
+│  │   │             instance-owned, born-bound to the   │
+│  │   │             instance store)                     │
 │  │   ├── render/   (PaintContext, Renderer,            │
 │  │   │             ElementRender trait + brush/         │
 │  │   │             Color/Brush/GradientStop + JS        │
@@ -70,8 +72,9 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   │             own tur:core)               │
 │  │   ├── focus/    (FocusManager + Focusable trait +   │
 │  │   │             BlurEvent/FocusEvent/FocusChange)   │
-│  │   ├── screen/   (Screen + viewportSize$ source +    │
-│  │   │             ResizeSubsystem)                    │
+│  │   ├── screen/   (Screen = pure data: logical_size  │
+│  │   │             + dpr; ResizeSubsystem owns the     │
+│  │   │             viewportSize$ backing + write rail) │
 │  │   ├── shell/    (the app↔OS interactive layer:      │
 │  │   │             Shell trait [set_cursor +           │
 │  │   │             request_text_input] + NoopShell +   │
@@ -312,17 +315,22 @@ fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
 
     // Mint a source. Initial value is a JsValue (the store is type-erased to
     // JsValue at runtime; Source<T>'s T is a type-level marker only).
-    let clock: Source<JsValue> = bridge.source(JsValue::new(0.0));
+    let clock: Source<JsValue> = bridge.decl_source(JsValue::new(0.0));
 
     // Expose to JS — handles cross the boundary via IntoJs (opaque JsObject).
-    // JS reads via `store.get(mySource)` on any store of the instance (the
-    // atom is owned by the engine store, so reads route there).
+    // JS reads via `store.get(mySource)`; the value materializes into the
+    // instance store (like every atom).
     let js_handle = clock.into_js(ctx.boa_mut());
     ctx.register_global("clock$", js_handle);
 
-    // A subsystem can write to the source from Rust each frame — mirrors the
-    // engine-internal `viewportSize$` pattern (Screen::sync_source on resize).
-    ctx.register_subsystem(Box::new(ClockSubsystem { source: clock, bridge }));
+    // A subsystem that publishes ENGINE ENVIRONMENT truth follows the
+    // `viewportSize$` pattern: the backing's single value home is the
+    // INSTANCE store — published via the ordinary `set_source` write rail
+    // (no tree chase, works pre- and post-mount) — and the public handle
+    // is a derive whose closure reads the backing through a captured
+    // engine read face (`bridge.read_only()`), so every read path
+    // resolves the same live value.
+    ctx.register_subsystem(Box::new(ClockSubsystem { source: clock }));
     Ok(())
 }
 ```
@@ -334,23 +342,31 @@ atoms minted by JS. JS reads/writes via `store.get(atom)` /
 
 **The store is the KV.** JS `source(v)` / `derive(fn)` / `mutate(fn)` return
 *pure declarations* — no state is stored at call time; the seed (initial
-value / closure) lives in the instance-wide registry. A `Store` (from
-`createStore()`) materializes each declaration on first read/write — the
-same declaration in two stores is two independent atoms. `mount(store, view)`
-binds the tree's declarations to that store (free module-level `get`/`set`
-exports are gone, and there is no `getStore()` either: reactive access
-outside a store goes through the closure ctx of `derive`/`mutate`, which the
-engine binds to the mounted store — code needing reactive access in helpers
+value / closure) lives in the instance-wide registry. Each instance has
+exactly ONE store — created by the engine and handed to the module's
+`start({ store })` (`createStore` is not exported); the store materializes
+each declaration on first read/write. `mount(view)` builds the tree against
+that store (free module-level `get`/`set` exports are gone, and there is no
+`getStore()` either: reactive access outside a closure goes through the
+closure ctx of `derive`/`mutate`, which the
+engine binds to the instance store — code needing reactive access in helpers
 or `launch` generators threads/captures that ctx; side-effecting helpers
 are declared as mutations themselves and dispatched via
 `ctx.set(action, …args)` — the flush's fixed-point loop drains nested
 dispatches within the same frame, so composing actions costs no latency).
-Rust-minted
-atoms (`bridge.source(...)` etc.) are *owned* by the engine store: one value
-home, readable through any store via the shared owner map. Atom ids come
+The machinery (`SharedReactive`) holds no store references and no values —
+every read/write/invoke takes the caller's store per call, and atom values
+live only in the store KV. Atom ids come
 from one per-instance counter, so the derived graph / subscriber index /
-flush state are shared across all stores of the instance (a write in one
-store invalidates deriveds materialized in another).
+flush state are shared (a write invalidates every cached copy — via
+per-atom invalidation generations: the store's cached slot records the
+generation it was computed at, and a mismatch or missing slot forces a
+recompute). Engine environment atoms (`viewportSize$`) follow the
+**engine rail**: the backing source's single value home is the instance
+store (written with the ordinary `set_source` path JS `store.set` uses),
+and the public handle is a derive whose closure reads the backing through a
+captured engine read face — so every read path resolves the same live
+value, and cache coherence rides the same generation rail as any derive.
 
 **Rust-native closures** (`build_derive` / `build_mutate`) skip the `{get, set}`
 JsObject round-trip that JS `derive(fn)` / `mutate(fn)` closures pay. The
@@ -668,19 +684,22 @@ libs/
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge
         edgy/                # Reactive substrate: reactive/ (SharedReactive
-                             #   shared per instance + per-store StoreKv +
-                             #   Source/Derived/AnyReadable handles) +
+                             #   shared per instance + the instance
+                             #   StoreKv + Source/Derived/AnyReadable
+                             #   handles) +
                              #   mutation/ (MutationHandle/
                              #   PendingMutationInvocationQueue) +
-                             #   source/derive/mutate/watch/createStore/
-                             #   view bridge + ReadableSubscribe (the
-                             #   engine's own tur:core) + watch/
+                             #   source/derive/mutate/watch/view bridge +
+                             #   ReadableSubscribe (the engine's own
+                             #   tur:core) + watch/
                              #   (WatcherRegistry — non-element
                              #   subscribers: start$/stop$ handles,
                              #   epoch coalescing, loop guard)
         element.rs           # ElementKind / ElementNodeId / NodeId /
                              #   FragmentNodeId
         elements/            # AnyElement, ElementObject, ElementTree
+                             #   (instance-owned — created at build,
+                             #   born-bound to the instance store)
         focus/               # FocusManager + Focusable trait +
                              #   BlurEvent/FocusEvent/FocusChange
                              #   (engine contract — the Focusable *widget*
@@ -720,9 +739,10 @@ libs/
         render/              # PaintContext, Renderer, ElementRender trait,
                              #   Canvas + brush/ (Color/Brush/GradientStop/
                              #   RGB types + JS bindings)
-        screen/              # Screen struct (logical_size + viewportSize$
-                             #   source atom) + ResizeSubsystem (handles
-                             #   the shell Resize event)
+        screen/              # Screen = pure data (logical_size + dpr) +
+                             #   ResizeSubsystem (owns the viewportSize$
+                             #   backing + the instance store's write
+                             #   rail; minted & registered by TurStdPlugin)
         frame_env/          # FrameEnv (clock + pointer + cursor-resolve
                              #   state) + PaintEnv + CursorSink
         subsystem.rs         # Subsystem trait (flush_pre_layout +

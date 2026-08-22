@@ -1,6 +1,4 @@
-import { createStore, SizedBox, Stack, view } from "tur:std";
-
-export const store = createStore();
+import { SizedBox, Stack, view } from "tur:std";
 
 export default view(() =>
     Stack({

@@ -1,14 +1,4 @@
-import {
-    Color,
-    Container,
-    createStore,
-    derive,
-    Expanded,
-    Row,
-    source,
-    view,
-} from "tur:std";
-export const store = createStore();
+import { Color, Container, derive, Expanded, Row, source, view } from "tur:std";
 
 // Two reactive flex weights. Exposed to Rust tests via globalThis so the test
 // can flip them without a click (a click would mark extra nodes dirty via the
@@ -18,8 +8,8 @@ const flexB$ = source(1);
 
 Object.assign(globalThis, {
     __setFlex: (a: number, b: number): void => {
-        store.set(flexA$, a);
-        store.set(flexB$, b);
+        globalThis.__store.set(flexA$, a);
+        globalThis.__store.set(flexB$, b);
     },
 });
 

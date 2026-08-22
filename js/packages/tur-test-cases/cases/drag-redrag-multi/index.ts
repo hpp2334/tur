@@ -2,7 +2,6 @@ import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
-    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -13,7 +12,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Multi-tile drag-and-drop with a SHARED lift animation — a faithful,

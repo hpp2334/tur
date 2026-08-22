@@ -3,14 +3,12 @@ import {
     type Brush,
     Color,
     Container,
-    createStore,
     derive,
     mutate,
     PointerInteract,
     source,
     view,
 } from "tur:std";
-export const store = createStore();
 
 const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);

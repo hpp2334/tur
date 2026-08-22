@@ -7,14 +7,13 @@ use tur_integration_tests::TurTestApp;
 fn setup(app: &mut TurTestApp, extra: &str) {
     app.eval_module_source(&format!(
         r#"
-        import {{ Container, createStore, mount, mutate, source, watch }} from "tur:std";
-        const store = createStore();
+        import {{ Container, mount, mutate, source, watch }} from "tur:std";
         globalThis.__store = store;
         globalThis.__n = source(0);
         globalThis.__fires = source(0);
         globalThis.__caught = source("unset");
         {extra}
-        mount(store, Container({{ children: [] }}));
+        mount(Container({{ children: [] }}));
         "#,
         extra = extra,
     ))
@@ -306,13 +305,11 @@ fn watch_pingpong_terminates_within_frame() {
         r#"
         import {
             Container,
-            createStore,
             mount,
             mutate,
             source,
             watch,
         } from "tur:std";
-        const store = createStore();
         globalThis.__store = store;
         globalThis.__a = source(0);
         globalThis.__b = source(0);
@@ -328,7 +325,7 @@ fn watch_pingpong_terminates_within_frame() {
         }));
         store.set(wa.start$);
         store.set(wb.start$);
-        mount(store, Container({ children: [] }));
+        mount(Container({ children: [] }));
         "#,
     )
     .unwrap();
@@ -366,14 +363,14 @@ fn subscriber_edges_dropped_on_subtree_destroy() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Column, Text, Condition, createStore, source, derive, mount } from "tur:std";
-        globalThis.__store = createStore();
+        import { Column, Text, Condition, source, derive, mount } from "tur:std";
+        globalThis.__store = store;
         globalThis.__show = source(true);
         globalThis.__label = derive((ctx) => (ctx.get(globalThis.__show) ? "on" : "off"));
         const items = () => Column({
             children: [0, 1, 2, 3].map(() => Text({ text: globalThis.__label })),
         });
-        mount(globalThis.__store, Column({
+        mount(Column({
             children: [
                 Condition({ condition: globalThis.__show, child: items }),
                 Text({ text: "anchor" }),

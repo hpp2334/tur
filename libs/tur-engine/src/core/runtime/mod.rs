@@ -16,12 +16,10 @@ use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::js_runtime::instance_context::InstanceDataCx;
-use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
 use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginContext};
 use crate::core::scheduler::WorkerPoolHandle;
-use crate::core::screen::Screen;
 use crate::error::TurError;
 use crate::{TurApp, TurAppLooper};
 
@@ -622,14 +620,29 @@ pub(crate) fn build_worker_backend(
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
     let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
 
-    let viewport_size_js: boa_engine::JsValue = {
-        internal.app_context.borrow_mut().screen.logical_size = viewport;
-        let init = Screen::size_js(viewport.0, viewport.1, &mut boa_context);
-        let src: reactive::Source<boa_engine::JsValue> =
-            internal.js_context.store.bridge().source(init);
-        internal.app_context.borrow_mut().screen.set_source(src);
-        src.into_js(&mut boa_context)
+    // The instance store as a JS `{get, set}` object — the `store` handed to
+    // every module's `start({ store })`. The instance-owned tree is
+    // born-bound to this store at build, so a module that mounts
+    // `mount(view)` (no explicit store) builds against exactly the store it
+    // was handed; `mount(store, view)` swaps the binding (legacy shape).
+    let start_arg = {
+        let store_obj =
+            reactive::make_store_js_object(&mut boa_context, internal.js_context.store.clone());
+        let obj = JsObject::with_object_proto(boa_context.intrinsics());
+        let _ = obj.create_data_property(
+            js_string!("store"),
+            boa_engine::JsValue::from(store_obj),
+            &mut boa_context,
+        );
+        obj
     };
+
+    // Seed the worker-side screen state with the build-time viewport. The
+    // `viewportSize$` engine atom — backing source, public derive handle,
+    // and the `ResizeSubsystem` that publishes it — is minted and owned by
+    // `TurStdPlugin` (the canonical plugin-facing engine-atom recipe, see
+    // `builtin_plugins/std.rs`), seeded via `PluginContext::viewport()`.
+    internal.app_context.borrow_mut().screen.logical_size = viewport;
 
     let mut core_fns: Vec<FnEntry> = Vec::new();
     core_fns.extend(crate::core::edgy::bridge::fns());
@@ -701,14 +714,18 @@ pub(crate) fn build_worker_backend(
             app: internal.app_context.clone(),
             subsystems: internal.subsystems.clone(),
             event_bus: internal.event_bus.clone(),
-            viewport_size: viewport_size_js.clone(),
             host_exec: host_exec.clone(),
         };
         plugin.register(&mut plugin_ctx)?;
     }
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
-    Ok(WorkerBackend::new(boa_context, internal, executor))
+    Ok(WorkerBackend::new(
+        boa_context,
+        internal,
+        executor,
+        start_arg,
+    ))
 }
 
 pub struct TurRuntimeBuilder {
