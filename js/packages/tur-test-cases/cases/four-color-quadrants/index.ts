@@ -1,13 +1,4 @@
-import {
-    Color,
-    Container,
-    createStore,
-    Positioned,
-    Stack,
-    view,
-} from "tur:std";
-
-export const store = createStore();
+import { Color, Container, Positioned, Stack, view } from "tur:std";
 
 export default view(() =>
     Stack({

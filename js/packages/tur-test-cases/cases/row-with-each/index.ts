@@ -3,7 +3,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     Each,
     Expanded,
     MainAxisSize,
@@ -13,8 +12,6 @@ import {
     Text,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 const seg$ = source<string[]>(["a", "b"]);
 

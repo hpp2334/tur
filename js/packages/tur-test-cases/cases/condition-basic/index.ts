@@ -1,6 +1,4 @@
-import { Color, Condition, Container, createStore, Text, view } from "tur:std";
-
-export const store = createStore();
+import { Color, Condition, Container, Text, view } from "tur:std";
 
 export default view(() =>
     Condition({

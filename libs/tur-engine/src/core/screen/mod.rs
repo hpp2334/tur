@@ -1,107 +1,52 @@
 //! Screen domain — the canvas's logical size + the resize subsystem that
 //! drives it.
 //!
-//! Owns:
-//! - the current logical size (CSS pixels),
-//! - the shared reactive `Store` (so the size→atom sync is self-contained),
-//! - the `viewportSize$` reactive source atom that publishes `{width, height}`
-//!   to JS,
-//! - the [`ResizeSubsystem`] that handles the shell `Resize` event (resizes the
-//!   renderer, updates the size, pushes the atom, and re-marks the tree root
-//!   dirty).
+//! [`Screen`] is **pure data**: the current logical size (CSS pixels) and
+//! the device pixel ratio. The `viewportSize$` atom — its backing source,
+//! the instance-store write rail it publishes through, and the dedup guard
+//! — is owned by [`ResizeSubsystem`] (`resize.rs`), minted and registered
+//! by `TurStdPlugin` (the canonical plugin-facing engine-atom recipe), and
+//! driven by the shell `Resize` event (updates this state, publishes the
+//! atom, and re-marks the tree root dirty).
 //!
 //! `TurAppContext` owns a [`Screen`] inline; `SubsystemFlushContext.screen`
 //! is a `&mut` borrow into it, so the resize handler drives both the size
-//! mutation and the atom sync directly (event-driven, not polled each frame).
+//! mutation and the atom publish directly (event-driven, not polled each
+//! frame).
 
 pub mod resize;
 
 pub use resize::ResizeSubsystem;
 
-use std::cell::Cell;
+pub(crate) use resize::viewport_size_value;
 
-use boa_engine::{Context, JsValue, js_string, object::JsObject};
-
-use crate::core::edgy::reactive::{Source, Store};
-
-/// Engine screen state — the canvas's logical size + DPR + the
-/// `viewportSize$` reactive source atom that publishes it to JS.
+/// Engine screen state — pure data: the canvas's logical size + DPR.
+/// Updated by [`ResizeSubsystem`] on shell `Resize` events (which also
+/// publishes the new size into `viewportSize$`).
 pub struct Screen {
-    /// Current canvas logical size, in CSS pixels. Updated by
-    /// [`ResizeSubsystem`] when a shell `Resize` event arrives.
+    /// Current canvas logical size, in CSS pixels.
     pub logical_size: (f64, f64),
-    /// Current device pixel ratio. Updated by [`ResizeSubsystem`]; shipped
-    /// to main with each `HostMsg::RenderCommands` so the host-side
-    /// renderer can call `resize()` + apply the dpr root transform.
+    /// Current device pixel ratio. Shipped to main with each
+    /// `HostMsg::RenderCommands` so the host-side renderer can call
+    /// `resize()` + apply the dpr root transform.
     pub dpr: f64,
-    /// The shared reactive store, captured at construction so the resize
-    /// handler can push the `viewportSize$` atom directly via
-    /// [`Self::sync_source`] without the caller threading a `&Store` through
-    /// `SubsystemFlushContext`. Cheap to clone (`Rc`-backed); observes the
-    /// same reactive state engine-wide.
-    pub(crate) store: Store,
-    /// The reactive source atom that publishes `{width, height}` to JS.
-    /// `None` until `TurRuntimeBuilder::build` creates it.
-    pub(crate) source: Option<Source<JsValue>>,
-    /// Last `(width, height)` pushed into `source` — guards against
-    /// spurious stale marking (`set_source` compares `JsValue` by object
-    /// identity, so a fresh `{w,h}` object would otherwise dirty on every
-    /// push).
-    last: Cell<(f64, f64)>,
 }
 
 impl Screen {
-    /// Create with the given reactive store and the default initial logical
-    /// size (400×600) — matches the historical `TurAppContext::new` default
-    /// before this type existed.
-    pub fn new(store: Store) -> Self {
+    /// Create with the default initial logical size (400×600) — matches the
+    /// historical `TurAppContext::new` default before this type existed.
+    /// The engine builder overwrites `logical_size` with the real viewport
+    /// before anything runs.
+    pub fn new() -> Self {
         Self {
             logical_size: (400.0, 600.0),
             dpr: 1.0,
-            store,
-            source: None,
-            last: Cell::new((-1.0, -1.0)),
         }
     }
+}
 
-    /// Build a `{width, height}` JS object (CSS pixels) — the value shape
-    /// of the `viewportSize$` atom. Consumed by the engine builder (initial
-    /// const value) and [`Self::sync_source`] (per-resize update).
-    pub(crate) fn size_js(width: f64, height: f64, boa: &mut Context) -> JsValue {
-        let obj = JsObject::with_object_proto(boa.intrinsics());
-        let _ = obj.create_data_property(js_string!("width"), JsValue::from(width), boa);
-        let _ = obj.create_data_property(js_string!("height"), JsValue::from(height), boa);
-        obj.into()
-    }
-
-    /// Install the `viewportSize$` source atom. Called once from
-    /// `TurRuntimeBuilder::build` after the `Source` is created on the
-    /// reactive store.
-    pub(crate) fn set_source(&mut self, src: Source<JsValue>) {
-        self.last.set((-1.0, -1.0));
-        self.source = Some(src);
-    }
-
-    /// Push the current logical size into the source atom if it has
-    /// changed since the last sync. Called by [`ResizeSubsystem`] from its
-    /// shell `Resize`-event handler (event-driven, not once per `flush()`
-    /// iteration), so `viewportSize$` subscribers re-layout in the same
-    /// fixed-point iteration that mutated [`Self::logical_size`].
-    pub(crate) fn sync_source(&self, boa: &mut Context) {
-        let Some(src) = self.source else {
-            return;
-        };
-        let (width, height) = self.logical_size;
-        if (width, height) == self.last.get() {
-            return;
-        }
-        self.last.set((width, height));
-        let value = Self::size_js(width, height, boa);
-        // A resize can never be a watch loop (it originates from the platform
-        // event queue, never inside a watcher callback delivery), so an error
-        // here would be an engine invariant violation — log, don't crash.
-        if let Err(e) = self.store.bridge().set_source(src, value) {
-            tracing::error!("viewportSize$ sync failed: {e}");
-        }
+impl Default for Screen {
+    fn default() -> Self {
+        Self::new()
     }
 }

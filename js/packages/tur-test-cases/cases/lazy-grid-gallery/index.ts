@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     type Element,
     Expanded,
@@ -22,7 +21,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Lazy Grid Gallery" — a massive virtualized palette. 6,000 tiles, but only

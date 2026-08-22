@@ -41,9 +41,8 @@ fn pick_resolves_with_files_and_drives_reactive_set() {
     ]);
 
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
+        r#"
+        import { source } from "tur:std";
         import { filePicker } from "tur:filepicker";
         globalThis.__count$ = source(0);
         globalThis.__first$ = source("");
@@ -75,9 +74,8 @@ fn pick_returns_empty_array_when_cancelled() {
     // No canned pick → backend resolves with an empty Vec (cancelled).
 
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
+        r#"
+        import { source } from "tur:std";
         import { filePicker } from "tur:filepicker";
         globalThis.__len$ = source(-1);
         filePicker.pick().then((files) => {

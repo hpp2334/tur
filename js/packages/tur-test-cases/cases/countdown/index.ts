@@ -5,7 +5,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    createStore,
     createTextEditingController,
     derive,
     type Element,
@@ -32,7 +31,6 @@ import {
     type Val,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // --- Light theme palette (slate + emerald accents) -----------------------
 

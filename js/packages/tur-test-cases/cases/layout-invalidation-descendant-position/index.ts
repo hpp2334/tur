@@ -1,14 +1,12 @@
 import {
     Color,
     Container,
-    createStore,
     derive,
     MainAxisAlignment,
     Row,
     source,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // Reactive width of the outer container. Exposed to Rust tests via globalThis
 // so the test can change it without a click (a click would mark extra nodes
@@ -17,7 +15,7 @@ const width$ = source(100);
 
 Object.assign(globalThis, {
     __setWidth: (w: number): void => {
-        store.set(width$, w);
+        globalThis.__store.set(width$, w);
     },
 });
 

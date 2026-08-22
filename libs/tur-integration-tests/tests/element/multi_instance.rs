@@ -48,12 +48,11 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     (runtime, driver, pool)
 }
 
-const SET_ID_JS: &str = r#"const store = createStore();
-
-    import { createStore, Text, mount } from "tur:std";
-    export function start() {
+const SET_ID_JS: &str = r#"
+    import { Text, mount } from "tur:std";
+    export function start({ store }) {
         globalThis.__instanceId = "VALUE";
-        mount(store, Text({ text: "VALUE" }));
+        mount(Text({ text: "VALUE" }));
     }
 "#;
 
@@ -119,32 +118,31 @@ fn instances_have_isolated_element_trees() {
 
     // Mount a tree only in A.
     futures::executor::block_on(app_a.backend().load_module(
-        r#"const store = createStore();
-
-            import { createStore, Text, mount } from "tur:std";
-            export function start() {
-                mount(store, Text({ text: "only-in-A", queryKey: ["a_only"] }));
+        r#"
+            import { Text, mount } from "tur:std";
+            export function start({ store }) {
+                mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
             }
         "#,
     ))
     .expect("load A");
     looper_a.wait_for_timeout(Duration::ZERO);
 
-    // B has no tree mounted.
+    // B has no root mounted (its module only defines start).
     let b_tree = futures::executor::block_on(app_b.with_tree(|tree, _focus| {
         tree.root_element_id()
             .and_then(|root| tree.dev_tool_node(root.into()))
     }))
     .flatten();
-    assert!(b_tree.is_none(), "instance B should have no tree");
+    assert!(b_tree.is_none(), "instance B should have no root");
 
-    // A does have a tree.
+    // A does have a root.
     let a_tree = futures::executor::block_on(app_a.with_tree(|tree, _focus| {
         tree.root_element_id()
             .and_then(|root| tree.dev_tool_node(root.into()))
     }))
     .flatten();
-    assert!(a_tree.is_some(), "instance A should have a tree");
+    assert!(a_tree.is_some(), "instance A should have a root");
 }
 
 #[test]
@@ -161,10 +159,9 @@ fn headless_instance_runs_js_without_rendering() {
 
     // JS executes; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.backend().load_module(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
-        export function start() {
+        r#"
+        import { source } from "tur:std";
+        export function start({ store }) {
             globalThis.__val = source(42);
             const v = store.get(globalThis.__val);
             globalThis.__readBack = v;
@@ -197,10 +194,9 @@ fn build_headless_runs_engine_on_worker() {
 
     // JS executes via the worker RPC path.
     futures::executor::block_on(app.backend().load_module(
-        r#"const store = createStore();
-
-        import { createStore, source } from "tur:std";
-        export function start() {
+        r#"
+        import { source } from "tur:std";
+        export function start({ store }) {
             globalThis.__val = source(7);
             globalThis.__readBack = store.get(globalThis.__val);
         }
@@ -428,13 +424,14 @@ fn platform_events_route_to_the_correct_instance() {
 
     // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
     // mode (no imports), so do the import in a module eval and stash the JSON
-    // on globalThis, then read it back with eval_js.
+    // on globalThis, then read it back with eval_js. The read goes through
+    // the instance store — engine environment atoms live in it.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
         let _ = futures::executor::block_on(app.backend().load_module(
-            r#"import { createStore, viewportSize$ } from "tur:std";
-const store = createStore();
+            r#"import { mount, view, Text, viewportSize$ } from "tur:std";
 
-               export function start() {
+               export function start({ store }) {
+                   mount(view(() => Text({ text: "x" })));
                    globalThis.__vp = JSON.stringify(store.get(viewportSize$));
                }"#,
         ));
@@ -470,14 +467,14 @@ fn reactive_stores_are_isolated_per_instance() {
         .build()
         .expect("B");
 
-    // Create a source in A and set a value. The store is stashed on
-    // globalThis so the read-back module below reads through the SAME store
-    // (a fresh store would materialize the declaration independently).
+    // Create a source in A and set a value. The instance store is stashed
+    // on globalThis so the read-back module below reads through the SAME
+    // store (the instance store persists across reloads — its KV keeps the
+    // materialized value).
     futures::executor::block_on(app_a.backend().load_module(
-        r#"import { createStore, source } from "tur:std";
-           const store = createStore();
-           globalThis.__store = store;
-           export function start() {
+        r#"import { source } from "tur:std";
+           export function start({ store }) {
+               globalThis.__store = store;
                globalThis.__atom = source("from-A");
                store.set(globalThis.__atom, "A2");
            }"#,

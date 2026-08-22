@@ -369,8 +369,7 @@ impl NodeTreeData {
         // Drop the node's declared reactive edges. Destroyed nodes never
         // re-declare (the subscribe phase runs only during layout), so the
         // last set would otherwise persist as phantom subscribers forever.
-        self.store
-            .remove_subscriber(SubscriberId::new(id.into()));
+        self.store.remove_subscriber(SubscriberId::new(id.into()));
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
@@ -401,8 +400,7 @@ impl NodeTreeData {
         let _ = self.remove_fragment(id);
         // Same phantom-edge cleanup as `destroy_subtree`, for fragments
         // (Condition/Switch/Each subscribe at build time).
-        self.store
-            .remove_subscriber(SubscriberId::new(id.into()));
+        self.store.remove_subscriber(SubscriberId::new(id.into()));
     }
 
     /// Insert `child` into `parent`'s children vec immediately before
@@ -1133,22 +1131,13 @@ impl NodeTree {
         }
     }
 
-    /// The **mounted** store — the store `mount(store, view)` bound to this
-    /// tree (the engine store until the first mount). Declarations read or
-    /// subscribed by tree-driven code materialize into this store's KV.
+    /// The **mounted** store — the instance store this tree was born with
+    /// (the engine-created store passed to the module's `start({ store })`).
+    /// The binding is permanent: one instance, one store, one tree.
+    /// Declarations read or subscribed by tree-driven code materialize into
+    /// this store's KV.
     pub fn store(&self) -> Store {
         self.data.borrow().store.clone()
-    }
-
-    /// Bind a new mounted store (`mount(store, view)`), swapping the cached
-    /// read face with it. All stores of one instance share the reactive
-    /// machinery (atom routing, derived graph, subscriber index), so existing
-    /// atoms/subscriptions keep working — this only changes where **fresh
-    /// declarations** materialize.
-    pub fn set_store(&self, store: Store) {
-        let mut data = self.data.borrow_mut();
-        data.read_face = store.read_only();
-        data.store = store;
     }
 
     /// Borrow the interior immutably. Prefer the delegating methods below for

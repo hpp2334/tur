@@ -20,6 +20,10 @@ use crate::core::scheduler::WorkerContext;
 #[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurInstanceContext {
+    /// The instance-owned element tree — created at build, born-bound to the
+    /// instance store (the engine-created store handed to the module's
+    /// `start({ store })`). `mount(store, view)` with an explicit store
+    /// swaps the binding; module teardown clears the root, not the tree.
     pub element_tree: NodeTree,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub focus_manager: Rc<RefCell<FocusManager>>,

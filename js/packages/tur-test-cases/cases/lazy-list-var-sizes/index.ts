@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     Each,
     type Element,
@@ -22,7 +21,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Variable width + height LazyList" — items with DIFFERENT main-axis extents

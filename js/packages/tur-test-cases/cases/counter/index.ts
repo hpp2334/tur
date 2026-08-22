@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     Expanded,
     MainAxisAlignment,
@@ -16,7 +15,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 const count$ = source(0);
 

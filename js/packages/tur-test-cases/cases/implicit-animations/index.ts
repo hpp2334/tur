@@ -9,7 +9,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     type Element,
     Expanded,
@@ -27,7 +26,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Implicit Animations" — demonstrates tur's AnimatedContainer /

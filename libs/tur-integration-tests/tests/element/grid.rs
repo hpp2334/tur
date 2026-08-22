@@ -14,12 +14,8 @@ fn setup_grid(width: f64, height: f64, source: &str) -> (TurTestApp, ElementNode
 
 fn color_tile_source(count: usize, grid_opts: &str) -> String {
     format!(
-        r#"import {{ createStore }} from "tur:std";
-const store = createStore();
-
-
-        import {{ mount, Grid, Container, createColor }} from "tur:std";
-        mount(store, Grid({{
+        r#"import {{ mount, Grid, Container, createColor }} from "tur:std";
+        mount(Grid({{
             queryKey: ["g"],
             {grid_opts}
             children: Array.from({{ length: {count} }}, () =>

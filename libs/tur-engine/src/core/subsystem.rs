@@ -186,17 +186,18 @@ pub struct SubsystemFlushContext<'a> {
     /// subsystem (or the rest of the flush loop) runs.
     pub boa: &'a mut Context,
     /// Element tree (shared handle). Borrow on demand via `.borrow()` /
-    /// `.borrow_mut()`.
+    /// `.borrow_mut()`. The tree is instance-owned — rootless before the
+    /// first `mount` (empty layout/paint), root cleared at module teardown.
     pub element_tree: NodeTree,
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub platform_event_queue: &'a mut PlatformEventQueue,
     pub app_event_queue: &'a mut AppEventQueue,
-    /// Engine screen state — the canvas logical size + the `viewportSize$`
-    /// atom. Driven by [`crate::core::screen::ResizeSubsystem`] on
-    /// the shell `Resize` event (it sets the size, pushes the atom via
-    /// [`Screen::sync_source`], and requests a paint). Other subsystems may
-    /// read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
+    /// Engine screen state — the canvas logical size + dpr. Driven by
+    /// [`crate::core::screen::ResizeSubsystem`] on the shell `Resize`
+    /// event (it sets the size, publishes the `viewportSize$` atom via the
+    /// instance store's write rail, and requests a paint). Other subsystems
+    /// may read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
     pub screen: &'a mut Screen,
     pub need_paint: &'a Cell<bool>,
     /// Worker-thread scheduler. Subsystems call

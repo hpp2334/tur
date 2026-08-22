@@ -3,15 +3,12 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
-    createStore,
     Positioned,
     SizedBox,
     Stack,
     Transform,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 // Regression for affine-based follower tracking. The follower is nested inside
 // a `Transform` with a PAINT-ONLY translate (translateX: 50, translateY: 30),

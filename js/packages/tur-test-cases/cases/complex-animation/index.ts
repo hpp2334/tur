@@ -10,7 +10,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     type Element,
     Expanded,
@@ -30,7 +29,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Animated Card Studio" — a demo of tur's animation API.

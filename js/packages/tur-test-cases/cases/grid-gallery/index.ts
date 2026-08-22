@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     type Element,
     Expanded,
@@ -24,7 +23,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Grid Gallery" — an interactive tile gallery that exercises every Grid knob:

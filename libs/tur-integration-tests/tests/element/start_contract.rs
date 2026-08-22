@@ -27,12 +27,11 @@ fn start_is_called_and_cleanup_runs_before_reload() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         globalThis.__log = [];
         export function start() {
             globalThis.__log.push("start1");
-            mount(store, Text({ text: "one", queryKey: ["one"] }));
+            mount(Text({ text: "one", queryKey: ["one"] }));
         }
     "#,
     )
@@ -45,11 +44,10 @@ fn start_is_called_and_cleanup_runs_before_reload() {
 
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         export function start() {
             globalThis.__log.push("start2");
-            mount(store, Text({ text: "two", queryKey: ["two"] }));
+            mount(Text({ text: "two", queryKey: ["two"] }));
             return () => {
                 globalThis.__log.push("cleanup2");
             };
@@ -114,10 +112,9 @@ fn reload_clears_leftover_root_tree() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         export function start() {
-            mount(store, Text({ text: "one", queryKey: ["one"] }));
+            mount(Text({ text: "one", queryKey: ["one"] }));
         }
     "#,
     )
@@ -126,10 +123,9 @@ fn reload_clears_leftover_root_tree() {
 
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         export function start() {
-            mount(store, Text({ text: "two", queryKey: ["two"] }));
+            mount(Text({ text: "two", queryKey: ["two"] }));
         }
     "#,
     )
@@ -153,13 +149,12 @@ fn remount_replaces_previous_root() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         globalThis.__mount = mount;
-        globalThis.__store = store;
         globalThis.__Text = Text;
-        export function start() {
-            mount(store, Text({ text: "first", queryKey: ["first"] }));
+        export function start({ store }) {
+            globalThis.__store = store;
+            mount(Text({ text: "first", queryKey: ["first"] }));
         }
     "#,
     )
@@ -169,7 +164,7 @@ fn remount_replaces_previous_root() {
 
     // Second mount via the stashed reference (same module still loaded).
     app.eval_js(
-        r#"globalThis.__mount(globalThis.__store, globalThis.__Text({ text: "second", queryKey: ["second"] }));"#,
+        r#"globalThis.__mount(globalThis.__Text({ text: "second", queryKey: ["second"] }));"#,
     );
     app.wait_for_timeout(Duration::ZERO);
 
@@ -218,10 +213,9 @@ fn start_returning_non_function_is_ok() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         export function start() {
-            mount(store, Text({ text: "plain", queryKey: ["plain"] }));
+            mount(Text({ text: "plain", queryKey: ["plain"] }));
             // No cleanup — returning undefined is fine.
         }
     "#,
@@ -238,10 +232,9 @@ fn dev_tool_tree_reflects_reload() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { createStore, mount, Text } from "tur:std";
-        const store = createStore();
+        import { mount, Text } from "tur:std";
         export function start() {
-            mount(store, Text({ text: "x" }));
+            mount(Text({ text: "x" }));
         }
     "#,
     )
@@ -261,5 +254,87 @@ fn dev_tool_tree_reflects_reload() {
     assert!(
         app.dev_tool_element_tree().is_none(),
         "dev-tool tree must be empty after teardown without a new mount"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `start({ store })` — the engine creates the instance store and hands it to
+// the module; the tree is instance-owned (born-bound to it at build).
+// ---------------------------------------------------------------------------
+
+/// `start` receives a working `{ store }`: a live `{get, set}` object the
+/// module can read/write directly, and `mount(view)` (single arg) mounts
+/// against the tree's bound instance store.
+#[test]
+fn start_receives_instance_store_and_single_arg_mount_works() {
+    let mut app = TurTestApp::new(400.0, 300.0).unwrap();
+    app.load_module_raw(
+        r#"
+        import { mount, source, Text } from "tur:std";
+        globalThis.__n = source(7);
+        export function start({ store }) {
+            globalThis.__instance_store = store;
+            store.set(globalThis.__n, 11);
+            mount(Text({
+                text: String(store.get(globalThis.__n)),
+                queryKey: ["bound"],
+            }));
+        }
+    "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    assert!(
+        app.query_element(&["bound"]).is_some(),
+        "single-arg mount(view) must mount against the tree's bound instance store"
+    );
+    let v = app.eval_js("globalThis.__instance_store.get(globalThis.__n).toString()");
+    assert_eq!(
+        v, "11",
+        "the start-injected store must be live (its own writes read back)"
+    );
+}
+
+/// Across a reload, teardown clears the ROOT (not the tree): the next module
+/// receives the same instance store and single-arg mounts into the same
+/// instance-owned tree.
+#[test]
+fn reload_keeps_instance_tree_and_remounts_via_injected_store() {
+    let mut app = TurTestApp::new(400.0, 300.0).unwrap();
+    app.load_module_raw(
+        r#"
+        import { mount, Text } from "tur:std";
+        export function start({ store }) {
+            globalThis.__instance_store = store;
+            mount(Text({ text: "one", queryKey: ["one"] }));
+        }
+    "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(app.query_element(&["one"]).is_some());
+
+    app.load_module_raw(
+        r#"
+        import { mount, Text } from "tur:std";
+        export function start({ store }) {
+            if (store !== globalThis.__instance_store) {
+                throw new Error("instance store identity changed across reload");
+            }
+            mount(Text({ text: "two", queryKey: ["two"] }));
+        }
+    "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    assert!(
+        app.query_element(&["two"]).is_some(),
+        "module 2 mounts into the same instance-owned tree"
+    );
+    assert!(
+        app.query_element(&["one"]).is_none(),
+        "module 1 root cleared on re-load"
     );
 }

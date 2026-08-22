@@ -20,18 +20,32 @@ use crate::core::edgy::watch::WatcherRegistry;
 // organizational, not an isolation boundary (the one truly separable concern,
 // the subscriber index, lives in its own `SubscriberGraph`).
 //
-// MULTI-STORE LAYOUT: the machinery below is split in two —
+// LAYOUT: the machinery is split in two —
 //   * [`SharedReactive`] — instance-wide: the atom-id counter, the id→seed
-//     registry, the derived graph, the flush state, the subscriber graph, the
-//     owner map (single-home atoms) and the holder index (staleness across
-//     stores). Because atom ids are allocated from one shared counter, every
+//     registry, the derived graph (incl. the invalidation generations that
+//     keep per-store caches coherent), the flush state and the subscriber
+//     graph. Because atom ids are allocated from one shared counter, every
 //     map keyed by bare `AtomId` (derived deps, dependents, stale sets,
-//     subscriber edges) is collision-free across stores, and a write in one
-//     store invalidates deriveds materialized in any other (the dependents
-//     walk is shared).
-//   * [`StoreKv`] — per-store: the atom VALUE map. This is what makes a store
-//     a store: the same id materialized in two stores yields two independent
-//     values.
+//     subscriber edges) is collision-free, and a write invalidates every
+//     materialized copy (the dependents walk is shared). The machinery
+//     holds NO store references and NO values — every method takes the
+//     caller's store (`via`) per call. One instance has exactly ONE store
+//     (created by the engine at build, handed to `start({ store })`); the
+//     substrate keeps the store-per-KV shape so the value home is always an
+//     ordinary store KV, never an instance-scoped side slot.
+//   * [`StoreKv`] — per-store: the atom VALUE map. This is what makes a
+//     store a store — values live in a store KV, nowhere else.
+//
+// An atom is its seed: id + initial value or closure, no value anywhere
+// until the store materializes it — and the store's KV holds the copy.
+// Engine "environment" atoms (`viewportSize$` …) are ordinary atoms with a
+// designated home: the backing source materializes in the INSTANCE store
+// (the engine writes it via the ordinary `set_source` rail), and the public
+// handle is a derive whose closure reads the backing through a captured
+// engine read face — so the value resolves identically from every read
+// path, with cache coherence provided by the generation rail (see
+// `ReactiveBridgeStore::read_only`). No read path ever receives hidden
+// engine values.
 // ---------------------------------------------------------------------------
 
 /// The seed of an atom — the data that exists before any store materializes
@@ -80,11 +94,15 @@ type DeriveRustFn = dyn Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue
 type MutateRustFn = dyn Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue>;
 
 /// Derived-recomputation graph: per-derived dependency sets, the reverse
-/// `dependents` edges, the stale-derived set, and the reentrancy tracker
-/// stack used while a derived closure runs (to discover its deps).
+/// `dependents` edges, the stale-derived set, the reentrancy tracker
+/// stack used while a derived closure runs (to discover its deps), and the
+/// per-atom **generation** counter driving cross-store cache coherence.
 struct DerivedGraph {
     derived_deps: RefCell<HashMap<AtomId, HashSet<AtomId>>>,
     dependents: RefCell<HashMap<AtomId, HashSet<AtomId>>>,
+    /// Flush reporting: deriveds marked dirty since their last compute.
+    /// NOT a cache-serving input — a store's cached slot is served iff its
+    /// recorded generation matches the atom's current generation below.
     stale_deriveds: RefCell<HashSet<AtomId>>,
     tracker_stack: RefCell<Vec<HashSet<AtomId>>>,
     /// Derived atoms currently being recomputed. A read of an in-flight id
@@ -92,6 +110,14 @@ struct DerivedGraph {
     /// own computation — pure-Rust closures have no JS frames, so without
     /// this guard that recurses to an OS thread-stack overflow.
     in_flight_derives: RefCell<Vec<AtomId>>,
+    /// Cross-store cache coherence: the invalidation generation of each
+    /// derived. Every invalidation (a write to a transitive dep) bumps the
+    /// atom's generation; a `StoreKv` slot records the generation it was
+    /// computed at, and a mismatch (or a missing slot) forces a recompute
+    /// IN THAT STORE regardless of what any other store did. Sources are
+    /// never bumped, so their slots are always fresh — one uniform rule.
+    generations: RefCell<HashMap<AtomId, u64>>,
+    next_generation: Cell<u64>,
 }
 
 impl DerivedGraph {
@@ -102,7 +128,23 @@ impl DerivedGraph {
             stale_deriveds: RefCell::new(HashSet::new()),
             tracker_stack: RefCell::new(Vec::new()),
             in_flight_derives: RefCell::new(Vec::new()),
+            generations: RefCell::new(HashMap::new()),
+            next_generation: Cell::new(1),
         }
+    }
+
+    /// The current invalidation generation of `atom` (0 = never
+    /// invalidated).
+    fn generation_of(&self, atom: AtomId) -> u64 {
+        self.generations.borrow().get(&atom).copied().unwrap_or(0)
+    }
+
+    /// Mark `atom`'s cached copies (in every store) stale by bumping its
+    /// generation.
+    fn bump_generation(&self, atom: AtomId) {
+        let epoch = self.next_generation.get();
+        self.next_generation.set(epoch + 1);
+        self.generations.borrow_mut().insert(atom, epoch);
     }
 }
 
@@ -239,13 +281,26 @@ impl SubscriberGraph {
 
 // ---------------------------------------------------------------------------
 // StoreKv — the per-store state container. A store IS its KV: the map of
-// materialized atom VALUES, keyed by the shared atom-id space. Seeds live in
-// [`SharedReactive`]; a value lands here when a store reads (materializing
+// materialized atom values, keyed by the shared atom-id space. Seeds live
+// in [`SharedReactive`]; a value lands here when a store reads (materializing
 // the seed) or writes the atom.
+//
+// Each slot records the **generation** it was computed at. Deriveds get
+// their generation bumped by every invalidation (see [`DerivedGraph`]), so
+// a slot is servable iff its generation matches the atom's current one —
+// a missing or outdated slot recomputes in THIS store no matter what any
+// other store did. Sources are never bumped: always fresh once present.
 // ---------------------------------------------------------------------------
 
+/// A materialized atom value + the invalidation generation it was computed
+/// at (see [`StoreKv`] docs).
+struct Slot {
+    value: JsValue,
+    epoch: u64,
+}
+
 pub struct StoreKv {
-    values: RefCell<HashMap<AtomId, JsValue>>,
+    values: RefCell<HashMap<AtomId, Slot>>,
 }
 
 impl StoreKv {
@@ -259,16 +314,13 @@ impl StoreKv {
 // ---------------------------------------------------------------------------
 // SharedReactive — the instance-wide reactive machinery shared by every
 // store of one JS realm: atom id allocation, the id→seed registry, the
-// derived graph, the flush state, the subscriber graph, owner routing
-// (single-home atoms) and the holder index (cross-store staleness).
+// derived graph (dependency edges + invalidation generations), the flush
+// state, and the subscriber graph.
 //
-// Routing rule (the ONE rule of the model):
-//   * An id with an **owner** entry (engine/plugin-minted atoms, e.g.
-//     `viewportSize$`) has a single value home: the owning store's KV. Reads
-//     and writes from any store route there.
-//   * An id **without** an owner (a JS `source()` / `derive()` / `mutate()`
-//     declaration) materializes into whichever store first reads/writes it —
-//     each store's KV holds its own independent value for the id.
+// The machinery is store-free: every read/write/invoke takes the caller's
+// store per call (`via`), and an id's value ALWAYS lives in a store's KV —
+// an atom materializes into whichever store first reads/writes it (each
+// store's KV holds its own independent value for the id).
 //
 // All fields have interior mutability, so the struct is shared as a plain
 // `Rc<SharedReactive>` and every method takes `&self` — nested recompute
@@ -278,14 +330,6 @@ impl StoreKv {
 pub struct SharedReactive {
     next_atom: Cell<u32>,
     seeds: RefCell<HashMap<AtomId, Seed>>,
-    /// Single-home atoms: id → the store whose KV holds the value. Populated
-    /// only by the Rust mint path (`ReactiveBridgeStore::source` etc.) —
-    /// engine/plugin atoms are owned by the engine store.
-    owners: RefCell<HashMap<AtomId, Rc<StoreKv>>>,
-    /// Stores that have materialized each id (for staleness: invalidating a
-    /// derived must drop every store's cached copy). Weak so a dropped store
-    /// doesn't leak.
-    holders: RefCell<HashMap<AtomId, Vec<Weak<StoreKv>>>>,
     graph: DerivedGraph,
     flush: FlushState,
     subscribers: SubscriberGraph,
@@ -299,8 +343,6 @@ impl SharedReactive {
         SharedReactive {
             next_atom: Cell::new(1),
             seeds: RefCell::new(HashMap::new()),
-            owners: RefCell::new(HashMap::new()),
-            holders: RefCell::new(HashMap::new()),
             graph: DerivedGraph::new(),
             flush: FlushState::new(app_dirty),
             subscribers: SubscriberGraph::new(),
@@ -322,54 +364,18 @@ impl SharedReactive {
         id
     }
 
-    /// The KV a given read/write should flow through: the owner's for
-    /// single-home atoms, otherwise the caller's `via` KV (materializing
-    /// declarations live wherever they're touched).
-    fn route(&self, id: AtomId, via: &Rc<StoreKv>) -> Rc<StoreKv> {
-        self.owners
-            .borrow()
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| via.clone())
-    }
-
-    fn register_holder(&self, id: AtomId, kv: &Rc<StoreKv>) {
-        let mut holders = self.holders.borrow_mut();
-        let list = holders.entry(id).or_default();
-        if !list
-            .iter()
-            .any(|w| w.upgrade().is_some_and(|k| Rc::ptr_eq(&k, kv)))
-        {
-            list.push(Rc::downgrade(kv));
-        }
-    }
-
     // ----- minting ----------------------------------------------------------
 
-    /// Mint a **declaration** (the JS `source(v)` / `derive(fn)` / `mutate(fn)`
-    /// path): id + central seed, no owner — the atom materializes into
-    /// whichever store first touches it.
+    /// Mint an atom: id + central seed, no value. The atom materializes
+    /// into whichever store first touches it; each store's KV holds its own
+    /// value. JS `source(v)` / `derive(fn)` / `mutate(fn)` and every Rust
+    /// `bridge.build_*` mint through here alike.
     fn decl(&self, seed: Seed) -> AtomId {
         let id = self.alloc_id();
         if let Seed::Derived(_) = seed {
             self.graph.stale_deriveds.borrow_mut().insert(id);
         }
         self.seeds.borrow_mut().insert(id, seed);
-        id
-    }
-
-    /// Mint an **owned** atom (the Rust bridge path): id + seed + value home
-    /// in `kv`. Reads from any store route here.
-    fn owned(&self, kv: &Rc<StoreKv>, seed: Seed, initial: Option<JsValue>) -> AtomId {
-        let id = self.alloc_id();
-        if let Seed::Derived(_) = seed {
-            self.graph.stale_deriveds.borrow_mut().insert(id);
-        }
-        self.seeds.borrow_mut().insert(id, seed);
-        self.owners.borrow_mut().insert(id, kv.clone());
-        if let Some(v) = initial {
-            kv.values.borrow_mut().insert(id, v);
-        }
         id
     }
 
@@ -387,32 +393,40 @@ impl SharedReactive {
             top.insert(id);
         }
 
-        let kv = self.route(id, via);
-        if kv.values.borrow().contains_key(&id) && !self.graph.stale_deriveds.borrow().contains(&id)
+        // Serve the cached slot iff it is fresh: recorded at the atom's
+        // current generation (sources are never bumped — always fresh once
+        // present; deriveds go stale in THIS store the moment a transitive
+        // dep is written anywhere).
         {
-            return Ok(kv
-                .values
-                .borrow()
-                .get(&id)
-                .cloned()
-                .unwrap_or(JsValue::undefined()));
+            let epoch = self.graph.generation_of(id);
+            let values = via.values.borrow();
+            if let Some(slot) = values.get(&id).filter(|s| s.epoch == epoch) {
+                return Ok(slot.value.clone());
+            }
         }
 
         // Not materialized here (or stale): materialize from the seed.
         let seed = self.seeds.borrow().get(&id).cloned();
         match seed {
             Some(Seed::Source(initial)) => {
-                kv.values.borrow_mut().insert(id, initial.clone());
-                self.register_holder(id, &kv);
+                let epoch = self.graph.generation_of(id);
+                via.values.borrow_mut().insert(
+                    id,
+                    Slot {
+                        value: initial.clone(),
+                        epoch,
+                    },
+                );
                 Ok(initial)
             }
             Some(Seed::Derived(_)) => {
-                self.ensure_computed(id, ctx, &kv)?;
-                Ok(kv
-                    .values
-                    .borrow()
+                self.ensure_computed(id, ctx, via)?;
+                let epoch = self.graph.generation_of(id);
+                let values = via.values.borrow();
+                Ok(values
                     .get(&id)
-                    .cloned()
+                    .filter(|slot| slot.epoch == epoch)
+                    .map(|slot| slot.value.clone())
                     .unwrap_or(JsValue::undefined()))
             }
             _ => Ok(JsValue::undefined()),
@@ -420,19 +434,24 @@ impl SharedReactive {
     }
 
     fn ensure_computed(&self, id: AtomId, ctx: &mut Context, kv: &Rc<StoreKv>) -> JsResult<()> {
-        if !self.graph.stale_deriveds.borrow().contains(&id) {
+        // Fresh in THIS store already? (A compute elsewhere does not count —
+        // per-store values.)
+        let fresh_here = kv
+            .values
+            .borrow()
+            .get(&id)
+            .is_some_and(|s| s.epoch == self.graph.generation_of(id));
+        if fresh_here {
             return Ok(());
         }
         // Cycle guard: re-entrant computation of this derive (its closure
         // reading itself directly or through another derived) would recurse
         // natively until the thread overflows — fail the read instead. The
-        // error surfaces at the read site; per throwing-closure semantics the
-        // derive then materializes `undefined`.
+        // error surfaces at the read site and the atom stays unmaterialized.
         if self.graph.in_flight_derives.borrow().contains(&id) {
-            return Err(JsError::from(
-                JsNativeError::typ()
-                    .with_message("cycle detected: derived atom re-entered its own computation"),
-            ));
+            return Err(JsError::from(JsNativeError::typ().with_message(
+                "cycle detected: derived atom re-entered its own computation",
+            )));
         }
 
         let closure = match self.seeds.borrow().get(&id) {
@@ -445,10 +464,10 @@ impl SharedReactive {
 
         // Dispatch on the closure kind. The Js branch builds the per-store
         // `{get, set}` JsObject (declarations materialize into this derived's
-        // routed store) and calls the JS closure with it; the DeriveRust
-        // branch hands the closure a typed `&ReactiveReadStore` face (no
-        // JsObject round-trip). The MutateRust branch is unreachable here —
-        // derive handles never carry a MutateRust closure.
+        // store) and calls the JS closure with it; the DeriveRust branch
+        // hands the closure a typed `&ReactiveReadStore` face (no JsObject
+        // round-trip). The MutateRust branch is unreachable here — derive
+        // handles never carry a MutateRust closure.
         let result = match closure {
             Closure::Js(f) => {
                 let store_ctx_obj = self.build_store_ctx_obj(ctx, kv.clone());
@@ -457,14 +476,13 @@ impl SharedReactive {
                     std::slice::from_ref(&store_ctx_obj),
                     ctx,
                 )
-                .unwrap_or_else(|_| JsValue::undefined())
             }
             Closure::DeriveRust(f) => {
                 let read_store = ReactiveReadStore {
                     shared: self.self_rc(),
                     default: kv.clone(),
                 };
-                f(&read_store, ctx).unwrap_or_else(|_| JsValue::undefined())
+                f(&read_store, ctx)
             }
             Closure::MutateRust(_) => {
                 panic!(
@@ -475,8 +493,17 @@ impl SharedReactive {
             }
         };
 
+        // Unwind the reentrancy guards BEFORE propagating a possible error,
+        // so a throwing closure cannot leak a tracker frame or an in-flight
+        // marker into later computes.
         let new_deps = self.graph.tracker_stack.borrow_mut().pop().unwrap();
         self.graph.in_flight_derives.borrow_mut().pop();
+
+        // Error propagation: a closure that throws fails the read at its
+        // call site, and the atom stays stale + unmaterialized (no sticky
+        // `undefined`) — the next read retries, so the derive recovers once
+        // the underlying state is present.
+        let result = result?;
 
         if let Some(old_deps) = self.graph.derived_deps.borrow().get(&id).cloned() {
             for dep in &old_deps {
@@ -498,8 +525,18 @@ impl SharedReactive {
                 .insert(id);
         }
 
-        kv.values.borrow_mut().insert(id, result);
-        self.register_holder(id, kv);
+        // Record the slot at the CURRENT generation, re-read after the
+        // closure ran: a write to a dep that happened during the compute
+        // already bumped the generation, so the slot lands already-stale and
+        // the next read recomputes (no torn state).
+        let epoch = self.graph.generation_of(id);
+        kv.values.borrow_mut().insert(
+            id,
+            Slot {
+                value: result,
+                epoch,
+            },
+        );
         self.graph.stale_deriveds.borrow_mut().remove(&id);
         Ok(())
     }
@@ -516,8 +553,7 @@ impl SharedReactive {
         via: &Rc<StoreKv>,
         value: JsValue,
     ) -> JsResult<()> {
-        let kv = self.route(id, via);
-        let prev = kv.values.borrow().get(&id).cloned();
+        let prev = via.values.borrow().get(&id).map(|s| s.value.clone());
         if prev.as_ref() == Some(&value) {
             return Ok(());
         }
@@ -527,13 +563,17 @@ impl SharedReactive {
         if let Some(message) = self.detect_watch_loop(id) {
             return Err(JsError::from(JsNativeError::typ().with_message(message)));
         }
-        kv.values.borrow_mut().insert(id, value);
-        self.register_holder(id, &kv);
+        // A written source keeps its generation (sources are never bumped),
+        // so the slot stays fresh wherever it is read.
+        let epoch = self.graph.generation_of(id);
+        via.values.borrow_mut().insert(id, Slot { value, epoch });
         self.flush.source_changed.set(true);
 
-        // Propagate invalidation: mark all dependents stale AND drop every
-        // store's cached copy of them (per-KV caches must not survive a dep
-        // change in another store).
+        // Propagate invalidation through the dependents closure: mark each
+        // derived stale (flush reporting) and bump its generation, which
+        // invalidates EVERY store's cached copy of it — a slot recorded at
+        // an older generation fails the freshness check on its next read,
+        // in whatever store holds it.
         let mut queue = vec![id];
         let mut visited = HashSet::new();
         while let Some(atom) = queue.pop() {
@@ -544,17 +584,7 @@ impl SharedReactive {
                 self.flush.stale_sources.borrow_mut().insert(atom);
             } else {
                 self.graph.stale_deriveds.borrow_mut().insert(atom);
-                let holders = self
-                    .holders
-                    .borrow()
-                    .get(&atom)
-                    .cloned()
-                    .unwrap_or_default();
-                for w in holders {
-                    if let Some(hkv) = w.upgrade() {
-                        hkv.values.borrow_mut().remove(&atom);
-                    }
-                }
+                self.graph.bump_generation(atom);
             }
             if let Some(deps) = self.graph.dependents.borrow().get(&atom).cloned() {
                 for dep in deps {
@@ -698,13 +728,14 @@ impl std::fmt::Debug for SharedReactive {
 }
 
 // ---------------------------------------------------------------------------
-// Store — the composite `{ shared, kv }`. One instance per JS realm is
-// created by the engine (the **engine store**, which plugin- and
-// engine-minted atoms call home); `createStore()` from JS mints further
-// stores over the same shared machinery (`Store::spawn`). Held by
-// `TurInstanceContext` / `ElementTree` and used by the layout driver for
-// orchestration (invoking pending mutations, building the JS-context object)
-// and for handing out capability faces.  Cheap to clone (two `Rc` bumps).
+// Store — the composite `{ shared, kv }`. Each instance has exactly ONE
+// store, created by the engine at build (the **instance store**, handed to
+// the module's `start({ store })` and permanently bound to the
+// instance-owned tree; engine- and plugin-minted atoms call home to it).
+// Held by `TurInstanceContext` / `ElementTree` and used by the layout driver
+// for orchestration (invoking pending mutations, building the JS-context
+// object) and for handing out capability faces.  Cheap to clone (two `Rc`
+// bumps).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -721,22 +752,6 @@ impl Store {
             shared,
             kv: Rc::new(StoreKv::new()),
         }
-    }
-
-    /// Mint a new store over this store's shared machinery — `createStore()`.
-    /// The new store shares the id space / seed registry / derived graph /
-    /// flush state / subscriber graph, but owns a fresh KV: an atom
-    /// materialized here is independent of the same atom in another store.
-    pub fn spawn(&self) -> Store {
-        Store {
-            shared: self.shared.clone(),
-            kv: Rc::new(StoreKv::new()),
-        }
-    }
-
-    /// Whether both stores belong to the same instance (share machinery).
-    pub fn same_instance(&self, other: &Store) -> bool {
-        Rc::ptr_eq(&self.shared, &other.shared)
     }
 
     pub(crate) fn shared(&self) -> Rc<SharedReactive> {
@@ -842,10 +857,10 @@ impl std::fmt::Debug for Store {
 }
 
 // ---------------------------------------------------------------------------
-// ReactiveReadStore — read-only capability face for business code (element impls,
-// layout, views, handlers). Wraps the shared machinery + a default KV:
-// owned atoms route to their owner; declarations materialize into `default`
-// (for tree-driven flows, the mounted store).
+// ReactiveReadStore — read-only capability face for business code (element
+// impls, layout, views, handlers). Wraps the shared machinery + a default
+// KV: atoms materialize into `default` (for tree-driven flows, the mounted
+// store).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -984,15 +999,13 @@ impl WatchDispatchStore {
 
 // ---------------------------------------------------------------------------
 // ReactiveBridgeStore — the JS-bridge capability face: the sole entry point
-// for atom creation (`source`/`derive`/`mutate`), plus the read/write surface
-// the bridge needs (`read`/`set_source`/`invoke_mutation`) and ctx-object
-// building. Produced exclusively via [`Store::bridge`]; `Store` itself exposes
-// none of these, so atom minting is gated behind the bridge.
-//
-// Rust-minted atoms (the `source`/`derive`/`mutate`/`build_*` methods) are
-// **owned** by this face's store; JS-declaration minting (`decl_source` /
-// `decl_derive` / `decl_mutate`, used by the `tur:core` bridge fns) produces
-// owner-less ids that materialize per store.
+// for atom minting (`decl_source` / `decl_derive` / `decl_mutate` /
+// `build_derive` / `build_mutate`), plus the read/write surface the bridge
+// needs (`read`/`set_source`/`invoke_mutation`) and ctx-object building.
+// Produced exclusively via [`Store::bridge`]; `Store` itself exposes none of
+// these, so atom minting is gated behind the bridge. Every mint produces an
+// id + seed in the shared registry — no value lands until a store touches
+// the atom.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -1001,41 +1014,14 @@ pub struct ReactiveBridgeStore {
 }
 
 impl ReactiveBridgeStore {
-    /// Mint an owned source atom (value lives in this store's KV; reads from
-    /// any store route here).
-    pub fn source<T>(&self, value: JsValue) -> Source<T> {
-        let id = self
-            .store
-            .shared
-            .owned(&self.store.kv, Seed::Source(value.clone()), Some(value));
-        Source(id, PhantomData)
-    }
-
-    /// Mint an owned derived atom.
-    pub fn derive<T>(&self, closure: JsFunction) -> Derived<T> {
-        let id = self
-            .store
-            .shared
-            .owned(&self.store.kv, Seed::Derived(Closure::Js(closure)), None);
-        Derived(id, PhantomData)
-    }
-
-    /// Mint an owned mutation atom.
-    pub fn mutate(&self, closure: JsFunction) -> Mutation {
-        Mutation(
-            self.store
-                .shared
-                .owned(&self.store.kv, Seed::Mutate(Closure::Js(closure)), None),
-        )
-    }
-
-    /// Mint a **declaration** — the JS `source(v)` path. No owner: the atom
-    /// materializes into whichever store first reads/writes it.
+    /// Mint a source atom: id + seed carrying the initial value. No value
+    /// lands anywhere — the atom materializes into whichever store first
+    /// reads or writes it.
     pub fn decl_source<T>(&self, value: JsValue) -> Source<T> {
         Source(self.store.shared.decl(Seed::Source(value)), PhantomData)
     }
 
-    /// Mint a **declaration** — the JS `derive(fn)` path.
+    /// Mint a derived atom: id + seed carrying the JS closure.
     pub fn decl_derive<T>(&self, closure: JsFunction) -> Derived<T> {
         Derived(
             self.store.shared.decl(Seed::Derived(Closure::Js(closure))),
@@ -1043,7 +1029,7 @@ impl ReactiveBridgeStore {
         )
     }
 
-    /// Mint a **declaration** — the JS `mutate(fn)` path.
+    /// Mint a mutation atom: id + seed carrying the JS closure.
     pub fn decl_mutate(&self, closure: JsFunction) -> Mutation {
         Mutation(self.store.shared.decl(Seed::Mutate(Closure::Js(closure))))
     }
@@ -1065,11 +1051,10 @@ impl ReactiveBridgeStore {
     where
         F: Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue> + 'static,
     {
-        let id = self.store.shared.owned(
-            &self.store.kv,
-            Seed::Derived(Closure::DeriveRust(Rc::new(closure))),
-            None,
-        );
+        let id = self
+            .store
+            .shared
+            .decl(Seed::Derived(Closure::DeriveRust(Rc::new(closure))));
         Derived(id, PhantomData)
     }
 
@@ -1086,11 +1071,11 @@ impl ReactiveBridgeStore {
     where
         F: Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue> + 'static,
     {
-        Mutation(self.store.shared.owned(
-            &self.store.kv,
-            Seed::Mutate(Closure::MutateRust(Rc::new(closure))),
-            None,
-        ))
+        Mutation(
+            self.store
+                .shared
+                .decl(Seed::Mutate(Closure::MutateRust(Rc::new(closure)))),
+        )
     }
 
     /// `watch(readable, cb)` support: register a watcher over `watched` with
@@ -1144,6 +1129,26 @@ impl ReactiveBridgeStore {
 
     pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
         self.store.read_only().read(readable, ctx)
+    }
+
+    /// The bridge's own store (the **engine store** when the bridge came
+    /// from `PluginContext::reactive` / `TurInstanceContext::reactive`),
+    /// as a read-only face. The engine-atom pattern captures this in a
+    /// `build_derive` handle closure so the handle — read from ANY store of
+    /// the instance — resolves the backing's single engine-store value:
+    /// ```text
+    /// let backing = bridge.decl_source(initial);
+    /// let engine_read = bridge.read_only();
+    /// let handle = bridge.build_derive(move |_read, boa| {
+    ///     Ok(engine_read.read(Readable::from(backing), boa))
+    /// });
+    /// // publish: bridge.set_source(backing, v) — the ordinary write rail
+    /// ```
+    /// Cross-store coherence rides the existing generation rail: the write
+    /// bumps the handle's generation, so every store's cached copy
+    /// recomputes on its next read.
+    pub fn read_only(&self) -> ReactiveReadStore {
+        self.store.read_only()
     }
 
     pub fn set_source<T>(&self, source: Source<T>, value: JsValue) -> JsResult<()> {

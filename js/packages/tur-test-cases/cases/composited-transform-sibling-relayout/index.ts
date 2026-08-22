@@ -3,7 +3,6 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
-    createStore,
     derive,
     type Mutation,
     mutate,
@@ -15,7 +14,6 @@ import {
     source,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // Reproduces the follower "flash to top-left" bug. The follower is a
 // non-positioned child of the root Stack, so layout assigns it offset (0,0);
