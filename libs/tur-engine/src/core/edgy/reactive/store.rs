@@ -87,6 +87,11 @@ struct DerivedGraph {
     dependents: RefCell<HashMap<AtomId, HashSet<AtomId>>>,
     stale_deriveds: RefCell<HashSet<AtomId>>,
     tracker_stack: RefCell<Vec<HashSet<AtomId>>>,
+    /// Derived atoms currently being recomputed. A read of an in-flight id
+    /// means the closure (directly or through another derived) re-entered its
+    /// own computation — pure-Rust closures have no JS frames, so without
+    /// this guard that recurses to an OS thread-stack overflow.
+    in_flight_derives: RefCell<Vec<AtomId>>,
 }
 
 impl DerivedGraph {
@@ -96,6 +101,7 @@ impl DerivedGraph {
             dependents: RefCell::new(HashMap::new()),
             stale_deriveds: RefCell::new(HashSet::new()),
             tracker_stack: RefCell::new(Vec::new()),
+            in_flight_derives: RefCell::new(Vec::new()),
         }
     }
 }
@@ -187,6 +193,37 @@ impl SubscriberGraph {
                 self.subscribe_edge(*atom, sub);
             }
         }
+    }
+
+    /// Drop a subscriber and every edge it declared. Called from the element
+    /// tree's destroy paths — destroyed nodes never re-declare (the subscribe
+    /// phase runs only during layout), so their last edge set would otherwise
+    /// persist as phantom subscribers forever.
+    fn remove_subscriber(&self, sub: SubscriberId) {
+        let Some(atoms) = self.sub_to_atoms.borrow_mut().remove(&sub) else {
+            return;
+        };
+        for atom in &atoms {
+            let should_remove = {
+                let mut map = self.atom_to_subs.borrow_mut();
+                if let Some(subs) = map.get_mut(atom) {
+                    subs.remove(&sub);
+                    subs.is_empty()
+                } else {
+                    false
+                }
+            };
+            if should_remove {
+                self.atom_to_subs.borrow_mut().remove(atom);
+            }
+        }
+    }
+
+    /// Dev-tool introspection: `(live subscribers, total declared edges)`.
+    fn stats(&self) -> (usize, usize) {
+        let map = self.sub_to_atoms.borrow();
+        let edges = map.values().map(|deps| deps.len()).sum();
+        (map.len(), edges)
     }
 
     fn dirty_subscribers(&self, atoms: &HashSet<AtomId>) -> HashSet<SubscriberId> {
@@ -338,7 +375,12 @@ impl SharedReactive {
 
     // ----- read / write -----------------------------------------------------
 
-    pub(crate) fn read_by_id(&self, id: AtomId, via: &Rc<StoreKv>, ctx: &mut Context) -> JsValue {
+    pub(crate) fn read_by_id(
+        &self,
+        id: AtomId,
+        via: &Rc<StoreKv>,
+        ctx: &mut Context,
+    ) -> JsResult<JsValue> {
         // Auto-dependency tracking: any read inside a running derived closure
         // records the dep.
         if let Some(top) = self.graph.tracker_stack.borrow_mut().last_mut() {
@@ -348,12 +390,12 @@ impl SharedReactive {
         let kv = self.route(id, via);
         if kv.values.borrow().contains_key(&id) && !self.graph.stale_deriveds.borrow().contains(&id)
         {
-            return kv
+            return Ok(kv
                 .values
                 .borrow()
                 .get(&id)
                 .cloned()
-                .unwrap_or(JsValue::undefined());
+                .unwrap_or(JsValue::undefined()));
         }
 
         // Not materialized here (or stale): materialize from the seed.
@@ -362,31 +404,44 @@ impl SharedReactive {
             Some(Seed::Source(initial)) => {
                 kv.values.borrow_mut().insert(id, initial.clone());
                 self.register_holder(id, &kv);
-                initial
+                Ok(initial)
             }
             Some(Seed::Derived(_)) => {
-                self.ensure_computed(id, ctx, &kv);
-                kv.values
+                self.ensure_computed(id, ctx, &kv)?;
+                Ok(kv
+                    .values
                     .borrow()
                     .get(&id)
                     .cloned()
-                    .unwrap_or(JsValue::undefined())
+                    .unwrap_or(JsValue::undefined()))
             }
-            _ => JsValue::undefined(),
+            _ => Ok(JsValue::undefined()),
         }
     }
 
-    fn ensure_computed(&self, id: AtomId, ctx: &mut Context, kv: &Rc<StoreKv>) {
+    fn ensure_computed(&self, id: AtomId, ctx: &mut Context, kv: &Rc<StoreKv>) -> JsResult<()> {
         if !self.graph.stale_deriveds.borrow().contains(&id) {
-            return;
+            return Ok(());
+        }
+        // Cycle guard: re-entrant computation of this derive (its closure
+        // reading itself directly or through another derived) would recurse
+        // natively until the thread overflows — fail the read instead. The
+        // error surfaces at the read site; per throwing-closure semantics the
+        // derive then materializes `undefined`.
+        if self.graph.in_flight_derives.borrow().contains(&id) {
+            return Err(JsError::from(
+                JsNativeError::typ()
+                    .with_message("cycle detected: derived atom re-entered its own computation"),
+            ));
         }
 
         let closure = match self.seeds.borrow().get(&id) {
             Some(Seed::Derived(c)) => c.clone(),
-            _ => return,
+            _ => return Ok(()),
         };
 
         self.graph.tracker_stack.borrow_mut().push(HashSet::new());
+        self.graph.in_flight_derives.borrow_mut().push(id);
 
         // Dispatch on the closure kind. The Js branch builds the per-store
         // `{get, set}` JsObject (declarations materialize into this derived's
@@ -421,6 +476,7 @@ impl SharedReactive {
         };
 
         let new_deps = self.graph.tracker_stack.borrow_mut().pop().unwrap();
+        self.graph.in_flight_derives.borrow_mut().pop();
 
         if let Some(old_deps) = self.graph.derived_deps.borrow().get(&id).cloned() {
             for dep in &old_deps {
@@ -445,6 +501,7 @@ impl SharedReactive {
         kv.values.borrow_mut().insert(id, result);
         self.register_holder(id, kv);
         self.graph.stale_deriveds.borrow_mut().remove(&id);
+        Ok(())
     }
 
     fn build_store_ctx_obj(&self, ctx: &mut Context, kv: Rc<StoreKv>) -> JsValue {
@@ -730,6 +787,18 @@ impl Store {
         }
     }
 
+    /// Drop a subscriber (element/fragment node) and every edge it declared.
+    /// Called by the element tree's destroy paths.
+    pub fn remove_subscriber(&self, sub: SubscriberId) {
+        self.shared.subscribers.remove_subscriber(sub);
+    }
+
+    /// Dev-tool introspection: `(live subscribers, total declared edges)` on
+    /// the shared graph.
+    pub fn subscriber_stats(&self) -> (usize, usize) {
+        self.shared.subscribers.stats()
+    }
+
     /// View over the stale/dirty engine: drain pending source changes and
     /// report whether any are pending. Held by the layout driver.
     pub fn flush_engine(&self) -> FlushEngineStore {
@@ -792,7 +861,12 @@ impl ReactiveReadStore {
             Readable::Derived(d) => (d.id(), true),
         };
         let _ = derived; // read_by_id handles staleness uniformly
-        self.shared.read_by_id(id, &self.default, ctx)
+        // Rust-native face (layout reads + DeriveRust closures): a cycle
+        // error can't propagate as JsResult here — fall back to undefined,
+        // mirroring throwing-closure semantics.
+        self.shared
+            .read_by_id(id, &self.default, ctx)
+            .unwrap_or(JsValue::undefined())
     }
 }
 
@@ -1050,6 +1124,8 @@ impl ReactiveBridgeStore {
                 return Ok(JsValue::undefined());
             };
             if let Some((watched_id, _)) = shared.watchers.activate(watcher) {
+                // Materialization best-effort: a cyclic watched derived
+                // errors here and simply stays unmaterialized this epoch.
                 let _ = shared.read_by_id(watched_id, &bridge.store.kv, ctx);
             }
             Ok(JsValue::undefined())

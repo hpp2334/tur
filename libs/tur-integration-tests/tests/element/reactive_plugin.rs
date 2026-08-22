@@ -374,3 +374,55 @@ globalThis.__c = store.get(globalThis.counter$);
         "subsystem should have bumped counter$ at least once across driven frames (got {v})"
     );
 }
+
+// ---------------------------------------------------------------------------
+// cycle guard: a Rust-native derive reading itself must not overflow the
+// thread stack. There are no JS frames on this path, so the engine (not
+// boa's runtime limits) must detect the re-entrant compute.
+// ---------------------------------------------------------------------------
+
+struct SelfReadDerivePlugin;
+impl Plugin for SelfReadDerivePlugin {
+    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        use tur_engine::core::edgy::reactive::Derived;
+
+        let bridge = ctx.reactive();
+        // Chicken-and-egg: the closure needs its own handle, so we hand it a
+        // cell filled immediately after `build_derive` returns.
+        let handle: Rc<RefCell<Option<Derived<JsValue>>>> = Rc::new(RefCell::new(None));
+        let handle_for_closure = handle.clone();
+        let d = bridge.build_derive(move |read, boa| {
+            let Some(d) = handle_for_closure.borrow().clone() else {
+                return Ok(JsValue::undefined());
+            };
+            Ok(read.read(Readable::from(d), boa))
+        });
+        *handle.borrow_mut() = Some(d);
+
+        let d_js = d.into_js(ctx.boa_mut());
+        ctx.register_global("cycle$", d_js);
+        Ok(())
+    }
+}
+
+#[test]
+fn rust_derive_self_read_materializes_undefined_without_overflow() {
+    let app = TurTestApp::new_with_extra_plugins(200.0, 100.0, vec![Box::new(SelfReadDerivePlugin)])
+        .expect("app build");
+    app.eval_module_source(
+        r#"import { createStore } from "tur:std";
+const store = createStore();
+            globalThis.__v = store.get(globalThis.cycle$);
+"#,
+    )
+    .expect("eval");
+    app.wait_for_timeout(Duration::ZERO);
+
+    assert_eq!(
+        app.eval_js("String(globalThis.__v)"),
+        "undefined",
+        "self-reading Rust derive must materialize undefined, not overflow the stack"
+    );
+}

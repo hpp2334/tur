@@ -298,3 +298,49 @@ fn ctx_threads_the_mounted_store() {
         "ctx captured into a launch generator must read/write the mounted store"
     );
 }
+
+/// A derived that reads itself must not recurse natively (thread stack
+/// overflow). The re-entrant read fails with a JS TypeError at the read site,
+/// the derive closure's error is swallowed per throwing-closure semantics, and
+/// the derived materializes `undefined`.
+#[test]
+fn self_read_derive_materializes_undefined_without_overflow() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { createStore, derive } from "tur:std";
+        globalThis.__d = derive((ctx) => ctx.get(globalThis.__d));
+        globalThis.__s = createStore();
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let val = app.eval_js("String(globalThis.__s.get(globalThis.__d))");
+    assert_eq!(
+        val, "undefined",
+        "self-reading derive must materialize undefined, not overflow the stack"
+    );
+}
+
+/// An indirect cycle through two deriveds (d1 -> d2 -> d1) is detected the
+/// same way: the innermost re-entrant read errors, both materialize undefined.
+#[test]
+fn indirect_derive_cycle_materializes_undefined_without_overflow() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { createStore, derive } from "tur:std";
+        globalThis.__d1 = derive((ctx) => ctx.get(globalThis.__d2));
+        globalThis.__d2 = derive((ctx) => ctx.get(globalThis.__d1));
+        globalThis.__s = createStore();
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let v1 = app.eval_js("String(globalThis.__s.get(globalThis.__d1))");
+    let v2 = app.eval_js("String(globalThis.__s.get(globalThis.__d2))");
+    assert_eq!(v1, "undefined", "indirect cycle d1 must not overflow");
+    assert_eq!(v2, "undefined", "indirect cycle d2 must not overflow");
+}

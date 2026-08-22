@@ -355,3 +355,59 @@ fn watch_pingpong_terminates_within_frame() {
         "1"
     );
 }
+
+/// Destroying a subtree must remove its subscriber edges from the reactive
+/// graph. Today the edges leak forever (phantom subscribers accumulate with
+/// every mount/unmount cycle). Contract: `turDevTool.reactiveStats()` exposes
+/// `{ subscribers, edges }`; toggling a Condition off drops exactly the
+/// destroyed branch's declared edges, and re-mounting restores them.
+#[test]
+fn subscriber_edges_dropped_on_subtree_destroy() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { Column, Text, Condition, createStore, source, derive, mount } from "tur:std";
+        globalThis.__store = createStore();
+        globalThis.__show = source(true);
+        globalThis.__label = derive((ctx) => (ctx.get(globalThis.__show) ? "on" : "off"));
+        const items = () => Column({
+            children: [0, 1, 2, 3].map(() => Text({ text: globalThis.__label })),
+        });
+        mount(globalThis.__store, Column({
+            children: [
+                Condition({ condition: globalThis.__show, child: items }),
+                Text({ text: "anchor" }),
+            ],
+        }));
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let edges = || -> u64 {
+        app.eval_js("String(globalThis.turDevTool.reactiveStats().edges)")
+            .trim()
+            .parse()
+            .expect("reactiveStats().edges should be a number")
+    };
+
+    // show=true: Condition fragment (1 edge on __show) + 4 Texts (1 edge each
+    // on __label) = 5.
+    assert_eq!(edges(), 5, "initial mount declares fragment + branch edges");
+
+    app.eval_js("globalThis.__store.set(globalThis.__show, false)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    // show=false: only the Condition fragment's edge remains — the destroyed
+    // branch's 4 edges must be gone.
+    assert_eq!(
+        edges(),
+        1,
+        "destroyed subtree's subscriber edges must be removed"
+    );
+
+    // Re-show: fresh subtree re-declares its edges.
+    app.eval_js("globalThis.__store.set(globalThis.__show, true)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(edges(), 5, "re-mounted branch re-subscribes");
+}

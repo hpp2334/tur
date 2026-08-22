@@ -1,5 +1,6 @@
 mod animation;
 mod async_bridge;
+mod bridge_contract_check;
 mod capability;
 mod column;
 mod composited_transform;
@@ -30,6 +31,7 @@ mod rich_text;
 mod row;
 mod scroll_view;
 mod sized_box;
+mod store_api;
 mod stack;
 mod start_contract;
 mod std_module_check;

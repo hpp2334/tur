@@ -273,6 +273,12 @@ impl TurInstanceContext {
         self.store.bridge()
     }
 
+    /// Dev-tool introspection over the shared reactive subscriber graph:
+    /// `(live subscribers, total declared atom↔subscriber edges)`.
+    pub fn reactive_subscriber_stats(&self) -> (usize, usize) {
+        self.store.subscriber_stats()
+    }
+
     /// Register a decoded image: allocate the worker-side id + record its
     /// natural size via [`ImageManager::allocate`] (so layout + paint can
     /// size the element this frame), and ship the pixel `Blob` to main

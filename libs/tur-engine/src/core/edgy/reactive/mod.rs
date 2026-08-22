@@ -398,7 +398,7 @@ pub fn build_store_context_object(
     let get_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-            Ok(shared_for_get.read_by_id(readable.id(), &kv_for_get, ctx))
+            shared_for_get.read_by_id(readable.id(), &kv_for_get, ctx)
         })
     };
     let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
@@ -475,7 +475,7 @@ pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
             let s = get_store.clone();
-            Ok(s.shared().read_by_id(readable.id(), &s.kv_handle(), ctx))
+            s.shared().read_by_id(readable.id(), &s.kv_handle(), ctx)
         })
     };
     let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)

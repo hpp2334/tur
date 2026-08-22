@@ -366,6 +366,11 @@ impl NodeTreeData {
         {
             self.pending_destroy.push(elem);
         }
+        // Drop the node's declared reactive edges. Destroyed nodes never
+        // re-declare (the subscribe phase runs only during layout), so the
+        // last set would otherwise persist as phantom subscribers forever.
+        self.store
+            .remove_subscriber(SubscriberId::new(id.into()));
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
@@ -394,6 +399,10 @@ impl NodeTreeData {
             }
         }
         let _ = self.remove_fragment(id);
+        // Same phantom-edge cleanup as `destroy_subtree`, for fragments
+        // (Condition/Switch/Each subscribe at build time).
+        self.store
+            .remove_subscriber(SubscriberId::new(id.into()));
     }
 
     /// Insert `child` into `parent`'s children vec immediately before
