@@ -802,3 +802,26 @@ declare module "tur:std" {
     /** Encode a string into a Uint8Array of UTF-8 bytes. */
     export function encodeUtf8(text: string): Uint8Array;
 }
+
+// Explicit re-exports for consumers importing the package directly
+// (not via the ambient "tur:std" module specifier).
+export type {
+    Derived,
+    Element,
+    Mutation,
+    Readable,
+    ReadonlyStoreCtx,
+    Source,
+    Store,
+    StoreCtx,
+    Val,
+    WatchHandle,
+} from "tur:core";
+export {
+    derive,
+    mount,
+    mutate,
+    source,
+    view,
+    watch,
+} from "tur:core";
