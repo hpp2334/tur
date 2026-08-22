@@ -658,6 +658,13 @@ pub(crate) fn build_worker_backend(
         1,
         "getElement",
     );
+    let rs_fn = bound_native(
+        &mut boa_context,
+        ctx_val.clone(),
+        dev_tool::tur_dev_tool_reactive_stats,
+        0,
+        "reactiveStats",
+    );
     let _ = dt_obj.create_data_property(
         js_string!("elementTree"),
         boa_engine::JsValue::from(et_fn),
@@ -666,6 +673,11 @@ pub(crate) fn build_worker_backend(
     let _ = dt_obj.create_data_property(
         js_string!("getElement"),
         boa_engine::JsValue::from(ge_fn),
+        &mut boa_context,
+    );
+    let _ = dt_obj.create_data_property(
+        js_string!("reactiveStats"),
+        boa_engine::JsValue::from(rs_fn),
         &mut boa_context,
     );
     let _ =
