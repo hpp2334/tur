@@ -9,5 +9,5 @@
             "@tur-ng/net"
         ]
     },
-    "include": ["cases"]
+    "include": ["cases", "global.d.ts"]
 }
