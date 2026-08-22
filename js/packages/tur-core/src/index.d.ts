@@ -202,3 +202,4 @@ declare module "tur:core" {
      *  the tree materialize into it). Replaces any previously mounted
      *  root. */
     export function mount(root: Element): void;
+}
