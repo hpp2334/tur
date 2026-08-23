@@ -1075,8 +1075,7 @@ impl WasmApp {
             };
             s.app.clone()
         };
-        app.backend()
-            .load_module(js_source)
+        app.load_module(js_source)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         // The worker self-paints on load (dirty state → coalesced self-wake);
@@ -1102,7 +1101,6 @@ impl WasmApp {
         };
         wasm_bindgen_futures::future_to_promise(async move {
             let s = app
-                .backend()
                 .eval_js("JSON.stringify(turDevTool.elementTree())")
                 .await;
             Ok(JsValue::from_str(&s))
@@ -1121,7 +1119,7 @@ impl WasmApp {
         };
         let source = format!("JSON.stringify(turDevTool.getElement({id}))");
         wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.backend().eval_js(&source).await;
+            let s = app.eval_js(&source).await;
             Ok(JsValue::from_str(&s))
         })
     }

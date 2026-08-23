@@ -18,7 +18,7 @@ use tur_integration_tests::{MutexFixedClock, TestSchedulerDriver};
 use tur_native::NativeFontLoader;
 
 fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> String {
-    futures::executor::block_on(app.backend().eval_js(source))
+    futures::executor::block_on(app.eval_js(source))
 }
 
 /// Probe plugin: at register time spawns a worker task that runs `spin_ms`

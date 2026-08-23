@@ -691,7 +691,7 @@ impl TurTestApp {
         // the engine's module loader) and satisfy the module lifecycle
         // contract natively: their own `start({ store })` calls `mount(view)`
         // against the engine-provided instance store.
-        block_on(self.inner.backend().load_module(source.as_str()))?;
+        block_on(self.inner.load_module(source.as_str()))?;
         // Drive the module's initial render to quiescence (frozen clock)
         // before the test starts interacting.
         self.wait_for_timeout(Duration::ZERO);
@@ -1269,7 +1269,7 @@ impl TurTestApp {
         // RPC to the worker: it runs `ctx.eval(source)`, drains jobs, and
         // replies with the display string. Synchronous from the test's POV
         // (blocks on the worker's reply via `block_on`).
-        block_on(self.inner.backend().eval_js(source))
+        block_on(self.inner.eval_js(source))
     }
 
     /// Evaluate `source` as an ES module and invoke its `start()` export
@@ -1284,13 +1284,13 @@ impl TurTestApp {
     /// [`load_module_raw`](Self::load_module_raw) for the strict path.
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         let wrapped = wrap_legacy_start(source);
-        block_on(self.inner.backend().load_module(wrapped.as_str())).map_err(TurError::from)
+        block_on(self.inner.load_module(wrapped.as_str()))
     }
 
     /// Strict module-lifecycle path: loads `source` verbatim — it MUST
     /// export `function start()` (missing/invalid `start` fails the load).
     pub fn load_module_raw(&self, source: &str) -> Result<(), TurError> {
-        block_on(self.inner.backend().load_module(source)).map_err(TurError::from)
+        block_on(self.inner.load_module(source))
     }
 
     /// Structured dev-tool snapshot of the root node, or `None` if no root
