@@ -1,4 +1,4 @@
-import { Color, Container, Grid, view } from "tur:std";
+import { Color, Container, Grid, mount, view } from "tur:std";
 
 // Static `Grid`: 12 cells tiled row-major. The column count is derived from
 // `maxCrossAxisExtent` (140) and the available width — e.g. a 800px viewport
@@ -45,7 +45,7 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-export default view(() =>
+const App = view(() =>
     Grid({
         maxCrossAxisExtent: 140,
         crossAxisSpacing: 8,
@@ -58,3 +58,7 @@ export default view(() =>
         ),
     }),
 );
+
+export function start() {
+    mount(App);
+}

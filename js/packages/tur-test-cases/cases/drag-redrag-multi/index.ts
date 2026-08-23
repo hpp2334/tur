@@ -3,11 +3,13 @@ import {
     Color,
     Container,
     derive,
+    mount,
     mutate,
     PointerInteract,
     Positioned,
     type ReadonlyStoreCtx,
     Stack,
+    type Store,
     source,
     Transform,
     view,
@@ -31,8 +33,9 @@ import {
 // test can assert that a second drag, started right after the first release,
 // still fires onPointerDown / onPointerMove on the OTHER tile.
 //
-// Reads flow through the closure ctx (`ctx.get(src)`) or the module store
-// (test hooks), matching the puzzle / drag-delta-tracking convention.
+// Reads flow through the closure ctx (`ctx.get(src)`) or the instance store
+// captured by the test hooks registered in `start`, matching the puzzle /
+// drag-delta-tracking convention.
 // ---------------------------------------------------------------------------
 
 const LIFT_MS = 180;
@@ -69,21 +72,6 @@ let dragOffset = { dx: 0, dy: 0 };
 function readTile(r: ReadonlyStoreCtx, id: number): TileState {
     return r.get(tilePos$[id]);
 }
-
-Object.assign(globalThis, {
-    // "down,move,move,up" style log for tile `id`.
-    __getTileEvents: (id: number): string => events[id].join(","),
-    // "x,y" current position of tile `id`.
-    __getTilePos: (id: number): string => {
-        const p = readTile(globalThis.__store, id);
-        return `${p.x},${p.y}`;
-    },
-    __resetDrag: (): void => {
-        events[0].length = 0;
-        events[1].length = 0;
-        dragId = null;
-    },
-});
 
 // Mirrors the puzzle's `pieceScale`: the actively-dragged tile AND the
 // just-released tile (during settle) read the animated `dragScale$`; every
@@ -139,7 +127,7 @@ function makeTile(id: number) {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Stack({
         children: [
             Container({
@@ -152,3 +140,21 @@ export default view(() =>
         ],
     }),
 );
+
+export function start({ store }: { store: Store }) {
+    Object.assign(globalThis, {
+        // "down,move,move,up" style log for tile `id`.
+        __getTileEvents: (id: number): string => events[id].join(","),
+        // "x,y" current position of tile `id`.
+        __getTilePos: (id: number): string => {
+            const p = readTile(store, id);
+            return `${p.x},${p.y}`;
+        },
+        __resetDrag: (): void => {
+            events[0].length = 0;
+            events[1].length = 0;
+            dragId = null;
+        },
+    });
+    mount(App);
+}

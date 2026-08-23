@@ -39,7 +39,7 @@ pub(in crate::builtin_plugins) use event::{ClipboardPasteEvent, push_write};
 
 use crate::core::capability::CapabilityDecls;
 use crate::core::js_runtime::helpers::ConstEntry;
-use crate::core::plugin::{Plugin, PluginContext};
+use crate::core::plugin::{Plugin, PluginRegisterContext};
 use crate::error::TurError;
 
 /// tur-clipboard plugin: registers `tur:clipboard` (exporting a
@@ -74,7 +74,7 @@ impl Plugin for TurClipboardPlugin {
         decls.need::<Clipboard>();
     }
 
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         // Engine-internal subsystems.
         //
         // `ClipboardPlatformSubsystem` must run BEFORE tur-text's

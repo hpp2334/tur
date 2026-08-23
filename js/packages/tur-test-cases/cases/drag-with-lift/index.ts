@@ -3,6 +3,7 @@ import {
     Color,
     Container,
     derive,
+    mount,
     mutate,
     PointerInteract,
     source,
@@ -46,7 +47,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default view(() =>
+const App = view(() =>
     Transform({
         scale: derive((ctx) => ctx.get(dragScale$)),
         child: PointerInteract({
@@ -74,3 +75,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

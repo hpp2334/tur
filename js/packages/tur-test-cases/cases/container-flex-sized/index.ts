@@ -1,6 +1,15 @@
-import { Alignment, Color, Column, Container, Row, Text, view } from "tur:std";
+import {
+    Alignment,
+    Color,
+    Column,
+    Container,
+    mount,
+    Row,
+    Text,
+    view,
+} from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             Row({
@@ -18,3 +27,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

@@ -1,6 +1,6 @@
-import { Color, Condition, Container, Text, view } from "tur:std";
+import { Color, Condition, Container, mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Condition({
         condition: true,
         queryKey: ["condition-basic"],
@@ -24,3 +24,7 @@ export default view(() =>
             }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

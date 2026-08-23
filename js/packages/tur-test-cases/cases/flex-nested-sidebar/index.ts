@@ -3,12 +3,13 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    mount,
     Row,
     SizedBox,
     view,
 } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Row({
         children: [
             Container({
@@ -31,3 +32,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

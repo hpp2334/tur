@@ -2,25 +2,18 @@ import { globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
-import * as rspack from "@rspack/core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.resolve(__dirname, "cases");
 
-// Each case source `export default`s a view; it never calls `mount()` itself.
-// The Rust integration tests eval `dist/<name>.js` which must satisfy the
-// module lifecycle contract (a `start` export), so the in-memory wrapper
-// (rspack's VirtualModulesPlugin) imports the case's default export and
-// mounts it inside `start({ store })` against the engine-provided instance
-// store (also stashed on globalThis for case helper seams) — no generated
-// files on disk.
+// Each case source authors the module lifecycle contract directly: an
+// `export function start(...)` that calls `mount(view)` against the
+// engine-provided instance store. The dist module IS the case source
+// (transpiled, `tur:*` imports kept external) — no wrapper needed.
 const entries: Record<string, string> = {};
-const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
-    virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../cases/${name}/index";\nimport { mount } from "tur:std";\nexport function start({ store }) {\n    globalThis.__store = store;\n    mount(Case);\n}\n`;
-    entries[name] = `./virtual-entries/${name}.ts`;
+    entries[name] = `./cases/${name}/index.ts`;
 }
 
 export default defineConfig({
@@ -46,7 +39,7 @@ export default defineConfig({
         "tur:clipboard": "tur:clipboard",
         "tur:net": "tur:net",
     },
-    plugins: [new rspack.experiments.VirtualModulesPlugin(virtualModules)],
+    plugins: [],
     module: {
         rules: [
             {

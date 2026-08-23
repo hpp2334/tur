@@ -1,6 +1,6 @@
-import { Positioned, SizedBox, Stack, view } from "tur:std";
+import { mount, Positioned, SizedBox, Stack, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Stack({
         children: [
             Positioned({
@@ -11,3 +11,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

@@ -11,6 +11,7 @@ import {
     MainAxisSize,
     MouseRegion,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -106,7 +107,7 @@ function Pill(props: {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Container({
         color: Color.hex("#0f172a"),
         padding: 16,
@@ -221,3 +222,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

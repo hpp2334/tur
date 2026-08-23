@@ -33,7 +33,7 @@ use std::pin::Pin;
 
 use futures::StreamExt;
 use futures::stream::LocalBoxStream;
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ impl Default for TurNetPlugin {
 }
 
 impl Plugin for TurNetPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         // Optional capability: if no Http backend is registered, skip
         // registering `tur:net`. JS code feature-detects.
         if !ctx.capability().contains::<Http>() {

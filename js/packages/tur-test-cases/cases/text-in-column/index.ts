@@ -1,6 +1,6 @@
-import { Column, CrossAxisAlignment, Text, view } from "tur:std";
+import { Column, CrossAxisAlignment, mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.End,
         children: [
@@ -9,3 +9,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

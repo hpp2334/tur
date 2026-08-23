@@ -24,6 +24,7 @@ export {
     selectAll,
 } from "./context-menu";
 export { relativeTime } from "./helpers";
+export { getInstanceStore, setInstanceStore } from "./instance-store";
 export {
     autoRun$,
     CASE_NAMES,

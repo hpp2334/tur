@@ -36,7 +36,7 @@ use std::rc::Rc;
 use boa_engine::native_function::NativeFunction;
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 use link::CompositedLinkState;
@@ -52,7 +52,7 @@ pub(crate) type ClosureEntry = (&'static str, usize, NativeFunction);
 /// `CompositedTransformFollower`) and the `createLayerLink` closure (which
 /// captures the shared link registry also held by the subsystem).
 pub fn install_composited_transform(
-    ctx: &mut PluginContext<'_>,
+    ctx: &mut PluginRegisterContext<'_>,
 ) -> Result<(Vec<FnEntry>, Vec<ClosureEntry>), TurError> {
     // Shared registry of active links — owned by the subsystem and captured
     // by the `createLayerLink` closure. O(active links) per flush.

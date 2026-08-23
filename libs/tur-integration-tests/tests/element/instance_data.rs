@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::js_runtime::InstanceDataCx;
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::renderer::NoopRenderer;
@@ -121,7 +121,7 @@ struct ReadPluginId {
     seen: Arc<Mutex<Option<PluginId>>>,
 }
 impl Plugin for ReadPluginId {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         *self.seen.lock().unwrap() = ctx.js_ctx().data::<PluginId>();
         Ok(())
     }
@@ -134,7 +134,7 @@ struct ReadPluginIdViaRef {
     seen: Arc<Mutex<Option<PluginId>>>,
 }
 impl Plugin for ReadPluginIdViaRef {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let captured = ctx.js_ctx().with_data::<PluginId, _>(|pid| pid.clone());
         *self.seen.lock().unwrap() = captured;
         Ok(())
@@ -148,7 +148,7 @@ struct ReadMultipleTypes {
     theme: Arc<Mutex<Option<ThemeOverride>>>,
 }
 impl Plugin for ReadMultipleTypes {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let js = ctx.js_ctx();
         *self.pid.lock().unwrap() = js.data::<PluginId>();
         *self.theme.lock().unwrap() = js.data::<ThemeOverride>();
@@ -161,7 +161,7 @@ struct UpdatePluginId {
     seen: Arc<Mutex<Option<PluginId>>>,
 }
 impl Plugin for UpdatePluginId {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let js = ctx.js_ctx();
         js.update::<PluginId>(PluginId("updated".into()));
         *self.seen.lock().unwrap() = js.data::<PluginId>();
@@ -173,7 +173,7 @@ impl Plugin for UpdatePluginId {
 /// build-time `define` — must panic.
 struct UpdateUndefinedPluginId;
 impl Plugin for UpdateUndefinedPluginId {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         ctx.js_ctx()
             .update::<PluginId>(PluginId("never-defined".into()));
         Ok(())

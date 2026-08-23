@@ -43,7 +43,7 @@ use boa_engine::{
 use boa_gc::{Finalize, Trace};
 
 use crate::core::js_runtime::helpers::ConstEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::error::TurError;
 
@@ -378,10 +378,10 @@ fn extract_bytes_from_value(v: &JsValue, ctx: &mut Context) -> JsResult<Vec<u8>>
 /// each flush) and the JS-side `eventBus` object (`on`/`send`). The shared
 /// state is created up-front in [`crate::core::app::TurAppInternal::new`]
 /// and exposed to plugins via
-/// [`PluginContext::event_bus`](crate::core::plugin::PluginContext::event_bus);
+/// [`PluginRegisterContext::event_bus`](crate::core::plugin::PluginRegisterContext::event_bus);
 /// this function just hooks up the JS bridge + subsystem to that shared
 /// state.
-pub fn install_event_bus(ctx: &mut PluginContext) -> Result<Vec<ConstEntry>, TurError> {
+pub fn install_event_bus(ctx: &mut PluginRegisterContext) -> Result<Vec<ConstEntry>, TurError> {
     let inner = ctx.event_bus();
 
     ctx.register_subsystem(Box::new(EmbedderBusSubsystem(inner.clone())));

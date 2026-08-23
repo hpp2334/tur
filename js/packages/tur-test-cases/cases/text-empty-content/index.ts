@@ -1,3 +1,7 @@
-import { Text, view } from "tur:std";
+import { mount, Text, view } from "tur:std";
 
-export default view(() => Text({ text: "" }));
+const App = view(() => Text({ text: "" }));
+
+export function start() {
+    mount(App);
+}

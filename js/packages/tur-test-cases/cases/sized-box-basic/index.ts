@@ -1,5 +1,9 @@
-import { SizedBox, Text, view } from "tur:std";
+import { mount, SizedBox, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     SizedBox({ width: 100, height: 50, children: [Text({ text: "Hi" })] }),
 );
+
+export function start() {
+    mount(App);
+}

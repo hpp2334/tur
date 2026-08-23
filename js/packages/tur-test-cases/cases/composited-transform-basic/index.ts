@@ -3,6 +3,7 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    mount,
     Positioned,
     SizedBox,
     Stack,
@@ -12,7 +13,7 @@ import {
 // Target sits at (100, 80) via a Positioned wrapper; the follower (default
 // TopLeft/TopLeft anchors, zero targetOffset) should land its top-left at the
 // target's top-left. The follower is a direct root-Stack child (overlay slot).
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -32,3 +33,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

@@ -89,7 +89,7 @@ impl FrameEnv {
     }
 
     /// The shared clock handle. Plugins obtain this via
-    /// [`PluginContext::clock`](crate::core::plugin::PluginContext::clock)
+    /// [`PluginRegisterContext::clock`](crate::core::plugin::PluginRegisterContext::clock)
     /// and stash it in time-driven subsystems (animation, audio, …) so they
     /// can query `clock.now()` during their tick.
     pub fn clock(&self) -> Rc<dyn Clock> {

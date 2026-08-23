@@ -13,7 +13,7 @@
 //! The loader keeps a registry of bare `tur:*` specifiers → pre-built
 //! [`Module`]s. Plugins register additional capability modules
 //! (`tur:net`, `tur:clipboard`, …) through
-//! [`PluginContext::register_module`] / [`PluginContext::register_native_module`].
+//! [`PluginRegisterContext::register_module`] / [`PluginRegisterContext::register_native_module`].
 
 use std::cell::RefCell;
 use std::collections::HashMap;

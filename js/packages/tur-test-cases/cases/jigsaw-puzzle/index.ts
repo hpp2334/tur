@@ -14,6 +14,7 @@ import {
     Expanded,
     MainAxisAlignment,
     MouseRegion,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -493,7 +494,7 @@ function WinBanner(): Element {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     // Fill the entire viewer pane: an outer Stack provides the full-bleed
     // dark background + a centered puzzle play area + the win banner overlay.
     // The puzzle itself is a fixed-size Stack (PLAY_W × PLAY_H) so the
@@ -553,3 +554,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

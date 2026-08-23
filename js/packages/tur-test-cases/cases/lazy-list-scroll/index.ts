@@ -1,9 +1,9 @@
-import { Axis, Color, Container, LazyList, view } from "tur:std";
+import { Axis, Color, Container, LazyList, mount, view } from "tur:std";
 
 const ITEM_HEIGHT = 50;
 const ITEM_COUNT = 100;
 
-export default view(() =>
+const App = view(() =>
     LazyList({
         axis: Axis.Vertical,
         itemCount: ITEM_COUNT,
@@ -18,3 +18,7 @@ export default view(() =>
             }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

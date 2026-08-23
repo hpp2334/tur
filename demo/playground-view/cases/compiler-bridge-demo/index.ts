@@ -1,4 +1,4 @@
-import { Color, Column, Container, Expanded, Text, view } from "tur:std";
+import { Color, Column, Container, Expanded, mount, Text, view } from "tur:std";
 import { tokenizeTsx, transpileTsx } from "tur-ext/demo-helper";
 
 const SRC = "const x: number = 42;";
@@ -31,7 +31,7 @@ if (pos < HL.length) {
     spans.push({ content: HL.slice(pos) });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#282c34"),
@@ -69,3 +69,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

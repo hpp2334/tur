@@ -1,7 +1,7 @@
 //! Builtin plugins — feature bundles bundled with the engine itself.
 //!
 //! Each plugin sub-folder exports a single `pub fn install_<name>(ctx:
-//! &mut PluginContext) -> Result<Vec<FnEntry>, TurError>` that registers
+//! &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>` that registers
 //! its elements + bridge fns + subsystems + classes. Sub-modules are
 //! `pub(in crate::builtin_plugins)` so sibling plugins can share internals
 //! (e.g. text uses scroll's `dispatch_wheel`), but `core/` and external

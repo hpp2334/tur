@@ -1,6 +1,6 @@
-import { Alignment, Color, Container, Text, view } from "tur:std";
+import { Alignment, Color, Container, mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Container({
         width: 200,
         height: 200,
@@ -13,3 +13,7 @@ export default view(() =>
         children: [Text({ text: "Shadow", fontSize: 16 })],
     }),
 );
+
+export function start() {
+    mount(App);
+}

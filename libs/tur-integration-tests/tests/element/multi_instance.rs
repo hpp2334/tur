@@ -11,7 +11,7 @@ use std::time::Duration;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
-use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
+use tur_engine::core::plugin::{CompileContext, Plugin, PluginRegisterContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::ShellEvent;
 use tur_engine::renderer::NoopRenderer;
@@ -268,7 +268,10 @@ impl Plugin for CounterPlugin {
         self.compile_count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), tur_engine::error::TurError> {
+    fn register(
+        &self,
+        ctx: &mut PluginRegisterContext<'_>,
+    ) -> Result<(), tur_engine::error::TurError> {
         self.register_count.fetch_add(1, Ordering::SeqCst);
         // Look up the shared capability (registered on the runtime builder) and
         // bump it — proves every instance's register sees the SAME backend.

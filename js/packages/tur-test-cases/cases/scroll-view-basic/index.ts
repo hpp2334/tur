@@ -1,12 +1,13 @@
 import {
     Column,
     CrossAxisAlignment,
+    mount,
     ScrollView,
     SizedBox,
     view,
 } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     ScrollView({
         queryKey: ["scroll-view"],
         child: Column({
@@ -19,3 +20,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

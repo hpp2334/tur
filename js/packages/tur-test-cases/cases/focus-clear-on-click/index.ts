@@ -3,6 +3,7 @@ import {
     createTextEditingController,
     derive,
     Input,
+    mount,
     mutate,
     PointerInteract,
     source,
@@ -19,7 +20,7 @@ import {
 const controller = createTextEditingController({});
 const clicks$ = source(0);
 
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             Input({
@@ -41,3 +42,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

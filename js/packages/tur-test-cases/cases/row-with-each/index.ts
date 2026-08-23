@@ -6,6 +6,7 @@ import {
     Each,
     Expanded,
     MainAxisSize,
+    mount,
     Row,
     SizedBox,
     source,
@@ -15,7 +16,7 @@ import {
 
 const seg$ = source<string[]>(["a", "b"]);
 
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
@@ -36,3 +37,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

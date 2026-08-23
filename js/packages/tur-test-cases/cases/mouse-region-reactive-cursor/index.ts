@@ -5,6 +5,8 @@ import {
     type Cursor,
     derive,
     MouseRegion,
+    mount,
+    type Store,
     source,
     view,
 } from "tur:std";
@@ -13,13 +15,7 @@ import {
 // `globalThis.__setCursor` and assert the host cursor updates after a flush.
 const cursor$ = source<Cursor>("pointer");
 
-Object.assign(globalThis, {
-    __setCursor: (c: Cursor): void => {
-        globalThis.__store.set(cursor$, c);
-    },
-});
-
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             MouseRegion({
@@ -34,3 +30,12 @@ export default view(() =>
         ],
     }),
 );
+
+export function start({ store }: { store: Store }) {
+    Object.assign(globalThis, {
+        __setCursor: (c: Cursor): void => {
+            store.set(cursor$, c);
+        },
+    });
+    mount(App);
+}

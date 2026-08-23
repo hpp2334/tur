@@ -1,6 +1,6 @@
-import { Text, view } from "tur:std";
+import { mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Text({
         text: "Hello World this is a long text that should wrap",
         fontSize: 14,
@@ -8,3 +8,7 @@ export default view(() =>
         overflow: "clip",
     }),
 );
+
+export function start() {
+    mount(App);
+}

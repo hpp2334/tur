@@ -1,6 +1,13 @@
-import { Container, CrossAxisAlignment, Row, SizedBox, view } from "tur:std";
+import {
+    Container,
+    CrossAxisAlignment,
+    mount,
+    Row,
+    SizedBox,
+    view,
+} from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Container({
         height: 100,
         width: 200,
@@ -13,3 +20,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

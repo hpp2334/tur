@@ -1,9 +1,9 @@
-import { Column, Container, ScrollView, Text, view } from "tur:std";
+import { Column, Container, mount, ScrollView, Text, view } from "tur:std";
 
 // Repro #6: Container(no explicit size, padding:48) sized from a Text child,
 // wrapped in ScrollView(axis: Vertical) > Column. Expected: the container is
 // laid out at its intrinsic size inside the scrollable column.
-export default view(() =>
+const App = view(() =>
     ScrollView({
         axis: "vertical",
         child: Column({
@@ -23,3 +23,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

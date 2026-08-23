@@ -272,7 +272,7 @@ impl TurInstanceContext {
     /// returning a fresh source) reach this via
     /// [`extract_js_ctx`](crate::core::js_runtime::helpers::extract_js_ctx).
     /// Plugins reach the same face at registration time via
-    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive).
+    /// [`PluginRegisterContext::reactive`](crate::core::plugin::PluginRegisterContext::reactive).
     pub fn reactive(&self) -> crate::core::edgy::reactive::ReactiveBridgeStore {
         self.store.bridge()
     }

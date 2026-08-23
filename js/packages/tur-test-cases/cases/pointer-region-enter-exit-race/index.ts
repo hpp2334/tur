@@ -3,7 +3,9 @@ import {
     Column,
     Container,
     MouseRegion,
+    mount,
     mutate,
+    type Store,
     source,
     view,
 } from "tur:std";
@@ -12,11 +14,7 @@ import {
 // Each region sets it on enter and clears it (unconditionally) on exit.
 const hover$ = source("");
 
-Object.assign(globalThis, {
-    __getHover: (): string => globalThis.__store.get(hover$),
-});
-
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             MouseRegion({
@@ -42,3 +40,10 @@ export default view(() =>
         ],
     }),
 );
+
+export function start({ store }: { store: Store }) {
+    Object.assign(globalThis, {
+        __getHover: (): string => store.get(hover$),
+    });
+    mount(App);
+}

@@ -45,7 +45,7 @@ pub trait Capability: Any + Clone + 'static {}
 ///
 /// Cloning a `Capabilities` clones only the inner `Rc` — all clones share the
 /// same backing map. Returned by [`crate::core::js_runtime::TurInstanceContext::capability`]
-/// and [`crate::core::plugin::PluginContext::capability`]; also held by
+/// and [`crate::core::plugin::PluginRegisterContext::capability`]; also held by
 /// [`crate::core::handler::HandlerContext`] so event handlers can look up
 /// capabilities at dispatch time.
 #[derive(Clone, Debug)]

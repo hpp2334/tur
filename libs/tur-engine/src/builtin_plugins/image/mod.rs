@@ -27,7 +27,7 @@ pub mod render;
 pub use element::{ImageElement, ImageView};
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 /// Wire image plugin into `tur:std`. Called by `TurStdPlugin`'s
@@ -40,6 +40,6 @@ use crate::error::TurError;
 /// Returns: the `Image` / `createImageResource` / `createSvgResource` factory
 /// fns, which the caller merges into `std_fns` before
 /// `register_module("tur:std", ...)`.
-pub fn install_image(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_image(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     Ok(bridge::fns())
 }

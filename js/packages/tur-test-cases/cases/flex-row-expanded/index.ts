@@ -1,8 +1,19 @@
-import { CrossAxisAlignment, Expanded, Row, SizedBox, view } from "tur:std";
+import {
+    CrossAxisAlignment,
+    Expanded,
+    mount,
+    Row,
+    SizedBox,
+    view,
+} from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Row({
         crossAlignment: CrossAxisAlignment.Start,
         children: [SizedBox({ width: 50 }), Expanded({ child: SizedBox({}) })],
     }),
 );
+
+export function start() {
+    mount(App);
+}

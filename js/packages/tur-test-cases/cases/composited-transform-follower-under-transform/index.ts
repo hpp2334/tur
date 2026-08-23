@@ -3,6 +3,7 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    mount,
     Positioned,
     SizedBox,
     Stack,
@@ -21,7 +22,7 @@ import {
 // translate stacked on top of the desired point. With affine-inverse tracking
 // the subsystem solves `parent_world⁻¹ · translate(desired)` and the follower
 // lands exactly at (100, 80).
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -49,3 +50,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

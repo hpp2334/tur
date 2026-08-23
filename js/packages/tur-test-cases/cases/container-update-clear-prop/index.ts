@@ -4,6 +4,7 @@ import {
     Color,
     Container,
     derive,
+    mount,
     mutate,
     PointerInteract,
     source,
@@ -16,7 +17,7 @@ const gray = Color.rgba(226, 232, 240, 255);
 const color$ = derive((ctx) => (ctx.get(checked$) ? green : undefined));
 const borderColor$ = derive((ctx) => (ctx.get(checked$) ? green : gray));
 
-export default view(() =>
+const App = view(() =>
     Container({
         height: 100,
         width: 200,
@@ -37,3 +38,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

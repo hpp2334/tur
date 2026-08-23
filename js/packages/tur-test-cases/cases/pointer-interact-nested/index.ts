@@ -5,6 +5,7 @@ import {
     derive,
     HitTestBehavior,
     MainAxisSize,
+    mount,
     mutate,
     PointerInteract,
     Row,
@@ -18,7 +19,7 @@ const innerClicks$ = source(0);
 const translucentOuterClicks$ = source(0);
 const translucentInnerClicks$ = source(0);
 
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         mainAxisSize: MainAxisSize.Min,
@@ -103,3 +104,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

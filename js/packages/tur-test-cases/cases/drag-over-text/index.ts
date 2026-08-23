@@ -1,4 +1,12 @@
-import { Color, Container, mutate, PointerInteract, Text, view } from "tur:std";
+import {
+    Color,
+    Container,
+    mount,
+    mutate,
+    PointerInteract,
+    Text,
+    view,
+} from "tur:std";
 
 // ---------------------------------------------------------------------------
 // Regression fixture for the touch-drag-stealing bug.
@@ -31,7 +39,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default view(() =>
+const App = view(() =>
     PointerInteract({
         onPointerDown: mutate(() => {
             downCount += 1;
@@ -48,3 +56,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

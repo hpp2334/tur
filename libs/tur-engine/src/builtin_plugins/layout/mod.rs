@@ -28,13 +28,13 @@ pub use positioned::{PositionedElement, PositionedView};
 pub use stack::{StackElement, StackView};
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 /// Install the layout plugin (`Column` / `Row` / `Expanded` / `Stack` /
 /// `Positioned` / `Container` / `SizedBox`). Returns the JS factory fns to
 /// be merged into `tur:std` by the orchestrator.
-pub fn install_layout(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_layout(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     let mut v: Vec<FnEntry> = Vec::new();
     v.extend(container::bridge::fns());
     v.extend(flex::bridge::fns());

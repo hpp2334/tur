@@ -1,8 +1,8 @@
-import { Column, MainAxisSize, SizedBox, view } from "tur:std";
+import { Column, MainAxisSize, mount, SizedBox, view } from "tur:std";
 
 // Three 300px children in a Min column — total 900px overflows the 600px
 // viewport. Children should keep their natural height (not squish to 0).
-export default view(() =>
+const App = view(() =>
     Column({
         mainAxisSize: MainAxisSize.Min,
         children: [
@@ -12,3 +12,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

@@ -5,6 +5,7 @@ import {
     createTextEditingController,
     derive,
     Input,
+    mount,
     mutate,
     source,
     Text,
@@ -22,7 +23,7 @@ const pwCtrl = createTextEditingController({
 });
 const plainCtrl = createTextEditingController({});
 
-export default view(() =>
+const App = view(() =>
     Container({
         padding: 32,
         children: [
@@ -60,3 +61,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

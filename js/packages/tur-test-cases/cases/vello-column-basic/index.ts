@@ -1,6 +1,6 @@
-import { Column, Container, view } from "tur:std";
+import { Column, Container, mount, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             Container({ width: 200, height: 50 }),
@@ -8,3 +8,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

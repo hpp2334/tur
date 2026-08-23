@@ -5,6 +5,7 @@ import {
     createLayerLink,
     derive,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -24,7 +25,7 @@ import {
 // frame before snapping back — the visible flash.
 const tall$ = source(false);
 
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -66,3 +67,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

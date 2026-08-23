@@ -44,7 +44,7 @@ use crate::error::TurError;
 ///    `&self`, the **same** plugin object is reused across every instance —
 ///    no factory needed. Stateful per-instance artifacts (subsystems,
 ///    handles) are created fresh inside `register` and pushed into the
-///    per-instance [`PluginContext`].
+///    per-instance [`PluginRegisterContext`].
 ///
 /// Plugins declare hard-required capabilities via
 /// [`requires`](Plugin::requires); the runtime validates every declaration
@@ -66,7 +66,7 @@ pub trait Plugin: Send + Sync {
     ///
     /// Default: no requirements. Optional capabilities should NOT be declared
     /// here — the plugin should look them up via
-    /// [`PluginContext::capability`] in `register` and handle absence
+    /// [`PluginRegisterContext::capability`] in `register` and handle absence
     /// gracefully.
     fn requires(&self, _decls: &mut CapabilityDecls) {}
 
@@ -90,7 +90,7 @@ pub trait Plugin: Send + Sync {
     /// [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build)
     /// into a fresh boa `Context`. Register modules, handlers, classes,
     /// globals via `ctx.register_*()`.
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError>;
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError>;
 }
 
 /// Context passed to [`Plugin::compile`]. Provides read access to the
@@ -101,23 +101,30 @@ pub struct CompileContext<'a> {
     pub font_context: &'a FontContext,
 }
 
-/// Per-instance context passed to [`Plugin::register`]. Only available while an
-/// instance is being constructed — after the app is built, no further
-/// registration is possible.
+/// Register-phase context passed to [`Plugin::register`]. It exists **only**
+/// while an instance is being constructed — inside
+/// [`build_worker_backend`](crate::core::runtime) — and is consumed once the
+/// last plugin registers. After the app is built, no further registration is
+/// possible: this type is the only registration surface in existence, and it
+/// is gone.
 ///
 /// Exposes registration primitives for JS modules, boa classes, subsystems,
 /// and global properties. Each `register_*` method is self-contained: call them
 /// sequentially within `register.
-pub struct PluginContext<'a> {
+pub struct PluginRegisterContext<'a> {
     pub(crate) boa: &'a mut Context,
     pub(crate) loader: Rc<TurModuleLoader>,
     pub js_ctx_value: JsValue,
     pub(crate) js_ctx: TurInstanceContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
-    /// Plugin-registered flush subsystems. Shared with
-    /// [`TurAppInternal::subsystems`](crate::core::app::TurAppInternal) —
-    /// plugins push here, the engine iterates the same vec during flush.
-    pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
+    /// Build-time collector for plugin-registered flush subsystems. Owned by
+    /// this register-phase context and moved into the instance
+    /// ([`TurAppInternal::subsystems`](crate::core::app::TurAppInternal))
+    /// by the builder after the last plugin registers — see
+    /// [`into_subsystems`](Self::into_subsystems). No handle into the live
+    /// registry survives the builder, so subsystem registration after build
+    /// is structurally impossible.
+    pub(crate) subsystems: Vec<Box<dyn Subsystem>>,
     /// Always-installed event bus — shared with
     /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
     /// (specifically `install_event_bus`) read this to wire up the JS bridge
@@ -130,15 +137,15 @@ pub struct PluginContext<'a> {
     /// The engine's [`HostExecutor`] — a `Send + Sync + Clone`
     /// handle for hopping work onto the engine's host thread (for OS APIs
     /// that require it, e.g. macOS `NSPasteboard` via `arboard`). Set by
-    /// the engine when the `PluginContext` is constructed; plugins obtain a
-    /// clone via [`to_host_executor`](PluginContext::to_host_executor). Capabilities that
+    /// the engine when the `PluginRegisterContext` is constructed; plugins obtain a
+    /// clone via [`to_host_executor`](PluginRegisterContext::to_host_executor). Capabilities that
     /// need host-thread access receive their own clone at construction via
     /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder)'s
     /// closure form.
     pub(crate) host_exec: HostExecutor,
 }
 
-impl<'a> PluginContext<'a> {
+impl<'a> PluginRegisterContext<'a> {
     /// Register a ctx-bound native module (bridge fns that receive `TurInstanceContext`
     /// as their first argument) plus optional free-form closure exports. Used
     /// for `tur:std` and similar.
@@ -317,11 +324,25 @@ impl<'a> PluginContext<'a> {
     }
 
     /// Register a [`Subsystem`] — a long-lived participant in the engine's
-    /// per-frame `flush` loop. Subsystems tick once per frame (not once per
-    /// fixed-point iteration), in registration order. See the
+    /// per-frame `flush` loop. Both flush phases run every fixed-point
+    /// iteration, in registration order (= plugin order on
+    /// [`TurRuntimeBuilder`](crate::TurRuntimeBuilder)); time-driven
+    /// subsystems self-gate via `frame_id`. See the
     /// [`subsystem`](crate::core::subsystem) module docs for details.
+    ///
+    /// Only available during `register` — the collected list is frozen into
+    /// the instance when the last plugin registers.
     pub fn register_subsystem(&mut self, sub: Box<dyn Subsystem>) {
-        self.subsystems.borrow_mut().push(sub);
+        self.subsystems.push(sub);
+    }
+
+    /// Builder-facing: hand the collected subsystems to the instance.
+    /// Consumes the register-phase context (ending its `&mut Context`
+    /// borrow) — after this call the only subsystem registration path in
+    /// existence is gone, which is what makes the registry immutable for
+    /// the instance's lifetime.
+    pub(crate) fn into_subsystems(self) -> Vec<Box<dyn Subsystem>> {
+        self.subsystems
     }
 
     /// The always-installed event bus handle (shared with
@@ -369,7 +390,7 @@ impl<'a> PluginContext<'a> {
 /// [`TurRuntimeBuilder::build`](crate::TurRuntimeBuilder) and spawns the
 /// paired drain on the host thread, so the hop "just works" with no embedder
 /// wiring. Plugins obtain a clone via
-/// [`PluginContext::to_host_executor`](PluginContext::to_host_executor); capabilities
+/// [`PluginRegisterContext::to_host_executor`](PluginRegisterContext::to_host_executor); capabilities
 /// (backends) that need host-thread access receive their own clone at
 /// construction via the closure form of
 /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder).

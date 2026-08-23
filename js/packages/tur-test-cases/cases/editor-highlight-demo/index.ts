@@ -7,6 +7,7 @@ import {
     Expanded,
     Input,
     MainAxisAlignment,
+    mount,
     Text,
     view,
 } from "tur:std";
@@ -29,7 +30,7 @@ ctrl.setSpans([
     { content: "; }", color: Color.hex("#abb2bf") },
 ]);
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#282c34"),
@@ -59,3 +60,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

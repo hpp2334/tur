@@ -3,13 +3,14 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    mount,
     Text,
     view,
 } from "tur:std";
 
 // Repro: Column(crossAlignment: Stretch) > Container(padding, color, no size)
 // > Text. Expected: full-width red strip with white text, visible.
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
@@ -28,3 +29,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

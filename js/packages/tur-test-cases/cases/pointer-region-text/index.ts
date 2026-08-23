@@ -6,6 +6,7 @@ import {
     CrossAxisAlignment,
     derive,
     MouseRegion,
+    mount,
     mutate,
     source,
     Text,
@@ -14,7 +15,7 @@ import {
 
 const state$ = source("idle");
 
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
@@ -37,3 +38,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

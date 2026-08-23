@@ -8,6 +8,7 @@ import {
     MainAxisSize,
     MouseRegion,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     Row,
@@ -141,7 +142,7 @@ function OverflowCard({
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Container({
         color: C.pageBg,
         children: [
@@ -346,3 +347,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

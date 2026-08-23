@@ -49,7 +49,7 @@ use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
@@ -91,7 +91,7 @@ pub struct NativeExport {
 }
 
 impl Plugin for NativeModulePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let exports: Vec<(String, NativeFunction, usize)> = self
             .exports
             .iter()
@@ -687,8 +687,10 @@ impl TurTestApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        // Case dist files are ES modules that import `tur:std` (resolved by
-        // the engine's module loader) and call `render(<case default>)`.
+        // Case dist files are ES modules that import `tur:*` (resolved by
+        // the engine's module loader) and satisfy the module lifecycle
+        // contract natively: their own `start({ store })` calls `mount(view)`
+        // against the engine-provided instance store.
         block_on(self.inner.backend().load_module(source.as_str()))?;
         // Drive the module's initial render to quiescence (frozen clock)
         // before the test starts interacting.

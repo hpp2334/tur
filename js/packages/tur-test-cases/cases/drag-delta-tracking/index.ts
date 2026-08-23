@@ -1,4 +1,11 @@
-import { Color, Container, mutate, PointerInteract, view } from "tur:std";
+import {
+    Color,
+    Container,
+    mount,
+    mutate,
+    PointerInteract,
+    view,
+} from "tur:std";
 
 // Mirrors the drag-delta tracking logic in the playground's VDivider:
 // tracks the press position (dragStart) and the previous move position
@@ -19,7 +26,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default view(() =>
+const App = view(() =>
     PointerInteract({
         onPointerDown: mutate((_ctx, ev) => {
             dragStart = { x: ev.global.x, y: ev.global.y };
@@ -47,3 +54,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

@@ -4,6 +4,7 @@ import {
     Container,
     CrossAxisAlignment,
     MainAxisAlignment,
+    mount,
     Row,
     SizedBox,
     Text,
@@ -13,7 +14,7 @@ import {
 const TABS = [{ id: "todolist", label: "TodoList" }];
 const activeId = "todolist";
 
-export default view(() =>
+const App = view(() =>
     Row({
         children: [
             Container({
@@ -62,3 +63,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

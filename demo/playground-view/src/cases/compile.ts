@@ -1,6 +1,6 @@
 import * as Anim from "tur:animation";
 import * as Clipboard from "tur:clipboard";
-import type { Color, SpanData } from "tur:std";
+import type { Color, SpanData, Store } from "tur:std";
 import * as Std from "tur:std";
 import { FilePicker, Net } from "@tur-pg/optional-ns";
 import type { AstNode, TokenSpan } from "tur-ext/demo-helper";
@@ -27,10 +27,12 @@ const KIND_COLOR: Color[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** The case's `start()` (module lifecycle contract). Invoking it
-     *  publishes the case view via `setCaseView`; it may return a cleanup
-     *  function the case store runs before the next case / recompile. */
-    start?: () => (() => void) | void;
+    /** The case's `start({ store })` (module lifecycle contract). Invoking it
+     *  publishes the case view via the intercepted `mount`; it may return a
+     *  cleanup function the case store runs before the next case / recompile.
+     *  The store type is `Store | null` on the harness side (the compile-time
+     *  cache prime runs before the instance store exists). */
+    start?: (ctx: { store: Store | null }) => (() => void) | void;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,23 @@ function specNames(specs: Array<{ local: string; imported: string }>): string {
             s.imported === s.local ? s.local : `${s.imported}: ${s.local}`,
         )
         .join(", ");
+}
+
+/** Split a `tur:std` specifier list: pull `mount` (under any local alias) out
+ *  and return the remaining names plus the alias to rebind. The playground
+ *  intercepts the case's own `mount(...)` so the case view publishes into the
+ *  viewer pane instead of replacing the playground's mounted root. */
+function splitMountSpec(specs: Array<{ local: string; imported: string }>): {
+    names: string;
+    mountAlias: string | null;
+} {
+    let mountAlias: string | null = null;
+    const rest: typeof specs = [];
+    for (const s of specs) {
+        if (s.imported === "mount") mountAlias = s.local;
+        else rest.push(s);
+    }
+    return { names: specNames(rest), mountAlias };
 }
 
 /** Normalize a relative import path to a module name key.
@@ -108,8 +127,21 @@ function rewriteModule(transpiled: string): {
         switch (node.kind) {
             case "import": {
                 const src = node.source ?? "";
-                const names = specNames(node.specifiers ?? []);
-                parts.push(`const {${names}} = ${importTarget(src)};`);
+                if (src === "tur:std") {
+                    const { names, mountAlias } = splitMountSpec(
+                        node.specifiers ?? [],
+                    );
+                    parts.push(`const {${names}} = Std;`);
+                    if (mountAlias) {
+                        parts.push(
+                            `const ${mountAlias} = (root) => { __setCaseView(root); };`,
+                        );
+                    }
+                } else {
+                    parts.push(
+                        `const {${specNames(node.specifiers ?? [])}} = ${importTarget(src)};`,
+                    );
+                }
                 break;
             }
 
@@ -145,24 +177,39 @@ function rewriteModule(transpiled: string): {
     return { source: parts.join("\n"), exportedNames };
 }
 
-/** Rewrite the entry file. Like `rewriteModule` but converts
- *  `export default X` → a generated `start()` that publishes X as the case
- *  view (the module lifecycle contract, in-realm form: the compiler injects
- *  `__setCaseView` and the case store invokes `start` / runs its returned
- *  cleanup). An explicit `export function start()` passes through verbatim
- *  (advanced cases with resources to dispose call `__setCaseView(...)`
- *  themselves and may return a cleanup function). */
-function rewriteEntry(transpiled: string): string {
+/** Rewrite the entry file. Like `rewriteModule` (same `mount` interception)
+ *  but for the module-lifecycle entry: the case's own `export function
+ *  start(...)` passes through verbatim and is wired to the module's exports
+ *  (advanced cases may register hooks, return a cleanup, …). `export default`
+ *  is NOT an entrypoint — `compileCase` rejects it with a clear error. */
+function rewriteEntry(transpiled: string): {
+    source: string;
+    hasDefaultExport: boolean;
+} {
     const ast = Host.generateAst(transpiled);
     const parts: string[] = [];
     let hasExplicitStart = false;
+    let hasDefaultExport = false;
 
     for (const node of ast) {
         switch (node.kind) {
             case "import": {
                 const src = node.source ?? "";
-                const names = specNames(node.specifiers ?? []);
-                parts.push(`const {${names}} = ${importTarget(src)};`);
+                if (src === "tur:std") {
+                    const { names, mountAlias } = splitMountSpec(
+                        node.specifiers ?? [],
+                    );
+                    parts.push(`const {${names}} = Std;`);
+                    if (mountAlias) {
+                        parts.push(
+                            `const ${mountAlias} = (root) => { __setCaseView(root); };`,
+                        );
+                    }
+                } else {
+                    parts.push(
+                        `const {${specNames(node.specifiers ?? [])}} = ${importTarget(src)};`,
+                    );
+                }
                 break;
             }
 
@@ -173,9 +220,7 @@ function rewriteEntry(transpiled: string): string {
             }
 
             case "exportDefault": {
-                parts.push(
-                    `exports.start = function () {\n    __setCaseView(${node.body ?? node.text});\n};`,
-                );
+                hasDefaultExport = true;
                 break;
             }
 
@@ -196,13 +241,11 @@ function rewriteEntry(transpiled: string): string {
         }
     }
 
-    // An explicit `export function start` in the entry wins over the
-    // default-export wrapper — the compiler wires the declared `start`
-    // through to the module's exports below.
+    // Wire the declared `start` through to the module's exports.
     if (hasExplicitStart) {
         parts.push("exports.start = start;");
     }
-    return parts.join("\n");
+    return { source: parts.join("\n"), hasDefaultExport };
 }
 
 // ---------------------------------------------------------------------------
@@ -210,8 +253,8 @@ function rewriteEntry(transpiled: string): string {
 // ---------------------------------------------------------------------------
 
 /** Lifecycle sink: the view published by the currently-started case's
- *  `setCaseView(...)` call. Drained once by `takePublishedView` after the
- *  case store invokes `start()`. */
+ *  (intercepted) `mount(root)` call. Drained once by `takePublishedView`
+ *  after the case store invokes `start`. */
 let publishedView: unknown = null;
 
 function setCaseView(view: unknown): void {
@@ -219,7 +262,7 @@ function setCaseView(view: unknown): void {
 }
 
 /** Drain the view published by the last `start()` (null if it never called
- *  `setCaseView`). */
+ *  `mount`). */
 export function takePublishedView(): unknown {
     const v = publishedView;
     publishedView = null;
@@ -227,9 +270,10 @@ export function takePublishedView(): unknown {
 }
 
 /** Evaluate rewritten case code in an isolated function scope with the
- *  `tur:*` modules, the per-case `__modules` registry, and the lifecycle
- *  `__setCaseView` sink injected as parameters (no `globalThis` pollution).
- *  Returns the function's value. */
+ *  `tur:*` modules, the per-case `__modules` registry, and the internal
+ *  `__setCaseView` sink injected as parameters (no `globalThis` pollution —
+ *  case code never references `__setCaseView`; the compiler's `mount` shim
+ *  is the only caller). Returns the function's value. */
 function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
     const fn = new Function(
         "Std",
@@ -314,11 +358,20 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
     }
 
     let entryJs: string;
+    let entryHasDefaultExport: boolean;
     try {
-        entryJs = rewriteEntry(transpiled);
+        const entry = rewriteEntry(transpiled);
+        entryJs = entry.source;
+        entryHasDefaultExport = entry.hasDefaultExport;
     } catch (e) {
         return {
             error: `rewrite index.ts: ${e instanceof Error ? e.message : String(e)}`,
+        };
+    }
+
+    if (entryHasDefaultExport) {
+        return {
+            error: "`export default` is not the module entrypoint — export `function start(...)` and call `mount(view)` inside it",
         };
     }
 
@@ -338,7 +391,9 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
     if (typeof start !== "function") {
         return { error: "case must export a function start()" };
     }
-    return { start: start as () => (() => void) | void };
+    return {
+        start: start as (ctx: { store: Store | null }) => (() => void) | void,
+    };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */

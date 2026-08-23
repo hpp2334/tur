@@ -6,7 +6,7 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::property::PropertyDescriptor;
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 fn format_args(args: &[JsValue], ctx: &mut Context) -> String {
@@ -89,7 +89,7 @@ pub(in crate::builtin_plugins) fn register_console_globals(context: &mut Context
 /// Install the global `console` object (`console.log` / `.warn` / `.error` /
 /// `.info` / `.debug`) on the boa context. Returns an empty `FnEntry` vec —
 /// console registers globals, not bridge fns.
-pub fn install_console(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_console(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError> {
     register_console_globals(ctx.boa_mut());
     Ok(Vec::new())
 }
