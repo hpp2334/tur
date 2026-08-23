@@ -226,14 +226,8 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        futures::executor::block_on(
-            self.inner
-                .borrow()
-                .app
-                .backend()
-                .load_module(source.as_str()),
-        )
-        .map_err(TurError::from)?;
+        futures::executor::block_on(self.inner.borrow().app.load_module(source.as_str()))
+            .map_err(TurError::from)?;
         // Drive the module's initial render to quiescence.
         self.wait_for_timeout(Duration::ZERO);
         Ok(())

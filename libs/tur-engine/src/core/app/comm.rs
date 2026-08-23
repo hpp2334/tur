@@ -1,7 +1,8 @@
 //! Worker ↔ host message vocabulary.
 //!
-//! The engine runs on a worker thread (see [`crate::core::runtime::HostBackend`]);
-//! the embedder drives it from the host thread via [`WorkerMsg`]s and receives
+//! The engine runs on a worker thread (driven by the engine-internal
+//! host-side backend in `core::runtime`); the embedder drives it from the
+//! host thread via [`WorkerMsg`]s and receives
 //! [`HostMsg`] replies. Every public `TurApp` method is a thin wrapper
 //! that builds a `WorkerMsg`, sends it via the channel, and awaits the
 //! matching [`Reply`] (one-shot slot).

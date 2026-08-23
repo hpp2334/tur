@@ -27,11 +27,13 @@ pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an
-// isolated `(Rc<TurApp>, TurAppLooper)` pair (engine on a worker thread;
-// `HostBackend` owns the renderer on the host thread and drives it directly —
-// the app handle carries the mid-loop `&self` surface, the looper carries the
-// autonomous frame loop).
-pub use crate::core::runtime::{HostBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+// isolated `(Rc<TurApp>, TurAppLooper)` pair (engine on a worker thread; the
+// internal host-side backend owns the renderer on the host thread and drives
+// it directly — the app handle carries the mid-loop `&self` surface, the
+// looper carries the autonomous frame loop). `HostBackend` is engine-internal
+// (`pub(crate)`): embedders talk to the instance exclusively through
+// `TurApp` / `TurAppLooper`.
+pub use crate::core::runtime::{TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type
 // without reaching into `core::plugin`. OS-API backends receive an
@@ -60,17 +62,23 @@ use std::rc::Rc;
 use error::TurError;
 
 use core::app::FrameOutcome;
+// Engine-internal (the crate-root re-export is gone): the host-side backend
+// type referenced by `TurApp` / `TurAppLooper` internals below.
+use core::runtime::HostBackend;
 
 /// A running tur engine instance.
 ///
-/// Wraps a [`HostBackend`] (shared with the instance's
-/// [`TurAppLooper`]) that owns a worker thread (running a
-/// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the host-side
-/// renderer + shell (both passed to `TurRuntime::app_builder()...build(...)`).
-/// Main drives the renderer directly from [`HostBackend`]; shell requests
-/// (`HostMsg::Shell`) are applied there too.
-/// Everything else (boa `Context`, element tree, reactive store, layout,
-/// subsystems) lives on the worker.
+/// Wraps an internal host-side backend (shared with the instance's
+/// [`TurAppLooper`]) that owns a worker thread (running the engine's worker
+/// state) **and** the host-side renderer + shell (both passed to
+/// `TurRuntime::app_builder()...build(...)`). The loop drives the renderer
+/// directly from that backend; shell requests (`HostMsg::Shell`) are applied
+/// there too. Everything else (boa `Context`, element tree, reactive store,
+/// layout, subsystems) lives on the worker.
+///
+/// The backend is fully encapsulated — embedders interact with the instance
+/// exclusively through this handle (input, module loading, RPC-style reads,
+/// destroy).
 ///
 /// Construct via [`TurRuntime::app_builder`] then
 /// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build), which
@@ -127,14 +135,43 @@ impl TurApp {
         }
     }
 
-    /// Direct accessor on the underlying [`HostBackend`]. Shared with the
-    /// instance's [`TurAppLooper`] — safe to call while the loop runs.
-    pub fn backend(&self) -> &HostBackend {
-        &self.backend
+    /// String-based module load: parse + evaluate `source` as an ES module
+    /// and invoke its `start()` export (the module lifecycle contract:
+    /// `start` returns an optional cleanup function; the engine runs it
+    /// before the next load and at destroy).
+    ///
+    /// The string-based sibling of [`Self::load_module_source`] — used by
+    /// embedders that produce the source at runtime (the wasm host, tests).
+    /// Embedders holding Rust-side sources (APK assets, bundle files)
+    /// prefer the handle-based path so the source never crosses an
+    /// embedder boundary as a string.
+    pub async fn load_module(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+    ) -> Result<(), TurError> {
+        self.backend
+            .load_module(source)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// Synchronous JS expression evaluation. Dev-tool / test-only —
+    /// production code uses [`Self::load_module`]. Useful for inspecting
+    /// JS-side state via `globalThis.__x = ...`.
+    pub async fn eval_js(&self, source: &str) -> String {
+        self.backend.eval_js(source).await
+    }
+
+    /// Count of image resources retained on the host side (pixel `Blob`s).
+    /// `#[doc(hidden)]` test-only introspection (see the image-shipping
+    /// tests).
+    #[doc(hidden)]
+    pub fn image_resource_count(&self) -> usize {
+        self.backend.image_resource_count()
     }
 
     /// Handle-based module load: resolve `handle` in `registry` and load
-    /// the shared source via [`HostBackend::load_module`] (parse + evaluate
+    /// the shared source via [`Self::load_module`] (parse + evaluate
     /// as an ES module and invoke its `start()` export — the module
     /// lifecycle contract: `start` returns an optional cleanup function;
     /// the engine runs it before the next load and at destroy).
@@ -143,7 +180,7 @@ impl TurApp {
     /// register sources Rust-side (APK assets, bundle files) load them by
     /// opaque id, so the source never crosses an embedder boundary as a
     /// string. String-based embedders (the wasm host, tests) call
-    /// [`HostBackend::load_module`] directly.
+    /// [`Self::load_module`] directly.
     ///
     /// An unknown / released handle is an error (never UB — registry handles
     /// are monotonic ids, so a stale value can only miss).
@@ -284,9 +321,9 @@ impl TurApp {
 ///   construction — see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
 ///
 /// The app handle keeps the mid-loop `&self` surface (input, RPC,
-/// `destroy`); the two share the `HostBackend`, the frame clock (the app
-/// re-arms it from input paths while the loop runs) and the destroyed
-/// flag.
+/// `destroy`); the two share the internal host-side backend, the frame
+/// clock (the app re-arms it from input paths while the loop runs) and the
+/// destroyed flag.
 pub struct TurAppLooper {
     /// Shared with the app handle — the app sends (input, RPC) while the
     /// loop applies worker messages + renders. Every `HostBackend` method
@@ -352,8 +389,8 @@ impl TurAppLooper {
     /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
     ///   N+1 while main encodes N below), then paint the latest buffered batch
     ///   (vsync-aligned, latest-wins).
-    /// - **worker msg** — dispatch via [`HostBackend::apply_msg`](core::runtime::HostBackend::apply_msg),
-    ///   the single shared handler. `RenderCommands` is buffered into
+    /// - **worker msg** — dispatch via the internal host-side backend's
+    ///   `apply_msg`, the single shared handler. `RenderCommands` is buffered into
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
     ///   quiescence). Side-effects (shell commands, image uploads) are

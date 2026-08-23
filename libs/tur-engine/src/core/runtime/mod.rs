@@ -24,10 +24,13 @@ use crate::core::scheduler::WorkerPoolHandle;
 use crate::error::TurError;
 use crate::{TurApp, TurAppLooper};
 
-pub mod backend;
-pub use backend::HostBackend;
-// `WorkerBackend` is `pub(crate)` — internal to the engine, only
-// `HostBackend` (which owns a worker running `WorkerBackend`) is public.
+// The backend module is engine-internal: `HostBackend` (the host-side half
+// of an instance, owned by `TurApp` + shared with `TurAppLooper`) and
+// `WorkerBackend` (the worker-thread engine state) are both `pub(crate)`.
+// Embedders interact with an instance exclusively through `TurApp` /
+// `TurAppLooper`.
+pub(crate) mod backend;
+pub(crate) use backend::HostBackend;
 pub(crate) use backend::WorkerBackend;
 // `MsgOutcome` is `pub(crate)` — the result of the single shared message
 // handler (`HostBackend::apply_msg`), consumed by `TurAppLooper::run`
@@ -199,9 +202,9 @@ impl TurRuntime {
     /// [`TurAppBuilder::build`] (rendering) or
     /// [`TurAppBuilder::build_headless`] (no renderer).
     ///
-    /// The engine runs on a worker thread (via [`HostBackend`]); the
-    /// renderer lives on the main thread and is owned by `HostBackend`
-    /// (passed to `build`). `HostBackend` applies each `Vec<RenderCommand>`
+    /// The engine runs on a worker thread (via the internal host-side
+    /// backend); the renderer lives on the main thread and is owned by that
+    /// backend (passed to `build`). It applies each `Vec<RenderCommand>`
     /// batch directly to the renderer, uploads new image resources
     /// incrementally, and calls `renderer.resize(...)` on viewport-change
     /// events only.
@@ -365,9 +368,9 @@ pub struct TurAppBuilder<'rt> {
 impl<'rt> TurAppBuilder<'rt> {
     /// Group the rendering surface — renderer, viewport, dpr — onto this
     /// builder. A non-headless app must supply all three together; the
-    /// terminal [`Self::build`] then takes no arguments. `HostBackend`
-    /// owns the renderer on the host thread and drives it directly (render batches,
-    /// image uploads, resize-on-event).
+    /// terminal [`Self::build`] then takes no arguments. The internal
+    /// host-side backend owns the renderer on the host thread and drives it
+    /// directly (render batches, image uploads, resize-on-event).
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
     /// target; `dpr` is the device pixel ratio. The engine pushes the
@@ -429,7 +432,8 @@ impl<'rt> TurAppBuilder<'rt> {
 
     /// Install the per-instance OS-interaction surface — the shell the
     /// engine pushes cursor changes and text-input (IME) session requests
-    /// to. Host-thread-only (applied inside `HostBackend::apply_msg`), so
+    /// to. Host-thread-only (applied by the internal host-side backend when
+    /// it applies worker messages), so
     /// implementations may touch host-thread-only OS APIs (the DOM on
     /// wasm, the JNI/Kotlin main looper on Android) directly.
     ///
@@ -514,7 +518,8 @@ impl<'rt> TurAppBuilder<'rt> {
     /// Terminal: build a headless instance (no renderer, no rendering).
     /// The instance still runs JS, owns a reactive store, accepts platform
     /// events if fed any, and can use capabilities (http, clipboard, etc.).
-    /// The engine runs on a worker thread (via [`HostBackend`]) — JS
+    /// The engine runs on a worker thread (via the internal host-side
+    /// backend) — JS
     /// execution, frame flushes, and every `async` RPC round-trip through
     /// the same main↔worker channel as a rendering instance; the only
     /// difference is the host-side [`Renderer`](crate::core::render::Renderer)

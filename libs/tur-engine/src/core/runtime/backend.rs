@@ -1,20 +1,23 @@
 //! Backend types: `WorkerBackend` (engine state on the worker thread) and
-//! `HostBackend` (the public backend owned by `TurApp`, spawns + dispatches
-//! to the worker).
+//! `HostBackend` (the host-side backend owned by `TurApp`, spawns +
+//! dispatches to the worker).
 //!
 //! ## Architecture
 //!
-//! - [`WorkerBackend`] is `pub(crate)`: it lives on the worker thread and
-//!   owns the boa `Context`, element tree, reactive store, subsystems.
-//!   `pump()` runs one flush and produces a `Vec<RenderCommand>` batch
-//!   (stored in `TurAppInternal::pending_render_batch`).
+//! - [`WorkerBackend`] lives on the worker thread and owns the boa
+//!   `Context`, element tree, reactive store, subsystems. `pump()` runs one
+//!   flush and produces a `Vec<RenderCommand>` batch (stored in
+//!   `TurAppInternal::pending_render_batch`).
 //!
-//! - [`HostBackend`] is public: `TurApp` owns one. It spawns a worker
+//! - [`HostBackend`] is `pub(crate)`: `TurApp` owns one. It spawns a worker
 //!   (via the platform `WorkerSpawner`) hosting a `WorkerBackend`,
 //!   dispatches input via `futures::channel`, and receives [`HostMsg`]
 //!   replies. `HostBackend` owns the host-side [`Renderer`] (passed to
 //!   `TurRuntime::app_builder().build(...)`); it applies each
 //!   `HostMsg::RenderCommands` batch directly to the renderer.
+//!   Embedders never touch `HostBackend` directly — everything they need
+//!   is forwarded on [`TurApp`](crate::TurApp) / driven by
+//!   [`TurAppLooper`](crate::TurAppLooper).
 //!
 //! ## Async model
 //!
@@ -397,13 +400,16 @@ pub(crate) enum MsgOutcome {
     Closed,
 }
 
-/// The public backend owned by `TurApp`. Spawns a worker thread running a
+/// The host-side backend owned by `TurApp` (shared with its
+/// [`TurAppLooper`](crate::TurAppLooper)) — engine-internal, `pub(crate)`:
+/// embedders reach its surface through the methods forwarded on
+/// [`TurApp`](crate::TurApp). Spawns a worker thread running a
 /// [`WorkerBackend`], dispatches input via `futures::channel`, and receives
 /// [`HostMsg`] replies.
 ///
 /// ## Async rpc
 ///
-/// All public methods on `HostBackend` are `async fn`. The embedder
+/// All rpc methods on `HostBackend` are `async fn`. The embedder
 /// supplies the runtime — `wasm_bindgen_futures::spawn_local` on wasm
 /// (so the JS main thread never blocks), `futures::executor::block_on`
 /// on native (so the calling thread parks until the worker replies).
@@ -431,7 +437,7 @@ pub(crate) enum MsgOutcome {
 /// [`TurAppBuilder::shell`](crate::core::runtime::TurAppBuilder::shell)
 /// (default [`NoopShell`](crate::core::shell::NoopShell)). The engine
 /// retains no cursor / text-input cache on the host side.
-pub struct HostBackend {
+pub(crate) struct HostBackend {
     worker_tx: WorkerTx,
     /// Holds the app's worker-slot claim alive for the backend's
     /// lifetime so the hosting worker doesn't reclaim the slot.
@@ -548,7 +554,7 @@ impl HostBackend {
 
     /// Cross-thread event bus handle (queues mode is unused; the worker's
     /// `EventBus` isn't reachable from main).
-    pub fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
+    pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
         self.event_bus_handle.clone()
     }
 
@@ -665,7 +671,10 @@ impl HostBackend {
         rx.rx.await.expect("reply sender dropped without firing")
     }
 
-    pub async fn load_module(
+    /// String-based module load (the raw RPC entry behind
+    /// [`TurApp::load_module`](crate::TurApp::load_module) /
+    /// [`TurApp::load_module_source`](crate::TurApp::load_module_source)).
+    pub(crate) async fn load_module(
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), ModuleError> {
@@ -675,10 +684,10 @@ impl HostBackend {
             .await
     }
 
-    /// Synchronous JS expression evaluation. Test-only — production code
-    /// uses `load_module`. Useful for inspecting JS-side state via
-    /// `globalThis.__x = ...`.
-    pub async fn eval_js(&self, source: &str) -> String {
+    /// Synchronous JS expression evaluation. Dev-tool / test-only —
+    /// production code uses `load_module`. Useful for inspecting JS-side
+    /// state via `globalThis.__x = ...`.
+    pub(crate) async fn eval_js(&self, source: &str) -> String {
         self.rpc(|tx| WorkerMsg::EvalJs {
             source: std::sync::Arc::from(source),
             reply: tx,
@@ -687,11 +696,12 @@ impl HostBackend {
     }
 
     /// Count of image resources retained on main (pixel `Blob`s). Test-only
-    /// introspection: asserts `HostMsg::UploadImage` was received (shipped
+    /// introspection (forwarded on
+    /// [`TurApp::image_resource_count`](crate::TurApp::image_resource_count)):
+    /// asserts `HostMsg::UploadImage` was received (shipped
     /// directly from the `createImageResource` bridge) and inserted into
     /// main's `ImageResourceMap`.
-    #[doc(hidden)]
-    pub fn image_resource_count(&self) -> usize {
+    pub(crate) fn image_resource_count(&self) -> usize {
         self.image_resource_map.borrow().iter_images().count()
     }
 }

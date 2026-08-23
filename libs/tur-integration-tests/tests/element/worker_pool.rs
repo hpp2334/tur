@@ -23,7 +23,7 @@ use tur_native::NativeFontLoader;
 /// Eval a JS script on a `TurApp` (worker-thread RPC) and return the
 /// result as a string.
 fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> String {
-    futures::executor::block_on(app.backend().eval_js(source))
+    futures::executor::block_on(app.eval_js(source))
 }
 
 /// Test-only plugin that stamps the worker/lane thread's id into a global
@@ -269,7 +269,7 @@ fn heavy_daemon_work_does_not_stall_other_pools() {
             globalThis.__daemonDone = n;
         "#
         .to_string();
-        let _ = daemon_for_task.backend().eval_js(&busy).await;
+        let _ = daemon_for_task.eval_js(&busy).await;
         done_for_task.set(true);
         let _ = finished_tx.send(());
     }));
@@ -278,7 +278,7 @@ fn heavy_daemon_work_does_not_stall_other_pools() {
     // while the daemon is mid-loop. If pools were broken (both apps on one
     // thread), this block_on would queue behind the busy loop and only
     // return after it finished.
-    futures::executor::block_on(ui_app.backend().load_module(
+    futures::executor::block_on(ui_app.load_module(
         r#"
             import { source } from "tur:std";
             export function start({ store }) {

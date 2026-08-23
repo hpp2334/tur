@@ -12,7 +12,7 @@ Clean design and architecture.
 
 ## Module lifecycle contract
 
-`load_module(source)` (on the app's backend — `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources; the string-based `HostBackend::load_module` RPC is the raw entry) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
+`load_module(source)` (on the app handle — `TurApp::load_module` is the string-based entry; `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
 
 - The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree (draining its `before_destroy` lifecycle before clearing it), then evaluates the new module and calls its `start({ store })`.
 - Missing / non-function `start` fails the load (`ModuleError::Eval`); a throwing `start` fails it too. `start` returning undefined is fine (no cleanup).

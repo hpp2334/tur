@@ -42,7 +42,7 @@ fn image_blob_ships_to_main() {
 
     // The bridge shipped exactly one `UploadImage` at `createImageResource`
     // time; main inserted it into its `ImageResourceMap`.
-    let count = app.with_app(|a| a.backend().image_resource_count());
+    let count = app.with_app(|a| a.image_resource_count());
     assert_eq!(count, 1, "main should retain the shipped pixel Blob");
 
     // Settle a few more frames — the bridge ships once per decode (no
@@ -50,6 +50,6 @@ fn image_blob_ships_to_main() {
     for _ in 0..3 {
         app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
-    let count = app.with_app(|a| a.backend().image_resource_count());
+    let count = app.with_app(|a| a.image_resource_count());
     assert_eq!(count, 1, "images ship exactly once per decode");
 }

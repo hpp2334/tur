@@ -313,7 +313,7 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
     )
     .unwrap();
     app.with_app(|a| {
-        futures::executor::block_on(a.backend().load_module(source.as_str()))
+        futures::executor::block_on(a.load_module(source.as_str()))
             .map_err(tur_engine::error::TurError::from)
     })
     .unwrap();
