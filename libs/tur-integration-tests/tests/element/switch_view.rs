@@ -1,8 +1,7 @@
 use tur_integration_tests::TurTestApp;
 
 const RUNTIME: &str = r#"
-import { createStore, source, Switch, Text, mount } from "tur:std";
-const store = createStore();
+import { source, Switch, Text, mount } from "tur:std";
 
 globalThis.__key = source("a");
 globalThis.__store = store;
@@ -14,7 +13,7 @@ const root = Switch({
     ],
     fallback: () => Text({ text: "FALL", queryKey: ["case_fallback"] }),
 });
-mount(store, root);
+mount(root);
 "#;
 
 #[test]
@@ -94,8 +93,7 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 }
 
 const DERIVED_RUNTIME: &str = r#"
-import { createStore, source, derive, Switch, Text, mount } from "tur:std";
-const store = createStore();
+import { source, derive, Switch, Text, mount } from "tur:std";
 
 globalThis.__key = source("a");
 globalThis.__store = store;
@@ -108,7 +106,7 @@ const root = Switch({
     ],
     fallback: () => Text({ text: "FALL", queryKey: ["d_case_fallback"] }),
 });
-mount(store, root);
+mount(root);
 "#;
 
 #[test]

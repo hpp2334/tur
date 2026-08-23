@@ -199,13 +199,11 @@ impl GestureSubsystem {
         // Text-edit-focus: clear focus when clicking outside any focusable
         // element (unless the pointer-down target was the focused element —
         // the element's own handler will manage focus in that case).
-        let (focusable_id, hit_path) = {
+        let focusable_id = {
             let tree = cx.element_tree.borrow();
             let hit_path = HitTest::new(&tree).path(position);
-            let focusable_id = find_focusable_in_path(&tree, &hit_path);
-            (focusable_id, hit_path)
+            find_focusable_in_path(&tree, &hit_path)
         };
-        let _ = hit_path;
         // Hoist the `borrow()` out of the `let`-chain below: a `borrow()`
         // temporary created inside a `let`-chain condition has its lifetime
         // extended through the entire `if` block (temporary lifetime
@@ -481,7 +479,10 @@ impl GestureSubsystem {
 /// Dispatch `ComposedGestureEvent::Click` to every `PointerInteractElement`
 /// in the hit-path, stopping at the first click-opaque element.
 fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: PointerDeviceKind) {
-    let hit_path = HitTest::new(&cx.element_tree.borrow()).path(position);
+    // Clone the handle out (cheap Rc bump) so the tree reference doesn't
+    // borrow `cx` across the `&mut cx` dispatch calls below.
+    let tree = cx.element_tree.clone();
+    let hit_path = HitTest::new(&tree.borrow()).path(position);
     for node_id in &hit_path {
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(
@@ -493,7 +494,11 @@ fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: 
                 device,
             },
         );
-        if is_click_opaque(&cx.element_tree.borrow(), *node_id) {
+        let opaque = {
+            let tree_data = tree.borrow();
+            is_click_opaque(&tree_data, *node_id)
+        };
+        if opaque {
             break;
         }
     }
@@ -506,7 +511,10 @@ fn dispatch_context_menu(
     position: Offset,
     device: PointerDeviceKind,
 ) {
-    let hit_path = HitTest::new(&cx.element_tree.borrow()).path(position);
+    // Clone the handle out (cheap Rc bump) — same borrow discipline as
+    // `dispatch_click`.
+    let tree = cx.element_tree.clone();
+    let hit_path = HitTest::new(&tree.borrow()).path(position);
     for node_id in &hit_path {
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(

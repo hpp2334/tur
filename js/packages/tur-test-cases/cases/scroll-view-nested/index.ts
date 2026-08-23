@@ -2,14 +2,11 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     Row,
     ScrollView,
     SizedBox,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 export default view(() =>
     Row({

@@ -154,7 +154,11 @@ pub fn tur_dev_tool_reactive_stats(
     let js_ctx = extract_js_ctx(args)?;
     let (subscribers, edges) = js_ctx.reactive_subscriber_stats();
     let obj = JsObject::with_object_proto(ctx.intrinsics());
-    obj.create_data_property(js_string!("subscribers"), JsValue::from(subscribers as f64), ctx)?;
+    obj.create_data_property(
+        js_string!("subscribers"),
+        JsValue::from(subscribers as f64),
+        ctx,
+    )?;
     obj.create_data_property(js_string!("edges"), JsValue::from(edges as f64), ctx)?;
     Ok(obj.into())
 }

@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     derive,
     MouseRegion,
     mutate,
@@ -12,7 +11,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 const state$ = source("idle");
 

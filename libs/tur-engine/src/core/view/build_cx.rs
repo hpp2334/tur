@@ -69,8 +69,8 @@ pub trait ViewCx {
 
     // ----- shared handle access (controller binding, e.g. ScrollView) --------
 
-    /// A clonable handle to the node tree (for controllers that reach the tree
-    /// at event time, outside layout).
+    /// A clonable handle to the node tree (for controllers that reach the
+    /// tree at event time, outside layout).
     fn node_tree(&self) -> NodeTree;
 
     /// The pending-mutation queue handle (for controllers that fire mutations).

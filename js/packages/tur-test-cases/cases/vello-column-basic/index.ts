@@ -1,6 +1,4 @@
-import { Column, Container, createStore, view } from "tur:std";
-
-export const store = createStore();
+import { Column, Container, view } from "tur:std";
 
 export default view(() =>
     Column({

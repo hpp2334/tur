@@ -37,15 +37,17 @@ use crate::builtin_plugins::{
 };
 use crate::core::app::mount;
 use crate::core::async_::task;
+use crate::core::edgy::reactive::{Readable, Source};
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
+use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::plugin::{Plugin, PluginContext};
-use crate::core::screen::ResizeSubsystem;
+use crate::core::screen::{ResizeSubsystem, viewport_size_value};
 use crate::error::TurError;
 use boa_engine::native_function::NativeFunction;
 
 /// The standard widget library plugin. Registers the `tur:std`
 /// module (widget factories, controllers, color bridge), plus the
-/// input-event subsystems (gesture, keyboard, ime, resize, pointer region).
+/// input-event subsystems (gesture, keyboard, ime, pointer region).
 ///
 /// `TurStdPlugin` carries no per-instance state. Backend injection
 /// (clipboard, http, cursor) happens via `TurRuntimeBuilder::capability(...)`
@@ -64,12 +66,26 @@ impl Default for TurStdPlugin {
 
 impl Plugin for TurStdPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        // Subsystem registration order matters: gesture → keyboard → ime →
-        // resize → pointer_region. The resize handler is renderer infra
-        // (`core::screen::ResizeSubsystem`); the gesture / pointer-region /
-        // keyboard / ime subsystems are registered by their respective
-        // `install_xxx` calls below.
-        ctx.register_subsystem(Box::new(ResizeSubsystem));
+        // `viewportSize$` — the canonical engine-environment atom, minted
+        // here (plugin-facing recipe): a backing source whose single value
+        // home is the INSTANCE store (the seed carries the true initial
+        // size), exposed to JS through a derive whose closure reads the
+        // backing via a captured instance-store read face — so every read
+        // path resolves the same live value, and cache coherence rides the
+        // generation rail like any derive. The publisher —
+        // `core::screen::ResizeSubsystem`, engine infra wired here — owns
+        // the backing + the write rail from here on and publishes on shell
+        // `Resize` events. Registered FIRST, so the atom exists before
+        // anything can read it and subsystem dispatch order stays:
+        // resize → gesture → keyboard → ime → pointer_region.
+        let bridge = ctx.reactive();
+        let initial = ctx.viewport();
+        let backing: Source<boa_engine::JsValue> =
+            bridge.decl_source(viewport_size_value(initial.0, initial.1, ctx.boa_mut()));
+        let read_face = bridge.read_only();
+        let viewport_size_handle =
+            bridge.build_derive(move |_read, boa| Ok(read_face.read(Readable::from(backing), boa)));
+        ctx.register_subsystem(Box::new(ResizeSubsystem::new(backing, bridge, initial)));
         // Note: ClipboardPlatformSubsystem (embedder paste → engine-internal
         // paste forwarding) and ClipboardWriteSubsystem (Cmd+C/X → backend)
         // both live in `builtin_plugins::clipboard` (TurClipboardPlugin) —
@@ -124,9 +140,10 @@ impl Plugin for TurStdPlugin {
         ));
         std_consts.extend(enums::consts(ctx.boa_mut()));
         // Engine-owned reactive source exposing the live canvas size as
-        // `{width, height}` (CSS pixels). The engine syncs it each frame in
-        // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
-        std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
+        // `{width, height}` (CSS pixels) — minted at the top of `register`;
+        // `ResizeSubsystem` publishes into it on shell `Resize` events. JS
+        // reads it via `get(viewportSize$).width`.
+        std_consts.push(("viewportSize$", viewport_size_handle.into_js(ctx.boa_mut())));
         // Event bus: bidirectional byte-channel between host and JS.
         // Engine infrastructure (lives in `core::event_bus`); the shared
         // state is created up-front by `TurAppInternal::new`, so

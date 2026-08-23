@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     type Element,
     Expanded,
     LazyList,
@@ -16,8 +15,6 @@ import {
     Text,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "10,000-item Contact List" — a demo of tur's (now actually lazy) LazyList.

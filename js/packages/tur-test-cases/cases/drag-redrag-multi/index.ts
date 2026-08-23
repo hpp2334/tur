@@ -2,7 +2,6 @@ import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
-    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -13,7 +12,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Multi-tile drag-and-drop with a SHARED lift animation — a faithful,
@@ -77,7 +75,7 @@ Object.assign(globalThis, {
     __getTileEvents: (id: number): string => events[id].join(","),
     // "x,y" current position of tile `id`.
     __getTilePos: (id: number): string => {
-        const p = readTile(store, id);
+        const p = readTile(globalThis.__store, id);
         return `${p.x},${p.y}`;
     },
     __resetDrag: (): void => {

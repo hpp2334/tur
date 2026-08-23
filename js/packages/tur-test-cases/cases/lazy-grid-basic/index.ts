@@ -1,14 +1,4 @@
-import {
-    Axis,
-    Color,
-    Container,
-    createStore,
-    LazyGrid,
-    Text,
-    view,
-} from "tur:std";
-
-export const store = createStore();
+import { Axis, Color, Container, LazyGrid, Text, view } from "tur:std";
 
 // Virtualized `LazyGrid`: 500 items, only the cells in the viewport + overscan
 // are mounted. Wheel-scroll to reveal more. Cells are uniform square tiles

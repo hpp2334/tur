@@ -1,6 +1,6 @@
 {
     "name": "@tur-ng/core",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "type": "module",
     "types": "src/index.d.ts",
     "files": [

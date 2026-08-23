@@ -6,11 +6,10 @@ use tur_integration_tests::TurTestApp;
 /// Inline bundle that mounts a single `Input` with `obscureText: true`. The
 /// `queryKey` lands on Input's Container wrapper; the editable text is that
 /// container's first child.
-const PASSWORD_BUNDLE: &str = r#"const store = createStore();
-
-    import { createStore, createTextEditingController, mount, Container, Input } from "tur:std";
+const PASSWORD_BUNDLE: &str = r#"
+    import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(store, Container({
+    mount(Container({
         children: [
             Input({
                 controller: controller,
@@ -24,11 +23,10 @@ const PASSWORD_BUNDLE: &str = r#"const store = createStore();
     }));
 "#;
 
-const CUSTOM_CHAR_BUNDLE: &str = r#"const store = createStore();
-
-    import { createStore, createTextEditingController, mount, Container, Input } from "tur:std";
+const CUSTOM_CHAR_BUNDLE: &str = r#"
+    import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(store, Container({
+    mount(Container({
         children: [
             Input({
                 controller: controller,

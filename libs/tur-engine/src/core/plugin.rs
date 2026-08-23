@@ -127,11 +127,6 @@ pub struct PluginContext<'a> {
     ///
     /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
-    /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wraps
-    /// a `Source<JsValue>`). Plugins export this as a const so JS can
-    /// `import { viewportSize$ } from "tur:std"` and read the live
-    /// canvas size via `get`. The engine updates it each frame in `flush`.
-    pub viewport_size: JsValue,
     /// The engine's [`HostExecutor`] — a `Send + Sync + Clone`
     /// handle for hopping work onto the engine's host thread (for OS APIs
     /// that require it, e.g. macOS `NSPasteboard` via `arboard`). Set by
@@ -271,26 +266,35 @@ impl<'a> PluginContext<'a> {
         self.js_ctx.mutation_queue.clone()
     }
 
-    /// The reactive atom minter + writer face. Plugins can create
-    /// sources/derives/mutations from Rust via this face, then expose them
-    /// to JS as bridge-fn return values, global properties, or module
-    /// consts. JS reads/writes the atoms through the unchanged `tur:core`
-    /// bridge (`get` / `set`), so the JS side cannot tell whether an atom
-    /// was minted by Rust or JS.
+    /// The reactive atom minter + writer face. Plugins mint atoms from Rust
+    /// via this face (`decl_source` / `decl_derive` / `decl_mutate` take
+    /// seeds; `build_derive` / `build_mutate` take Rust closures), then
+    /// expose them to JS as bridge-fn return values, global properties, or
+    /// module consts. JS reads/writes the atoms through the unchanged
+    /// `tur:core` bridge (`get` / `set`), so the JS side cannot tell
+    /// whether an atom was minted by Rust or JS. `build_derive` /
+    /// `build_mutate` closures skip the `{get, set}` JsObject round-trip,
+    /// receiving typed faces directly.
     ///
-    /// For Rust-native derive / mutate closures that skip the `{get, set}`
-    /// JsObject round-trip, use
-    /// [`build_derive`](crate::core::edgy::reactive::ReactiveBridgeStore::build_derive)
-    /// /
-    /// [`build_mutate`](crate::core::edgy::reactive::ReactiveBridgeStore::build_mutate).
-    /// The plain
-    /// [`derive`](crate::core::edgy::reactive::ReactiveBridgeStore::derive)
-    /// /
-    /// [`mutate`](crate::core::edgy::reactive::ReactiveBridgeStore::mutate)
-    /// accept a boa `JsFunction` (the JS-bridge path).
+    /// Rust-minted atoms materialize per store like any atom. A plugin that
+    /// publishes engine environment truth should follow the
+    /// `viewportSize$` pattern — the backing's single value home is the
+    /// ENGINE store, exposed via a handle derive that reads it through a
+    /// captured engine-store read face (so every store of the instance
+    /// resolves the same live value), published via the ordinary
+    /// `set_source` write rail from a subsystem:
     ///
-    /// Mirrors the engine-internal `viewportSize$` pattern (`source` minted
-    /// in the runtime builder, updated each frame by a subsystem).
+    /// ```text
+    /// let bridge = ctx.reactive();
+    /// let backing: Source<JsValue> = bridge.decl_source(initial);
+    /// let engine_read = bridge.read_only();
+    /// let handle = bridge.build_derive(move |_read, boa| {
+    ///     Ok(engine_read.read(Readable::from(backing), boa))
+    /// });
+    /// ctx.register_global("foo$", handle.into_js(ctx.boa_mut()));
+    /// // in the subsystem tick (no tree chase — works pre- and post-mount):
+    /// //   bridge.set_source(backing, value)
+    /// ```
     pub fn reactive(&self) -> crate::core::edgy::reactive::ReactiveBridgeStore {
         self.js_ctx.reactive()
     }
@@ -301,6 +305,15 @@ impl<'a> PluginContext<'a> {
     /// handle at registration time and query `clock.now()` during their tick.
     pub fn clock(&self) -> Rc<dyn Clock> {
         self.app.borrow().frame_env.clock()
+    }
+
+    /// The build-time viewport (logical CSS pixels) — the size
+    /// [`Screen`](crate::core::screen::Screen) carries when plugins
+    /// register (no shell `Resize` can have arrived yet). `TurStdPlugin`
+    /// seeds the `viewportSize$` atom and the dedup guard of its
+    /// [`ResizeSubsystem`](crate::core::screen::ResizeSubsystem) with it.
+    pub fn viewport(&self) -> (f64, f64) {
+        self.app.borrow().screen.logical_size
     }
 
     /// Register a [`Subsystem`] — a long-lived participant in the engine's

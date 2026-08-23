@@ -64,10 +64,9 @@ fn text_input_requests_fire_on_editable_focus() {
     })
     .unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Input, mount } from "tur:std";
-        mount(store, Input({
+        r#"
+        import { Input, mount } from "tur:std";
+        mount(Input({
             text: "",
             width: 200,
             height: 44,

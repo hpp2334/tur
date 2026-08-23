@@ -2,20 +2,18 @@ import {
     Color,
     Column,
     Container,
-    createStore,
     MouseRegion,
     mutate,
     source,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // A single shared hover source, mirroring the playground sidebar pattern.
 // Each region sets it on enter and clears it (unconditionally) on exit.
 const hover$ = source("");
 
 Object.assign(globalThis, {
-    __getHover: (): string => store.get(hover$),
+    __getHover: (): string => globalThis.__store.get(hover$),
 });
 
 export default view(() =>

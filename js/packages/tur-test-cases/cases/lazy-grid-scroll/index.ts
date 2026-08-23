@@ -1,6 +1,4 @@
-import { Axis, Color, Container, createStore, LazyGrid, view } from "tur:std";
-
-export const store = createStore();
+import { Axis, Color, Container, LazyGrid, view } from "tur:std";
 
 // Large virtualized `LazyGrid`: 5000 items with a fixed `mainAxisExtent`
 // (60px row height) + `childAspectRatio`. Wheel-scroll vertically; only the

@@ -1,6 +1,4 @@
-import { ClipBehavior, Color, Container, createStore, view } from "tur:std";
-
-export const store = createStore();
+import { ClipBehavior, Color, Container, view } from "tur:std";
 
 export default view(() =>
     Container({

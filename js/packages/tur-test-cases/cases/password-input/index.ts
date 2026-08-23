@@ -2,7 +2,6 @@ import {
     Color,
     Column,
     Container,
-    createStore,
     createTextEditingController,
     derive,
     Input,
@@ -11,7 +10,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // Demonstrates `obscureText` (password mode): each character of the value is
 // rendered as `obscuringCharacter` (default "•") while the controller keeps

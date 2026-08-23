@@ -8,7 +8,6 @@ import {
     Container,
     CrossAxisAlignment,
     createLayerLink,
-    createStore,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -27,7 +26,6 @@ import {
     Text,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Composited-transform anchor playground.

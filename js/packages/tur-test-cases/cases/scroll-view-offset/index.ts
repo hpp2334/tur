@@ -2,13 +2,10 @@ import {
     Column,
     CrossAxisAlignment,
     createScrollController,
-    createStore,
     ScrollView,
     SizedBox,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 const controller = createScrollController({ initialOffset: 100 });
 

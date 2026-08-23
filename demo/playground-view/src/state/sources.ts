@@ -71,9 +71,10 @@ export const layoutHovered$ = source<string | null>(null);
 export const autoRun$ = source(true);
 export const layoutMode$ = source<LayoutMode>("split");
 
-// Responsive layout. `viewportSize$` is engine-owned (synced each frame from
-// the canvas resize handler). Below 720px CSS width the playground switches to
-// the mobile single-pane + bottom-tab layout (see views/shell.ts).
+// Responsive layout. `viewportSize$` is engine-provided (backed by the
+// canvas resize handler; readable through the mounted-store ctx). Below
+// 720px CSS width the playground switches to the mobile single-pane +
+// bottom-tab layout (see views/shell.ts).
 export const isMobile$ = derive(
     (ctx) => ctx.get<ViewportSize>(viewportSize$).width < 720,
 );

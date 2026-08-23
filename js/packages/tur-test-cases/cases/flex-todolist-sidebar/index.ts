@@ -3,15 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    createStore,
     MainAxisAlignment,
     Row,
     SizedBox,
     Text,
     view,
 } from "tur:std";
-
-export const store = createStore();
 
 const TABS = [{ id: "todolist", label: "TodoList" }];
 const activeId = "todolist";

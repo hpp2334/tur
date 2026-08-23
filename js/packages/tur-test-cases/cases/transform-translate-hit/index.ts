@@ -1,7 +1,6 @@
 import {
     Condition,
     Container,
-    createStore,
     derive,
     type Mutation,
     mutate,
@@ -13,7 +12,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // A clickable box is laid out at (0,0) but painted at (100,80) via `Transform`
 // `translateX`/`translateY` (a paint-only translate). Its painted center is

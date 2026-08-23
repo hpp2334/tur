@@ -238,10 +238,9 @@ fn lazy_list_virtualizes_large_item_count() {
     // that only a small subset is actually mounted after layout + scroll.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(store, LazyList({
+        r#"
+        import { mount, LazyList, Container, createColor, Text } from "tur:std";
+        mount(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 50,
@@ -313,10 +312,9 @@ fn lazy_list_virtualizes_large_item_count() {
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(store, LazyList({
+        r#"
+        import { mount, LazyList, Container, createColor, Text } from "tur:std";
+        mount(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 56,

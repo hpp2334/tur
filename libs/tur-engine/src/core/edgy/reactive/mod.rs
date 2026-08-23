@@ -24,13 +24,13 @@ pub use store::{
 /// (`Source<T>`, `Derived<T>`, `Mutation`, `Readable<T>`) or the erased
 /// `AnyReadable`.
 ///
-/// An id's **seed** (initial value for a source, closure for a derived /
-/// mutation) lives in the shared registry ([`SharedReactive`]). Its **value**
-/// lives in a store's KV: engine/plugin-minted atoms are *owned* by exactly
-/// one store (the engine store — reads from anywhere route there via the
-/// owner map); JS `source()`/`derive()`/`mutate()` declarations have no owner
-/// and materialize into whichever store first reads/writes them (the same id
-/// in two stores = two independent values).
+/// An atom is its seed (initial value for a source, closure for a derived /
+/// mutation), kept in the shared registry ([`SharedReactive`]). Its value
+/// lives in a store's KV and materializes on first touch: each store holds
+/// its own copy, so the same id in two stores is two independent values.
+/// Engine "environment" atoms (`viewportSize$` …) are ordinary atoms whose
+/// backing the engine writes through the tree's current store (see
+/// [`SharedReactive`] docs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AtomId(u32);
 
@@ -72,11 +72,9 @@ impl SubscriberId {
 // safety.  The Store stores `JsValue` for all atoms; `T` is erased to
 // `PhantomData<fn() -> T>` (covariant, no Send/Sync/'static overhead).
 //
-// A handle is a bare id: for engine-minted atoms it addresses an owned slot
-// in the engine store's KV; for JS `source()`/`derive()`/`mutate()`
-// declarations it addresses a seed in the shared registry that materializes
-// into whichever store first touches it. Callers never distinguish — the
-// store resolves on read/write.
+// A handle is a bare id addressing a seed in the shared registry; the
+// value materializes into whichever store the read/write flows through.
+// Callers never distinguish — the store resolves on read/write.
 //
 // The inner `AtomId` and the `.id()` / `from_id` accessors are module-private:
 // external code addresses handles opaquely (passing them to store methods) or
@@ -255,8 +253,8 @@ impl<T> From<Derived<T>> for Readable<T> {
 // module.
 //
 // JS-visible handles are ALWAYS these opaques, whether the id came from a JS
-// declaration (`source(v)` / `derive(fn)` / `mutate(fn)`) or a Rust-minted
-// atom — one id space, one opaque per kind.
+// `source()` / `derive()` / `mutate()` call or Rust minting — one id space,
+// one opaque per kind.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -271,7 +269,7 @@ struct JsDerived(AtomId);
 #[boa_gc(unsafe_empty_trace)]
 struct JsMutation(AtomId);
 
-/// JS-opaque wrapper for a [`Store`] — the object `createStore()` hands to
+/// JS-opaque wrapper for a [`Store`] — the object `start({ store })` hands to
 /// JS, carrying `get`/`set` methods. Same `unsafe_empty_trace` soundness
 /// note as `TurInstanceContext` (pure-Rust state behind `Rc`s).
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -381,10 +379,9 @@ fn any_readable_of(id: AtomId) -> AnyReadable {
 /// as their first argument.
 ///
 /// `shared` is the instance-wide reactive machinery; `default` is the KV of
-/// the store that owns the atom being computed/invoked — declarations read or
+/// the store that owns the atom being computed/invoked — atoms read or
 /// written through this ctx materialize into that store (tree-driven flows:
-/// the mounted store). Engine-owned atoms route to their owner KV, so
-/// `ctx.get(viewportSize$)` works from any store.
+/// the mounted store).
 pub fn build_store_context_object(
     context: &mut Context,
     shared: Rc<SharedReactive>,
@@ -462,10 +459,10 @@ pub fn build_store_context_object(
     Ok(obj)
 }
 
-/// Build the JS `Store` object (the `createStore()` result): a
-/// `JsStore`-opaque carrying the `Store` handle, with `get` / `set` methods
-/// that extract the store off `this`. Both methods accept declaration ids
-/// (materialized into THIS store) and engine-owned atoms (routed).
+/// Build the JS `Store` object (the instance store handed to the module's
+/// `start({ store })`): a `JsStore`-opaque carrying the `Store` handle, with
+/// `get` / `set` methods that extract the store off `this`. Atoms materialize
+/// into THIS store.
 pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
     let proto = context.intrinsics().constructors().object().prototype();
     let obj = JsObject::from_proto_and_data(proto, JsStore(store.clone()));

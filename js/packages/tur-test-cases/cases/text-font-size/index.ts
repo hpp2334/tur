@@ -1,6 +1,4 @@
-import { createStore, Fragment, Text, view } from "tur:std";
-
-export const store = createStore();
+import { Fragment, Text, view } from "tur:std";
 
 export default view(() =>
     Fragment({

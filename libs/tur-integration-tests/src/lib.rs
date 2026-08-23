@@ -110,9 +110,10 @@ const FRAME_STEP_MS: u64 = 16;
 /// Legacy fixture adapter: if `source` doesn't already contain an `export`
 /// (inline fixtures never do; dist bundles and hand-written contract
 /// modules always do), hoist its import statements to the top and wrap the
-/// remaining statements in `export function start() { … }` so the source
-/// satisfies the module lifecycle contract without hand-editing every
-/// inline test bundle.
+/// remaining statements in `export function start({ store }) { … }` so the
+/// source satisfies the module lifecycle contract without hand-editing
+/// every inline test bundle. The injected `{ store }` is the instance
+/// store; the fixture body's bare `store` references resolve to it.
 fn wrap_legacy_start(source: &str) -> String {
     if source.contains("export") {
         return source.to_string();
@@ -131,7 +132,7 @@ fn wrap_legacy_start(source: &str) -> String {
             body.push('\n');
         }
     }
-    format!("{imports}export function start() {{\n{body}}}\n")
+    format!("{imports}export function start({{ store }}) {{\n{body}}}\n")
 }
 
 /// `Clipboard` impl for tests. Reads return a pre-canned value (set via
@@ -1290,8 +1291,9 @@ impl TurTestApp {
         block_on(self.inner.backend().load_module(source)).map_err(TurError::from)
     }
 
-    /// Structured dev-tool snapshot of the root node, or `None` if no tree
-    /// is mounted. Children are bare ids; iterate with `dev_tool_get_element`.
+    /// Structured dev-tool snapshot of the root node, or `None` if no root
+    /// is mounted (pre-first-mount / post-teardown). Children are bare ids;
+    /// iterate with `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<tur_engine::core::elements::DevNodeData> {
         self.with_tree(|tree, _focus| {
             tree.root_element_id()

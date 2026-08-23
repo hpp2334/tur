@@ -7,13 +7,12 @@ use tur_integration_tests::TurTestApp;
 fn animation_controller_forward_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -73,13 +72,12 @@ fn animation_controller_forward_with_on_tick() {
 fn animation_controller_reverse_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(200);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -128,13 +126,12 @@ fn animation_controller_reverse_with_on_tick() {
 fn animation_controller_stop_freezes_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -191,13 +188,12 @@ fn animation_controller_stop_freezes_value() {
 fn animation_controller_repeats() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 100,
@@ -248,12 +244,11 @@ fn animation_controller_repeats() {
 fn animation_controller_status_transitions() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount } from "tur:std";
+        r#"
+        import { Container, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 100
@@ -293,12 +288,11 @@ fn animation_controller_status_transitions() {
 fn animation_controller_on_end_callback() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__ended = false;
         const ctrl = createAnimationController({
@@ -326,13 +320,12 @@ fn animation_controller_on_end_callback() {
 fn animation_controller_ease_in_curve() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(0);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 1000,
@@ -370,13 +363,12 @@ fn animation_controller_ease_in_curve() {
 fn animation_controller_pause_freezes_and_resume_continues() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -449,13 +441,12 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 fn animation_controller_seek_jumps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -510,13 +501,12 @@ fn animation_controller_seek_jumps_value() {
 fn animation_controller_set_speed_scales_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        mount(store, container);
+        mount(container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -592,12 +582,11 @@ fn controller_on_tick_can_read_status_from_forward() {
     // while holding the RefMut.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__tick_status = null;
         const ctrl = createAnimationController({
@@ -627,12 +616,11 @@ fn controller_on_end_can_read_status_after_complete() {
     // onEnd callback reads ctrl.status after the animation completes.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__end_status = null;
         const ctrl = createAnimationController({
@@ -663,12 +651,11 @@ fn controller_on_tick_can_read_value_during_forward() {
     // downcast_mut was still held.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__tick_values = [];
         const ctrl = createAnimationController({
@@ -711,15 +698,14 @@ fn controller_on_tick_can_read_value_during_forward() {
 fn controller_infinite_does_not_complete_after_many_iterations() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__tick_count = 0;
         globalThis.__end_count = 0;
         globalThis.__last_tick_value = -1;
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -786,13 +772,12 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
 fn controller_infinite_reverse_cycles_back_to_zero() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__tick_values = [];
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -846,13 +831,12 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
 fn controller_repeat_three_then_completes() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, Container, mount, mutate } from "tur:std";
+        r#"
+        import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__end_count = 0;
         const container = Container({});
-        mount(store, container);
+        mount(container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -898,9 +882,8 @@ fn animation_started_from_handler_schedules_next_frame() {
     // case-switch FadeIn bug).
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
-        r#"const store = createStore();
-
-        import { createStore, source, Container, mount, mutate, lifecycleView } from "tur:std";
+        r#"
+        import { source, Container, mount, mutate, lifecycleView } from "tur:std";
         import { createAnimationController } from "tur:animation";
 
         const width$ = source(100);
@@ -909,7 +892,7 @@ fn animation_started_from_handler_schedules_next_frame() {
             curve: "linear",
             onTick: mutate(function(_ctx, v) { store.set(width$, 100 + (200 - 100) * v); }),
         });
-        mount(store, lifecycleView(() => ({
+        mount(lifecycleView(() => ({
             element: Container({ width: width$ }),
             onMounted$: mutate((_ctx) => { ctrl.forward(); }),
         })));

@@ -2,7 +2,6 @@ import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
-    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -11,7 +10,6 @@ import {
     Transform,
     view,
 } from "tur:std";
-export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Drag-and-drop with a lift animation — mirrors the jigsaw-puzzle's drag

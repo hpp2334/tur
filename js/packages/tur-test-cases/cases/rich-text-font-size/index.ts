@@ -1,6 +1,4 @@
-import { createStore, Text, view } from "tur:std";
-
-export const store = createStore();
+import { Text, view } from "tur:std";
 
 export default view(() =>
     Text({
