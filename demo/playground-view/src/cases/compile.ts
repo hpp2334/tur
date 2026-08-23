@@ -54,9 +54,10 @@ function specNames(specs: Array<{ local: string; imported: string }>): string {
  *  and return the remaining names plus the alias to rebind. The playground
  *  intercepts the case's own `mount(...)` so the case view publishes into the
  *  viewer pane instead of replacing the playground's mounted root. */
-function splitMountSpec(
-    specs: Array<{ local: string; imported: string }>,
-): { names: string; mountAlias: string | null } {
+function splitMountSpec(specs: Array<{ local: string; imported: string }>): {
+    names: string;
+    mountAlias: string | null;
+} {
     let mountAlias: string | null = null;
     const rest: typeof specs = [];
     for (const s of specs) {
@@ -370,8 +371,7 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
 
     if (entryHasDefaultExport) {
         return {
-            error:
-                "`export default` is not the module entrypoint — export `function start(...)` and call `mount(view)` inside it",
+            error: "`export default` is not the module entrypoint — export `function start(...)` and call `mount(view)` inside it",
         };
     }
 
