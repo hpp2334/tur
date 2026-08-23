@@ -35,7 +35,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use tur_engine::core::capability::CapabilityDecls;
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 
 // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ impl Plugin for TurFilePickerPlugin {
         decls.need::<FilePicker>();
     }
 
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let ctx_value = ctx.js_ctx_value.clone();
         let filepicker_obj = bridge::build_filepicker_object(ctx.boa_mut(), ctx_value);
         let consts: Vec<tur_engine::core::js_runtime::helpers::ConstEntry> =

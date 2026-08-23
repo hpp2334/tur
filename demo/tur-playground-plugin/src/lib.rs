@@ -15,7 +15,7 @@
 mod compiler;
 mod host_fns;
 
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 
 // Re-export the swc compiler primitives so downstream embedders can use them
@@ -37,7 +37,7 @@ impl Default for TurPlaygroundPlugin {
 }
 
 impl Plugin for TurPlaygroundPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let service_fns = host_fns::build_host_service_fns();
         let exports: Vec<(String, boa_engine::NativeFunction, usize)> = service_fns
             .into_iter()

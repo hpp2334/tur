@@ -39,7 +39,7 @@ pub struct TurAppInternal {
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// Worker-thread scheduler. Bridges grab it via
-    /// [`PluginContext::worker_ctx`] / [`SubsystemFlushContext::worker_ctx`]
+    /// [`PluginRegisterContext::worker_ctx`] / [`SubsystemFlushContext::worker_ctx`]
     /// and call `spawn_local(fut)` to drive async work (clipboard reads,
     /// http requests, sleep futures). The driver's `sleep` returns a
     /// platform-specific `Sleep(BoxFuture)`.
@@ -51,7 +51,7 @@ pub struct TurAppInternal {
     /// worker flushes promptly whenever a future completes.
     pub(crate) completion_queue: Rc<CompletionQueue>,
     /// Cheap-cloned handle on the completion queue, handed out to bridges
-    /// via [`PluginContext::completion_handle`] /
+    /// via [`PluginRegisterContext::completion_handle`] /
     /// [`SubsystemFlushContext::completion_handle`].
     #[allow(dead_code)]
     pub(crate) completion_handle: CompletionHandle,
@@ -63,14 +63,18 @@ pub struct TurAppInternal {
     /// observe). Real platform async (HTTP / clipboard / file-picker)
     /// still uses `worker_ctx.spawn_local`.
     pub(crate) flush_task_queue: Rc<FlushTaskQueue>,
-    /// Plugin-registered flush subsystems. Each is `flush`-ed **every
-    /// fixed-point iteration** of `flush()` (possibly several times per
-    /// frame), in registration order, before `flush_reactive`. Time-driven
-    /// subsystems self-gate via the per-`flush()` `frame_id` so the clock
-    /// advances at most once per frame. The same `Rc<RefCell<…>>` is shared
-    /// with [`PluginContext`](crate::core::plugin::PluginContext) so plugins
-    /// can push into the vec during `register`.
-    pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
+    /// Plugin-registered flush subsystems — populated **once** by
+    /// `build_worker_backend` (moved from the register-phase
+    /// [`PluginRegisterContext`](crate::core::plugin::PluginRegisterContext)
+    /// collector after the last plugin registers) and immutable for the
+    /// instance's lifetime; no registration path survives the builder.
+    /// Each is `flush`-ed **every fixed-point iteration** of `flush()`
+    /// (possibly several times per frame), in registration order, before
+    /// `flush_reactive`. Time-driven subsystems self-gate via the
+    /// per-`flush()` `frame_id` so the clock advances at most once per
+    /// frame. `RefCell` (rather than a plain field) only because
+    /// `flush(&self)` needs `&mut` access to tick the subsystems.
+    pub(crate) subsystems: RefCell<Vec<Box<dyn Subsystem>>>,
     /// Per-`flush()` epoch exposed to subsystems via
     /// [`crate::core::subsystem::SubsystemFlushContext::frame_id`].
     /// Incremented once at the top of each `flush()` call; stable across the
@@ -81,7 +85,7 @@ pub struct TurAppInternal {
     /// [`TurAppInternal::new`]; the host-side handle is retrieved via
     /// [`crate::TurApp::event_bus`]. Plugins (specifically
     /// `install_event_bus`) read this via
-    /// [`crate::core::plugin::PluginContext::event_bus`] to register the
+    /// [`crate::core::plugin::PluginRegisterContext::event_bus`] to register the
     /// JS-side bridge (`eventBus.on`/`send`) and the
     /// [`EmbedderBusSubsystem`] that drains the queues
     /// each flush.
@@ -218,7 +222,7 @@ impl TurAppInternal {
             completion_queue,
             completion_handle,
             flush_task_queue,
-            subsystems: Rc::new(RefCell::new(Vec::new())),
+            subsystems: RefCell::new(Vec::new()),
             frame_id: Cell::new(0),
             event_bus: event_bus.clone(),
             pending_render_batch: RefCell::new(None),

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::{Capability, CapabilityDecls};
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
@@ -37,7 +37,7 @@ impl Plugin for NeedsCounterPlugin {
     fn requires(&self, decls: &mut CapabilityDecls) {
         decls.need::<CountersCapability>();
     }
-    fn register(&self, _ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, _ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         Ok(())
     }
 }
@@ -53,7 +53,7 @@ fn capability_round_trip_via_plugin() {
         seen: Arc<Mutex<Option<CountersCapability>>>,
     }
     impl Plugin for CapturePlugin {
-        fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+        fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
             *self.seen.lock().unwrap() = ctx.capability().of::<CountersCapability>();
             Ok(())
         }

@@ -22,7 +22,7 @@ pub mod scroll_view;
 pub mod scrollbar;
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 pub use self::core::ScrollEvent;
@@ -43,7 +43,7 @@ pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 /// Returns: the `ScrollView` / `createScrollController` / `Scrollbar` factory
 /// fns, which the caller merges into `std_fns` before
 /// `register_module("tur:std", ...)`.
-pub fn install_scroll(ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_scroll(ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     ctx.register_class::<ScrollController>()
         .map_err(|e| TurError::Other(format!("failed to register ScrollController: {e}")))?;
     ctx.register_subsystem(Box::new(ScrollSubsystem));

@@ -11,7 +11,7 @@ use boa_engine::native_function::NativeFunction;
 use boa_gc::{Finalize, Trace};
 use tur_engine::core::edgy::mutation::PendingMutationInvocationQueue;
 use tur_engine::core::js_runtime::helpers::{ConstEntry, FnEntry};
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 
 use crate::controller::AnimationController;
@@ -51,7 +51,7 @@ impl Default for TurAnimationPlugin {
 }
 
 impl Plugin for TurAnimationPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         // 1. Register the AnimationController boa class. JS constructs via
         //    `createAnimationController` (the closure registered below), which
         //    injects the manager + mutation_queue handles; a direct

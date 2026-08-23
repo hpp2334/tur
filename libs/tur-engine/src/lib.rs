@@ -39,7 +39,7 @@ pub use crate::core::runtime::{HostBackend, TurAppBuilder, TurRuntime, TurRuntim
 // `TurRuntimeBuilder::capability`) and hop OS-API calls onto the engine's
 // main thread (required by some platforms — e.g. macOS
 // `arboard`/`NSPasteboard`); plugin code reaches the same channel via
-// `PluginContext::to_host_executor`. The engine creates the channel internally at
+// `PluginRegisterContext::to_host_executor`. The engine creates the channel internally at
 // `build()`, so no embedder wiring is required.
 pub use crate::core::plugin::{HostExecutor, HostRunFuture};
 pub use crate::core::scheduler::SpawnError;

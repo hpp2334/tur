@@ -21,7 +21,7 @@ pub(in crate::builtin_plugins) mod ime;
 pub(in crate::builtin_plugins) mod subsystem;
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 pub(in crate::builtin_plugins) use ime::ImeSubsystem;
@@ -30,7 +30,7 @@ pub(in crate::builtin_plugins) use subsystem::KeyboardSubsystem;
 /// Install the input plugin (`KeyboardSubsystem`, `ImeSubsystem`) — no JS
 /// factory fns are returned (this plugin contributes subsystems only). The
 /// orchestrator merges the empty fn list into `tur:std` harmlessly.
-pub fn install_input(ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_input(ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     ctx.register_subsystem(Box::new(KeyboardSubsystem));
     ctx.register_subsystem(Box::new(ImeSubsystem));
     Ok(Vec::new())

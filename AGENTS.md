@@ -93,7 +93,7 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   ├── image_resource.rs (ImageResourceId,           │
 │  │   │             ImageResourceMap, ImageResource —   │
 │  │   │             paint/layout contract types only)   │
-│  │   └── plugin.rs (Plugin trait + PluginContext)      │
+│  │   └── plugin.rs (Plugin trait + PluginRegisterContext) │
 │  ├── builtin_plugins/ (feature bundles — each exposes  │
 │  │                      one pub install_xxx(ctx))      │
 │  │   ├── std.rs    (TurStdPlugin — the orchestrator    │
@@ -259,7 +259,7 @@ let (headless, headless_looper) = runtime
   channel internally in `build()` and spawns the drain on the host thread, so
   **no embedder wiring is required**. OS-API backends receive a clone at
   construction (via the capability closure) and self-hop; plugin/bridge code
-  reaches the same channel via `PluginContext::to_host_executor()`. The raw
+  reaches the same channel via `PluginRegisterContext::to_host_executor()`. The raw
   `HostTask`/`HostDrain`/`host_channel()` live `pub(crate)` in
   `core::scheduler` (the plugin layer
   wraps the sender — dependency direction: plugin → scheduler, never reverse).
@@ -306,11 +306,11 @@ let (headless, headless_looper) = runtime
 The reactive substrate (`core::edgy`) is engine-owned per-instance infrastructure
 (like `mutation_queue` / `clock` / `event_bus`), NOT a swappable cross-cutting
 backend. Plugins mint reactive atoms from Rust via the narrow
-`ReactiveBridgeStore` face returned by `PluginContext::reactive()` (or
+`ReactiveBridgeStore` face returned by `PluginRegisterContext::reactive()` (or
 `TurInstanceContext::reactive()` from inside a bridge fn):
 
 ```rust
-fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
     let bridge = ctx.reactive();
 
     // Mint a source. Initial value is a JsValue (the store is type-erased to
@@ -601,7 +601,7 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
 
 ### Text model
 
-Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_text(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
+Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_text(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
 
 - **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; the text plugin only produces these structs.
 - **`extract_layout_data(props) -> TextLayoutData`** (`builtin_plugins/text/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
@@ -614,7 +614,7 @@ JS surface is unchanged — `tur:std` still exports Text/Input/etc. No `.d.ts` s
 
 ### Image model
 
-Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_image(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
+Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_image(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
 
 - **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; the image plugin only produces these structs.
 - **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
@@ -729,13 +729,16 @@ libs/
                              #   key_event.rs (KeyEvent/Modifiers/
                              #   KeyEventType/KeydownEvent/KeyupEvent —
                              #   engine contract types)
-        plugin.rs            # Plugin trait (register + requires) + PluginContext
-                             #   + CompileContext + HostExecutor
+        plugin.rs            # Plugin trait (register + requires) +
+                             #   PluginRegisterContext (register-phase
+                             #   only — its subsystem collector is frozen
+                             #   into the instance after the last plugin
+                             #   registers) + CompileContext + HostExecutor
                              #   (Send+Sync+Clone host-thread hop — wraps the
                              #   scheduler's pub(crate) channel sender; the
                              #   engine creates the channel internally in
                              #   build() so no embedder wiring is needed) +
-                             #   HostRunFuture + PluginContext::to_host_executor()
+                             #   HostRunFuture + PluginRegisterContext::to_host_executor()
         render/              # PaintContext, Renderer, ElementRender trait,
                              #   Canvas + brush/ (Color/Brush/GradientStop/
                              #   RGB types + JS bindings)

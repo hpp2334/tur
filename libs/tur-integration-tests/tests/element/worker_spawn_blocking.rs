@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::{TurRuntime, TurStdPlugin};
@@ -33,7 +33,7 @@ struct BlockingProbePlugin {
 }
 
 impl Plugin for BlockingProbePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let lane_tid = self.lane_tid.clone();
         let blocking_tid = self.blocking_tid.clone();
         let result = self.result.clone();

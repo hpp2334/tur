@@ -1,5 +1,5 @@
 //! Plugin-facing reactive substrate: plugins can mint sources / derives /
-//! mutations from Rust (via `PluginContext::reactive()` →
+//! mutations from Rust (via `PluginRegisterContext::reactive()` →
 //! `ReactiveBridgeStore`) and expose them to JS. JS reads/writes the atoms
 //! through the unchanged `tur:core` / `tur:std` bridge (`get` / `set`), so
 //! the JS side cannot tell whether an atom was minted by Rust or JS.
@@ -13,7 +13,7 @@ use std::time::Duration;
 use boa_engine::{JsArgs, JsValue};
 use tur_engine::core::edgy::reactive::{ReactiveBridgeStore, Readable, Source};
 use tur_engine::core::js_runtime::js_value::IntoJs;
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
 use tur_engine::error::TurError;
 use tur_integration_tests::TurTestApp;
@@ -24,7 +24,7 @@ use tur_integration_tests::TurTestApp;
 
 struct MintSourcePlugin;
 impl Plugin for MintSourcePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
         let s: Source<JsValue> = bridge.decl_source(JsValue::new(42.0));
         let js_handle = s.into_js(ctx.boa_mut());
@@ -78,7 +78,7 @@ fn plugin_minted_source_is_writable_from_js_via_set() {
 
 struct BuildDerivePlugin;
 impl Plugin for BuildDerivePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
         let a: Source<JsValue> = bridge.decl_source(JsValue::new(10.0));
         let b: Source<JsValue> = bridge.decl_source(JsValue::new(20.0));
@@ -172,7 +172,7 @@ fn plugin_build_derive_dirty_propagation_across_multiple_updates() {
 
 struct BuildMutatePlugin;
 impl Plugin for BuildMutatePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
         let flag: Source<JsValue> = bridge.decl_source(JsValue::new(false));
 
@@ -238,7 +238,7 @@ fn plugin_build_mutate_runs_rust_closure_on_js_set() {
 /// `build_mutate` closures receive user args verbatim (no JsObject prepended).
 struct BuildMutateWithArgsPlugin;
 impl Plugin for BuildMutateWithArgsPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
         let sink: Source<JsValue> = bridge.decl_source(JsValue::undefined());
 
@@ -317,7 +317,7 @@ impl Subsystem for CounterSubsystem {
 
 struct SubsystemTickPlugin;
 impl Plugin for SubsystemTickPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
         let counter: Source<JsValue> = bridge.decl_source(JsValue::new(0.0));
         // The public handle: a derive reading the backing through the
@@ -378,7 +378,7 @@ export function start({ store }) {
 
 struct SelfReadDerivePlugin;
 impl Plugin for SelfReadDerivePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         use std::cell::RefCell;
         use std::rc::Rc;
         use tur_engine::core::edgy::reactive::Derived;

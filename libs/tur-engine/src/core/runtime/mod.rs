@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -18,7 +19,7 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::js_runtime::instance_context::InstanceDataCx;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
-use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginContext};
+use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginRegisterContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::error::TurError;
 use crate::{TurApp, TurAppLooper};
@@ -169,8 +170,8 @@ pub struct TurRuntime {
     worker_pools: Vec<WorkerPoolHandle>,
     /// The engine's main-thread hop context. Created internally in `build()`
     /// (the channel + drain are engine-internal — embedders never wire them).
-    /// Cloned into each worker's [`PluginContext`] (so plugins reach main via
-    /// [`PluginContext::to_host_executor`](crate::core::plugin::PluginContext::to_host_executor))
+    /// Cloned into each worker's [`PluginRegisterContext`] (so plugins reach main via
+    /// [`PluginRegisterContext::to_host_executor`](crate::core::plugin::PluginRegisterContext::to_host_executor))
     /// and handed to capability constructors that need it (via the closure
     /// form of [`TurRuntimeBuilder::capability`]).
     main_cx: HostExecutor,
@@ -606,7 +607,7 @@ pub(crate) fn build_worker_backend(
         .build()
         .expect("failed to build boa context");
 
-    let internal = TurAppInternal::new(
+    let mut internal = TurAppInternal::new(
         font_context,
         font_loader,
         executor.clone(),
@@ -641,7 +642,7 @@ pub(crate) fn build_worker_backend(
     // `viewportSize$` engine atom — backing source, public derive handle,
     // and the `ResizeSubsystem` that publishes it — is minted and owned by
     // `TurStdPlugin` (the canonical plugin-facing engine-atom recipe, see
-    // `builtin_plugins/std.rs`), seeded via `PluginContext::viewport()`.
+    // `builtin_plugins/std.rs`), seeded via `PluginRegisterContext::viewport()`.
     internal.app_context.borrow_mut().screen.logical_size = viewport;
 
     let mut core_fns: Vec<FnEntry> = Vec::new();
@@ -705,19 +706,28 @@ pub(crate) fn build_worker_backend(
         definer(&mut data_cx);
     }
 
+    // One register-phase context for the whole plugin loop (today's
+    // per-plugin contexts were clones of the same handles; the only mutable
+    // state is the subsystem collector, which must accumulate across
+    // plugins so registration order = plugin order is preserved verbatim).
+    // The context is consumed after the loop and its collected list becomes
+    // the instance's registry — the natural freeze: no handle into the
+    // registry survives the builder, so subsystem registration after build
+    // is structurally impossible.
+    let mut register_cx = PluginRegisterContext {
+        boa: &mut boa_context,
+        loader: module_loader.clone(),
+        js_ctx_value: ctx_val.clone(),
+        js_ctx: internal.js_context.clone(),
+        app: internal.app_context.clone(),
+        subsystems: Vec::new(),
+        event_bus: internal.event_bus.clone(),
+        host_exec: host_exec.clone(),
+    };
     for plugin in plugins {
-        let mut plugin_ctx = PluginContext {
-            boa: &mut boa_context,
-            loader: module_loader.clone(),
-            js_ctx_value: ctx_val.clone(),
-            js_ctx: internal.js_context.clone(),
-            app: internal.app_context.clone(),
-            subsystems: internal.subsystems.clone(),
-            event_bus: internal.event_bus.clone(),
-            host_exec: host_exec.clone(),
-        };
-        plugin.register(&mut plugin_ctx)?;
+        plugin.register(&mut register_cx)?;
     }
+    internal.subsystems = RefCell::new(register_cx.into_subsystems());
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
     Ok(WorkerBackend::new(

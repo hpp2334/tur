@@ -31,7 +31,7 @@ pub use controller::{TextEditingController, UndoController};
 pub use elements::{EditableTextElement, EditableTextView, InputView, TextElement, TextView};
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 /// Wire text plugin into `tur:std`. Called by `TurStdPlugin`'s
@@ -51,7 +51,7 @@ use crate::error::TurError;
 /// Returns: the `Text` / `Input` / `createTextEditingController` /
 /// `createUndoController` factory fns, which the caller merges into
 /// `std_fns` before `register_module("tur:std", ...)`.
-pub fn install_text(ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_text(ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     ctx.register_class::<TextEditingController>()
         .map_err(|e| TurError::Other(format!("failed to register TextEditingController: {e}")))?;
     ctx.register_class::<UndoController>()

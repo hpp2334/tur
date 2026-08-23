@@ -10,11 +10,11 @@ pub(in crate::builtin_plugins) mod render;
 pub(in crate::builtin_plugins) use element::LifecycleView;
 
 use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginContext;
+use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 /// Install the lifecycle plugin (`lifecycleView`). Returns the JS factory
 /// fns to be merged into `tur:std` by the orchestrator.
-pub fn install_lifecycle(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_lifecycle(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     Ok(bridge::fns())
 }

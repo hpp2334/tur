@@ -40,7 +40,7 @@ use crate::core::async_::task;
 use crate::core::edgy::reactive::{Readable, Source};
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::js_runtime::js_value::IntoJs;
-use crate::core::plugin::{Plugin, PluginContext};
+use crate::core::plugin::{Plugin, PluginRegisterContext};
 use crate::core::screen::{ResizeSubsystem, viewport_size_value};
 use crate::error::TurError;
 use boa_engine::native_function::NativeFunction;
@@ -65,7 +65,7 @@ impl Default for TurStdPlugin {
 }
 
 impl Plugin for TurStdPlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         // `viewportSize$` — the canonical engine-environment atom, minted
         // here (plugin-facing recipe): a backing source whose single value
         // home is the INSTANCE store (the seed carries the true initial

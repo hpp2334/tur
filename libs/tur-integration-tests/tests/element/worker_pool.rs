@@ -14,7 +14,7 @@ use boa_engine::JsValue;
 use boa_engine::js_string;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_integration_tests::{MutexFixedClock, TestSchedulerDriver};
@@ -31,7 +31,7 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> String {
 struct TidProbePlugin;
 
 impl Plugin for TidProbePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let tid = format!("{:?}", std::thread::current().id());
         ctx.register_global("__turTid", JsValue::from(js_string!(tid.as_str())));
         Ok(())

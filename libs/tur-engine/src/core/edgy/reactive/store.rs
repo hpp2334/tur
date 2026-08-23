@@ -1043,9 +1043,9 @@ impl ReactiveBridgeStore {
     /// closure is safe — all reactive methods are `&self`).
     ///
     /// Plugins reach this via
-    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive)
+    /// [`PluginRegisterContext::reactive`](crate::core::plugin::PluginRegisterContext::reactive)
     /// and typically expose the returned handle to JS via
-    /// [`PluginContext::register_global`] or as a bridge-fn return value;
+    /// [`PluginRegisterContext::register_global`] or as a bridge-fn return value;
     /// JS then reads it through `store.get(handle)`.
     pub fn build_derive<F>(&self, closure: F) -> Derived<JsValue>
     where
@@ -1064,7 +1064,7 @@ impl ReactiveBridgeStore {
     /// with no `{get, set}` JsObject round-trip.
     ///
     /// Plugins reach this via
-    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive);
+    /// [`PluginRegisterContext::reactive`](crate::core::plugin::PluginRegisterContext::reactive);
     /// JS invokes the mutation through `store.set(mutation, ...args)`,
     /// which routes the user args here verbatim.
     pub fn build_mutate<F>(&self, closure: F) -> Mutation
@@ -1132,7 +1132,7 @@ impl ReactiveBridgeStore {
     }
 
     /// The bridge's own store (the **engine store** when the bridge came
-    /// from `PluginContext::reactive` / `TurInstanceContext::reactive`),
+    /// from `PluginRegisterContext::reactive` / `TurInstanceContext::reactive`),
     /// as a read-only face. The engine-atom pattern captures this in a
     /// `build_derive` handle closure so the handle — read from ANY store of
     /// the instance — resolves the backing's single engine-store value:

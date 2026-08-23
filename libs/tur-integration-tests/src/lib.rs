@@ -49,7 +49,7 @@ use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
-use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
@@ -91,7 +91,7 @@ pub struct NativeExport {
 }
 
 impl Plugin for NativeModulePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let exports: Vec<(String, NativeFunction, usize)> = self
             .exports
             .iter()

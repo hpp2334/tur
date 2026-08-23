@@ -7,8 +7,11 @@
 //! engine's fixed-point flush loop (e.g. a scroll subsystem that processes
 //! wheel events, a keyboard subsystem that routes key events to the focused
 //! element). The engine owns the registry; plugins register instances via
-//! [`PluginContext::register_subsystem`](crate::core::plugin::PluginContext::register_subsystem)
-//! during `build()`.
+//! [`PluginRegisterContext::register_subsystem`](crate::core::plugin::PluginRegisterContext::register_subsystem)
+//! during `build()`. The registry is **frozen when the build completes** —
+//! the collector lives only in the register-phase context, which is
+//! consumed after the last plugin registers, so no registration path
+//! survives into the instance's lifetime.
 //!
 //! ## Ordering
 //!
