@@ -10,6 +10,7 @@ import {
     LazyList,
     MainAxisAlignment,
     MainAxisSize,
+    mount,
     Row,
     SizedBox,
     Text,
@@ -191,7 +192,7 @@ function buildRow(index: number): Element {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#ffffff"),
@@ -207,3 +208,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

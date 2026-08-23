@@ -5,6 +5,7 @@ import {
     Container,
     CrossAxisAlignment,
     derive,
+    mount,
     mutate,
     PointerInteract,
     source,
@@ -16,7 +17,7 @@ const lastX$ = source(0);
 const lastY$ = source(0);
 const phase$ = source("idle");
 
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
@@ -56,3 +57,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

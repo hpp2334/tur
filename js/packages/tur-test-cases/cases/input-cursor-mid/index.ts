@@ -1,10 +1,16 @@
-import { Container, createTextEditingController, Input, view } from "tur:std";
+import {
+    Container,
+    createTextEditingController,
+    Input,
+    mount,
+    view,
+} from "tur:std";
 
 const ctrl = createTextEditingController({});
 
 (globalThis as Record<string, unknown>).__setCursorMidTick = () => {};
 
-export default view(() =>
+const App = view(() =>
     Container({
         children: [
             Input({
@@ -16,3 +22,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

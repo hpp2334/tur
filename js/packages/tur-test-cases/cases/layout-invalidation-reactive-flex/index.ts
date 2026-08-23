@@ -1,4 +1,14 @@
-import { Color, Container, derive, Expanded, Row, source, view } from "tur:std";
+import {
+    Color,
+    Container,
+    derive,
+    Expanded,
+    mount,
+    Row,
+    type Store,
+    source,
+    view,
+} from "tur:std";
 
 // Two reactive flex weights. Exposed to Rust tests via globalThis so the test
 // can flip them without a click (a click would mark extra nodes dirty via the
@@ -6,14 +16,7 @@ import { Color, Container, derive, Expanded, Row, source, view } from "tur:std";
 const flexA$ = source(1);
 const flexB$ = source(1);
 
-Object.assign(globalThis, {
-    __setFlex: (a: number, b: number): void => {
-        globalThis.__store.set(flexA$, a);
-        globalThis.__store.set(flexB$, b);
-    },
-});
-
-export default view(() =>
+const App = view(() =>
     Row({
         children: [
             Expanded({
@@ -33,3 +36,13 @@ export default view(() =>
         ],
     }),
 );
+
+export function start({ store }: { store: Store }) {
+    Object.assign(globalThis, {
+        __setFlex: (a: number, b: number): void => {
+            store.set(flexA$, a);
+            store.set(flexB$, b);
+        },
+    });
+    mount(App);
+}

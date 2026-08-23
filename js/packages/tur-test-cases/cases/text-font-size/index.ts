@@ -1,6 +1,6 @@
-import { Fragment, Text, view } from "tur:std";
+import { Fragment, mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Fragment({
         children: [
             Text({ text: "Hello", fontSize: 14 }),
@@ -8,3 +8,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

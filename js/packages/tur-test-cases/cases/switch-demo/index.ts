@@ -7,6 +7,7 @@ import {
     derive,
     Expanded,
     MainAxisAlignment,
+    mount,
     mutate,
     PointerInteract,
     Row,
@@ -39,7 +40,7 @@ function coloredPanel(label: string, hex: string) {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#1a1a2e"),
@@ -124,3 +125,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

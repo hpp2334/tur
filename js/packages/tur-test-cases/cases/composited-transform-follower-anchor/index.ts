@@ -4,6 +4,7 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    mount,
     Positioned,
     SizedBox,
     Stack,
@@ -17,7 +18,7 @@ import {
 // blue box, right edges flush. If followerAnchor is dropped (treated as
 // TopLeft) the follower's top-left lands at (160, 120) and the red box
 // overhangs off-screen right.
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -44,3 +45,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

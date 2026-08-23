@@ -2,6 +2,7 @@ import {
     Column,
     CrossAxisAlignment,
     createScrollController,
+    mount,
     ScrollView,
     SizedBox,
     view,
@@ -9,7 +10,7 @@ import {
 
 const controller = createScrollController({ initialOffset: 100 });
 
-export default view(() =>
+const App = view(() =>
     ScrollView({
         controller,
         queryKey: ["scroll-view"],
@@ -23,3 +24,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

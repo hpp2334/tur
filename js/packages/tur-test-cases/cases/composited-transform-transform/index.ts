@@ -3,6 +3,7 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    mount,
     Positioned,
     SizedBox,
     Stack,
@@ -14,7 +15,7 @@ import {
 // Transform at (20, 20); the translate (50, 10) is applied at paint only. The
 // follower must compose the target's full world affine and land at
 // (20 + 50, 20 + 10) = (70, 30) — not the layout position (20, 20).
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -38,3 +39,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

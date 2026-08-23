@@ -1,4 +1,4 @@
-import { Color, Container, Grid, Text, view } from "tur:std";
+import { Color, Container, Grid, mount, Text, view } from "tur:std";
 
 // `Grid` with `childAspectRatio: 2` → each cell is twice as wide as it is
 // tall (cell_main = cell_cross / 2). Also exercises `mainAxisExtent` on the
@@ -44,7 +44,7 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-export default view(() =>
+const App = view(() =>
     Grid({
         maxCrossAxisExtent: 160,
         childAspectRatio: 2,
@@ -65,3 +65,7 @@ export default view(() =>
         ),
     }),
 );
+
+export function start() {
+    mount(App);
+}

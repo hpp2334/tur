@@ -2,14 +2,19 @@ import {
     Column,
     CrossAxisAlignment,
     MainAxisAlignment,
+    mount,
     SizedBox,
     view,
 } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Column({
         mainAlignment: MainAxisAlignment.End,
         crossAlignment: CrossAxisAlignment.Start,
         children: [SizedBox({ height: 50 }), SizedBox({ height: 30 })],
     }),
 );
+
+export function start() {
+    mount(App);
+}

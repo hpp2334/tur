@@ -7,6 +7,7 @@ import {
     type Element,
     Expanded,
     lifecycleView,
+    mount,
     Stack,
     Switch,
     Text,
@@ -15,10 +16,6 @@ import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";
 import { hasHttp, repoWatch, view$ } from "./state";
 import { COLORS } from "./theme";
-
-// The in-realm case compiler (`compile.ts` → `runCaseBody`) injects
-// `__setCaseView` as a function parameter when evaluating this module.
-declare const __setCaseView: (view: unknown) => void;
 
 /** Capability guard: the viewer needs the playground's HTTP module; if it is
  *  somehow absent the whole viewer is replaced with a short notice. */
@@ -82,8 +79,9 @@ function GithubViewer(): Element {
     }));
 }
 
-/** Advanced case: an explicit `start()` (wins over the default-export
- *  wrapper) — it just mounts the component, like any other view. */
+/** The module entrypoint — mounts the component, like any other view.
+ *  (In the playground the compiler intercepts `mount` to publish the view
+ *  into the viewer pane; elsewhere this runs the viewer as a root module.) */
 export function start() {
-    __setCaseView(GithubViewer());
+    mount(GithubViewer());
 }

@@ -7,10 +7,12 @@ import {
     type Mutation,
     mutate,
     sleep,
+    type Store,
     type Task,
 } from "tur:std";
 import { CASE_SOURCES, compileCase, takePublishedView } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
+import { getInstanceStore } from "./instance-store";
 import {
     autoRun$,
     CASE_NAMES,
@@ -43,12 +45,23 @@ const caseCleanups = new Map<string, () => void>();
  *  Populated from CASE_SOURCES on first load; updated on each recompile. */
 const caseFileCache = new Map<string, CaseFileMap>();
 
-/** Run a compiled case's `start()`: tear down the previous run's cleanup,
- *  invoke `start`, then drain the view it published via `setCaseView`. */
-function invokeCaseStart(name: string, start: () => (() => void) | void): void {
+/** Run a compiled case's `start({ store })`: tear down the previous run's
+ *  cleanup, invoke `start` with the instance store, then drain the view it
+ *  published via its (intercepted) `mount`. The harness-side store type is
+ *  `Store | null` because prime-time runs before the entry stashed it; the
+ *  case's own `start({ store }: { store: Store })` still follows the engine
+ *  contract (it only ever receives the live store once the app runs). */
+function invokeCaseStart(
+    name: string,
+    start: (ctx: { store: Store | null }) => (() => void) | void,
+): void {
     caseCleanups.get(name)?.();
     caseCleanups.delete(name);
-    const cleanup = start();
+    // Prime-time (module eval) runs before the playground entry's `start`
+    // stashed the instance store, so the pass-through may be null there —
+    // harmless: nothing invokes a case's `__*` hooks until the app runs, and
+    // every recompile re-invokes with the live store.
+    const cleanup = start({ store: getInstanceStore() });
     if (typeof cleanup === "function") {
         caseCleanups.set(name, cleanup);
     }

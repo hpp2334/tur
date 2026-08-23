@@ -1,9 +1,9 @@
-import { Column, Container, Expanded, Text, view } from "tur:std";
+import { Column, Container, Expanded, mount, Text, view } from "tur:std";
 
 // Repro #5: Container(no explicit size, padding:48) sized from a Text child,
 // wrapped in Expanded, inside a Column with MainAxisSize.Max. Expected: the
 // Expanded fills remaining main axis; the inner container is visible.
-export default view(() =>
+const App = view(() =>
     Column({
         children: [
             Expanded({
@@ -22,3 +22,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

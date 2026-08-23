@@ -4,6 +4,7 @@ import {
     Container,
     CrossAxisAlignment,
     derive,
+    mount,
     mutate,
     PointerInteract,
     source,
@@ -14,7 +15,7 @@ import { COLORS } from "./utils";
 
 const count$ = source(0);
 
-export default view(() =>
+const App = view(() =>
     Container({
         color: COLORS.bg,
         children: [
@@ -52,3 +53,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

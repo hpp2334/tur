@@ -12,6 +12,7 @@ import {
     LazyList,
     MainAxisSize,
     MouseRegion,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -211,7 +212,7 @@ function ToggleButton(): Element {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#020617"),
@@ -259,3 +260,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

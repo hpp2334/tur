@@ -16,6 +16,7 @@ import {
     MainAxisSize,
     MouseRegion,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -121,7 +122,7 @@ function ToggleButton(): Element {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.rgb(248, 250, 252),
@@ -155,3 +156,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

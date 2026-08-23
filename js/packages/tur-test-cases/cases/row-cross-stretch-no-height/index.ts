@@ -3,13 +3,14 @@ import {
     Container,
     CrossAxisAlignment,
     Expanded,
+    mount,
     Row,
     view,
 } from "tur:std";
 
 // Test: Row with crossAlignment=Stretch should give non-flex children the
 // row's full height, even when those children have no explicit height prop.
-export default view(() =>
+const App = view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
@@ -37,3 +38,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

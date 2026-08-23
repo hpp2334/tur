@@ -16,13 +16,13 @@
 
 import type { Store } from "tur:core";
 import { mount } from "tur:std";
-import { startNowTicker, stopNowTicker } from "./state";
+import { setInstanceStore, startNowTicker, stopNowTicker } from "./state";
 import { Shell } from "./views/shell";
 
 export function start({ store }: { store: Store }) {
-    // Stash the instance store for embedded case helpers (module-scope test
-    // seams reach it via `globalThis.__store` — see cases/*-invalidation).
-    globalThis.__store = store;
+    // Stash the instance store for the case store's pass-through (embedded
+    // seam cases bind their `__*` test hooks to it — see cases/*-invalidation).
+    setInstanceStore(store);
     mount(Shell);
     store.set(startNowTicker);
     return stopNowTicker;

@@ -28,7 +28,7 @@ const outDir = path.resolve(__dirname, "..", "src", "cases");
 fs.mkdirSync(outDir, { recursive: true });
 
 /** Collect case entries (name → { filename → source }) from a cases dir. */
-function collectFrom(casesDir, { embed } = { embed: false }) {
+function collectFrom(casesDir) {
     const out = [];
     if (!fs.existsSync(casesDir)) return out;
     for (const name of fs.readdirSync(casesDir).sort()) {
@@ -43,11 +43,10 @@ function collectFrom(casesDir, { embed } = { embed: false }) {
             .readdirSync(caseDir)
             .filter((f) => f.endsWith(".ts"))
             .sort();
-        const fileMap = files.map((f) => {
-            let src = fs.readFileSync(path.join(caseDir, f), "utf8");
-            if (embed) src = embedTransform(src);
-            return `${JSON.stringify(f)}: ${JSON.stringify(src)}`;
-        });
+        const fileMap = files.map(
+            (f) =>
+                `${JSON.stringify(f)}: ${JSON.stringify(fs.readFileSync(path.join(caseDir, f), "utf8"))}`,
+        );
         out.push(
             `    ${JSON.stringify(name)}: {\n${fileMap.map((s) => `        ${s}`).join(",\n")},\n    }`,
         );
@@ -55,25 +54,19 @@ function collectFrom(casesDir, { embed } = { embed: false }) {
     return out;
 }
 
-// The shared engine cases are ROOT-MOUNTED (their dist wrapper does
-// `mount(Case)` inside `start({ store })` with the engine-provided instance
-// store). Their view/logic code is ctx-only — all reactive reads/writes flow
-// through the closure ctx of `derive`/`mutate`, which the engine binds to
-// the instance store; the few module-scope test-seam helpers reach it via
-// `globalThis.__store` (stashed by every entry point's `start`).
+// Both case sources are the real module contract already: each entry authors
+// `export function start(...)` with `mount(view)` inside (against the
+// engine-provided instance store). Their view/logic code is ctx-only — all
+// reactive reads/writes flow through the closure ctx of `derive`/`mutate`,
+// which the engine binds to the instance store; the few test-seam hooks are
+// registered inside `start`, closing over the injected store.
 //
-// So embedding needs NO rewrites: the case sources are already
-// embedding-aware (ctx-only).
-function embedTransform(src) {
-    return src;
-}
+// So embedding is a pure copy — no source rewrites.
 
 // Local (playground-only) cases take precedence on name collisions; otherwise
 // the order just affects stable output ordering (each set is pre-sorted).
-// Engine cases are embedded as-is (root-mount source, ctx-only); local
-// playground cases are written embedding-aware already (ctx-only).
 const entries = [
-    ...collectFrom(engineCasesDir, { embed: true }),
+    ...collectFrom(engineCasesDir),
     ...collectFrom(localCasesDir),
 ];
 

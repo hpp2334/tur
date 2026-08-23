@@ -3,7 +3,9 @@ import {
     Container,
     derive,
     MainAxisAlignment,
+    mount,
     Row,
+    type Store,
     source,
     view,
 } from "tur:std";
@@ -12,12 +14,6 @@ import {
 // so the test can change it without a click (a click would mark extra nodes
 // dirty via the gesture handler and mask the position-invalidation bug).
 const width$ = source(100);
-
-Object.assign(globalThis, {
-    __setWidth: (w: number): void => {
-        globalThis.__store.set(width$, w);
-    },
-});
 
 // Reproduces the divider-drag position gap.
 //
@@ -39,7 +35,7 @@ Object.assign(globalThis, {
 // skip a constraint-driven descendant, leaving the tracker at a stale X offset
 // (playground symptom: the editor scrollbar stayed painted at its old
 // position after a divider drag).
-export default view(() =>
+const App = view(() =>
     Container({
         width: derive((ctx) => ctx.get(width$)),
         children: [
@@ -57,3 +53,12 @@ export default view(() =>
         ],
     }),
 );
+
+export function start({ store }: { store: Store }) {
+    Object.assign(globalThis, {
+        __setWidth: (w: number): void => {
+            store.set(width$, w);
+        },
+    });
+    mount(App);
+}

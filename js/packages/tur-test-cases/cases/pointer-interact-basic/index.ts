@@ -1,7 +1,11 @@
-import { Container, PointerInteract, view } from "tur:std";
+import { Container, mount, PointerInteract, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     PointerInteract({
         child: Container({ width: 100, height: 50 }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

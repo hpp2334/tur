@@ -2,13 +2,14 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    mount,
     Row,
     ScrollView,
     SizedBox,
     view,
 } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Row({
         children: [
             SizedBox({ width: 200 }),
@@ -43,3 +44,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

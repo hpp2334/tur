@@ -1,6 +1,6 @@
-import { Text, view } from "tur:std";
+import { mount, Text, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Text({
         fontSize: 14,
         spans: [
@@ -10,3 +10,7 @@ export default view(() =>
         ],
     } as never),
 );
+
+export function start() {
+    mount(App);
+}

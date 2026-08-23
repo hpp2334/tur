@@ -6,6 +6,7 @@ import {
     createLayerLink,
     derive,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -21,7 +22,7 @@ import {
 // bottom-right corner on the next frame.
 const anchor$ = source(Alignment.TopLeft);
 
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -57,3 +58,7 @@ export default view(() => {
         ],
     });
 });
+
+export function start() {
+    mount(App);
+}

@@ -1,4 +1,4 @@
-import { Axis, Color, Container, LazyGrid, view } from "tur:std";
+import { Axis, Color, Container, LazyGrid, mount, view } from "tur:std";
 
 // Large virtualized `LazyGrid`: 5000 items with a fixed `mainAxisExtent`
 // (60px row height) + `childAspectRatio`. Wheel-scroll vertically; only the
@@ -44,7 +44,7 @@ function cellColor(i: number) {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-export default view(() =>
+const App = view(() =>
     LazyGrid({
         axis: Axis.Vertical,
         itemCount: ITEM_COUNT,
@@ -60,3 +60,7 @@ export default view(() =>
             }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

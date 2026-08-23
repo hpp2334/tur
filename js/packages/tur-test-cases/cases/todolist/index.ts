@@ -12,6 +12,7 @@ import {
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
+    mount,
     mutate,
     PointerInteract,
     Positioned,
@@ -139,7 +140,7 @@ function TaskList(): Element {
     });
 }
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Stack({
             children: [
@@ -183,3 +184,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

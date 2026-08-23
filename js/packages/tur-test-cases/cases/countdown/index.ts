@@ -16,6 +16,7 @@ import {
     MainAxisSize,
     MouseRegion,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -442,7 +443,7 @@ function EditModal(): Element {
 
 // --- Page ----------------------------------------------------------------
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Stack({
             children: [
@@ -470,3 +471,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

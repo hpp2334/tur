@@ -1,6 +1,6 @@
-import { ClipBehavior, Color, Container, view } from "tur:std";
+import { ClipBehavior, Color, Container, mount, view } from "tur:std";
 
-export default view(() =>
+const App = view(() =>
     Container({
         width: 200,
         height: 200,
@@ -15,3 +15,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}

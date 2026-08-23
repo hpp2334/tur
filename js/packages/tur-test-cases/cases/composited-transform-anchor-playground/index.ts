@@ -13,6 +13,7 @@ import {
     MainAxisSize,
     MouseRegion,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -115,7 +116,7 @@ const MENU1_Y = PANEL_Y + PAD + TRIGGER_H;
 const MENU2_X = PANEL_X + PAD;
 const MENU2_Y = MENU1_Y + 6 + TRIGGER_H;
 
-export default view(() => {
+const App = view(() => {
     const link = createLayerLink();
     return Stack({
         children: [
@@ -404,4 +405,8 @@ function SmallButton(label: string, onClick: Mutation<[], void>) {
             children: [Text({ text: label, fontSize: 11, color: C.text })],
         }),
     });
+}
+
+export function start() {
+    mount(App);
 }

@@ -1,4 +1,4 @@
-import { Axis, Color, Container, LazyGrid, Text, view } from "tur:std";
+import { Axis, Color, Container, LazyGrid, mount, Text, view } from "tur:std";
 
 // Virtualized `LazyGrid`: 500 items, only the cells in the viewport + overscan
 // are mounted. Wheel-scroll to reveal more. Cells are uniform square tiles
@@ -44,7 +44,7 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-export default view(() =>
+const App = view(() =>
     LazyGrid({
         axis: Axis.Vertical,
         itemCount: ITEM_COUNT,
@@ -66,3 +66,7 @@ export default view(() =>
             }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

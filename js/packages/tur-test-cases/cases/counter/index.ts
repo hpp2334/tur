@@ -7,6 +7,7 @@ import {
     derive,
     Expanded,
     MainAxisAlignment,
+    mount,
     mutate,
     PointerInteract,
     Row,
@@ -18,7 +19,7 @@ import {
 
 const count$ = source(0);
 
-export default view(() =>
+const App = view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),
@@ -84,3 +85,7 @@ export default view(() =>
         }),
     }),
 );
+
+export function start() {
+    mount(App);
+}

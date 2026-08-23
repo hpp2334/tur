@@ -3,6 +3,7 @@ import {
     Container,
     derive,
     type Mutation,
+    mount,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -20,7 +21,7 @@ import {
 // hit-testing ignored the paint transform, so the click missed.
 const hit$ = source(false);
 
-export default view(() =>
+const App = view(() =>
     Stack({
         children: [
             // Sizes the root Stack to the full canvas so the box's absolute
@@ -51,3 +52,7 @@ export default view(() =>
         ],
     }),
 );
+
+export function start() {
+    mount(App);
+}
