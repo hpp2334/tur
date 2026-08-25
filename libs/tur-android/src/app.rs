@@ -3,8 +3,11 @@
 //! instances — each attached to an Android `Surface` (rendering) or headless
 //! (no rendering). Exposes the operations the JNI layer drives.
 //!
-//! On non-Android targets the crate compiles as a stub so the workspace builds
-//! on desktop; this module is then empty.
+//! All of it lives on the **tur-host thread** (`crate::host_thread`): the
+//! JNI layer marshals every op there, so the Android main thread only ever
+//! posts work (see `ops` in `lib.rs`). On non-Android targets the crate
+//! compiles as a stub so the workspace builds on desktop; this module is
+//! then empty.
 
 #[cfg(target_os = "android")]
 mod imp {
@@ -43,10 +46,11 @@ mod imp {
     /// Push the engine's text-input state (editable focused flag) to
     /// Kotlin's `FrameLoop.onTextInputChanged(boolean)` via JNI. Called
     /// from the engine's [`AndroidShell`] (installed at
-    /// `app_builder().shell(...)`) on the main thread, so
-    /// `attach_current_thread` is a cheap no-op (the main looper thread is
-    /// already attached). Kotlin retains the value so the per-frame
-    /// `syncIme` poll reads it without a JNI round-trip.
+    /// `app_builder().shell(...)`) on the **tur-host thread** (frames run
+    /// there), which `attach_current_thread` attaches on first use. Kotlin
+    /// retains the value and reconciles the soft keyboard from it — both
+    /// the per-frame sync and a posted reconcile on state change (see
+    /// `FrameLoop.onTextInputChanged`).
     fn push_text_input_to_kotlin(frame_loop: &FrameLoopRef, is_editable: bool) {
         let Some(vm) = crate::java_vm() else {
             return;
@@ -102,12 +106,14 @@ mod imp {
         WgpuSurface(String),
     }
 
-    /// The shared runtime — created once per app process. Owns the
-    /// [`TurRuntime`] (fonts, clock, capabilities, plugins), a shared
-    /// `wgpu::Instance` that every rendering instance creates its `Surface`
-    /// from, and the tokio runtime whose handle backs the lane timers,
-    /// `sleep` timers. Returned to the JNI layer as a boxed pointer (the
-    /// `jlong` runtime handle Kotlin holds).
+    /// The shared runtime — created once per app process, on the **tur-host
+    /// thread**. Owns the [`TurRuntime`] (fonts, clock, capabilities,
+    /// plugins), a shared `wgpu::Instance` that every rendering instance
+    /// creates its `Surface` from, and the tokio runtime whose handle backs
+    /// the lane timers, `sleep` timers. The JNI layer's `jlong` runtime
+    /// handle points at a
+    /// [`RuntimeRoute`](crate::host_thread::RuntimeRoute) — this struct is
+    /// reachable only from host-thread ops.
     pub struct AndroidRuntime {
         pub runtime: Rc<TurRuntime>,
         pub wgpu_instance: wgpu::Instance,
@@ -141,8 +147,15 @@ mod imp {
         /// `AndroidClipboard`, `NativeHttp`, the base scheduler driver), so the
         /// callback only needs to chain `.plugin(…)` calls and return the
         /// builder.
+        ///
+        /// Runs on the **tur-host thread** (`ops::create_runtime` marshals
+        /// the build over) — the runtime's `Rc` state (host loop, lane
+        /// registry) is `!Send` and must never cross a thread. `module_sources`
+        /// is the caller-allocated shared registry (the JNI route holds the
+        /// other Arc half, so module sources register from any thread).
         pub fn build(
             context: GlobalRef,
+            module_sources: ModuleSourceRegistry,
             configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
         ) -> Result<Self, TurAndroidError> {
             // Register the process JavaVM for the clipboard backend (it attaches
@@ -196,7 +209,7 @@ mod imp {
                 wgpu_instance,
                 tokio,
                 host_loop,
-                module_sources: ModuleSourceRegistry::new(),
+                module_sources,
                 default_worker_pool,
             })
         }
@@ -211,8 +224,10 @@ mod imp {
     /// One isolated engine instance — either rendering (attached to a Surface)
     /// or headless. Built from an [`AndroidRuntime`] via
     /// [`AndroidInstance::build_with_surface`] or
-    /// [`AndroidInstance::build_headless`]. Returned to the JNI layer as a
-    /// boxed pointer (the `jlong` instance handle Kotlin holds).
+    /// [`AndroidInstance::build_headless`]. Lives in the tur-host thread's
+    /// instance map, addressed by the id Kotlin's `jlong` instance handle
+    /// routes to (see
+    /// [`InstanceRoute`](crate::host_thread::InstanceRoute)).
     pub struct AndroidInstance {
         pub app: Rc<TurApp>,
         /// Per-instance vsync source bound to this instance's Kotlin
@@ -226,15 +241,16 @@ mod imp {
         /// The autonomous frame loop future (`TurAppLooper::run`). The
         /// boa realm lives on the worker, but the loop itself is `!Send`
         /// host-thread state (it owns the worker→host message stream), so
-        /// it cannot run on a spawned thread: JNI `pump` polls it once per
-        /// Choreographer tick.
+        /// it lives on the **tur-host thread**: the Choreographer callback
+        /// (still on the Android main thread) posts a pump op that polls it
+        /// once per display tick.
         loop_task: std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
-        /// `Send + Sync` closure that requests a main-loop pump. Used
-        /// as the waker for `pump_loop` so that when the worker sends to
+        /// `Send + Sync` closure that requests a loop poll by posting a
+        /// poll-only pump op **directly onto the tur-host thread's queue**.
+        /// Used as the waker for `pump_loop`: when the worker sends to
         /// `main_rx` (from its own thread), the channel waker fires this
-        /// closure → coalesced Handler post → `pump_loop` runs → processes
-        /// the message. Without this the loop used `noop_waker` and worker
-        /// messages sat unconsumed until the next input event.
+        /// closure → host-thread wake → `pump_loop` runs → processes the
+        /// message. No Android-main-thread Handler hop is involved.
         vsync_wake_fn: std::sync::Arc<dyn Fn() + Send + Sync>,
     }
 
@@ -274,19 +290,21 @@ mod imp {
             (vsync, loop_task, vsync_wake_fn)
         }
 
-        /// Poll the autonomous loop exactly once. Called from JNI `pump`
-        /// (Choreographer-fired: vsync + poll) and `pumpMessages`
-        /// (message-pump: poll only). Each poll handles at most one
-        /// vsync/main-msg event, so the loop is pulled forward by whichever
-        /// cadence is active — display frames while animating, one Handler
-        /// post per message batch while idle.
+        /// Poll the autonomous loop exactly once. Called from the tur-host
+        /// thread's pump op — the vsync variant (Choreographer-fired: fire
+        /// vsync + poll) and the message-pump variant (poll only, posted by
+        /// the wake fn). Each poll handles at most one vsync/main-msg event,
+        /// so the loop is pulled forward by whichever cadence is active —
+        /// display frames while animating, one host-thread wake per message
+        /// batch while idle.
         ///
         /// Uses a **real waker** (not `noop_waker`) backed by
         /// [`vsync_wake_fn`](Self::vsync_wake_fn): when the worker sends to
-        /// `main_rx`, the channel waker fires the closure → coalesced
-        /// Handler post → this method runs again → processes the message.
-        /// Without this, worker messages (render batches, frame outcomes)
-        /// would sit unconsumed between input events.
+        /// `main_rx`, the channel waker fires the closure → a poll-only
+        /// pump op lands on the tur-host queue → this method runs again →
+        /// processes the message. Without this, worker messages (render
+        /// batches, frame outcomes) would sit unconsumed between input
+        /// events.
         pub fn pump_loop(&self) {
             {
                 let mut task = self.loop_task.borrow_mut();
@@ -313,6 +331,12 @@ mod imp {
         /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
         /// cadence.
         ///
+        /// Runs on the **tur-host thread** (marshalled there by
+        /// `ops::create_instance`): the wgpu adapter/device request and the
+        /// worker-lane handshake block that thread while the Android main
+        /// thread stays free. `host` + `instance_id` wire the cross-thread
+        /// wake path (see [`AndroidVsyncSource::new`]).
+        ///
         /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
         /// `.renderer(…)` is applied — chain
         /// [`TurAppBuilder::instance_data`] (or any other pre-build hook)
@@ -321,9 +345,9 @@ mod imp {
         /// accidentally override it. Pass `|b| b` for the no-op default.
         ///
         /// Architecture: the engine runs on a worker thread; `HostBackend`
-        /// owns the wgpu `VelloRenderer` on the caller thread (main) and
-        /// drives it directly — command batches, incremental image uploads,
-        /// and resize-on-event.
+        /// owns the wgpu `VelloRenderer` on the tur-host thread and drives
+        /// it directly — command batches, incremental image uploads, and
+        /// resize-on-event. The Android main thread never touches it.
         #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             runtime: &AndroidRuntime,
@@ -335,6 +359,8 @@ mod imp {
             logical_height: u32,
             dpr: f64,
             frame_loop: FrameLoopRef,
+            host: crate::host_thread::HostHandle,
+            instance_id: u64,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             let raw_display = window_handle
@@ -384,8 +410,21 @@ mod imp {
             // drives it directly (render batches, image uploads,
             // resize-on-event).
             // The shell carries the Choreographer-bound frame clock; the
-            // embedder keeps a clone for JNI `fire_vsync` + the wake fn.
-            let vsync = AndroidVsyncSource::new(frame_loop.clone());
+            // embedder keeps a clone for the host-thread `fire_vsync` + the
+            // wake fn. `request_pump` posts a poll-only pump op straight
+            // onto the tur-host queue — the direct, main-thread-free wake
+            // path (worker messages / host-loop tasks land on the host
+            // thread, not the Android main looper).
+            let request_pump: std::sync::Arc<dyn Fn() + Send + Sync> =
+                std::sync::Arc::new(move || {
+                    let host = host.clone();
+                    host.post(move |state| {
+                        if let Some(instance) = state.instance(instance_id) {
+                            instance.pump_loop();
+                        }
+                    });
+                });
+            let vsync = AndroidVsyncSource::new(frame_loop.clone(), request_pump);
             let (app, looper) = configure_instance(
                 runtime
                     .runtime
@@ -417,7 +456,9 @@ mod imp {
         }
 
         /// Build a headless instance (no surface, no rendering) from the
-        /// runtime. Runs JS + capabilities + events only.
+        /// runtime. Runs JS + capabilities + events only. Like
+        /// [`build_with_surface`](Self::build_with_surface), it runs on the
+        /// tur-host thread; `host` + `instance_id` wire the wake path.
         ///
         /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
         /// `.build_headless(…)` is applied — chain
@@ -428,12 +469,25 @@ mod imp {
             default_worker_pool: WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
+            host: crate::host_thread::HostHandle,
+            instance_id: u64,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             // Headless instances still need a frame clock (the loop races
             // its ticks against worker messages) — same Choreographer
-            // binding as the rendering path.
-            let vsync = AndroidVsyncSource::new(frame_loop.clone());
+            // binding + direct tur-host wake as the rendering path.
+            let request_pump: std::sync::Arc<dyn Fn() + Send + Sync> = {
+                let host = host.clone();
+                std::sync::Arc::new(move || {
+                    let host = host.clone();
+                    host.post(move |state| {
+                        if let Some(instance) = state.instance(instance_id) {
+                            instance.pump_loop();
+                        }
+                    });
+                })
+            };
+            let vsync = AndroidVsyncSource::new(frame_loop.clone(), request_pump);
             let (app, looper) = configure_instance(
                 runtime
                     .runtime
@@ -483,6 +537,7 @@ mod imp {
     impl AndroidRuntime {
         pub fn build(
             _context: GlobalRef,
+            _module_sources: crate::ModuleSourceRegistry,
             _configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
@@ -503,6 +558,8 @@ mod imp {
             _logical_height: u32,
             _dpr: f64,
             _frame_loop: FrameLoopRef,
+            _host: crate::host_thread::HostHandle,
+            _instance_id: u64,
             _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
@@ -513,6 +570,8 @@ mod imp {
             _default_worker_pool: tur_engine::WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
             _frame_loop: FrameLoopRef,
+            _host: crate::host_thread::HostHandle,
+            _instance_id: u64,
             _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)

@@ -157,7 +157,10 @@ adb -s <device> shell setprop debug.tur.crash '""'   # disable
 ```
 
 A real crash looks like `PANIC at <file>:<line>: <msg>` + `PANIC backtrace:`
-(0..N frame names) + `pump: panic caught at JNI boundary, aborting: <msg>`.
+(0..N frame names) + `tur-host: op panicked — aborting`. (Engine ops run on
+the **tur-host thread**; the panic hook fires there inside the op wrapper's
+`catch_unwind`, then the wrapper aborts — same total behavior as the old
+JNI-boundary catch, one thread further removed.)
 
 ## Rebuilding after an *engine* change
 

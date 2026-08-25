@@ -53,6 +53,12 @@ class TurRuntime(
      * Spawn an isolated rendering instance attached to [surface] and return it.
      * Shares this runtime's fonts/clock/capabilities/plugins; gets its own JS
      * realm, element tree, and renderer.
+     *
+     * Returns as soon as the native handle exists — the heavy build (wgpu
+     * adapter/device init, worker handshake, plugin registration) runs on
+     * the native tur-host thread, so the first frames appear asynchronously.
+     * A native build failure logs to logcat (no exception here) and later
+     * ops on the returned instance become no-ops.
      */
     fun createInstance(
         surface: android.view.Surface,

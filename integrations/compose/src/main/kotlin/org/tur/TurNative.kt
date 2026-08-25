@@ -13,6 +13,15 @@ import android.view.Surface
  * of instances — one per [TurView] in a multi-view app — all sharing one
  * runtime.
  *
+ * **Threading**: every op is marshalled onto the native **tur-host thread**
+ * — the single thread that owns the runtime, instances, and renderers — so
+ * these functions may be called from any thread (in practice: the main
+ * looper, where surface + input callbacks arrive) and never run engine work
+ * on the caller. Fire-and-forget ops return immediately; the op queue is
+ * FIFO, so ordering is preserved. A native build failure inside a posted op
+ * (e.g. wgpu init) surfaces as a logcat error and later ops for that handle
+ * become no-ops.
+ *
  * This object does **not** load any library and does **not** create runtimes.
  * The embedder (the app) is responsible for:
  *  1. loading its `.so` (`System.loadLibrary(…)`), and
@@ -28,7 +37,12 @@ object TurNative {
     /**
      * Spawn an isolated rendering instance attached to [surface], sharing the
      * runtime's fonts/clock/capabilities/wgpu-instance. Returns an opaque
-     * instance handle, or `0` on failure.
+     * instance handle **immediately** — the heavy build (wgpu surface +
+     * adapter/device + worker handshake) is queued onto the native tur-host
+     * thread while the caller stays free; ops for this handle are ordered
+     * behind the build. A build failure logs to logcat (no exception) and
+     * turns later ops into no-ops. Returns `0` only for an invalid runtime
+     * handle or if the host thread is gone.
      */
     external fun createInstance(
         runtimeHandle: Long,
@@ -41,8 +55,9 @@ object TurNative {
 
     /**
      * Spawn an isolated headless instance (no surface, no rendering) from the
-     * runtime. Runs JS + capabilities + events only. Returns an opaque instance
-     * handle, or `0` on failure.
+     * runtime. Runs JS + capabilities + events only. Same async-build
+     * semantics as [createInstance]. Returns an opaque instance handle, or
+     * `0` on failure.
      */
     external fun createHeadlessInstance(
         runtimeHandle: Long,
@@ -72,18 +87,24 @@ object TurNative {
      * Evaluate the registered module source ([registerModuleSource]'s return
      * value) as an ES module (`import … from "tur:*"` resolved by the engine).
      * The shared source flows to the engine by refcount — zero JNI string
-     * traffic.
+     * traffic. Posted onto the native tur-host thread (ordered behind the
+     * instance build); a failed load logs to logcat.
      */
     external fun loadModule(handle: Long, sourceHandle: Long)
 
-    /** Fire one engine wake — call each Choreographer / Handler tick. */
+    /**
+     * Fire one engine wake — call each Choreographer / Handler tick. Posts
+     * the vsync pump onto the native tur-host thread (which fires the vsync
+     * event, polls the loop, and applies the frame's render batch to the
+     * GPU); the calling thread returns immediately.
+     */
     external fun pump(handle: Long): Int
 
     /**
-     * Poll the engine's main loop WITHOUT firing a vsync — the coalesced
-     * message-pump path (worker→main messages / main-loop tasks while the
-     * engine is idle). Keeps an idle instance from ping-ponging at display
-     * refresh rate.
+     * Poll the engine's loop WITHOUT firing a vsync — posted onto the
+     * native tur-host thread (the coalesced message-pump path for
+     * worker→host messages / host-loop tasks while the engine is idle).
+     * Keeps an idle instance from ping-ponging at display refresh rate.
      */
     external fun pumpMessages(handle: Long): Int
 

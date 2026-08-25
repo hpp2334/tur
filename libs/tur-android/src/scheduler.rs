@@ -2,14 +2,16 @@
 //!
 //! - [`AndroidVsyncSource`] — per-instance frame cadence: `request_frame`
 //!   calls into Kotlin's `FrameLoop.scheduleVsync()` via JNI
-//!   (Choreographer-backed). When the Choreographer fires, Kotlin calls
-//!   `nativePump` which invokes [`AndroidVsyncSource::fire_vsync`],
-//!   pushing an event into every subscribed channel.
-//! - [`AndroidHostLoop`] — main-thread task spawner: tasks are held in a
-//!   list polled from `AndroidInstance::pump_loop` (each wake-up), with
-//!   wakers that request a prompt pump so pending tasks get their next
-//!   poll. Roots the engine's main-thread drain (the
-//!   `HostExecutor` hop) + any embedder main-thread tasks.
+//!   (Choreographer-backed, still the Android main thread — the
+//!   Choreographer is thread-local to a Looper thread). When it fires,
+//!   Kotlin calls `nativePump`, which posts the vsync pump onto the
+//!   **tur-host thread** (the main-thread callback is a trivial post).
+//! - [`AndroidHostLoop`] — the host-thread task spawner: tasks are held in
+//!   a list polled from `AndroidInstance::pump_loop` (each wake-up) on the
+//!   tur-host thread, with wakers that post a poll-only pump op directly
+//!   onto the tur-host queue (no main-thread Handler hop). Roots the
+//!   engine's host-thread drain (the `HostExecutor` hop) + any embedder
+//!   host-thread tasks.
 //! - Worker hosting comes from
 //!   [`tur_native::worker_pool::NativeWorkerPools`] (the shared native
 //!   lane executor) with [`TokioLaneTimer`] as the lane timer — pools
@@ -23,8 +25,8 @@
 //! callback), so the vsync source is **per-instance**: `AndroidShell`
 //! carries an [`AndroidVsyncSource`] bound to the instance's `FrameLoop`
 //! and hands it to the engine at construction (`Shell::take_vsync`); the
-//! embedder keeps a clone for JNI `fire_vsync` + the pump wake fn.
-//! Multiple subscribers per source are supported (broadcast).
+//! embedder keeps a clone for the host-thread `fire_vsync` + the pump wake
+//! fn. Multiple subscribers per source are supported (broadcast).
 //!
 //! ## Timers
 //!
@@ -111,27 +113,34 @@ struct AndroidVsyncInner {
 
 /// Per-instance vsync source bound to the instance's Kotlin `FrameLoop`.
 /// Carried by `AndroidShell` and handed to the engine at construction
-/// (the embedder keeps a clone for JNI `fire_vsync` + the pump wake fn).
+/// (the embedder keeps a clone for the host-thread `fire_vsync` + the pump
+/// wake fn). `request_pump` is the direct tur-host wake (see
+/// [`AndroidVsyncSource::make_vsync_wake_fn`]).
 pub struct AndroidVsyncSource {
     inner: Arc<AndroidVsyncInner>,
     /// JNI `FrameLoop` global ref. The source's `request_frame` calls
     /// `scheduleVsync()` on this object.
     frame_loop: FrameLoopRef,
+    /// `Send + Sync` closure posting a poll-only pump op for this instance
+    /// straight onto the tur-host thread's queue — the wake path that does
+    /// NOT touch the Android main thread.
+    request_pump: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl AndroidVsyncSource {
-    pub fn new(frame_loop: FrameLoopRef) -> Rc<Self> {
+    pub fn new(frame_loop: FrameLoopRef, request_pump: Arc<dyn Fn() + Send + Sync>) -> Rc<Self> {
         Rc::new(Self {
             inner: Arc::new(AndroidVsyncInner {
                 vsync_txs: Mutex::new(Vec::new()),
                 vsync_armed: std::sync::atomic::AtomicBool::new(false),
             }),
             frame_loop,
+            request_pump,
         })
     }
 
-    /// Called from JNI (`nativePump`) when Kotlin's Choreographer fires.
-    /// Pushes a vsync event into the subscribed channel + clears the
+    /// Called from the tur-host thread's pump op when Kotlin's Choreographer
+    /// fires. Pushes a vsync event into the subscribed channel + clears the
     /// `vsync_armed` flag so the next `request_frame` re-arms.
     pub fn fire_vsync(&self) {
         self.inner
@@ -142,29 +151,22 @@ impl AndroidVsyncSource {
         }
     }
 
-    /// Returns a `Send + Sync` closure that requests a **message pump** —
-    /// a coalesced main-Handler post that polls the loop WITHOUT firing a
-    /// vsync. Used as the waker for `pump_loop` so that when the worker
-    /// sends to `main_rx` (from its own thread), the channel waker fires
-    /// this closure → the main thread polls the loop promptly.
+    /// Returns a `Send + Sync` closure that requests a **loop poll without
+    /// a vsync** — a poll-only pump op posted directly onto the tur-host
+    /// thread's queue. Used as the waker for `pump_loop` so that when the
+    /// worker sends to `main_rx` (from its own thread), the channel waker
+    /// fires this closure → the tur-host thread wakes and polls the loop
+    /// promptly. The Android main thread is not involved at all.
     ///
     /// Deliberately does NOT arm the Choreographer: arming a vsync here
-    /// would make every worker→main message (each pump ships a
+    /// would make every worker→host message (each pump ships a
     /// `FrameOutcome`) re-arm the next display frame, ping-ponging the
     /// whole engine (flush per pump) at display refresh rate forever —
     /// even fully idle. The Choreographer is armed ONLY by
     /// [`VsyncSource::request_frame`](Self::request_frame), i.e. by the
     /// engine's `FrameOutcome.schedule == Vsync` decision.
     pub fn make_vsync_wake_fn(&self) -> Arc<dyn Fn() + Send + Sync> {
-        let kotlin_loop = self.frame_loop.kotlin_loop.clone();
-        Arc::new(move || {
-            let Some(vm) = crate::java_vm() else { return };
-            let Ok(mut env) = vm.attach_current_thread() else {
-                return;
-            };
-            let loop_obj = unsafe { JObject::from_raw(kotlin_loop.as_raw()) };
-            let _ = env.call_method(&loop_obj, "requestPump", "()V", &[]);
-        })
+        self.request_pump.clone()
     }
 }
 
@@ -200,9 +202,9 @@ impl VsyncSource for AndroidVsyncSource {
 /// A wake closure: arms a Choreographer vsync on a live instance.
 pub type WakeFn = Arc<dyn Fn() + Send + Sync>;
 
-/// Waker that fires the main loop's registered wake closures (requesting a
-/// prompt pump on every live instance) so pending main-loop tasks get
-/// polled on the next `pump_loop`.
+/// Waker that fires the host loop's registered wake closures (requesting a
+/// poll-only pump on every live instance directly on the tur-host thread)
+/// so pending host-loop tasks get polled on the next `pump_loop`.
 struct MainLoopWaker(Arc<Mutex<Vec<WakeFn>>>);
 
 impl std::task::Wake for MainLoopWaker {
@@ -217,12 +219,15 @@ impl std::task::Wake for MainLoopWaker {
     }
 }
 
-/// Main-thread task spawner for Android: tasks are held in a list and
-/// polled cooperatively from `AndroidInstance::pump_loop`. Task wakers
-/// request a pump (via the wake closures registered by live instances) so
-/// a task that becomes ready between pumps gets polled promptly.
+/// Host-thread task spawner for Android: tasks are held in a list and
+/// polled cooperatively from `AndroidInstance::pump_loop` on the **tur-host
+/// thread** (the thread that built the runtime — the scheduler contract's
+/// single-consistent-host-thread requirement; not necessarily Android's
+/// main looper). Task wakers post a pump directly onto the tur-host queue
+/// (via the wake closures registered by live instances) so a task that
+/// becomes ready between pumps gets polled promptly.
 ///
-/// This roots the engine's main-thread drain (the `HostExecutor`
+/// This roots the engine's host-thread drain (the `HostExecutor`
 /// hop — clipboard `run_on_host` etc.), which historically sat on an
 /// unpumped `LocalPool` and could never advance.
 pub struct AndroidHostLoop {
@@ -238,9 +243,9 @@ impl AndroidHostLoop {
         })
     }
 
-    /// Register a wake closure — typically each instance's message-pump
+    /// Register a wake closure — typically each instance's poll-pump
     /// request fn (`AndroidVsyncSource::make_vsync_wake_fn`), so any
-    /// pending main-loop task schedules a pump on a live instance and
+    /// pending host-loop task schedules a pump on a live instance and
     /// thereby gets polled.
     pub fn add_wake_fn(&self, f: WakeFn) {
         self.wake_fns.lock().unwrap().push(f);
