@@ -121,8 +121,11 @@ fun rememberTurModuleSource(
  * `SurfaceView` subclass that owns the [TurInstance] lifecycle + input dispatch.
  *
  * The instance is created lazily via [bind] (called once the surface is ready —
- * see [TurView]'s `DisposableEffect`). All methods must be called on the main
- * looper (where `SurfaceHolder.Callback` and input dispatch arrive).
+ * see [TurView]'s `DisposableEffect`). All methods run on the main looper
+ * (where `SurfaceHolder.Callback` and input dispatch arrive) — they only
+ * marshal work onto the native tur-host thread, which runs the engine + GPU
+ * work off the main thread; [createInstance][TurRuntime.createInstance]
+ * returns before the native build finishes (failures log to logcat).
  */
 private class TurSurfaceView(context: android.content.Context) : SurfaceView(context) {
     private var instance: TurInstance? = null
@@ -160,6 +163,12 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.addCallback(surfaceCallback)
         setOnTouchListener { _, event ->
             userInteracted = true
+            // Reconcile the IME on the user-interaction transition itself:
+            // a tap on an already-focused editable may change no focus and
+            // request no new frame, so nothing else would run the sync —
+            // but the keyboard should appear now that the user has
+            // interacted.
+            syncIme()
             val inst = instance ?: run {
                 return@setOnTouchListener false
             }
@@ -206,9 +215,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
             val w = (holder.surfaceFrame.width() / dpr).toInt().coerceAtLeast(1)
             val h = (holder.surfaceFrame.height() / dpr).toInt().coerceAtLeast(1)
             instance = try {
-                // Spawn an isolated instance from the runtime (which calls
-                // TurNative.createInstance under the hood — the runtime's loop
-                // driver arms wake-ups against the instance's FrameLoop).
+                // Spawn an isolated instance from the runtime — returns
+                // immediately; the native build (wgpu init + worker
+                // handshake) runs on the tur-host thread, and the
+                // loadModule below is queued behind it (FIFO).
                 rt.createInstance(holder.surface, w, h, dprValue).also {
                     it.loadModule(sourceHandle)
                     // After each frame, sync the soft keyboard with the

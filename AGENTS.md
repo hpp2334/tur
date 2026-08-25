@@ -545,15 +545,20 @@ data; the engine only validates registration + assignment:
   `WasmVsyncSource` (rAF, carried by `WasmShell`) / `WasmMainLoop`
   (`wasm_bindgen_futures`) / `WasmWorkerExecutor` (setTimeout sleep;
   default spawn_blocking) fill the other roles.
-- Android main-thread tasks: `AndroidHostLoop` holds a task list polled
-  from each instance's `pump_loop`; task wakers request a **message pump**
-  (coalesced main-Handler post via Kotlin `FrameLoop.requestPump()` → JNI
-  `pumpMessages`, which polls the loop WITHOUT firing a vsync) so pending
-  tasks get their next poll. This roots the engine's main-thread drain,
+- Android runs the host side on a dedicated **tur-host thread**
+  (`tur-android`'s `host_thread`): every JNI op is marshalled onto its FIFO
+  op queue, so the Android main thread only posts work (the Choreographer
+  callback is a trivial post; per-frame GPU encode/present, instance builds
+  — wgpu adapter/device + the lane handshake — module loads, and teardown
+  all run off-main). `AndroidHostLoop` holds a task list polled from each
+  instance's `pump_loop` on that thread; task wakers + the loop waker post a
+  poll-only pump op **directly onto the tur-host queue** (no
+  main-Handler/Kotlin hop; `FrameLoop.requestPump()` → JNI `pumpMessages`
+  remains as the fallback). This roots the engine's host-thread drain,
   which previously sat on an unpumped `LocalPool` and could never advance.
   The Choreographer is armed ONLY by `AndroidVsyncSource::request_frame`
   (the engine's `FrameOutcome.schedule == Vsync` decision) — never by
-  message wakes. Arming on messages would ping-pong worker↔main at display
+  message wakes. Arming on messages would ping-pong worker↔host at display
   refresh rate forever (each pump ships a `FrameOutcome`, whose channel
   wake would re-arm the next frame), burning a full engine flush per
   display frame even fully idle.

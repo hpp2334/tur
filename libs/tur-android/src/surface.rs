@@ -23,6 +23,14 @@ pub struct AndroidWindowHandle {
     a_native_window: NonNull<c_void>,
 }
 
+// SAFETY: the wrapped `ANativeWindow*` comes from `ANativeWindow_fromSurface`,
+// which ACQUIRES a reference — the window object is process-global and stays
+// alive while that ref is held, so moving the handle to another thread (the
+// tur-host thread creates the wgpu surface from it) is sound. Deliberately
+// NOT `Sync`: the handle models a single-owner borrow of the window, and
+// concurrent use from multiple threads is not expressible here.
+unsafe impl Send for AndroidWindowHandle {}
+
 impl AndroidWindowHandle {
     /// Wrap a raw `ANativeWindow*` (non-null) obtained via
     /// `ANativeWindow_fromSurface`. The handle is borrowed for the duration of
