@@ -1,7 +1,7 @@
 ---
 description: Operates a live browser via Playwright MCP. Use when you need to navigate pages, take and read a snapshot (accessibility tree), click elements, type text, fill forms, take screenshots, inspect network requests, or run JavaScript in a real browser session.
 mode: subagent
-model: xiaomi-token-plan-sgp/mimo-v2.5
+model: zai-coding-plan/glm-5.3-flash
 permission:
   edit: deny
   bash: deny
