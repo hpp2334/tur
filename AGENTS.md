@@ -145,11 +145,18 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │    subsystems + event payloads)                     │
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
-│     │   tur:net)                               │
+│     │   tur:net — hidden tur:net/native bridge fns + a │
+│     │   JS module defining requestStream as a generator │
+│     │   coroutine (yield* from launch) with per-request │
+│     │   bufferBytes backpressure + body.cancel() abort) │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
 │     ├── tur-net-native         (NativeHttp via reqwest on a│
 │     │   user-provided tokio runtime — the only crate that │
-│     │   touches tokio; engine core is tokio-free)        │
+│     │   touches tokio; engine core is tokio-free.       │
+│     │   request_stream is byte-budgeted: a Semaphore    │
+│     │   caps in-flight bytes (bufferBytes, default      │
+│     │   512 KiB) between socket and JS — the producer   │
+│     │   parks on acquire_many → real TCP backpressure)  │
 │     ├── tur-filepicker-capability (FilePicker +         │
 │     │   FilePickerBackend trait + tur:filepicker bridge │
 │     │   — opt-in, requires a backend)                    │
@@ -820,12 +827,20 @@ libs/
                              #   NativeClipboard::new(&HostExecutor)
                              #   stores it and self-hops each read/write to
                              #   main (macOS NSPasteboard needs main-thread)
-  tur-net-capability/        # HttpBackend trait + Http cap + tur:net
+  tur-net-capability/        # HttpBackend trait + Http cap + tur:net (hidden
+                              #   tur:net/native bridge fns + a JS module
+                              #   defining requestStream as a generator
+                              #   coroutine — yield* from launch, per-request
+                              #   bufferBytes backpressure, body.cancel())
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
    tur-net-native/            # NativeHttp (reqwest) backend — runs each request
                               #   on a user-provided tokio runtime (Handle) and
                               #   bridges results back via oneshot/mpsc; the only
-                              #   crate in the workspace that touches tokio
+                              #   crate in the workspace that touches tokio.
+                              #   request_stream is byte-budgeted: a Semaphore
+                              #   caps in-flight bytes between socket + JS
+                              #   (bufferBytes, default 512 KiB) — the producer
+                              #   parks on acquire_many → TCP backpressure
    tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
                              #   registers the process JavaVM for per-call attach
    tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan
