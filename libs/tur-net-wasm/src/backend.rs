@@ -25,6 +25,10 @@ impl HttpBackend for WasmHttp {
     }
 
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
+        // `bufferBytes` is intentionally ignored here: the body is pulled
+        // straight from the browser's ReadableStream on each poll (the
+        // pull-driven contract), and the browser owns network-level flow
+        // control — there is no internal buffering window to size from wasm.
         Box::pin(perform_request_stream(
             opts.url,
             opts.method,

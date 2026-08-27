@@ -1,4 +1,10 @@
-//! `tur:net` HTTP bridge: `request(opts) -> Promise<ResponseResult>`.
+//! `tur:net/native` HTTP bridge: `request(opts)` + the promise-based
+//! `requestStream(opts)` (both returning `JsPromise`s).
+//!
+//! The consumer-facing `tur:net` module (registered by
+//! [`crate::TurNetPlugin`] from `js/index.js`) re-exports `request` and wraps
+//! `requestStream` as a generator coroutine — `yield*` it from a `launch`
+//! generator. This file contains only the native layer.
 //!
 //! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
 //! pointer** (no captures) that reads its `Rc<dyn Http>` + scheduler
@@ -14,7 +20,7 @@
 //! the needed state lives in the capability registry (populated by
 //! [`crate::TurNetPlugin`] during `register`).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use boa_engine::object::FunctionObjectBuilder;
@@ -40,11 +46,25 @@ type ByteChunkStream = LocalBoxStream<'static, Result<Vec<u8>, String>>;
 /// out, poll one chunk, and put it back.
 type SharedStream = Rc<RefCell<Option<ByteChunkStream>>>;
 
+/// Shared boolean flag consulted from completion closures that run after the
+/// native call returns (`Rc<Cell<bool>>` — cheap, JS-side only).
+type SharedFlag = Rc<Cell<bool>>;
+
+/// Valid range (bytes) for the JS `bufferBytes` option, enforced at parse
+/// time so every backend sees uniform validation errors. The lower bound
+/// keeps the pipe progressing (one byte at a time is legal, just slow); the
+/// upper bound is a typo guard, not a hard limit on in-flight data by
+/// intent — callers genuinely wanting looser backpressure can raise it.
+const MIN_STREAM_BUFFER_BYTES: f64 = 1.0;
+/// 64 MiB typo guard for `bufferBytes`.
+const MAX_STREAM_BUFFER_BYTES: f64 = 64.0 * 1024.0 * 1024.0;
+
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
-/// Bridge function tables entries for `tur:net`.
+/// Bridge function tables entries for `tur:net/native`.
 ///
-/// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
-/// that reads its `Http` + scheduler from `TurInstanceContext`.
+/// Returns `("request", …)` + `("requestStream", …)` — ctx-bound fn pointers
+/// that read their `Http` + scheduler from `TurInstanceContext`. The
+/// consumer-facing `tur:net` JS module wraps `requestStream` in a generator.
 pub fn fns() -> Vec<FnEntry> {
     vec![
         ("request", 1, tur_net_request as Ptr),
@@ -119,6 +139,7 @@ fn parse_request_opts(
     };
     let username = js_opt_str(&obj, "username", ctx);
     let password = js_opt_str(&obj, "password", ctx);
+    let stream_buffer_bytes = parse_buffer_bytes(&obj, ctx)?;
 
     let mut headers: Vec<(String, String)> = Vec::new();
     if let Some(hobj) = obj
@@ -167,7 +188,38 @@ fn parse_request_opts(
         response_type,
         username,
         password,
+        stream_buffer_bytes,
     })
+}
+
+/// Parse + validate the optional `bufferBytes` option (streaming only).
+/// `undefined`/`null`/absent → `None` (backend default); anything else must
+/// be a finite integer in `1..=64 MiB`.
+fn parse_buffer_bytes(obj: &JsObject, ctx: &mut boa_engine::Context) -> Result<Option<u32>, String> {
+    let v = obj
+        .get(js_string!("bufferBytes"), ctx)
+        .map_err(|e| e.to_string())?;
+    if v.is_undefined() || v.is_null() {
+        return Ok(None);
+    }
+    let n = v
+        .as_number()
+        .ok_or_else(|| "bufferBytes must be a number".to_string())?;
+    if !n.is_finite() {
+        return Err("bufferBytes must be a finite number".to_string());
+    }
+    if n.fract() != 0.0 {
+        return Err("bufferBytes must be an integer".to_string());
+    }
+    if n < MIN_STREAM_BUFFER_BYTES {
+        return Err("bufferBytes must be >= 1".to_string());
+    }
+    if n > MAX_STREAM_BUFFER_BYTES {
+        return Err(format!(
+            "bufferBytes must be <= {MAX_STREAM_BUFFER_BYTES} (64 MiB)"
+        ));
+    }
+    Ok(Some(n as u32))
 }
 
 fn js_opt_str(obj: &JsObject, key: &str, ctx: &mut boa_engine::Context) -> Option<String> {
@@ -257,6 +309,44 @@ struct StreamHandle {
     stream: SharedStream,
     js_ctx: TurInstanceContext,
     completion_handle: CompletionHandle,
+    /// Set by `cancel()` — the pipe was dropped; every `next()` resolves
+    /// `{ done: true }` (ReadableStream cancel semantics).
+    cancelled: SharedFlag,
+    /// The pull protocol is serial: at most one `next()` in flight. A
+    /// concurrent call rejects instead of queueing (queueing would silently
+    /// build an unbounded promise chain — anti-backpressure).
+    next_in_flight: SharedFlag,
+}
+
+/// Resolve a stream promise with `{ done: true }`.
+fn resolve_stream_done(
+    resolvers: &boa_engine::builtins::promise::ResolvingFunctions,
+    ctx: &mut Context,
+) -> JsResult<()> {
+    let result = JsObject::with_object_proto(ctx.intrinsics());
+    let _ = result.create_data_property(js_string!("done"), JsValue::from(true), ctx);
+    resolvers
+        .resolve
+        .call(&JsValue::undefined(), &[result.into()], ctx)?;
+    Ok(())
+}
+
+/// Reject a stream promise with `{ message }`.
+fn reject_stream_error(
+    resolvers: &boa_engine::builtins::promise::ResolvingFunctions,
+    message: &str,
+    ctx: &mut Context,
+) -> JsResult<()> {
+    let err_obj = JsObject::with_object_proto(ctx.intrinsics());
+    let _ = err_obj.create_data_property(
+        js_string!("message"),
+        JsValue::from(js_string!(message)),
+        ctx,
+    );
+    resolvers
+        .reject
+        .call(&JsValue::undefined(), &[err_obj.into()], ctx)?;
+    Ok(())
 }
 
 /// `requestStream(opts): Promise<StreamResponse>` — performs a streaming HTTP
@@ -374,11 +464,14 @@ fn build_stream_response(
     }
     let _ = o.create_data_property(js_string!("headers"), JsValue::from(hmap), ctx);
 
-    // Body object: JsData = StreamHandle, with next() + [Symbol.asyncIterator]
+    // Body object: JsData = StreamHandle, with next() + cancel() +
+    // [Symbol.asyncIterator]
     let handle = StreamHandle {
         stream,
         js_ctx,
         completion_handle,
+        cancelled: Rc::new(Cell::new(false)),
+        next_in_flight: Rc::new(Cell::new(false)),
     };
     let proto = ctx.intrinsics().constructors().object().prototype();
     let body = JsObject::from_proto_and_data(proto, handle);
@@ -389,6 +482,14 @@ fn build_stream_response(
         .name(js_string!("next"))
         .build();
     let _ = body.create_data_property(js_string!("next"), JsValue::from(next_obj), ctx);
+
+    let cancel_fn = NativeFunction::from_fn_ptr(tur_stream_cancel);
+    let cancel_obj = FunctionObjectBuilder::new(ctx.realm(), cancel_fn)
+        .length(0)
+        .name(js_string!("cancel"))
+        .build();
+    let _ = body
+        .create_data_property(js_string!("cancel"), JsValue::from(cancel_obj), ctx);
 
     let iter_fn = NativeFunction::from_fn_ptr(tur_stream_async_iterator);
     let iter_obj = FunctionObjectBuilder::new(ctx.realm(), iter_fn)
@@ -421,7 +522,9 @@ fn tur_stream_async_iterator(
 
 /// `next(): Promise<{done, value}>` — reads one chunk from the stream. Resolves
 /// with `{done:false, value:Uint8Array}` for each chunk, or `{done:true}` when
-/// the stream ends. Rejects on I/O error.
+/// the stream ends or was cancelled. Rejects on I/O error, and on a call made
+/// while a previous one is still pending (the pull protocol is serial — that's
+/// what carries backpressure).
 fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let obj = this.as_object().ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message("stream.next called on non-object"))
@@ -432,13 +535,24 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
 
-    // If the stream is already exhausted, resolve immediately with {done:true}.
-    if handle.stream.borrow().is_none() {
-        let result = JsObject::with_object_proto(ctx.intrinsics());
-        let _ = result.create_data_property(js_string!("done"), JsValue::from(true), ctx);
-        let _ = resolvers
-            .resolve
-            .call(&JsValue::undefined(), &[result.into()], ctx);
+    // One outstanding pull at a time — checked BEFORE the exhausted check,
+    // because an in-flight poll also leaves the slot temporarily empty (the
+    // stream is taken out while being polled). A second concurrent call used
+    // to resolve `{done: true}` spuriously — misreporting a stall as
+    // end-of-stream.
+    if handle.next_in_flight.replace(true) {
+        reject_stream_error(
+            &resolvers,
+            "stream.next() called while a previous call is still pending",
+            ctx,
+        )?;
+        return Ok(promise.into());
+    }
+
+    // Cancelled or already exhausted — done immediately.
+    if handle.cancelled.get() || handle.stream.borrow().is_none() {
+        handle.next_in_flight.set(false);
+        resolve_stream_done(&resolvers, ctx)?;
         return Ok(promise.into());
     }
 
@@ -447,6 +561,8 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
     let stream_rc = handle.stream.clone();
     let js_ctx = handle.js_ctx.clone();
     let completion_handle = handle.completion_handle.clone();
+    let cancelled = handle.cancelled.clone();
+    let next_in_flight = handle.next_in_flight.clone();
 
     let _ = js_ctx.spawn_local(|_aw| async move {
         let mut s = stream_opt;
@@ -455,51 +571,64 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
             None => None,
         };
 
+        // The stream slot is restored inside the completion (not here) so a
+        // `cancel()` landing while this poll is in flight wins: the pipe is
+        // dropped, never revived.
         match polled {
             Some(Ok(chunk)) => {
-                *stream_rc.borrow_mut() = s;
                 completion_handle.push(Box::new(move |ctx| {
+                    next_in_flight.set(false);
+                    if cancelled.get() {
+                        return resolve_stream_done(&resolvers, ctx);
+                    }
+                    *stream_rc.borrow_mut() = s;
                     let result = JsObject::with_object_proto(ctx.intrinsics());
                     let _ =
                         result.create_data_property(js_string!("done"), JsValue::from(false), ctx);
                     let u8a = JsUint8Array::from_iter(chunk, ctx)?;
                     let _ =
                         result.create_data_property(js_string!("value"), JsValue::from(u8a), ctx);
-                    let _ = resolvers
+                    resolvers
                         .resolve
                         .call(&JsValue::undefined(), &[result.into()], ctx)?;
                     Ok(())
                 }));
             }
             Some(Err(e)) => {
-                *stream_rc.borrow_mut() = s;
                 completion_handle.push(Box::new(move |ctx| {
-                    let err_obj = JsObject::with_object_proto(ctx.intrinsics());
-                    let _ = err_obj.create_data_property(
-                        js_string!("message"),
-                        JsValue::from(js_string!(e.as_str())),
-                        ctx,
-                    );
-                    let _ = resolvers
-                        .reject
-                        .call(&JsValue::undefined(), &[err_obj.into()], ctx)?;
-                    Ok(())
+                    next_in_flight.set(false);
+                    if cancelled.get() {
+                        return resolve_stream_done(&resolvers, ctx);
+                    }
+                    *stream_rc.borrow_mut() = s;
+                    reject_stream_error(&resolvers, e.as_str(), ctx)
                 }));
             }
             None => {
-                // Stream ended — leave stream as None
+                // Stream ended — leave the slot empty (the stream is dropped).
                 completion_handle.push(Box::new(move |ctx| {
-                    let result = JsObject::with_object_proto(ctx.intrinsics());
-                    let _ =
-                        result.create_data_property(js_string!("done"), JsValue::from(true), ctx);
-                    let _ = resolvers
-                        .resolve
-                        .call(&JsValue::undefined(), &[result.into()], ctx)?;
-                    Ok(())
+                    next_in_flight.set(false);
+                    resolve_stream_done(&resolvers, ctx)
                 }));
             }
         }
     });
 
     Ok(promise.into())
+}
+
+/// `cancel(): void` — abort the stream now. Drops the pipe synchronously
+/// (native: the tokio receiver is dropped → the producer aborts → the
+/// connection closes; deterministic, no GC involved). Pending and subsequent
+/// `next()` calls resolve `{ done: true }`. Idempotent.
+fn tur_stream_cancel(this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let obj = this.as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("stream.cancel called on non-object"))
+    })?;
+    let handle = obj.downcast_ref::<StreamHandle>().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("stream.cancel called on non-stream object"))
+    })?;
+    handle.cancelled.set(true);
+    *handle.stream.borrow_mut() = None;
+    Ok(JsValue::undefined())
 }

@@ -198,6 +198,9 @@ struct RecordingHttpInner {
     next_response: std::sync::Mutex<Option<HttpOutcome>>,
     next_stream_chunks: std::sync::Mutex<Option<(u16, Vec<Vec<u8>>)>>,
     last_request: std::sync::Mutex<Option<RecordedRequest>>,
+    /// Chunks produced so far by the canned stream body — bumped exactly when
+    /// the engine polls a chunk out (pull counter for backpressure pins).
+    stream_pulls: std::sync::atomic::AtomicUsize,
 }
 
 /// Simplified view of an HTTP request captured by [`RecordingHttp`].
@@ -220,8 +223,19 @@ impl RecordingHttp {
 
     /// Pre-canned streaming response: returns the given status + chunks via
     /// `request_stream`. The next `request_stream` call drains these.
+    /// Resets the [`Self::stream_pulls`] counter.
     pub fn set_next_stream(&self, status: u16, chunks: Vec<Vec<u8>>) {
         *self.inner.next_stream_chunks.lock().unwrap() = Some((status, chunks));
+        self.inner
+            .stream_pulls
+            .store(0, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Chunks produced so far by the canned stream body — i.e. how many
+    /// times the engine polled the body stream (each JS `body.next()` call
+    /// polls exactly once). For backpressure assertions.
+    pub fn stream_pulls(&self) -> usize {
+        self.inner.stream_pulls.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// The most recent request seen by the recording (or `None` if no
@@ -256,7 +270,21 @@ impl HttpBackend for RecordingHttp {
         let canned = self.inner.next_stream_chunks.lock().unwrap().clone();
         match canned {
             Some((status, chunks)) => {
-                let body_stream = stream::iter(chunks.into_iter().map(Ok)).boxed_local();
+                // Pull-counting body: the counter bumps exactly when the
+                // engine polls a chunk out — a lazy `stream::iter` wrapped in
+                // `unfold`, so production happens on demand only.
+                let pulls = self.inner.clone();
+                let body_stream = stream::unfold(chunks.into_iter(), move |mut iter| {
+                    let pulls = pulls.clone();
+                    async move {
+                        let chunk = iter.next()?;
+                        pulls
+                            .stream_pulls
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        Some((Ok(chunk), iter))
+                    }
+                })
+                .boxed_local();
                 Box::pin(std::future::ready(Ok(HttpStreamResponse {
                     status,
                     status_text: "OK".to_string(),
@@ -1225,6 +1253,16 @@ impl TurTestApp {
             .as_ref()
             .expect("TurTestApp::set_http_stream requires new_with_http")
             .set_next_stream(status, chunks);
+    }
+
+    /// Chunks produced so far by the canned stream body (pulled by JS
+    /// `body.next()` calls — one poll each). For backpressure pins.
+    /// Panics if this app wasn't constructed via [`Self::new_with_http`].
+    pub fn http_stream_pulls(&self) -> usize {
+        self.http
+            .as_ref()
+            .expect("TurTestApp::http_stream_pulls requires new_with_http")
+            .stream_pulls()
     }
 
     /// The most recent request seen by the recording, or `None` if no

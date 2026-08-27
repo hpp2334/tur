@@ -9,8 +9,9 @@
 //!   [`tur_engine::TurRuntimeBuilder::capability`](`Http::new(backend)`).
 //! - The [`NoopHttp`] default.
 //! - The [`TurNetPlugin`] (unit struct) that conditionally registers the
-//!   `tur:net` module (with the `request` bridge fn) when an [`Http`]
-//!   capability is present.
+//!   `tur:net` module when an [`Http`] capability is present (a hidden
+//!   `tur:net/native` module with the bridge fns + a consumer-facing JS
+//!   module defining `requestStream` as a generator coroutine).
 //!
 //! ## Architecture
 //!
@@ -63,7 +64,7 @@ pub enum ResponseType {
 }
 
 /// Request options, parsed from the JS `{ url, method?, headers?, body?,
-/// responseType?, username?, password? }` object.
+/// responseType?, username?, password?, bufferBytes? }` object.
 #[derive(Debug, Clone)]
 pub struct RequestOpts {
     pub url: String,
@@ -73,6 +74,12 @@ pub struct RequestOpts {
     pub response_type: ResponseType,
     pub username: Option<String>,
     pub password: Option<String>,
+    /// Streaming only (`requestStream({ bufferBytes })`): the max bytes
+    /// buffered in flight between the network and the consumer, already
+    /// validated by the bridge to `1..=64 MiB`. `None` = backend default.
+    /// Honored best-effort — see [`HttpBackend::request_stream`]. Ignored by
+    /// [`HttpBackend::request`].
+    pub stream_buffer_bytes: Option<u32>,
 }
 
 /// Outcome of an HTTP request — the success body or the error message.
@@ -94,6 +101,8 @@ pub struct HttpStreamResponse {
     pub status: u16,
     pub status_text: String,
     pub headers: Vec<(String, String)>,
+    /// The response body. **Must be pull-driven** (see the contract on
+    /// [`HttpBackend::request_stream`]) — backpressure rides on `poll_next`.
     pub body: LocalBoxStream<'static, Result<Vec<u8>, String>>,
 }
 
@@ -106,8 +115,23 @@ pub trait HttpBackend: Send + Sync + 'static {
     fn request(&self, opts: RequestOpts) -> HttpFuture;
 
     /// Streaming variant: returns the response headers immediately, then the
-    /// body as a stream of byte chunks. Default impl delegates to `request()`
-    /// and wraps the body as a single-chunk stream.
+    /// body as a stream of byte chunks.
+    ///
+    /// **Backpressure contract**: the body stream MUST be pull-driven — each
+    /// `poll_next` drives at most one chunk of network I/O, and
+    /// implementations MUST NOT eagerly buffer the body beyond a small
+    /// bounded window. The `tur:net` bridge polls exactly one chunk per JS
+    /// `body.next()` call; consumer pacing propagates all the way down to
+    /// TCP flow control only if backends honor this (an eager producer plus
+    /// an unbounded queue turns any slow consumer into unbounded memory).
+    ///
+    /// `opts.stream_buffer_bytes` (from `requestStream({ bufferBytes })`)
+    /// requests the max bytes buffered in flight between the network and the
+    /// consumer; `None` = backend default. Implementations that own their
+    /// buffering SHOULD honor it; browser-managed backends (wasm) may ignore
+    /// it.
+    ///
+    /// Default impl delegates to `request()` and wraps the body as a single-chunk stream.
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
         let fut = self.request(opts);
         Box::pin(async move {
@@ -175,17 +199,26 @@ impl tur_engine::core::capability::Capability for Http {}
 // Plugin
 // ---------------------------------------------------------------------------
 
-/// tur-net plugin: registers `tur:net` (with the `request` bridge
-/// fn) when an [`Http`] capability is registered.
+/// tur-net plugin: registers `tur:net` when an [`Http`] capability is
+/// registered.
 ///
-/// If no backend is injected, the plugin is a no-op — `tur:net`
-/// remains unregistered, and JS code that imports from it fails at module
-/// load. Cases that may run in HTTP-less environments must guard accordingly
-/// (or be marked playground-only, like github-viewer).
+/// Two modules, the `tur:animation` pattern:
 ///
-/// The bridge fn (`request`) is a ctx-bound `Ptr` that reads its [`Http`]
-/// capability from `TurInstanceContext`'s capability registry at call time. This
-/// avoids `unsafe NativeFunction::from_closure` — see [`bridge`].
+/// - `tur:net/native` (hidden) — the ctx-bound native bridge fns
+///   ([`bridge::fns`]): `request` + the promise-based streaming request.
+/// - `tur:net` (consumer-facing JS source, `js/index.js`) — re-exports
+///   `request` unchanged and defines `requestStream` as a **generator
+///   coroutine** (`yield*` it from a `launch` generator) instead of a
+///   promise-returning async fn.
+///
+/// If no backend is injected, the plugin is a no-op — both modules stay
+/// unregistered, and JS code that imports from them fails at module load.
+/// Cases that may run in HTTP-less environments must guard accordingly (or
+/// be marked playground-only, like github-viewer).
+///
+/// The bridge fns are ctx-bound `Ptr`s that read their [`Http`] capability
+/// from `TurInstanceContext`'s capability registry at call time. This avoids
+/// `unsafe NativeFunction::from_closure` — see [`bridge`].
 pub struct TurNetPlugin;
 
 impl Default for TurNetPlugin {
@@ -202,7 +235,12 @@ impl Plugin for TurNetPlugin {
             tracing::info!("TurNetPlugin: no Http capability registered; skipping tur:net");
             return Ok(());
         }
-        ctx.register_module("tur:net", bridge::fns(), vec![], vec![]);
+        ctx.register_module("tur:net/native", bridge::fns(), vec![], vec![]);
+        ctx.register_js_module(
+            "tur:net",
+            include_str!("../js/index.js"),
+            std::path::Path::new("libs/tur-net-capability/js/index.js"),
+        )?;
         Ok(())
     }
 }
