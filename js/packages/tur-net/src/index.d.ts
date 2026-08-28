@@ -2,14 +2,22 @@
  * @tur-ng/net — ambient type declarations for the networking module.
  *
  * The runtime is a boa module registered by `tur-net-capability` (via
- * `TurNetPlugin`) under the specifier `"tur:net"` — a JS module wrapping the
- * native bridge fns in the hidden `tur:net/native`. Backends are injected by
- * the embedder (`WasmHttp` in the browser, `NativeHttp` natively,
- * `RecordingHttp` in tests); when none is registered the module is absent
- * and JS code feature-detects.
+ * `TurNetPlugin`) under the specifier `"tur:net"` — both exports are
+ * Task-returning native bridge fns. Backends are injected by the embedder
+ * (`WasmHttp` in the browser, `NativeHttp` natively, `RecordingHttp` in
+ * tests); when none is registered the module is absent and JS code
+ * feature-detects.
+ *
+ * Every async API returns `Task<T> = { promise, cancel() }` (see
+ * `tur:std`): await `task.promise`, `task.cancel()` aborts the request and
+ * rejects with a `CancelError`.
  */
 
+/// <reference types="@tur-ng/std" />
+
 declare module "tur:net" {
+    import type { Task } from "tur:std";
+
     export interface RequestOptions {
         url: string;
         method?: string;
@@ -41,53 +49,47 @@ declare module "tur:net" {
         bodyBytes?: ArrayBuffer;
     }
 
-    /** Perform an HTTP request. Rejects with `{ message }` on network error. */
-    export function request(opts: RequestOptions): Promise<ResponseResult>;
-
-    export interface StreamBody extends AsyncIterable<Uint8Array> {
-        /**
-         * Read one chunk. Pull-driven: each call polls at most one chunk of
-         * network I/O — pausing `next()` IS the backpressure signal. Await
-         * each call before the next one; a call made while a previous one is
-         * still pending rejects with `{ message }`.
-         */
-        next(): Promise<IteratorResult<Uint8Array, unknown>>;
-        /**
-         * Abort the download now (idempotent). The pipe is dropped
-         * synchronously — natively the connection closes without waiting for
-         * GC. Pending and subsequent `next()` calls resolve
-         * `{ done: true }`. (Best-effort on wasm: the browser may keep the
-         * connection until GC.)
-         */
-        cancel(): void;
-    }
+    /**
+     * Perform an HTTP request. `promise` rejects with `{ message }` on
+     * network/validation error; `cancel()` aborts the request (unpolled
+     * requests are never sent; in-flight ones are discarded) and rejects
+     * with a `CancelError`.
+     */
+    export function request(opts: RequestOptions): Task<ResponseResult>;
 
     export interface StreamResponse {
         ok: true;
         status: number;
         statusText: string;
         headers: Record<string, string>;
-        body: StreamBody;
+        /**
+         * The response body: a pull-driven `AsyncIterableIterator` yielding
+         * `Uint8Array` chunks. Each `next()` polls at most one chunk of
+         * network I/O — pausing `next()` IS the backpressure signal. Await
+         * each call before the next one; a call made while a previous one
+         * is still pending rejects with `{ message }`.
+         *
+         * There is deliberately no `cancel()` on the body — aborting the
+         * download is `task.cancel()` on the `requestStream` Task (see
+         * below).
+         */
+        body: AsyncIterableIterator<Uint8Array>;
     }
 
     /**
-     * Streaming HTTP request as a **generator coroutine** — `yield*` it from
-     * a `launch` generator (a plain call returns an unstarted generator):
+     * Streaming HTTP request:
      *
      * ```ts
-     * launch(function* () {
-     *     const resp = yield* requestStream({ url });
-     *     let r = yield resp.body.next();
-     *     while (!r.done) { /* consume r.value *\/; r = yield resp.body.next(); }
-     * });
+     * const t = requestStream({ url, bufferBytes: 64 * 1024 });
+     * const resp = await t.promise;
+     * for await (const chunk of resp.body) { /* consume chunk *\/ }
+     * // t.cancel() anywhere above: pending/subsequent next() resolve
+     * // { done: true } so the for-await exits cleanly; if the response
+     * // hasn't resolved yet, the promise rejects with a CancelError.
      * ```
      *
-     * The single yield delegates the in-flight promise to the driving
-     * `launch`; a network/validation failure throws at the `yield*`
-     * (catchable with try/catch — composes with retry/timeout helpers via
-     * `yield*`).
+     * `cancel()` wire-aborts the download (the response pipe is dropped —
+     * natively the connection closes without waiting for GC).
      */
-    export function requestStream(
-        opts: RequestOptions,
-    ): Generator<Promise<StreamResponse>, StreamResponse, StreamResponse>;
+    export function requestStream(opts: RequestOptions): Task<StreamResponse>;
 }

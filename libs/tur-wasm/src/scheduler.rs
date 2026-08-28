@@ -317,7 +317,7 @@ impl WorkerExecutor for WasmWorkerExecutor {
 /// Resolves `setTimeout` off `js_sys::global()` (not `web_sys::window()`)
 /// so it works on a `DedicatedWorkerGlobalScope` — `window()` returns
 /// `None` on a worker, which would silently drop the timer and the
-/// `sleep()`/`launch()` it backs would never resolve.
+/// `sleep()` it backs would never resolve.
 fn wasm_sleep(d: Duration) -> Sleep {
     let (tx, rx) = futures::channel::oneshot::channel();
     let ms = d.as_millis().min(i32::MAX as u128) as i32;

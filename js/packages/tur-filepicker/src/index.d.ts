@@ -3,9 +3,14 @@
  *
  * The runtime is a synthetic boa module registered by `tur-filepicker-capability`
  * (`TurFilePickerPlugin`) under the specifier `"tur:filepicker"`. It exports a
- * single `filePicker` object whose methods are Promise-returning fns backed by
+ * single `filePicker` object whose methods are Task-returning fns backed by
  * the engine's async executor — `pick()` opens the platform file picker,
  * `saveFile()` persists bytes via the platform save dialog / download.
+ *
+ * Every method returns `Task<T> = { promise, cancel() }` (see `tur:std`):
+ * await `task.promise`; `task.cancel()` aborts the wait (a shown dialog may
+ * still complete underneath — its result is discarded) and rejects the
+ * promise with a `CancelError`.
  *
  * The `FilePickerBackend` impl is injected by the embedder (tur-wasm wires the
  * `<input type=file>` / `<a download>` browser backend; tests use
@@ -17,7 +22,11 @@
  * itself is absent, the module loader rejects the `tur:filepicker` specifier).
  */
 
+/// <reference types="@tur-ng/std" />
+
 declare module "tur:filepicker" {
+    import type { Task } from "tur:std";
+
     /** Options for {@link FilePicker.pick}. */
     export interface PickOptions {
         /** Accepted file filters — MIME types (`"image/*"`) or extensions
@@ -48,18 +57,18 @@ declare module "tur:filepicker" {
         size: number;
     }
 
-    /** File-picker surface. */
+    /** File-picker surface (Task-returning). */
     export interface FilePicker {
-        /** Open the platform file picker. Resolves with the picked files
-         *  (empty array if cancelled/denied). */
-        pick(opts?: PickOptions): Promise<PickedFile[]>;
+        /** Open the platform file picker. `promise` resolves with the picked
+         *  files (empty array if cancelled/denied). */
+        pick(opts?: PickOptions): Task<PickedFile[]>;
         /** Persist `bytes` under file name `name` (via the platform save dialog
-         *  or a browser download). Resolves when written. */
+         *  or a browser download). `promise` resolves when written. */
         saveFile(
             name: string,
             bytes: ArrayBuffer,
             opts?: SaveOptions,
-        ): Promise<void>;
+        ): Task<void>;
     }
 
     export const filePicker: FilePicker;

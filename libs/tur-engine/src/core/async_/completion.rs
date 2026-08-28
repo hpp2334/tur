@@ -112,8 +112,7 @@ impl CompletionHandle {
     /// resolves with that value once the completion drains (on the next
     /// `flush()`). Used by async code running on a [`WorkerContext`]'s
     /// executor that needs to run boa-touching logic under `&mut Context`
-    /// and hand the result back into the async flow — e.g. driving a JS
-    /// generator from a spawned task (see `tur_launch`).
+    /// and hand the result back into the async flow.
     ///
     /// The future resolves to `None` if the completion queue is dropped
     /// before the completion runs (shouldn't happen in normal operation —

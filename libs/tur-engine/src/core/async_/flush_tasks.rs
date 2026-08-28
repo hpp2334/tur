@@ -1,30 +1,28 @@
-//! Flush-driven task queue for engine-internal async (`sleep`, `launch`).
+//! Flush-driven task queue for engine-internal async (`sleep`).
 //!
 //! `spawn_local`'d futures normally run on the platform executor
 //! ([`WorkerContext::spawn_local`](crate::core::scheduler::WorkerContext) →
 //! tokio `LocalSet` on native / `wasm_bindgen_futures::spawn_local` on wasm),
 //! which polls them *between* frames — never inside `flush()`. For pure
-//! engine-internal async (the `sleep(ms)` promise driver and the `launch`
-//! generator driver) that polling lag breaks single-frame semantics: a
-//! `sleep(1000)` whose deadline is reached by an `advance(1000)` only
-//! resolves *after* the flush triggered by that advance has already
-//! returned, so the generator doesn't resume until a later frame. The
-//! integration-test countdown cases (one pump per second) never observe
-//! the tick.
+//! engine-internal async (the `sleep(ms)` timer driver) that polling lag
+//! breaks single-frame semantics: a `sleep(1000)` whose deadline is reached
+//! by an `advance(1000)` only resolves *after* the flush triggered by that
+//! advance has already returned, so the `.then` continuation doesn't run
+//! until a later frame. The integration-test countdown cases (one pump per
+//! second) never observe the tick.
 //!
-//! This queue closes that gap. `sleep` + `launch` push their driver future
-//! here instead of `worker_ctx.spawn_local`, and `flush()` polls every
-//! queued task once per fixed-point iteration — so a sleep that becomes
-//! due resolves *inside* the same flush, pushes its completion, which the
-//! same flush drains (settling the promise + firing `.then`, which wakes
-//! the launch driver, which `flush` re-polls to resume the generator) —
+//! This queue closes that gap. `sleep` pushes its driver future here
+//! instead of `worker_ctx.spawn_local`, and `flush()` polls every queued
+//! task once per fixed-point iteration — so a sleep that becomes due
+//! resolves *inside* the same flush, pushes its completion, which the same
+//! flush drains (settling the promise and firing the `.then` reactions) —
 //! all within one frame.
 //!
 //! Real platform async (HTTP, clipboard, file-picker) still uses
-//! `worker_ctx.spawn_local`: those futures need the platform's I/O
-//! driver (reqwest polling, web-sys promises) to make progress, and their
-//! completions are already drained by `flush()` (the `Wake` they
-//! self-send on completion re-arms the worker).
+//! `worker_ctx.spawn_local`: those futures need the platform's I/O driver
+//! (reqwest polling, web-sys promises) to make progress, and their
+//! completions are already drained by `flush()` (the `Wake` they self-send
+//! on completion re-arms the worker).
 //!
 //! ## Wakers
 //!
@@ -96,15 +94,14 @@ impl FlushTaskQueue {
     }
 
     /// Poll every queued task once. Completed tasks are removed; tasks
-    /// spawned mid-poll (e.g. `sleep` pushed by the `launch` driver as it
-    /// steps) are picked up next iteration / next flush. Returns the
+    /// spawned mid-poll (e.g. a sleep pushed while another drains) are
+    /// picked up next iteration / next flush. Returns the
     /// number that completed this pass — fed into `flush()`'s quiescence
     /// check so a completed task (which likely pushed a completion) keeps
     /// the fixed-point loop alive to drain it.
     pub fn poll_all(&self) -> usize {
         // Drain into a local vec so a task that spawns a sibling mid-poll
-        // (the launch driver spawns the sleep task on its first step) can
-        // push to the RefCell without a double-`borrow_mut` panic.
+        // can push to the RefCell without a double-`borrow_mut` panic.
         let mut tasks = self.tasks.borrow_mut().drain(..).collect::<Vec<_>>();
         if tasks.is_empty() {
             return 0;
@@ -143,7 +140,7 @@ impl FlushTaskQueue {
     }
 }
 
-/// Cheap handle held by bridges (`tur_sleep`, `tur_launch`). Shares the
+/// Cheap handle held by bridges (`tur_sleep`). Shares the
 /// task list with the parent [`FlushTaskQueue`].
 pub struct FlushTaskHandle {
     tasks: Rc<RefCell<Vec<Rc<FlushTask>>>>,
@@ -152,10 +149,10 @@ pub struct FlushTaskHandle {
 impl FlushTaskHandle {
     /// Push a driver future to be polled by `flush()`. Returns a
     /// [`TaskHandle`] whose `abort()` cancels the task (its future is
-    /// dropped at its next poll point) — used by `launch`'s `Task.cancel()`.
-    /// Dropping the handle detaches (the future keeps running to
-    /// completion). The future runs across flush iterations (polled every
-    /// iteration until it returns `Ready`).
+    /// dropped at its next poll point) — the real timer abort behind
+    /// `Task.cancel()` on a `sleep`. Dropping the handle detaches (the
+    /// future keeps running to completion). The future runs across flush
+    /// iterations (polled every iteration until it returns `Ready`).
     pub fn spawn(&self, fut: BoxFuture) -> TaskHandle {
         let tasks = self.tasks.clone();
         // `track_spawn` wraps `fut` in an `Abortable` + oneshot (so

@@ -1,12 +1,13 @@
-//! Integration tests for `tur:net.requestStream` — the generator-based
-//! streaming HTTP request (`yield*` from a `launch` coroutine) with an
-//! async-iterable response body.
+//! Integration tests for `tur:net.requestStream` — the Task-based streaming
+//! HTTP request (`{ promise, cancel() }`) with an async-iterable response
+//! body.
 //!
-//! Validates the full path: JS `yield* requestStream(opts)` → `RecordingHttp`
-//! serves canned chunks → the async iterable yields `Uint8Array` chunks →
-//! JS collects and concatenates them. Plus the backpressure surface:
-//! pull-only-what's-consumed, `bufferBytes` validation, `cancel()`, and the
-//! serial-`next()` protocol.
+//! Validates the full path: `await requestStream(opts).promise` →
+//! `RecordingHttp` serves canned chunks → the async iterable yields
+//! `Uint8Array` chunks → JS collects and concatenates them. Plus the
+//! backpressure surface: pull-only-what's-consumed, `bufferBytes`
+//! validation, `task.cancel()` wire aborts, and the serial-`next()`
+//! protocol. (Cancel semantics live in `task_promise.rs`.)
 
 use tur_integration_tests::TurTestApp;
 
@@ -27,25 +28,24 @@ fn stream_collects_multiple_chunks() {
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__collected = "";
         globalThis.__done = false;
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/stream" });
+        (async () => {
+            const resp = await requestStream({ url: "http://test/stream" }).promise;
             globalThis.__status = resp.status;
 
-            let result = yield resp.body.next();
+            let result = await resp.body.next();
             while (!result.done) {
                 const text = Array.from(result.value)
                     .map(b => String.fromCharCode(b))
                     .join("");
                 globalThis.__collected += text;
-                result = yield resp.body.next();
+                result = await resp.body.next();
             }
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
@@ -68,24 +68,23 @@ fn stream_single_chunk() {
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__collected = "";
         globalThis.__done = false;
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/single" });
+        (async () => {
+            const resp = await requestStream({ url: "http://test/single" }).promise;
 
-            let result = yield resp.body.next();
+            let result = await resp.body.next();
             while (!result.done) {
                 const text = Array.from(result.value)
                     .map(b => String.fromCharCode(b))
                     .join("");
                 globalThis.__collected += text;
-                result = yield resp.body.next();
+                result = await resp.body.next();
             }
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
@@ -105,15 +104,14 @@ fn stream_empty_body() {
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__done = false;
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/empty" });
-            let result = yield resp.body.next();
+        (async () => {
+            const resp = await requestStream({ url: "http://test/empty" }).promise;
+            let result = await resp.body.next();
             globalThis.__done = result.done;
-        });
+        })();
         "#,
     )
     .expect("module");
@@ -142,18 +140,17 @@ fn stream_pulls_only_what_js_consumes() {
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__done = false;
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/pull" });
-            let r = yield resp.body.next();
+        (async () => {
+            const resp = await requestStream({ url: "http://test/pull" }).promise;
+            let r = await resp.body.next();
             globalThis.__first = r.done ? "" : Array.from(r.value).length;
-            r = yield resp.body.next();
+            r = await resp.body.next();
             globalThis.__second = !r.done;
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
@@ -170,91 +167,80 @@ fn stream_pulls_only_what_js_consumes() {
 }
 
 /// `bufferBytes` is validated at parse time: bad values throw at the
-/// `yield*` with a clear message (catchable like any generator error — the
-/// composable-try/catch ergonomics the generator API exists for); a valid
-/// value passes through to the backend.
+/// `await` with a clear message. (See the parse-time rejection path in
+/// `tur_net_request_stream`.)
 #[test]
-fn buffer_bytes_validation() {
+fn stream_buffer_bytes_validation() {
     let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
-    app.set_http_stream(200, vec![b"ok".to_vec()]);
+
+    app.set_http_stream(200, vec![b"x".to_vec()]);
 
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__done = false;
-        globalThis.__msgs = [];
 
-        // A generator helper around yield* — retries/timeouts compose the
-        // same way, with no promise chains.
-        function* attempt(label, opts) {
+        (async () => {
             try {
-                yield* requestStream(opts);
-                globalThis.__msgs.push(label + ":ok");
+                await requestStream({ url: "http://test/bb", bufferBytes: 0 }).promise;
+                globalThis.__caught = "unreachable";
             } catch (e) {
-                globalThis.__msgs.push(label + ":" + e.message);
+                globalThis.__caught = String(e.message);
             }
-        }
-
-        launch(function*() {
-            yield* attempt("zero", { url: "http://test/v", bufferBytes: 0 });
-            yield* attempt("frac", { url: "http://test/v", bufferBytes: 1.5 });
-            yield* attempt("huge", { url: "http://test/v", bufferBytes: 1e9 });
-            yield* attempt("str", { url: "http://test/v", bufferBytes: "1024" });
-            yield* attempt("valid", { url: "http://test/v", bufferBytes: 1024 });
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
 
     app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
 
-    let msgs = app.eval_js("globalThis.__msgs.join(\"|\")");
-    assert!(msgs.contains("zero:bufferBytes must be >= 1"), "{msgs}");
-    assert!(msgs.contains("frac:bufferBytes must be an integer"), "{msgs}");
-    assert!(
-        msgs.contains("huge:bufferBytes must be <= 67108864 (64 MiB)"),
-        "{msgs}"
+    assert_eq!(
+        app.eval_js("globalThis.__caught"),
+        "bufferBytes must be >= 1"
     );
-    assert!(msgs.contains("str:bufferBytes must be a number"), "{msgs}");
-    assert!(msgs.contains("valid:ok"), "{msgs}");
 }
 
-/// `body.cancel()` aborts deterministically: pending/subsequent `next()`
-/// resolve `{done: true}` and the remaining canned chunks are never produced.
+/// `task.cancel()` wire-aborts deterministically: pending/subsequent
+/// `next()` steps resolve `{ done: true }`, the producer is no longer
+/// pulled, and (the response having already resolved) the cancel is
+/// abort-only for the promise.
 #[test]
-fn cancel_aborts_and_nexts_done() {
+fn stream_task_cancel_aborts_and_nexts_done() {
     let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
     app.set_http_stream(
         200,
         vec![
-            b"c0".to_vec(),
-            b"c1".to_vec(),
-            b"c2".to_vec(),
-            b"c3".to_vec(),
+            b"chunk-0".to_vec(),
+            b"chunk-1".to_vec(),
+            b"chunk-2".to_vec(),
+            b"chunk-3".to_vec(),
         ],
     );
 
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__done = false;
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/cancel" });
-            let r = yield resp.body.next();
-            globalThis.__firstDone = r.done;
-            resp.body.cancel();
-            resp.body.cancel(); // idempotent
-            let after = yield resp.body.next();
-            globalThis.__afterCancel = after.done;
+        (async () => {
+            const t = requestStream({ url: "http://test/cancel" });
+            globalThis.__t = t;
+            const resp = await t.promise;
+            const first = await resp.body.next();
+            globalThis.__firstDone = String(first.done);
+            const pending = resp.body.next();
+            t.cancel();
+            t.cancel(); // idempotent
+            const after = await pending;
+            globalThis.__afterDone = String(after.done);
+            const later = await resp.body.next();
+            globalThis.__laterDone = String(later.done);
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
@@ -262,54 +248,85 @@ fn cancel_aborts_and_nexts_done() {
     app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
 
     assert_eq!(app.eval_js("globalThis.__firstDone"), "false");
-    assert_eq!(app.eval_js("globalThis.__afterCancel"), "true");
-    assert_eq!(
-        app.http_stream_pulls(),
-        1,
-        "cancel must stop production: only the consumed chunk was pulled"
-    );
+    assert_eq!(app.eval_js("globalThis.__afterDone"), "true");
+    assert_eq!(app.eval_js("globalThis.__laterDone"), "true");
+    // Two pulls (first + the cancelled pending); the abort stops the producer.
+    assert_eq!(app.http_stream_pulls(), 2);
 }
 
 /// The pull protocol is serial: a `next()` issued while a previous one is
-/// still pending rejects with a clear error instead of lying `{done: true}`.
+/// still pending rejects — that's what carries backpressure. The natural
+/// promise shape: keep the first call's promise, `.then` the second.
 #[test]
 fn concurrent_next_rejects() {
     let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
-    app.set_http_stream(200, vec![b"one".to_vec(), b"two".to_vec()]);
+    // A stream that never produces a chunk on its own: each pull parks until
+    // the RecordingHttp stream is polled... canned chunks are pulled eagerly
+    // per next(), so issue both calls before awaiting either.
+    app.set_http_stream(200, vec![b"chunk-0".to_vec(), b"chunk-1".to_vec()]);
 
     app.eval_module_source(
         r#"
         import { requestStream } from "tur:net";
-        import { launch } from "tur:std";
 
         globalThis.__done = false;
-        globalThis.__p2 = "";
 
-        launch(function*() {
-            const resp = yield* requestStream({ url: "http://test/conc" });
+        (async () => {
+            const resp = await requestStream({ url: "http://test/conc" }).promise;
             const p1 = resp.body.next();
             const p2 = resp.body.next();
-            p2.then(v => { globalThis.__p2 = "resolved:" + v.done; },
-                    e => { globalThis.__p2 = "rejected:" + e.message; });
-            const r1 = yield p1;
-            globalThis.__r1done = r1.done;
+            p2.then(
+                () => { globalThis.__p2 = "resolved"; },
+                (e) => { globalThis.__p2 = "rejected:" + e.message; },
+            );
+            await p1;
+            globalThis.__p1ok = "yes";
             globalThis.__done = true;
-        });
+        })();
         "#,
     )
     .expect("module");
 
     app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
-    // The p2 reaction is a microtask — give it its own pump-driven wait
-    // rather than assuming queue ordering relative to __done.
-    app.wait_for(|a| !a.eval_js("globalThis.__p2").is_empty());
 
-    let p2 = app.eval_js("globalThis.__p2");
-    assert!(
-        p2.starts_with("rejected:"),
-        "concurrent next() must reject with a clear message, got: {p2}"
+    assert_eq!(app.eval_js("globalThis.__p1ok"), "yes");
+    assert_eq!(
+        app.eval_js("globalThis.__p2"),
+        "rejected:stream.next() called while a previous call is still pending"
     );
-    assert!(p2.contains("still pending"), "{p2}");
-    assert_eq!(app.eval_js("globalThis.__r1done"), "false");
+}
+
+/// `for await ... of resp.body` — the async-iterator surface — drains the
+/// stream to completion.
+#[test]
+fn stream_for_await_drains() {
+    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+
+    app.set_http_stream(
+        200,
+        vec![b"for-".to_vec(), b"await".to_vec(), b"-works".to_vec()],
+    );
+
+    app.eval_module_source(
+        r#"
+        import { requestStream } from "tur:net";
+
+        globalThis.__collected = "";
+        globalThis.__done = false;
+
+        (async () => {
+            const resp = await requestStream({ url: "http://test/forawait" }).promise;
+            for await (const chunk of resp.body) {
+                globalThis.__collected += String.fromCharCode(...chunk);
+            }
+            globalThis.__done = true;
+        })();
+        "#,
+    )
+    .expect("module");
+
+    app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
+
+    assert_eq!(app.eval_js("globalThis.__collected"), "for-await-works");
 }

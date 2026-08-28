@@ -1,6 +1,6 @@
 {
     "name": "@tur-ng/std",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "type": "module",
     "types": "src/index.d.ts",
     "files": [
@@ -14,5 +14,8 @@
         "type": "git",
         "url": "git+https://github.com/hpp2334/tur.git",
         "directory": "js/packages/tur-std"
+    },
+    "dependencies": {
+        "@tur-ng/core": "workspace:*"
     }
 }

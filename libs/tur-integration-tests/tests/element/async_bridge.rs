@@ -4,22 +4,22 @@
 //! reactive-set path end-to-end:
 //!
 //! 1. JS calls `clipboard.readText()` / `request()` (ctx-bound fn pointers
-//!    registered by the tur-clipboard / tur-net plugins).
+//!    registered by the tur-clipboard / tur-net plugins) and gets a
+//!    `Task { promise, cancel() }` handle.
 //! 2. The fn creates a pending `JsPromise`, spawns a future via the
-//!    engine's `AsyncExecutor` that calls `Clipboard::read_text().await`
+//!    engine's executor that calls `Clipboard::read_text().await`
 //!    (or `Http::request(opts).await`).
-//! 3. `flush`'s `tick` polls the future (Recording* impls resolve eagerly),
+//! 3. `flush` polls the future (Recording* impls resolve eagerly),
 //!    the future pushes a `Completion` that resolves the promise.
 //! 4. `drain_completions` runs the completion under `&mut Context`, which
 //!    enqueues a `PromiseJob`.
-//! 5. boa's `executor.drain` runs the PromiseJob → fires the `.then` body,
-//!    which calls `set(source, ...)` → dirty → re-layout.
+//! 5. boa's `executor.drain` runs the PromiseJob → fires the `.promise.then`
+//!    body, which calls `set(source, ...)` → dirty → re-layout.
 //! 6. Test asserts the source atom updated.
 //!
 //! Capability lookup: both bridge fns read their `Rc<dyn Clipboard>` /
-//! `Rc<dyn Http>` / `Rc<AsyncExecutor>` from `TurInstanceContext`'s capability
-//! registry (populated by the plugins during `register`). No `unsafe`
-//! closures are involved.
+//! `Rc<dyn Http>` from `TurInstanceContext`'s capability registry
+//! (populated by the plugins during `register`).
 
 use tur_integration_tests::{TurTestApp, text_response};
 
@@ -38,7 +38,7 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
         import { source } from "tur:std";
         import { clipboard } from "tur:clipboard";
         globalThis.__sink$ = source("initial");
-        clipboard.readText().then((text) => {
+        clipboard.readText().promise.then((text) => {
             store.set(globalThis.__sink$, text);
             // Stash the resolved value as a plain string global so eval_js
             // (which runs as a script, not a module) can read it without
@@ -72,7 +72,7 @@ fn clipboard_write_logs_to_recording() {
     app.eval_module_source(
         r#"
         import { clipboard } from "tur:clipboard";
-        clipboard.writeText("payload").then(() => {
+        clipboard.writeText("payload").promise.then(() => {
             globalThis.__wrote = "1";
         });
         "#,
@@ -95,6 +95,7 @@ fn http_request_resolves_with_canned_response() {
         globalThis.__status$ = source(0);
         globalThis.__body$ = source("");
         request({ url: "https://example.test/x", method: "GET" })
+            .promise
             .then((r) => {
                 store.set(globalThis.__status$, r.status);
                 store.set(globalThis.__body$, r.bodyText);

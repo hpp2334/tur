@@ -11,7 +11,7 @@ import {
     Expanded,
     HitTestBehavior,
     Input,
-    launch,
+    isCancelError,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -60,30 +60,36 @@ const initial$ = source(DEFAULT_TIME);
 const editText$ = source("");
 const editController$ = source<unknown>(null);
 
-// Cancellable coroutine driving the 1 Hz countdown. `cancel()` halts it;
-// pause/reset also flip `running$` so the loop's own check exits it.
-let countdownTask: Task | null = null;
+// Cancellable async loop driving the 1 Hz countdown. Cancelling the current
+// sleep halts it (the await throws CancelError); pause/reset also flip
+// `running$` so the loop's own check exits it.
+let countdownTick: Task<void> | null = null;
 function stopCountdown() {
-    countdownTask?.cancel();
-    countdownTask = null;
+    countdownTick?.cancel();
+    countdownTick = null;
 }
 
 const start$ = mutate((ctx, _ev: PointerInteractEvent) => {
     if (ctx.get(running$)) return;
     ctx.set(running$, true);
     stopCountdown();
-    countdownTask = launch(function* () {
-        while (ctx.get(running$)) {
-            yield sleep(1000);
-            const r = ctx.get(remaining$);
-            if (r <= 1) {
-                ctx.set(running$, false);
-                ctx.set(remaining$, 0);
-                return;
+    (async () => {
+        try {
+            while (ctx.get(running$)) {
+                countdownTick = sleep(1000);
+                await countdownTick.promise;
+                const r = ctx.get(remaining$);
+                if (r <= 1) {
+                    ctx.set(running$, false);
+                    ctx.set(remaining$, 0);
+                    return;
+                }
+                ctx.set(remaining$, r - 1);
             }
-            ctx.set(remaining$, r - 1);
+        } catch (e) {
+            if (!isCancelError(e)) throw e;
         }
-    });
+    })();
 });
 
 const pause$ = mutate((ctx, _ev: PointerInteractEvent) => {

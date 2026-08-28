@@ -125,7 +125,7 @@ impl tur_engine::core::capability::Capability for FilePicker {}
 
 /// tur-filepicker plugin: registers `tur:filepicker`, exporting a single
 /// `filePicker` object with `pick(opts?)` / `saveFile(name, bytes, opts?)`
-/// methods (each returning a `Promise`).
+/// methods (each returning a `Task` — `{ promise, cancel() }`).
 ///
 /// The plugin declares a hard dependency on the [`FilePicker`] capability via
 /// `requires`; the engine builder fails fast at `build()` if the embedder

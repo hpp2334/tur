@@ -1,6 +1,6 @@
 {
     "name": "@tur-ng/net",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "type": "module",
     "types": "src/index.d.ts",
     "files": [
@@ -14,5 +14,8 @@
         "type": "git",
         "url": "git+https://github.com/hpp2334/tur.git",
         "directory": "js/packages/tur-net"
+    },
+    "dependencies": {
+        "@tur-ng/std": "workspace:*"
     }
 }

@@ -1,26 +1,30 @@
 //! `tur:filepicker` bridge: a `filePicker` object with `pick` /
-//! `saveFile` methods, each returning a `Promise`.
+//! `saveFile` methods, each returning a `Task` (`{ promise, cancel() }`).
 //!
 //! The bridge fns are ctx-bound `Ptr`s that look up the
 //! [`FilePicker`](crate::FilePicker) capability from `TurInstanceContext`'s
 //! capability registry (populated by the embedder via
 //! `TurRuntimeBuilder::capability(FilePicker::new(...))`).
 //!
-//! Promise settlement flow:
+//! Task settlement flow:
 //!
-//! 1. Bridge fn creates a pending `JsPromise` synchronously and returns it.
-//! 2. Spawns a future via the executor that calls `FilePicker::pick(opts)`
+//! 1. Bridge fn creates a pending `JsPromise` synchronously, spawns the
+//!    op, and returns the shared [`make_task`] handle.
+//! 2. The spawn (via the engine's executor) calls `FilePicker::pick(opts)`
 //!    (or `save`) — this is the only async part.
 //! 3. On completion, the future pushes a `Completion` closure into the
 //!    executor that runs under `&mut Context` on the next `flush` and
 //!    resolves the promise (building the JS `{ name, bytes, type, size }`
 //!    objects + `ArrayBuffer`s there, where the boa `Context` is available).
+//! 4. `task.cancel()` aborts the spawn and rejects the promise with a
+//!    `CancelError` (see [`make_task`]).
 
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::object::builtins::{JsArray, JsArrayBuffer, JsPromise};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
+use tur_engine::core::async_::make_task;
 use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 use tur_engine::core::js_runtime::module_loader::bound_native;
 
@@ -35,7 +39,7 @@ pub fn fns() -> Vec<FnEntry> {
 }
 
 /// Build the `filePicker` JS object:
-/// `{ pick(opts?): Promise<PickedFile[]>, saveFile(name, bytes, opts?): Promise<void> }`.
+/// `{ pick(opts?): Task<PickedFile[]>, saveFile(name, bytes, opts?): Task<void> }`.
 /// Each method is a ctx-bound native fn (via [`bound_native`]) so it can
 /// `extract_js_ctx(args)` and look up its capability slot.
 pub fn build_filepicker_object(context: &mut Context, ctx_value: JsValue) -> JsValue {
@@ -59,8 +63,11 @@ pub fn build_filepicker_object(context: &mut Context, ctx_value: JsValue) -> JsV
     obj.into()
 }
 
-/// `filePicker.pick(opts?): Promise<PickedFile[]>` — opens the platform file
-/// picker. Resolves with the picked files (empty array if cancelled/denied).
+/// `filePicker.pick(opts?): Task<PickedFile[]>` — opens the platform file
+/// picker. `promise` resolves with the picked files (empty array if
+/// cancelled/denied); `task.cancel()` aborts the wait (a shown dialog may
+/// still complete underneath — its result is discarded) and rejects with a
+/// `CancelError`.
 fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let picker = js_ctx
@@ -74,8 +81,9 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
+    let resolvers_for_task = resolvers.clone();
     let opts = parse_pick_opts(args, ctx);
-    let _ = js_ctx.spawn_local(|_aw| async move {
+    let handle = js_ctx.spawn_local(|_aw| async move {
         let files = picker.pick(opts).await;
         completion_handle.push(Box::new(move |ctx| {
             let arr = JsArray::new(ctx)?;
@@ -89,11 +97,12 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    Ok(promise.into())
+    Ok(make_task(ctx, &promise, &resolvers_for_task, Some(handle), None).into())
 }
 
-/// `filePicker.saveFile(name, bytes, opts?): Promise<void>` — persists
+/// `filePicker.saveFile(name, bytes, opts?): Task<void>` — persists
 /// `bytes` under file name `name` via the platform save dialog / download.
+/// `cancel()` behaves like `pick`'s.
 fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let picker = js_ctx
@@ -107,6 +116,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
+    let resolvers_for_task = resolvers.clone();
     let name = args
         .get_or_undefined(1)
         .as_string()
@@ -119,7 +129,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .and_then(|ab| ab.to_vec())
         .unwrap_or_default();
     let opts = parse_save_opts(args, ctx);
-    let _ = js_ctx.spawn_local(|_aw| async move {
+    let handle = js_ctx.spawn_local(|_aw| async move {
         picker.save(name, bytes, opts).await;
         completion_handle.push(Box::new(move |ctx| {
             resolvers
@@ -128,7 +138,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    Ok(promise.into())
+    Ok(make_task(ctx, &promise, &resolvers_for_task, Some(handle), None).into())
 }
 
 /// Parse the JS `{ accept?, multiple? }` opts object from `args[1]` (the

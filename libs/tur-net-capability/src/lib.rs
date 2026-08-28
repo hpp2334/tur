@@ -9,9 +9,9 @@
 //!   [`tur_engine::TurRuntimeBuilder::capability`](`Http::new(backend)`).
 //! - The [`NoopHttp`] default.
 //! - The [`TurNetPlugin`] (unit struct) that conditionally registers the
-//!   `tur:net` module when an [`Http`] capability is present (a hidden
-//!   `tur:net/native` module with the bridge fns + a consumer-facing JS
-//!   module defining `requestStream` as a generator coroutine).
+//!   `tur:net` module when an [`Http`] capability is present — `request` +
+//!   `requestStream`, both returning the shared `Task` handle
+//!   (`{ promise, cancel() }`).
 //!
 //! ## Architecture
 //!
@@ -20,8 +20,10 @@
 //!   implement [`HttpBackend`] and are registered via
 //!   `.capability(Http::new(backend))`.
 //! - The bridge closure (in [`bridge`]) parses JS opts into [`RequestOpts`],
-//!   spawns the future via the engine's `AsyncExecutor`, and settles the
-//!   `JsPromise` via a completion closure on the next `flush`.
+//!   spawns the future via the engine's executor, settles the task's
+//!   `JsPromise` via a completion closure on the next `flush`, and returns
+//!   the `Task` handle whose `cancel()` aborts the spawn / wire-aborts the
+//!   stream and rejects with a `CancelError`.
 //! - [`TurNetPlugin`] does NOT declare a `requires` for [`Http`] — HTTP is
 //!   an optional capability. If absent, the plugin simply skips registering
 //!   `tur:net`, and JS code feature-detects via
@@ -202,17 +204,15 @@ impl tur_engine::core::capability::Capability for Http {}
 /// tur-net plugin: registers `tur:net` when an [`Http`] capability is
 /// registered.
 ///
-/// Two modules, the `tur:animation` pattern:
+/// One synthetic module: `tur:net` exports `request(opts): Task<Response>` +
+/// `requestStream(opts): Task<StreamResponse>` (the shared
+/// `{ promise, cancel() }` handle every async engine API returns — see
+/// [`tur_engine::core::async_::make_task`]). The stream body is a plain
+/// `AsyncIterableIterator<Uint8Array>`; aborting a stream is
+/// `task.cancel()`.
 ///
-/// - `tur:net/native` (hidden) — the ctx-bound native bridge fns
-///   ([`bridge::fns`]): `request` + the promise-based streaming request.
-/// - `tur:net` (consumer-facing JS source, `js/index.js`) — re-exports
-///   `request` unchanged and defines `requestStream` as a **generator
-///   coroutine** (`yield*` it from a `launch` generator) instead of a
-///   promise-returning async fn.
-///
-/// If no backend is injected, the plugin is a no-op — both modules stay
-/// unregistered, and JS code that imports from them fails at module load.
+/// If no backend is injected, the plugin is a no-op — the module stays
+/// unregistered, and JS code that imports from it fails at module load.
 /// Cases that may run in HTTP-less environments must guard accordingly (or
 /// be marked playground-only, like github-viewer).
 ///
@@ -235,12 +235,7 @@ impl Plugin for TurNetPlugin {
             tracing::info!("TurNetPlugin: no Http capability registered; skipping tur:net");
             return Ok(());
         }
-        ctx.register_module("tur:net/native", bridge::fns(), vec![], vec![]);
-        ctx.register_js_module(
-            "tur:net",
-            include_str!("../js/index.js"),
-            std::path::Path::new("libs/tur-net-capability/js/index.js"),
-        )?;
+        ctx.register_module("tur:net", bridge::fns(), vec![], vec![]);
         Ok(())
     }
 }
