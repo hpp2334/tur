@@ -11,6 +11,11 @@
  * Every async API returns `Task<T> = { promise, cancel() }` (see
  * `tur:std`): await `task.promise`, `task.cancel()` aborts the request and
  * rejects with a `CancelError`.
+ *
+ * The response body is **always raw bytes** (`body: ArrayBuffer` for
+ * `request`, a `Uint8Array` iterator for `requestStream`) — decode UTF-8
+ * yourself via `decodeUtf8` from `tur:std` (`JSON.parse(decodeUtf8(r.body))`),
+ * or read binary directly.
  */
 
 /// <reference types="@tur-ng/std" />
@@ -24,20 +29,16 @@ declare module "tur:net" {
         headers?: Record<string, string>;
         /** A string or an ArrayBuffer (e.g. from `filePicker.pick()`). */
         body?: string | ArrayBuffer;
-        /** "text" (default; fills `bodyText`) or "bytes" (fills `bodyBytes`). */
-        responseType?: "text" | "bytes";
-        username?: string;
-        password?: string;
         /**
          * Streaming only (`requestStream`): max bytes buffered in flight
          * between the network and your `next()` calls — while this much
          * unconsumed data is in flight, the producer pauses (TCP
-         * backpressure) and resumes as you pull. Integer `1..=67108864`
-         * (64 MiB); default 524288 (512 KiB). Best-effort: the browser
-         * (wasm) backend ignores it — the browser owns fetch-body flow
-         * control. Ignored by `request`.
+         * backpressure) and resumes as you pull. Binary units
+         * (KB = 1024); no upper cap; default 20 MiB. Best-effort: the
+         * browser (wasm) backend ignores it — the browser owns fetch-body
+         * flow control. Ignored by `request`.
          */
-        bufferBytes?: number;
+        backpressure?: { value: number; unit: "B" | "KB" | "MB" | "GB" };
     }
 
     export interface ResponseResult {
@@ -45,8 +46,8 @@ declare module "tur:net" {
         status: number;
         statusText: string;
         headers: Record<string, string>;
-        bodyText?: string;
-        bodyBytes?: ArrayBuffer;
+        /** The raw response body. Decode with `decodeUtf8` for text. */
+        body: ArrayBuffer;
     }
 
     /**
@@ -80,7 +81,7 @@ declare module "tur:net" {
      * Streaming HTTP request:
      *
      * ```ts
-     * const t = requestStream({ url, bufferBytes: 64 * 1024 });
+     * const t = requestStream({ url, backpressure: { value: 64, unit: "KB" } });
      * const resp = await t.promise;
      * for await (const chunk of resp.body) { /* consume chunk *\/ }
      * // t.cancel() anywhere above: pending/subsequent next() resolve

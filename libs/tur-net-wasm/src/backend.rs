@@ -4,7 +4,7 @@
 use futures::StreamExt;
 use tur_net_capability::{
     HttpBackend, HttpBody, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse,
-    RequestOpts, ResponseType,
+    RequestOpts,
 };
 
 /// Browser HTTP backend. Spawns each request through `reqwest_wasm`.
@@ -18,14 +18,11 @@ impl HttpBackend for WasmHttp {
             opts.method,
             opts.headers,
             opts.body,
-            opts.response_type == ResponseType::Bytes,
-            opts.username,
-            opts.password,
         ))
     }
 
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
-        // `bufferBytes` is intentionally ignored here: the body is pulled
+        // `backpressure` is intentionally ignored here: the body is pulled
         // straight from the browser's ReadableStream on each poll (the
         // pull-driven contract), and the browser owns network-level flow
         // control — there is no internal buffering window to size from wasm.
@@ -34,8 +31,6 @@ impl HttpBackend for WasmHttp {
             opts.method,
             opts.headers,
             opts.body,
-            opts.username,
-            opts.password,
         ))
     }
 }
@@ -45,18 +40,12 @@ pub async fn perform_request(
     method: String,
     headers: Vec<(String, String)>,
     body: Option<HttpBody>,
-    want_bytes: bool,
-    username: Option<String>,
-    password: Option<String>,
 ) -> HttpOutcome {
     let result: Result<HttpOutcome, String> = async {
         let client = reqwest_wasm::Client::new();
         let m = reqwest_wasm::Method::from_bytes(method.as_bytes())
             .map_err(|e| format!("invalid method {method:?}: {e}"))?;
         let mut rb = client.request(m, &url);
-        if let (Some(u), Some(p)) = (username.as_deref(), password.as_deref()) {
-            rb = rb.basic_auth(u, Some(p));
-        }
         for (k, v) in &headers {
             if let (Ok(name), Ok(val)) = (
                 reqwest_wasm::header::HeaderName::from_bytes(k.as_bytes()),
@@ -78,11 +67,8 @@ pub async fn perform_request(
             .iter()
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = if want_bytes {
-            HttpBody::Bytes(resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec())
-        } else {
-            HttpBody::Text(resp.text().await.map_err(|e| format!("{e}"))?)
-        };
+        // Always raw bytes — the JS side decodes UTF-8 itself (decodeUtf8).
+        let body = resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec();
         Ok(HttpOutcome::Ok {
             status,
             status_text,
@@ -99,16 +85,11 @@ pub async fn perform_request_stream(
     method: String,
     headers: Vec<(String, String)>,
     body: Option<HttpBody>,
-    username: Option<String>,
-    password: Option<String>,
 ) -> Result<HttpStreamResponse, String> {
     let client = reqwest_wasm::Client::new();
     let m = reqwest_wasm::Method::from_bytes(method.as_bytes())
         .map_err(|e| format!("invalid method {method:?}: {e}"))?;
     let mut rb = client.request(m, &url);
-    if let (Some(u), Some(p)) = (username.as_deref(), password.as_deref()) {
-        rb = rb.basic_auth(u, Some(p));
-    }
     for (k, v) in &headers {
         if let (Ok(name), Ok(val)) = (
             reqwest_wasm::header::HeaderName::from_bytes(k.as_bytes()),

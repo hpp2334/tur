@@ -15,6 +15,13 @@
 //! the connection closes) so pending and subsequent `body.next()` pulls
 //! resolve `{ done: true }` and `for await` loops exit cleanly.
 //!
+//! Option surface: `{ url, method?, headers?, body? }` shared by both fns,
+//! plus `requestStream`'s `backpressure: { value, unit }` (binary units,
+//! resolved to bytes by [`parse_backpressure`], no upper cap). The response
+//! body is **always raw bytes** (`body: ArrayBuffer` for `request`, a
+//! `Uint8Array` iterator for `requestStream`) — business code decodes UTF-8
+//! itself via `decodeUtf8` from `tur:std`.
+//!
 //! This file contains **no `unsafe`** — uses `NativeFunction::from_fn_ptr`
 //! via the engine's `bound_native` helper instead of the previous
 //! `unsafe NativeFunction::from_closure`. Captures are eliminated because
@@ -40,6 +47,8 @@ use tur_engine::core::async_::{CompletionHandle, make_task};
 use tur_engine::core::js_runtime::TurInstanceContext;
 use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 
+use crate::{Http, HttpBody, HttpOutcome, RequestOpts};
+
 /// Shorthand for the boxed byte-chunk stream used by the streaming bridge.
 type ByteChunkStream = LocalBoxStream<'static, Result<Vec<u8>, String>>;
 
@@ -51,16 +60,11 @@ type SharedStream = Rc<RefCell<Option<ByteChunkStream>>>;
 /// native call returns (`Rc<Cell<bool>>` — cheap, JS-side only).
 type SharedFlag = Rc<Cell<bool>>;
 
-/// Valid range (bytes) for the JS `bufferBytes` option, enforced at parse
-/// time so every backend sees uniform validation errors. The lower bound
-/// keeps the pipe progressing (one byte at a time is legal, just slow); the
-/// upper bound is a typo guard, not a hard limit on in-flight data by
-/// intent — callers genuinely wanting looser backpressure can raise it.
+/// Lower bound (bytes) for the resolved `backpressure` budget, enforced at
+/// parse time so every backend sees uniform validation errors. One byte is
+/// legal (just slow); there is **no upper cap** — only the `u64` overflow
+/// check in [`parse_backpressure`].
 const MIN_STREAM_BUFFER_BYTES: f64 = 1.0;
-/// 64 MiB typo guard for `bufferBytes`.
-const MAX_STREAM_BUFFER_BYTES: f64 = 64.0 * 1024.0 * 1024.0;
-
-use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 /// Bridge function tables entries for `tur:net`.
 ///
 /// Returns `("request", …)` + `("requestStream", …)` — ctx-bound fn pointers
@@ -133,16 +137,7 @@ fn parse_request_opts(
 
     let url = js_opt_str(&obj, "url", ctx).unwrap_or_default();
     let method = js_opt_str(&obj, "method", ctx).unwrap_or_else(|| "GET".to_string());
-    let response_type_str =
-        js_opt_str(&obj, "responseType", ctx).unwrap_or_else(|| "text".to_string());
-    let response_type = if response_type_str == "bytes" {
-        ResponseType::Bytes
-    } else {
-        ResponseType::Text
-    };
-    let username = js_opt_str(&obj, "username", ctx);
-    let password = js_opt_str(&obj, "password", ctx);
-    let stream_buffer_bytes = parse_buffer_bytes(&obj, ctx)?;
+    let stream_buffer_bytes = parse_backpressure(&obj, ctx)?;
 
     let mut headers: Vec<(String, String)> = Vec::new();
     if let Some(hobj) = obj
@@ -188,44 +183,78 @@ fn parse_request_opts(
         method,
         headers,
         body,
-        response_type,
-        username,
-        password,
         stream_buffer_bytes,
     })
 }
 
-/// Parse + validate the optional `bufferBytes` option (streaming only).
-/// `undefined`/`null`/absent → `None` (backend default); anything else must
-/// be a finite integer in `1..=64 MiB`.
-fn parse_buffer_bytes(
+/// Binary unit multipliers for the JS `backpressure` option (`KB = 1024`,
+/// matching the KiB/MiB language used throughout the docs).
+const UNIT_B: u128 = 1;
+const UNIT_KB: u128 = 1024;
+const UNIT_MB: u128 = 1024 * 1024;
+const UNIT_GB: u128 = 1024 * 1024 * 1024;
+
+/// Parse + validate the optional `backpressure: { value, unit }` option
+/// (streaming only). `undefined`/`null`/absent → `None` (backend default);
+/// otherwise `value` must be an integer `>= 1` (a JS safe integer) and `unit`
+/// one of `"B" | "KB" | "MB" | "GB"` (binary). The resolved byte count has
+/// **no upper cap** — only the `u64` overflow check (value × unit computed
+/// in `u128`).
+fn parse_backpressure(
     obj: &JsObject,
     ctx: &mut boa_engine::Context,
-) -> Result<Option<u32>, String> {
+) -> Result<Option<u64>, String> {
     let v = obj
-        .get(js_string!("bufferBytes"), ctx)
+        .get(js_string!("backpressure"), ctx)
         .map_err(|e| e.to_string())?;
     if v.is_undefined() || v.is_null() {
         return Ok(None);
     }
-    let n = v
+    let bp = v
+        .as_object()
+        .ok_or_else(|| "backpressure must be an object: { value, unit }".to_string())?;
+
+    let value = bp
+        .get(js_string!("value"), ctx)
+        .map_err(|e| e.to_string())?
         .as_number()
-        .ok_or_else(|| "bufferBytes must be a number".to_string())?;
-    if !n.is_finite() {
-        return Err("bufferBytes must be a finite number".to_string());
+        .ok_or_else(|| "backpressure.value must be a number".to_string())?;
+    if !value.is_finite() {
+        return Err("backpressure.value must be a finite number".to_string());
     }
-    if n.fract() != 0.0 {
-        return Err("bufferBytes must be an integer".to_string());
+    if value.fract() != 0.0 {
+        return Err("backpressure.value must be an integer".to_string());
     }
-    if n < MIN_STREAM_BUFFER_BYTES {
-        return Err("bufferBytes must be >= 1".to_string());
+    if value < MIN_STREAM_BUFFER_BYTES {
+        return Err("backpressure.value must be >= 1".to_string());
     }
-    if n > MAX_STREAM_BUFFER_BYTES {
-        return Err(format!(
-            "bufferBytes must be <= {MAX_STREAM_BUFFER_BYTES} (64 MiB)"
-        ));
+    // JS numbers are f64; keep the conversion exact (safe integers only).
+    if value > 9_007_199_254_740_991.0 {
+        return Err("backpressure.value is too large".to_string());
     }
-    Ok(Some(n as u32))
+
+    let unit_str = bp
+        .get(js_string!("unit"), ctx)
+        .map_err(|e| e.to_string())?
+        .as_string()
+        .map(|s| s.to_std_string_escaped())
+        .ok_or_else(|| "backpressure.unit must be a string".to_string())?;
+    let mult = match unit_str.as_str() {
+        "B" => UNIT_B,
+        "KB" => UNIT_KB,
+        "MB" => UNIT_MB,
+        "GB" => UNIT_GB,
+        _ => {
+            return Err(
+                "backpressure.unit must be one of \"B\" | \"KB\" | \"MB\" | \"GB\"".to_string(),
+            );
+        }
+    };
+
+    let total = (value as u128) * mult;
+    u64::try_from(total)
+        .map(Some)
+        .map_err(|_| "backpressure budget is too large".to_string())
 }
 
 fn js_opt_str(obj: &JsObject, key: &str, ctx: &mut boa_engine::Context) -> Option<String> {
@@ -266,22 +295,14 @@ fn resolve_outcome(
                 );
             }
             let _ = o.create_data_property(js_string!("headers"), JsValue::from(hmap), ctx);
-            match body {
-                HttpBody::Text(t) => {
-                    let _ = o.create_data_property(
-                        js_string!("bodyText"),
-                        JsValue::from(js_string!(t.as_str())),
-                        ctx,
-                    );
-                }
-                HttpBody::Bytes(b) => {
-                    use boa_engine::object::builtins::AlignedVec;
-                    if let Ok(ab) =
-                        JsArrayBuffer::from_byte_block(AlignedVec::from_iter(0, b.clone()), ctx)
-                    {
-                        let _ =
-                            o.create_data_property(js_string!("bodyBytes"), JsValue::from(ab), ctx);
-                    }
+            // Always raw bytes (`ArrayBuffer`) — business code decodes UTF-8
+            // itself via `decodeUtf8` (tur:std) or reads binary directly.
+            {
+                use boa_engine::object::builtins::AlignedVec;
+                if let Ok(ab) =
+                    JsArrayBuffer::from_byte_block(AlignedVec::from_iter(0, body.clone()), ctx)
+                {
+                    let _ = o.create_data_property(js_string!("body"), JsValue::from(ab), ctx);
                 }
             }
             resolvers

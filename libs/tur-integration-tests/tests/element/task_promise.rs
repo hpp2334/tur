@@ -201,12 +201,15 @@ fn request_returns_task_and_resolves() {
 
     app.eval_module_source(
         r#"
+        import { decodeUtf8 } from "tur:std";
         import { request } from "tur:net";
         globalThis.__done = "no";
         const t = request({ url: "https://example.test/x", method: "GET" });
         t.promise.then((r) => {
             globalThis.__status = String(r.status);
-            globalThis.__body = String(r.bodyText);
+            globalThis.__body = decodeUtf8(r.body);
+            globalThis.__hasBodyText = String("bodyText" in r);
+            globalThis.__bodyIsArrayBuffer = String(r.body instanceof ArrayBuffer);
             globalThis.__done = "yes";
         });
         "#,
@@ -216,6 +219,9 @@ fn request_returns_task_and_resolves() {
     app.wait_for(|a| a.eval_js("globalThis.__done") == "yes");
     assert_eq!(app.eval_js("globalThis.__status"), "200");
     assert_eq!(app.eval_js("globalThis.__body"), "task body");
+    // The body is always raw bytes — one `body: ArrayBuffer`, no text variant.
+    assert_eq!(app.eval_js("globalThis.__hasBodyText"), "false");
+    assert_eq!(app.eval_js("globalThis.__bodyIsArrayBuffer"), "true");
 }
 
 /// Cancelling before the driver is polled aborts it — the request is never

@@ -17,7 +17,7 @@
 //! targeting wasm should depend on `tur-net-wasm` instead.
 
 pub use tur_net_capability::{
-    Http, HttpBackend, HttpBody, HttpOutcome, NoopHttp, RequestOpts, ResponseType, TurNetPlugin,
+    Http, HttpBackend, HttpBody, HttpOutcome, NoopHttp, RequestOpts, TurNetPlugin,
 };
 
 #[cfg(not(target_family = "wasm"))]

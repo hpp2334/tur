@@ -62,8 +62,8 @@ use tur_filepicker_capability::{
 };
 use tur_native::NativeFontLoader;
 use tur_net_capability::{
-    Http, HttpBackend, HttpBody, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse,
-    RequestOpts, TurNetPlugin,
+    Http, HttpBackend, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse, RequestOpts,
+    TurNetPlugin,
 };
 
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
@@ -235,7 +235,9 @@ impl RecordingHttp {
     /// times the engine polled the body stream (each JS `body.next()` call
     /// polls exactly once). For backpressure assertions.
     pub fn stream_pulls(&self) -> usize {
-        self.inner.stream_pulls.load(std::sync::atomic::Ordering::SeqCst)
+        self.inner
+            .stream_pulls
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// The most recent request seen by the recording (or `None` if no
@@ -297,13 +299,25 @@ impl HttpBackend for RecordingHttp {
     }
 }
 
-/// Helper to build a canned text response.
+/// Helper to build a canned text response (UTF-8 encoded to raw bytes —
+/// the response body is always bytes; the JS side decodes with
+/// `decodeUtf8`).
 pub fn text_response(status: u16, body: impl Into<String>) -> HttpOutcome {
     HttpOutcome::Ok {
         status,
         status_text: "OK".to_string(),
         headers: Vec::new(),
-        body: HttpBody::Text(body.into()),
+        body: body.into().into_bytes(),
+    }
+}
+
+/// Helper to build a canned raw-bytes response.
+pub fn bytes_response(status: u16, body: Vec<u8>) -> HttpOutcome {
+    HttpOutcome::Ok {
+        status,
+        status_text: "OK".to_string(),
+        headers: Vec::new(),
+        body,
     }
 }
 

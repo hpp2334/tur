@@ -5,7 +5,7 @@
 //! Validates the full path: `await requestStream(opts).promise` →
 //! `RecordingHttp` serves canned chunks → the async iterable yields
 //! `Uint8Array` chunks → JS collects and concatenates them. Plus the
-//! backpressure surface: pull-only-what's-consumed, `bufferBytes`
+//! backpressure surface: pull-only-what's-consumed, `backpressure`
 //! validation, `task.cancel()` wire aborts, and the serial-`next()`
 //! protocol. (Cancel semantics live in `task_promise.rs`.)
 
@@ -166,11 +166,11 @@ fn stream_pulls_only_what_js_consumes() {
     );
 }
 
-/// `bufferBytes` is validated at parse time: bad values throw at the
+/// `backpressure` is validated at parse time: bad values throw at the
 /// `await` with a clear message. (See the parse-time rejection path in
 /// `tur_net_request_stream`.)
 #[test]
-fn stream_buffer_bytes_validation() {
+fn stream_backpressure_validation() {
     let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
     app.set_http_stream(200, vec![b"x".to_vec()]);
@@ -182,11 +182,25 @@ fn stream_buffer_bytes_validation() {
         globalThis.__done = false;
 
         (async () => {
-            try {
-                await requestStream({ url: "http://test/bb", bufferBytes: 0 }).promise;
-                globalThis.__caught = "unreachable";
-            } catch (e) {
-                globalThis.__caught = String(e.message);
+            const cases = [
+                [{ url: "http://test/bb0", backpressure: { value: 0, unit: "KB" } },
+                 "backpressure.value must be >= 1"],
+                [{ url: "http://test/bb1", backpressure: { value: 64, unit: "XX" } },
+                 'backpressure.unit must be one of "B" | "KB" | "MB" | "GB"'],
+                [{ url: "http://test/bb2", backpressure: 64 },
+                 "backpressure must be an object: { value, unit }"],
+            ];
+            for (const [opts, want] of cases) {
+                try {
+                    await requestStream(opts).promise;
+                    globalThis.__caught = "unreachable";
+                } catch (e) {
+                    globalThis.__caught = String(e.message);
+                }
+                if (globalThis.__caught !== want) {
+                    globalThis.__mismatch = globalThis.__caught + " != " + want;
+                    break;
+                }
             }
             globalThis.__done = true;
         })();
@@ -197,9 +211,47 @@ fn stream_buffer_bytes_validation() {
     app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
 
     assert_eq!(
-        app.eval_js("globalThis.__caught"),
-        "bufferBytes must be >= 1"
+        app.eval_js("globalThis.__mismatch"),
+        "undefined",
+        "every backpressure validation case must match its expected message"
     );
+}
+
+/// `backpressure` has **no upper cap**: a 2 GiB budget (far above the former
+/// 64 MiB guard) is accepted and the stream completes normally.
+#[test]
+fn stream_backpressure_accepts_large_budget() {
+    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+
+    app.set_http_stream(200, vec![b"chunk-0!!".to_vec(), b"chunk-1!!".to_vec()]);
+
+    app.eval_module_source(
+        r#"
+        import { requestStream } from "tur:net";
+
+        globalThis.__done = false;
+
+        (async () => {
+            const t = requestStream({
+                url: "http://test/big",
+                backpressure: { value: 2, unit: "GB" },
+            });
+            const resp = await t.promise;
+            let collected = 0;
+            let r = await resp.body.next();
+            while (!r.done) {
+                collected += r.value.length;
+                r = await resp.body.next();
+            }
+            globalThis.__collected = String(collected);
+            globalThis.__done = true;
+        })();
+        "#,
+    )
+    .expect("module");
+
+    app.wait_for(|a| a.eval_js("globalThis.__done") == "true");
+    assert_eq!(app.eval_js("globalThis.__collected"), "18");
 }
 
 /// `task.cancel()` wire-aborts deterministically: pending/subsequent

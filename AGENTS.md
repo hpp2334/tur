@@ -146,17 +146,21 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
 │     │   tur:net — `request`/`requestStream` bridge fns │
-│     │   returning `Task<T> = { promise, cancel() }`    │
-│     │   with per-request bufferBytes backpressure;     │
-│     │   task.cancel() wire-aborts a stream) │
+│     │   returning `Task<T> = { promise, cancel() }`;   │
+│     │   response body is ALWAYS raw bytes (decode      │
+│     │   with `decodeUtf8`); `requestStream` takes      │
+│     │   `backpressure: { value, unit }` (no cap,       │
+│     │   default 20 MiB); task.cancel() wire-aborts a   │
+│     │   stream) │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
 │     ├── tur-net-native         (NativeHttp via reqwest on a│
 │     │   user-provided tokio runtime — the only crate that │
 │     │   touches tokio; engine core is tokio-free.       │
 │     │   request_stream is byte-budgeted: a Semaphore    │
-│     │   caps in-flight bytes (bufferBytes, default      │
-│     │   512 KiB) between socket and JS — the producer   │
-│     │   parks on acquire_many → real TCP backpressure)  │
+│     │   caps in-flight bytes (backpressure option,      │
+│     │   default 20 MiB) between socket and JS — the     │
+│     │   producer parks on acquire_many → real TCP       │
+│     │   backpressure)  │
 │     ├── tur-filepicker-capability (FilePicker +         │
 │     │   FilePickerBackend trait + tur:filepicker bridge │
 │     │   — opt-in, requires a backend)                    │
@@ -839,8 +843,9 @@ libs/
                               #   crate in the workspace that touches tokio.
                               #   request_stream is byte-budgeted: a Semaphore
                               #   caps in-flight bytes between socket + JS
-                              #   (bufferBytes, default 512 KiB) — the producer
-                              #   parks on acquire_many → TCP backpressure
+                              #   (backpressure option, default 20 MiB) —
+                              #   the producer parks on acquire_many →
+                              #   TCP backpressure
    tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
                              #   registers the process JavaVM for per-call attach
    tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan

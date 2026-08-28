@@ -4,6 +4,7 @@ import { request } from "tur:net";
 import {
     createSvgResource,
     createTextEditingController,
+    decodeUtf8,
     derive,
     isCancelError,
     mutate,
@@ -44,8 +45,7 @@ interface HttpResponse {
     status: number;
     statusText: string;
     headers: Record<string, string>;
-    bodyText?: string;
-    bodyBytes?: ArrayBuffer;
+    body: ArrayBuffer;
 }
 
 interface HttpRequestOpts {
@@ -53,7 +53,6 @@ interface HttpRequestOpts {
     method?: string;
     headers?: Record<string, string>;
     body?: string | ArrayBuffer;
-    responseType?: "text" | "bytes";
 }
 
 export const hasHttp = typeof request === "function";
@@ -294,7 +293,6 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             const rVer = await http({
                 method: "GET",
                 url: base,
-                responseType: "text",
             });
             if (rVer.status === 404) {
                 ctx.set(error$, `Repository not found: ${target.fullName}`);
@@ -309,7 +307,7 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             }
             let parsed: JsDelivrVersion;
             try {
-                parsed = JSON.parse(rVer.bodyText ?? "{}");
+                parsed = JSON.parse(decodeUtf8(rVer.body));
             } catch {
                 ctx.set(error$, "Bad response from jsDelivr");
                 return;
@@ -323,14 +321,13 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             const rTree = await http({
                 method: "GET",
                 url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
-                responseType: "text",
             });
             if (rTree.status !== 200) {
                 // jsDelivr returns 403 for repos exceeding the 50 MB cap.
                 let msg = `HTTP ${rTree.status} ${rTree.statusText}`.trim();
                 try {
                     const body: JsDelivrTree = JSON.parse(
-                        rTree.bodyText ?? "{}",
+                        decodeUtf8(rTree.body),
                     );
                     if (
                         rTree.status === 403 &&
@@ -348,7 +345,7 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             }
             let parsedTree: JsDelivrTree;
             try {
-                parsedTree = JSON.parse(rTree.bodyText ?? "{}");
+                parsedTree = JSON.parse(decodeUtf8(rTree.body));
             } catch {
                 ctx.set(error$, "Bad file-tree response from jsDelivr");
                 return;
@@ -513,10 +510,9 @@ export const doDownload = mutate((ctx: StoreCtx) => {
             const r = await http({
                 method: "GET",
                 url: downloadUrl,
-                responseType: "bytes",
             });
             spinCtrl.stop();
-            if (r.status >= 200 && r.status < 300 && r.bodyBytes) {
+            if (r.status >= 200 && r.status < 300 && r.body.byteLength > 0) {
                 // Flip status to "done" first so the button morph renders on
                 // the next frame. Defer `save()` by 500 ms (engine time) so the
                 // "Saved" confirmation is already on screen before the host's
@@ -524,10 +520,10 @@ export const doDownload = mutate((ctx: StoreCtx) => {
                 // stall the frame loop, and without the defer the stall would
                 // prevent the done-state flush from rendering.
                 ctx.set(flashStatus, "done");
-                const bytes = r.bodyBytes;
+                const bytes = r.body;
                 const name = entry.name;
                 await sleep(500).promise;
-                save(name, bytes as ArrayBuffer);
+                save(name, bytes);
             } else {
                 ctx.set(error$, `Download failed: HTTP ${r.status}`);
                 ctx.set(flashStatus, "error");

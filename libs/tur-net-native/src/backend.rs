@@ -51,16 +51,16 @@ use futures::stream::BoxStream;
 use tokio::sync::Semaphore;
 use tur_net_capability::{
     HttpBackend, HttpBody, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse,
-    RequestOpts, ResponseType,
+    RequestOpts,
 };
 
 /// In-flight byte budget between the socket read and the JS consumer when a
-/// request omits `bufferBytes`. The JS side can raise/lower it per request
-/// via `requestStream({ bufferBytes })` (validated by the `tur:net` bridge
-/// to `1..=64 MiB`). 512 KiB ≈ 8 × 64 KiB chunks — enough to keep one chunk
-/// always ready for the next `body.next()` while a slow consumer pauses the
+/// request omits `backpressure`. The JS side can raise/lower it per request
+/// via `requestStream({ backpressure: { value, unit } })` (resolved to bytes
+/// by the `tur:net` bridge — no upper cap). 20 MiB keeps plenty of chunks
+/// ready for the next `body.next()` while a slow consumer pauses the
 /// download mid-body.
-pub const DEFAULT_STREAM_BUFFER_BYTES: usize = 512 * 1024;
+pub const DEFAULT_STREAM_BUFFER_BYTES: usize = 20 * 1024 * 1024;
 
 /// Carrier-channel capacity, in **chunks**. This is a defense-in-depth
 /// backstop only — the real bound is the byte budget semaphore (see
@@ -146,11 +146,13 @@ impl HttpBackend for NativeHttp {
 }
 
 /// Effective in-flight byte budget for one streaming request: the caller's
-/// `bufferBytes` (already validated by the bridge to `1..=64 MiB`) or the
-/// module default. Never below 1.
+/// `backpressure` bytes (resolved by the bridge — no upper cap) or the
+/// module default. Never below 1. Saturates to `usize::MAX` on 32-bit
+/// targets for oversized budgets (harmless: `pump_body` still splits by
+/// budget and `send_budgeted` saturates `acquire_many` at u32 permits).
 fn resolve_stream_budget(opts: &RequestOpts) -> usize {
     opts.stream_buffer_bytes
-        .map(|b| b as usize)
+        .map(|b| usize::try_from(b).unwrap_or(usize::MAX))
         .unwrap_or(DEFAULT_STREAM_BUFFER_BYTES)
         .max(1)
 }
@@ -272,9 +274,6 @@ async fn perform_request(opts: RequestOpts) -> HttpOutcome {
         let m = reqwest::Method::from_bytes(opts.method.as_bytes())
             .map_err(|e| format!("invalid method {:?}: {e}", opts.method))?;
         let mut rb = client.request(m, &opts.url);
-        if let (Some(u), Some(p)) = (opts.username.as_deref(), opts.password.as_deref()) {
-            rb = rb.basic_auth(u, Some(p));
-        }
         for (k, v) in &opts.headers {
             if let (Ok(name), Ok(val)) = (
                 reqwest::header::HeaderName::from_bytes(k.as_bytes()),
@@ -288,7 +287,6 @@ async fn perform_request(opts: RequestOpts) -> HttpOutcome {
             Some(HttpBody::Bytes(b)) => rb.body(b),
             None => rb,
         };
-        let want_bytes = opts.response_type == ResponseType::Bytes;
         let resp = rb.send().await.map_err(|e| format!("{e}"))?;
         let status = resp.status().as_u16();
         let status_text = resp.status().canonical_reason().unwrap_or("").to_string();
@@ -297,11 +295,8 @@ async fn perform_request(opts: RequestOpts) -> HttpOutcome {
             .iter()
             .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = if want_bytes {
-            HttpBody::Bytes(resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec())
-        } else {
-            HttpBody::Text(resp.text().await.map_err(|e| format!("{e}"))?)
-        };
+        // Always raw bytes — the JS side decodes UTF-8 itself (decodeUtf8).
+        let body = resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec();
         Ok(HttpOutcome::Ok {
             status,
             status_text,
@@ -338,9 +333,6 @@ async fn run_stream_request(
         }
     };
     let mut rb = client.request(m, &opts.url);
-    if let (Some(u), Some(p)) = (opts.username.as_deref(), opts.password.as_deref()) {
-        rb = rb.basic_auth(u, Some(p));
-    }
     for (k, v) in &opts.headers {
         if let (Ok(name), Ok(val)) = (
             reqwest::header::HeaderName::from_bytes(k.as_bytes()),
@@ -522,10 +514,7 @@ mod tests {
 
         // Consuming one chunk releases exactly its bytes back — the producer
         // advances by exactly one chunk, then parks again.
-        let first = rt
-            .block_on(body.next())
-            .expect("chunk")
-            .expect("ok");
+        let first = rt.block_on(body.next()).expect("chunk").expect("ok");
         assert_eq!(first.len(), SIZE);
         rt.block_on(async {
             for _ in 0..200 {
@@ -611,7 +600,10 @@ mod tests {
             }
         });
         let pulled_before_drop = pulled.load(Ordering::SeqCst);
-        assert!(pulled_before_drop < N, "producer should be parked on budget");
+        assert!(
+            pulled_before_drop < N,
+            "producer should be parked on budget"
+        );
 
         drop(body); // closes the semaphore + drops the receiver
         rt.block_on(async {
@@ -619,10 +611,12 @@ mod tests {
                 tokio::task::yield_now().await;
             }
         });
-        assert!(task.is_finished(), "producer must abort after consumer drop");
+        assert!(
+            task.is_finished(),
+            "producer must abort after consumer drop"
+        );
         let pulled_after = pulled.load(Ordering::SeqCst);
         assert!(pulled_after < N);
         let _ = rt.block_on(task);
     }
 }
-

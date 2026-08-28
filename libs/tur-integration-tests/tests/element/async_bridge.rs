@@ -90,19 +90,20 @@ fn http_request_resolves_with_canned_response() {
 
     app.eval_module_source(
         r#"
-        import { source } from "tur:std";
+        import { decodeUtf8, source } from "tur:std";
         import { request } from "tur:net";
         globalThis.__status$ = source(0);
         globalThis.__body$ = source("");
         request({ url: "https://example.test/x", method: "GET" })
             .promise
             .then((r) => {
+                const text = decodeUtf8(r.body);
                 store.set(globalThis.__status$, r.status);
-                store.set(globalThis.__body$, r.bodyText);
+                store.set(globalThis.__body$, text);
                 // Stash resolved values as plain string globals so eval_js
                 // can read them without imports.
                 globalThis.__result_status = String(r.status);
-                globalThis.__result_body = String(r.bodyText);
+                globalThis.__result_body = text;
             })
             .catch((e) => {
                 globalThis.__result_body = "err:" + e.message;

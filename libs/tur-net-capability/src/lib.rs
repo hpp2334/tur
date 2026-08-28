@@ -3,7 +3,7 @@
 //! Provides:
 //!
 //! - The [`HttpBackend`] capability trait + supporting types
-//!   ([`RequestOpts`], [`HttpOutcome`], [`HttpBody`], [`ResponseType`]).
+//!   ([`RequestOpts`], [`HttpOutcome`], [`HttpBody`]).
 //! - The [`Http`] capability newtype wrapping `Rc<dyn HttpBackend>`,
 //!   registered via
 //!   [`tur_engine::TurRuntimeBuilder::capability`](`Http::new(backend)`).
@@ -51,48 +51,41 @@ pub type HttpStreamFuture = Pin<Box<dyn Future<Output = Result<HttpStreamRespons
 
 /// Request body kind. Mirrors what JS can pass via `request({ body })`:
 /// either a string or an `ArrayBuffer` (e.g. from `filePicker.pick()`).
+/// (Request-side only — the response body is always raw `Vec<u8>` bytes.)
 #[derive(Debug, Clone)]
 pub enum HttpBody {
     Text(String),
     Bytes(Vec<u8>),
 }
 
-/// Response body kind the caller wants back. `"text"` (default) fills
-/// `bodyText`; `"bytes"` fills `bodyBytes` as an `ArrayBuffer`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResponseType {
-    Text,
-    Bytes,
-}
-
 /// Request options, parsed from the JS `{ url, method?, headers?, body?,
-/// responseType?, username?, password?, bufferBytes? }` object.
+/// backpressure? }` object.
 #[derive(Debug, Clone)]
 pub struct RequestOpts {
     pub url: String,
     pub method: String,
     pub headers: Vec<(String, String)>,
+    /// Request body (text or raw bytes). The RESPONSE body is always raw
+    /// bytes — business code decodes UTF-8 itself via `decodeUtf8` (`tur:std`).
     pub body: Option<HttpBody>,
-    pub response_type: ResponseType,
-    pub username: Option<String>,
-    pub password: Option<String>,
-    /// Streaming only (`requestStream({ bufferBytes })`): the max bytes
-    /// buffered in flight between the network and the consumer, already
-    /// validated by the bridge to `1..=64 MiB`. `None` = backend default.
-    /// Honored best-effort — see [`HttpBackend::request_stream`]. Ignored by
-    /// [`HttpBackend::request`].
-    pub stream_buffer_bytes: Option<u32>,
+    /// Streaming only (`requestStream({ backpressure: { value, unit } })`):
+    /// the max bytes buffered in flight between the network and the
+    /// consumer, resolved to bytes by the bridge (no upper cap). `None` =
+    /// backend default. Honored best-effort — see
+    /// [`HttpBackend::request_stream`]. Ignored by [`HttpBackend::request`].
+    pub stream_buffer_bytes: Option<u64>,
 }
 
-/// Outcome of an HTTP request — the success body or the error message.
-/// The bridge builds a JS object from this in the completion closure.
+/// Outcome of an HTTP request — the success body (always raw bytes; decode
+/// with `decodeUtf8` on the JS side) or the error message. The bridge builds
+/// a JS object from this in the completion closure.
 #[derive(Debug, Clone)]
 pub enum HttpOutcome {
     Ok {
         status: u16,
         status_text: String,
         headers: Vec<(String, String)>,
-        body: HttpBody,
+        body: Vec<u8>,
     },
     Err(String),
 }
@@ -127,11 +120,12 @@ pub trait HttpBackend: Send + Sync + 'static {
     /// TCP flow control only if backends honor this (an eager producer plus
     /// an unbounded queue turns any slow consumer into unbounded memory).
     ///
-    /// `opts.stream_buffer_bytes` (from `requestStream({ bufferBytes })`)
-    /// requests the max bytes buffered in flight between the network and the
-    /// consumer; `None` = backend default. Implementations that own their
-    /// buffering SHOULD honor it; browser-managed backends (wasm) may ignore
-    /// it.
+    /// `opts.stream_buffer_bytes` (resolved from
+    /// `requestStream({ backpressure: { value, unit } })`) requests the max
+    /// bytes buffered in flight between the network and the consumer; `None`
+    /// = backend default. No upper cap is enforced by the bridge.
+    /// Implementations that own their buffering SHOULD honor it;
+    /// browser-managed backends (wasm) may ignore it.
     ///
     /// Default impl delegates to `request()` and wraps the body as a single-chunk stream.
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
@@ -145,10 +139,7 @@ pub trait HttpBackend: Send + Sync + 'static {
                     headers,
                     body,
                 } => {
-                    let chunk = match body {
-                        HttpBody::Text(t) => t.into_bytes(),
-                        HttpBody::Bytes(b) => b,
-                    };
+                    let chunk = body;
                     let body_stream = futures::stream::once(async move { Ok(chunk) }).boxed_local();
                     Ok(HttpStreamResponse {
                         status,
