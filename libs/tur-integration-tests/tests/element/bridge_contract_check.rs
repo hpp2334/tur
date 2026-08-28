@@ -28,7 +28,10 @@ const CONTRACTS: &[(&str, &str)] = &[
     ("tur:animation", "js/packages/tur-animation/src/index.d.ts"),
     ("tur:clipboard", "js/packages/tur-clipboard/src/index.d.ts"),
     ("tur:net", "js/packages/tur-net/src/index.d.ts"),
-    ("tur:filepicker", "js/packages/tur-filepicker/src/index.d.ts"),
+    (
+        "tur:filepicker",
+        "js/packages/tur-filepicker/src/index.d.ts",
+    ),
 ];
 
 fn workspace_root() -> std::path::PathBuf {
@@ -68,7 +71,7 @@ fn declared_runtime_exports(spec: &str, rel_path: &str) -> Vec<String> {
                 .trim()
                 .strip_prefix('"')
                 .and_then(|s| s.strip_suffix('"'))
-                && let Some((_, other_path)) = CONTRACTS.iter().find(|(s, _)| *s == other)
+            && let Some((_, other_path)) = CONTRACTS.iter().find(|(s, _)| *s == other)
         {
             names.extend(declared_runtime_exports(other, other_path));
             continue;
@@ -161,7 +164,10 @@ fn tur_net_matches_its_types() {
 fn tur_filepicker_matches_its_types() {
     let app = TurTestApp::new_with_filepicker(100.0, 100.0).unwrap();
     let runtime = runtime_exports(&app, "tur:filepicker");
-    assert!(!runtime.is_empty(), "tur:filepicker should register exports");
+    assert!(
+        !runtime.is_empty(),
+        "tur:filepicker should register exports"
+    );
     assert_contract(
         "tur:filepicker",
         CONTRACTS[5].1,
