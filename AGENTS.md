@@ -145,11 +145,22 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │    subsystems + event payloads)                     │
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
-│     │   tur:net)                               │
+│     │   tur:net — `request`/`requestStream` bridge fns │
+│     │   returning `Task<T> = { promise, cancel() }`;   │
+│     │   response body is ALWAYS raw bytes (decode      │
+│     │   with `decodeUtf8`); `requestStream` takes      │
+│     │   `backpressure: { value, unit }` (no cap,       │
+│     │   default 20 MiB); task.cancel() wire-aborts a   │
+│     │   stream) │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
 │     ├── tur-net-native         (NativeHttp via reqwest on a│
 │     │   user-provided tokio runtime — the only crate that │
-│     │   touches tokio; engine core is tokio-free)        │
+│     │   touches tokio; engine core is tokio-free.       │
+│     │   request_stream is byte-budgeted: a Semaphore    │
+│     │   caps in-flight bytes (backpressure option,      │
+│     │   default 20 MiB) between socket and JS — the     │
+│     │   producer parks on acquire_many → real TCP       │
+│     │   backpressure)  │
 │     ├── tur-filepicker-capability (FilePicker +         │
 │     │   FilePickerBackend trait + tur:filepicker bridge │
 │     │   — opt-in, requires a backend)                    │
@@ -350,7 +361,7 @@ that store (free module-level `get`/`set` exports are gone, and there is no
 `getStore()` either: reactive access outside a closure goes through the
 closure ctx of `derive`/`mutate`, which the
 engine binds to the instance store — code needing reactive access in helpers
-or `launch` generators threads/captures that ctx; side-effecting helpers
+or `async` fn bodies threads/captures that ctx; side-effecting helpers
 are declared as mutations themselves and dispatched via
 `ctx.set(action, …args)` — the flush's fixed-point loop drains nested
 dispatches within the same frame, so composing actions costs no latency).
@@ -820,12 +831,21 @@ libs/
                              #   NativeClipboard::new(&HostExecutor)
                              #   stores it and self-hops each read/write to
                              #   main (macOS NSPasteboard needs main-thread)
-  tur-net-capability/        # HttpBackend trait + Http cap + tur:net
+  tur-net-capability/        # HttpBackend trait + Http cap + tur:net —
+                              #   `request`/`requestStream` bridge fns, both
+                              #   returning `Task<T> = { promise, cancel() }`
+                              #   (cancel wire-aborts a stream); per-request
+                              #   bufferBytes backpressure
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
    tur-net-native/            # NativeHttp (reqwest) backend — runs each request
                               #   on a user-provided tokio runtime (Handle) and
                               #   bridges results back via oneshot/mpsc; the only
-                              #   crate in the workspace that touches tokio
+                              #   crate in the workspace that touches tokio.
+                              #   request_stream is byte-budgeted: a Semaphore
+                              #   caps in-flight bytes between socket + JS
+                              #   (backpressure option, default 20 MiB) —
+                              #   the producer parks on acquire_many →
+                              #   TCP backpressure
    tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
                              #   registers the process JavaVM for per-call attach
    tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan
@@ -981,6 +1001,7 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
 - Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlVelloRenderer`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`VelloRenderer`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint the element tree into a vello-hybrid `Scene`; each backend wraps it with its own renderer + `Renderer` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
+- Async JS model: every async engine API returns `Task<T> = { promise, cancel() }` (`sleep`, `clipboard.*`, `request`/`requestStream`, `filePicker.*`). Compose with plain `async`/`await` or `.promise.then` — never generators (`launch` is gone). `cancel()` aborts what the op can abort (a sleep timer, an unpolled/in-flight request, a stream download) and **rejects the promise with a `CancelError`** (`isCancelError(e)`); the debounce idiom pairs `.then(onOk, () => {})` so the no-op rejection handler IS the cancelled branch.
 - No separate RenderTree — layout and paint happen directly on ElementTree
 - When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
 - Publishable npm packages (the `@tur-ng/*` packages under `js/packages/` that carry a `publishConfig` block — `tur-core`, `tur-std`, `tur-animation`, `tur-clipboard`, `tur-net`): whenever you modify one, bump its **patch** version by exactly +1 over the latest version **published on the npm registry** (`npm view <pkg-name> version`, e.g. `npm view @tur-ng/std version` → set the branch's `version` to that + one patch). Do **not** use `main`'s `version` as the baseline — `main` frequently drifts ahead of the registry (e.g. `main` holds `0.1.0` while `@tur-ng/std` is published at `0.0.2`), so it yields wrong numbers. Never bump twice on the same branch for the same change; never bump minor/major unless asked.

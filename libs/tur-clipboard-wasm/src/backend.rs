@@ -9,7 +9,8 @@ use std::pin::Pin;
 use tur_engine::ClipboardBackend;
 
 /// Browser clipboard backend. Wraps `navigator.clipboard.readText` /
-/// `writeText` — both Promise-returning JS calls.
+/// `writeText` — both promise-based JS calls (surfaced to tur JS as the
+/// `Task`-returning `clipboard` object).
 #[derive(Default)]
 pub struct WasmClipboard;
 

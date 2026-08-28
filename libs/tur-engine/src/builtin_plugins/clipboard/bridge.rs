@@ -1,20 +1,23 @@
 //! `tur:clipboard` bridge: a `clipboard` object with `readText` /
-//! `writeText` methods, each returning a `Promise`.
+//! `writeText` methods, each returning a `Task` (`{ promise, cancel() }`).
 //!
 //! The bridge fns are ctx-bound `Ptr`s that look up the
 //! [`Clipboard`](super::capability::Clipboard) capability from `TurInstanceContext`'s
 //! capability registry (populated by the embedder via
 //! `TurRuntimeBuilder::capability(Clipboard::new(...))`).
 //!
-//! Promise settlement flow:
+//! Task settlement flow:
 //!
-//! 1. Bridge fn creates a pending `JsPromise` synchronously and returns it.
-//! 2. Spawns a future via [`WorkerContext::spawn_local`] that calls
+//! 1. Bridge fn creates a pending `JsPromise` synchronously, spawns the
+//!    op, and returns the shared [`make_task`] handle.
+//! 2. The spawn (via [`WorkerContext::spawn_local`]) calls
 //!    `clipboard.read_text()` (or `write_text`) — this is the only async
 //!    part.
 //! 3. On completion, the future pushes a `Completion` closure into the
 //!    [`CompletionHandle`] that runs under `&mut Context` on the next
 //!    `flush` and resolves the promise.
+//! 4. `task.cancel()` aborts the spawn and rejects the promise with a
+//!    `CancelError` (see [`make_task`]).
 //!
 //! Promise settlement enqueues a PromiseJob; boa's `executor.drain` (called
 //! right after `drain_completions` in `flush`) runs the `.then`
@@ -25,6 +28,7 @@ use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsPromise;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
+use crate::core::async_::make_task;
 use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx};
 use crate::core::js_runtime::module_loader::bound_native;
 
@@ -39,8 +43,8 @@ pub(in crate::builtin_plugins) fn fns() -> Vec<crate::core::js_runtime::helpers:
     Vec::new()
 }
 
-/// Build the `clipboard` JS object: `{ readText(): Promise<string>,
-/// writeText(text: string): Promise<void> }`. Each method is a ctx-bound
+/// Build the `clipboard` JS object: `{ readText(): Task<string>,
+/// writeText(text: string): Task<void> }`. Each method is a ctx-bound
 /// native fn (via [`bound_native`]) so it can `extract_js_ctx(args)` and look
 /// up its capability slot.
 pub(in crate::builtin_plugins) fn build_clipboard_object(
@@ -67,8 +71,11 @@ pub(in crate::builtin_plugins) fn build_clipboard_object(
     obj.into()
 }
 
-/// `clipboard.readText(): Promise<string>` — reads text from the platform
-/// clipboard. Resolves with the text (empty string if denied/unavailable).
+/// `clipboard.readText(): Task<string>` — reads text from the platform
+/// clipboard. `promise` resolves with the text (empty string if
+/// denied/unavailable); `cancel()` aborts the read (a dispatched host op
+/// may still complete underneath — its result is discarded) and rejects
+/// with a `CancelError`.
 fn tur_clipboard_read_text(
     _this: &JsValue,
     args: &[JsValue],
@@ -84,7 +91,8 @@ fn tur_clipboard_read_text(
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
-    let _ = js_ctx.spawn_local(|_aw| async move {
+    let resolvers_for_task = resolvers.clone();
+    let handle = js_ctx.spawn_local(|_aw| async move {
         let text = clipboard.read_text().await;
         // Push a completion closure that resolves the promise under
         // `&mut Context`. Runs on the next `flush`'s `drain_completions`
@@ -96,11 +104,12 @@ fn tur_clipboard_read_text(
             Ok(())
         }));
     });
-    Ok(promise.into())
+    Ok(make_task(ctx, &promise, &resolvers_for_task, Some(handle), None).into())
 }
 
-/// `clipboard.writeText(text: string): Promise<void>` — writes text to the
-/// platform clipboard. Resolves when the write has been acknowledged.
+/// `clipboard.writeText(text: string): Task<void>` — writes text to the
+/// platform clipboard. `promise` resolves when the write has been
+/// acknowledged; `cancel()` behaves like `readText`'s.
 fn tur_clipboard_write_text(
     _this: &JsValue,
     args: &[JsValue],
@@ -116,12 +125,13 @@ fn tur_clipboard_write_text(
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
+    let resolvers_for_task = resolvers.clone();
     let text = args
         .get_or_undefined(1)
         .as_string()
         .map(|s| s.to_std_string_escaped())
         .unwrap_or_default();
-    let _ = js_ctx.spawn_local(|_aw| async move {
+    let handle = js_ctx.spawn_local(|_aw| async move {
         clipboard.write_text(text).await;
         completion_handle.push(Box::new(move |ctx| {
             resolvers
@@ -130,5 +140,5 @@ fn tur_clipboard_write_text(
             Ok(())
         }));
     });
-    Ok(promise.into())
+    Ok(make_task(ctx, &promise, &resolvers_for_task, Some(handle), None).into())
 }

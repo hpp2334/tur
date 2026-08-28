@@ -83,15 +83,31 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/tur-clipboard: {}
+  packages/tur-clipboard:
+    dependencies:
+      '@tur-ng/std':
+        specifier: workspace:*
+        version: link:../tur-std
 
   packages/tur-core: {}
 
-  packages/tur-filepicker: {}
+  packages/tur-filepicker:
+    dependencies:
+      '@tur-ng/std':
+        specifier: workspace:*
+        version: link:../tur-std
 
-  packages/tur-net: {}
+  packages/tur-net:
+    dependencies:
+      '@tur-ng/std':
+        specifier: workspace:*
+        version: link:../tur-std
 
-  packages/tur-std: {}
+  packages/tur-std:
+    dependencies:
+      '@tur-ng/core':
+        specifier: workspace:*
+        version: link:../tur-core
 
   packages/tur-test-cases:
     dependencies:

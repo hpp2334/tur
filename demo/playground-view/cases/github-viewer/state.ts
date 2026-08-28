@@ -4,8 +4,9 @@ import { request } from "tur:net";
 import {
     createSvgResource,
     createTextEditingController,
+    decodeUtf8,
     derive,
-    launch,
+    isCancelError,
     mutate,
     type Readable,
     type StoreCtx,
@@ -44,8 +45,7 @@ interface HttpResponse {
     status: number;
     statusText: string;
     headers: Record<string, string>;
-    bodyText?: string;
-    bodyBytes?: ArrayBuffer;
+    body: ArrayBuffer;
 }
 
 interface HttpRequestOpts {
@@ -53,13 +53,12 @@ interface HttpRequestOpts {
     method?: string;
     headers?: Record<string, string>;
     body?: string | ArrayBuffer;
-    responseType?: "text" | "bytes";
 }
 
 export const hasHttp = typeof request === "function";
 
 function http(opts: HttpRequestOpts): Promise<HttpResponse> {
-    return request(opts) as Promise<HttpResponse>;
+    return request(opts).promise as Promise<HttpResponse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +253,11 @@ function rawUrl(
 
 interface JsDelivrVersion {
     versions: Array<{ version: string }>;
-    tags?: Array<{ version: string }>;
+    /** Tag → version map. An EMPTY OBJECT when the repo has no tags — never
+     *  an array (a previous revision assumed `Array<{version}>` and called
+     *  `.find` on it, which threw "not a callable function" for tag-less
+     *  repos like octocat/Hello-World). */
+    tags?: Record<string, string>;
 }
 
 interface JsDelivrTree {
@@ -264,22 +267,18 @@ interface JsDelivrTree {
 }
 
 function pickVersion(body: JsDelivrVersion): string | null {
-    // Prefer the latest release tag; fall back to a `main`/`master`/`HEAD` ref.
+    // Prefer the latest published version; fall back to a `main`/`master`/
+    // `HEAD` tag.
     if (body.versions && body.versions.length > 0)
         return body.versions[0].version;
-    const tag = body.tags?.find(
-        (t) =>
-            t.version === "main" ||
-            t.version === "master" ||
-            t.version === "HEAD",
-    );
-    return tag?.version ?? null;
+    const tags = body.tags ?? {};
+    return tags.main ?? tags.master ?? tags.HEAD ?? null;
 }
 
 /** Fetch the flat file tree for a repo, stash it, and switch to the explorer.
  *  Runs as two sequential HTTP calls (version resolve → tree). Dispatched by
- *  the `target$` watcher on every target change; the fetch generator
- *  captures the mutation ctx. */
+ *  the `target$` watcher on every target change; the async fetch captures
+ *  the mutation ctx. */
 const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
     ctx.set(loading$, true);
     ctx.set(error$, null);
@@ -289,13 +288,12 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
 
     const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
 
-    launch(function* () {
+    (async () => {
         try {
-            const rVer = (yield http({
+            const rVer = await http({
                 method: "GET",
                 url: base,
-                responseType: "text",
-            })) as HttpResponse;
+            });
             if (rVer.status === 404) {
                 ctx.set(error$, `Repository not found: ${target.fullName}`);
                 return;
@@ -309,7 +307,7 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             }
             let parsed: JsDelivrVersion;
             try {
-                parsed = JSON.parse(rVer.bodyText ?? "{}");
+                parsed = JSON.parse(decodeUtf8(rVer.body));
             } catch {
                 ctx.set(error$, "Bad response from jsDelivr");
                 return;
@@ -320,17 +318,16 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
                 return;
             }
             ctx.set(version$, ver);
-            const rTree = (yield http({
+            const rTree = await http({
                 method: "GET",
                 url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
-                responseType: "text",
-            })) as HttpResponse;
+            });
             if (rTree.status !== 200) {
                 // jsDelivr returns 403 for repos exceeding the 50 MB cap.
                 let msg = `HTTP ${rTree.status} ${rTree.statusText}`.trim();
                 try {
                     const body: JsDelivrTree = JSON.parse(
-                        rTree.bodyText ?? "{}",
+                        decodeUtf8(rTree.body),
                     );
                     if (
                         rTree.status === 403 &&
@@ -348,7 +345,7 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
             }
             let parsedTree: JsDelivrTree;
             try {
-                parsedTree = JSON.parse(rTree.bodyText ?? "{}");
+                parsedTree = JSON.parse(decodeUtf8(rTree.body));
             } catch {
                 ctx.set(error$, "Bad file-tree response from jsDelivr");
                 return;
@@ -359,7 +356,7 @@ const loadRepo = mutate((ctx: StoreCtx, target: Repo) => {
         } finally {
             ctx.set(loading$, false);
         }
-    });
+    })();
 });
 
 // ---------------------------------------------------------------------------
@@ -477,7 +474,7 @@ export const selectEntry = mutate((ctx: StoreCtx, entry: DirEntry) => {
 /** Revert the button to idle after a short confirmation window so the user
  *  sees the "Saved" / "Failed" flash before the label resets. */
 const STATUS_FLASH_MS = 1800;
-let statusTask: Task | null = null;
+let statusTask: Task<void> | null = null;
 const flashStatus = mutate((ctx: StoreCtx, status: DownloadStatus) => {
     statusTask?.cancel();
     ctx.set(downloadStatus$, status);
@@ -485,11 +482,14 @@ const flashStatus = mutate((ctx: StoreCtx, status: DownloadStatus) => {
         // Keep error$ set — the banner will show it.
     }
     if (status !== "loading") {
-        statusTask = launch(function* () {
-            yield sleep(STATUS_FLASH_MS);
-            statusTask = null;
-            ctx.set(downloadStatus$, "idle");
-        });
+        statusTask = sleep(STATUS_FLASH_MS);
+        statusTask.promise.then(
+            () => {
+                statusTask = null;
+                ctx.set(downloadStatus$, "idle");
+            },
+            () => {},
+        );
     }
 });
 
@@ -500,20 +500,19 @@ export const doDownload = mutate((ctx: StoreCtx) => {
     const entry = ctx.get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
     // Capture the narrowed string before the closure — TS does not preserve
-    // property narrowing across generator/callback boundaries.
+    // property narrowing across async/callback boundaries.
     const downloadUrl = entry.downloadUrl;
     ctx.set(error$, null);
     ctx.set(flashStatus, "loading");
     spinCtrl.forward();
-    launch(function* () {
+    (async () => {
         try {
-            const r = (yield http({
+            const r = await http({
                 method: "GET",
                 url: downloadUrl,
-                responseType: "bytes",
-            })) as HttpResponse;
+            });
             spinCtrl.stop();
-            if (r.status >= 200 && r.status < 300 && r.bodyBytes) {
+            if (r.status >= 200 && r.status < 300 && r.body.byteLength > 0) {
                 // Flip status to "done" first so the button morph renders on
                 // the next frame. Defer `save()` by 500 ms (engine time) so the
                 // "Saved" confirmation is already on screen before the host's
@@ -521,20 +520,21 @@ export const doDownload = mutate((ctx: StoreCtx) => {
                 // stall the frame loop, and without the defer the stall would
                 // prevent the done-state flush from rendering.
                 ctx.set(flashStatus, "done");
-                const bytes = r.bodyBytes;
+                const bytes = r.body;
                 const name = entry.name;
-                yield sleep(500);
-                save(name, bytes as ArrayBuffer);
+                await sleep(500).promise;
+                save(name, bytes);
             } else {
                 ctx.set(error$, `Download failed: HTTP ${r.status}`);
                 ctx.set(flashStatus, "error");
             }
         } catch (e) {
+            if (isCancelError(e)) return;
             spinCtrl.stop();
             ctx.set(error$, errMsg(e));
             ctx.set(flashStatus, "error");
         }
-    });
+    })();
 });
 
 // ---------------------------------------------------------------------------

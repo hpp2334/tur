@@ -1,73 +1,33 @@
-//! Integration tests for the `sleep` + `launch` task primitives exported by
-//! `tur:std` (the replacements for `setTimeout`/`setInterval`).
+//! Integration tests for the `sleep` Task + the async/await model exported
+//! by `tur:std` (the replacement for `setTimeout`/`setInterval`).
 //!
-//! These also exercise boa's generator support end-to-end — `launch` drives a
-//! `function*` generator via `JsGenerator::next`, resuming it when each
-//! `yield`ed promise (`sleep`) resolves.
+//! Every async engine API returns `Task<T> = { promise, cancel() }` — the
+//! shape/cancel/debounce semantics are pinned in `task_promise.rs`, and the
+//! completion → PromiseJob → reactive-set path is pinned in
+//! `async_bridge.rs`. This file pins the *composition* layer: plain
+//! `async`/`await` functions driven by boa's microtask queue, with loop
+//! cancellation via the current sleep's `cancel()` + `isCancelError`.
 
 use std::time::Duration;
 
 use tur_integration_tests::TurTestApp;
 
+/// An async loop ticks repeatedly — each `await sleep(ms).promise` parks and
+/// resumes inside the engine's flush loop.
 #[test]
-fn sleep_resolves_after_delay() {
+fn async_loop_ticks_multiple_times() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
         import { sleep } from "tur:std";
-        globalThis.__done = "0";
-        sleep(50).then(() => { globalThis.__done = "1"; });
-        "#,
-    )
-    .unwrap();
-
-    // Not resolved synchronously / after a single frame.
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(app.eval_js("globalThis.__done"), "0");
-
-    app.wait_for(|a| a.eval_js("globalThis.__done") == "1");
-    assert_eq!(app.eval_js("globalThis.__done"), "1");
-}
-
-#[test]
-fn launch_runs_generator_and_resumes_after_sleep() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { launch, sleep } from "tur:std";
-        globalThis.__v = "0";
-        launch(function* () {
-            yield sleep(40);
-            globalThis.__v = "7";
-        });
-        "#,
-    )
-    .unwrap();
-
-    // The generator parks at its first `yield`; nothing has run yet.
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(app.eval_js("globalThis.__v"), "0");
-
-    app.wait_for(|a| a.eval_js("globalThis.__v") == "7");
-    assert_eq!(app.eval_js("globalThis.__v"), "7");
-}
-
-#[test]
-fn launch_repeating_loop_ticks_multiple_times() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { launch, sleep } from "tur:std";
         globalThis.__count = "0";
-        launch(function* () {
+        (async () => {
             for (let i = 0; i < 3; i++) {
-                yield sleep(40);
+                await sleep(40).promise;
                 globalThis.__count = String(i + 1);
             }
-        });
+        })();
         "#,
     )
     .unwrap();
@@ -76,119 +36,65 @@ fn launch_repeating_loop_ticks_multiple_times() {
     assert_eq!(app.eval_js("globalThis.__count"), "3");
 }
 
+/// The ticker idiom: an async loop that stops when its current sleep is
+/// cancelled — the `await` throws `CancelError`, the `isCancelError` catch
+/// returns, and nothing after the cancelled await ever runs.
 #[test]
-fn launch_cancel_stops_resumption() {
+fn async_loop_stops_when_current_sleep_cancelled() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "tur:std";
+        import { isCancelError, sleep } from "tur:std";
         globalThis.__hit = "0";
-        // The body after the `yield` must never run once we cancel.
-        globalThis.__task = launch(function* () {
-            yield sleep(120);
-            globalThis.__hit = "1";
-        });
+        globalThis.__tick = null;
+        (async () => {
+            try {
+                for (;;) {
+                    globalThis.__tick = sleep(80);
+                    await globalThis.__tick.promise;
+                    globalThis.__hit = "tick-ran";
+                }
+            } catch (e) {
+                if (!isCancelError(e)) throw e;
+            }
+            globalThis.__hit = "stopped";
+        })();
         "#,
     )
     .unwrap();
 
-    // Cancel before the sleep deadline elapses.
-    app.eval_js("globalThis.__task.cancel()");
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(app.eval_js("globalThis.__hit"), "0");
+    app.eval_js("globalThis.__tick.cancel()");
+    app.wait_for(|a| a.eval_js("globalThis.__hit") == "stopped");
 
-    // Advance well past the sleep deadline: the in-flight sleep
-    // resolves, but the driver ignores a cancelled task, so `__hit` stays 0.
+    // Advance well past the sleep deadline: the loop body never runs again.
     app.wait_for_timeout(Duration::from_millis(200));
-
-    assert_eq!(app.eval_js("globalThis.__hit"), "0");
+    assert_eq!(app.eval_js("globalThis.__hit"), "stopped");
 }
 
+/// A rejected awaited promise surfaces as a thrown error at the `await`
+/// point, catchable with `try/catch` (native async semantics — boa's
+/// microtask queue drives it exactly like a sleep resolution). After the
+/// catch runs, the async fn continues.
 #[test]
-fn launch_debounce_supersedes_previous_task() {
+fn caught_rejection_resumes_async_fn() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "tur:std";
-        globalThis.__calls = "0";
-        globalThis.__pending = null;
-        globalThis.__schedule = function () {
-            if (globalThis.__pending) globalThis.__pending.cancel();
-            globalThis.__pending = launch(function* () {
-                yield sleep(60);
-                globalThis.__calls = String(Number(globalThis.__calls) + 1);
-            });
-        };
-        // Two rapid schedules: only the second should fire.
-        globalThis.__schedule();
-        globalThis.__schedule();
-        "#,
-    )
-    .unwrap();
-
-    app.wait_for(|a| a.eval_js("globalThis.__calls") == "1");
-    assert_eq!(app.eval_js("globalThis.__calls"), "1");
-}
-
-/// Regression: `launch` must drive ANY iterator (native `function*` OR a
-/// down-levelled tslib `_ts_generator` iterator), since rspack/swc bundles
-/// transpile generators away. Simulate the transpiled shape: a plain function
-/// returning an object whose `.next(value)` returns `{done, value}`.
-#[test]
-fn launch_drives_non_native_iterator() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { launch, sleep } from "tur:std";
-        globalThis.__hit = "0";
-        // A hand-written iterator that mimics what SWC/tslib produces for
-        // `function* () { yield sleep(40); globalThis.__hit = "1"; }` — a
-        // plain object with a `.next(value)` method, NOT a native Generator.
-        function makeIter() {
-            let state = 0;
-            return {
-                next: function () {
-                    if (state === 0) { state = 1; return { value: sleep(40), done: false }; }
-                    globalThis.__hit = "1";
-                    return { value: undefined, done: true };
-                },
-            };
-        }
-        launch(makeIter);
-        "#,
-    )
-    .unwrap();
-
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(app.eval_js("globalThis.__hit"), "0");
-
-    app.wait_for(|a| a.eval_js("globalThis.__hit") == "1");
-    assert_eq!(app.eval_js("globalThis.__hit"), "1");
-}
-
-/// A rejected yielded promise surfaces as a thrown error at the `yield` point,
-/// catchable with `try/catch` (the same ergonomics as `await`). After the
-/// catch runs, the generator continues. Uses `Promise.reject`, which the frame
-/// loop's JobQueue flush resolves exactly like a `sleep` resolution.
-#[test]
-fn launch_caught_rejection_resumes_generator() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { launch } from "tur:std";
         globalThis.__caught = "no";
         globalThis.__after = "no";
-        launch(function* () {
+        (async () => {
             try {
-                yield Promise.reject("boom");
+                await Promise.reject("boom");
                 globalThis.__after = "unreachable";
             } catch (e) {
                 globalThis.__caught = String(e);
             }
             globalThis.__after = "yes";
-        });
+        })();
         "#,
     )
     .unwrap();
@@ -198,27 +104,25 @@ fn launch_caught_rejection_resumes_generator() {
     assert_eq!(app.eval_js("globalThis.__after"), "yes");
 }
 
-/// An uncaught rejection (no `try/catch` around the `yield`) must NOT panic:
-/// the driver throws into the generator via `.throw`, the throw propagates back
-/// out (nothing catches it), and the driver logs the uncaught rejection and
-/// stops resuming. The body after the rejected `yield` never runs.
+/// An uncaught rejection inside an async fn must not panic the engine —
+/// boa settles the rejected promise and the continuation simply never
+/// runs. (Unhandled-rejection reporting is the host's business.)
 #[test]
-fn launch_uncaught_rejection_stops_without_panic() {
+fn uncaught_rejection_in_async_fn_stops_without_panic() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
-        import { launch } from "tur:std";
         globalThis.__reached = "no";
-        launch(function* () {
-            yield Promise.reject("boom");
+        (async () => {
+            await Promise.reject("boom");
             globalThis.__reached = "yes";
-        });
+        })();
         "#,
     )
     .unwrap();
 
-    // Pump frames so the rejection handler fires; the driver must not panic.
+    // Pump frames so the rejection lands; the engine must not panic.
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.wait_for_timeout(Duration::from_millis(50));
 

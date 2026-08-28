@@ -34,6 +34,7 @@ pub use async_worker_context::AsyncWorkerContext;
 pub use completion::{CompletionHandle, CompletionQueue};
 pub use executor::TurJobExecutor;
 pub use flush_tasks::{FlushTaskHandle, FlushTaskQueue};
+pub use task::{CANCEL_ERROR_NAME, cancel_error, make_task};
 
 /// A closure that runs under `&mut Context` to settle a JsPromise (or any
 /// other synchronous side-effect that needs Context access). Produced by a

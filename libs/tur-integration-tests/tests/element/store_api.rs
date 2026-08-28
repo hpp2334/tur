@@ -263,29 +263,29 @@ fn get_store_is_not_exported() {
 
 /// The pattern that replaces `getStore()`: the `{get, set}` ctx handed to a
 /// mutate closure is a stable store-bound reader/writer, so it can be
-/// threaded into helper functions and captured by `launch` generators —
-/// reads/writes flow to the instance store without ever holding the store.
+/// threaded into helper functions and captured by async fns — reads/writes
+/// flow to the instance store without ever holding the store.
 #[test]
 fn ctx_threads_the_instance_store() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
         import {
-            launch, mount, mutate, sleep, source, view, Text,
+            mount, mutate, sleep, source, view, Text,
         } from "tur:std";
         const n = source(0);
         const ticks = source(0);
         globalThis.__n = n;
 
-        // Helper takes ctx (never the store). The generator captures it too.
+        // Helper takes ctx (never the store). The async fn captures it too.
         function runLoop(ctx, rounds) {
-            launch(function* () {
+            (async () => {
                 for (let i = 0; i < rounds; i++) {
-                    yield sleep(0);
+                    await sleep(0).promise;
                     ctx.set(n, ctx.get(n) + 1);
                     ctx.set(ticks, i + 1);
                 }
-            });
+            })();
         }
 
         const startLoop = mutate((ctx, rounds) => runLoop(ctx, rounds));
@@ -303,11 +303,12 @@ fn ctx_threads_the_instance_store() {
     // Invoke through the instance store (as an event dispatch would).
     app.eval_js("globalThis.__store.set(globalThis.__startLoop, 3); 'ok'");
     app.wait_for_timeout(std::time::Duration::ZERO);
+    app.wait_for_timeout(std::time::Duration::from_millis(50));
 
     let val = app.eval_js("globalThis.__store.get(globalThis.__n).toString()");
     assert_eq!(
         val, "3",
-        "ctx captured into a launch generator must read/write the instance store"
+        "ctx captured into an async fn must read/write the instance store"
     );
 }
 

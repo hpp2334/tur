@@ -18,13 +18,17 @@
  * substrate may import directly from `tur:core`.
  */
 
+/// <reference types="@tur-ng/core" />
+
 declare module "tur:std" {
     // Re-export the reactive core (source/derive/mutate/get/set/view/mount,
     // Element/Source/Derived/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
     export * from "tur:core";
 
-    // Core meta-types used by the prop interfaces below.
-    import type { Element, Mutation, Readable, Val } from "tur:core";
+    // Core meta-types used by the prop interfaces below. (`export *` alone
+    // re-exports but does not bind names locally — every core type used in
+    // this module body must also appear here.)
+    import type { Derived, Element, Mutation, Readable, Val } from "tur:core";
 
     // ---------------------------------------------------------------------------
     // Value types — Color / LinearGradient / Brush / SpanData
@@ -584,43 +588,55 @@ declare module "tur:std" {
     }
 
     // ---------------------------------------------------------------------------
-    // Async task primitives — `sleep` (a timer primitive) + `launch` (a
-    // cancellable generator coroutine driver). These replace the old
-    // `setTimeout` / `setInterval` globals.
+    // Async task primitives — the `Task<T>` handle, `sleep`, `CancelError`,
+    // and `isCancelError`. These replace the old `setTimeout` /
+    // `setInterval` globals (and the former `launch` generator driver):
+    // async composition is plain `async`/`await` + `.then`, cancellation is
+    // per-operation via the Task handle.
     // ---------------------------------------------------------------------------
 
-    /** Resolve after `ms` milliseconds (engine time). The engine's frame loop
-     *  wakes precisely at the deadline. Use bare (`sleep(ms).then(...)`) or
-     *  inside a `launch` coroutine via `yield sleep(ms)`. */
-    export function sleep(ms: number): Promise<void>;
-
-    /** A cancellable coroutine task returned by `launch`. `cancel()` stops the
-     *  generator from resuming after its current `yield`. Any in-flight
-     *  `sleep` resolves harmlessly and is ignored. */
-    export interface Task {
+    /** The handle every async engine API returns: `sleep`, `request`,
+     *  `requestStream`, `clipboard.readText`/`writeText`,
+     *  `filePicker.pick`/`saveFile`, …
+     *
+     *  - `promise` settles with the operation's result.
+     *  - `cancel()` stops the operation where stoppable (a pending `sleep`
+     *    timer is really cleared; an unpolled HTTP request is never sent;
+     *    an in-flight one is discarded; a stream is wire-aborted) and
+     *    **rejects `promise` with a `CancelError`**. Idempotent; a no-op
+     *    for the promise once settled (op-specific abort still runs — e.g.
+     *    cancelling a stream mid-consumption).
+     *
+     *  Debounce idiom (the no-op rejection handler IS the cancelled
+     *  branch):
+     *  ```ts
+     *  t?.cancel(); t = sleep(300);
+     *  t.promise.then(show, () => {});
+     *  ```
+     *
+     *  Loop stop idiom: cancel the awaited sleep; the `await` throws
+     *  `CancelError`; `catch (e) { if (isCancelError(e)) return; throw e; }`
+     *  exits the loop. */
+    export interface Task<T> {
+        readonly promise: Promise<T>;
         cancel(): void;
     }
 
-    /** Run a zero-arg generator function as a cancellable coroutine. The
-     *  generator must `yield` Promises (typically `sleep(ms)`); each resolved
-     *  promise resumes the generator, passing the resolved value back as the
-     *  `yield` result. Returns a `Task` whose `cancel()` halts further
-     *  resumption.
-     *
-     *  Rejections: when a yielded promise rejects, the rejection reason is
-     *  thrown into the generator at the `yield` point — so a `try/catch`
-     *  around `yield` catches it (the same ergonomics as `await`). An uncaught
-     *  rejection stops the coroutine. This makes `launch` safe to use with
-     *  fallible Promises (`clipboard.readText`, `http`, `fetch`), not just
-     *  `sleep`.
-     *
-     *  Unlike `async`/`await`, generators can be externally stepped/abandoned,
-     *  which is what makes real cancellation possible. Use the debounce
-     *  pattern: `task?.cancel(); task = launch(function* () { yield sleep(ms);
-     *  ... });`. */
-    export function launch<T>(
-        gen: () => Generator<Promise<unknown>, T, unknown>,
-    ): Task;
+    /** The rejection reason produced by `Task.cancel()` — an `Error` whose
+     *  `name` is `"CancelError"`. Test with `isCancelError` (or
+     *  `e.name === "CancelError"`). */
+    export interface CancelError extends Error {
+        name: "CancelError";
+    }
+
+    /** `true` when `reason` is the rejection produced by `Task.cancel()`. */
+    export function isCancelError(reason: unknown): reason is CancelError;
+
+    /** Sleep for `ms` milliseconds (engine time) — the engine's frame loop
+     *  wakes precisely at the deadline. Returns a `Task<void>`: await
+     *  `sleep(ms).promise`, and `cancel()` to clear the timer (the promise
+     *  then rejects with a `CancelError`). */
+    export function sleep(ms: number): Task<void>;
 
     // ---------------------------------------------------------------------------
     // Element factories

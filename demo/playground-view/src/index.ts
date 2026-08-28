@@ -9,7 +9,7 @@
 //
 // No store is created here: the module mounts the Shell with the injected
 // instance store and dispatches the one boot mutation that needs a writer
-// from the engine (the `now$` ticker — its launch loop captures the
+// from the engine (the `now$` ticker — its async loop captures the
 // mutation ctx). Everything else in the app is ctx-only: reactive reads
 // happen in `derive` closures, side effects in `mutate` closures, and
 // actions compose by dispatching other mutations via `ctx.set(action, …)`.

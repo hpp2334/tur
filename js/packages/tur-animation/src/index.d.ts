@@ -16,6 +16,9 @@
  * all ship as part of `tur:std`.
  */
 
+/// <reference types="@tur-ng/std" />
+/// <reference types="@tur-ng/core" />
+
 declare module "tur:animation" {
     import type {
         Color,

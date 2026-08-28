@@ -3,7 +3,6 @@ import {
     createUndoController,
     type Element,
     type KeyEvent,
-    launch,
     type Mutation,
     mutate,
     type Store,
@@ -93,7 +92,7 @@ for (const name of CASE_NAMES) {
     lastCompiledFiles.set(name, { ...CASE_SOURCES[name] });
 }
 
-let autoRunTask: Task | null = null;
+let autoRunTask: Task<void> | null = null;
 
 // ---------------------------------------------------------------------------
 // Editor controller — closures reference forward-declared lifecycle fns
@@ -105,11 +104,14 @@ export const editorCtrl = createTextEditingController({
         editorCtrl.setSpansPreserveCursor(buildHighlightSpans(editorCtrl.text));
         saveCurrentFileText(ctx.get(selectedCase$), ctx.get(selectedFile$));
         if (ctx.get(autoRun$)) {
+            // Debounce: cancel the previous delay, then wait 300ms — the
+            // no-op rejection handler is the cancelled branch.
             autoRunTask?.cancel();
-            autoRunTask = launch(function* () {
-                yield sleep(300);
-                ctx.set(recompile);
-            });
+            autoRunTask = sleep(300);
+            autoRunTask.promise.then(
+                () => ctx.set(recompile),
+                () => {},
+            );
         }
     }),
     onKeyDown: mutate((ctx, ev: KeyEvent) => {

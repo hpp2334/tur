@@ -1,6 +1,6 @@
 import {
     derive,
-    launch,
+    isCancelError,
     type Mutation,
     mutate,
     type Source,
@@ -95,24 +95,29 @@ export const editorWidth$ = source(600);
 export const lastCompiledAtMs$ = source<number>(Date.now());
 export const now$: Source<number> = source<number>(Date.now());
 
-// The ticker is a mutation so its `launch` loop can capture the mutation ctx
+// The ticker is a mutation so its async loop can capture the mutation ctx
 // (the store-bound writer) — there is no module store to write through. The
 // entry point dispatches it once after `mount`; the returned module cleanup
-// cancels the task so a reload doesn't leak the previous loop.
-let nowTask: Task | null = null;
+// cancels the current sleep so a reload doesn't leak the previous loop.
+let nowTick: Task<void> | null = null;
 
 export const startNowTicker: Mutation<[], void> = mutate((ctx) => {
-    nowTask?.cancel();
-    nowTask = launch(function* () {
-        for (;;) {
-            yield sleep(5000);
-            ctx.set(now$, Date.now());
+    nowTick?.cancel();
+    (async () => {
+        try {
+            for (;;) {
+                nowTick = sleep(5000);
+                await nowTick.promise;
+                ctx.set(now$, Date.now());
+            }
+        } catch (e) {
+            if (!isCancelError(e)) throw e;
         }
-    });
+    })();
 });
 
 /** Cancel the `now$` ticker (module cleanup, run by the entry point). */
 export function stopNowTicker(): void {
-    nowTask?.cancel();
-    nowTask = null;
+    nowTick?.cancel();
+    nowTick = null;
 }

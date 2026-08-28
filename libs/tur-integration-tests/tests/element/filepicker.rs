@@ -4,16 +4,18 @@
 //! reactive-set path end-to-end, mirroring `async_bridge.rs`:
 //!
 //! 1. JS calls `filePicker.pick(opts)` / `filePicker.saveFile(name, bytes)`
-//!    (ctx-bound methods on the `filePicker` const object).
+//!    (ctx-bound methods on the `filePicker` const object) and gets a
+//!    `Task { promise, cancel() }` handle.
 //! 2. The fn creates a pending `JsPromise`, spawns a future via the engine's
-//!    `AsyncExecutor` that calls `FilePickerBackend::pick(opts).await`
+//!    executor that calls `FilePickerBackend::pick(opts).await`
 //!    (`RecordingFilePicker` resolves eagerly).
-//! 3. `flush`'s `tick` polls the future, the future pushes a `Completion`
+//! 3. `flush` polls the future, the future pushes a `Completion`
 //!    that resolves the promise (building the JS `{name,bytes: ArrayBuffer,
 //!    type, size}` objects there).
 //! 4. `drain_completions` runs the completion under `&mut Context`, enqueuing
 //!    a `PromiseJob`.
-//! 5. boa's `executor.drain` runs the PromiseJob → fires the `.then` body.
+//! 5. boa's `executor.drain` runs the PromiseJob → fires the
+//!    `.promise.then` body.
 //!
 //! Capability lookup: the bridge fns read their `Rc<dyn FilePickerBackend>`
 //! from `TurInstanceContext`'s capability registry (populated by `TurFilePickerPlugin`
@@ -47,7 +49,7 @@ fn pick_resolves_with_files_and_drives_reactive_set() {
         globalThis.__count$ = source(0);
         globalThis.__first$ = source("");
         globalThis.__size$ = source(0);
-        filePicker.pick({ multiple: true }).then((files) => {
+        filePicker.pick({ multiple: true }).promise.then((files) => {
             store.set(globalThis.__count$, files.length);
             store.set(globalThis.__first$, files[0].name);
             store.set(globalThis.__size$, files[0].size);
@@ -78,7 +80,7 @@ fn pick_returns_empty_array_when_cancelled() {
         import { source } from "tur:std";
         import { filePicker } from "tur:filepicker";
         globalThis.__len$ = source(-1);
-        filePicker.pick().then((files) => {
+        filePicker.pick().promise.then((files) => {
             store.set(globalThis.__len$, files.length);
             globalThis.__result_len = String(files.length);
         });
@@ -108,7 +110,7 @@ fn save_file_logs_to_recording() {
         const bytes = new ArrayBuffer(4);
         const view = new Uint8Array(bytes);
         view[0] = 10; view[1] = 20; view[2] = 30; view[3] = 40;
-        filePicker.saveFile("out.bin", bytes).then(() => {
+        filePicker.saveFile("out.bin", bytes).promise.then(() => {
             globalThis.__saved = "1";
         });
         "#,

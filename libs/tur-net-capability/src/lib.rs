@@ -3,14 +3,15 @@
 //! Provides:
 //!
 //! - The [`HttpBackend`] capability trait + supporting types
-//!   ([`RequestOpts`], [`HttpOutcome`], [`HttpBody`], [`ResponseType`]).
+//!   ([`RequestOpts`], [`HttpOutcome`], [`HttpBody`]).
 //! - The [`Http`] capability newtype wrapping `Rc<dyn HttpBackend>`,
 //!   registered via
 //!   [`tur_engine::TurRuntimeBuilder::capability`](`Http::new(backend)`).
 //! - The [`NoopHttp`] default.
 //! - The [`TurNetPlugin`] (unit struct) that conditionally registers the
-//!   `tur:net` module (with the `request` bridge fn) when an [`Http`]
-//!   capability is present.
+//!   `tur:net` module when an [`Http`] capability is present — `request` +
+//!   `requestStream`, both returning the shared `Task` handle
+//!   (`{ promise, cancel() }`).
 //!
 //! ## Architecture
 //!
@@ -19,8 +20,10 @@
 //!   implement [`HttpBackend`] and are registered via
 //!   `.capability(Http::new(backend))`.
 //! - The bridge closure (in [`bridge`]) parses JS opts into [`RequestOpts`],
-//!   spawns the future via the engine's `AsyncExecutor`, and settles the
-//!   `JsPromise` via a completion closure on the next `flush`.
+//!   spawns the future via the engine's executor, settles the task's
+//!   `JsPromise` via a completion closure on the next `flush`, and returns
+//!   the `Task` handle whose `cancel()` aborts the spawn / wire-aborts the
+//!   stream and rejects with a `CancelError`.
 //! - [`TurNetPlugin`] does NOT declare a `requires` for [`Http`] — HTTP is
 //!   an optional capability. If absent, the plugin simply skips registering
 //!   `tur:net`, and JS code feature-detects via
@@ -48,42 +51,41 @@ pub type HttpStreamFuture = Pin<Box<dyn Future<Output = Result<HttpStreamRespons
 
 /// Request body kind. Mirrors what JS can pass via `request({ body })`:
 /// either a string or an `ArrayBuffer` (e.g. from `filePicker.pick()`).
+/// (Request-side only — the response body is always raw `Vec<u8>` bytes.)
 #[derive(Debug, Clone)]
 pub enum HttpBody {
     Text(String),
     Bytes(Vec<u8>),
 }
 
-/// Response body kind the caller wants back. `"text"` (default) fills
-/// `bodyText`; `"bytes"` fills `bodyBytes` as an `ArrayBuffer`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResponseType {
-    Text,
-    Bytes,
-}
-
 /// Request options, parsed from the JS `{ url, method?, headers?, body?,
-/// responseType?, username?, password? }` object.
+/// backpressure? }` object.
 #[derive(Debug, Clone)]
 pub struct RequestOpts {
     pub url: String,
     pub method: String,
     pub headers: Vec<(String, String)>,
+    /// Request body (text or raw bytes). The RESPONSE body is always raw
+    /// bytes — business code decodes UTF-8 itself via `decodeUtf8` (`tur:std`).
     pub body: Option<HttpBody>,
-    pub response_type: ResponseType,
-    pub username: Option<String>,
-    pub password: Option<String>,
+    /// Streaming only (`requestStream({ backpressure: { value, unit } })`):
+    /// the max bytes buffered in flight between the network and the
+    /// consumer, resolved to bytes by the bridge (no upper cap). `None` =
+    /// backend default. Honored best-effort — see
+    /// [`HttpBackend::request_stream`]. Ignored by [`HttpBackend::request`].
+    pub stream_buffer_bytes: Option<u64>,
 }
 
-/// Outcome of an HTTP request — the success body or the error message.
-/// The bridge builds a JS object from this in the completion closure.
+/// Outcome of an HTTP request — the success body (always raw bytes; decode
+/// with `decodeUtf8` on the JS side) or the error message. The bridge builds
+/// a JS object from this in the completion closure.
 #[derive(Debug, Clone)]
 pub enum HttpOutcome {
     Ok {
         status: u16,
         status_text: String,
         headers: Vec<(String, String)>,
-        body: HttpBody,
+        body: Vec<u8>,
     },
     Err(String),
 }
@@ -94,6 +96,8 @@ pub struct HttpStreamResponse {
     pub status: u16,
     pub status_text: String,
     pub headers: Vec<(String, String)>,
+    /// The response body. **Must be pull-driven** (see the contract on
+    /// [`HttpBackend::request_stream`]) — backpressure rides on `poll_next`.
     pub body: LocalBoxStream<'static, Result<Vec<u8>, String>>,
 }
 
@@ -106,8 +110,24 @@ pub trait HttpBackend: Send + Sync + 'static {
     fn request(&self, opts: RequestOpts) -> HttpFuture;
 
     /// Streaming variant: returns the response headers immediately, then the
-    /// body as a stream of byte chunks. Default impl delegates to `request()`
-    /// and wraps the body as a single-chunk stream.
+    /// body as a stream of byte chunks.
+    ///
+    /// **Backpressure contract**: the body stream MUST be pull-driven — each
+    /// `poll_next` drives at most one chunk of network I/O, and
+    /// implementations MUST NOT eagerly buffer the body beyond a small
+    /// bounded window. The `tur:net` bridge polls exactly one chunk per JS
+    /// `body.next()` call; consumer pacing propagates all the way down to
+    /// TCP flow control only if backends honor this (an eager producer plus
+    /// an unbounded queue turns any slow consumer into unbounded memory).
+    ///
+    /// `opts.stream_buffer_bytes` (resolved from
+    /// `requestStream({ backpressure: { value, unit } })`) requests the max
+    /// bytes buffered in flight between the network and the consumer; `None`
+    /// = backend default. No upper cap is enforced by the bridge.
+    /// Implementations that own their buffering SHOULD honor it;
+    /// browser-managed backends (wasm) may ignore it.
+    ///
+    /// Default impl delegates to `request()` and wraps the body as a single-chunk stream.
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
         let fut = self.request(opts);
         Box::pin(async move {
@@ -119,10 +139,7 @@ pub trait HttpBackend: Send + Sync + 'static {
                     headers,
                     body,
                 } => {
-                    let chunk = match body {
-                        HttpBody::Text(t) => t.into_bytes(),
-                        HttpBody::Bytes(b) => b,
-                    };
+                    let chunk = body;
                     let body_stream = futures::stream::once(async move { Ok(chunk) }).boxed_local();
                     Ok(HttpStreamResponse {
                         status,
@@ -175,17 +192,24 @@ impl tur_engine::core::capability::Capability for Http {}
 // Plugin
 // ---------------------------------------------------------------------------
 
-/// tur-net plugin: registers `tur:net` (with the `request` bridge
-/// fn) when an [`Http`] capability is registered.
+/// tur-net plugin: registers `tur:net` when an [`Http`] capability is
+/// registered.
 ///
-/// If no backend is injected, the plugin is a no-op — `tur:net`
-/// remains unregistered, and JS code that imports from it fails at module
-/// load. Cases that may run in HTTP-less environments must guard accordingly
-/// (or be marked playground-only, like github-viewer).
+/// One synthetic module: `tur:net` exports `request(opts): Task<Response>` +
+/// `requestStream(opts): Task<StreamResponse>` (the shared
+/// `{ promise, cancel() }` handle every async engine API returns — see
+/// [`tur_engine::core::async_::make_task`]). The stream body is a plain
+/// `AsyncIterableIterator<Uint8Array>`; aborting a stream is
+/// `task.cancel()`.
 ///
-/// The bridge fn (`request`) is a ctx-bound `Ptr` that reads its [`Http`]
-/// capability from `TurInstanceContext`'s capability registry at call time. This
-/// avoids `unsafe NativeFunction::from_closure` — see [`bridge`].
+/// If no backend is injected, the plugin is a no-op — the module stays
+/// unregistered, and JS code that imports from it fails at module load.
+/// Cases that may run in HTTP-less environments must guard accordingly (or
+/// be marked playground-only, like github-viewer).
+///
+/// The bridge fns are ctx-bound `Ptr`s that read their [`Http`] capability
+/// from `TurInstanceContext`'s capability registry at call time. This avoids
+/// `unsafe NativeFunction::from_closure` — see [`bridge`].
 pub struct TurNetPlugin;
 
 impl Default for TurNetPlugin {

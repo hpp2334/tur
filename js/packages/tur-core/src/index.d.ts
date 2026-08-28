@@ -32,13 +32,13 @@
  * ctx handed to `derive`/`mutate` closures (and callback props like
  * `onTick`/`onClick`, which are mutations). The ctx is a stable store-bound
  * reader/writer, so code that needs reactive access outside a closure —
- * helper functions, `launch` generator bodies — threads/captures the ctx
+ * helper functions, `async` fn bodies — threads/captures the ctx
  * from the enclosing mutation instead:
  *
  *     const startLoop = mutate((ctx) => {
- *         launch(function* () {
- *             while (ctx.get(running$)) { yield sleep(1000); ctx.set(n$, ...); }
- *         });
+ *         (async () => {
+ *             while (ctx.get(running$)) { await sleep(1000).promise; ctx.set(n$, ...); }
+ *         })();
  *     });
  *
  * Side-effecting helpers are declared as mutations themselves and composed
