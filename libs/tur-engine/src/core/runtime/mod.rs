@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -237,6 +238,7 @@ impl TurRuntime {
     /// both [`TurAppBuilder::build`] (rendering) and
     /// [`TurAppBuilder::build_headless`] (the latter passes a
     /// [`NoopRenderer`](crate::renderer::NoopRenderer)).
+    #[expect(clippy::too_many_arguments)]
     fn spawn_instance(
         self: &Rc<Self>,
         renderer: Box<dyn crate::core::render::Renderer>,
@@ -245,6 +247,7 @@ impl TurRuntime {
         dpr: f64,
         worker_pool: WorkerPoolHandle,
         instance_data_definer: Option<InstanceDataDefiner>,
+        virtual_app_id: crate::core::virtual_app::VirtualAppId,
     ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
         // The shell owns the window's frame clock — take it exactly once
         // here (a second take returns `None`) and subscribe the loop's
@@ -267,6 +270,11 @@ impl TurRuntime {
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
         let main_cx = self.main_cx.clone();
+        // The runtime's worker-pool registry (name → handle), shipped to the
+        // worker so `forWorkerPool(name)` resolves eagerly against the same
+        // handles the embedder registered.
+        let worker_pools: std::sync::Arc<[WorkerPoolHandle]> =
+            self.worker_pools.iter().cloned().collect();
         let backend_factory = move |worker_ctx: crate::core::scheduler::WorkerContext,
                                     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
                                     host_tx: crate::core::app::HostTx|
@@ -287,6 +295,7 @@ impl TurRuntime {
                 host_tx,
                 main_cx.clone(),
                 instance_data_definer,
+                worker_pools.clone(),
             )
             .expect("threaded backend factory failed")
         };
@@ -297,25 +306,50 @@ impl TurRuntime {
             worker_pool,
             backend_factory,
         );
-        // The app handle and its looper share the backend (both `&self`
-        // users) and the destroyed flag (the app sets it, the loop polls
-        // it). The frame clock is shared too: the app re-arms it from the
-        // input paths while the loop runs; the looper additionally owns
-        // the already-subscribed tick stream (`vsync_events`).
-        let backend = Rc::new(backend);
-        let destroyed = Rc::new(std::cell::Cell::new(false));
-        let app = Rc::new(TurApp::new(
-            backend.clone(),
+        // The instance's host-side core (identity + backend rails + the
+        // children it hosts), the public facade over it, and the looper
+        // that drains `host_rx` (routing `HostMsg::VirtualControl` to the
+        // core). The backend holds no hosting state — the dependency
+        // direction is core → backend, never reversed.
+        let host = Rc::new(crate::core::virtual_app::VirtualHost::new(
+            virtual_app_id,
+            self.clone(),
+            self.host_loop.clone(),
             vsync.clone(),
-            destroyed.clone(),
+            Rc::new(backend),
         ));
-        let looper = TurAppLooper::new(backend, host_rx, vsync, vsync_events, destroyed);
+        let app = Rc::new(TurApp::new(host.clone()));
+        let looper = TurAppLooper::new(host, host_rx, vsync_events);
         // Bootstrap the viewport: resize the host-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
         // frame 1 (the forwarded shell `Resize` event does the worker
         // half).
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok((app, looper))
+    }
+
+    /// Engine-internal spawn path for **element-hosted children** — the
+    /// only way to create a non-root instance. Identity is supplied by the
+    /// hosting parent (a token minted worker-side by the parent's
+    /// `VirtualState`), never by the embedder-facing builder: with the
+    /// builder path hardcoded to
+    /// [`VirtualAppId::ROOT`](crate::core::virtual_app::VirtualAppId::ROOT)
+    /// and this entry requiring a parent-minted token, id uniqueness and
+    /// ROOT-reservation are structural, not conventional. Viewport/dpr are
+    /// the placeholders the host element's first `flush_post_layout` rect
+    /// immediately corrects (a `Resize` control).
+    pub(crate) fn spawn_hosted_instance(
+        self: &Rc<Self>,
+        token: crate::core::virtual_app::VirtualAppId,
+        pool: WorkerPoolHandle,
+        renderer: Box<dyn crate::core::render::Renderer>,
+        shell: Box<dyn crate::core::shell::Shell>,
+    ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
+        debug_assert!(
+            token != crate::core::virtual_app::VirtualAppId::ROOT,
+            "ROOT is reserved for embedder-hosted instances"
+        );
+        self.spawn_instance(renderer, shell, (400.0, 300.0), 1.0, pool, None, token)
     }
 }
 
@@ -512,7 +546,18 @@ impl<'rt> TurAppBuilder<'rt> {
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
         let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
-        runtime.spawn_instance(renderer, shell, viewport, dpr, pool, instance_data_definer)
+        runtime.spawn_instance(
+            renderer,
+            shell,
+            viewport,
+            dpr,
+            pool,
+            instance_data_definer,
+            // The embedder-facing build path can only ever name the root —
+            // child identity is assigned by the hosting parent through
+            // `spawn_hosted_instance` (never a builder option).
+            crate::core::virtual_app::VirtualAppId::ROOT,
+        )
     }
 
     /// Terminal: build a headless instance (no renderer, no rendering).
@@ -551,6 +596,7 @@ impl<'rt> TurAppBuilder<'rt> {
             1.0,
             pool,
             instance_data_definer,
+            crate::core::virtual_app::VirtualAppId::ROOT,
         )
     }
 
@@ -602,6 +648,7 @@ pub(crate) fn build_worker_backend(
     host_tx: crate::core::app::HostTx,
     host_exec: HostExecutor,
     instance_data_definer: Option<InstanceDataDefiner>,
+    worker_pools: std::sync::Arc<[WorkerPoolHandle]>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -621,6 +668,7 @@ pub(crate) fn build_worker_backend(
         worker_ctx,
         wake_worker,
         host_tx,
+        worker_pools,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
@@ -657,7 +705,6 @@ pub(crate) fn build_worker_backend(
         &mut boa_context,
         opaque.object().clone().into(),
         &core_fns,
-        &[],
         &[],
     );
     module_loader.register("tur:core", core_module);
@@ -713,12 +760,12 @@ pub(crate) fn build_worker_backend(
 
     // One register-phase context for the whole plugin loop (today's
     // per-plugin contexts were clones of the same handles; the only mutable
-    // state is the subsystem collector, which must accumulate across
-    // plugins so registration order = plugin order is preserved verbatim).
-    // The context is consumed after the loop and its collected list becomes
-    // the instance's registry — the natural freeze: no handle into the
-    // registry survives the builder, so subsystem registration after build
-    // is structurally impossible.
+    // state is the collectors, which must accumulate across plugins so
+    // registration order = plugin order is preserved verbatim).
+    // The context is consumed after the loop and its collected state
+    // becomes the instance's registries — the natural freeze: no handle
+    // into either survives the builder, so registration after build is
+    // structurally impossible.
     let mut register_cx = PluginRegisterContext {
         boa: &mut boa_context,
         loader: module_loader.clone(),
@@ -726,13 +773,19 @@ pub(crate) fn build_worker_backend(
         js_ctx: internal.js_context.clone(),
         app: internal.app_context.clone(),
         subsystems: Vec::new(),
+        plugin_state: HashMap::new(),
         event_bus: internal.event_bus.clone(),
         host_exec: host_exec.clone(),
     };
     for plugin in plugins {
         plugin.register(&mut register_cx)?;
     }
-    internal.subsystems = RefCell::new(register_cx.into_subsystems());
+    // Consume the register-phase collectors (subsystems + plugin state) —
+    // both installed once; runtime code can read both but there is no
+    // write path left in existence.
+    let parts = register_cx.into_parts();
+    internal.js_context.install_plugin_state(parts.plugin_state);
+    internal.subsystems = RefCell::new(parts.subsystems);
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
     Ok(WorkerBackend::new(
@@ -944,6 +997,18 @@ impl TurRuntimeBuilder {
                 )));
             }
         }
+        // Auto-register the default virtual-app pool unless the embedder
+        // registered a pool with that name (then theirs wins — cap included).
+        let mut worker_pools = self.worker_pools;
+        if !worker_pools
+            .iter()
+            .any(|p| p.name() == crate::core::virtual_app::DEFAULT_POOL)
+        {
+            worker_pools.push(WorkerPoolHandle::new(
+                crate::core::virtual_app::DEFAULT_POOL,
+                crate::core::virtual_app::DEFAULT_POOL_MAX_WORKERS,
+            ));
+        }
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
@@ -1018,7 +1083,7 @@ impl TurRuntimeBuilder {
             plugins: Arc::new(self.plugins),
             worker_spawner,
             host_loop,
-            worker_pools: self.worker_pools,
+            worker_pools,
             main_cx,
         }))
     }

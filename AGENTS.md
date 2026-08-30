@@ -48,6 +48,23 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   │             AppEvent/AppEventQueue + mount()   │
 │  │   │             mount + RootView/RootElement        │
 │  │   │             generic-root wrapper)               │
+│  │   ├── virtual_app/ (the engine seam for hosting    │
+│  │   │             nested instances: VirtualHost —    │
+│  │   │             the instance's host-side CORE      │
+│  │   │             (VirtualAppId identity + backend   │
+│  │   │             rails + recursive children map);   │
+│  │   │             TurApp = thin public facade;       │
+│  │   │             spawns children from the same      │
+│  │   │             TurRuntime via internal            │
+│  │   │             spawn_hosted_instance;             │
+│  │   │             ForwardingRenderer                 │
+│  │   │             ships child batches back to the    │
+│  │   │             PARENT WORKER as AppEvent::Custom  │
+│  │   │             VirtualFrameEvent; VirtualShell    │
+│  │   │             shares the parent vsync;           │
+│  │   │             HostMsg::VirtualControl is the     │
+│  │   │             only new message variant, routed   │
+│  │   │             by the looper)                     │
 │  │   ├── elements/ (AnyElement, ElementObject,         │
 │  │   │             ElementTree with layout+paint —     │
 │  │   │             instance-owned, born-bound to the   │
@@ -120,7 +137,15 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 │  │   │               decoders)                         │
 │  │   ├── scroll/    (ScrollView, Scrollbar,            │
 │  │   │               ScrollController, ScrollSubsystem)│
-│  │   └── lazy_container/ (LazyList + LazyListController)│
+│  │   ├── lazy_container/ (LazyList + LazyListController)│
+│  │   └── virtual_app/ (VirtualAppView element +        │
+│  │                   createModuleSource /              │
+│  │                   createVirtualAppController        │
+│  │                   bridges + VirtualAppSubsystem —   │
+│  │                   the plugin half of                │
+│  │                   core::virtual_app; the element's  │
+│  │                   own paint replays the child's     │
+│  │                   batch with existing ops)          │
 │  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
 │  └── renderer/noop  (NoopRenderer, logs tree stats)    │
 └──────────────────────┬──────────────────────────────┘
@@ -305,6 +330,25 @@ let (headless, headless_looper) = runtime
   JS args). Mirrors the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId,
   Box<dyn Any>>>>` inside `TurInstanceContext`, shared across every cheap clone.
   Lives entirely in the worker.
+- **Plugin state** (register-phase
+  `PluginRegisterContext::define_plugin_state::<T>(Rc<T>)` → runtime
+  `TurInstanceContext::plugin_state::<T>() -> Option<Rc<T>>`) — the channel
+  for plugin-owned per-instance state that ctx-bound bridge fns reach
+  through `args[0]` (`extract_js_ctx`). Register-phase define rides a
+  collector **owned by `PluginRegisterContext`** (the subsystems pattern):
+  after the last plugin registers the builder consumes it
+  (`into_parts(self) -> (subsystems, plugin_state)`) and installs the
+  finished map once (`install_plugin_state`) into a shared
+  `Rc<OnceCell<…>>` slot — there is **no runtime write path at all** and no
+  freeze flag; immutability is enforced by ownership. Duplicate defines
+  panic. This is what lets every plugin bridge be a
+  **plain `FnEntry` fn pointer** — no `NativeFunction` closures (the
+  `register_module` closures escape hatch is removed). Per-object method
+  state (store `{get,set}`, `Task.cancel`, `eventBus.on/send`) instead rides
+  the JS object's `JsData` payload and is read off `this`, cloning out of
+  the payload before running JS. The only closure natives left live in
+  `core/js_runtime/module_loader` — the module-assembly + ctx-prepend
+  mechanism itself.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
   `HttpBackend`, `FilePickerBackend`). The shell is NOT a capability (see
@@ -592,7 +636,13 @@ clocks (incl. the fail-fast when a shell hands back none).
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Text`, `Input`, `Paragraph`, `Image`, `Svg` (all in `tur-engine::builtin_plugins::*`) · `Opacity`, `Transform` (tur-animation)
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Text`, `Input`, `Paragraph`, `Image`, `Svg`, `VirtualAppView` (all in `tur-engine::builtin_plugins::*`) · `Opacity`, `Transform` (tur-animation)
+
+### Virtual app model
+
+Every tur instance is a **virtual app**; what differs is only *who hosts it*. The embedder hosts the root (canvas/DOM/JNI as its host surface, via `TurRuntime::app_builder()`); a `VirtualAppView` element hosts a child (the element as its host surface, via the JS API). Nesting composes — a child can host its own `VirtualAppView` (bounded by pool caps). JS surface on `tur:std`: `createModuleSource(source) -> ModuleSourceHandle` (opaque handle — the string never crosses the JS API again), `forWorkerPool(name) -> WorkerPoolHandle` (resolves a registered pool **eagerly** — the very handle the embedder registered, shipped to the worker at instance build; unknown name throws at the call site), `createVirtualAppController({ source, pool?, keepAlive? })` (a **lazy declaration** with `status$` / `errorMsg$` readables + the `destroy$` control mutation, dispatched via `store.set`; `pool` is handle-only — a `WorkerPoolHandle` from `forWorkerPool`, default the auto-registered `"virtual"` pool), and `VirtualAppView({ app$: Readable<Controller | null>, background?, fallback?, errorView? })` — binding materializes the child, unbinding destroys it (unless `keepAlive`); new code = `destroy$` + a new controller with a new source (no in-place reload).
+
+The seam (engine core, `core::virtual_app`): a `VirtualHost` — the **instance's host-side core**: its [`VirtualAppId`] identity (`ROOT` for embedder-hosted instances, a parent-minted token for element-hosted children — assigned through the engine-internal `TurRuntime::spawn_hosted_instance`, never a builder option), the backend rails (it wraps the parent's `HostBackend` — worker sender + wake; later egress milestones will reach the parent's shell rail through it), the destroyed flag, and the children it hosts (a recursive `HashMap<VirtualAppId, Rc<VirtualHost>>` — hosting nests as the same type, bounded by pool caps). `TurApp` is a thin public facade over the core (one `Rc<VirtualHost>` field + forwarders; `TurApp::id()` exposes the identity); `TurAppLooper` routes `HostMsg::VirtualControl` straight to the core (`HostBackend::apply_msg` never sees one). Children spawn from the **same `TurRuntime`** into the pool the controller's `WorkerPoolHandle` names (default `"virtual"`, auto-registered, cap 2, overridable; resolved worker-side by `forWorkerPool`, carried by the spawn control). The child's `Renderer` is a `ForwardingRenderer` — each painted batch (+ image uploads) ships back to the **parent's worker** as an `AppEvent::Custom` `VirtualFrameEvent` (status rides the same rail as `VirtualStatusEvent`). The child's `VirtualShell` hands it the **parent's vsync source** (both loopers wake on the same tick). **Input forwarding**: pointer (down/up/move) + wheel events over a host element forward into its child via `VirtualAppSubsystem::handle_platform_event` — hit-test the parent tree, translate to child-local coordinates (`position − host origin`), ship a `VirtualControl::PlatformEvent`; an interactive element in front of every host consumes the event instead, and the child composes gestures in its own arena (key/IME stay parent-side until the child-focus milestone). The render model is untouched: the host element's **own paint** replays the child's `RenderCommandBatch` with existing canvas ops (per command: push child transform → ops, image ids re-keyed into the parent's `ImageResource` space → pop), clipped to the element rect. Layout-driven resize: `VirtualAppSubsystem` ships the element's final rect (`flush_post_layout`, the CompositedTransform precedent; re-shipped once the child reports `Running` — the first ship can race the spawn). `TurApp::destroy` tears down hosted children first (each child's module cleanup runs in its own worker); children surface as `Rc<TurApp>` **facades** via `TurApp::virtual_apps()` (minted per call — identity lives on the core, so compare `id()` not `Rc::ptr_eq`; test/advanced accessor — driving a child is identical to driving the root). Pinned by `tests/element/virtual_app.rs`.
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -673,6 +723,16 @@ libs/
                              #   module_source.rs (ModuleSourceRegistry —
                              #   engine-owned shared Arc<str> source store
                              #   for handle-based module loading)
+        virtual_app/         # The engine seam for hosting nested instances:
+                             #   VirtualHost (the instance's host-side core:
+                             #   VirtualAppId identity + backend rails +
+                             #   recursive children map; TurApp is the thin
+                             #   public facade; children spawn from the same
+                             #   TurRuntime via spawn_hosted_instance) +
+                             #   ForwardingRenderer (batches ship to
+                             #   the PARENT WORKER as VirtualFrameEvent) +
+                             #   VirtualShell (shares the parent vsync) +
+                             #   VirtualControl/Status/Frame event types
         async_/              # CompletionQueue/CompletionHandle (pending
                              #   completion invocations drained each flush)
                              #   + executor (TurJobExecutor — boa
@@ -808,6 +868,10 @@ libs/
         scroll/              # ScrollView, Scrollbar, ScrollController,
                              #   ScrollSubsystem (inlined from former
                              #   tur-scroll crate)
+        virtual_app/         # VirtualAppView element + createModuleSource /
+                             #   createVirtualAppController bridges +
+                             #   VirtualAppSubsystem (plugin half of
+                             #   core/virtual_app)
         text/                # TextElement, EditableTextElement,
                              #   ParagraphElement, controllers,
                              #   ClipboardPasteSubsystem,
@@ -1001,6 +1065,12 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
 - Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlVelloRenderer`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`VelloRenderer`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint the element tree into a vello-hybrid `Scene`; each backend wraps it with its own renderer + `Renderer` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
+- Bridge fns are **plain fn pointers only** (`FnEntry`, ctx-bound: `args[0]`
+  is the `TurInstanceContext`, user args start at index 1). Per-instance
+  plugin state → `define_plugin_state` / `plugin_state::<T>()`; per-object
+  method state → the JS object's `JsData` payload read off `this`. No
+  `NativeFunction` closures in bridges (see "Plugin state" under the
+  Capability registry section).
 - Async JS model: every async engine API returns `Task<T> = { promise, cancel() }` (`sleep`, `clipboard.*`, `request`/`requestStream`, `filePicker.*`). Compose with plain `async`/`await` or `.promise.then` — never generators (`launch` is gone). `cancel()` aborts what the op can abort (a sleep timer, an unpolled/in-flight request, a stream download) and **rejects the promise with a `CancelError`** (`isCancelError(e)`); the debounce idiom pairs `.then(onOk, () => {})` so the no-op rejection handler IS the cancelled branch.
 - No separate RenderTree — layout and paint happen directly on ElementTree
 - When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
@@ -1025,9 +1095,9 @@ pub trait Renderer {
 Use `VelloRenderer` (wgpu, native) or `WebGlVelloRenderer` (wasm) for GPU
 rendering, or `NoopRenderer` for debug logging.
 
-## Debugging the playground (main agent + image-reader)
+## Debugging the playground (main agent + operator)
 
-The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly via Playwright MCP tools and reads screenshots with the **image-reader** subagent (Task tool, `image-reader` type).
+The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly via Playwright MCP tools and delegates seeing + driving to the **operator** subagent (Task tool, `operator` type — `.opencode/agents/operator.md`): a multimodal agent that reads screenshots AND operates the playground browser itself (fresh cert-bypassed context, canvas-event dispatch, screenshots).
 
 ### Start the dev server
 
@@ -1057,9 +1127,9 @@ The new context's page isn't tracked by the MCP snapshot/click tools — use `ne
 3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: dispatch `KeyboardEvent` on the focused element (canvas or the hidden `<textarea>` when an `EditableText` has focus).
 4. Re-read `turDevTool.elementTree()` / `getElement(id)` or take a screenshot to confirm the result.
 
-### Verify visually with image-reader
+### Verify visually with the operator
 
-`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot with `playwright_browser_take_screenshot` and pass the file path to the **image-reader** subagent (Task tool, `image-reader` type) with a focused PASS/FAIL question. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since color perception is unreliable.
+`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot and either read it yourself or pass the file path to the **operator** subagent (Task tool, `operator` type) with a focused PASS/FAIL question — or hand the whole see → act → see journey to it. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since color perception is unreliable.
 
 ### Stop the dev server after verification
 

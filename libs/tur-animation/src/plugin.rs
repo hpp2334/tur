@@ -7,10 +7,7 @@ use std::rc::Rc;
 
 use boa_engine::JsValue;
 use boa_engine::class::Class;
-use boa_engine::native_function::NativeFunction;
-use boa_gc::{Finalize, Trace};
-use tur_engine::core::edgy::mutation::PendingMutationInvocationQueue;
-use tur_engine::core::js_runtime::helpers::{ConstEntry, FnEntry};
+use tur_engine::core::js_runtime::helpers::{ConstEntry, Ptr};
 use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::error::TurError;
 
@@ -59,13 +56,14 @@ impl Plugin for TurAnimationPlugin {
         ctx.register_class::<AnimationController>()
             .map_err(|e| TurError::Other(format!("failed to register AnimationController: {e}")))?;
 
-        // 2. Build the shared animation manager + capture engine-owned handles.
-        //    The manager is shared between:
+        // 2. Build the shared animation manager. The manager is shared
+        //    between:
         //    - the AnimationSubsystem (ticks it once per frame),
-        //    - the createAnimationController closure (registers new controllers
-        //      into it on `forward()` / `reverse()`).
+        //    - the createAnimationController bridge fn (registers new
+        //      controllers into it on `forward()` / `reverse()`) — reached
+        //      through the register-phase plugin-state channel, so the fn is
+        //      a plain ctx-bound pointer (no closures).
         let manager: Rc<RefCell<AnimationManager>> = Rc::new(RefCell::new(AnimationManager::new()));
-        let mutation_queue = ctx.mutation_queue();
         let clock = ctx.clock();
 
         // 3. Register the AnimationSubsystem. It runs in registration order
@@ -75,16 +73,19 @@ impl Plugin for TurAnimationPlugin {
 
         // 4. Register the hidden internal native module `tur:animation/native`.
         //    The consumer-facing `tur:animation` JS source imports
-        //    from here to access the native bridge fns.
-        let native_fns: Vec<FnEntry> = Vec::new();
-
-        let create_animation_controller =
-            build_create_animation_controller(manager.clone(), mutation_queue.clone());
+        //    from here to access the native bridge fns. All exports are
+        //    ctx-bound `FnEntry`s (the AGENTS rule: plugins provide fns).
+        ctx.define_plugin_state(Rc::new(AnimationHostState {
+            manager: manager.clone(),
+        }));
 
         ctx.register_module(
             "tur:animation/native",
-            native_fns,
-            vec![("createAnimationController", 1, create_animation_controller)],
+            vec![(
+                "createAnimationController",
+                2,
+                tur_create_animation_controller as Ptr,
+            )],
             Vec::<ConstEntry>::new(),
         );
 
@@ -102,41 +103,39 @@ impl Plugin for TurAnimationPlugin {
     }
 }
 
-/// Captures stashed inside the `createAnimationController` JS closure. Held
-/// inside boa's GC heap (the closure is wrapped in a `Gc`), so the type
-/// must implement `Trace` — but it owns only pure-Rust state (no `Gc` /
-/// `GcRefCell`), so the trace is empty.
-#[derive(Clone, Trace, Finalize)]
-#[boa_gc(unsafe_empty_trace)]
-struct AnimationCtrlCaptures {
+/// Per-instance plugin state: the shared animation manager, held by the
+/// subsystem and readable by the `createAnimationController` bridge fn
+/// through the instance ctx (the register-phase plugin-state channel).
+pub(crate) struct AnimationHostState {
     manager: Rc<RefCell<AnimationManager>>,
-    mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
 }
 
-/// Build the `createAnimationController` native closure. Captures the shared
-/// animation manager + the engine-wide mutation queue so each newly-built
-/// controller can register itself on `forward()` / `reverse()` and enqueue
-/// `onTick` / `onEnd` callbacks for deferred dispatch.
-fn build_create_animation_controller(
-    manager: Rc<RefCell<AnimationManager>>,
-    mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-) -> NativeFunction {
-    NativeFunction::from_copy_closure_with_captures(
-        move |_this, args, state, context| {
-            let mgr = state.manager.clone();
-            let mq = state.mutation_queue.clone();
-            let data =
-                AnimationController::data_constructor(&JsValue::undefined(), &args[0..], context)?;
-            let obj = AnimationController::from_data(data, context)?;
-            if let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() {
-                ctrl.set_animation_manager(mgr);
-                ctrl.set_mutation_queue(mq);
-            }
-            Ok(obj.upcast().clone().into())
-        },
-        AnimationCtrlCaptures {
-            manager,
-            mutation_queue,
-        },
-    )
+/// `createAnimationController(opts)` — a plain ctx-bound fn pointer (ctx at
+/// `args[0]`, user opts at `args[1]`). Builds the controller and injects the
+/// shared manager (plugin state) + the engine-wide mutation queue (off the
+/// instance ctx), so each controller can register itself on `forward()` /
+/// `reverse()` and enqueue `onTick` / `onEnd` callbacks for deferred
+/// dispatch.
+fn tur_create_animation_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut boa_engine::Context,
+) -> boa_engine::JsResult<JsValue> {
+    let js_ctx = tur_engine::core::js_runtime::helpers::extract_js_ctx(args)?;
+    let manager = js_ctx
+        .plugin_state::<AnimationHostState>()
+        .ok_or_else(|| {
+            boa_engine::JsNativeError::typ()
+                .with_message("animation plugin not registered on this instance")
+        })?
+        .manager
+        .clone();
+    let mutation_queue = js_ctx.mutation_queue.clone();
+    let data = AnimationController::data_constructor(&JsValue::undefined(), &args[1..], context)?;
+    let obj = AnimationController::from_data(data, context)?;
+    if let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() {
+        ctrl.set_animation_manager(manager);
+        ctrl.set_mutation_queue(mutation_queue);
+    }
+    Ok(obj.upcast().clone().into())
 }

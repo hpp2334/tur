@@ -8,6 +8,7 @@ import {
     source,
     type Task,
     type ViewportSize,
+    type VirtualAppController,
     viewportSize$,
 } from "tur:std";
 import { CASE_SOURCES } from "../cases";
@@ -56,8 +57,17 @@ export const errorMsg$ = source("");
 export const edited$ = source(false);
 
 // Bumped on every successful recompile so consumers keyed on the active case
-// (e.g. the viewer) re-read the cached view handle.
+// (e.g. the status bar's relative timestamp) re-read fresh state.
 export const compileVersion$ = source<number>(0);
+
+/** The hosted case instance — the viewer's `VirtualAppView` binds this
+ *  controller (null = idle placeholder). Controllers are lazy declarations:
+ *  nothing runs until an element binds. Swapping the value unbinds the old
+ *  controller (kept alive across viewer element churn — see `runCase` for
+ *  the explicit `destroy$` on swap) and binds the new one, spawning its
+ *  child instance. */
+export const app$: Source<VirtualAppController | null> =
+    source<VirtualAppController | null>(null);
 
 // Per-element hover state (single source per interactive group, not per
 // instance — keeps the subscription graph flat).

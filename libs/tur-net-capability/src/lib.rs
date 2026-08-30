@@ -226,7 +226,7 @@ impl Plugin for TurNetPlugin {
             tracing::info!("TurNetPlugin: no Http capability registered; skipping tur:net");
             return Ok(());
         }
-        ctx.register_module("tur:net", bridge::fns(), vec![], vec![]);
+        ctx.register_module("tur:net", bridge::fns(), vec![]);
         Ok(())
     }
 }

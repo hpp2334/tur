@@ -33,8 +33,6 @@ mod target;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use boa_engine::native_function::NativeFunction;
-
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
@@ -42,29 +40,32 @@ use crate::error::TurError;
 use link::CompositedLinkState;
 use subsystem::CompositedTransformSubsystem;
 
-/// A JS-side closure entry: `(js_name, length, native_function)`.
-pub(crate) type ClosureEntry = (&'static str, usize, NativeFunction);
+/// Per-instance plugin state: the shared registry of active links — held by
+/// the subsystem (per-flush recompute) and readable by the
+/// `createLayerLink` bridge fn through the instance ctx (`args[0]`), so the
+/// fn is a plain ctx-bound `FnEntry` pointer (no closures). O(active links)
+/// per flush.
+pub(crate) struct LayerLinkRegistry(pub Rc<RefCell<Vec<Rc<CompositedLinkState>>>>);
 
 /// Install the composited-transform elements + the link factory + the
 /// tracking subsystem.
 ///
-/// Returns the element factory `FnEntry`s (`CompositedTransformTarget`,
-/// `CompositedTransformFollower`) and the `createLayerLink` closure (which
-/// captures the shared link registry also held by the subsystem).
+/// Returns the `FnEntry`s (`CompositedTransformTarget`,
+/// `CompositedTransformFollower`, `createLayerLink`) — all plain ctx-bound
+/// fn pointers; the shared link registry rides the register-phase
+/// plugin-state channel.
 pub fn install_composited_transform(
     ctx: &mut PluginRegisterContext<'_>,
-) -> Result<(Vec<FnEntry>, Vec<ClosureEntry>), TurError> {
-    // Shared registry of active links — owned by the subsystem and captured
-    // by the `createLayerLink` closure. O(active links) per flush.
+) -> Result<Vec<FnEntry>, TurError> {
     let links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>> = Rc::new(RefCell::new(Vec::new()));
 
     ctx.register_subsystem(Box::new(CompositedTransformSubsystem {
         links: links.clone(),
     }));
 
-    let create_layer_link = link::build_create_layer_link(links);
+    ctx.define_plugin_state(Rc::new(LayerLinkRegistry(links)));
 
-    let fns = vec![
+    Ok(vec![
         (
             "CompositedTransformTarget",
             2,
@@ -75,8 +76,10 @@ pub fn install_composited_transform(
             2,
             follower::tur_follower as crate::core::js_runtime::helpers::Ptr,
         ),
-    ];
-    let closures = vec![("createLayerLink", 0, create_layer_link)];
-
-    Ok((fns, closures))
+        (
+            "createLayerLink",
+            2,
+            link::tur_create_layer_link as crate::core::js_runtime::helpers::Ptr,
+        ),
+    ])
 }

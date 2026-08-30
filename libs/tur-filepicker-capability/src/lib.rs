@@ -152,7 +152,7 @@ impl Plugin for TurFilePickerPlugin {
         let filepicker_obj = bridge::build_filepicker_object(ctx.boa_mut(), ctx_value);
         let consts: Vec<tur_engine::core::js_runtime::helpers::ConstEntry> =
             vec![("filePicker", filepicker_obj)];
-        ctx.register_module("tur:filepicker", bridge::fns(), vec![], consts);
+        ctx.register_module("tur:filepicker", bridge::fns(), consts);
         Ok(())
     }
 }

@@ -1,4 +1,6 @@
+use std::any::{Any, TypeId};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -111,6 +113,16 @@ pub struct CompileContext<'a> {
 /// Exposes registration primitives for JS modules, boa classes, subsystems,
 /// and global properties. Each `register_*` method is self-contained: call them
 /// sequentially within `register.
+/// The consumed register-phase collectors, handed to the instance by the
+/// builder once the last plugin has registered (see
+/// [`PluginRegisterContext::into_parts`]): the flush-subsystem list and the
+/// plugin-state map. Installed once; no handle to either collector
+/// survives the builder.
+pub(crate) struct RegisterParts {
+    pub(crate) subsystems: Vec<Box<dyn Subsystem>>,
+    pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
+}
+
 pub struct PluginRegisterContext<'a> {
     pub(crate) boa: &'a mut Context,
     pub(crate) loader: Rc<TurModuleLoader>,
@@ -121,10 +133,18 @@ pub struct PluginRegisterContext<'a> {
     /// this register-phase context and moved into the instance
     /// ([`TurAppInternal::subsystems`](crate::core::app::TurAppInternal))
     /// by the builder after the last plugin registers — see
-    /// [`into_subsystems`](Self::into_subsystems). No handle into the live
+    /// [`into_parts`](Self::into_parts). No handle into the live
     /// registry survives the builder, so subsystem registration after build
     /// is structurally impossible.
     pub(crate) subsystems: Vec<Box<dyn Subsystem>>,
+    /// Build-time collector for plugin-state slots — the subsystems
+    /// pattern's twin. Owned by this register-phase context
+    /// ([`define_plugin_state`](Self::define_plugin_state) fills it) and
+    /// moved into the instance
+    /// ([`TurInstanceContext::install_plugin_state`]) by the builder after
+    /// the last plugin registers. No runtime write path exists at all: the
+    /// collector is consumed, not flagged.
+    pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
     /// Always-installed event bus — shared with
     /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
     /// (specifically `install_event_bus`) read this to wire up the JS bridge
@@ -146,32 +166,22 @@ pub struct PluginRegisterContext<'a> {
 }
 
 impl<'a> PluginRegisterContext<'a> {
-    /// Register a ctx-bound native module (bridge fns that receive `TurInstanceContext`
-    /// as their first argument) plus optional free-form closure exports. Used
-    /// for `tur:std` and similar.
+    /// Register a ctx-bound native module: bridge fns that receive
+    /// `TurInstanceContext` as their first argument (`args[0]`, user args
+    /// from `args[1]`). Used for `tur:std` and similar.
     ///
-    /// `closures` is for bridge fns that capture state which can't live on
-    /// `TurInstanceContext` (e.g. a `Clipboard` impl provided by a plugin). Each
-    /// closure is registered as-is, with no ctx binding.
-    pub fn register_module(
-        &mut self,
-        specifier: &str,
-        fns: Vec<FnEntry>,
-        closures: Vec<(&str, usize, NativeFunction)>,
-        consts: Vec<ConstEntry>,
-    ) {
-        let module = build_native_module(
-            self.boa,
-            self.js_ctx_value.clone(),
-            &fns,
-            &closures,
-            &consts,
-        );
+    /// Plugins provide **fn pointers only** — per-instance state rides the
+    /// register-phase plugin-state channel
+    /// ([`Self::define_plugin_state`], read via
+    /// [`TurInstanceContext::plugin_state`](crate::core::js_runtime::TurInstanceContext::plugin_state)),
+    /// and per-object method state rides the JS object's `JsData` payload
+    /// (read off `this`). There is deliberately no closure escape hatch.
+    pub fn register_module(&mut self, specifier: &str, fns: Vec<FnEntry>, consts: Vec<ConstEntry>) {
+        let module = build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &consts);
         self.loader.register(specifier, module);
         tracing::info!(
-            "registered module {specifier} ({} fns, {} closures, {} consts)",
+            "registered module {specifier} ({} fns, {} consts)",
             fns.len(),
-            closures.len(),
             consts.len()
         );
     }
@@ -336,13 +346,47 @@ impl<'a> PluginRegisterContext<'a> {
         self.subsystems.push(sub);
     }
 
-    /// Builder-facing: hand the collected subsystems to the instance.
-    /// Consumes the register-phase context (ending its `&mut Context`
-    /// borrow) — after this call the only subsystem registration path in
-    /// existence is gone, which is what makes the registry immutable for
-    /// the instance's lifetime.
-    pub(crate) fn into_subsystems(self) -> Vec<Box<dyn Subsystem>> {
-        self.subsystems
+    /// Define a per-instance **plugin state** slot — typed state the plugin
+    /// owns, readable at runtime by ctx-bound bridge fns via
+    /// [`TurInstanceContext::plugin_state`] (reached through
+    /// `extract_js_ctx(args)`).
+    ///
+    /// This is the channel that lets a stateful bridge be a plain
+    /// [`FnEntry`](crate::core::js_runtime::helpers::FnEntry) fn pointer
+    /// (state via `args[0]`) instead of an
+    /// `unsafe NativeFunction::from_closure` capture: mint the shared state
+    /// here, hand clones to your subsystem / elements, and read the slot
+    /// back inside the bridge fns. Per-**object** method state (not
+    /// per-instance) instead rides the JS object's `JsData` payload and is
+    /// read off `this` (the store `{get,set}` / `Task.cancel` /
+    /// `eventBus.on/send` pattern — clone out of the payload before
+    /// running JS).
+    ///
+    /// Register-phase only — the collector is consumed by the builder
+    /// ([`into_parts`](Self::into_parts)) once the last plugin registers
+    /// and installed as an immutable map, so there is no runtime write
+    /// path. A duplicate define for the same type panics (fail-fast).
+    pub fn define_plugin_state<T: 'static>(&mut self, value: Rc<T>) {
+        let id = TypeId::of::<T>();
+        if self.plugin_state.contains_key(&id) {
+            panic!(
+                "plugin_state: `{}` defined twice — each plugin-state type may \
+                 be defined only once per instance",
+                std::any::type_name::<T>()
+            );
+        }
+        self.plugin_state.insert(id, value);
+    }
+
+    /// Builder-facing: consume the register-phase collectors (subsystems +
+    /// plugin state), ending the register phase. After this call the only
+    /// registration path in existence is gone — the collected state is
+    /// installed once and immutable for the instance's lifetime.
+    pub(crate) fn into_parts(self) -> RegisterParts {
+        RegisterParts {
+            subsystems: self.subsystems,
+            plugin_state: self.plugin_state,
+        }
     }
 
     /// The always-installed event bus handle (shared with

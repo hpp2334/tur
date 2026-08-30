@@ -1,9 +1,5 @@
-import * as Anim from "tur:animation";
-import * as Clipboard from "tur:clipboard";
-import type { Color, SpanData, Store } from "tur:std";
-import * as Std from "tur:std";
-import { FilePicker, Net } from "@tur-pg/optional-ns";
-import type { AstNode, TokenSpan } from "tur-ext/demo-helper";
+import type { Color, SpanData } from "tur:std";
+import type { TokenSpan } from "tur-ext/demo-helper";
 import * as Host from "tur-ext/demo-helper";
 import { code } from "../theme/tokens";
 
@@ -27,12 +23,15 @@ const KIND_COLOR: Color[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** The case's `start({ store })` (module lifecycle contract). Invoking it
-     *  publishes the case view via the intercepted `mount`; it may return a
-     *  cleanup function the case store runs before the next case / recompile.
-     *  The store type is `Store | null` on the harness side (the compile-time
-     *  cache prime runs before the instance store exists). */
-    start?: (ctx: { store: Store | null }) => (() => void) | void;
+    /** The compiled case as a self-contained ES module source (the module
+     *  lifecycle contract — `export function start(...)`, `mount` inside).
+     *  Multi-file cases inline their non-entry files as a `__modules`
+     *  registry of function bodies evaluated with the `tur:*` namespaces
+     *  injected; the entry's relative imports rewrite to registry lookups
+     *  while its `tur:*` imports pass through verbatim (the child realm
+     *  resolves them natively — no `mount` interception, the case mounts
+     *  its own root in its own instance). */
+    source?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,23 +47,6 @@ function specNames(specs: Array<{ local: string; imported: string }>): string {
             s.imported === s.local ? s.local : `${s.imported}: ${s.local}`,
         )
         .join(", ");
-}
-
-/** Split a `tur:std` specifier list: pull `mount` (under any local alias) out
- *  and return the remaining names plus the alias to rebind. The playground
- *  intercepts the case's own `mount(...)` so the case view publishes into the
- *  viewer pane instead of replacing the playground's mounted root. */
-function splitMountSpec(specs: Array<{ local: string; imported: string }>): {
-    names: string;
-    mountAlias: string | null;
-} {
-    let mountAlias: string | null = null;
-    const rest: typeof specs = [];
-    for (const s of specs) {
-        if (s.imported === "mount") mountAlias = s.local;
-        else rest.push(s);
-    }
-    return { names: specNames(rest), mountAlias };
 }
 
 /** Normalize a relative import path to a module name key.
@@ -87,9 +69,10 @@ function fileKey(source: string): string {
     return name;
 }
 
-/** Map an import source to the expression the rewritten code destructures
- *  from. `tur:*` resolve to the injected module namespace; relative
- *  imports resolve to the local `__modules` registry. */
+/** Map an import source to the expression an inlined (non-entry) module
+ *  body destructures from. `tur:*` resolve to the `__evalModule` injection
+ *  parameter of the same name; relative imports resolve to the local
+ *  `__modules` registry. */
 function importTarget(source: string): string {
     switch (source) {
         case "tur:std":
@@ -109,12 +92,14 @@ function importTarget(source: string): string {
     }
 }
 
-/** Rewrite a transpiled JS string using AST metadata from `generateAst`.
- *  Returns the rewritten source and the list of exported names.
+/** Rewrite a transpiled non-entry file for the inlined `__modules`
+ *  registry: imports become destructuring from the injected namespaces /
+ *  registry, exports become plain declarations assigned onto a local
+ *  `exports` object (the registry entry IS the module's exports).
  *
- *  Each AST node carries its own `text` (full node text) and `body` (export
- *  nodes only — text without the `export` keyword), both extracted safely by
- *  Rust. No regex or position arithmetic on the JS side. */
+ *  Each AST node carries its own `text` (full node text) and `body`
+ *  (export nodes only — text without the `export` keyword), both extracted
+ *  safely by Rust. No regex or position arithmetic on the JS side. */
 function rewriteModule(transpiled: string): {
     source: string;
     exportedNames: string[];
@@ -127,21 +112,9 @@ function rewriteModule(transpiled: string): {
         switch (node.kind) {
             case "import": {
                 const src = node.source ?? "";
-                if (src === "tur:std") {
-                    const { names, mountAlias } = splitMountSpec(
-                        node.specifiers ?? [],
-                    );
-                    parts.push(`const {${names}} = Std;`);
-                    if (mountAlias) {
-                        parts.push(
-                            `const ${mountAlias} = (root) => { __setCaseView(root); };`,
-                        );
-                    }
-                } else {
-                    parts.push(
-                        `const {${specNames(node.specifiers ?? [])}} = ${importTarget(src)};`,
-                    );
-                }
+                parts.push(
+                    `const {${specNames(node.specifiers ?? [])}} = ${importTarget(src)};`,
+                );
                 break;
             }
 
@@ -177,45 +150,39 @@ function rewriteModule(transpiled: string): {
     return { source: parts.join("\n"), exportedNames };
 }
 
-/** Rewrite the entry file. Like `rewriteModule` (same `mount` interception)
- *  but for the module-lifecycle entry: the case's own `export function
- *  start(...)` passes through verbatim and is wired to the module's exports
- *  (advanced cases may register hooks, return a cleanup, …). `export default`
- *  is NOT an entrypoint — `compileCase` rejects it with a clear error. */
-function rewriteEntry(transpiled: string): {
+/** Rewrite the entry file for the generated ES module: relative imports
+ *  become `__modules` registry lookups; `tur:*` imports and every
+ *  declaration/export pass through verbatim — the child realm resolves
+ *  them natively and the case's own `export function start(...)` IS the
+ *  module entrypoint (no interception, no re-wiring). `export default` is
+ *  NOT an entrypoint — `compileCase` rejects it with a clear error. */
+function rewriteEntryModule(transpiled: string): {
     source: string;
+    hasStart: boolean;
     hasDefaultExport: boolean;
 } {
     const ast = Host.generateAst(transpiled);
     const parts: string[] = [];
-    let hasExplicitStart = false;
+    let hasStart = false;
     let hasDefaultExport = false;
 
     for (const node of ast) {
         switch (node.kind) {
             case "import": {
                 const src = node.source ?? "";
-                if (src === "tur:std") {
-                    const { names, mountAlias } = splitMountSpec(
-                        node.specifiers ?? [],
-                    );
-                    parts.push(`const {${names}} = Std;`);
-                    if (mountAlias) {
-                        parts.push(
-                            `const ${mountAlias} = (root) => { __setCaseView(root); };`,
-                        );
-                    }
-                } else {
+                if (src.startsWith("./")) {
                     parts.push(
-                        `const {${specNames(node.specifiers ?? [])}} = ${importTarget(src)};`,
+                        `const {${specNames(node.specifiers ?? [])}} = __modules["${moduleKey(src)}"];`,
                     );
+                } else {
+                    parts.push(node.text);
                 }
                 break;
             }
 
             case "exportDecl": {
-                parts.push(node.body ?? node.text);
-                if (node.names?.includes("start")) hasExplicitStart = true;
+                parts.push(node.text);
+                if (node.names?.includes("start")) hasStart = true;
                 break;
             }
 
@@ -225,7 +192,8 @@ function rewriteEntry(transpiled: string): {
             }
 
             case "exportNamed": {
-                if (node.names?.includes("start")) hasExplicitStart = true;
+                parts.push(node.text);
+                if (node.names?.includes("start")) hasStart = true;
                 break;
             }
 
@@ -241,76 +209,34 @@ function rewriteEntry(transpiled: string): {
         }
     }
 
-    // Wire the declared `start` through to the module's exports.
-    if (hasExplicitStart) {
-        parts.push("exports.start = start;");
-    }
-    return { source: parts.join("\n"), hasDefaultExport };
+    return { source: parts.join("\n"), hasStart, hasDefaultExport };
 }
 
 // ---------------------------------------------------------------------------
 // Compile
 // ---------------------------------------------------------------------------
 
-/** Lifecycle sink: the view published by the currently-started case's
- *  (intercepted) `mount(root)` call. Drained once by `takePublishedView`
- *  after the case store invokes `start`. */
-let publishedView: unknown = null;
-
-function setCaseView(view: unknown): void {
-    publishedView = view;
-}
-
-/** Drain the view published by the last `start()` (null if it never called
- *  `mount`). */
-export function takePublishedView(): unknown {
-    const v = publishedView;
-    publishedView = null;
-    return v;
-}
-
-/** Evaluate rewritten case code in an isolated function scope with the
- *  `tur:*` modules, the per-case `__modules` registry, and the internal
- *  `__setCaseView` sink injected as parameters (no `globalThis` pollution —
- *  case code never references `__setCaseView`; the compiler's `mount` shim
- *  is the only caller). Returns the function's value. */
-function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
-    const fn = new Function(
-        "Std",
-        "Anim",
-        "Host",
-        "Net",
-        "Clipboard",
-        "FilePicker",
-        "__modules",
-        "__setCaseView",
-        body,
-    );
-    return fn(
-        Std,
-        Anim,
-        Host,
-        Net,
-        Clipboard,
-        FilePicker,
-        modules,
-        setCaseView,
-    );
-}
-
+/** Compile a case into a self-contained ES module source for a hosted
+ *  child instance.
+ *
+ *  Single-file cases compile to the entry verbatim (imports included).
+ *  Multi-file cases additionally emit a preamble that imports the `tur:*`
+ *  namespaces once and evaluates each non-entry file through
+ *  `__evalModule` — a `new Function` body receiving the namespaces and the
+ *  registry as parameters, exactly the isolation the in-realm compiler
+ *  used, but running inside the child realm instead of the playground's. */
 export function compileCase(files: Record<string, string>): CaseCompileResult {
     const entryFile = files["index.ts"] ?? Object.values(files)[0];
     if (!entryFile) {
         return { error: "case has no files" };
     }
 
-    const modules: Record<string, unknown> = {};
-
-    // Process non-entry files first, topologically sorted.
+    // Non-entry files, topologically sorted, compiled to registry bodies.
     const nonEntryFiles = Object.keys(files).filter(
         (name) => name !== "index.ts",
     );
     const sorted = topoSort(nonEntryFiles, files);
+    const registryLines: string[] = [];
     for (const filename of sorted) {
         const src = files[filename];
         let transpiled: string;
@@ -337,17 +263,12 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
             ...rewritten.exportedNames.map((n) => `exports.${n} = ${n};`),
             "return exports;",
         ].join("\n");
-
-        try {
-            modules[moduleKey(filename)] = runCaseBody(body, modules);
-        } catch (e) {
-            return {
-                error: `eval ${filename}: ${e instanceof Error ? e.message : String(e)}`,
-            };
-        }
+        registryLines.push(
+            `__modules["${moduleKey(filename)}"] = __evalModule(${JSON.stringify(body)});`,
+        );
     }
 
-    // Process entry file (index.ts).
+    // Entry file.
     let transpiled: string;
     try {
         transpiled = Host.transpileTsx(entryFile);
@@ -357,43 +278,47 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
         };
     }
 
-    let entryJs: string;
-    let entryHasDefaultExport: boolean;
+    let entry: {
+        source: string;
+        hasStart: boolean;
+        hasDefaultExport: boolean;
+    };
     try {
-        const entry = rewriteEntry(transpiled);
-        entryJs = entry.source;
-        entryHasDefaultExport = entry.hasDefaultExport;
+        entry = rewriteEntryModule(transpiled);
     } catch (e) {
         return {
             error: `rewrite index.ts: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 
-    if (entryHasDefaultExport) {
+    if (entry.hasDefaultExport) {
         return {
             error: "`export default` is not the module entrypoint — export `function start(...)` and call `mount(view)` inside it",
         };
     }
-
-    let entryExports: Record<string, unknown> | null;
-    try {
-        entryExports = runCaseBody(
-            ["var exports = {};", entryJs, "return exports;"].join("\n"),
-            modules,
-        ) as Record<string, unknown> | null;
-    } catch (e) {
-        return {
-            error: `eval index.ts: ${e instanceof Error ? e.message : String(e)}`,
-        };
-    }
-
-    const start = entryExports?.start;
-    if (typeof start !== "function") {
+    if (!entry.hasStart) {
         return { error: "case must export a function start()" };
     }
-    return {
-        start: start as (ctx: { store: Store | null }) => (() => void) | void,
-    };
+
+    const lines: string[] = [];
+    if (registryLines.length > 0) {
+        lines.push(
+            'import * as Std from "tur:std";',
+            'import * as Anim from "tur:animation";',
+            'import * as Host from "tur-ext/demo-helper";',
+            'import * as Net from "tur:net";',
+            'import * as Clipboard from "tur:clipboard";',
+            'import * as FilePicker from "tur:filepicker";',
+            "const __modules = {};",
+            "function __evalModule(body) {",
+            '    const fn = new Function("Std", "Anim", "Host", "Net", "Clipboard", "FilePicker", "__modules", body);',
+            "    return fn(Std, Anim, Host, Net, Clipboard, FilePicker, __modules);",
+            "}",
+            ...registryLines,
+        );
+    }
+    lines.push(entry.source);
+    return { source: lines.join("\n") };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */
@@ -468,10 +393,3 @@ function topoSort(
     }
     return result;
 }
-
-// Silence unused-import warnings for Net, Clipboard and FilePicker
-// (referenced only inside generated case bodies via the `runCaseBody`
-// injection, not directly here).
-void Net;
-void Clipboard;
-void FilePicker;

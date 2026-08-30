@@ -2,6 +2,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use boa_engine::native_function::NativeFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
@@ -375,33 +376,97 @@ fn any_readable_of(id: AtomId) -> AnyReadable {
     Readable::Source(Source::from_id(id))
 }
 
+/// Payload of the per-store `{ get, set }` context object handed to
+/// mutation / derive closures as their first argument. The methods are
+/// **plain fn pointers** reading the state off `this` — no closures, no
+/// captures. Same `unsafe_empty_trace` soundness note as [`JsStore`]:
+/// pure-Rust state (`Rc`s, no `Gc`).
+#[derive(Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+struct StoreClosureCtx {
+    shared: Rc<SharedReactive>,
+    kv: Rc<StoreKv>,
+}
+
+/// `this` → the `{ get, set }` context object's state, cloned out before any
+/// JS runs (a nested `ctx.get`/`ctx.set` on the same object must not hit a
+/// live payload borrow).
+fn store_ctx_of(this: &JsValue) -> JsResult<(Rc<SharedReactive>, Rc<StoreKv>)> {
+    let obj = this.as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message(
+            "expected the { get, set } ctx object as `this` — call it as a method (ctx.get(...))",
+        ))
+    })?;
+    let caps = obj.downcast_ref::<StoreClosureCtx>().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message(
+            "expected the { get, set } ctx object as `this` — call it as a method (ctx.get(...))",
+        ))
+    })?;
+    Ok((caps.shared.clone(), caps.kv.clone()))
+}
+
+fn tur_store_ctx_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (shared, kv) = store_ctx_of(this)?;
+    let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
+    shared.read_by_id(readable.id(), &kv, ctx)
+}
+
+fn tur_store_ctx_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (shared, kv) = store_ctx_of(this)?;
+    let v = args.get_or_undefined(0);
+    if let Ok(mutation) = Mutation::from_js(v) {
+        // `invoke_mutation` builds the `{get,set}` JsObject internally
+        // and prepends it for `Js`-variant closures; pass only the
+        // user args (no recursive ctx_obj construction here).
+        let user_args = args.get(1..).unwrap_or(&[]);
+        return shared.invoke_mutation_by_id(mutation.id(), &kv, user_args, ctx);
+    }
+    if let Ok(readable) = AnyReadable::from_js(v) {
+        return match readable {
+            AnyReadable::Source(_) => {
+                let value = args.get_or_undefined(1).clone();
+                shared.write_by_id(readable.id(), &kv, value)?;
+                Ok(JsValue::undefined())
+            }
+            AnyReadable::Derived(_) => Err(JsError::from(
+                JsNativeError::typ().with_message("cannot set a derived atom"),
+            )),
+        };
+    }
+    Err(JsError::from(
+        JsNativeError::typ().with_message("expected an atom handle"),
+    ))
+}
+
 /// Build the per-store `{ get, set }` JS context object that closures receive
 /// as their first argument.
 ///
 /// `shared` is the instance-wide reactive machinery; `default` is the KV of
 /// the store that owns the atom being computed/invoked — atoms read or
 /// written through this ctx materialize into that store (tree-driven flows:
-/// the mounted store).
+/// the mounted store). The state rides the object's [`StoreClosureCtx`]
+/// payload; both methods are plain fn pointers — **no `unsafe`**.
 pub fn build_store_context_object(
     context: &mut Context,
     shared: Rc<SharedReactive>,
     default: Rc<StoreKv>,
 ) -> JsResult<JsObject> {
     let proto = context.intrinsics().constructors().object().prototype();
-    let obj = JsObject::from_proto_and_data(proto, ());
+    let obj = JsObject::from_proto_and_data(
+        proto,
+        StoreClosureCtx {
+            shared,
+            kv: default,
+        },
+    );
 
-    let shared_for_get = shared.clone();
-    let kv_for_get = default.clone();
-    let get_fn = unsafe {
-        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-            shared_for_get.read_by_id(readable.id(), &kv_for_get, ctx)
-        })
-    };
-    let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
-        .name(js_string!("get"))
-        .length(1)
-        .build();
+    let get_obj = boa_engine::object::FunctionObjectBuilder::new(
+        context.realm(),
+        NativeFunction::from_fn_ptr(tur_store_ctx_get),
+    )
+    .name(js_string!("get"))
+    .length(1)
+    .build();
     let get_desc = PropertyDescriptor::builder()
         .value(get_obj)
         .writable(true)
@@ -410,44 +475,13 @@ pub fn build_store_context_object(
         .build();
     obj.insert_property(js_string!("get"), get_desc);
 
-    let shared_for_set = shared.clone();
-    let kv_for_set = default;
-    let set_fn = unsafe {
-        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let v = args.get_or_undefined(0);
-            if let Ok(mutation) = Mutation::from_js(v) {
-                // `invoke_mutation` builds the `{get,set}` JsObject internally
-                // and prepends it for `Js`-variant closures; pass only the
-                // user args (no recursive ctx_obj construction here).
-                let user_args = args.get(1..).unwrap_or(&[]);
-                return shared_for_set.invoke_mutation_by_id(
-                    mutation.id(),
-                    &kv_for_set,
-                    user_args,
-                    ctx,
-                );
-            }
-            if let Ok(readable) = AnyReadable::from_js(v) {
-                return match readable {
-                    AnyReadable::Source(_) => {
-                        let value = args.get_or_undefined(1).clone();
-                        shared_for_set.write_by_id(readable.id(), &kv_for_set, value)?;
-                        Ok(JsValue::undefined())
-                    }
-                    AnyReadable::Derived(_) => Err(JsError::from(
-                        JsNativeError::typ().with_message("cannot set a derived atom"),
-                    )),
-                };
-            }
-            Err(JsError::from(
-                JsNativeError::typ().with_message("expected an atom handle"),
-            ))
-        })
-    };
-    let set_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), set_fn)
-        .name(js_string!("set"))
-        .length(2)
-        .build();
+    let set_obj = boa_engine::object::FunctionObjectBuilder::new(
+        context.realm(),
+        NativeFunction::from_fn_ptr(tur_store_ctx_set),
+    )
+    .name(js_string!("set"))
+    .length(2)
+    .build();
     let set_desc = PropertyDescriptor::builder()
         .value(set_obj)
         .writable(true)
@@ -459,26 +493,72 @@ pub fn build_store_context_object(
     Ok(obj)
 }
 
+/// `this` → the `JsStore` payload, cloned out before any JS runs (nested
+/// store access from a mutation must not hit a live payload borrow).
+fn store_of(this: &JsValue) -> JsResult<Store> {
+    let obj = this.as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message(
+            "expected the store object as `this` — call it as a method (store.get(...))",
+        ))
+    })?;
+    obj.downcast_ref::<JsStore>()
+        .map(|s| s.0.clone())
+        .ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message(
+                "expected the store object as `this` — call it as a method (store.get(...))",
+            ))
+        })
+}
+
+fn tur_store_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let store = store_of(this)?;
+    let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
+    store
+        .shared()
+        .read_by_id(readable.id(), &store.kv_handle(), ctx)
+}
+
+fn tur_store_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let store = store_of(this)?;
+    let v = args.get_or_undefined(0);
+    if let Ok(mutation) = Mutation::from_js(v) {
+        let user_args = args.get(1..).unwrap_or(&[]);
+        return store.invoke_mutation(mutation, user_args, ctx);
+    }
+    if let Ok(readable) = AnyReadable::from_js(v) {
+        return match readable {
+            AnyReadable::Source(_) => {
+                let value = args.get_or_undefined(1).clone();
+                store
+                    .shared()
+                    .write_by_id(readable.id(), &store.kv_handle(), value)?;
+                Ok(JsValue::undefined())
+            }
+            AnyReadable::Derived(_) => Err(JsError::from(
+                JsNativeError::typ().with_message("cannot set a derived atom"),
+            )),
+        };
+    }
+    Err(JsError::from(
+        JsNativeError::typ().with_message("expected an atom handle"),
+    ))
+}
+
 /// Build the JS `Store` object (the instance store handed to the module's
 /// `start({ store })`): a `JsStore`-opaque carrying the `Store` handle, with
 /// `get` / `set` methods that extract the store off `this`. Atoms materialize
-/// into THIS store.
+/// into THIS store. Both methods are plain fn pointers — **no `unsafe`**.
 pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
     let proto = context.intrinsics().constructors().object().prototype();
-    let obj = JsObject::from_proto_and_data(proto, JsStore(store.clone()));
+    let obj = JsObject::from_proto_and_data(proto, JsStore(store));
 
-    let get_store = store.clone();
-    let get_fn = unsafe {
-        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-            let s = get_store.clone();
-            s.shared().read_by_id(readable.id(), &s.kv_handle(), ctx)
-        })
-    };
-    let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
-        .name(js_string!("get"))
-        .length(1)
-        .build();
+    let get_obj = boa_engine::object::FunctionObjectBuilder::new(
+        context.realm(),
+        NativeFunction::from_fn_ptr(tur_store_get),
+    )
+    .name(js_string!("get"))
+    .length(1)
+    .build();
     obj.insert_property(
         js_string!("get"),
         PropertyDescriptor::builder()
@@ -489,39 +569,13 @@ pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
             .build(),
     );
 
-    let set_store = store;
-    let set_fn = unsafe {
-        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let v = args.get_or_undefined(0);
-            if let Ok(mutation) = Mutation::from_js(v) {
-                let user_args = args.get(1..).unwrap_or(&[]);
-                return set_store.invoke_mutation(mutation, user_args, ctx);
-            }
-            if let Ok(readable) = AnyReadable::from_js(v) {
-                return match readable {
-                    AnyReadable::Source(_) => {
-                        let value = args.get_or_undefined(1).clone();
-                        set_store.shared().write_by_id(
-                            readable.id(),
-                            &set_store.kv_handle(),
-                            value,
-                        )?;
-                        Ok(JsValue::undefined())
-                    }
-                    AnyReadable::Derived(_) => Err(JsError::from(
-                        JsNativeError::typ().with_message("cannot set a derived atom"),
-                    )),
-                };
-            }
-            Err(JsError::from(
-                JsNativeError::typ().with_message("expected an atom handle"),
-            ))
-        })
-    };
-    let set_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), set_fn)
-        .name(js_string!("set"))
-        .length(2)
-        .build();
+    let set_obj = boa_engine::object::FunctionObjectBuilder::new(
+        context.realm(),
+        NativeFunction::from_fn_ptr(tur_store_set),
+    )
+    .name(js_string!("set"))
+    .length(2)
+    .build();
     obj.insert_property(
         js_string!("set"),
         PropertyDescriptor::builder()

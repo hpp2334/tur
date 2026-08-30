@@ -52,9 +52,10 @@ use std::rc::Rc;
 use boa_engine::builtins::promise::ResolvingFunctions;
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsPromise;
+use boa_engine::object::builtins::{JsFunction, JsPromise};
 use boa_engine::object::{FunctionObjectBuilder, JsObject};
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
+use boa_gc::{Finalize, Trace};
 
 use crate::core::js_runtime::helpers::{FnEntry, extract_js_ctx};
 use crate::core::scheduler::TaskHandle;
@@ -143,6 +144,54 @@ pub fn cancel_error(ctx: &mut Context) -> JsValue {
     err.into()
 }
 
+/// Payload of the `Task` JS object — `cancel` is a **plain fn pointer**
+/// reading this state off `this` (no closures, no captures).
+///
+/// `reject` is a GC handle kept alive by its **root count** — a
+/// `JsFunction` clone is a root, so the collector never frees it while the
+/// payload holds it. That rooting is exactly what made the former untraced
+/// closure capture sound; stating it here keeps the empty trace sound for
+/// the `Rc`/`Box<dyn Fn>` fields around it (pure Rust, no `Gc`).
+#[derive(Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+struct TaskCancelState {
+    reject: JsFunction,
+    abort: Rc<Option<TaskHandle>>,
+    extra_cancel: Option<Rc<dyn Fn() + 'static>>,
+}
+
+fn tur_task_cancel(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    // Clone out before any JS runs (the reject call re-enters JS). The
+    // clones keep `cancel()` fully idempotent — every call re-runs the
+    // extra hook + abort, exactly like the former closure capture did.
+    let (reject, abort, extra_cancel) = {
+        let obj = this.as_object().ok_or_else(|| {
+            JsNativeError::typ().with_message(
+                "expected the Task object as `this` — call it as a method (task.cancel())",
+            )
+        })?;
+        let state = obj.downcast_ref::<TaskCancelState>().ok_or_else(|| {
+            JsNativeError::typ().with_message(
+                "expected the Task object as `this` — call it as a method (task.cancel())",
+            )
+        })?;
+        (
+            state.reject.clone(),
+            state.abort.clone(),
+            state.extra_cancel.clone(),
+        )
+    };
+    if let Some(extra) = &extra_cancel {
+        extra();
+    }
+    if let Some(handle) = abort.as_ref() {
+        handle.abort();
+    }
+    let reason = cancel_error(ctx);
+    reject.call(&JsValue::undefined(), &[reason], ctx)?;
+    Ok(JsValue::undefined())
+}
+
 /// Build the shared `Task<T>` JS handle: `{ promise, cancel() }`.
 ///
 /// Every async bridge API returns this object. `cancel()`:
@@ -155,10 +204,8 @@ pub fn cancel_error(ctx: &mut Context) -> JsValue {
 /// Promise settle-once semantics make double cancels and post-settlement
 /// cancels harmless (the reject is a silent no-op; the abort still runs).
 ///
-/// The `cancel` closure is one `unsafe NativeFunction::from_closure` —
-/// the established pattern (the former `launch` handle used it): captures
-/// are `Rc`/handle state plus the reject `JsFunction`, whose boa handle is
-/// GC-rooted by clone.
+/// The cancel state rides the object's [`TaskCancelState`] payload and the
+/// method is a plain fn pointer — **no `unsafe`**.
 pub fn make_task(
     ctx: &mut Context,
     promise: &JsPromise,
@@ -166,28 +213,20 @@ pub fn make_task(
     abort: Option<TaskHandle>,
     extra_cancel: Option<Box<dyn Fn() + 'static>>,
 ) -> JsObject {
-    let reject = resolvers.reject.clone();
-    let abort = Rc::new(abort);
-    let cancel_fn = unsafe {
-        NativeFunction::from_closure(move |_this, _args, ctx| {
-            if let Some(extra) = &extra_cancel {
-                extra();
-            }
-            if let Some(handle) = abort.as_ref() {
-                handle.abort();
-            }
-            let reason = cancel_error(ctx);
-            reject.call(&JsValue::undefined(), &[reason], ctx)?;
-            Ok(JsValue::undefined())
-        })
-    };
-    let cancel_obj = FunctionObjectBuilder::new(ctx.realm(), cancel_fn)
-        .length(0)
-        .name(js_string!("cancel"))
-        .build();
+    let cancel_obj =
+        FunctionObjectBuilder::new(ctx.realm(), NativeFunction::from_fn_ptr(tur_task_cancel))
+            .length(0)
+            .name(js_string!("cancel"))
+            .build();
 
-    let task =
-        JsObject::from_proto_and_data(ctx.intrinsics().constructors().object().prototype(), ());
+    let task = JsObject::from_proto_and_data(
+        ctx.intrinsics().constructors().object().prototype(),
+        TaskCancelState {
+            reject: resolvers.reject.clone(),
+            abort: Rc::new(abort),
+            extra_cancel: extra_cancel.map(Rc::from),
+        },
+    );
     let _ = task.create_data_property(js_string!("promise"), promise.clone(), ctx);
     let _ = task.create_data_property(js_string!("cancel"), JsValue::from(cancel_obj), ctx);
     task

@@ -1,18 +1,18 @@
 import {
+    createModuleSource,
     createTextEditingController,
     createUndoController,
-    type Element,
+    createVirtualAppController,
     type KeyEvent,
     type Mutation,
     mutate,
-    type Store,
     sleep,
     type Task,
 } from "tur:std";
-import { CASE_SOURCES, compileCase, takePublishedView } from "../cases";
+import { CASE_SOURCES, compileCase } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
-import { getInstanceStore } from "./instance-store";
 import {
+    app$,
     autoRun$,
     CASE_NAMES,
     compileVersion$,
@@ -26,62 +26,28 @@ import {
     selectedFile$,
     status$,
 } from "./sources";
-import { triggerFadeIn } from "./transitions";
-import type { CaseFileMap, EditorController } from "./types";
+import type { CaseFileMap } from "./types";
 
 // ---------------------------------------------------------------------------
-// Case cache & last-compiled-source tracking
+// Case caches & last-compiled-source tracking
 // ---------------------------------------------------------------------------
 
-const caseViews = new Map<string, Element>();
-
-/** Per-case cleanup returned by the last invoked `start()` (the module
- *  lifecycle contract, in-realm form). Runs before that case's next
- *  recompile so controllers / animation loops don't leak across runs. */
-const caseCleanups = new Map<string, () => void>();
+/** Per-case compiled module source cache (the child-instance sources the
+ *  case store hands to `createModuleSource` on spawn). Primed at module
+ *  eval so the first spawn needs no compile — but nothing runs until a
+ *  controller binds (lazy). */
+const caseSources = new Map<string, string>();
 
 /** Per-case file cache: case name → { filename → current editor text }.
  *  Populated from CASE_SOURCES on first load; updated on each recompile. */
 const caseFileCache = new Map<string, CaseFileMap>();
 
-/** Run a compiled case's `start({ store })`: tear down the previous run's
- *  cleanup, invoke `start` with the instance store, then drain the view it
- *  published via its (intercepted) `mount`. The harness-side store type is
- *  `Store | null` because prime-time runs before the entry stashed it; the
- *  case's own `start({ store }: { store: Store })` still follows the engine
- *  contract (it only ever receives the live store once the app runs). */
-function invokeCaseStart(
-    name: string,
-    start: (ctx: { store: Store | null }) => (() => void) | void,
-): void {
-    caseCleanups.get(name)?.();
-    caseCleanups.delete(name);
-    // Prime-time (module eval) runs before the playground entry's `start`
-    // stashed the instance store, so the pass-through may be null there —
-    // harmless: nothing invokes a case's `__*` hooks until the app runs, and
-    // every recompile re-invokes with the live store.
-    const cleanup = start({ store: getInstanceStore() });
-    if (typeof cleanup === "function") {
-        caseCleanups.set(name, cleanup);
-    }
-    const view = takePublishedView();
-    if (view != null) {
-        caseViews.set(name, view as Element);
-    }
-}
-
-function compileIntoCache(name: string): void {
-    const files = CASE_SOURCES[name];
-    if (!files) return;
-    const result = compileCase(files);
-    if (result.start) {
-        invokeCaseStart(name, result.start);
-    }
-}
-
-// Prime the cache synchronously so the first paint has something to render.
+// Prime the caches synchronously so the first paint has something to render.
 for (const name of CASE_NAMES) {
-    compileIntoCache(name);
+    const result = compileCase(CASE_SOURCES[name]);
+    if (result.source != null) {
+        caseSources.set(name, result.source);
+    }
     caseFileCache.set(name, { ...CASE_SOURCES[name] });
 }
 
@@ -121,8 +87,8 @@ export const editorCtrl = createTextEditingController({
     }),
 });
 
-/** Undo/redo history stack for the code editor. Passed to `Input` via
- *  the `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
+/** Undo/redo history stack for the code editor. Passed to `Input` via the
+ *  `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
 export const editorUndo = createUndoController();
 
 /** Save the current editor text back to the per-case file cache. Pure cache
@@ -149,6 +115,43 @@ function isEdited(name: string, filename: string): boolean {
 // drains newly-queued mutations in the next iteration).
 // ---------------------------------------------------------------------------
 
+/** Spawn (or re-spawn) the hosted child instance for a case: resolve its
+ *  compiled module source (cache, then compile-on-demand), then swap `app$`
+ *  to a fresh controller — the viewer's `VirtualAppView` unbinds the old
+ *  controller and binds the new one in the same flush.
+ *
+ *  Controllers are created with `keepAlive: true` so the child SURVIVES
+ *  viewer element churn (layout-mode switches, mobile tab swaps) — the
+ *  element rebind is a no-op for a live child. The trade: swapping to a new
+ *  controller must explicitly retire the old one (`destroy$` — always
+ *  retires, regardless of `keepAlive`), or its child would leak. */
+export const runCase: Mutation<[string], void> = mutate((ctx, name: string) => {
+    if (!CASE_SOURCES[name]) return;
+    let src = caseSources.get(name);
+    if (src == null) {
+        const files = caseFileCache.get(name) ?? { ...CASE_SOURCES[name] };
+        const result = compileCase(files);
+        if (result.error != null || result.source == null) {
+            ctx.set(status$, "error");
+            ctx.set(errorMsg$, result.error ?? "unknown error");
+            return;
+        }
+        src = result.source;
+        caseSources.set(name, src);
+    }
+    const previous = ctx.get(app$);
+    if (previous != null) {
+        ctx.set(previous.destroy$);
+    }
+    ctx.set(
+        app$,
+        createVirtualAppController({
+            source: createModuleSource(src),
+            keepAlive: true,
+        }),
+    );
+});
+
 export const loadCase: Mutation<[string], void> = mutate(
     (ctx, name: string) => {
         if (!CASE_SOURCES[name]) return;
@@ -172,7 +175,7 @@ export const loadCase: Mutation<[string], void> = mutate(
         ctx.set(status$, "ready");
         ctx.set(errorMsg$, "");
         ctx.set(edited$, isEdited(name, "index.ts"));
-        triggerFadeIn();
+        ctx.set(runCase, name);
     },
 );
 
@@ -199,19 +202,19 @@ export const recompile: Mutation<[], void> = mutate((ctx) => {
     const files = caseFileCache.get(name) ?? {};
 
     const result = compileCase(files);
-    if (result.error || !result.start) {
+    if (result.error != null || result.source == null) {
         ctx.set(status$, "error");
         ctx.set(errorMsg$, result.error ?? "unknown error");
         return;
     }
-    invokeCaseStart(name, result.start);
+    caseSources.set(name, result.source);
     lastCompiledFiles.set(name, { ...files });
     ctx.set(lastCompiledAtMs$, Date.now());
     ctx.set(status$, "ready");
     ctx.set(errorMsg$, "");
     ctx.set(edited$, false);
     ctx.set(compileVersion$, ctx.get(compileVersion$) + 1);
-    triggerFadeIn();
+    ctx.set(runCase, name);
 });
 
 export const resetCase: Mutation<[], void> = mutate((ctx) => {
@@ -224,12 +227,6 @@ export const resetCase: Mutation<[], void> = mutate((ctx) => {
     );
     ctx.set(recompile);
 });
-
-/** Look up the cached view handle for a case (or undefined). Used by
- *  the viewer pane to render the active case. */
-export function getCaseView(name: string): Element | undefined {
-    return caseViews.get(name);
-}
 
 /** Get the file names for a case (e.g. ["index.ts", "utils.ts"]). */
 export function getCaseFileNames(name: string): string[] {

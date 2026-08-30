@@ -3,7 +3,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::native_function::NativeFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
@@ -75,23 +74,23 @@ impl LayerLink {
     }
 }
 
-/// Captures stashed inside the `createLayerLink` JS closure. Held inside
-/// boa's GC heap (the closure is wrapped in a `Gc`), so the type must impl
-/// `Trace` — but it owns only pure-Rust state (no `Gc`), so the trace is empty.
-#[derive(Clone, Trace, Finalize)]
-#[boa_gc(unsafe_empty_trace)]
-struct LinkRegistryCaptures {
-    links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>>,
-}
-
-/// Build the `createLayerLink` native closure. Captures the shared link
-/// registry (the same `Rc` held by the subsystem) so each newly-created link
-/// is tracked for the per-flush recompute.
-pub fn build_create_layer_link(links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>>) -> NativeFunction {
-    NativeFunction::from_copy_closure_with_captures(
-        move |_this, _args, caps, ctx| create_layer_link(&caps.links, ctx),
-        LinkRegistryCaptures { links },
-    )
+/// Build the `createLayerLink` bridge fn — a plain ctx-bound fn pointer
+/// (user args at index 1). Reads the shared link registry (the same `Rc`
+/// held by the subsystem) off the instance ctx's plugin-state channel, so
+/// each newly-created link is tracked for the per-flush recompute.
+pub fn tur_create_layer_link(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = crate::core::js_runtime::helpers::extract_js_ctx(args)?;
+    let registry = js_ctx
+        .plugin_state::<super::LayerLinkRegistry>()
+        .ok_or_else(|| {
+            boa_engine::JsNativeError::typ()
+                .with_message("composited-transform not registered on this instance")
+        })?;
+    create_layer_link(&registry.0.clone(), ctx)
 }
 
 fn create_layer_link(

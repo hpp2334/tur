@@ -40,6 +40,7 @@ mod task_promise;
 mod text;
 mod text_input;
 mod transform;
+mod virtual_app;
 mod vsync_source;
 mod watch;
 mod worker_pool;

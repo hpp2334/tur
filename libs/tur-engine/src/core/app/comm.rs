@@ -157,6 +157,14 @@ pub enum HostMsg {
     /// handlers registered on `channel_id` on the host-side
     /// `EventBusHandle`.
     EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
+    /// Virtual-app control (spawn / resize / platform-event / destroy a
+    /// hosted child instance) — routed by `TurAppLooper` (the drain point)
+    /// straight to the instance's
+    /// [`VirtualHost`](crate::core::virtual_app::VirtualHost). The child
+    /// lifecycle surface lives in `core::virtual_app`; status + frame egress
+    /// flows back through `WorkerMsg::AppEvent(AppEvent::custom(...))`, so
+    /// this is the only virtual-app message variant.
+    VirtualControl(crate::core::virtual_app::VirtualControl),
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
 }
@@ -272,6 +280,7 @@ impl fmt::Debug for HostMsg {
                 .field("channel_id", channel_id)
                 .field("len", &payload.len())
                 .finish(),
+            Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
             Self::Destroyed => write!(f, "Destroyed"),
         }
     }

@@ -6,8 +6,26 @@
 
 use std::path::Path;
 
-use boa_engine::{JsArgs, JsValue, Module, NativeFunction, Source, js_string};
+use boa_engine::{Context, JsArgs, JsResult, JsValue, Module, NativeFunction, Source};
 use tur_integration_tests::{NativeExport, NativeModulePlugin, TurTestApp};
+
+fn test_load_module(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let src = args
+        .get_or_undefined(0)
+        .as_string()
+        .ok_or_else(|| {
+            boa_engine::JsNativeError::typ().with_message("loadModule: expected string")
+        })?
+        .to_std_string_escaped();
+    let module = Module::parse(
+        Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
+        None,
+        ctx,
+    )?;
+    let _ = module.load_link_evaluate(ctx);
+    ctx.run_jobs()?;
+    Ok(JsValue::undefined())
+}
 
 #[test]
 fn reentrant_module_load_via_host_fn() {
@@ -22,26 +40,7 @@ fn reentrant_module_load_via_host_fn() {
             // Builder produces a fresh NativeFunction per instance (Phase 7:
             // `NativeFunction` is `!Send`, so we hold a Send+Sync builder
             // closure instead of a pre-built value).
-            builder: Box::new(|_ctx| {
-                NativeFunction::from_copy_closure(|_this, args, ctx| {
-                    let src = args
-                        .get_or_undefined(0)
-                        .as_string()
-                        .ok_or_else(|| {
-                            boa_engine::JsNativeError::typ()
-                                .with_message("loadModule: expected string")
-                        })?
-                        .to_std_string_escaped();
-                    let module = Module::parse(
-                        Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
-                        None,
-                        ctx,
-                    )?;
-                    let _ = module.load_link_evaluate(ctx);
-                    ctx.run_jobs()?;
-                    Ok(JsValue::undefined())
-                })
-            }),
+            builder: Box::new(|_ctx| NativeFunction::from_fn_ptr(test_load_module)),
             length: 1,
         }],
     };
@@ -61,5 +60,4 @@ fn reentrant_module_load_via_host_fn() {
 
     assert_eq!(app.eval_js("globalThis.__outer"), "ran");
     assert_eq!(app.eval_js("globalThis.__inner"), "function");
-    let _ = (js_string!(),);
 }

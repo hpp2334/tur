@@ -23,3 +23,4 @@ pub mod shell;
 pub mod subsystem;
 pub mod text;
 pub mod view;
+pub mod virtual_app;

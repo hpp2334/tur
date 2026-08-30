@@ -552,6 +552,13 @@ impl HostBackend {
         )
     }
 
+    /// The cross-thread wake for this instance's worker (`Rc<dyn Fn()>`,
+    /// host-thread-only). Virtual-app hosting (frames / status back into
+    /// the parent's worker) reuses it after every send.
+    pub(crate) fn worker_wake_handle(&self) -> Rc<dyn Fn()> {
+        self.worker_wake.clone()
+    }
+
     /// Cross-thread event bus handle (queues mode is unused; the worker's
     /// `EventBus` isn't reachable from main).
     pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
@@ -653,6 +660,14 @@ impl HostBackend {
             } => {
                 self.event_bus_handle.dispatch_to_host(channel_id, payload);
                 MsgOutcome::Continue
+            }
+            // Virtual-app controls are routed by `TurAppLooper` — the drain
+            // point — directly to the instance's `VirtualHost` core (the
+            // host-side core shared by the app facade + looper; the backend
+            // holds none of it). This backend never sees one; the arm exists
+            // only to keep the match exhaustive.
+            HostMsg::VirtualControl(_) => {
+                unreachable!("HostMsg::VirtualControl is routed by TurAppLooper before apply_msg")
             }
         }
     }
