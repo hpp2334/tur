@@ -1,5 +1,5 @@
 use std::any::{Any, TypeId};
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
-use crate::core::scheduler::WorkerContext;
+use crate::core::scheduler::{WorkerContext, WorkerPoolHandle};
 
 #[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -126,6 +126,35 @@ pub struct TurInstanceContext {
     /// cheap clone of `TurInstanceContext` (one per bridge call, per flush, etc.).
     /// The struct-level `#[boa_gc(unsafe_empty_trace)]` already covers it.
     pub instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>,
+    /// Worker-side per-instance **plugin state** — typed `Rc` slots defined
+    /// at **register time** (via
+    /// [`PluginRegisterContext::define_plugin_state`](crate::core::plugin::PluginRegisterContext::define_plugin_state),
+    /// after `instance_data` seeding) and read at runtime by ctx-bound
+    /// bridge fns via [`Self::plugin_state`]. This is the channel that lets
+    /// a stateful bridge be a plain `FnEntry` fn pointer (state reached
+    /// through `args[0]`) instead of an
+    /// `unsafe NativeFunction::from_closure` capture.
+    ///
+    /// The register-phase collector is owned by `PluginRegisterContext`
+    /// (the subsystems pattern): after the last plugin registers the
+    /// builder consumes it and installs the finished map here exactly once
+    /// ([`Self::install_plugin_state`]) — there is no runtime write path at
+    /// all, so immutability is enforced by ownership, not a freeze flag.
+    /// Duplicate defines panic (fail-fast) at collection time. Shared
+    /// across every cheap clone (the JS-side opaque payload captures a
+    /// pre-register clone, which is why the slot is a shared `Rc` filled
+    /// once rather than a swapped field).
+    pub(crate) plugin_state: Rc<OnceCell<PluginStateMap>>,
+    /// The runtime's registered worker pools, captured host-side at
+    /// instance build. The JS-side `forWorkerPool(name)` bridge resolves
+    /// against this list eagerly — a resolved handle is the very
+    /// `WorkerPoolHandle` the embedder registered, so a virtual app spawned
+    /// with it lands in exactly the pool Rust code would have assigned.
+    ///
+    /// Sound to keep out of boa's GC trace: pure Rust state
+    /// (`Arc<[WorkerPoolHandle]>` — each an `Arc` over plain data), no
+    /// `boa_gc::Gc`/`GcRefCell`.
+    pub(crate) worker_pools: Arc<[WorkerPoolHandle]>,
 }
 
 impl TurInstanceContext {
@@ -148,6 +177,7 @@ impl TurInstanceContext {
         flush_task_handle: crate::core::async_::FlushTaskHandle,
         wake_worker: Arc<dyn Fn() + Send + Sync>,
         capabilities: Capabilities,
+        worker_pools: Arc<[WorkerPoolHandle]>,
     ) -> Self {
         Self {
             element_tree,
@@ -166,6 +196,8 @@ impl TurInstanceContext {
             flush_task_handle,
             capabilities,
             instance_data: Rc::new(RefCell::new(HashMap::new())),
+            plugin_state: Rc::new(OnceCell::new()),
+            worker_pools,
         }
     }
 
@@ -367,6 +399,50 @@ impl TurInstanceContext {
             .and_then(|v| v.downcast_ref::<T>())
             .map(f)
     }
+
+    /// Read a plugin-state slot defined during register. Bridge fns reach
+    /// this through `args[0]`:
+    ///
+    /// ```text
+    /// fn my_bridge(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    ///     let js_ctx = extract_js_ctx(args)?;
+    ///     let state = js_ctx.plugin_state::<MyPluginState>()
+    ///         .ok_or_else(|| JsError::from(JsNativeError::typ()
+    ///             .with_message("my plugin not registered")))?;
+    ///     ...
+    /// }
+    /// ```
+    ///
+    /// Returns a cheap `Rc` clone of the stored handle (the same `Rc` the
+    /// plugin handed to `define_plugin_state`, so subsystems, elements, and
+    /// bridge fns all share one state).
+    pub fn plugin_state<T: 'static>(&self) -> Option<Rc<T>> {
+        self.plugin_state
+            .get()
+            .and_then(|map| map.slots.get(&TypeId::of::<T>()))
+            .cloned()
+            .and_then(|any| any.downcast::<T>().ok())
+    }
+
+    /// Install the finished plugin-state map — the builder's one-shot
+    /// boundary write, the exact mirror of `TurAppInternal`'s
+    /// `subsystems = register_cx.into_parts().0` install. Called once by
+    /// `build_worker_backend` after the last plugin registers; the shared
+    /// `Rc` slot means every cheap clone (including the pre-register clone
+    /// captured by the JS-side opaque payload) sees the installed map.
+    pub(crate) fn install_plugin_state(&self, slots: HashMap<TypeId, Rc<dyn Any>>) {
+        if self.plugin_state.set(PluginStateMap { slots }).is_err() {
+            panic!("plugin state already installed — the register-phase collector ran twice");
+        }
+    }
+
+    /// Resolve a registered worker pool by name — the worker-side twin of
+    /// the runtime's registry, used by the `forWorkerPool` bridge fn. Eager
+    /// and total: the returned handle is the same `WorkerPoolHandle` the
+    /// embedder registered.
+    pub(crate) fn find_worker_pool(&self, name: &str) -> Option<WorkerPoolHandle> {
+        self.worker_pools.iter().find(|p| p.name() == name).cloned()
+    }
 }
 
 /// Build-time context handed to the closure passed to
@@ -413,4 +489,14 @@ impl InstanceDataCx {
         }
         map.insert(id, Box::new(value));
     }
+}
+
+/// The finished plugin-state map (see
+/// [`TurInstanceContext::plugin_state`]) — built by consuming the
+/// register-phase collector (`PluginRegisterContext::into_parts`) and
+/// installed once via [`TurInstanceContext::install_plugin_state`].
+/// Immutable for the instance's lifetime: the write path exists only at
+/// the build boundary.
+pub(crate) struct PluginStateMap {
+    slots: HashMap<TypeId, Rc<dyn Any>>,
 }

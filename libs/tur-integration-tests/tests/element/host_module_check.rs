@@ -1,7 +1,11 @@
 //! Verify plugin-registered host modules (`tur:*`) resolve via the loader.
 
-use boa_engine::{JsArgs, NativeFunction};
+use boa_engine::{Context, JsArgs, JsResult, JsValue, NativeFunction};
 use tur_integration_tests::{NativeExport, NativeModulePlugin, TurTestApp};
+
+fn test_echo(_this: &JsValue, args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    Ok(args.get_or_undefined(0).clone())
+}
 
 #[test]
 fn host_module_is_importable() {
@@ -12,11 +16,7 @@ fn host_module_is_importable() {
             // Builder produces a fresh NativeFunction per instance (Phase 7:
             // `NativeFunction` is `!Send`, so we hold a Send+Sync builder
             // closure instead of a pre-built value).
-            builder: Box::new(|_ctx| {
-                NativeFunction::from_copy_closure(|_this, args, _ctx| {
-                    Ok(args.get_or_undefined(0).clone())
-                })
-            }),
+            builder: Box::new(|_ctx| NativeFunction::from_fn_ptr(test_echo)),
             length: 1,
         }],
     };

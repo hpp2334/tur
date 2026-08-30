@@ -280,25 +280,36 @@ impl Subsystem for EmbedderBusSubsystem {
 }
 
 // ---------------------------------------------------------------------------
-// Captures for the bridge closures (held inside boa's GC heap)
+// The eventBus JS object — payload + plain fn-pointer methods
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Trace, Finalize)]
+/// Payload of the `eventBus` JS object: the shared [`EventBus`] handle. The
+/// `on` / `send` methods are plain fn pointers reading it off `this` — no
+/// closures, no captures. Same `unsafe_empty_trace` soundness note as
+/// `JsStore` (pure-Rust state, no `Gc`).
+#[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
-struct EventBusCaptures {
+struct EventBusState {
     inner: Rc<EventBus>,
+}
+
+/// `this` → the shared `EventBus`, cloned out before any JS runs.
+fn event_bus_of(this: &JsValue) -> JsResult<Rc<EventBus>> {
+    let msg = "expected the eventBus object as `this` — call it as a method (eventBus.on(...))";
+    let obj = this
+        .as_object()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message(msg)))?;
+    obj.downcast_ref::<EventBusState>()
+        .map(|s| s.inner.clone())
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message(msg)))
 }
 
 // ---------------------------------------------------------------------------
 // Bridge fns
 // ---------------------------------------------------------------------------
 
-fn tur_event_bus_on(
-    _this: &JsValue,
-    args: &[JsValue],
-    caps: &EventBusCaptures,
-    _ctx: &mut Context,
-) -> JsResult<JsValue> {
+fn tur_event_bus_on(this: &JsValue, args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let inner = event_bus_of(this)?;
     let channel_id = args.get_or_undefined(0).as_number().ok_or_else(|| {
         JsError::from(
             JsNativeError::typ()
@@ -317,7 +328,7 @@ fn tur_event_bus_on(
                 .with_message("eventBus.on: expected a function as the second argument"),
         )
     })?;
-    caps.inner
+    inner
         .js_handlers
         .borrow_mut()
         .entry(channel_id)
@@ -326,12 +337,8 @@ fn tur_event_bus_on(
     Ok(JsValue::undefined())
 }
 
-fn tur_event_bus_send(
-    _this: &JsValue,
-    args: &[JsValue],
-    caps: &EventBusCaptures,
-    ctx: &mut Context,
-) -> JsResult<JsValue> {
+fn tur_event_bus_send(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let inner = event_bus_of(this)?;
     let channel_id =
         args.get_or_undefined(0).as_number().ok_or_else(|| {
             JsError::from(JsNativeError::typ().with_message(
@@ -339,7 +346,7 @@ fn tur_event_bus_send(
             ))
         })? as u64;
     let bytes = extract_bytes_from_value(args.get_or_undefined(1), ctx)?;
-    caps.inner
+    inner
         .js_to_embedder
         .lock()
         .unwrap()
@@ -386,23 +393,32 @@ pub fn install_event_bus(ctx: &mut PluginRegisterContext) -> Result<Vec<ConstEnt
 
     ctx.register_subsystem(Box::new(EmbedderBusSubsystem(inner.clone())));
 
-    let caps = EventBusCaptures {
-        inner: inner.clone(),
-    };
+    let on_obj = FunctionObjectBuilder::new(
+        ctx.boa_mut().realm(),
+        NativeFunction::from_fn_ptr(tur_event_bus_on),
+    )
+    .length(2)
+    .name(js_string!("on"))
+    .build();
 
-    let on_fn = NativeFunction::from_copy_closure_with_captures(tur_event_bus_on, caps.clone());
-    let on_obj = FunctionObjectBuilder::new(ctx.boa_mut().realm(), on_fn)
-        .length(2)
-        .name(js_string!("on"))
-        .build();
+    let send_obj = FunctionObjectBuilder::new(
+        ctx.boa_mut().realm(),
+        NativeFunction::from_fn_ptr(tur_event_bus_send),
+    )
+    .length(2)
+    .name(js_string!("send"))
+    .build();
 
-    let send_fn = NativeFunction::from_copy_closure_with_captures(tur_event_bus_send, caps);
-    let send_obj = FunctionObjectBuilder::new(ctx.boa_mut().realm(), send_fn)
-        .length(2)
-        .name(js_string!("send"))
-        .build();
-
-    let obj = boa_engine::object::JsObject::with_object_proto(ctx.boa_mut().intrinsics());
+    let obj = boa_engine::object::JsObject::from_proto_and_data(
+        ctx.boa_mut()
+            .intrinsics()
+            .constructors()
+            .object()
+            .prototype(),
+        EventBusState {
+            inner: inner.clone(),
+        },
+    );
     let _ = obj.create_data_property(js_string!("on"), JsValue::from(on_obj), ctx.boa_mut());
     let _ = obj.create_data_property(js_string!("send"), JsValue::from(send_obj), ctx.boa_mut());
 

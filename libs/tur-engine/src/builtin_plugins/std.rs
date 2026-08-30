@@ -33,7 +33,7 @@ use crate::builtin_plugins::{
     encode::install_encode, focus::install_focus, gesture::install_gesture, image::install_image,
     input::install_input, layout::composited_transform::install_composited_transform,
     layout::enums, layout::install_layout, lazy_container::install_lazy_container,
-    lifecycle::install_lifecycle, scroll::install_scroll, text::install_text,
+    lifecycle::install_lifecycle, scroll::install_scroll, text::install_text, virtual_app,
 };
 use crate::core::app::mount;
 use crate::core::async_::task;
@@ -43,7 +43,6 @@ use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::plugin::{Plugin, PluginRegisterContext};
 use crate::core::screen::{ResizeSubsystem, viewport_size_value};
 use crate::error::TurError;
-use boa_engine::native_function::NativeFunction;
 
 /// The standard widget library plugin. Registers the `tur:std`
 /// module (widget factories, controllers, color bridge), plus the
@@ -93,7 +92,6 @@ impl Plugin for TurStdPlugin {
         // the clipboard backend through a single `.capability(...)` call.
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
-        let mut std_closures: Vec<(&str, usize, NativeFunction)> = Vec::new();
         // Inlined feature plugins (text, image, scroll, lazy_container used
         // to be external `tur-*` crates; they now live inside
         // `builtin_plugins/` and follow the same `install_xxx` pattern as
@@ -118,13 +116,15 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(install_effects(ctx)?);
         std_fns.extend(install_layout(ctx)?);
         // CompositedTransformTarget/Follower + createLayerLink + tracking
-        // subsystem. Returns element FnEntries + a state-capturing closure
-        // (createLayerLink), both merged into `tur:std`.
-        let (ct_fns, ct_closures) = install_composited_transform(ctx)?;
-        std_fns.extend(ct_fns);
-        std_closures.extend(ct_closures);
+        // subsystem (the link registry rides the plugin-state channel).
+        std_fns.extend(install_composited_transform(ctx)?);
         std_fns.extend(install_lifecycle(ctx)?);
         std_fns.extend(install_encode()?);
+        // Virtual apps — `VirtualAppView` + `createModuleSource` /
+        // `createVirtualAppController` + the frame/status subsystem. The
+        // shared per-instance `VirtualState` rides the plugin-state channel,
+        // so these are plain ctx-bound fns (state via `args[0]`).
+        std_fns.extend(virtual_app::install_virtual_app(ctx)?);
         // View-tree mount + async task primitives stay in `core::app::mount`
         // and `core::async_::task` (renderer/async infra, not element-plugin
         // affinity).
@@ -150,7 +150,7 @@ impl Plugin for TurStdPlugin {
         // `install_event_bus` just hooks up the JS bridge + subsystem.
         std_consts.extend(crate::core::event_bus::install_event_bus(ctx)?);
 
-        ctx.register_module("tur:std", std_fns, std_closures, std_consts);
+        ctx.register_module("tur:std", std_fns, std_consts);
 
         Ok(())
     }

@@ -122,6 +122,7 @@ impl TurAppInternal {
         worker_ctx: WorkerContext,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
         host_tx: crate::core::app::HostTx,
+        worker_pools: std::sync::Arc<[crate::core::scheduler::WorkerPoolHandle]>,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
@@ -194,6 +195,7 @@ impl TurAppInternal {
             flush_task_queue.handle(),
             wake_worker.clone(),
             capabilities,
+            worker_pools,
         );
 
         // Share the capability registry between the JS context (bridge fns)

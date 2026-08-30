@@ -99,7 +99,7 @@ impl Plugin for TurClipboardPlugin {
         let clipboard_obj = bridge::build_clipboard_object(ctx.boa_mut(), ctx_value);
         let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
 
-        ctx.register_module("tur:clipboard", bridge::fns(), vec![], consts);
+        ctx.register_module("tur:clipboard", bridge::fns(), consts);
 
         Ok(())
     }

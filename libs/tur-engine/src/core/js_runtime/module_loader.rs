@@ -92,33 +92,23 @@ impl ModuleLoader for TurModuleLoader {
 /// verbatim, while JS callers get a ctx-free surface
 /// (`source(value)`, `Container(props)`).
 ///
-/// Each `(name, length, nf)` in `closures` becomes a *free-form* export: the
-/// `NativeFunction` is registered as-is, with no ctx prepending. Used for
-/// bridge fns that need to capture state that can't live on `TurInstanceContext`
-/// (e.g. clipboard/http impls from outside tur-engine).
+/// Plugins provide fn pointers only (per-instance state goes through the
+/// plugin-state channel; per-object state through the JS object's payload).
 ///
 /// Each `(name, val)` in `consts` becomes a constant export.
 pub fn build_native_module(
     context: &mut Context,
     ctx_value: JsValue,
     fns: &[(&str, usize, NativeFunctionPointer)],
-    closures: &[(&str, usize, NativeFunction)],
     consts: &[(&str, JsValue)],
 ) -> Module {
-    // Collect every export as a (name, value) pair: bound native fns, closure
-    // fns, then constant values (enum objects, etc.). A single flat list
-    // keeps the synthetic-module initializer trivial.
+    // Collect every export as a (name, value) pair: bound native fns, then
+    // constant values (enum objects, etc.). A single flat list keeps the
+    // synthetic-module initializer trivial.
     let mut exports: Vec<(boa_engine::JsString, JsValue)> =
-        Vec::with_capacity(fns.len() + closures.len() + consts.len());
+        Vec::with_capacity(fns.len() + consts.len());
     for (name, length, ptr) in fns {
         let f = bound_native(context, ctx_value.clone(), *ptr, *length, name);
-        exports.push((js_string!(*name), f.into()));
-    }
-    for (name, length, nf) in closures {
-        let f = FunctionObjectBuilder::new(context.realm(), nf.clone())
-            .length(*length)
-            .name(js_string!(*name))
-            .build();
         exports.push((js_string!(*name), f.into()));
     }
     for (name, val) in consts {

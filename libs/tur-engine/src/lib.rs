@@ -56,25 +56,24 @@ pub use crate::core::app::ModuleSourceRegistry;
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
 pub use crate::core::scheduler::WorkerPoolHandle;
 
-use std::cell::Cell;
 use std::rc::Rc;
 
 use error::TurError;
 
 use core::app::FrameOutcome;
-// Engine-internal (the crate-root re-export is gone): the host-side backend
-// type referenced by `TurApp` / `TurAppLooper` internals below.
-use core::runtime::HostBackend;
 
-/// A running tur engine instance.
+/// A running tur engine instance — the thin public facade over the
+/// instance's host-side core
+/// ([`core::virtual_app::VirtualHost`]: identity, backend rails, frame
+/// clock, lifecycle flag, and any children it hosts).
 ///
-/// Wraps an internal host-side backend (shared with the instance's
-/// [`TurAppLooper`]) that owns a worker thread (running the engine's worker
-/// state) **and** the host-side renderer + shell (both passed to
-/// `TurRuntime::app_builder()...build(...)`). The loop drives the renderer
-/// directly from that backend; shell requests (`HostMsg::Shell`) are applied
-/// there too. Everything else (boa `Context`, element tree, reactive store,
-/// layout, subsystems) lives on the worker.
+/// The core owns the worker-sending backend (which owns the worker thread
+/// running the engine's worker state **and** the host-side renderer +
+/// shell, both passed to `TurRuntime::app_builder()...build(...)`);
+/// everything else (boa `Context`, element tree, reactive store, layout,
+/// subsystems) lives on the worker. The loop drives the renderer directly
+/// from that backend; shell requests (`HostMsg::Shell`) are applied there
+/// too.
 ///
 /// The backend is fully encapsulated — embedders interact with the instance
 /// exclusively through this handle (input, module loading, RPC-style reads,
@@ -96,20 +95,11 @@ use core::runtime::HostBackend;
 /// - On native (Android JNI, integration tests), `futures::executor::block_on`
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
-    /// Shared with [`TurAppLooper`] — the app sends (input, RPC) while
-    /// the loop applies worker messages + renders. Every `HostBackend`
-    /// method is `&self`, so `Rc`-sharing is borrow-free.
-    backend: Rc<HostBackend>,
-    /// Per-instance frame cadence — taken from the instance's shell at
-    /// construction (see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
-    /// Shared with [`TurAppLooper`] because the app re-arms it from the
-    /// input paths ([`Self::push_platform_event`], [`Self::resize`],
-    /// [`Self::push_app_event`]) while the loop is running. Both trait
-    /// methods are `&self`, so sharing needs no interior mutability.
-    vsync: Rc<dyn core::scheduler::VsyncSource>,
-    /// Set by [`Self::destroy`]. Shared with [`TurAppLooper`], whose vsync
-    /// wake-ups poll it to stop after destroy.
-    destroyed: Rc<Cell<bool>>,
+    /// The instance's host-side core — identity, backend rails, frame
+    /// clock, lifecycle flag, and the children it hosts. Shared with
+    /// [`TurAppLooper`]; every method on this facade is a one-line
+    /// forwarder into it.
+    host: Rc<core::virtual_app::VirtualHost>,
 }
 
 /// Per-frame hook fired at the end of each iteration of
@@ -118,21 +108,29 @@ pub struct TurApp {
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
 impl TurApp {
-    /// Construct a `TurApp` sharing `backend` / `vsync` / `destroyed` with
-    /// its looper. `pub(crate)`: instances are only constructed by
+    /// Construct the facade over the instance's host-side core.
+    /// `pub(crate)`: instances are only constructed by
     /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
-    /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
-    /// — embedders never call it directly.
-    pub(crate) fn new(
-        backend: Rc<HostBackend>,
-        vsync: Rc<dyn core::scheduler::VsyncSource>,
-        destroyed: Rc<Cell<bool>>,
-    ) -> Self {
-        Self {
-            backend,
-            vsync,
-            destroyed,
-        }
+    /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build)
+    /// (or its engine-internal child-spawn sibling) — embedders never call
+    /// it directly.
+    pub(crate) fn new(host: Rc<core::virtual_app::VirtualHost>) -> Self {
+        Self { host }
+    }
+
+    /// The instance's host-side core. Engine-internal — the element-hosted
+    /// child spawn path reaches through it to register the child with its
+    /// parent.
+    pub(crate) fn host(&self) -> Rc<core::virtual_app::VirtualHost> {
+        self.host.clone()
+    }
+
+    /// This instance's identity:
+    /// [`VirtualAppId::ROOT`](core::virtual_app::VirtualAppId::ROOT) for
+    /// an embedder-hosted instance; the parent-minted incarnation token
+    /// for an element-hosted child.
+    pub fn id(&self) -> core::virtual_app::VirtualAppId {
+        self.host.id()
     }
 
     /// String-based module load: parse + evaluate `source` as an ES module
@@ -149,7 +147,8 @@ impl TurApp {
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), TurError> {
-        self.backend
+        self.host
+            .backend()
             .load_module(source)
             .await
             .map_err(TurError::from)
@@ -159,7 +158,7 @@ impl TurApp {
     /// production code uses [`Self::load_module`]. Useful for inspecting
     /// JS-side state via `globalThis.__x = ...`.
     pub async fn eval_js(&self, source: &str) -> String {
-        self.backend.eval_js(source).await
+        self.host.backend().eval_js(source).await
     }
 
     /// Count of image resources retained on the host side (pixel `Blob`s).
@@ -167,7 +166,7 @@ impl TurApp {
     /// tests).
     #[doc(hidden)]
     pub fn image_resource_count(&self) -> usize {
-        self.backend.image_resource_count()
+        self.host.backend().image_resource_count()
     }
 
     /// Handle-based module load: resolve `handle` in `registry` and load
@@ -192,7 +191,8 @@ impl TurApp {
         let source = registry
             .get(handle)
             .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
-        self.backend
+        self.host
+            .backend()
             .load_module(source)
             .await
             .map_err(TurError::from)
@@ -201,14 +201,14 @@ impl TurApp {
     /// Read rendered pixels back from the owned renderer (screenshot
     /// tests). Returns `None` if the renderer doesn't support readback.
     pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.backend.render_to_pixels()
+        self.host.backend().render_to_pixels()
     }
 
     /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
     /// worker's channel; JS→host messages fire handlers registered via
     /// `on_bus_event` (shipped back as `HostMsg::EventBusToEmbedder`).
     pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
-        self.backend.event_bus_handle()
+        self.host.backend().event_bus_handle()
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
@@ -218,53 +218,48 @@ impl TurApp {
     /// a `Custom` payload wrapper for domain events. Re-arms an idle
     /// autonomous loop.
     pub fn push_platform_event(&self, event: impl Into<core::platform::PlatformEvent>) {
-        self.backend
-            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event.into()));
-        self.request_frame();
+        self.host.push_platform_event(event.into());
     }
 
     /// Resize the surface. The embedder calls this at resize-event-receipt
-    /// time (DOM `ResizeObserver` / winit / JNI): it resizes the host-side
-    /// renderer directly (no flush + worker→host round-trip — lower
-    /// latency) AND forwards the shell `Resize` event to the worker so
-    /// `ResizeSubsystem` updates `Screen` / `viewportSize$` for layout.
-    /// Event-driven, not per-frame, so no dedup is needed.
+    /// time (DOM `ResizeObserver` / winit / JNI). Event-driven, not
+    /// per-frame, so no dedup is needed — see
+    /// [`VirtualHost::resize`](core::virtual_app::VirtualHost::resize)
+    /// (the single implementation, shared with the `Resize` control arm).
     pub fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.backend.resize(logical_width, logical_height, dpr);
-        self.backend
-            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(
-                core::platform::PlatformEvent::Shell(core::shell::ShellEvent::Resize {
-                    logical_width,
-                    logical_height,
-                    dpr,
-                }),
-            ));
-        self.request_frame();
+        self.host.resize(logical_width, logical_height, dpr);
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
     /// scrolls, clipboard writes). Re-arms an idle autonomous loop.
     pub fn push_app_event(&self, event: core::app::AppEvent) {
-        self.backend
+        self.host
+            .backend()
             .send_worker_msg(core::app::WorkerMsg::AppEvent(event));
-        self.request_frame();
+        self.host.request_frame();
     }
 
     /// Mark the app as destroyed. Subsequent `wake` attempts short-circuit.
-    /// Sends `WorkerMsg::Destroy` to drain the worker.
+    /// Sends `WorkerMsg::Destroy` to drain the worker. Destroys every hosted
+    /// virtual app first (each child's module cleanup runs in its own
+    /// worker) — engine-owned teardown, mirroring instance-destroy
+    /// semantics.
     pub fn destroy(&self) {
-        self.destroyed.set(true);
-        // Fire-and-forget — the worker drains and exits. We don't await
-        // the reply (would block on a sync API).
-        let (tx, _rx) = core::app::Reply::<()>::pair();
-        self.backend
-            .send_worker_msg(core::app::WorkerMsg::Destroy { reply: tx });
+        self.host.destroy();
     }
 
-    /// Re-arm an idle autonomous loop: ask the vsync source for one
-    /// wake-up on the next frame. Idempotent at the source (armed flag).
-    fn request_frame(&self) {
-        self.vsync.request_frame();
+    /// Currently hosted virtual apps (nested child instances) as facades.
+    /// `#[doc(hidden)]` test / advanced accessor — driving a child is
+    /// identical to driving the root. Facades are **minted per call**
+    /// (identity lives on the host-side core): compare
+    /// [`Self::id`](Self::id) values, not `Rc` pointers.
+    #[doc(hidden)]
+    pub fn virtual_apps(&self) -> Vec<Rc<TurApp>> {
+        self.host
+            .children()
+            .into_iter()
+            .map(|h| Rc::new(TurApp::new(h)))
+            .collect()
     }
 
     /// Test-only: run `cb` against the worker's live `NodeTreeData` AND
@@ -291,7 +286,8 @@ impl TurApp {
             tx.send(Some(cb(tree, focus)));
         });
         let _ = self
-            .backend
+            .host
+            .backend()
             .worker_tx()
             .unbounded_send(WorkerMsg::WithTree { runner });
         rx.rx.await.unwrap_or(None)
@@ -321,27 +317,23 @@ impl TurApp {
 ///   construction — see [`Shell::take_vsync`](core::shell::Shell::take_vsync)).
 ///
 /// The app handle keeps the mid-loop `&self` surface (input, RPC,
-/// `destroy`); the two share the internal host-side backend, the frame
-/// clock (the app re-arms it from input paths while the loop runs) and the
-/// destroyed flag.
+/// `destroy`); the two share the instance's host-side core (backend rails,
+/// frame clock — the app re-arms it from input paths while the loop runs —
+/// and the destroyed flag).
 pub struct TurAppLooper {
-    /// Shared with the app handle — the app sends (input, RPC) while the
-    /// loop applies worker messages + renders. Every `HostBackend` method
-    /// is `&self`, so `Rc`-sharing is borrow-free.
-    backend: Rc<HostBackend>,
+    /// The instance's host-side core, shared with the app handle. The
+    /// looper is the drain point for `host_rx`, so it routes
+    /// `HostMsg::VirtualControl` to the core directly — the backend never
+    /// sees virtual-app controls.
+    host: Rc<core::virtual_app::VirtualHost>,
     /// The worker→host message stream, drained **only** by this looper —
     /// owned outright, no `RefCell`, no borrow held across `.await`.
     host_rx: core::app::HostRx,
-    /// Per-instance frame cadence, shared with the app handle (see
-    /// [`TurApp`]'s field docs); used to re-arm on `FrameOutcome`s.
-    vsync: Rc<dyn core::scheduler::VsyncSource>,
     /// The cadence's tick stream — subscribed **once, at construction**
     /// (`Shell::take_vsync` → `VsyncSource::subscribe` in
     /// `spawn_instance`), owned outright from then on. No subscribe
     /// happens at run time.
     vsync_events: core::scheduler::VsyncEvents,
-    /// Set by `TurApp::destroy`; polled at each vsync wake-up.
-    destroyed: Rc<Cell<bool>>,
     /// Embedder-installed callback fired after each autonomous frame —
     /// typically used for DOM side-effects (file-pick resolution,
     /// textarea focus / caret positioning). `None` in tests.
@@ -349,23 +341,19 @@ pub struct TurAppLooper {
 }
 
 impl TurAppLooper {
-    /// Construct the looper sharing `backend` / `vsync` / `destroyed` with
-    /// its app handle, owning the build-time-subscribed `vsync_events`.
+    /// Construct the looper sharing the instance's host-side core with its
+    /// app handle, owning the build-time-subscribed `vsync_events`.
     /// `pub(crate)`: built only by
     /// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build).
     pub(crate) fn new(
-        backend: Rc<HostBackend>,
+        host: Rc<core::virtual_app::VirtualHost>,
         host_rx: core::app::HostRx,
-        vsync: Rc<dyn core::scheduler::VsyncSource>,
         vsync_events: core::scheduler::VsyncEvents,
-        destroyed: Rc<Cell<bool>>,
     ) -> Self {
         Self {
-            backend,
+            host,
             host_rx,
-            vsync,
             vsync_events,
-            destroyed,
             after_frame: None,
         }
     }
@@ -406,11 +394,9 @@ impl TurAppLooper {
     /// per instance.
     pub async fn run(self) {
         let Self {
-            backend,
+            host,
             mut host_rx,
-            vsync,
             vsync_events,
-            destroyed,
             after_frame,
         } = self;
         let mut vsync_rx = vsync_events;
@@ -430,23 +416,35 @@ impl TurAppLooper {
 
             match event {
                 Either::Left((Some(()), _)) => {
-                    if destroyed.get() {
+                    if host.is_destroyed() {
                         break;
                     }
                     // 1) Kick the worker for the NEXT frame first — it
                     //    flushes+records N+1 while main encodes N below.
-                    backend.send_worker_msg(core::app::WorkerMsg::Wake);
+                    host.backend().send_worker_msg(core::app::WorkerMsg::Wake);
                     // 2) Render the latest buffered batch (vsync-aligned,
                     //    latest-wins). Skip empty batches — an empty command
                     //    list paints a blank frame (clears the surface), which
                     //    is never desirable.
                     if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
-                        backend.render_batch(&batch);
+                        host.backend().render_batch(&batch);
                     }
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
-                    let stop = match backend.apply_msg(msg) {
+                    // Virtual-app controls route straight to the instance's
+                    // host-side core — the backend knows nothing about them
+                    // (dependency direction: the core wraps the backend,
+                    // never reversed). Everything else goes through the
+                    // backend's single shared handler.
+                    let outcome = match msg {
+                        core::app::HostMsg::VirtualControl(control) => {
+                            host.handle_control(control);
+                            MsgOutcome::Continue
+                        }
+                        msg => host.backend().apply_msg(msg),
+                    };
+                    let stop = match outcome {
                         MsgOutcome::Render(batch) => {
                             // Pipelined: buffer (latest-wins); rendered at
                             // the next vsync.
@@ -461,7 +459,7 @@ impl TurAppLooper {
                             // frame. The hook is the last thing the loop
                             // does for this message.
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
-                                vsync.request_frame();
+                                host.vsync().request_frame();
                                 false
                             } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                                 // Quiescence: no vsync is armed (nothing
@@ -471,7 +469,7 @@ impl TurAppLooper {
                                 // paint request). Flush it now (empty
                                 // batches skipped — they'd paint blank) —
                                 // the next frame only starts on a new input.
-                                backend.render_batch(&batch);
+                                host.backend().render_batch(&batch);
                                 false
                             } else {
                                 // Idle + empty pending: no-op. The loop

@@ -29,6 +29,7 @@ pub mod lifecycle;
 pub mod scroll;
 pub mod std;
 pub mod text;
+pub mod virtual_app;
 
 pub use clipboard::TurClipboardPlugin;
 pub use std::TurStdPlugin;

@@ -817,4 +817,91 @@ declare module "tur:std" {
 
     /** Encode a string into a Uint8Array of UTF-8 bytes. */
     export function encodeUtf8(text: string): Uint8Array;
+
+    // ------------------------------------------------------------------
+    // Virtual apps — VirtualAppView hosts a complete nested engine
+    // instance (own worker, realm, store, tree) and draws the child's
+    // frames from its own paint. The controller is a lazy declaration:
+    // nothing runs until an element binds it (`app$` resolving to a
+    // controller); unbinding destroys the child unless `keepAlive`.
+    // ------------------------------------------------------------------
+
+    /**
+     * Opaque handle to a registered module source (`createModuleSource`).
+     * The source string never crosses the JS API again — only this handle
+     * does (the JS mirror of the Rust-side `ModuleSourceRegistry` /
+     * `load_module_source` flow).
+     */
+    export interface ModuleSourceHandle {
+        readonly __moduleSource: unique symbol;
+    }
+
+    /**
+     * Opaque handle to a worker pool registered on the runtime
+     * (`forWorkerPool`). The JS mirror of the Rust-side `WorkerPoolHandle`
+     * — resolved eagerly against the registry, so an unknown name throws
+     * at the call site.
+     */
+    export interface WorkerPoolHandle {
+        readonly __workerPool: unique symbol;
+    }
+
+    /** Lifecycle state of a hosted virtual app. */
+    export type VirtualAppStatus =
+        | "idle"
+        | "spawning"
+        | "running"
+        | "error"
+        | "destroyed";
+
+    /** A hosted virtual app's controller — a lazy declaration. */
+    export interface VirtualAppController {
+        /** Reactive status — read via `store.get(app.status$)`. */
+        readonly status$: Readable<VirtualAppStatus>;
+        /** Error detail (module load / start failures) — read via `store.get`. */
+        readonly errorMsg$: Readable<string>;
+        /**
+         * The ONLY lifecycle action — a control mutation (the `watch`
+         * `{ start$, stop$ }` convention: side effects ride the mutation
+         * rail). Dispatch via `store.set(app.destroy$)`. New code =
+         * destroy$ + a new controller with a new source.
+         */
+        readonly destroy$: Mutation;
+    }
+
+    /** Register a module source once; reference it by opaque handle. */
+    export function createModuleSource(source: string): ModuleSourceHandle;
+
+    /**
+     * Resolve a registered worker pool by name — eagerly (an unknown name
+     * throws right here). The only source of the handle
+     * `createVirtualAppController({ pool })` accepts.
+     */
+    export function forWorkerPool(name: string): WorkerPoolHandle;
+
+    /** Create a virtual-app controller (lazy — spawns on first bind). */
+    export function createVirtualAppController(opts: {
+        source: ModuleSourceHandle;
+        /**
+         * Target worker pool, from `forWorkerPool(name)` (handle-only — raw
+         * strings are rejected). Omit for the default `"virtual"` pool.
+         */
+        pool?: WorkerPoolHandle;
+        /** Survive element unbind (default `false`). */
+        keepAlive?: boolean;
+    }): VirtualAppController;
+
+    /** Element hosting a virtual app; draws the child's latest frame. */
+    export function VirtualAppView(props: {
+        /** Reactive controller binding — `null` unbinds (destroys). */
+        app$: Readable<VirtualAppController | null>;
+        background?: Val<Color>;
+        width?: Val<number>;
+        height?: Val<number>;
+        queryKey?: Array<string>;
+        /** Painted while the child isn't live. */
+        fallback?: Element;
+        /** Painted on error. */
+        errorView?: Element;
+    }): Element;
 }

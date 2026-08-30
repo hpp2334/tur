@@ -6,10 +6,10 @@ export {
     editorCtrl,
     editorUndo,
     getCaseFileNames,
-    getCaseView,
     loadCase,
     recompile,
     resetCase,
+    runCase,
     selectFile,
 } from "./case-store";
 export {
@@ -24,8 +24,8 @@ export {
     selectAll,
 } from "./context-menu";
 export { relativeTime } from "./helpers";
-export { getInstanceStore, setInstanceStore } from "./instance-store";
 export {
+    app$,
     autoRun$,
     CASE_NAMES,
     compileVersion$,
