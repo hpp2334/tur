@@ -12,10 +12,11 @@ import java.util.concurrent.atomic.AtomicLong
  * runtime via a [TurRuntimeFactory] (which calls into its own `.so`) and hands
  * the resulting handle here.
  *
- * From a runtime, create rendering instances via [createInstance] (attached to
- * a [android.view.Surface]) or headless instances via [createHeadlessInstance].
- * Multiple instances share the runtime's fonts/clock/capabilities/plugins while
- * keeping fully isolated JS state.
+ * From a runtime, spawn isolated instances via [createInstance]
+ * (renderer-less; attach a [android.view.Surface] later via
+ * [TurInstance.attach] — a never-attached instance is simply headless).
+ * Multiple instances share the runtime's fonts/clock/capabilities/plugins
+ * while keeping fully isolated JS state.
  *
  * @param handle the opaque native runtime pointer returned by the app's
  *   `createRuntime` JNI function. `0` is treated as "destroyed".
@@ -50,39 +51,24 @@ class TurRuntime(
     }
 
     /**
-     * Spawn an isolated rendering instance attached to [surface] and return it.
-     * Shares this runtime's fonts/clock/capabilities/plugins; gets its own JS
-     * realm, element tree, and renderer.
+     * Spawn an isolated engine instance (**renderer-less** — the initialize
+     * half of the two-phase lifecycle) and return it. Shares this runtime's
+     * fonts/clock/capabilities/plugins; gets its own JS realm + element
+     * tree. Attach a [android.view.Surface] later via
+     * [TurInstance.attach] (from `surfaceCreated`); a never-attached
+     * instance is simply headless (JS + capabilities + events only).
      *
-     * Returns as soon as the native handle exists — the heavy build (wgpu
-     * adapter/device init, worker handshake, plugin registration) runs on
-     * the native tur-host thread, so the first frames appear asynchronously.
-     * A native build failure logs to logcat (no exception here) and later
-     * ops on the returned instance become no-ops.
+     * Returns as soon as the native handle exists — the heavy build
+     * (worker handshake, plugin registration) runs on the native tur-host
+     * thread, so the instance becomes usable asynchronously. A native
+     * build failure logs to logcat (no exception here) and later ops on
+     * the returned instance become no-ops.
      */
-    fun createInstance(
-        surface: android.view.Surface,
-        width: Int,
-        height: Int,
-        dpr: Double,
-    ): TurInstance {
+    fun createInstance(): TurInstance {
         check(handle != 0L) { "runtime destroyed" }
         val frameLoop = FrameLoop()
-        val h = TurNative.createInstance(handle, surface, width, height, dpr, frameLoop)
+        val h = TurNative.createInstance(handle, frameLoop)
         check(h != 0L) { "createInstance returned 0 (see logcat)" }
-        return TurInstance(h, frameLoop)
-    }
-
-    /**
-     * Spawn an isolated headless instance (no surface, no rendering). Runs JS +
-     * capabilities + events only. Useful for off-screen JS computation that
-     * shares a runtime with visible views.
-     */
-    fun createHeadlessInstance(): TurInstance {
-        check(handle != 0L) { "runtime destroyed" }
-        val frameLoop = FrameLoop()
-        val h = TurNative.createHeadlessInstance(handle, frameLoop)
-        check(h != 0L) { "createHeadlessInstance returned 0 (see logcat)" }
         return TurInstance(h, frameLoop)
     }
 

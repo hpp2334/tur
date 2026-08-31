@@ -24,11 +24,14 @@ import androidx.compose.ui.viewinterop.AndroidView
  * [rememberTurRuntime]), drop this composable into any Compose UI, pass a
  * module **source handle** (an ES module source registered on the runtime via
  * [TurRuntime.registerModuleSource] or created on the Rust side), and tur
- * renders into the surface. When the surface becomes ready the view spawns an
- * instance via [TurRuntime.createInstance]; when the surface is destroyed the
- * instance is torn down (the runtime survives). Pointer (touch), resize, and
- * the frame loop are wired automatically; basic key dispatch is wired when
- * the surface has focus.
+ * renders into the surface. Two-phase lifecycle: the view spawns a
+ * renderer-less instance via [TurRuntime.createInstance] as soon as it binds
+ * and loads the module; `surfaceCreated` ATTACHES the surface
+ * ([TurInstance.attach]) and `surfaceDestroyed` DETACHES it
+ * ([TurInstance.detach]) — the instance (JS realm + module state) survives
+ * surface recreation and re-attaches; leaving the composition destroys it.
+ * Pointer (touch), resize, and the frame loop are wired automatically; basic
+ * key dispatch is wired when the surface has focus.
  *
  * Multiple `TurView`s sharing one [runtime] coexist as isolated instances
  * (each its own JS realm) while sharing fonts/clock/capabilities/plugins — the
@@ -129,9 +132,7 @@ fun rememberTurModuleSource(
  */
 private class TurSurfaceView(context: android.content.Context) : SurfaceView(context) {
     private var instance: TurInstance? = null
-    private var pendingSourceHandle: Long = 0L
     private var dprValue: Double = 0.0
-    private var runtime: TurRuntime? = null
     /** Tracks the last IME state we drove so we only call the IMM on
      *  show↔hide transitions (not every frame). */
     private var imeActive = false
@@ -151,15 +152,36 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
     }
 
-    /** Stash the source handle + dpr + runtime and register the surface
-     *  callback; spawn the instance when the surface is ready. */
+    /** Stash the source handle + dpr + runtime, spawn the instance, and
+     *  register the surface callback; attach the surface when it's ready.
+     *
+     *  Two-phase lifecycle: the instance (JS realm, worker, plugins) is
+     *  created here — no surface involved, so nothing can race Android's
+     *  surface lifecycle — and `loadModule` is ordered right behind the
+     *  native build (FIFO). `surfaceCreated` then ATTACHES the surface;
+     *  `surfaceDestroyed` DETACHES it (the instance survives and
+     *  re-attaches when the platform re-creates the surface); [unbind]
+     *  destroys the instance. */
     fun bind(runtime: TurRuntime, sourceHandle: Long, dpr: Double) {
-        pendingSourceHandle = sourceHandle
         dprValue = dpr
-        this.runtime = runtime
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
+        instance = try {
+            // INITIALIZE — returns as soon as the handle exists; the build
+            // runs on the native tur-host thread. A failure logs to logcat
+            // and later ops become no-ops.
+            runtime.createInstance().also {
+                if (sourceHandle != 0L) it.loadModule(sourceHandle)
+                // After each frame, sync the soft keyboard with the
+                // engine's text-input state (reads the value native
+                // pushed into the FrameLoop via onTextInputChanged).
+                it.setAfterPump { syncIme() }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("TurView", "instance create failed", e)
+            null
+        }
         holder.addCallback(surfaceCallback)
         setOnTouchListener { _, event ->
             userInteracted = true
@@ -198,10 +220,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            if (instance != null) return
-            val sourceHandle = pendingSourceHandle
-            val rt = runtime ?: return
-            if (sourceHandle == 0L) return
+            val inst = instance ?: return
             // `SurfaceHolder.surfaceFrame` (and `surfaceChanged`'s width/height)
             // report *physical* pixels, but the engine's `viewportSize$` (and
             // thus JS-side layout thresholds like the playground's
@@ -214,22 +233,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
             val dpr = dprValue.coerceAtLeast(1.0)
             val w = (holder.surfaceFrame.width() / dpr).toInt().coerceAtLeast(1)
             val h = (holder.surfaceFrame.height() / dpr).toInt().coerceAtLeast(1)
-            instance = try {
-                // Spawn an isolated instance from the runtime — returns
-                // immediately; the native build (wgpu init + worker
-                // handshake) runs on the tur-host thread, and the
-                // loadModule below is queued behind it (FIFO).
-                rt.createInstance(holder.surface, w, h, dprValue).also {
-                    it.loadModule(sourceHandle)
-                    // After each frame, sync the soft keyboard with the
-                    // engine's text-input state (reads the value native
-                    // pushed into the FrameLoop via onTextInputChanged).
-                    it.setAfterPump { syncIme() }
-                }
-            } catch (e: Throwable) {
-                android.util.Log.e("TurView", "instance create failed", e)
-                null
-            }
+            // ATTACH: the native attach op is FIFO behind the instance
+            // build, so the instance exists when it runs; the wgpu
+            // surface/adapter/device init happens there.
+            inst.attach(holder.surface, w, h, dprValue)
         }
 
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -245,8 +252,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
-            instance?.close()
-            instance = null
+            // DETACH — not destroy: the instance (JS realm, module state)
+            // survives the platform surface going away and re-attaches
+            // when the surface is created again.
+            instance?.detach()
         }
     }
 

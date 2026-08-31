@@ -157,7 +157,8 @@ impl TurVelloApp {
             width as u32,
             height as u32,
             dpr,
-        );
+        )
+        .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?;
 
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);

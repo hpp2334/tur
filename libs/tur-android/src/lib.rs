@@ -227,16 +227,18 @@ fn init_logger_once() {
 }
 
 /// Standard engine operations — the handle-based API the Kotlin integration
-/// drives (create instances, load JS, pump a frame, push input, query/edit
-/// IME, tear down).
+/// drives (create instances, attach surfaces, load JS, pump a frame, push
+/// input, query/edit IME, tear down).
 ///
 /// The model is **one runtime, many instances**:
 /// - [`create_runtime`] builds the shared [`AndroidRuntime`] (fonts, clock,
 ///   capabilities, plugins, wgpu instance) — no surface. Returns a runtime
 ///   handle.
-/// - [`create_instance`] / [`create_headless_instance`] spawn an isolated
-///   [`AndroidInstance`] from a runtime handle (rendering / headless). Returns
-///   an instance handle.
+/// - [`create_instance`] spawns an isolated **renderer-less**
+///   [`AndroidInstance`] from a runtime handle (the INITIALIZE half of the
+///   two-phase lifecycle); [`attach_instance`] / [`detach_instance`] are the
+///   surface half (ATTACH / DETACH), driven by `surfaceCreated` /
+///   `surfaceDestroyed`.
 /// - [`register_module_source`] / [`release_module_source`] /
 ///   `load_module`/`pump`/`resize`/`push_*`/`destroy`
 ///   operate on **instance** handles (module sources register on the
@@ -245,6 +247,29 @@ fn init_logger_once() {
 ///   from the engine's shell — no `focused_is_editable` JNI poll.)
 /// - [`destroy_runtime`] drops the runtime.
 ///
+/// ## Instance lifecycle (initialize → attach)
+///
+/// `createInstance` builds the engine instance **without any window**
+/// (JS realm, worker lane, plugins — nothing Android's surface lifecycle
+/// can invalidate), so a destroy racing the build is an ordered no-op:
+/// whichever of the two FIFO-ordered ops runs second finds nothing. All
+/// window work — `ANativeWindow` acquire, wgpu surface + adapter/device,
+/// `Surface::configure` — lives in the ATTACH op, which by FIFO
+/// construction runs only after the instance exists. `surfaceDestroyed`
+/// detaches (drops the renderer, then releases the window ref — a paired
+/// acquire/release) and the instance survives to re-attach a fresh
+/// surface; `destroy` (or `destroySettled` for the fenced variant) drops
+/// the instance itself.
+///
+/// This structure is what fixed the young-instance SIGABRT: the old build
+/// created + configured the wgpu surface inside the FIFO-blind build op,
+/// so a `surfaceDestroyed` that abandoned the window mid-build made
+/// `Surface::configure` hit a dead window and abort the process via
+/// wgpu's panic-by-default error handler. Residual races inside the
+/// attach op (a window dying between `surfaceCreated` and the op) merely
+/// degrade — the renderer's log-not-panic wgpu error policy — and the
+/// instance can attach again later.
+///
 /// ## Threading
 ///
 /// Every op marshals onto the **tur-host thread** ([`host_thread`]) — the
@@ -252,7 +277,8 @@ fn init_logger_once() {
 /// the frame-loop futures (all `!Send`). The op channel is FIFO, which
 /// gives total ordering: an op can never observe a half-built instance,
 /// and `destroy` always lands after the create it follows. Fire-and-forget
-/// ops (`pump`, input, resize, `load_module`, instance creation, destroy)
+/// ops (`pump`, input, resize, `load_module`, instance creation, attach/
+/// detach, destroy)
 /// return immediately on the calling (usually the Android main) thread;
 /// ops that must return a value (`register_module_source` for the registry
 /// — actually caller-thread via the Arc-shared registry — and the
@@ -272,7 +298,7 @@ pub mod ops {
 
     use jni::JNIEnv;
     use jni::objects::{JObject, JString};
-    use jni::sys::{jdouble, jint, jlong};
+    use jni::sys::{jboolean, jdouble, jint, jlong};
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
     use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
@@ -339,24 +365,33 @@ pub mod ops {
         })
     }
 
-    /// `createInstance(env, runtimeHandle, surface, width, height, dpr, frameLoop): long`
+    /// `createInstance(env, runtimeHandle, frameLoop): long`
     ///
-    /// Spawns an isolated rendering instance attached to the given Android
-    /// `Surface`, sharing the runtime's fonts/clock/capabilities/wgpu-instance.
-    /// Returns an instance handle **immediately** — the heavy build (wgpu
-    /// surface + adapter/device init + the worker-lane handshake + plugin
-    /// registration) is posted to the **tur-host thread**, keeping the
-    /// Android main thread free. FIFO op order guarantees every later op
-    /// for this handle lands after the build; a failed build logs to logcat
-    /// and turns those ops into no-ops (a blank surface, not a crash).
+    /// Spawns an isolated engine instance — the **INITIALIZE** half of the
+    /// two-phase lifecycle. Sharing the runtime's fonts/clock/
+    /// capabilities/plugins, the instance gets its own JS realm + element
+    /// tree, and **no surface**: no wgpu work, no `ANativeWindow`, nothing
+    /// that Android's surface lifecycle can invalidate. Rendering attaches
+    /// later via [`attach_instance`] (`surfaceCreated`) — the Flutter-style
+    /// engine/view split.
     ///
-    /// The `ANativeWindow*` is acquired on the calling thread (inside
-    /// `surfaceCreated`, where the Surface is guaranteed valid); the
-    /// refcounted native window then stays memory-safe even if
-    /// `surfaceDestroyed` races ahead of the host-thread build.
+    /// Returns an instance handle **immediately** — the build (worker-lane
+    /// handshake + plugin registration) is posted to the **tur-host
+    /// thread**, keeping the Android main thread free. FIFO op order
+    /// guarantees every later op for this handle lands after the build; a
+    /// failed build logs to logcat and turns those ops into no-ops.
+    ///
+    /// **Why the split exists**: the pre-split build created + configured
+    /// the wgpu surface inside the FIFO-blind build op — disposing a young
+    /// instance (`surfaceDestroyed` abandoning the window's BufferQueue
+    /// while the ~0.6 s build ran) made `Surface::configure` hit the dead
+    /// window and abort the process via wgpu's panic-by-default error
+    /// handler. With surface work moved to [`attach_instance`] — which by
+    /// FIFO construction runs only when the instance already exists — the
+    /// blind window is structurally empty of window work.
     ///
     /// `configure_instance` receives the [`TurAppBuilder`] before the
-    /// surface-backed renderer is attached — chain
+    /// headless build is applied — chain
     /// [`TurAppBuilder::instance_data`] on it and return it to stamp
     /// per-instance data at build time. It must be `Send + 'static` (it
     /// crosses onto the host thread). The standard
@@ -364,45 +399,20 @@ pub mod ops {
     /// passes `|b| b` (no-op); embedders that need build-time data write
     /// their own `Java_<pkg>_<Class>_createInstance` (mirroring
     /// `createRuntime` — see the compose demo).
-    #[allow(clippy::too_many_arguments)]
     pub fn create_instance(
         env: &mut JNIEnv,
         runtime_handle: jlong,
-        surface: JObject,
-        width: jint,
-        height: jint,
-        dpr: jdouble,
         frame_loop: JObject,
         configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a> + Send + 'static,
     ) -> jlong {
         catch_into_zero(env, "createInstance", |env| {
             let route = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
-            let surface_ref = env.new_global_ref(surface)?;
             let frame_loop_ref = env.new_global_ref(frame_loop)?;
-            // Acquire the ANativeWindow* from the Surface NOW (this thread).
-            let env_ptr = env.get_raw();
-            let surface_ptr = surface_ref.as_raw();
-            let anw = unsafe {
-                crate::surface::native_window_from_surface(
-                    env_ptr as *mut c_void,
-                    surface_ptr as *mut c_void,
-                )
-            };
-            drop(surface_ref);
-            if anw.is_null() {
-                return Err("ANativeWindow_fromSurface returned null".into());
-            }
-            let window_handle = unsafe { crate::surface::AndroidWindowHandle::new(anw) };
             let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
             let id = crate::host_thread::next_instance_id();
             let host = route.host.clone();
             let host_for_build = route.host.clone();
-            log::info!(
-                "createInstance: queued instance {id} build ({}x{} @{}x) on tur-host thread",
-                width,
-                height,
-                dpr
-            );
+            log::info!("createInstance: queued instance {id} build on tur-host thread");
             let posted = host.post(move |state| {
                 let Some(runtime) = state.runtime() else {
                     log::error!(
@@ -410,21 +420,15 @@ pub mod ops {
                     );
                     return;
                 };
-                let result = pollster::block_on(AndroidInstance::build_with_surface(
+                match AndroidInstance::build(
                     runtime,
                     runtime.default_worker_pool.clone(),
                     &runtime.tokio_handle(),
-                    &runtime.wgpu_instance,
-                    window_handle,
-                    width.max(1) as u32,
-                    height.max(1) as u32,
-                    dpr.max(1.0),
                     frame_loop_handle,
                     host_for_build.clone(),
                     id,
                     configure_instance,
-                ));
-                match result {
+                ) {
                     Ok(instance) => {
                         state.insert_instance(id, Box::new(instance));
                         log::info!("createInstance: instance {id} built OK");
@@ -442,60 +446,133 @@ pub mod ops {
         })
     }
 
-    /// `createHeadlessInstance(env, runtimeHandle, frameLoop): long`
+    /// `attachInstance(env, instanceHandle, surface, width, height, dpr)`
     ///
-    /// Spawns an isolated headless instance (no surface, no rendering) from
-    /// the runtime. Like [`create_instance`], the build is posted to the
-    /// tur-host thread and the handle is valid immediately; build failures
-    /// log and turn later ops into no-ops.
+    /// Attach a rendering surface to a built instance — the **ATTACH**
+    /// half of the two-phase lifecycle (call from `surfaceCreated`, where
+    /// the `Surface` is guaranteed valid). The `ANativeWindow*` is
+    /// acquired on the calling thread; the attach op (tur-host thread,
+    /// FIFO after the instance build — the instance exists when it runs)
+    /// builds the wgpu surface + adapter/device + `VelloRenderer` and
+    /// hands it to the engine, which sizes it and seeds the viewport.
     ///
-    /// `configure_instance` mirrors [`create_instance`]'s hook — chain
-    /// [`TurAppBuilder::instance_data`] on the builder and return it. It
-    /// must be `Send + 'static`.
-    pub fn create_headless_instance(
+    /// If the instance is gone by the time the op runs (destroy already
+    /// processed, or the build failed), or the wgpu init fails (a window
+    /// that died between `surfaceCreated` and the op), the error is
+    /// logged and the acquired window ref is released — the instance
+    /// stays renderer-less and can attach again later. Residual
+    /// dead-window races inside the op degrade: the renderer's wgpu error
+    /// policy logs reported errors instead of panicking (see
+    /// `tur_engine::renderer::vello` module docs).
+    ///
+    /// Pair with [`detach_instance`] (`surfaceDestroyed`) — attach/detach
+    /// is repeatable: a new surface re-attaches without rebuilding the
+    /// JS realm.
+    pub fn attach_instance(
         env: &mut JNIEnv,
-        runtime_handle: jlong,
-        frame_loop: JObject,
-        configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a> + Send + 'static,
-    ) -> jlong {
-        catch_into_zero(env, "createHeadlessInstance", |env| {
-            let route = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
-            let frame_loop_ref = env.new_global_ref(frame_loop)?;
-            let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
-            let id = crate::host_thread::next_instance_id();
-            let host = route.host.clone();
-            let host_for_build = route.host.clone();
-            log::info!("createHeadlessInstance: queued instance {id} build on tur-host thread");
-            let posted = host.post(move |state| {
-                let Some(runtime) = state.runtime() else {
-                    log::error!(
-                        "createHeadlessInstance: runtime gone during create — instance {id} not built"
-                    );
+        handle: jlong,
+        surface: JObject,
+        width: jint,
+        height: jint,
+        dpr: jdouble,
+    ) {
+        catch_void(env, "attachInstance", |env| {
+            let route = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let surface_ref = env.new_global_ref(surface)?;
+            // Acquire the ANativeWindow* from the Surface NOW (this thread —
+            // inside surfaceCreated, where the Surface is valid).
+            let env_ptr = env.get_raw();
+            let surface_ptr = surface_ref.as_raw();
+            let anw = unsafe {
+                crate::surface::native_window_from_surface(
+                    env_ptr as *mut c_void,
+                    surface_ptr as *mut c_void,
+                )
+            };
+            drop(surface_ref);
+            if anw.is_null() {
+                return Err("ANativeWindow_fromSurface returned null".into());
+            }
+            let window_handle = unsafe { crate::surface::AndroidWindowHandle::new(anw) };
+            // The raw pointer escapes the handle for the failure/absent
+            // release paths — attach_surface retains the handle (and with
+            // it the ref) only on success; whoever still owns the ref
+            // releases it through this raw pointer. Carried as `usize`
+            // across the thread hop (raw pointers aren't `Send`; the
+            // value is a process-global `ANativeWindow` ref-counted
+            // handle — the same reason `AndroidWindowHandle` is `Send`).
+            let window_ptr = window_handle.as_ptr() as usize;
+            let id = route.id;
+            let width = width.max(1) as u32;
+            let height = height.max(1) as u32;
+            let dpr = dpr.max(1.0);
+            log::info!(
+                "attachInstance: queued instance {id} surface attach ({width}x{height} @{dpr}x)"
+            );
+            let posted = route.host.post(move |state| {
+                let release =
+                    || unsafe { crate::surface::release_native_window(window_ptr as *mut c_void) };
+                let Some(instance) = state.instance(id) else {
+                    // The build failed or destroy already ran (FIFO put
+                    // this op behind whichever it was) — nobody will
+                    // retain the window ref; release it now.
+                    log::info!("attachInstance: instance {id} gone — window ref released");
+                    release();
                     return;
                 };
-                match AndroidInstance::build_headless(
-                    runtime,
-                    runtime.default_worker_pool.clone(),
-                    &runtime.tokio_handle(),
-                    frame_loop_handle,
-                    host_for_build.clone(),
-                    id,
-                    configure_instance,
-                ) {
-                    Ok(instance) => {
-                        state.insert_instance(id, Box::new(instance));
-                        log::info!("createHeadlessInstance: instance {id} built OK");
+                let Some(runtime) = state.runtime() else {
+                    release();
+                    return;
+                };
+                match pollster::block_on(instance.attach_surface(
+                    &runtime.wgpu_instance,
+                    window_handle,
+                    width,
+                    height,
+                    dpr,
+                )) {
+                    Ok(()) => {
+                        log::info!(
+                            "attachInstance: instance {id} attached ({width}x{height} @{dpr}x)"
+                        );
                     }
                     Err(e) => {
-                        log::error!("createHeadlessInstance: instance {id} build failed: {e}");
+                        // attach_surface retained nothing on failure.
+                        log::error!("attachInstance: instance {id} attach failed: {e}");
+                        release();
                     }
                 }
             });
             if !posted {
+                // Host thread gone: the op will never run — release here.
+                unsafe { crate::surface::release_native_window(window_ptr as *mut c_void) };
                 return Err("tur-host thread has shut down".into());
             }
-            let route = InstanceRoute { host, id };
-            Ok(Box::into_raw(Box::new(route)) as jlong)
+            Ok(())
+        })
+    }
+
+    /// `detachInstance(env, instanceHandle)`
+    ///
+    /// Detach the rendering surface — the **DETACH** half (call from
+    /// `surfaceDestroyed`). Drops the renderer (and its wgpu surface)
+    /// FIRST, then releases the `ANativeWindow` ref acquired by
+    /// [`attach_instance`] — a properly paired acquire/release (the wgpu
+    /// surface borrows the window and must drop first). Idempotent; a
+    /// no-op when the instance is gone (destroy handled the release) or
+    /// never attached. The instance keeps running (JS, capabilities,
+    /// events) and can attach a fresh surface later.
+    pub fn detach_instance(env: &mut JNIEnv, handle: jlong) {
+        catch_void(env, "detachInstance", |_env| {
+            let route = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let id = route.id;
+            route.host.post(move |state| {
+                if let Some(instance) = state.instance(id) {
+                    instance.detach_surface();
+                    log::info!("detachInstance: instance {id} detached");
+                }
+            });
+            Ok(())
         })
     }
 
@@ -838,11 +915,55 @@ pub mod ops {
     }
 
     /// Drop an instance. The route box is reclaimed on the calling thread;
-    /// the `AndroidInstance` (and its `Rc<TurApp>`, renderer, surface,
-    /// etc.) is removed + dropped on the tur-host thread. The parent
-    /// runtime is unaffected and may spawn more instances.
+    /// the `AndroidInstance` (and its `Rc<TurApp>`, renderer + surface if
+    /// still attached, loop future, …) is removed + dropped on the
+    /// tur-host thread. The parent runtime is unaffected and may spawn
+    /// more instances.
+    ///
+    /// **Lifecycle safety**: the destroy op detaches first if a surface is
+    /// still attached (dropping the renderer + releasing the
+    /// `ANativeWindow` ref), then sends the engine's `Destroy` message
+    /// (module cleanup) and drops the instance. A destroy racing the
+    /// initial build is harmless — the build creates no window (see
+    /// [`create_instance`]); whichever of the two FIFO-ordered ops runs
+    /// second simply finds nothing.
+    ///
+    /// Fire-and-forget: the destroy op is posted, not awaited. Hosts that
+    /// must know teardown settled use [`destroy_settled`].
     pub fn destroy(handle: jlong) {
+        destroy_inner(handle, None)
+    }
+
+    /// `destroySettled(handle): boolean` — [`destroy`] plus a fence: blocks
+    /// until the tur-host op queue drained **past** this instance's destroy
+    /// op (FIFO), i.e. until the `AndroidInstance`, its renderer, its
+    /// surface, and its loop future are dropped. The worker lane winds down
+    /// asynchronously on its own (the destroy op sends the engine's
+    /// `Destroy` message, which runs the module's cleanup then exits the
+    /// worker loop).
+    ///
+    /// Returns `true` when teardown settled, `false` if the host thread had
+    /// already shut down. **Blocking** — call off the Android main thread
+    /// (e.g. from a background dispatcher); the op it waits behind can
+    /// include a still-running instance build.
+    pub fn destroy_settled(handle: jlong) -> jboolean {
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
+        destroy_inner(handle, Some(tx));
+        match rx.recv() {
+            Ok(settled) => settled as jboolean,
+            Err(_) => false as jboolean,
+        }
+    }
+
+    /// Shared body of [`destroy`] / [`destroy_settled`]: reclaim the route
+    /// box, post the destroy op. `ack` (when set) receives `true` once the
+    /// host thread ran an op **after** the destroy op — the settled fence
+    /// (FIFO makes the round-trip's completion the acknowledgment).
+    fn destroy_inner(handle: jlong, ack: Option<std::sync::mpsc::Sender<bool>>) {
         if handle == 0 {
+            if let Some(tx) = ack {
+                let _ = tx.send(true);
+            }
             return;
         }
         // SAFETY: the handle is a valid `Box<InstanceRoute>` for the
@@ -850,10 +971,36 @@ pub mod ops {
         let route = unsafe { Box::from_raw(handle as *mut InstanceRoute) };
         let id = route.id;
         let _ = route.host.post(move |state| {
-            if state.remove_instance(id).is_some() {
+            if let Some(instance) = state.remove_instance(id) {
+                // Detach first if still attached: drop the renderer (+
+                // its wgpu surface) and release the retained
+                // `ANativeWindow` ref — the paired release.
+                instance.detach_surface();
+                // Engine-owned teardown BEFORE the drop: sends the engine's
+                // `Destroy` message so the worker runs the loaded module's
+                // cleanup (the module lifecycle contract) and exits its
+                // loop cleanly instead of parking on a channel whose host
+                // side is about to vanish. Fire-and-forget — the message
+                // is already queued ahead of the host-side drop below.
+                instance.app.destroy();
+                drop(instance);
                 log::info!("destroy: instance {id} dropped (tur-host thread)");
             }
         });
+        if let Some(tx) = ack {
+            // The fence: a round-trip op lands behind the destroy op by
+            // FIFO, so its completion proves the destroy op ran. Checking
+            // the slot is empty (rather than trusting the post) also
+            // covers the destroy-while-still-building case — a failed
+            // build inserts nothing, and a successful build is followed by
+            // its destroy before this runs; either way the slot reads
+            // "gone".
+            let settled = route
+                .host
+                .call(move |state| !state.contains_instance(id))
+                .unwrap_or(false);
+            let _ = tx.send(settled);
+        }
     }
 
     /// Drop the runtime. Should be called after all its instances are
@@ -950,15 +1097,16 @@ pub mod ops {
 
 /// Generate the standard engine-operation JNI entry points inside the caller's
 /// cdylib. Emits the instance/runtime-operation `Java_org_tur_TurNative_*`
-/// trampolines (`createInstance`, `createHeadlessInstance`,
+/// trampolines (`createInstance`, `attachInstance`, `detachInstance`,
 /// `registerModuleSource`, `releaseModuleSource`, `loadModule`, `pump`,
 /// `resize`, `pushPointer`, `pushKey`, `pushIme`, `destroy`,
+/// `destroySettled`,
 /// `destroyRuntime`) that forward to [`ops`](crate::ops).
 /// Invoking this macro is all an embedder needs to make its `.so` drivable by
 /// the Kotlin `org.tur.TurNative` bridge — **runtime creation** is NOT included
 /// (it varies per embedder; write your own `Java_<pkg>_<Class>_createRuntime`
 /// that calls [`ops::create_runtime`](crate::ops::create_runtime)). The
-/// `createInstance` / `createHeadlessInstance` trampolines generated here pass
+/// `createInstance` trampoline generated here passes
 /// `|b| b` as the `configure_instance` hook — embedders that need build-time
 /// per-instance data (via [`TurAppBuilder::instance_data`]) write their own
 /// `Java_<pkg>_<Class>_createInstance` instead, mirroring `createRuntime`.
@@ -978,32 +1126,31 @@ macro_rules! standard_jni_exports {
             mut env: $crate::JNIEnv,
             _class: $crate::JClass,
             runtime_handle: $crate::jlong,
+            frame_loop: $crate::JObject,
+        ) -> $crate::jlong {
+            $crate::ops::create_instance(&mut env, runtime_handle, frame_loop, |b| b)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_attachInstance(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
             surface: $crate::JObject,
             width: $crate::jint,
             height: $crate::jint,
             dpr: $crate::jdouble,
-            frame_loop: $crate::JObject,
-        ) -> $crate::jlong {
-            $crate::ops::create_instance(
-                &mut env,
-                runtime_handle,
-                surface,
-                width,
-                height,
-                dpr,
-                frame_loop,
-                |b| b,
-            )
+        ) {
+            $crate::ops::attach_instance(&mut env, handle, surface, width, height, dpr)
         }
 
         #[unsafe(no_mangle)]
-        pub extern "system" fn Java_org_tur_TurNative_createHeadlessInstance(
+        pub extern "system" fn Java_org_tur_TurNative_detachInstance(
             mut env: $crate::JNIEnv,
             _class: $crate::JClass,
-            runtime_handle: $crate::jlong,
-            frame_loop: $crate::JObject,
-        ) -> $crate::jlong {
-            $crate::ops::create_headless_instance(&mut env, runtime_handle, frame_loop, |b| b)
+            handle: $crate::jlong,
+        ) {
+            $crate::ops::detach_instance(&mut env, handle)
         }
 
         #[unsafe(no_mangle)]
@@ -1113,6 +1260,15 @@ macro_rules! standard_jni_exports {
             handle: $crate::jlong,
         ) {
             $crate::ops::destroy(handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_destroySettled(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) -> $crate::jboolean {
+            $crate::ops::destroy_settled(handle)
         }
 
         #[unsafe(no_mangle)]

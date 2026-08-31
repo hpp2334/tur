@@ -1,7 +1,10 @@
 //! tur Android engine wrapper: builds a shared [`TurRuntime`] once (fonts,
 //! clock, capabilities, wgpu instance), then spawns isolated [`TurApp`]
-//! instances — each attached to an Android `Surface` (rendering) or headless
-//! (no rendering). Exposes the operations the JNI layer drives.
+//! instances — **renderer-less** (the initialize half of the two-phase
+//! lifecycle; the Flutter engine/view model). A surface attaches later via
+//! [`AndroidInstance::attach_surface`] (from `surfaceCreated`) and detaches
+//! via [`AndroidInstance::detach_surface`] (from `surfaceDestroyed`),
+//! repeatedly. Exposes the operations the JNI layer drives.
 //!
 //! All of it lives on the **tur-host thread** (`crate::host_thread`): the
 //! JNI layer marshals every op there, so the Android main thread only ever
@@ -221,12 +224,14 @@ mod imp {
         }
     }
 
-    /// One isolated engine instance — either rendering (attached to a Surface)
-    /// or headless. Built from an [`AndroidRuntime`] via
-    /// [`AndroidInstance::build_with_surface`] or
-    /// [`AndroidInstance::build_headless`]. Lives in the tur-host thread's
-    /// instance map, addressed by the id Kotlin's `jlong` instance handle
-    /// routes to (see
+    /// One isolated engine instance — the **initialize** half of the
+    /// two-phase lifecycle: built renderer-less from an [`AndroidRuntime`]
+    /// via [`AndroidInstance::build`], and attached to an Android
+    /// `Surface` later via [`AndroidInstance::attach_surface`] (from
+    /// `surfaceCreated`), detached via
+    /// [`AndroidInstance::detach_surface`] (from `surfaceDestroyed`) —
+    /// repeatedly. Lives in the tur-host thread's instance map, addressed
+    /// by the id Kotlin's `jlong` instance handle routes to (see
     /// [`InstanceRoute`](crate::host_thread::InstanceRoute)).
     pub struct AndroidInstance {
         pub app: Rc<TurApp>,
@@ -252,6 +257,13 @@ mod imp {
         /// closure → host-thread wake → `pump_loop` runs → processes the
         /// message. No Android-main-thread Handler hop is involved.
         vsync_wake_fn: std::sync::Arc<dyn Fn() + Send + Sync>,
+        /// The retained [`AndroidWindowHandle`] of the currently-attached
+        /// surface, if any. The attach op hands it here; the matching
+        /// detach (or destroy) drops the renderer FIRST (the wgpu surface
+        /// borrows the window), then releases the native ref through
+        /// [`as_ptr`](crate::surface::AndroidWindowHandle::as_ptr) — a
+        /// properly paired acquire/release.
+        attached_window: std::cell::RefCell<Option<AndroidWindowHandle>>,
     }
 
     impl AndroidInstance {
@@ -326,43 +338,33 @@ mod imp {
             // on the same Choreographer tick.
             self.host_loop.poll();
         }
-        /// Build a rendering instance over a freshly-created wgpu surface
-        /// backed by the given Android `Surface`'s `ANativeWindow*`, using the
-        /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
-        /// cadence.
+        /// Attach a rendering surface to this **built** instance — the
+        /// **ATTACH** half of the two-phase lifecycle. Runs on the
+        /// tur-host thread (the `ops::attach_instance` op, FIFO after the
+        /// build — the instance exists when this runs): builds the wgpu
+        /// surface from the given `ANativeWindow*` (acquired by the JNI
+        /// caller inside `surfaceCreated`, where the window is guaranteed
+        /// valid), requests the adapter/device, initializes the
+        /// [`VelloRenderer`], and hands it to the engine via
+        /// [`TurApp::attach_renderer`] — which sizes it and seeds the
+        /// worker's viewport (`viewportSize$`).
         ///
-        /// Runs on the **tur-host thread** (marshalled there by
-        /// `ops::create_instance`): the wgpu adapter/device request and the
-        /// worker-lane handshake block that thread while the Android main
-        /// thread stays free. `host` + `instance_id` wire the cross-thread
-        /// wake path (see [`AndroidVsyncSource::new`]).
-        ///
-        /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
-        /// `.renderer(…)` is applied — chain
-        /// [`TurAppBuilder::instance_data`] (or any other pre-build hook)
-        /// on it and return it. The surface-backed renderer is set up by
-        /// this function after the closure returns, so the embedder cannot
-        /// accidentally override it. Pass `|b| b` for the no-op default.
-        ///
-        /// Architecture: the engine runs on a worker thread; `HostBackend`
-        /// owns the wgpu `VelloRenderer` on the tur-host thread and drives
-        /// it directly — command batches, incremental image uploads, and
-        /// resize-on-event. The Android main thread never touches it.
-        #[allow(clippy::too_many_arguments)]
-        pub async fn build_with_surface(
-            runtime: &AndroidRuntime,
-            default_worker_pool: WorkerPoolHandle,
-            _tokio: &tokio::runtime::Handle,
+        /// On success the window handle is retained until the matching
+        /// [`detach_surface`](Self::detach_surface). On failure nothing is
+        /// retained and the instance is unaffected (still renderer-less,
+        /// usable for a later attach) — the CALLER releases the acquired
+        /// window ref. A dead-window race inside (the window dying between
+        /// `surfaceCreated` and this op) degrades: the renderer's wgpu
+        /// error policy logs reported errors instead of panicking (see the
+        /// `tur_engine::renderer::vello` module docs).
+        pub async fn attach_surface(
+            &self,
             wgpu_instance: &wgpu::Instance,
             window_handle: AndroidWindowHandle,
             logical_width: u32,
             logical_height: u32,
             dpr: f64,
-            frame_loop: FrameLoopRef,
-            host: crate::host_thread::HostHandle,
-            instance_id: u64,
-            configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
-        ) -> Result<Self, TurAndroidError> {
+        ) -> Result<(), TurAndroidError> {
             let raw_display = window_handle
                 .display_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("display: {e}")))?;
@@ -401,70 +403,58 @@ mod imp {
                 logical_width,
                 logical_height,
                 dpr,
-            );
-
-            // Apply the embedder's pre-build customization (e.g.
-            // `.instance_data(...)`, `.worker_pool(...)`), then attach the
-            // surface-backed renderer and build. The engine runs on a
-            // worker; `HostBackend` owns the wgpu renderer on main and
-            // drives it directly (render batches, image uploads,
-            // resize-on-event).
-            // The shell carries the Choreographer-bound frame clock; the
-            // embedder keeps a clone for the host-thread `fire_vsync` + the
-            // wake fn. `request_pump` posts a poll-only pump op straight
-            // onto the tur-host queue — the direct, main-thread-free wake
-            // path (worker messages / host-loop tasks land on the host
-            // thread, not the Android main looper).
-            let request_pump: std::sync::Arc<dyn Fn() + Send + Sync> =
-                std::sync::Arc::new(move || {
-                    let host = host.clone();
-                    host.post(move |state| {
-                        if let Some(instance) = state.instance(instance_id) {
-                            instance.pump_loop();
-                        }
-                    });
-                });
-            let vsync = AndroidVsyncSource::new(frame_loop.clone(), request_pump);
-            let (app, looper) = configure_instance(
-                runtime
-                    .runtime
-                    .app_builder()
-                    .worker_pool(default_worker_pool.clone()),
             )
-            .renderer(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )
-            .shell(Box::new(AndroidShell {
-                frame_loop: frame_loop.clone(),
-                vsync: Some(vsync.clone()),
-            }))
-            .build()?;
+            .map_err(|e| TurAndroidError::WgpuSurface(e.to_string()))?;
 
-            let (vsync, loop_task, vsync_wake_fn) =
-                Self::install_frame_loop(&app, looper, vsync, &runtime.host_loop);
-
-            Ok(Self {
-                app,
-                vsync,
-                module_sources: runtime.module_sources.clone(),
-                host_loop: runtime.host_loop.clone(),
-                loop_task,
-                vsync_wake_fn,
-            })
+            // Hand the renderer to the engine (installs it, sizes it,
+            // seeds the worker viewport, requests a frame). Retain the
+            // window handle only on success — after this point the wgpu
+            // surface borrows the window until the matching detach.
+            self.app
+                .attach_renderer(Box::new(renderer), logical_width, logical_height, dpr);
+            *self.attached_window.borrow_mut() = Some(window_handle);
+            Ok(())
         }
 
-        /// Build a headless instance (no surface, no rendering) from the
-        /// runtime. Runs JS + capabilities + events only. Like
-        /// [`build_with_surface`](Self::build_with_surface), it runs on the
-        /// tur-host thread; `host` + `instance_id` wire the wake path.
+        /// Detach the rendering surface — the **DETACH** half (the
+        /// `ops::detach_instance` op, from `surfaceDestroyed`). Drops the
+        /// renderer — and with it the wgpu surface that borrows the native
+        /// window — FIRST, then releases the retained `ANativeWindow` ref:
+        /// the paired release of the attach's acquire. Idempotent (a
+        /// no-op when never attached / already detached). The instance
+        /// keeps running (JS, capabilities, events) and can attach a
+        /// fresh surface later — a re-created platform surface does NOT
+        /// rebuild the JS realm.
+        pub fn detach_surface(&self) {
+            self.app.detach_renderer();
+            if let Some(window) = self.attached_window.borrow_mut().take() {
+                // SAFETY: the ref was acquired exactly once (the attach's
+                // `ANativeWindow_fromSurface`) and the renderer that
+                // borrowed the window was dropped above.
+                unsafe { crate::surface::release_native_window(window.as_ptr()) };
+            }
+        }
+
+        /// Build the engine instance — the **INITIALIZE** half of the
+        /// two-phase lifecycle: JS realm, worker lane, plugins, frame
+        /// clock, **no surface** (rendering attaches later via
+        /// [`attach_surface`](Self::attach_surface)). Because nothing here
+        /// touches a window, a destroy racing this build is an ordered
+        /// no-op — the pre-split build's wgpu surface + `configure` inside
+        /// the FIFO-blind build op is exactly what made disposing a young
+        /// instance abort the process.
+        ///
+        /// Runs on the **tur-host thread** (marshalled there by
+        /// `ops::create_instance`): the worker-lane handshake blocks that
+        /// thread while the Android main thread stays free. `host` +
+        /// `instance_id` wire the cross-thread wake path (see
+        /// [`AndroidVsyncSource::new`]).
         ///
         /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
         /// `.build_headless(…)` is applied — chain
         /// [`TurAppBuilder::instance_data`] on it and return it. Pass
         /// `|b| b` for the no-op default.
-        pub fn build_headless(
+        pub fn build(
             runtime: &AndroidRuntime,
             default_worker_pool: WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
@@ -473,9 +463,9 @@ mod imp {
             instance_id: u64,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
-            // Headless instances still need a frame clock (the loop races
-            // its ticks against worker messages) — same Choreographer
-            // binding + direct tur-host wake as the rendering path.
+            // Instances still need a frame clock (the loop races its ticks
+            // against worker messages) — same Choreographer binding +
+            // direct tur-host wake as before the split.
             let request_pump: std::sync::Arc<dyn Fn() + Send + Sync> = {
                 let host = host.clone();
                 std::sync::Arc::new(move || {
@@ -498,6 +488,9 @@ mod imp {
                 frame_loop,
                 vsync: Some(vsync.clone()),
             }))
+            // Renderer-less: `(0.0, 0.0)` seeds a zero viewport — the
+            // attach's resize delivers the real size (and a module loaded
+            // before the attach re-lays-out against it).
             .build_headless((0.0, 0.0))?;
             let (vsync, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, looper, vsync, &runtime.host_loop);
@@ -509,6 +502,7 @@ mod imp {
                 host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,
+                attached_window: std::cell::RefCell::new(None),
             })
         }
     }
@@ -547,16 +541,10 @@ mod imp {
     pub struct AndroidInstance;
 
     impl AndroidInstance {
-        #[allow(clippy::too_many_arguments)]
-        pub async fn build_with_surface(
+        pub fn build(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
             _default_worker_pool: tur_engine::WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
-            _wgpu_instance: &wgpu::Instance,
-            _window_handle: AndroidWindowHandle,
-            _logical_width: u32,
-            _logical_height: u32,
-            _dpr: f64,
             _frame_loop: FrameLoopRef,
             _host: crate::host_thread::HostHandle,
             _instance_id: u64,
@@ -565,17 +553,18 @@ mod imp {
             Err(TurAndroidError::AndroidOnly)
         }
 
-        pub fn build_headless(
-            _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
-            _default_worker_pool: tur_engine::WorkerPoolHandle,
-            _tokio: &tokio::runtime::Handle,
-            _frame_loop: FrameLoopRef,
-            _host: crate::host_thread::HostHandle,
-            _instance_id: u64,
-            _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
-        ) -> Result<Self, TurAndroidError> {
+        pub async fn attach_surface(
+            &self,
+            _wgpu_instance: &wgpu::Instance,
+            _window_handle: AndroidWindowHandle,
+            _logical_width: u32,
+            _logical_height: u32,
+            _dpr: f64,
+        ) -> Result<(), TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
         }
+
+        pub fn detach_surface(&self) {}
     }
 }
 

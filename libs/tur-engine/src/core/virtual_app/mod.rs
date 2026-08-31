@@ -375,6 +375,28 @@ impl VirtualHost {
         self.request_frame();
     }
 
+    /// Attach (or replace) the host-side renderer — the **attach** half of
+    /// the two-phase (initialize → attach) lifecycle. Installs the renderer,
+    /// then routes through [`Self::resize`] so the renderer is
+    /// sized/configured and the worker's `viewportSize$` is seeded with a
+    /// fresh frame request. See [`TurApp::attach_renderer`].
+    pub(crate) fn attach_renderer(
+        &self,
+        renderer: Box<dyn crate::core::render::Renderer>,
+        logical_width: u32,
+        logical_height: u32,
+        dpr: f64,
+    ) {
+        self.backend.attach_renderer(renderer);
+        self.resize(logical_width, logical_height, dpr);
+    }
+
+    /// Take + drop the host-side renderer — the **detach** half. Idempotent.
+    /// See [`TurApp::detach_renderer`].
+    pub(crate) fn detach_renderer(&self) {
+        self.backend.detach_renderer();
+    }
+
     /// Push a platform (input) event into the instance's worker (the
     /// facade takes `impl Into<PlatformEvent>` and converts first).
     pub(crate) fn push_platform_event(&self, event: PlatformEvent) {

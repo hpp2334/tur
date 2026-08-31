@@ -97,6 +97,13 @@ impl HostState {
         self.instances.get(&id).map(|b| &**b)
     }
 
+    /// Whether the slot holds a live instance — the settled-fence check
+    /// (`destroySettled`): `false` once the destroy op ran (or a build
+    /// aborted without inserting).
+    pub(crate) fn contains_instance(&self, id: u64) -> bool {
+        self.instances.contains_key(&id)
+    }
+
     /// Insert a freshly built instance (`createInstance` op).
     pub(crate) fn insert_instance(&mut self, id: u64, instance: Box<AndroidInstance>) {
         self.instances.insert(id, instance);
@@ -271,4 +278,72 @@ pub(crate) fn spawn() -> (HostHandle, JoinHandle<()>) {
         })
         .expect("failed to spawn tur-host thread");
     (HostHandle { tx }, join)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn op_queue_is_fifo_and_round_trip_lands_behind_earlier_posts() {
+        let (host, join) = spawn();
+        let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u32>::new()));
+
+        // Op A: records 1.
+        let o = order.clone();
+        assert!(host.post(move |_state| {
+            o.lock().unwrap().push(1);
+        }));
+        // Op B (the "destroy" stand-in): records 2.
+        let o = order.clone();
+        assert!(host.post(move |state| {
+            o.lock().unwrap().push(2);
+            // Touch real HostState surface the destroy op uses.
+            assert!(!state.contains_instance(999));
+        }));
+        // Fence op C (the `destroySettled` stand-in): the blocking
+        // round-trip must land BEHIND A and B — its completion proves they
+        // ran.
+        let o = order.clone();
+        let settled = host.call(move |_state| {
+            o.lock().unwrap().push(3);
+            true
+        });
+        assert_eq!(settled, Ok(true), "round-trip result");
+        assert_eq!(
+            *order.lock().unwrap(),
+            vec![1, 2, 3],
+            "FIFO order + fence after both posts"
+        );
+
+        // Shut the thread down cleanly.
+        assert!(host.post_flow(|_state| Flow::Stop));
+        join.join().unwrap();
+    }
+
+    /// The `destroySettled` contract end-to-end against the real
+    /// `HostState` slot map: an inserted instance is reported present; the
+    /// destroy-style removal op runs before the fence's round-trip, so the
+    /// fence observes "gone".
+    #[test]
+    fn settled_fence_observes_destroyed_slot() {
+        let (host, join) = spawn();
+        let id = next_instance_id();
+
+        // "Build": insert a (desktop-stub) instance.
+        host.call(move |state| state.insert_instance(id, Box::new(AndroidInstance)))
+            .expect("insert round-trip");
+
+        // Destroy-style op: remove the slot.
+        host.post(move |state| {
+            assert!(state.remove_instance(id).is_some());
+        });
+
+        // Fence: lands behind the destroy op → observes the slot gone.
+        let settled = host.call(move |state| !state.contains_instance(id));
+        assert_eq!(settled, Ok(true), "fence must observe the instance gone");
+
+        assert!(host.post_flow(|_state| Flow::Stop));
+        join.join().unwrap();
+    }
 }

@@ -230,6 +230,43 @@ impl TurApp {
         self.host.resize(logical_width, logical_height, dpr);
     }
 
+    /// Attach (or replace) the instance's renderer — the **attach** half of
+    /// the two-phase (initialize → attach) lifecycle. Installs the renderer
+    /// into the host-side slot, then routes through [`Self::resize`] so the
+    /// renderer is sized/configured **and** the worker's `viewportSize$` is
+    /// seeded (a fresh frame is requested). Use for an instance built via
+    /// `build_headless` (or previously
+    /// [`detach`](Self::detach_renderer)ed): surface acquisition and
+    /// renderer construction are the embedder's job — e.g. tur-android's
+    /// `attachInstance` op builds the wgpu surface + `VelloRenderer` on the
+    /// host thread and hands it over here.
+    ///
+    /// Host-thread method (same discipline as [`Self::resize`]).
+    pub fn attach_renderer(
+        &self,
+        renderer: Box<dyn core::render::Renderer>,
+        logical_width: u32,
+        logical_height: u32,
+        dpr: f64,
+    ) {
+        self.host
+            .attach_renderer(renderer, logical_width, logical_height, dpr);
+    }
+
+    /// Detach (drop) the instance's renderer — the **detach** half of the
+    /// two-phase lifecycle. All render-side work (batch application,
+    /// present, image uploads, resize, readback) skips silently until the
+    /// next [`attach_renderer`](Self::attach_renderer); the engine loop
+    /// (JS, capabilities, events) keeps running. The embedder must drop
+    /// its own surface-side resources that must not outlive the renderer
+    /// **before** calling this if ordering matters, and release them after
+    /// (e.g. tur-android releases its `ANativeWindow` ref only after this
+    /// returns — the renderer's wgpu surface borrows the window until
+    /// dropped). Idempotent. Host-thread method.
+    pub fn detach_renderer(&self) {
+        self.host.detach_renderer();
+    }
+
     /// Push an engine-internal event onto the app-event bus (programmatic
     /// scrolls, clipboard writes). Re-arms an idle autonomous loop.
     pub fn push_app_event(&self, event: core::app::AppEvent) {

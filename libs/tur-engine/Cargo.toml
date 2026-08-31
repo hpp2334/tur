@@ -36,3 +36,9 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 unicode-segmentation = { workspace = true }
 futures = { workspace = true }
+
+[dev-dependencies]
+# Integration tests in `renderer/vello/renderer.rs` request a headless
+# wgpu adapter/device; pollster blocks on those futures the same way the
+# embedder crates do (dev-only — downstream builds are unaffected).
+pollster = "0.4"

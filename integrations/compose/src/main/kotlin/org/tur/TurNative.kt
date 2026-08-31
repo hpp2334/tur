@@ -29,40 +29,54 @@ import android.view.Surface
  *     runtime `Long` handle,
  *
  * then handing that handle to [TurRuntime]. From the runtime, instances are
- * created via [createInstance] / [createHeadlessInstance] below. `0` means
- * never-created (or destroyed); the [TurRuntime] / [TurInstance] wrappers guard
- * against calling into a dead handle.
+ * created via [createInstance] below (`0` means never-created or destroyed;
+ * the [TurRuntime] / [TurInstance] wrappers guard against calling into a
+ * dead handle).
  */
 object TurNative {
     /**
-     * Spawn an isolated rendering instance attached to [surface], sharing the
-     * runtime's fonts/clock/capabilities/wgpu-instance. Returns an opaque
-     * instance handle **immediately** — the heavy build (wgpu surface +
-     * adapter/device + worker handshake) is queued onto the native tur-host
+     * Spawn an isolated engine instance — the **initialize** half of the
+     * two-phase lifecycle. No surface yet: the native build (worker
+     * handshake + plugin registration) is queued onto the native tur-host
      * thread while the caller stays free; ops for this handle are ordered
-     * behind the build. A build failure logs to logcat (no exception) and
+     * behind it. Attach a surface later via [attachInstance] (from
+     * `surfaceCreated`). A build failure logs to logcat (no exception) and
      * turns later ops into no-ops. Returns `0` only for an invalid runtime
      * handle or if the host thread is gone.
      */
     external fun createInstance(
         runtimeHandle: Long,
-        surface: Surface,
-        width: Int,
-        height: Int,
-        dpr: Double,
         frameLoop: FrameLoop,
     ): Long
 
     /**
-     * Spawn an isolated headless instance (no surface, no rendering) from the
-     * runtime. Runs JS + capabilities + events only. Same async-build
-     * semantics as [createInstance]. Returns an opaque instance handle, or
-     * `0` on failure.
+     * Attach a rendering surface to a built instance — the **attach** half
+     * of the two-phase lifecycle (call from `surfaceCreated`, where the
+     * surface is guaranteed valid). The attach op is ordered behind the
+     * instance build, so the instance exists when it runs: it acquires the
+     * native window, performs the wgpu surface/adapter/device init, and
+     * hands the renderer to the engine. If the instance is already gone
+     * (destroyed / failed build) or the wgpu init fails, the error is
+     * logged and the instance stays renderer-less — attachable again
+     * later. Pair with [detachInstance] on `surfaceDestroyed`; the pair is
+     * repeatable (a re-created surface re-attaches without rebuilding the
+     * JS realm).
      */
-    external fun createHeadlessInstance(
-        runtimeHandle: Long,
-        frameLoop: FrameLoop,
-    ): Long
+    external fun attachInstance(
+        handle: Long,
+        surface: Surface,
+        width: Int,
+        height: Int,
+        dpr: Double,
+    )
+
+    /**
+     * Detach the rendering surface — the **detach** half (call from
+     * `surfaceDestroyed`). Drops the renderer and releases the native
+     * window reference; the instance keeps running (JS, capabilities,
+     * events) and can attach a fresh surface later. Idempotent.
+     */
+    external fun detachInstance(handle: Long)
 
     /**
      * Register a JS module source on the runtime's shared registry and return
@@ -142,8 +156,33 @@ object TurNative {
      */
     external fun pushIme(handle: Long, kind: Int, text: String)
 
-    /** Drop an instance and free its resources (the runtime is unaffected). */
+    /**
+     * Drop an instance and free its resources (the runtime is unaffected).
+     *
+     * Fire-and-forget: the destroy op is queued on the native tur-host
+     * thread (FIFO behind anything already posted). A destroy racing the
+     * instance build is harmless — the build creates no surface, so
+     * whichever op runs second simply finds nothing. Dispose of a young
+     * instance freely.
+     */
     external fun destroy(handle: Long)
+
+    /**
+     * Drop an instance and **block until its teardown settled** on the
+     * native tur-host thread: the destroy op ran, and with it the
+     * instance's renderer, surface, and loop future were dropped (the
+     * worker lane winds down asynchronously, running the loaded module's
+     * cleanup). Returns `true` when settled, `false` if the host thread had
+     * already shut down.
+     *
+     * The fence for hosts that must know disposal finished — e.g. before
+     * re-creating an instance on the same surface — replacing sleep-based
+     * quiesce heuristics. **Blocking** (it waits behind any ops still
+     * queued for the instance, including an in-flight build): call off the
+     * main thread, e.g. `withContext(Dispatchers.Default) {
+     * TurNative.destroySettled(handle) }`.
+     */
+    external fun destroySettled(handle: Long): Boolean
 
     /** Drop the runtime and free its resources. Destroy all instances first. */
     external fun destroyRuntime(handle: Long)

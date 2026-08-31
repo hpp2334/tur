@@ -454,8 +454,16 @@ pub(crate) struct HostBackend {
     /// `WorkerMsg::EventBusToJs`.
     event_bus_handle: crate::core::event_bus::EventBusHandle,
     /// Main-side renderer (owned — no sink callback). Worker ships
-    /// `HostMsg::RenderCommands` batches; main applies them here.
-    renderer: RefCell<Box<dyn Renderer>>,
+    /// `HostMsg::RenderCommands` batches; main applies them here. `None`
+    /// while the instance is **detached** (built without a renderer, or
+    /// between [`TurApp::detach_renderer`] and
+    /// [`TurApp::attach_renderer`]): every render-side call (batch
+    /// application, present, image upload, resize, readback) skips
+    /// silently — the engine loop keeps running, only the GPU output is
+    /// gone. This is the two-phase (initialize → attach) lifecycle seam:
+    /// the Android embedder builds its instances renderer-less and attaches
+    /// a surface renderer when the platform surface exists.
+    renderer: RefCell<Option<Box<dyn Renderer>>>,
     /// Main-side image resources — the full `ImageResource` (pixel `Blob`
     /// retained) per worker-assigned id. Inserted on `HostMsg::UploadImage`
     /// (under the worker-assigned id) alongside the GPU upload; retained for
@@ -492,7 +500,7 @@ impl HostBackend {
     /// only the sending-side plumbing.
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
-        renderer: Box<dyn Renderer>,
+        renderer: Option<Box<dyn Renderer>>,
         shell: Box<dyn crate::core::shell::Shell>,
         worker_pool: crate::core::scheduler::WorkerPoolHandle,
         backend_factory: impl FnOnce(
@@ -584,16 +592,23 @@ impl HostBackend {
     /// Apply a render-command batch to the owned renderer (encode +
     /// present). Called from `TurAppLooper::run` (both the vsync-aligned
     /// pipelining path and the quiescence flush) — single source of truth
-    /// for render application.
+    /// for render application. A no-op while detached (`None` slot).
     pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
-        let mut r = self.renderer.borrow_mut();
-        r.render_commands(commands);
-        let _ = r.present();
+        if let Some(r) = self.renderer.borrow_mut().as_mut() {
+            r.render_commands(commands);
+            let _ = r.present();
+        }
     }
 
-    /// Upload a newly-registered image resource to the owned renderer.
+    /// Upload a newly-registered image resource to the owned renderer (a
+    /// no-op while detached — a later attach re-uploads nothing; the worker
+    /// ships uploads as resources register, and any registered before the
+    /// attach simply aren't visible to the fresh renderer until re-use
+    /// re-registers them).
     pub(crate) fn upload_image_resource(&self, id: ImageResourceId, image: &ImageResource) {
-        self.renderer.borrow_mut().upload_image_resource(id, image);
+        if let Some(r) = self.renderer.borrow_mut().as_mut() {
+            r.upload_image_resource(id, image);
+        }
     }
 
     /// Retain a shipped image resource on main (under the worker-assigned
@@ -605,19 +620,39 @@ impl HostBackend {
             .insert_with_id(id, image);
     }
 
-    /// Resize the owned renderer. Called by `TurApp::resize`, which the
-    /// embedder invokes at resize-event-receipt time (DOM `ResizeObserver`
-    /// / winit / JNI) — event-driven, not per-frame, so no dedup is needed.
+    /// Resize the owned renderer (a no-op while detached — the shell
+    /// `Resize` event is still forwarded so the worker's `viewportSize$`
+    /// tracks the size; a later attach sizes the fresh renderer itself).
+    /// Called by `TurApp::resize`, which the embedder invokes at
+    /// resize-event-receipt time (DOM `ResizeObserver` / winit / JNI) —
+    /// event-driven, not per-frame, so no dedup is needed.
     pub(crate) fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.renderer
-            .borrow_mut()
-            .resize(logical_width, logical_height, dpr);
+        if let Some(r) = self.renderer.borrow_mut().as_mut() {
+            r.resize(logical_width, logical_height, dpr);
+        }
+    }
+
+    /// Install (or replace) the renderer — the **attach** half of the
+    /// two-phase lifecycle. Host-thread method (same discipline as
+    /// [`Self::resize`]). See [`TurApp::attach_renderer`].
+    pub(crate) fn attach_renderer(&self, renderer: Box<dyn Renderer>) {
+        *self.renderer.borrow_mut() = Some(renderer);
+    }
+
+    /// Take + drop the renderer — the **detach** half. Host-thread method.
+    /// Idempotent (detaching an already-detached instance is a no-op). See
+    /// [`TurApp::detach_renderer`].
+    pub(crate) fn detach_renderer(&self) {
+        self.renderer.borrow_mut().take();
     }
 
     /// Pixel readback from the owned renderer (screenshot tests). Returns
-    /// `None` if the renderer doesn't support readback.
+    /// `None` while detached or if the renderer doesn't support readback.
     pub(crate) fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.renderer.borrow_mut().render_to_pixels()
+        self.renderer
+            .borrow_mut()
+            .as_mut()
+            .and_then(|r| r.render_to_pixels())
     }
 
     /// Borrow the worker→host channel sender. Used by call sites that
@@ -780,9 +815,16 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                     )));
                 }
             }
-            WorkerMsg::Destroy { reply } => {
+            msg @ WorkerMsg::Destroy { .. } => {
+                // Module lifecycle contract: the loaded module's cleanup
+                // (best-effort) runs in the shared dispatch arm
+                // (`teardown_current_module`) before its reply fires —
+                // routing through `handle_worker_msg` (instead of
+                // intercepting here) keeps a single implementation of
+                // destroy-time teardown and un-deadcodes that arm. Then the
+                // loop ships `Destroyed` and exits.
+                backend.handle_worker_msg(msg);
                 let _ = host_tx.unbounded_send(HostMsg::Destroyed);
-                reply.send(());
                 break;
             }
             // All other variants (PlatformEvent, LoadModule,

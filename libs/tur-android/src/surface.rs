@@ -49,6 +49,17 @@ impl AndroidWindowHandle {
     fn raw_display_handle(&self) -> RawDisplayHandle {
         RawDisplayHandle::Android(AndroidDisplayHandle::new())
     }
+
+    /// The wrapped `ANativeWindow*`. Escape hatch for the attach/detach
+    /// release protocol: the handle deliberately has no `Drop` (a naive
+    /// drop-release would race the wgpu surface that borrows the window),
+    /// so the owner releases explicitly via
+    /// [`release_native_window`] — the attach op on failure, the detach
+    /// op on success (after the renderer — and with it the wgpu surface —
+    /// is dropped).
+    pub fn as_ptr(&self) -> *mut c_void {
+        self.a_native_window.as_ptr()
+    }
 }
 
 impl HasWindowHandle for AndroidWindowHandle {
@@ -100,8 +111,9 @@ pub unsafe fn native_window_from_surface(_env: *mut c_void, _surface: *mut c_voi
 }
 
 /// Release a window previously acquired via [`native_window_from_surface`].
+/// The release half of the attach/detach pairing — see
+/// [`AndroidWindowHandle::as_ptr`].
 #[cfg(target_os = "android")]
-#[allow(dead_code)]
 pub unsafe fn release_native_window(window: *mut c_void) {
     if !window.is_null() {
         unsafe { ffi::ANativeWindow_release(window) };

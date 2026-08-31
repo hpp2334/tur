@@ -26,7 +26,8 @@ object DemoNative {
     /**
      * Build the shared runtime with the demo plugins. Returns an opaque runtime
      * handle (`0` on failure — a `RuntimeException` is also thrown from native).
-     * No surface — instances are attached separately via `TurNative.createInstance`.
+     * No surface — instances are created via `TurNative.createInstance` and
+     * attached to a surface via `TurNative.attachInstance`.
      */
     external fun createRuntime(context: Context): Long
 
