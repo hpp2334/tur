@@ -16,9 +16,10 @@
 // empty (but compiling) cdylib.
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
-// Standard engine-op JNI trampolines (createInstance / createHeadlessInstance
-// / loadModule / pump / resize / pushPointer / pushKey / pushIme / destroy
-// / destroyRuntime). Resolved by Kotlin's `org.tur.TurNative` bridge.
+// Standard engine-op JNI trampolines (createInstance / attachInstance
+// / detachInstance / loadModule / pump / resize / pushPointer / pushKey
+// / pushIme / destroy / destroySettled / destroyRuntime). Resolved by
+// Kotlin's `org.tur.TurNative` bridge.
 #[cfg(target_os = "android")]
 tur_android::standard_jni_exports!();
 
@@ -26,8 +27,8 @@ tur_android::standard_jni_exports!();
 ///
 /// Builds the shared runtime with the **demo's** plugins (Std + Animation +
 /// Clipboard + Net + DemoHelper). Returns an opaque runtime handle Kotlin
-/// holds as a `long` and passes to `TurNative.createInstance` /
-/// `createHeadlessInstance`. No surface — instances are attached separately.
+/// holds as a `long` and passes to `TurNative.createInstance`. No surface —
+/// instances are attached separately via `TurNative.attachInstance`.
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_org_tur_demo_DemoNative_createRuntime(

@@ -1,5 +1,6 @@
 mod animation;
 mod async_bridge;
+mod attach_renderer;
 mod bridge_contract_check;
 mod capability;
 mod column;
@@ -7,6 +8,7 @@ mod composited_transform;
 mod container;
 mod core_module_check;
 mod debug;
+mod destroy_cleanup;
 mod each_in_row;
 mod encode;
 mod event_bus;

@@ -235,13 +235,13 @@ impl TurRuntime {
     }
 
     /// Internal: build an instance from already-resolved config. Called by
-    /// both [`TurAppBuilder::build`] (rendering) and
-    /// [`TurAppBuilder::build_headless`] (the latter passes a
-    /// [`NoopRenderer`](crate::renderer::NoopRenderer)).
+    /// both [`TurAppBuilder::build`] (rendering — `Some(renderer)`) and
+    /// [`TurAppBuilder::build_headless`] (no renderer — `None` slot; a
+    /// later [`TurApp::attach_renderer`] can attach one).
     #[expect(clippy::too_many_arguments)]
     fn spawn_instance(
         self: &Rc<Self>,
-        renderer: Box<dyn crate::core::render::Renderer>,
+        renderer: Option<Box<dyn crate::core::render::Renderer>>,
         shell: Box<dyn crate::core::shell::Shell>,
         viewport: (f64, f64),
         dpr: f64,
@@ -349,7 +349,15 @@ impl TurRuntime {
             token != crate::core::virtual_app::VirtualAppId::ROOT,
             "ROOT is reserved for embedder-hosted instances"
         );
-        self.spawn_instance(renderer, shell, (400.0, 300.0), 1.0, pool, None, token)
+        self.spawn_instance(
+            Some(renderer),
+            shell,
+            (400.0, 300.0),
+            1.0,
+            pool,
+            None,
+            token,
+        )
     }
 }
 
@@ -547,7 +555,7 @@ impl<'rt> TurAppBuilder<'rt> {
         let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
-            renderer,
+            Some(renderer),
             shell,
             viewport,
             dpr,
@@ -560,22 +568,25 @@ impl<'rt> TurAppBuilder<'rt> {
         )
     }
 
-    /// Terminal: build a headless instance (no renderer, no rendering).
+    /// Terminal: build a headless instance (no renderer — **detached**).
     /// The instance still runs JS, owns a reactive store, accepts platform
     /// events if fed any, and can use capabilities (http, clipboard, etc.).
     /// The engine runs on a worker thread (via the internal host-side
-    /// backend) — JS
-    /// execution, frame flushes, and every `async` RPC round-trip through
-    /// the same main↔worker channel as a rendering instance; the only
-    /// difference is the host-side [`Renderer`](crate::core::render::Renderer)
-    /// is a [`NoopRenderer`](crate::renderer::NoopRenderer), so paint
-    /// batches are discarded.
+    /// backend) — JS execution, frame flushes, and every `async` RPC
+    /// round-trip through the same main↔worker channel as a rendering
+    /// instance; the only difference is the host-side
+    /// [`Renderer`](crate::core::render::Renderer) slot is empty, so paint
+    /// batches are discarded — until
+    /// [`TurApp::attach_renderer`](crate::TurApp::attach_renderer) fills
+    /// it (the two-phase initialize → attach lifecycle; the Android
+    /// embedder's `createInstance`/`attachInstance` pair).
     ///
     /// `viewport` sets the initial `viewportSize$` (read by JS layout);
     /// pass `(0.0, 0.0)` if layout is irrelevant.
     ///
     /// Returns the app handle together with its [`TurAppLooper`], like
     /// [`Self::build`].
+    #[doc(alias = "initialize")]
     pub fn build_headless(
         self,
         viewport: (f64, f64),
@@ -590,7 +601,7 @@ impl<'rt> TurAppBuilder<'rt> {
         let shell = shell.unwrap_or_else(|| Box::new(crate::core::shell::NoopShell::new()));
         let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
-            Box::new(crate::renderer::NoopRenderer::new()),
+            None,
             shell,
             viewport,
             1.0,

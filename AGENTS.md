@@ -617,10 +617,33 @@ data; the engine only validates registration + assignment:
   refresh rate forever (each pump ships a `FrameOutcome`, whose channel
   wake would re-arm the next frame), burning a full engine flush per
   display frame even fully idle.
+- **Instance lifecycle on Android** (`tur-android`) is **two-phase
+  (initialize → attach)**, the Flutter engine/view model:
+  `createInstance` builds the instance with **no surface** (JS realm,
+  worker lane, plugins — nothing Android's surface lifecycle can
+  invalidate), so a destroy racing the build is an ordered no-op.
+  `attachInstance` (from `surfaceCreated`) is the ONLY op that touches a
+  window — acquire `ANativeWindow`, wgpu surface/adapter/device,
+  `VelloRenderer::init_surface`, then `TurApp::attach_renderer` — and by
+  FIFO construction it runs only when the instance exists.
+  `detachInstance` (from `surfaceDestroyed`) drops the renderer FIRST then
+  releases the window ref (a paired acquire/release; attach/detach is
+  repeatable — surface recreation re-attaches without rebuilding the JS
+  realm). `destroy`/`destroySettled` (the fenced variant; Kotlin pair
+  `TurInstance.closeBlocking()`) drop the instance itself, running the
+  loaded module's cleanup via the engine's `Destroy` message. Residual
+  dead-window races inside the attach op (a window dying between
+  `surfaceCreated` and the op) degrade: the `VelloRenderer` installs a
+  log-not-panic `on_uncaptured_error` policy and keeps `init_surface`
+  fallible only for capability discovery (see the renderer's "wgpu error
+  policy" module docs) — no wgpu-reported error can abort the host
+  process. Engine-side seam: the host-side renderer is a replaceable
+  `Option` slot (`TurApp::attach_renderer` / `detach_renderer`;
+  `build_headless` = initialize-without-renderer).
 - `tur-native` is **native-only** (root `compile_error!` on wasm32);
   `WasmRuntimeConfig::pools` / `WasmAppConfig::pool` + `WasmRuntime::default_pool`
   expose pools to wasm hosts; `AndroidRuntime::default_worker_pool` + the
-  `default_worker_pool` param on `AndroidInstance::build_*` expose them to
+  `default_worker_pool` param on `AndroidInstance::build` expose them to
   the Compose path.
 
 Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),

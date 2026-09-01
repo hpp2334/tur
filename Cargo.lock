@@ -4572,6 +4572,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "parley",
+ "pollster",
  "resvg",
  "thiserror 2.0.18",
  "tracing",

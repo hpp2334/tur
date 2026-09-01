@@ -45,6 +45,27 @@ pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
 
+impl Drop for TurVelloApp {
+    /// Explicit renderer teardown BEFORE the implicit end-of-test drops.
+    ///
+    /// The wgpu `Surface` borrows the window's X11 connection; leaving its
+    /// `unconfigure → destroy_swapchain` to static teardown (end of `main`,
+    /// after threads/statics start winding down) walks the lazy
+    /// xcb-present init through a half-dead process and, depending on
+    /// allocator state, corrupts the heap (glibc "corrupted size vs.
+    /// prev_size" → SIGSEGV in `_XSend` — latent on main, laid bare by
+    /// binary-layout shifts). Dropping the renderer here — while
+    /// everything it touches is still alive — makes teardown
+    /// deterministic. This is the same pairing discipline as tur-android's
+    /// attach/detach (`ANativeWindow` released only after the renderer
+    /// drops).
+    fn drop(&mut self) {
+        if let Ok(mut inner) = self.inner.try_borrow_mut() {
+            inner.app.detach_renderer();
+        }
+    }
+}
+
 struct TurVelloAppInner {
     app: Rc<TurApp>,
     driver: Rc<tur_integration_tests::TestSchedulerDriver>,
@@ -157,7 +178,8 @@ impl TurVelloApp {
             width as u32,
             height as u32,
             dpr,
-        );
+        )
+        .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?;
 
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);

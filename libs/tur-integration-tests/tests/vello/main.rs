@@ -1,5 +1,6 @@
 mod raw;
 mod snapshot;
+mod surface_lifecycle;
 mod vello_app;
 
 use libtest_mimic::{Arguments, Trial};
@@ -45,6 +46,14 @@ fn main() {
         }),
         Trial::test("vello_container_clip_rounded", || {
             snapshot::container_clip_rounded_corner_clipped();
+            Ok(())
+        }),
+        Trial::test("vello_init_surface_zero_area_degrades", || {
+            surface_lifecycle::init_surface_zero_area_degrades();
+            Ok(())
+        }),
+        Trial::test("vello_resize_zero_area_degrades_and_recovers", || {
+            surface_lifecycle::resize_zero_area_degrades_and_recovers();
             Ok(())
         }),
     ];
