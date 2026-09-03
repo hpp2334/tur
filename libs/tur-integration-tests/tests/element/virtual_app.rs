@@ -53,6 +53,30 @@ impl BatchRecorder {
                 .any(|op| matches!(op, tur_engine::core::render::CanvasOp::DrawImage { .. })))
         })
     }
+
+    /// Whether the last batch contains a solid-fill rect of the given
+    /// (r, g, b) whose width matches `width` (±0.5) — pins size-dependent
+    /// child repaints (a full-viewport child fill replays at the child's
+    /// current viewport width).
+    fn contains_solid_rect(&self, rgb: (u8, u8, u8), width: f64) -> bool {
+        use tur_engine::core::layout::Geometry;
+        use tur_engine::core::render::CanvasOp;
+        use tur_engine::core::render::brush::Brush;
+        self.0.borrow().iter().any(|c| {
+            matches!(c, RenderCommand::Paint { ops, .. } if ops.iter().any(|op| {
+                matches!(
+                    op,
+                    CanvasOp::FillGeometry {
+                        geometry: Geometry::Rect(size),
+                        brush: Brush::SolidColor(color),
+                        ..
+                    }
+                    if (color.r(), color.g(), color.b()) == rgb
+                        && (size.width - width).abs() <= 0.5
+                )
+            }))
+        })
+    }
 }
 
 fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle) {
@@ -133,20 +157,29 @@ fn js_quote(s: &str) -> String {
 /// `__spawnB` / `__unspawn` / `__destroy` / `__get`). `child_b` optionally
 /// registers a second source (`__spawnB`) for recreate tests.
 fn parent_module(child_src: &str) -> String {
-    parent_module_b(child_src, None)
+    parent_module_b(child_src, None, false)
 }
 
-fn parent_module_b(child_a: &str, child_b: Option<&str>) -> String {
+/// Same module, but the controller keeps its child alive across unbinds —
+/// the playground's viewer-churn shape (tab switches unmount the host
+/// element while the child keeps running).
+fn parent_module_keep_alive(child_src: &str) -> String {
+    parent_module_b(child_src, None, true)
+}
+
+fn parent_module_b(child_a: &str, child_b: Option<&str>, keep_alive: bool) -> String {
+    let ka = if keep_alive { ", keepAlive: true" } else { "" };
     let spawn_b = match child_b {
         Some(b) => format!(
             r#"
             globalThis.__spawnB = () => {{
-                app = createVirtualAppController({{ source: createModuleSource({child}) }});
+                app = createVirtualAppController({{ source: createModuleSource({child}){ka} }});
                 globalThis.__app = app;
                 store.set(app$$, app);
             }};
             "#,
-            child = js_quote(b)
+            child = js_quote(b),
+            ka = ka,
         ),
         None => "globalThis.__spawnB = undefined;".to_string(),
     };
@@ -162,7 +195,7 @@ fn parent_module_b(child_a: &str, child_b: Option<&str>) -> String {
 
         export function start({{ store }}) {{
             globalThis.__make = () => {{
-                app = createVirtualAppController({{ source: createModuleSource({child}) }});
+                app = createVirtualAppController({{ source: createModuleSource({child}){ka} }});
                 globalThis.__app = app;
                 return true;
             }};
@@ -176,6 +209,7 @@ fn parent_module_b(child_a: &str, child_b: Option<&str>) -> String {
     "#,
         child = js_quote(child_a),
         spawn_b = spawn_b,
+        ka = ka,
     )
     .replace("app$$", "app$")
 }
@@ -308,7 +342,7 @@ fn virtual_app_recreate_runs_new_source() {
     let (app, looper) = build_parent(&runtime, &driver, &pool, recorder.clone());
 
     futures::executor::block_on(
-        app.load_module(parent_module_b(CHILD_TEXT, Some(CHILD_B)).as_str()),
+        app.load_module(parent_module_b(CHILD_TEXT, Some(CHILD_B), false).as_str()),
     )
     .expect("load parent");
     eval_js(&app, "globalThis.__spawn()");
@@ -349,8 +383,10 @@ fn virtual_app_destroy_on_unbind() {
 
     eval_js(&app, "globalThis.__unspawn()");
     assert!(wait_status(&looper, &app, "destroyed"));
+    // The child leaves `virtual_apps()` once the looper routes the
+    // `Destroy` control host-side (the status flips on the worker first).
     assert!(
-        app.virtual_apps().is_empty(),
+        looper.wait_for(|| app.virtual_apps().is_empty()),
         "unbinding must destroy the child"
     );
 
@@ -398,6 +434,80 @@ fn virtual_app_resize_follows_layout() {
         eval_js(&child, "globalThis.__vpW()")
     );
     assert_eq!(eval_js(&child, "globalThis.__vpH()"), "400");
+}
+
+/// A keep-alive rebind after the parent viewport changed must repaint the
+/// child at its NEW rect — with no vsync tick to rescue it. The child's
+/// fresh frame reaches the parent as an engine `AppEvent` while the parent
+/// is otherwise idle; if that event doesn't drive its own flush, the
+/// parent keeps replaying the child's STALE (old-viewport) frame forever
+/// (the playground's mobile-tab viewer: unmount → viewport change →
+/// remount showed the desktop-sized frame clipped into the new element).
+#[test]
+fn virtual_app_rebind_after_resize_repaints_without_vsync() {
+    let (runtime, driver, pool) = build_runtime();
+    let recorder = BatchRecorder::default();
+    let (app, looper) = build_parent(&runtime, &driver, &pool, recorder.clone());
+
+    // The child paints a full-viewport magenta fill: the replayed rect's
+    // width IS the child's viewport width.
+    let child_src = r##"
+        import { Color, Container, derive, mount, view, viewportSize$ } from "tur:std";
+        export function start({ store }) {
+            globalThis.__vpW = () => store.get(viewportSize$).width;
+            mount(view(() => Container({
+                color: Color.hex("#ff00ff"),
+                width: derive((ctx) => ctx.get(viewportSize$).width),
+                height: 24,
+            })));
+        }
+    "##;
+    let parent_mod = parent_module_keep_alive(child_src);
+    futures::executor::block_on(app.load_module(parent_mod.as_str())).expect("load parent");
+    eval_js(&app, "globalThis.__spawn()");
+    assert!(
+        wait_status(&looper, &app, "running"),
+        "child should reach running, got: {}",
+        eval_js(&app, "globalThis.__get(globalThis.__app.status$)")
+    );
+
+    // The initial 400-wide replay is present (parent viewport 400×300).
+    assert!(
+        looper.wait_for(|| recorder.contains_solid_rect((255, 0, 255), 400.0)),
+        "initial child fill should replay at the element width (400)"
+    );
+
+    // Unbind (keep-alive: the child survives), change the parent
+    // viewport, rebind — the keep-alive rebind path.
+    eval_js(&app, "globalThis.__unspawn()");
+    app.resize(600, 350, 1.0);
+    eval_js(&app, "globalThis.__spawn()");
+
+    // ONE vsync tick — enough to pump the child's `Resize` platform
+    // event through (platform events ride the frame loop by design) —
+    // then settle in real time WITHOUT any further parent pumps: the
+    // child's fresh frame arrives as an `AppEvent` at an idle parent and
+    // must be consumed by the event itself, not a later tick.
+    driver.fire_vsync();
+    let mut settled = false;
+    for _ in 0..25 {
+        // Sleep in real time ON the driven LocalSet: the engine's loopers
+        // are spawn_local tasks here, so a woken looper (e.g. by the
+        // worker shipping a batch) runs during the wait. This pumps
+        // nothing itself — no vsync ticks fire.
+        driver.block_on(async { tokio::time::sleep(std::time::Duration::from_millis(20)).await });
+        if recorder.contains_solid_rect((255, 0, 255), 600.0) {
+            settled = true;
+            break;
+        }
+    }
+    assert!(
+        settled,
+        "rebind must replay the child at the new width (600) with no further vsync tick; \
+         600-fill present: {}, 400-fill present: {}",
+        recorder.contains_solid_rect((255, 0, 255), 600.0),
+        recorder.contains_solid_rect((255, 0, 255), 400.0),
+    );
 }
 
 /// A broken child source surfaces as `status$ = "error"` with detail, and
@@ -843,5 +953,9 @@ fn virtual_app_forwarded_clicks_are_exact() {
         eval_js(&child_app, "String(globalThis.__a)"),
         eval_js(&child_app, "String(globalThis.__b)"),
     );
-    assert_eq!(eval_js(&child_app, "String(globalThis.__a)"), "16");
+    assert!(
+        looper.wait_for(|| eval_js(&child_app, "String(globalThis.__a)") == "16"),
+        "alternating taps must all land (a={:?})",
+        eval_js(&child_app, "String(globalThis.__a)"),
+    );
 }
