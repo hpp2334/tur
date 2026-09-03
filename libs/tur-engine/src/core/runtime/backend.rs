@@ -782,7 +782,16 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
     let mut last_focus: FocusCache = None;
     while let Some(msg) = worker_rx.next().await {
         match msg {
-            WorkerMsg::Wake => {
+            // `Wake` is a bare flush request (dispatch no-op); an
+            // `AppEvent` queues an engine-internal event whose consumers
+            // all live inside `flush()`'s subsystem drain — and it may
+            // arrive while the instance is otherwise idle (no vsync armed,
+            // no input in flight), so it must drive its own flush rather
+            // than wait for the next `Wake` (virtual-app frames stalled
+            // without this: child resize → child repaint → frame event
+            // queued → never drained → stale replay).
+            msg @ (WorkerMsg::Wake | WorkerMsg::AppEvent(_)) => {
+                backend.handle_worker_msg(msg);
                 let outcome = backend.pump();
                 let payload = match outcome {
                     Ok(fo) => Ok(fo),
