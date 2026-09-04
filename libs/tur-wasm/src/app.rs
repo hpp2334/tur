@@ -7,6 +7,7 @@ use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerInput};
+use tur_engine::core::render::brush::Color;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::ShellEvent;
 use tur_engine::renderer::vello::WebGlVelloRenderer;
@@ -241,6 +242,10 @@ pub struct WasmAppConfig {
     /// [`WasmRuntimeConfig::worker_pools`] to share workers between apps of
     /// the same group.
     pub worker_pool: Option<WorkerPoolHandle>,
+    /// The renderer's base (background) color, painted as the frame's first
+    /// element. `None` ⇒ the default opaque white. A translucent color
+    /// composites over the browser page behind the canvas.
+    pub base_color: Option<Color>,
 }
 
 /// Owning handle to a running wasm tur app instance. Built via
@@ -290,6 +295,7 @@ impl WasmApp {
         let WasmAppConfig {
             container_id,
             worker_pool,
+            base_color,
         } = cfg;
         // Resolve the worker pool: the app's explicit choice, or the
         // runtime's built-in effectively-uncapped default.
@@ -479,7 +485,8 @@ impl WasmApp {
         canvas.set_width(physical_width);
         canvas.set_height(physical_height);
 
-        let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
+        let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr)
+            .with_base_color(base_color.unwrap_or(Color::WHITE));
 
         // Spawn an isolated engine instance. The engine runs on a worker
         // thread; `HostBackend` owns the WebGL renderer on main and drives

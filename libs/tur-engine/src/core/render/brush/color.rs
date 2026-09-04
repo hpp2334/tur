@@ -50,6 +50,9 @@ pub enum Color {
 }
 
 impl Color {
+    /// Opaque white — the renderers' default base (background) color.
+    pub const WHITE: Color = Color::RGB(RGB::new(255, 255, 255));
+
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Color::RGB(RGB::new(r, g, b))
     }

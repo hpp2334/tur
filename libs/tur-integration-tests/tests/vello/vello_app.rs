@@ -10,6 +10,7 @@ use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
+use tur_engine::core::render::brush::Color;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -75,8 +76,19 @@ struct TurVelloAppInner {
 
 impl TurVelloApp {
     pub fn new(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
+        Self::new_with_base_color(width, height, dpr, Color::WHITE)
+    }
+
+    /// Like [`Self::new`], but the renderer paints `base_color` as the frame
+    /// background instead of the default opaque white.
+    pub fn new_with_base_color(
+        width: f64,
+        height: f64,
+        dpr: f64,
+        base_color: Color,
+    ) -> Result<Self, TurVelloError> {
         let (app, looper, driver, window) =
-            pollster::block_on(Self::init_async(width, height, dpr))?;
+            pollster::block_on(Self::init_async(width, height, dpr, base_color))?;
 
         // Spawn the autonomous loop. The `after_frame` hook ships each
         // `FrameOutcome` into `frame_rx`; `drive_one_frame` pairs one
@@ -101,10 +113,12 @@ impl TurVelloApp {
         Ok(harness)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn init_async(
         width: f64,
         height: f64,
         dpr: f64,
+        base_color: Color,
     ) -> Result<
         (
             Rc<TurApp>,
@@ -179,7 +193,8 @@ impl TurVelloApp {
             height as u32,
             dpr,
         )
-        .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?;
+        .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?
+        .with_base_color(base_color);
 
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);

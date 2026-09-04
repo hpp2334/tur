@@ -321,6 +321,7 @@ impl Canvas for VelloPaintContext<'_> {
     }
 }
 
-fn to_peniko_color(color: &Color) -> PenikoColor {
+/// Convert a tur [`Color`] into vello's `peniko::Color`.
+pub(super) fn to_peniko_color(color: &Color) -> PenikoColor {
     PenikoColor::from_rgba8(color.r(), color.g(), color.b(), color.a())
 }

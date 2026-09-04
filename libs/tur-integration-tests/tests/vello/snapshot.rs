@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use image::ExtendedColorType;
+use tur_engine::core::render::brush::Color;
 
 use super::vello_app::TurVelloApp;
 
@@ -118,4 +119,70 @@ pub fn container_clip_rounded_corner_clipped() {
     assert_color_approx(center, (255, 0, 0, 255), 8);
 
     dump_snapshot_if_requested("container-clip-rounded", &pixels, logical_w, logical_h);
+}
+
+/// `VelloRenderer::base_color` — the configured base color replaces the
+/// default opaque-white page background: unpainted areas render in the base
+/// color, content still paints over it.
+pub fn base_color_paints_configured_background() {
+    let logical_w = 400u32;
+    let logical_h = 200u32;
+    let base = Color::rgb(30, 40, 50);
+
+    let app =
+        TurVelloApp::new_with_base_color(logical_w as f64, logical_h as f64, 1.0, base).unwrap();
+    app.load_bundle("column-stretch-container-text").unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let pixels = app.render_to_pixels();
+    assert_eq!(
+        pixels.len(),
+        (logical_w * logical_h * 4) as usize,
+        "pixel buffer size mismatch"
+    );
+
+    // Below the red strip: the configured base color (the same sample point
+    // `reported_stretch_bug_renders_red_strip` asserts is white under the
+    // default config).
+    let below = get_pixel(&pixels, logical_w, 200, 150);
+    assert_color_approx(below, (30, 40, 50, 255), 8);
+
+    // Content still paints over the base: the red strip stays red.
+    let strip = get_pixel(&pixels, logical_w, 200, 45);
+    assert_color_approx(strip, (255, 0, 0, 255), 8);
+
+    dump_snapshot_if_requested("base-color-opaque", &pixels, logical_w, logical_h);
+}
+
+/// `VelloRenderer::base_color` honors alpha: a translucent base composites
+/// over vello-hybrid's transparent clear (the frame's unpainted areas keep
+/// the base color's alpha).
+pub fn base_color_supports_alpha() {
+    let logical_w = 400u32;
+    let logical_h = 200u32;
+    let base = Color::rgba(255, 0, 0, 128);
+
+    let app =
+        TurVelloApp::new_with_base_color(logical_w as f64, logical_h as f64, 1.0, base).unwrap();
+    app.load_bundle("column-stretch-container-text").unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let pixels = app.render_to_pixels();
+    assert_eq!(
+        pixels.len(),
+        (logical_w * logical_h * 4) as usize,
+        "pixel buffer size mismatch"
+    );
+
+    // Below the strip: the base color's alpha survives compositing. The
+    // strip renderer writes premultiplied output, so each channel reads
+    // back at value × alpha/255 (red: 255 × 128/255 = 128).
+    let below = get_pixel(&pixels, logical_w, 200, 150);
+    assert_color_approx(below, (128, 0, 0, 128), 8);
+
+    // The red content strip stays fully opaque red.
+    let strip = get_pixel(&pixels, logical_w, 200, 45);
+    assert_color_approx(strip, (255, 0, 0, 255), 8);
+
+    dump_snapshot_if_requested("base-color-alpha", &pixels, logical_w, logical_h);
 }

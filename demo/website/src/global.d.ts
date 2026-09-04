@@ -18,6 +18,11 @@ declare module "*/tur_website.js" {
     ): Promise<void>;
     // biome-ignore lint/complexity/noStaticOnlyClass: WASM module type declaration
     export class TurWebsiteApp {
+        static create(): Promise<Record<string, unknown>>;
         static create_in(id: string): Promise<Record<string, unknown>>;
+        static createWithBackground(
+            containerId: string | null,
+            background: string | null,
+        ): Promise<Record<string, unknown>>;
     }
 }

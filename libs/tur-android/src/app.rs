@@ -21,6 +21,7 @@ mod imp {
     use jni::objects::{GlobalRef, JObject, JValue};
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
+    use tur_engine::core::render::brush::Color;
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
@@ -264,6 +265,11 @@ mod imp {
         /// [`as_ptr`](crate::surface::AndroidWindowHandle::as_ptr) — a
         /// properly paired acquire/release.
         attached_window: std::cell::RefCell<Option<AndroidWindowHandle>>,
+        /// Base (background) color applied to every [`VelloRenderer`] this
+        /// instance attaches (the renderer is created at attach time, so
+        /// the color must outlive attach/detach cycles). Set once at
+        /// build; defaults to opaque white.
+        base_color: Color,
     }
 
     impl AndroidInstance {
@@ -404,7 +410,8 @@ mod imp {
                 logical_height,
                 dpr,
             )
-            .map_err(|e| TurAndroidError::WgpuSurface(e.to_string()))?;
+            .map_err(|e| TurAndroidError::WgpuSurface(e.to_string()))?
+            .with_base_color(self.base_color);
 
             // Hand the renderer to the engine (installs it, sizes it,
             // seeds the worker viewport, requests a frame). Retain the
@@ -454,6 +461,11 @@ mod imp {
         /// `.build_headless(…)` is applied — chain
         /// [`TurAppBuilder::instance_data`] on it and return it. Pass
         /// `|b| b` for the no-op default.
+        ///
+        /// `base_color` is the renderer's base (background) color, applied
+        /// to every surface this instance attaches (pass
+        /// [`Color::WHITE`] for the default).
+        #[allow(clippy::too_many_arguments)]
         pub fn build(
             runtime: &AndroidRuntime,
             default_worker_pool: WorkerPoolHandle,
@@ -462,6 +474,7 @@ mod imp {
             host: crate::host_thread::HostHandle,
             instance_id: u64,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
+            base_color: Color,
         ) -> Result<Self, TurAndroidError> {
             // Instances still need a frame clock (the loop races its ticks
             // against worker messages) — same Choreographer binding +
@@ -503,6 +516,7 @@ mod imp {
                 loop_task,
                 vsync_wake_fn,
                 attached_window: std::cell::RefCell::new(None),
+                base_color,
             })
         }
     }
@@ -541,6 +555,7 @@ mod imp {
     pub struct AndroidInstance;
 
     impl AndroidInstance {
+        #[allow(clippy::too_many_arguments)]
         pub fn build(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
             _default_worker_pool: tur_engine::WorkerPoolHandle,
@@ -549,6 +564,7 @@ mod imp {
             _host: crate::host_thread::HostHandle,
             _instance_id: u64,
             _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
+            _base_color: tur_engine::core::render::brush::Color,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
         }

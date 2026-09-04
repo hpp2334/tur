@@ -44,16 +44,42 @@ pub struct TurWebsiteApp {
 impl TurWebsiteApp {
     /// Full-viewport canvas: the app owns the entire window.
     pub fn create() -> js_sys::Promise {
-        Self::create_internal(None)
+        Self::create_internal(None, None)
     }
 
     /// Embed the canvas inside the element with the given id.
     pub fn create_in(container_id: String) -> js_sys::Promise {
-        Self::create_internal(Some(container_id))
+        Self::create_internal(Some(container_id), None)
     }
 
-    fn create_internal(container_id: Option<String>) -> js_sys::Promise {
+    /// Like [`Self::create`] / [`Self::create_in`], but sets the renderer's
+    /// base (background) color. `background` is a CSS-style hex string
+    /// (`#RGB`, `#RRGGBB`, or `#RRGGBBAA`); pass `None`/`null` for the
+    /// default opaque white. The promise rejects on a malformed color.
+    #[wasm_bindgen(js_name = createWithBackground)]
+    pub fn create_with_background(
+        container_id: Option<String>,
+        background: Option<String>,
+    ) -> js_sys::Promise {
+        Self::create_internal(container_id, background)
+    }
+
+    fn create_internal(
+        container_id: Option<String>,
+        background: Option<String>,
+    ) -> js_sys::Promise {
         wasm_bindgen_futures::future_to_promise(async move {
+            // Parse the optional base color up front so a malformed value
+            // rejects before any DOM/runtime work happens.
+            let base_color = match background.as_deref().map(str::parse) {
+                Some(Ok(color)) => Some(color),
+                Some(Err(_)) => {
+                    return Err(JsValue::from_str(
+                        "invalid background color: expected #RGB, #RRGGBB, or #RRGGBBAA",
+                    ));
+                }
+                None => None,
+            };
             // Build the shared runtime once with the demo plugin.
             let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
                 configure: Box::new(|b| b.plugin(tur_playground_plugin::TurPlaygroundPlugin)),
@@ -65,6 +91,7 @@ impl TurWebsiteApp {
                 tur_wasm::WasmAppConfig {
                     container_id,
                     worker_pool: None,
+                    base_color,
                 },
             )
             .await?;

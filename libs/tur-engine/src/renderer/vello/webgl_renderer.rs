@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
+use crate::core::render::brush::Color;
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer};
@@ -25,6 +26,11 @@ pub struct WebGlVelloRenderer {
     dpr: f64,
     physical_width: u32,
     physical_height: u32,
+    /// Base (background) color painted as the scene's first element each
+    /// frame. vello-hybrid clears the target to transparent, so this is the
+    /// frame's effective clear color. Defaults to opaque white
+    /// ([`Color::WHITE`]).
+    base_color: Color,
     /// Cache mapping each registered image resource to its uploaded hybrid
     /// `ImageId`. The WebGL backend only supports `ImageSource::OpaqueId`, so
     /// every image must be uploaded to the atlas before painting.
@@ -55,8 +61,29 @@ impl WebGlVelloRenderer {
             dpr,
             physical_width,
             physical_height,
+            base_color: Color::WHITE,
             image_uploads: HashMap::new(),
         }
+    }
+
+    /// Set the base (background) color, consuming and returning `self` for
+    /// use before the renderer is boxed into `dyn Renderer`.
+    ///
+    /// Applied at paint time — the next rendered frame carries the new color
+    /// (no repaint is triggered by this call).
+    pub fn with_base_color(mut self, color: Color) -> Self {
+        self.base_color = color;
+        self
+    }
+
+    /// Set the base (background) color on a renderer still held concretely.
+    pub fn set_base_color(&mut self, color: Color) {
+        self.base_color = color;
+    }
+
+    /// The configured base (background) color.
+    pub fn base_color(&self) -> Color {
+        self.base_color
     }
 
     /// Render a flat command batch into the scene. Playback happens in
@@ -71,6 +98,7 @@ impl WebGlVelloRenderer {
             self.physical_width,
             self.physical_height,
             self.dpr,
+            &self.base_color,
             commands,
         );
     }

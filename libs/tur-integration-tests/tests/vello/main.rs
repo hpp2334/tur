@@ -48,6 +48,14 @@ fn main() {
             snapshot::container_clip_rounded_corner_clipped();
             Ok(())
         }),
+        Trial::test("vello_base_color_paints_configured_background", || {
+            snapshot::base_color_paints_configured_background();
+            Ok(())
+        }),
+        Trial::test("vello_base_color_supports_alpha", || {
+            snapshot::base_color_supports_alpha();
+            Ok(())
+        }),
         Trial::test("vello_init_surface_zero_area_degrades", || {
             surface_lifecycle::init_surface_zero_area_degrades();
             Ok(())
