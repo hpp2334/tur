@@ -14,8 +14,9 @@ use crate::core::render::RenderCommand;
 /// helper.
 pub trait Renderer {
     /// Command-batch path: render from a flat command batch (the new
-    /// primary path). The renderer resets the scene, fills the default
-    /// white background, seeds a `VelloPaintContext` with
+    /// primary path). The renderer resets the scene, fills the configured
+    /// base color (opaque white by default — see the concrete renderers'
+    /// `with_base_color`), seeds a `VelloPaintContext` with
     /// `Affine::scale(dpr)` as the root transform, and plays the commands
     /// back via [`crate::core::render::play_commands`].
     ///

@@ -399,11 +399,16 @@ pub mod ops {
     /// passes `|b| b` (no-op); embedders that need build-time data write
     /// their own `Java_<pkg>_<Class>_createInstance` (mirroring
     /// `createRuntime` — see the compose demo).
+    ///
+    /// `base_color` is the renderer's base (background) color, applied to
+    /// every surface the instance attaches. The standard trampoline passes
+    /// [`Color::WHITE`](tur_engine::core::render::brush::Color::WHITE).
     pub fn create_instance(
         env: &mut JNIEnv,
         runtime_handle: jlong,
         frame_loop: JObject,
         configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a> + Send + 'static,
+        base_color: tur_engine::core::render::brush::Color,
     ) -> jlong {
         catch_into_zero(env, "createInstance", |env| {
             let route = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
@@ -428,6 +433,7 @@ pub mod ops {
                     host_for_build.clone(),
                     id,
                     configure_instance,
+                    base_color,
                 ) {
                     Ok(instance) => {
                         state.insert_instance(id, Box::new(instance));
@@ -1128,7 +1134,13 @@ macro_rules! standard_jni_exports {
             runtime_handle: $crate::jlong,
             frame_loop: $crate::JObject,
         ) -> $crate::jlong {
-            $crate::ops::create_instance(&mut env, runtime_handle, frame_loop, |b| b)
+            $crate::ops::create_instance(
+                &mut env,
+                runtime_handle,
+                frame_loop,
+                |b| b,
+                tur_engine::core::render::brush::Color::WHITE,
+            )
         }
 
         #[unsafe(no_mangle)]
