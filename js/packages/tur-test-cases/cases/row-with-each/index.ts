@@ -14,10 +14,14 @@ import {
     view,
 } from "tur:std";
 
-const seg$ = source<string[]>(["a", "b"]);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree. NOTE the rebuild boundary: `Each.build`
+    // re-runs for every item whenever `items` changes — keep atoms OUT of the
+    // build thunk (state there would be re-created on every items change).
+    const seg$ = source<string[]>(["a", "b"]);
 
-const App = view(() =>
-    Column({
+    return Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
             Row({
@@ -35,8 +39,8 @@ const App = view(() =>
                 child: Container({ color: 0x00000000 as unknown as Brush }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

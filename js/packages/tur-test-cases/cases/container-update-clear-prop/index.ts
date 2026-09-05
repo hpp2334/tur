@@ -11,14 +11,18 @@ import {
     view,
 } from "tur:std";
 
-const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);
 const gray = Color.rgba(226, 232, 240, 255);
-const color$ = derive((ctx) => (ctx.get(checked$) ? green : undefined));
-const borderColor$ = derive((ctx) => (ctx.get(checked$) ? green : gray));
 
-const App = view(() =>
-    Container({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so these atoms
+    // are stable for the life of the tree — no need to hoist them to module
+    // level.
+    const checked$ = source(true);
+    const color$ = derive((ctx) => (ctx.get(checked$) ? green : undefined));
+    const borderColor$ = derive((ctx) => (ctx.get(checked$) ? green : gray));
+
+    return Container({
         height: 100,
         width: 200,
         padding: 20,
@@ -36,8 +40,8 @@ const App = view(() =>
                 }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

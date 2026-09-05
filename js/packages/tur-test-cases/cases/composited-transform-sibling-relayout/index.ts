@@ -23,9 +23,10 @@ import {
 // re-assigns the follower's offset back to (0,0). If the subsystem does not
 // re-correct within the same frame, the follower paints at (0,0) for one
 // frame before snapping back — the visible flash.
-const tall$ = source(false);
-
 const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atom and
+    // link are stable for the life of the tree.
+    const tall$ = source(false);
     const link = createLayerLink();
     return Stack({
         children: [

@@ -38,13 +38,6 @@ import {
 
 const TILE_COUNT = 27;
 
-// 1 = square, 16/9 ≈ 1.78 = wide, 9/16 ≈ 0.56 = tall.
-const aspect$ = source<number>(1);
-// Smaller maxExtent → more, narrower columns.
-const maxExtent$ = source<number>(150);
-// Index of the selected tile (-1 = none). Drives the white border highlight.
-const selected$ = source<number>(0);
-
 function hslToHex(h: number, s: number, l: number): string {
     const sat = s / 100;
     const light = l / 100;
@@ -109,7 +102,7 @@ function Pill(props: {
     });
 }
 
-function tile(i: number): Element {
+function tile(i: number, selected$: Readable<number>): Element {
     const hue = (i * 360) / TILE_COUNT;
     const base = Color.hex(hslToHex(hue, 58, 54));
     return MouseRegion({
@@ -137,15 +130,25 @@ function tile(i: number): Element {
     });
 }
 
-function aspectLabel(ctx: ReadonlyStoreCtx): string {
+function aspectLabel(ctx: ReadonlyStoreCtx, aspect$: Readable<number>): string {
     const a = ctx.get(aspect$);
     if (Math.abs(a - 1) < 0.01) return "1:1";
     if (a > 1) return "16:9";
     return "9:16";
 }
 
-const App = view(() =>
-    Container({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so these atoms
+    // are stable for the life of the tree — helpers that need them take the
+    // atom as a parameter (no module-level hoisting required).
+    //   aspect$    1 = square, 16/9 ≈ 1.78 = wide, 9/16 ≈ 0.56 = tall.
+    //   maxExtent$ smaller → more, narrower columns.
+    //   selected$  index of the selected tile (-1 = none) → white border.
+    const aspect$ = source<number>(1);
+    const maxExtent$ = source<number>(150);
+    const selected$ = source<number>(0);
+
+    return Container({
         color: Color.hex("#0f172a"),
         padding: 16,
         children: [
@@ -161,7 +164,7 @@ const App = view(() =>
                     Text({
                         text: derive(
                             (ctx) =>
-                                `tile #${ctx.get(selected$)} · ${aspectLabel(ctx)} · maxExtent ${ctx.get(maxExtent$)}`,
+                                `tile #${ctx.get(selected$)} · ${aspectLabel(ctx, aspect$)} · maxExtent ${ctx.get(maxExtent$)}`,
                         ),
                         fontSize: 12,
                         color: Color.hex("#94a3b8"),
@@ -254,7 +257,7 @@ const App = view(() =>
                                         queryKey: ["grid-gallery"],
                                         children: Array.from(
                                             { length: TILE_COUNT },
-                                            (_, i) => tile(i),
+                                            (_, i) => tile(i, selected$),
                                         ),
                                     }),
                                 }),
@@ -264,8 +267,8 @@ const App = view(() =>
                 ],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

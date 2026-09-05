@@ -46,36 +46,106 @@ import {
 //   - Curve dropdown (linear / easeIn / easeOut / easeInOut) — recreates controller
 // ---------------------------------------------------------------------------
 
-const progress$ = source(0); // 0..1 raw progress
-const status$ = source<
-    "stopped" | "forward" | "reverse" | "completed" | "paused"
->("stopped");
-const speedLabel$ = source("1x");
-const curveLabel$ = source<"linear" | "easeIn" | "easeOut" | "easeInOut">(
-    "easeInOut",
-);
-const looping$ = source(false);
+// --- State ------------------------------------------------------------------
+// Created INSIDE the root view fn below: view functions run exactly once,
+// when the element tree is built (at `mount`) — prop updates never re-invoke
+// them — so this cluster is stable local state, not module-level state.
+// Bundled into a factory so the widget builders further down can take it as
+// a parameter.
 
-// Mutable controller holder. Recreated when the curve changes or when
-// looping is toggled; in-place mutated for speed/seek.
-let ctrl: AnimationController = createController("easeInOut", false);
+function createAnimState() {
+    const progress$ = source(0); // 0..1 raw progress
+    const status$ = source<
+        "stopped" | "forward" | "reverse" | "completed" | "paused"
+    >("stopped");
+    const speedLabel$ = source("1x");
+    const curveLabel$ = source<"linear" | "easeIn" | "easeOut" | "easeInOut">(
+        "easeInOut",
+    );
+    const looping$ = source(false);
 
-function createController(
-    curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
-    looping: boolean,
-): AnimationController {
-    return createAnimationController({
-        duration: 2400,
-        curve,
-        repeat: looping ? "infinite" : 1,
-        onTick: mutate((ctx, v: number) => {
-            ctx.set(progress$, v);
-        }),
-        onEnd: mutate((ctx) => {
-            ctx.set(status$, ctrl.status);
-        }),
+    // Mutable controller holder. Recreated when the curve changes or when
+    // looping is toggled; in-place mutated for speed/seek.
+    let ctrl: AnimationController = createController("easeInOut", false);
+
+    function createController(
+        curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
+        looping: boolean,
+    ): AnimationController {
+        return createAnimationController({
+            duration: 2400,
+            curve,
+            repeat: looping ? "infinite" : 1,
+            onTick: mutate((ctx, v: number) => {
+                ctx.set(progress$, v);
+            }),
+            onEnd: mutate((ctx) => {
+                ctx.set(status$, ctrl.status);
+            }),
+        });
+    }
+
+    const playForward = mutate((ctx) => {
+        ctrl.forward();
+        ctx.set(status$, ctrl.status);
     });
+    const playReverse = mutate((ctx) => {
+        ctrl.reverse();
+        ctx.set(status$, ctrl.status);
+    });
+    const pause = mutate((ctx) => {
+        ctrl.pause();
+        ctx.set(status$, ctrl.status);
+    });
+    const resume = mutate((ctx) => {
+        ctrl.resume();
+        ctx.set(status$, ctrl.status);
+    });
+    const stop = mutate((ctx) => {
+        ctrl.stop();
+        ctx.set(status$, ctrl.status);
+        ctx.set(progress$, ctrl.value);
+    });
+    const setSpeed = mutate((ctx, factor: number, label: string) => {
+        ctrl.setSpeed(factor);
+        ctx.set(speedLabel$, label);
+    });
+    const setCurve = mutate(
+        (ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
+            const t = ctx.get(progress$);
+            ctrl = createController(curve, ctx.get(looping$));
+            ctrl.seek(t);
+            ctx.set(curveLabel$, curve);
+            ctx.set(status$, ctrl.status);
+        },
+    );
+    const toggleLooping = mutate((ctx) => {
+        const next = !ctx.get(looping$);
+        const t = ctx.get(progress$);
+        ctrl = createController(ctx.get(curveLabel$), next);
+        ctrl.seek(t);
+        ctx.set(looping$, next);
+        ctx.set(status$, ctrl.status);
+    });
+
+    return {
+        progress$,
+        status$,
+        speedLabel$,
+        curveLabel$,
+        looping$,
+        playForward,
+        playReverse,
+        pause,
+        resume,
+        stop,
+        setSpeed,
+        setCurve,
+        toggleLooping,
+    };
 }
+
+type AnimState = ReturnType<typeof createAnimState>;
 
 // Color interpolation: indigo (99,102,241) → coral (232,93,68). The new
 // `ColorTween` (tur's Flutter-aligned Tween) replaces the hand-rolled
@@ -89,67 +159,20 @@ const colorTween = ColorTween({
 });
 
 // ---------------------------------------------------------------------------
-// Mutations
-// ---------------------------------------------------------------------------
-
-const playForward = mutate((ctx) => {
-    ctrl.forward();
-    ctx.set(status$, ctrl.status);
-});
-const playReverse = mutate((ctx) => {
-    ctrl.reverse();
-    ctx.set(status$, ctrl.status);
-});
-const pause = mutate((ctx) => {
-    ctrl.pause();
-    ctx.set(status$, ctrl.status);
-});
-const resume = mutate((ctx) => {
-    ctrl.resume();
-    ctx.set(status$, ctrl.status);
-});
-const stop = mutate((ctx) => {
-    ctrl.stop();
-    ctx.set(status$, ctrl.status);
-    ctx.set(progress$, ctrl.value);
-});
-const setSpeed = mutate((ctx, factor: number, label: string) => {
-    ctrl.setSpeed(factor);
-    ctx.set(speedLabel$, label);
-});
-const setCurve = mutate(
-    (ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
-        const t = ctx.get(progress$);
-        ctrl = createController(curve, ctx.get(looping$));
-        ctrl.seek(t);
-        ctx.set(curveLabel$, curve);
-        ctx.set(status$, ctrl.status);
-    },
-);
-const toggleLooping = mutate((ctx) => {
-    const next = !ctx.get(looping$);
-    const t = ctx.get(progress$);
-    ctrl = createController(ctx.get(curveLabel$), next);
-    ctrl.seek(t);
-    ctx.set(looping$, next);
-    ctx.set(status$, ctrl.status);
-});
-
-// ---------------------------------------------------------------------------
 // UI
 // ---------------------------------------------------------------------------
 
-function Card(): Element {
+function Card(s: AnimState): Element {
     // Card animates width, borderRadius, hue based on progress$ via the
     // Tween / ColorTween abstractions (Flutter-aligned). The explicit
     // AnimationController drives `progress$` continuously; the tweens handle
     // the value interpolation that previously needed hand-rolled `lerp`.
     return Container({
         // Width: 120 → 280
-        width: derive((ctx) => widthTween.lerp(ctx.get(progress$))),
+        width: derive((ctx) => widthTween.lerp(ctx.get(s.progress$))),
         height: 160,
-        borderRadius: derive((ctx) => radiusTween.lerp(ctx.get(progress$))),
-        color: derive((ctx) => colorTween.lerp(ctx.get(progress$))),
+        borderRadius: derive((ctx) => radiusTween.lerp(ctx.get(s.progress$))),
+        color: derive((ctx) => colorTween.lerp(ctx.get(s.progress$))),
         shadowColor: Color.rgba(15, 23, 42, 80),
         shadowBlur: 24,
         shadowOffset: [0, 8],
@@ -157,7 +180,7 @@ function Card(): Element {
         children: [
             // Rotating inner shape — demonstrates the Transform element.
             Transform({
-                rotate: derive((ctx) => ctx.get(progress$) * 2 * Math.PI),
+                rotate: derive((ctx) => ctx.get(s.progress$) * 2 * Math.PI),
                 child: Container({
                     width: 60,
                     height: 60,
@@ -169,14 +192,14 @@ function Card(): Element {
     });
 }
 
-function OrbitingDot(): Element {
+function OrbitingDot(s: AnimState): Element {
     // A dot that orbits around the card center.
     return Positioned({
         left: derive(
-            (ctx) => 140 + 80 * Math.cos(2 * Math.PI * ctx.get(progress$)),
+            (ctx) => 140 + 80 * Math.cos(2 * Math.PI * ctx.get(s.progress$)),
         ),
         top: derive(
-            (ctx) => 80 + 80 * Math.sin(2 * Math.PI * ctx.get(progress$)),
+            (ctx) => 80 + 80 * Math.sin(2 * Math.PI * ctx.get(s.progress$)),
         ),
         child: Container({
             width: 20,
@@ -190,30 +213,30 @@ function OrbitingDot(): Element {
     });
 }
 
-function ProgressReadout(): Element {
+function ProgressReadout(s: AnimState): Element {
     return Text({
-        text: derive((ctx) => `${Math.round(ctx.get(progress$) * 100)}%`),
+        text: derive((ctx) => `${Math.round(ctx.get(s.progress$) * 100)}%`),
         fontSize: 12,
         color: Color.rgba(71, 85, 105, 255),
     });
 }
 
-function StatusBadge(): Element {
+function StatusBadge(s: AnimState): Element {
     return Container({
         padding: 6,
         borderRadius: 999,
         color: derive((ctx) => {
-            const s = ctx.get(status$);
-            if (s === "forward" || s === "reverse") {
+            const s2 = ctx.get(s.status$);
+            if (s2 === "forward" || s2 === "reverse") {
                 return Color.rgba(34, 197, 94, 255);
             }
-            if (s === "paused") return Color.rgba(245, 158, 11, 255);
-            if (s === "completed") return Color.rgba(99, 102, 241, 255);
+            if (s2 === "paused") return Color.rgba(245, 159, 11, 255);
+            if (s2 === "completed") return Color.rgba(99, 102, 241, 255);
             return Color.rgba(148, 163, 184, 255);
         }),
         children: [
             Text({
-                text: derive((ctx) => ctx.get(status$).toUpperCase()),
+                text: derive((ctx) => ctx.get(s.status$).toUpperCase()),
                 fontSize: 10,
                 color: Color.rgba(255, 255, 255, 255),
             }),
@@ -249,18 +272,18 @@ function Button(
     });
 }
 
-function SpeedButton(factor: number, label: string): Element {
+function SpeedButton(factor: number, label: string, s: AnimState): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate((ctx) =>
-                ctx.set(setSpeed, factor, label),
+                ctx.set(s.setSpeed, factor, label),
             ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive((ctx) =>
-                    ctx.get(speedLabel$) === label
+                    ctx.get(s.speedLabel$) === label
                         ? Color.hex("#1e293b")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -269,7 +292,7 @@ function SpeedButton(factor: number, label: string): Element {
                         text: label,
                         fontSize: 10,
                         color: derive((ctx) =>
-                            ctx.get(speedLabel$) === label
+                            ctx.get(s.speedLabel$) === label
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -283,18 +306,19 @@ function SpeedButton(factor: number, label: string): Element {
 function CurveButton(
     curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
     label: string,
+    s: AnimState,
 ): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate((ctx) =>
-                ctx.set(setCurve, curve),
+                ctx.set(s.setCurve, curve),
             ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive((ctx) =>
-                    ctx.get(curveLabel$) === curve
+                    ctx.get(s.curveLabel$) === curve
                         ? Color.hex("#0d9488")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -303,7 +327,7 @@ function CurveButton(
                         text: label,
                         fontSize: 10,
                         color: derive((ctx) =>
-                            ctx.get(curveLabel$) === curve
+                            ctx.get(s.curveLabel$) === curve
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -314,29 +338,29 @@ function CurveButton(
     });
 }
 
-function LoopButton(): Element {
+function LoopButton(s: AnimState): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate((ctx) => {
-                ctx.set(toggleLooping);
+                ctx.set(s.toggleLooping);
             }) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive((ctx) =>
-                    ctx.get(looping$)
+                    ctx.get(s.looping$)
                         ? Color.hex("#db2777")
                         : Color.hex("#e2e8f0"),
                 ),
                 children: [
                     Text({
                         text: derive((ctx) =>
-                            ctx.get(looping$) ? "Loop ✓" : "Loop",
+                            ctx.get(s.looping$) ? "Loop ✓" : "Loop",
                         ),
                         fontSize: 10,
                         color: derive((ctx) =>
-                            ctx.get(looping$)
+                            ctx.get(s.looping$)
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -347,8 +371,12 @@ function LoopButton(): Element {
     });
 }
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the whole
+    // animation state cluster is stable for the life of the tree.
+    const s = createAnimState();
+
+    return Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),
             children: [
@@ -366,9 +394,9 @@ const App = view(() =>
                         Row({
                             mainAxisSize: MainAxisSize.Min,
                             children: [
-                                StatusBadge(),
+                                StatusBadge(s),
                                 SizedBox({ width: 12 }),
-                                ProgressReadout(),
+                                ProgressReadout(s),
                             ],
                         }),
                         SizedBox({ height: 32 }),
@@ -383,9 +411,9 @@ const App = view(() =>
                                 Positioned({
                                     left: 100,
                                     top: 20,
-                                    child: Card(),
+                                    child: Card(s),
                                 }),
-                                OrbitingDot(),
+                                OrbitingDot(s),
                             ],
                         }),
 
@@ -395,15 +423,15 @@ const App = view(() =>
                         Row({
                             mainAxisSize: MainAxisSize.Min,
                             children: [
-                                Button("Play", playForward, "#22c55e"),
+                                Button("Play", s.playForward, "#22c55e"),
                                 SizedBox({ width: 6 }),
-                                Button("Pause", pause, "#f59e0b"),
+                                Button("Pause", s.pause, "#f59e0b"),
                                 SizedBox({ width: 6 }),
-                                Button("Resume", resume, "#0ea5e9"),
+                                Button("Resume", s.resume, "#0ea5e9"),
                                 SizedBox({ width: 6 }),
-                                Button("Reverse", playReverse, "#8b5cf6"),
+                                Button("Reverse", s.playReverse, "#8b5cf6"),
                                 SizedBox({ width: 6 }),
-                                Button("Stop", stop, "#ef4444"),
+                                Button("Stop", s.stop, "#ef4444"),
                             ],
                         }),
 
@@ -419,13 +447,13 @@ const App = view(() =>
                                     color: Color.hex("#64748b"),
                                 }),
                                 SizedBox({ width: 8 }),
-                                SpeedButton(0.5, "0.5x"),
+                                SpeedButton(0.5, "0.5x", s),
                                 SizedBox({ width: 4 }),
-                                SpeedButton(1, "1x"),
+                                SpeedButton(1, "1x", s),
                                 SizedBox({ width: 4 }),
-                                SpeedButton(2, "2x"),
+                                SpeedButton(2, "2x", s),
                                 SizedBox({ width: 4 }),
-                                SpeedButton(4, "4x"),
+                                SpeedButton(4, "4x", s),
                             ],
                         }),
 
@@ -441,15 +469,15 @@ const App = view(() =>
                                     color: Color.hex("#64748b"),
                                 }),
                                 SizedBox({ width: 8 }),
-                                CurveButton("linear", "linear"),
+                                CurveButton("linear", "linear", s),
                                 SizedBox({ width: 4 }),
-                                CurveButton("easeIn", "easeIn"),
+                                CurveButton("easeIn", "easeIn", s),
                                 SizedBox({ width: 4 }),
-                                CurveButton("easeOut", "easeOut"),
+                                CurveButton("easeOut", "easeOut", s),
                                 SizedBox({ width: 4 }),
-                                CurveButton("easeInOut", "easeInOut"),
+                                CurveButton("easeInOut", "easeInOut", s),
                                 SizedBox({ width: 12 }),
-                                LoopButton(),
+                                LoopButton(s),
                             ],
                         }),
 
@@ -464,8 +492,8 @@ const App = view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

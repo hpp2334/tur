@@ -20,6 +20,7 @@ import {
     mutate,
     PointerInteract,
     type PointerInteractEvent,
+    type Readable,
     Row,
     SizedBox,
     Stack,
@@ -43,10 +44,11 @@ import {
 // ---------------------------------------------------------------------------
 
 const DURATION = 600;
-const expanded$ = source(false);
-const toggle = mutate((ctx) => ctx.set(expanded$, !ctx.get(expanded$)));
 
-function Card(): Element {
+// The factories take the local state as parameters — the view fn owns it (it
+// runs exactly once at build, so the atoms are stable for the tree's life).
+
+function Card(expanded$: Readable<boolean>): Element {
     return Stack({
         children: [
             // Sizer: gives the inner Stack a finite canvas so Positioned
@@ -96,7 +98,10 @@ function Card(): Element {
     });
 }
 
-function ToggleButton(): Element {
+function ToggleButton(
+    expanded$: Readable<boolean>,
+    toggle: Mutation<[], void>,
+): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -122,8 +127,14 @@ function ToggleButton(): Element {
     });
 }
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atom and
+    // mutation are stable for the life of the tree — no need to hoist them to
+    // module level.
+    const expanded$ = source(false);
+    const toggle = mutate((ctx) => ctx.set(expanded$, !ctx.get(expanded$)));
+
+    return Expanded({
         child: Container({
             color: Color.rgb(248, 250, 252),
             children: [
@@ -144,18 +155,18 @@ const App = view(() =>
                             color: Color.rgb(100, 116, 139),
                         }),
                         SizedBox({ height: 24 }),
-                        Card(),
+                        Card(expanded$),
                         SizedBox({ height: 24 }),
                         Row({
                             mainAxisSize: MainAxisSize.Min,
-                            children: [ToggleButton()],
+                            children: [ToggleButton(expanded$, toggle)],
                         }),
                     ],
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

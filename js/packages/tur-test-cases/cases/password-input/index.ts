@@ -16,15 +16,18 @@ import {
 // rendered as `obscuringCharacter` (default "•") while the controller keeps
 // the real text. Copy/Cut are suppressed. A plain Input is shown for
 // comparison, and a readout echoes the controller's true value via `onInput`.
-const value$ = source("hunter2");
-const pwCtrl = createTextEditingController({
-    initialText: "hunter2",
-    onInput: mutate((ctx, text: string) => ctx.set(value$, text)),
-});
-const plainCtrl = createTextEditingController({});
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atoms and
+    // controllers are stable for the life of the tree — no need to hoist them
+    // to module level.
+    const value$ = source("hunter2");
+    const pwCtrl = createTextEditingController({
+        initialText: "hunter2",
+        onInput: mutate((ctx, text: string) => ctx.set(value$, text)),
+    });
+    const plainCtrl = createTextEditingController({});
 
-const App = view(() =>
-    Container({
+    return Container({
         padding: 32,
         children: [
             Column({
@@ -59,8 +62,8 @@ const App = view(() =>
                 ],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

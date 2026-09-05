@@ -165,7 +165,13 @@ function pieceRgb(slot: number): { r: number; g: number; b: number } {
     };
 }
 
-// --- Drag-lift animation ---------------------------------------------------
+// --- Game state -------------------------------------------------------------
+//
+// Created INSIDE the root view fn below: view functions run exactly once,
+// when the element tree is built (at `mount`) — prop updates never re-invoke
+// them — so this cluster is stable local state, not module-level state.
+// Bundled into a factory so the view helpers further down can take it as a
+// parameter.
 //
 // Game-feel: when the user grabs a piece it scales up to LIFT_MAX (1.1)
 // over ~180 ms (easeOut). On release it settles back to 1.0 at the same
@@ -175,133 +181,156 @@ function pieceRgb(slot: number): { r: number; g: number; b: number } {
 
 const LIFT_MAX = 1.1;
 const LIFT_MS = 180;
-const dragScale$ = source(1.0);
-const liftCtrl: AnimationController = createAnimationController({
-    duration: LIFT_MS,
-    curve: "easeOut",
-    onTick: mutate((ctx, v: number) => {
-        ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
-    }),
-});
 
-// --- Reactive state --------------------------------------------------------
-
-const pieces$ = source<Piece[]>(initialPieces());
-const placedCount$ = derive(
-    (ctx) => ctx.get(pieces$).filter((p) => p.placed).length,
-);
-const done$ = derive((ctx) => ctx.get(placedCount$) === GRID * GRID);
-
-// Drag tracking lives in plain module state, NOT reactive sources. Mutation
-// handlers fire synchronously back-to-back (down → move → move → … → up) and
-// the engine's reactive store may not have flushed the previous handler's
-// write by the time the next handler calls `ctx.get` — that would make the
-// move handler see a stale `dragId` and abort the drag. Module `let` writes
-// are visible to the next handler immediately. (Same pattern as
-// drag-delta-tracking/index.ts.) `pieces$` stays reactive because the
-// Positioned `left`/`top` derives need to re-evaluate when a piece moves.
-let dragId: number | null = null;
-let lastDragId: number | null = null;
-let dragOffset = { dx: 0, dy: 0 };
-
-// Returns the current scale for piece `id`: the animated `dragScale$` value
-// for the actively-dragged piece AND the just-released piece (during settle),
-// 1.0 for everything else.
-function pieceScale(ctx: ReadonlyStoreCtx, id: number): number {
-    const scale = ctx.get(dragScale$);
-    if (dragId === id || lastDragId === id) return scale;
-    return 1;
-}
-
-function pieceDragging(ctx: ReadonlyStoreCtx, id: number): boolean {
-    return (dragId === id || lastDragId === id) && ctx.get(dragScale$) > 1.001;
-}
-
-// --- Per-piece drag handlers (close over `id`) -----------------------------
-
-const onPieceDown = (id: number) =>
-    mutate((ctx, ev: PointerInteractEvent) => {
-        const me = ctx.get(pieces$)[id];
-        if (!me || me.placed) return;
-        // Record offset between pointer and piece top-left so the piece
-        // doesn't jump to the pointer on the first move event.
-        dragOffset = { dx: ev.global.x - me.x, dy: ev.global.y - me.y };
-        dragId = id;
-        lastDragId = id;
-        liftCtrl.forward();
+function createPuzzleState() {
+    const dragScale$ = source(1.0);
+    const liftCtrl: AnimationController = createAnimationController({
+        duration: LIFT_MS,
+        curve: "easeOut",
+        onTick: mutate((ctx, v: number) => {
+            ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
+        }),
     });
 
-const onPieceMove = (id: number) =>
-    mutate((ctx, ev: PointerInteractEvent) => {
-        if (dragId !== id) return;
-        const nx = ev.global.x - dragOffset.dx;
-        const ny = ev.global.y - dragOffset.dy;
-        const cur = ctx.get(pieces$);
-        ctx.set(
-            pieces$,
-            cur.map((p) => (p.id === id ? { ...p, x: nx, y: ny } : p)),
+    const pieces$ = source<Piece[]>(initialPieces());
+    const placedCount$ = derive(
+        (ctx) => ctx.get(pieces$).filter((p) => p.placed).length,
+    );
+    const done$ = derive((ctx) => ctx.get(placedCount$) === GRID * GRID);
+
+    // Drag tracking lives in plain closure state, NOT reactive sources.
+    // Mutation handlers fire synchronously back-to-back (down → move → move
+    // → … → up) and the engine's reactive store may not have flushed the
+    // previous handler's write by the time the next handler calls `ctx.get`
+    // — that would make the move handler see a stale `dragId` and abort the
+    // drag. Plain `let` writes are visible to the next handler immediately.
+    // (Same pattern as drag-delta-tracking/index.ts.) `pieces$` stays
+    // reactive because the Positioned `left`/`top` derives need to
+    // re-evaluate when a piece moves.
+    let dragId: number | null = null;
+    let lastDragId: number | null = null;
+    let dragOffset = { dx: 0, dy: 0 };
+
+    // Returns the current scale for piece `id`: the animated `dragScale$`
+    // value for the actively-dragged piece AND the just-released piece
+    // (during settle), 1.0 for everything else.
+    function pieceScale(ctx: ReadonlyStoreCtx, id: number): number {
+        const scale = ctx.get(dragScale$);
+        if (dragId === id || lastDragId === id) return scale;
+        return 1;
+    }
+
+    function pieceDragging(ctx: ReadonlyStoreCtx, id: number): boolean {
+        return (
+            (dragId === id || lastDragId === id) && ctx.get(dragScale$) > 1.001
         );
-    });
+    }
 
-const onPieceUp = (id: number) =>
-    mutate((ctx, _ev: PointerInteractEvent) => {
-        if (dragId !== id) return;
-        const cur = ctx.get(pieces$);
-        const me = cur[id];
-        if (me) {
-            const target = slotToPos(me.slot, BOARD_X, BOARD_Y);
-            const dist = Math.hypot(me.x - target.x, me.y - target.y);
-            if (dist < SNAP_THRESHOLD) {
-                // Snap + lock.
-                ctx.set(
-                    pieces$,
-                    cur.map((p) =>
-                        p.id === id
-                            ? { ...p, x: target.x, y: target.y, placed: true }
-                            : p,
-                    ),
-                );
+    // --- Per-piece drag handlers (close over `id`) -------------------------
+
+    const onPieceDown = (id: number) =>
+        mutate((ctx, ev: PointerInteractEvent) => {
+            const me = ctx.get(pieces$)[id];
+            if (!me || me.placed) return;
+            // Record offset between pointer and piece top-left so the piece
+            // doesn't jump to the pointer on the first move event.
+            dragOffset = { dx: ev.global.x - me.x, dy: ev.global.y - me.y };
+            dragId = id;
+            lastDragId = id;
+            liftCtrl.forward();
+        });
+
+    const onPieceMove = (id: number) =>
+        mutate((ctx, ev: PointerInteractEvent) => {
+            if (dragId !== id) return;
+            const nx = ev.global.x - dragOffset.dx;
+            const ny = ev.global.y - dragOffset.dy;
+            const cur = ctx.get(pieces$);
+            ctx.set(
+                pieces$,
+                cur.map((p) => (p.id === id ? { ...p, x: nx, y: ny } : p)),
+            );
+        });
+
+    const onPieceUp = (id: number) =>
+        mutate((ctx, _ev: PointerInteractEvent) => {
+            if (dragId !== id) return;
+            const cur = ctx.get(pieces$);
+            const me = cur[id];
+            if (me) {
+                const target = slotToPos(me.slot, BOARD_X, BOARD_Y);
+                const dist = Math.hypot(me.x - target.x, me.y - target.y);
+                if (dist < SNAP_THRESHOLD) {
+                    // Snap + lock.
+                    ctx.set(
+                        pieces$,
+                        cur.map((p) =>
+                            p.id === id
+                                ? {
+                                      ...p,
+                                      x: target.x,
+                                      y: target.y,
+                                      placed: true,
+                                  }
+                                : p,
+                        ),
+                    );
+                }
+                // Else: leave the piece where it was dropped (re-grabbable).
             }
-            // Else: leave the piece where it was dropped (re-grabbable).
-        }
+            dragId = null;
+            liftCtrl.reverse();
+        });
+
+    const resetPuzzle = mutate((ctx, _ev: PointerInteractEvent) => {
+        ctx.set(pieces$, initialPieces());
         dragId = null;
-        liftCtrl.reverse();
+        lastDragId = null;
+        liftCtrl.stop();
+        ctx.set(dragScale$, 1);
     });
 
-const resetPuzzle = mutate((ctx, _ev: PointerInteractEvent) => {
-    ctx.set(pieces$, initialPieces());
-    dragId = null;
-    lastDragId = null;
-    liftCtrl.stop();
-    ctx.set(dragScale$, 1);
-});
+    return {
+        pieces$,
+        placedCount$,
+        done$,
+        pieceScale,
+        pieceDragging,
+        onPieceDown,
+        onPieceMove,
+        onPieceUp,
+        resetPuzzle,
+    };
+}
+
+type PuzzleState = ReturnType<typeof createPuzzleState>;
 
 // --- View helpers ----------------------------------------------------------
 
-function pieceById(ctx: ReadonlyStoreCtx, id: number): Piece {
+function pieceById(ctx: ReadonlyStoreCtx, s: PuzzleState, id: number): Piece {
     // `pieces$` is created in id order (initialPieces uses `.map((slot, id))`)
     // and every mutation uses `.map((p) => p.id === id ? ... : p)` which
     // preserves array order — so indexing by id is always correct.
-    return ctx.get(pieces$)[id];
+    return ctx.get(s.pieces$)[id];
 }
 
-function makePiece(id: number): Element {
+function makePiece(id: number, s: PuzzleState): Element {
     return Positioned({
-        left: derive((ctx) => pieceById(ctx, id).x),
-        top: derive((ctx) => pieceById(ctx, id).y),
+        left: derive((ctx) => pieceById(ctx, s, id).x),
+        top: derive((ctx) => pieceById(ctx, s, id).y),
         width: PIECE,
         height: PIECE,
         child: Transform({
-            scale: derive((ctx) => pieceScale(ctx, id)),
+            scale: derive((ctx) => s.pieceScale(ctx, id)),
             child: PointerInteract({
-                onPointerDown: onPieceDown(id),
-                onPointerMove: onPieceMove(id),
-                onPointerUp: onPieceUp(id),
+                onPointerDown: s.onPieceDown(id),
+                onPointerMove: s.onPieceMove(id),
+                onPointerUp: s.onPieceUp(id),
                 child: Container({
                     width: PIECE,
                     height: PIECE,
                     color: derive((ctx) => {
-                        const me = pieceById(ctx, id);
+                        const me = pieceById(ctx, s, id);
                         return pieceColor(me.slot, me.placed);
                     }),
                     borderRadius: 14,
@@ -311,26 +340,26 @@ function makePiece(id: number): Element {
                     // cast a soft neutral shadow. Dragged pieces cast a
                     // stronger, deeper shadow to reinforce the lift.
                     shadowColor: derive((ctx) => {
-                        const me = pieceById(ctx, id);
-                        if (pieceDragging(ctx, id))
+                        const me = pieceById(ctx, s, id);
+                        if (s.pieceDragging(ctx, id))
                             return Color.rgba(0, 0, 0, 180);
                         if (!me.placed) return Color.rgba(0, 0, 0, 110);
                         const c = pieceRgb(me.slot);
                         return Color.rgba(c.r, c.g, c.b, 140);
                     }),
                     shadowOffset: derive((ctx) =>
-                        pieceDragging(ctx, id) ? [0, 12] : [0, 4],
+                        s.pieceDragging(ctx, id) ? [0, 12] : [0, 4],
                     ),
                     shadowBlur: derive((ctx) => {
-                        const me = pieceById(ctx, id);
-                        if (pieceDragging(ctx, id)) return 28;
+                        const me = pieceById(ctx, s, id);
+                        if (s.pieceDragging(ctx, id)) return 28;
                         return me.placed ? 18 : 10;
                     }),
                     alignment: Alignment.Center,
                     children: [
                         Text({
                             text: derive(
-                                (ctx) => `${pieceById(ctx, id).slot + 1}`,
+                                (ctx) => `${pieceById(ctx, s, id).slot + 1}`,
                             ),
                             fontSize: 28,
                             color: Color.hex("#ffffff"),
@@ -405,7 +434,7 @@ function TrayBackground(): Element {
     });
 }
 
-function TopBar(): Element {
+function TopBar(s: PuzzleState): Element {
     // Single Positioned spans the full width; Row with SpaceBetween pushes
     // Shuffle to the left and the HUD counter to the right. (Positioned with
     // only `right` set is not honored by the engine — needs `left` too, so
@@ -421,7 +450,7 @@ function TopBar(): Element {
                 MouseRegion({
                     cursor: "pointer",
                     child: PointerInteract({
-                        onClick: resetPuzzle,
+                        onClick: s.resetPuzzle,
                         child: Container({
                             padding: 10,
                             borderRadius: 20,
@@ -450,7 +479,8 @@ function TopBar(): Element {
                     children: [
                         Text({
                             text: derive(
-                                (ctx) => `${ctx.get(placedCount$)} / 9 placed`,
+                                (ctx) =>
+                                    `${ctx.get(s.placedCount$)} / 9 placed`,
                             ),
                             fontSize: 14,
                             color: Color.hex("#e2e8f0"),
@@ -494,13 +524,17 @@ function WinBanner(): Element {
     });
 }
 
-const App = view(() =>
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the whole
+    // game state cluster is stable for the life of the tree.
+    const s = createPuzzleState();
+
     // Fill the entire viewer pane: an outer Stack provides the full-bleed
     // dark background + a centered puzzle play area + the win banner overlay.
     // The puzzle itself is a fixed-size Stack (PLAY_W × PLAY_H) so the
     // Positioned piece/slot coordinates remain case-local; the surrounding
     // Column centers it within whatever size the viewer pane happens to be.
-    Expanded({
+    return Expanded({
         child: Stack({
             children: [
                 // Full-bleed background — fills the viewer regardless of
@@ -534,9 +568,9 @@ const App = view(() =>
                                         TrayBackground(),
                                         ...Array.from(
                                             { length: GRID * GRID },
-                                            (_, id) => makePiece(id),
+                                            (_, id) => makePiece(id, s),
                                         ),
-                                        TopBar(),
+                                        TopBar(s),
                                     ],
                                 }),
                             ],
@@ -547,13 +581,13 @@ const App = view(() =>
                 // area), so it can stay at its natural size without
                 // obscuring just one corner.
                 Condition({
-                    condition: done$,
+                    condition: s.done$,
                     child: () => WinBanner(),
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

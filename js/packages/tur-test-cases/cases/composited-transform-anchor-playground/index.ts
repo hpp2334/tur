@@ -19,6 +19,7 @@ import {
     type PointerInteractEvent,
     type PointerRegionEvent,
     Positioned,
+    type Readable,
     type ReadonlyStoreCtx,
     Row,
     SizedBox,
@@ -43,14 +44,31 @@ import {
 //   - the option list floats in the root overlay (no clipping)
 // ---------------------------------------------------------------------------
 
-const targetAnchor$ = source(Alignment.TopLeft);
-const followerAnchor$ = source(Alignment.TopLeft);
-const offsetX$ = source(0);
-const offsetY$ = source(0);
-// Single-open: opening one menu closes the other. `null` = none.
-const openMenu$ = source<null | "target" | "follower">(null);
-// Hovered option label within whichever menu is open (`null` = none).
-const hoveredOpt$ = source<string | null>(null);
+// --- State ------------------------------------------------------------------
+// Created INSIDE the root view fn below (view fns run exactly once, at build,
+// so this is stable local state). Bundled into a factory so the widget
+// builders further down can take it as a parameter.
+
+function createAnchorState() {
+    const targetAnchor$ = source(Alignment.TopLeft);
+    const followerAnchor$ = source(Alignment.TopLeft);
+    const offsetX$ = source(0);
+    const offsetY$ = source(0);
+    // Single-open: opening one menu closes the other. `null` = none.
+    const openMenu$ = source<null | "target" | "follower">(null);
+    // Hovered option label within whichever menu is open (`null` = none).
+    const hoveredOpt$ = source<string | null>(null);
+    return {
+        targetAnchor$,
+        followerAnchor$,
+        offsetX$,
+        offsetY$,
+        openMenu$,
+        hoveredOpt$,
+    };
+}
+
+type AnchorState = ReturnType<typeof createAnchorState>;
 
 const ANCHORS: { label: string; value: Alignment }[] = [
     { label: "TopLeft", value: Alignment.TopLeft },
@@ -117,6 +135,9 @@ const MENU2_X = PANEL_X + PAD;
 const MENU2_Y = MENU1_Y + 6 + TRIGGER_H;
 
 const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the anchor
+    // state cluster + link are stable for the life of the tree.
+    const s = createAnchorState();
     const link = createLayerLink();
     return Stack({
         children: [
@@ -149,11 +170,11 @@ const App = view(() => {
             // 3. The follower — anchors + offset are fully reactive.
             CompositedTransformFollower({
                 link,
-                targetAnchor: derive((ctx) => ctx.get(targetAnchor$)),
-                followerAnchor: derive((ctx) => ctx.get(followerAnchor$)),
+                targetAnchor: derive((ctx) => ctx.get(s.targetAnchor$)),
+                followerAnchor: derive((ctx) => ctx.get(s.followerAnchor$)),
                 targetOffset: derive((ctx) => ({
-                    x: ctx.get(offsetX$),
-                    y: ctx.get(offsetY$),
+                    x: ctx.get(s.offsetX$),
+                    y: ctx.get(s.offsetY$),
                 })),
                 child: Container({
                     width: 48,
@@ -170,7 +191,7 @@ const App = view(() => {
             // 4. Click-outside backdrop (below the panel so triggers stay
             //    clickable while a menu is open; catches canvas clicks).
             Condition({
-                condition: derive((ctx) => ctx.get(openMenu$) !== null),
+                condition: derive((ctx) => ctx.get(s.openMenu$) !== null),
                 child: () =>
                     Positioned({
                         left: 0,
@@ -180,7 +201,7 @@ const App = view(() => {
                         child: PointerInteract({
                             behavior: HitTestBehavior.Opaque,
                             onClick: click(
-                                mutate((ctx) => ctx.set(openMenu$, null)),
+                                mutate((ctx) => ctx.set(s.openMenu$, null)),
                             ),
                             child: SizedBox({ width: 400, height: 600 }),
                         }),
@@ -191,7 +212,7 @@ const App = view(() => {
             Positioned({
                 left: PANEL_X,
                 top: PANEL_Y,
-                child: ControlsPanel(),
+                child: ControlsPanel(s),
             }),
 
             // 6. Floating menus (root overlay → no clipping; on top of all).
@@ -199,8 +220,10 @@ const App = view(() => {
                 left: MENU1_X,
                 top: MENU1_Y,
                 child: Condition({
-                    condition: derive((ctx) => ctx.get(openMenu$) === "target"),
-                    child: () => MenuList(targetAnchor$),
+                    condition: derive(
+                        (ctx) => ctx.get(s.openMenu$) === "target",
+                    ),
+                    child: () => MenuList(s.targetAnchor$, s),
                 }),
             }),
             Positioned({
@@ -208,9 +231,9 @@ const App = view(() => {
                 top: MENU2_Y,
                 child: Condition({
                     condition: derive(
-                        (ctx) => ctx.get(openMenu$) === "follower",
+                        (ctx) => ctx.get(s.openMenu$) === "follower",
                     ),
-                    child: () => MenuList(followerAnchor$),
+                    child: () => MenuList(s.followerAnchor$, s),
                 }),
             }),
         ],
@@ -221,7 +244,7 @@ const App = view(() => {
 // Widget builders
 // ---------------------------------------------------------------------------
 
-function ControlsPanel() {
+function ControlsPanel(s: AnchorState) {
     return Container({
         width: PANEL_W,
         padding: PAD,
@@ -232,18 +255,18 @@ function ControlsPanel() {
                 mainAxisSize: MainAxisSize.Min,
                 crossAlignment: CrossAxisAlignment.Start,
                 children: [
-                    TriggerChip("target", targetAnchor$, "target"),
+                    TriggerChip("target", s.targetAnchor$, "target", s),
                     SizedBox({ height: 6 }),
-                    TriggerChip("follower", followerAnchor$, "follower"),
+                    TriggerChip("follower", s.followerAnchor$, "follower", s),
                     SizedBox({ height: 12 }),
-                    Stepper("offsetX", offsetX$, 5),
+                    Stepper("offsetX", s.offsetX$, 5),
                     SizedBox({ height: 4 }),
-                    Stepper("offsetY", offsetY$, 5),
+                    Stepper("offsetY", s.offsetY$, 5),
                     SizedBox({ height: 10 }),
                     Text({
                         text: derive(
                             (ctx) =>
-                                `t:${labelFor(ctx.get(targetAnchor$))}  f:${labelFor(ctx.get(followerAnchor$))}  off:(${ctx.get(offsetX$)},${ctx.get(offsetY$)})`,
+                                `t:${labelFor(ctx.get(s.targetAnchor$))}  f:${labelFor(ctx.get(s.followerAnchor$))}  off:(${ctx.get(s.offsetX$)},${ctx.get(s.offsetY$)})`,
                         ),
                         fontSize: 10,
                         color: C.textMuted,
@@ -256,15 +279,16 @@ function ControlsPanel() {
 
 function TriggerChip(
     label: string,
-    value$: typeof targetAnchor$,
+    value$: Readable<Alignment>,
     menuKey: "target" | "follower",
+    s: AnchorState,
 ) {
     return PointerInteract({
         onClick: click(
             mutate((ctx) =>
                 ctx.set(
-                    openMenu$,
-                    ctx.get(openMenu$) === menuKey ? null : menuKey,
+                    s.openMenu$,
+                    ctx.get(s.openMenu$) === menuKey ? null : menuKey,
                 ),
             ),
         ),
@@ -275,7 +299,7 @@ function TriggerChip(
             borderWidth: 1,
             borderColor: C.slate,
             color: derive((ctx) =>
-                ctx.get(openMenu$) === menuKey ? C.indigoSoft : C.white,
+                ctx.get(s.openMenu$) === menuKey ? C.indigoSoft : C.white,
             ),
             padding: 6,
             alignment: Alignment.CenterLeft,
@@ -301,7 +325,7 @@ function TriggerChip(
     });
 }
 
-function MenuList(value$: typeof targetAnchor$) {
+function MenuList(value$: Readable<Alignment>, s: AnchorState) {
     return Container({
         width: MENU_W,
         borderRadius: 8,
@@ -315,7 +339,7 @@ function MenuList(value$: typeof targetAnchor$) {
             Column({
                 mainAxisSize: MainAxisSize.Min,
                 crossAlignment: CrossAxisAlignment.Stretch,
-                children: ANCHORS.map((opt) => OptionRow(opt, value$)),
+                children: ANCHORS.map((opt) => OptionRow(opt, value$, s)),
             }),
         ],
     });
@@ -323,27 +347,28 @@ function MenuList(value$: typeof targetAnchor$) {
 
 function OptionRow(
     opt: { label: string; value: Alignment },
-    value$: typeof targetAnchor$,
+    value$: Readable<Alignment>,
+    s: AnchorState,
 ) {
     const isSel = (ctx: ReadonlyStoreCtx) => ctx.get(value$) === opt.value;
     const isHover = (ctx: ReadonlyStoreCtx) =>
-        ctx.get(hoveredOpt$) === opt.label;
+        ctx.get(s.hoveredOpt$) === opt.label;
     return MouseRegion({
         cursor: "pointer",
         behavior: HitTestBehavior.Translucent,
-        onEnter: hover(mutate((ctx) => ctx.set(hoveredOpt$, opt.label))),
+        onEnter: hover(mutate((ctx) => ctx.set(s.hoveredOpt$, opt.label))),
         onExit: hover(
             mutate((ctx) => {
-                if (ctx.get(hoveredOpt$) === opt.label)
-                    ctx.set(hoveredOpt$, null);
+                if (ctx.get(s.hoveredOpt$) === opt.label)
+                    ctx.set(s.hoveredOpt$, null);
             }),
         ),
         child: PointerInteract({
             onClick: click(
                 mutate((ctx) => {
                     ctx.set(value$, opt.value);
-                    ctx.set(openMenu$, null);
-                    ctx.set(hoveredOpt$, null);
+                    ctx.set(s.openMenu$, null);
+                    ctx.set(s.hoveredOpt$, null);
                 }),
             ),
             child: Container({
@@ -369,7 +394,7 @@ function OptionRow(
     });
 }
 
-function Stepper(label: string, value$: typeof offsetX$, step: number) {
+function Stepper(label: string, value$: Readable<number>, step: number) {
     return Row({
         children: [
             Text({ text: `${label}:`, fontSize: 11, color: C.textMid }),

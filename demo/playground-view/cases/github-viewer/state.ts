@@ -1,3 +1,11 @@
+// state.ts — the github-viewer's shared state + actions.
+//
+// Module-level ON PURPOSE: this state is shared across files (index.ts +
+// landing.ts + explorer.ts consume the same atoms/controllers from several
+// view factories). This is the "shared state" home the local-state idiom
+// carves out — state used by a single view would live inside that view's
+// function instead (view fns run exactly once, at build, so view-local
+// atoms are stable).
 import { createAnimationController } from "tur:animation";
 import { filePicker } from "tur:filepicker";
 import { request } from "tur:net";

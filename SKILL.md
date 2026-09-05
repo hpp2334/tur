@@ -77,6 +77,47 @@ const inc$ = mutate((ctx) => ctx.set(count$, ctx.get(count$) + 1)); // action
 - `viewportSize$` (from `tur:std`) is the engine-owned live canvas size:
   `get(viewportSize$).width`. Read-only.
 
+### View functions run exactly once
+
+`view(fn)` invokes the thunk **once**, when the element tree is built (the
+root `App`: at `mount`). Prop updates never re-invoke your function — live
+props are `Val<T>` atoms re-read on each layout pass and applied via
+`set_prop`. There is no re-render, no diffing, no hooks; don't carry React's
+render-model instincts over.
+
+So most **local state can live inside the view function** — `source` atoms,
+`mutate` actions, controllers, `let` task handles. Created once per mount,
+stable for the tree's life:
+
+```ts
+const App = view(() => {
+    const count$ = source(0);                 // local state — created once
+    const inc$ = mutate((ctx) => ctx.set(count$, ctx.get(count$) + 1));
+    return Column({ children: [/* uses count$, inc$ */] });
+});
+```
+
+Helper factories that need the state take it as a **parameter** (an atom or a
+small state object — see `countdown` / `jigsaw-puzzle` for the
+`createXxxState()` bundle pattern); they stay plain functions returning
+`Element`.
+
+Keep state at **module level** only when it is shared across views/files
+(`todolist`'s / `github-viewer`'s `state.ts`) or must **survive a subtree
+rebuild**. Rebuild boundaries re-run their thunks, and a re-run mints fresh
+atoms (seed values, new ids — old values don't carry over):
+
+- `Condition` / `Switch` branch thunks — re-run when the branch swaps.
+- `Each({ build })` — rebuilds **every** item subtree whenever the `items`
+  reference changes.
+- `LazyList` / `LazyGrid` `builder(i)` — runs per materialized item, re-runs
+  on data change.
+- `lifecycleView(() => …)` — once per mount of that node; re-runs if the
+  node is re-created (e.g. inside a swapped branch).
+
+Ephemeral per-item state is fine inside `build`; anything that must persist
+goes above the rebuild boundary (the enclosing stable view or module level).
+
 ## 4. Quick starts
 
 Each is a complete module — drop into
@@ -92,8 +133,6 @@ import {
     source, Text, view,
 } from "tur:std";
 
-const count$ = source(0);
-
 function Button({ label, onClick }: { label: string; onClick: Parameters<typeof PointerInteract>[0]["onClick"] }) {
     return PointerInteract({
         onClick,
@@ -105,8 +144,12 @@ function Button({ label, onClick }: { label: string; onClick: Parameters<typeof 
     });
 }
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state — the view fn runs exactly once (at build), so this atom
+    // is stable for the life of the tree.
+    const count$ = source(0);
+
+    return Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),
             children: [
@@ -136,8 +179,8 @@ const App = view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);
@@ -146,8 +189,9 @@ export function start() {
 
 ### 4.2 List + `Each` + text input (from `cases/todolist`)
 
-State lives in one file, views in another; atoms are module-level (each
-instance materializes its own values from the seeds):
+State shared across views/files lives in one file (`state.ts`), views in
+another — the module-level home is for *shared* state (each instance
+materializes its own values from the seeds):
 
 ```ts
 // state.ts
@@ -189,11 +233,14 @@ Pair `draftCtrl` with an `Input({ controller: draftCtrl, placeholder: "…" })`;
 
 ### 4.3 Cancellable async loop (from `cases/countdown`)
 
-Async runs on the engine's executor; cancellation is per-`Task`:
+Async runs on the engine's executor; cancellation is per-`Task` (state is
+view-local — `countdown` wraps this cluster in `createCountdownState()`
+called inside its view fn):
 
 ```ts
 import { isCancelError, mutate, sleep, source, type Task } from "tur:std";
 
+// inside the view fn (runs once at build, so this is stable local state):
 const remaining$ = source(60);
 const running$ = source(false);
 let tick: Task<void> | null = null;
@@ -296,6 +343,7 @@ when the target changes. No controller, no lerp boilerplate:
 import { AnimatedContainer } from "tur:animation";
 import { Color, derive, mutate, source } from "tur:std";
 
+// inside your view fn (runs once at build — stable local state):
 const expanded$ = source(false);
 const toggle$ = mutate((ctx) => ctx.set(expanded$, !ctx.get(expanded$)));
 
@@ -320,9 +368,18 @@ or `ColorTween` inside a `derive` (see `cases/complex-animation`).
 ### Idioms
 
 - **`$` suffix** on atom handles (`count$`, `running$`).
-- **State at module level** — seeds are per-instance; the store materializes.
-- **Controllers built once** at module load (`createTextEditingController`,
-  `createScrollController`, …), passed via props.
+- **Local state in the view fn** — view fns run once at build, so
+  `source`/`mutate`/controllers/`let` handles inside are stable for the
+  tree's life. Factories that need them take them as props (or a state
+  object — `createXxxState()` in `countdown` / `complex-animation` /
+  `jigsaw-puzzle`).
+- **Module level only for shared state** — atoms used across views/files
+  (`todolist`, `github-viewer`) or state that must survive subtree rebuilds
+  (`Condition`/`Switch` swaps, `Each` rebuilds). Seeds are per-instance;
+  the store materializes.
+- **Controllers built once** — at module load or inside the view fn
+  (`createTextEditingController`, `createScrollController`, …), passed via
+  props.
 - **`queryKey: ["name"]`** on interactive/text elements — stable ids for
   dev-tool targeting and integration tests.
 - **`Condition` / `Switch`** for branching subtrees; **`Stack` + opaque
@@ -350,9 +407,11 @@ or `ColorTween` inside a `derive` (see `cases/complex-animation`).
   `onContextMenu`, `behavior: HitTestBehavior.Opaque|Translucent`),
   `MouseRegion` (`cursor: "pointer" | …` CSS names, `onEnter/onExit`),
   `Focusable` (`onKeyDown/onKeyUp/onFocus/onBlur`), `requestFocus(target)`.
-- **Control flow**: `Condition({ condition, child, elseChild })` (thunks!),
-  `Switch({ value, cases, fallback })`, `Each<T>({ items: Readable<T[]>,
-  build })`, `Fragment`, `lifecycleView(() => ({ element, onMounted$,
+- **Control flow**: `Condition({ condition, child, elseChild })` (thunks! —
+  they re-run on branch swap, so local state inside resets),
+  `Switch({ value, cases, fallback })` (same), `Each<T>({ items:
+  Readable<T[]>, build })` (build re-runs for every item on any items
+  change), `Fragment`, `lifecycleView(() => ({ element, onMounted$,
   beforeDestroy$ }))`, `ReadableSubscribe({ readables, onUpdate$, child })`.
 - **Effects / overlay**: `Opacity({ value, child })`, `Transform({ rotate,
   scale, translateX/Y, alignment, child })`,
@@ -407,35 +466,41 @@ or `ColorTween` inside a `derive` (see `cases/complex-animation`).
 11. **Reactive access needs a ctx — there is no `getStore()`.** Helpers
     take the ctx as a parameter; `async` bodies capture it from the
     enclosing mutation (see §4.3/§4.4).
+12. **Don't think in re-renders.** View fns run exactly once (at build);
+    updates are `Val<T>` prop re-reads, so define local state *inside* the
+    view fn — no hooks/`useState` analogues needed. Flip side: state
+    defined inside rebuildable thunks (`Each.build`, `Condition`/`Switch`
+    branch thunks, lazy builders) is **re-created** (seed values) on every
+    rebuild — hoist it above the boundary (enclosing view or module level).
 
 **Modules / async**
 
-12. **Must be `export function start()`** — `export default` is rejected
+13. **Must be `export function start()`** — `export default` is rejected
     with a "export `function start()`" load error; a missing or throwing
     `start` fails the load.
-13. **No `setTimeout` / `setInterval` globals.** Use `sleep(ms).promise`
+14. **No `setTimeout` / `setInterval` globals.** Use `sleep(ms).promise`
     (+ `cancel()`), and treat `isCancelError(e)` as the clean-exit branch
     of awaited loops.
-14. **HTTP bodies are raw bytes.** `JSON.parse(decodeUtf8(r.body))`, never
+15. **HTTP bodies are raw bytes.** `JSON.parse(decodeUtf8(r.body))`, never
     `JSON.parse(r.body)`.
-15. **`tur:net` / `tur:filepicker` are embedder-dependent.** Statically
+16. **`tur:net` / `tur:filepicker` are embedder-dependent.** Statically
     importing a module the host didn't register fails the whole module
     load at the specifier. Feature-detect (`typeof request ===
     "function"`) and isolate optional imports (see the platform shims in
     `demo/playground-view/src/cases/optional-ns.*.ts`).
-16. **Cleanup is for your own resources only** — timers, subscriptions,
+17. **Cleanup is for your own resources only** — timers, subscriptions,
     controllers. Tree teardown is engine-owned; there is no `unmount` to
     call, so don't try to walk/dispose elements yourself.
 
 **Types**
 
-17. **Always typecheck — it's the only safety net.** The `tur:` modules
+18. **Always typecheck — it's the only safety net.** The `tur:` modules
     exist only as ambient TS declarations
     (`js/packages/*/src/index.d.ts`); a wrong prop name/shape is invisible
     to the bundler and at best no-ops (at worst throws) inside boa at
     runtime. Run `cd js && pnpm typecheck` (per-package `tsc --noEmit`)
     before loading a module anywhere.
-18. **`Color` handles are opaque** — no arithmetic. Interpolate with
+19. **`Color` handles are opaque** — no arithmetic. Interpolate with
     `colorLerp(a, b, t)` or a `ColorTween`; build with
     `Color.hex/rgb/rgba` only.
 
@@ -461,8 +526,9 @@ generators; there is no `setTimeout`/`setInterval` (use `sleep(ms)`).
 
 - **New test/demo case**: `js/packages/tur-test-cases/cases/<name>/index.ts`
   exporting `function start()`. Split `state.ts` / `views.ts` when large
-  (`todolist` pattern). Regenerate the embedded sources with
-  `node scripts/gen-cases.cjs` (run by prepare-js-fixtures).
+  (`todolist` pattern — module level is for state shared across views;
+  single-view state lives inside the view fn). Regenerate the embedded
+  sources with `node scripts/gen-cases.cjs` (run by prepare-js-fixtures).
 - Case code stays **ctx-only**: reads in `derive` closures, writes in
   `mutate` closures, actions composed via `ctx.set(action, …)`.
 
@@ -471,7 +537,7 @@ generators; there is no `setTimeout`/`setInterval` (use `sleep(ms)`).
 ```sh
 node scripts/prepare-js-fixtures.cjs   # install deps + build JS fixtures (before tests)
 cd js && pnpm build                    # all JS packages
-cd js && pnpm typecheck                # per-package tsc --noEmit (see pitfall 17)
+cd js && pnpm typecheck                # per-package tsc --noEmit (see pitfall 18)
 cargo nextest run --workspace          # engine tests (per-test process isolation)
 cargo clippy --workspace -- -D warnings
 ```

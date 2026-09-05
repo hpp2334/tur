@@ -12,6 +12,8 @@ import {
 
 // A single shared hover source, mirroring the playground sidebar pattern.
 // Each region sets it on enter and clears it (unconditionally) on exit.
+// Module-level on purpose: the test seam in `start` below needs this handle
+// (shared across the view fn and `start`), not because views re-run.
 const hover$ = source("");
 
 const App = view(() =>

@@ -10,10 +10,12 @@ import {
     view,
 } from "tur:std";
 
-const content$ = source("before");
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree — no need to hoist it to module level.
+    const content$ = source("before");
 
-const App = view(() =>
-    Column({
+    return Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             PointerInteract({
@@ -24,8 +26,8 @@ const App = view(() =>
                 }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

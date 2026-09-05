@@ -36,6 +36,10 @@ import {
 // Reads flow through the closure ctx (`ctx.get(src)`) or the instance store
 // captured by the test hooks registered in `start`, matching the puzzle /
 // drag-delta-tracking convention.
+//
+// Module-level on purpose throughout: the atoms/`let`s are shared across the
+// module helpers (`readTile`/`tileScale`/`makeTile`) AND the test seam in
+// `start` — not because view fns re-run (they run exactly once, at build).
 // ---------------------------------------------------------------------------
 
 const LIFT_MS = 180;

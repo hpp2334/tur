@@ -16,6 +16,7 @@ import {
     mutate,
     PointerInteract,
     type PointerInteractEvent,
+    type Readable,
     Row,
     SizedBox,
     source,
@@ -104,9 +105,6 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-// Reactive axis. Toggling flips vertical ↔ horizontal and rebuilds the list.
-const axis$ = source<Axis>(Axis.Vertical);
-
 function buildItem(i: number, axis: Axis): Element {
     const main = mainSizeFor(i);
     const cross = crossSizeFor(i);
@@ -181,7 +179,8 @@ function buildItem(i: number, axis: Axis): Element {
     });
 }
 
-function ToggleButton(): Element {
+// Takes the reactive axis as a parameter (local state owned by the view fn).
+function ToggleButton(axis$: Readable<Axis>): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -212,8 +211,14 @@ function ToggleButton(): Element {
     });
 }
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree. Helpers that need it (ToggleButton)
+    // take the atom as a parameter — no module-level hoisting required.
+    // Toggling flips vertical ↔ horizontal and rebuilds the list.
+    const axis$ = source<Axis>(Axis.Vertical);
+
+    return Expanded({
         child: Container({
             color: Color.hex("#020617"),
             padding: 16,
@@ -221,7 +226,7 @@ const App = view(() =>
                 Column({
                     crossAlignment: CrossAxisAlignment.Start,
                     children: [
-                        ToggleButton(),
+                        ToggleButton(axis$),
                         SizedBox({ height: 12 }),
                         Expanded({
                             child: Container({
@@ -258,8 +263,8 @@ const App = view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

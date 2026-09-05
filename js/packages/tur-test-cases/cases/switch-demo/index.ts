@@ -17,8 +17,6 @@ import {
     view,
 } from "tur:std";
 
-const tab$ = source("red");
-
 const TABS = ["red", "green", "blue"] as const;
 const HEX: Record<string, string> = {
     red: "#ef4444",
@@ -40,8 +38,12 @@ function coloredPanel(label: string, hex: string) {
     });
 }
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree — no need to hoist it to module level.
+    const tab$ = source("red");
+
+    return Expanded({
         child: Container({
             color: Color.hex("#1a1a2e"),
             padding: 24,
@@ -123,8 +125,8 @@ const App = view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);
