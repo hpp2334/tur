@@ -11,6 +11,7 @@ import {
     mount,
     mutate,
     PointerInteract,
+    type Readable,
     Row,
     ScrollView,
     SizedBox,
@@ -44,14 +45,6 @@ const C = {
 };
 
 const BROWN = "The quick brown fox jumps over the lazy dog.";
-
-const maxLines$ = source<number>(2);
-
-const cycleMaxLines = mutate((ctx: StoreCtx) => {
-    const cur = ctx.get(maxLines$);
-    // 2 → 1 → 3 → 2 (cycles through interesting truncation regimes).
-    ctx.set(maxLines$, cur === 2 ? 1 : cur === 1 ? 3 : 2);
-});
 
 /// A titled, content-sized card. `mainAxisSize: MainAxisSize.Min` keeps the
 /// card as short as its children (the bug fixed: a string `"min"` here used
@@ -112,8 +105,10 @@ function PrimaryButton({
 
 function OverflowCard({
     overflow,
+    maxLines$,
 }: {
     overflow: "clip" | "ellipsis" | "visible";
+    maxLines$: Readable<number>;
 }): Element {
     return Container({
         width: 100,
@@ -142,8 +137,18 @@ function OverflowCard({
     });
 }
 
-const App = view(() =>
-    Container({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atom and
+    // mutation are stable for the life of the tree — no need to hoist them
+    // to module level.
+    const maxLines$ = source<number>(2);
+    const cycleMaxLines = mutate((ctx: StoreCtx) => {
+        const cur = ctx.get(maxLines$);
+        // 2 → 1 → 3 → 2 (cycles through interesting truncation regimes).
+        ctx.set(maxLines$, cur === 2 ? 1 : cur === 1 ? 3 : 2);
+    });
+
+    return Container({
         color: C.pageBg,
         children: [
             ScrollView({
@@ -323,11 +328,20 @@ const App = view(() =>
                                     crossAlignment: CrossAxisAlignment.Start,
                                     mainAxisSize: MainAxisSize.Min,
                                     children: [
-                                        OverflowCard({ overflow: "clip" }),
+                                        OverflowCard({
+                                            overflow: "clip",
+                                            maxLines$,
+                                        }),
                                         SizedBox({ width: 8 }),
-                                        OverflowCard({ overflow: "ellipsis" }),
+                                        OverflowCard({
+                                            overflow: "ellipsis",
+                                            maxLines$,
+                                        }),
                                         SizedBox({ width: 8 }),
-                                        OverflowCard({ overflow: "visible" }),
+                                        OverflowCard({
+                                            overflow: "visible",
+                                            maxLines$,
+                                        }),
                                     ],
                                 }),
                                 SizedBox({ height: 10 }),
@@ -345,8 +359,8 @@ const App = view(() =>
                 }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

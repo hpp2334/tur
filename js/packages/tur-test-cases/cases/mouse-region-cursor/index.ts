@@ -13,10 +13,12 @@ import {
     view,
 } from "tur:std";
 
-const state$ = source("idle");
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree — no need to hoist it to module level.
+    const state$ = source("idle");
 
-const App = view(() =>
-    Column({
+    return Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             MouseRegion({
@@ -37,8 +39,8 @@ const App = view(() =>
                 }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

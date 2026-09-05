@@ -17,10 +17,12 @@ import {
     view,
 } from "tur:std";
 
-const count$ = source(0);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree — no need to hoist it to module level.
+    const count$ = source(0);
 
-const App = view(() =>
-    Expanded({
+    return Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),
             children: [
@@ -83,8 +85,8 @@ const App = view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

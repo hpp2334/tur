@@ -13,12 +13,15 @@ import {
     view,
 } from "tur:std";
 
-const lastX$ = source(0);
-const lastY$ = source(0);
-const phase$ = source("idle");
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so these atoms
+    // are stable for the life of the tree — no need to hoist them to module
+    // level.
+    const lastX$ = source(0);
+    const lastY$ = source(0);
+    const phase$ = source("idle");
 
-const App = view(() =>
-    Column({
+    return Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             PointerInteract({
@@ -55,8 +58,8 @@ const App = view(() =>
                 queryKey: ["drag-pos"],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

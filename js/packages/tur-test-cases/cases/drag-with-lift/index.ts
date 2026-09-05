@@ -27,15 +27,9 @@ import {
 
 const LIFT_MS = 180;
 const LIFT_MAX = 1.1;
-const dragScale$ = source(1.0);
-const liftCtrl = createAnimationController({
-    duration: LIFT_MS,
-    curve: "easeOut",
-    onTick: mutate((ctx, v: number) => {
-        ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
-    }),
-});
 
+// Seam state (module `let`s read by the globalThis hooks below — shared across
+// the view fn and the hooks, so it stays out here).
 let lastEvent = "idle";
 let dragStart: { x: number; y: number } | null = null;
 
@@ -47,8 +41,19 @@ Object.assign(globalThis, {
     },
 });
 
-const App = view(() =>
-    Transform({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atom and
+    // controller are stable for the life of the tree.
+    const dragScale$ = source(1.0);
+    const liftCtrl = createAnimationController({
+        duration: LIFT_MS,
+        curve: "easeOut",
+        onTick: mutate((ctx, v: number) => {
+            ctx.set(dragScale$, 1 + v * (LIFT_MAX - 1));
+        }),
+    });
+
+    return Transform({
         scale: derive((ctx) => ctx.get(dragScale$)),
         child: PointerInteract({
             onPointerDown: mutate((_ctx, ev) => {
@@ -73,8 +78,8 @@ const App = view(() =>
                 children: [Text({ text: "drag me" })],
             }),
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

@@ -38,11 +38,6 @@ import {
 
 const ITEM_COUNT = 6000;
 
-// 1 = square, 2 = wide, 0.5 = tall.
-const aspect$ = source<number>(1);
-// Dense (more, narrower columns) vs Normal.
-const dense$ = source<boolean>(false);
-
 function hslToHex(h: number, s: number, l: number): string {
     const sat = s / 100;
     const light = l / 100;
@@ -107,8 +102,15 @@ function Pill(props: {
     });
 }
 
-const App = view(() =>
-    Container({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so these atoms
+    // are stable for the life of the tree — no need to hoist them to module
+    // level.   aspect$: 1 = square, 2 = wide, 0.5 = tall; dense$: more,
+    // narrower columns vs Normal.
+    const aspect$ = source<number>(1);
+    const dense$ = source<boolean>(false);
+
+    return Container({
         color: Color.hex("#0f172a"),
         padding: 16,
         children: [
@@ -220,8 +222,8 @@ const App = view(() =>
                 ],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

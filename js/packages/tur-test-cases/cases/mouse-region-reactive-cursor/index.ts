@@ -13,6 +13,8 @@ import {
 
 // A reactive cursor driven by a source, so Rust tests can flip it via
 // `globalThis.__setCursor` and assert the host cursor updates after a flush.
+// Module-level on purpose: the test seam in `start` below needs this handle
+// (shared across the view fn and `start`), not because views re-run.
 const cursor$ = source<Cursor>("pointer");
 
 const App = view(() =>

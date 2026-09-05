@@ -17,11 +17,13 @@ import {
 // "clear focus when pointer-up lands outside any focusable" path, which used
 // to panic with "RefCell already borrowed" because a `let`-chain kept an
 // immutable `focus_manager` borrow alive across the `borrow_mut()`.
-const controller = createTextEditingController({});
-const clicks$ = source(0);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the
+    // controller and atom are stable for the life of the tree.
+    const controller = createTextEditingController({});
+    const clicks$ = source(0);
 
-const App = view(() =>
-    Column({
+    return Column({
         children: [
             Input({
                 controller,
@@ -40,8 +42,8 @@ const App = view(() =>
                 }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

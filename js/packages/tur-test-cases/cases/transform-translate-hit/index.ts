@@ -19,10 +19,12 @@ import {
 // (120,100). Clicking there must register — which requires hit-testing to
 // account for the transform. Before the `relative_transform` hit-test fix,
 // hit-testing ignored the paint transform, so the click missed.
-const hit$ = source(false);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree — no need to hoist it to module level.
+    const hit$ = source(false);
 
-const App = view(() =>
-    Stack({
+    return Stack({
         children: [
             // Sizes the root Stack to the full canvas so the box's absolute
             // position is deterministic (otherwise the Stack shrinks to its
@@ -50,8 +52,8 @@ const App = view(() =>
                     Container({ width: 10, height: 10, color: "#dc2626" }),
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

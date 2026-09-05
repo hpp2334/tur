@@ -13,6 +13,8 @@ import {
 // Reactive width of the outer container. Exposed to Rust tests via globalThis
 // so the test can change it without a click (a click would mark extra nodes
 // dirty via the gesture handler and mask the position-invalidation bug).
+// Module-level on purpose: the test seam in `start` below needs this handle
+// (shared across the view fn and `start`), not because views re-run.
 const width$ = source(100);
 
 // Reproduces the divider-drag position gap.

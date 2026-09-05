@@ -191,6 +191,12 @@ declare module "tur:core" {
         cb: Mutation<[], void>,
     ): WatchHandle;
 
+    /** Wrap a thunk `() => Element` as a view. The thunk is invoked exactly
+     *  once, when the view is built (the root view: at `mount`) — prop
+     *  updates never re-invoke it. Define local state inside the thunk:
+     *  atoms/controllers created there are stable for the life of the tree.
+     *  (Rebuildable thunks — `Condition`/`Switch` branches, `Each.build`,
+     *  lazy builders — DO re-run, minting fresh atoms each time.) */
     export function view(f: () => Element): Element;
 
     // ---------------------------------------------------------------------------

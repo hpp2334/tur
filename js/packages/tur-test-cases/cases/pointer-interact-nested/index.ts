@@ -14,13 +14,16 @@ import {
     view,
 } from "tur:std";
 
-const outerClicks$ = source(0);
-const innerClicks$ = source(0);
-const translucentOuterClicks$ = source(0);
-const translucentInnerClicks$ = source(0);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so these atoms
+    // are stable for the life of the tree — no need to hoist them to module
+    // level.
+    const outerClicks$ = source(0);
+    const innerClicks$ = source(0);
+    const translucentOuterClicks$ = source(0);
+    const translucentInnerClicks$ = source(0);
 
-const App = view(() =>
-    Column({
+    return Column({
         crossAlignment: CrossAxisAlignment.Start,
         mainAxisSize: MainAxisSize.Min,
         children: [
@@ -102,8 +105,8 @@ const App = view(() =>
                 queryKey: ["result-translucent"],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

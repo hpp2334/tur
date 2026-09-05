@@ -13,6 +13,8 @@ import {
 // Two reactive flex weights. Exposed to Rust tests via globalThis so the test
 // can flip them without a click (a click would mark extra nodes dirty via the
 // gesture handler and mask the layout-invalidation bug).
+// Module-level on purpose: the test seam in `start` below needs these handles
+// (shared across the view fn and `start`), not because views re-run.
 const flexA$ = source(1);
 const flexB$ = source(1);
 

@@ -13,10 +13,13 @@ import {
 } from "tur:std";
 import { COLORS } from "./utils";
 
-const count$ = source(0);
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so this atom is
+    // stable for the life of the tree (the multi-file split is about code
+    // organization — shared *values* like COLORS — not about state placement).
+    const count$ = source(0);
 
-const App = view(() =>
-    Container({
+    return Container({
         color: COLORS.bg,
         children: [
             Column({
@@ -51,8 +54,8 @@ const App = view(() =>
                 ],
             }),
         ],
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

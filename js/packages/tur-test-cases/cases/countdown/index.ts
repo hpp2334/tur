@@ -53,89 +53,143 @@ const COLORS = {
 
 const DEFAULT_TIME = 60;
 
-const remaining$ = source(DEFAULT_TIME);
-const running$ = source(false);
-const editing$ = source(false);
-const initial$ = source(DEFAULT_TIME);
-const editText$ = source("");
-const editController$ = source<unknown>(null);
+// --- State ----------------------------------------------------------------
+// Created INSIDE the root view fn below: view functions run exactly once,
+// when the element tree is built (at `mount`) — prop updates never re-invoke
+// them — so this cluster is stable local state, not module-level state.
+// Bundled into a factory so the view factories further down can take it as
+// a parameter instead of reaching for shared module scope.
 
-// Cancellable async loop driving the 1 Hz countdown. Cancelling the current
-// sleep halts it (the await throws CancelError); pause/reset also flip
-// `running$` so the loop's own check exits it.
-let countdownTick: Task<void> | null = null;
-function stopCountdown() {
-    countdownTick?.cancel();
-    countdownTick = null;
+function createCountdownState() {
+    const remaining$ = source(DEFAULT_TIME);
+    const running$ = source(false);
+    const editing$ = source(false);
+    const initial$ = source(DEFAULT_TIME);
+    const editText$ = source("");
+    const editController$ = source<unknown>(null);
+
+    // Cancellable async loop driving the 1 Hz countdown. Cancelling the current
+    // sleep halts it (the await throws CancelError); pause/reset also flip
+    // `running$` so the loop's own check exits it.
+    let countdownTick: Task<void> | null = null;
+    function stopCountdown() {
+        countdownTick?.cancel();
+        countdownTick = null;
+    }
+
+    const start$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        if (ctx.get(running$)) return;
+        ctx.set(running$, true);
+        stopCountdown();
+        (async () => {
+            try {
+                while (ctx.get(running$)) {
+                    countdownTick = sleep(1000);
+                    await countdownTick.promise;
+                    const r = ctx.get(remaining$);
+                    if (r <= 1) {
+                        ctx.set(running$, false);
+                        ctx.set(remaining$, 0);
+                        return;
+                    }
+                    ctx.set(remaining$, r - 1);
+                }
+            } catch (e) {
+                if (!isCancelError(e)) throw e;
+            }
+        })();
+    });
+
+    const pause$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        if (!ctx.get(running$)) return;
+        stopCountdown();
+        ctx.set(running$, false);
+    });
+
+    const reset$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        stopCountdown();
+        ctx.set(running$, false);
+        ctx.set(remaining$, ctx.get(initial$));
+    });
+
+    const openEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        stopCountdown();
+        ctx.set(running$, false);
+        ctx.set(editText$, String(ctx.get(initial$)));
+        // Pre-fill the field with the current initial value so the user can
+        // edit it in place rather than retyping. `initialText` is honoured at
+        // controller construction time and shows up as soon as the Input
+        // mounts the new controller.
+        const ctrl = createTextEditingController({
+            initialText: String(ctx.get(initial$)),
+            onInput: mutate((ctx, text: string, _enter: boolean) =>
+                ctx.set(editText$, text),
+            ),
+        });
+        ctx.set(editController$, ctrl);
+        ctx.set(editing$, true);
+    });
+
+    const cancelEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        ctx.set(editing$, false);
+        ctx.set(editController$, null);
+    });
+
+    const confirmEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
+        const parsed = parseInt(ctx.get(editText$), 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+            ctx.set(initial$, parsed);
+            ctx.set(remaining$, parsed);
+        }
+        ctx.set(editing$, false);
+        ctx.set(editController$, null);
+    });
+
+    const isUrgent$ = derive(
+        (ctx) =>
+            ctx.get(running$) &&
+            ctx.get(remaining$) <= 10 &&
+            ctx.get(remaining$) > 0,
+    );
+
+    const displayColor$ = derive((ctx) =>
+        ctx.get(isUrgent$) ? COLORS.urgent : COLORS.text,
+    );
+
+    const statusLabel$ = derive((ctx) => {
+        if (ctx.get(running$)) return "Running";
+        if (ctx.get(remaining$) === 0) return "Done";
+        if (ctx.get(remaining$) === ctx.get(initial$)) return "Ready";
+        return "Paused";
+    });
+
+    const statusColor$ = derive((ctx) => {
+        if (ctx.get(running$)) return COLORS.start;
+        if (ctx.get(remaining$) === 0) return COLORS.textFaint;
+        if (ctx.get(remaining$) === ctx.get(initial$)) return COLORS.textMuted;
+        return COLORS.pause;
+    });
+
+    return {
+        remaining$,
+        running$,
+        editing$,
+        initial$,
+        editText$,
+        editController$,
+        displayColor$,
+        statusLabel$,
+        statusColor$,
+        start$,
+        pause$,
+        reset$,
+        openEdit$,
+        cancelEdit$,
+        confirmEdit$,
+    };
 }
 
-const start$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    if (ctx.get(running$)) return;
-    ctx.set(running$, true);
-    stopCountdown();
-    (async () => {
-        try {
-            while (ctx.get(running$)) {
-                countdownTick = sleep(1000);
-                await countdownTick.promise;
-                const r = ctx.get(remaining$);
-                if (r <= 1) {
-                    ctx.set(running$, false);
-                    ctx.set(remaining$, 0);
-                    return;
-                }
-                ctx.set(remaining$, r - 1);
-            }
-        } catch (e) {
-            if (!isCancelError(e)) throw e;
-        }
-    })();
-});
-
-const pause$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    if (!ctx.get(running$)) return;
-    stopCountdown();
-    ctx.set(running$, false);
-});
-
-const reset$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    stopCountdown();
-    ctx.set(running$, false);
-    ctx.set(remaining$, ctx.get(initial$));
-});
-
-const openEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    stopCountdown();
-    ctx.set(running$, false);
-    ctx.set(editText$, String(ctx.get(initial$)));
-    // Pre-fill the field with the current initial value so the user can
-    // edit it in place rather than retyping. `initialText` is honoured at
-    // controller construction time and shows up as soon as the Input
-    // mounts the new controller.
-    const ctrl = createTextEditingController({
-        initialText: String(ctx.get(initial$)),
-        onInput: mutate((ctx, text: string, _enter: boolean) =>
-            ctx.set(editText$, text),
-        ),
-    });
-    ctx.set(editController$, ctrl);
-    ctx.set(editing$, true);
-});
-
-const cancelEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    ctx.set(editing$, false);
-    ctx.set(editController$, null);
-});
-
-const confirmEdit$ = mutate((ctx, _ev: PointerInteractEvent) => {
-    const parsed = parseInt(ctx.get(editText$), 10);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-        ctx.set(initial$, parsed);
-        ctx.set(remaining$, parsed);
-    }
-    ctx.set(editing$, false);
-    ctx.set(editController$, null);
-});
+type CountdownState = ReturnType<typeof createCountdownState>;
 
 // Format a remaining seconds count as `m:ss` (e.g. 65 -> "1:05", 5 -> "0:05").
 function formatTime(totalSeconds: number): string {
@@ -143,31 +197,6 @@ function formatTime(totalSeconds: number): string {
     const s = totalSeconds % 60;
     return `${m}:${String(s).padStart(2, "0")}`;
 }
-
-const isUrgent$ = derive(
-    (ctx) =>
-        ctx.get(running$) &&
-        ctx.get(remaining$) <= 10 &&
-        ctx.get(remaining$) > 0,
-);
-
-const displayColor$ = derive((ctx) =>
-    ctx.get(isUrgent$) ? COLORS.urgent : COLORS.text,
-);
-
-const statusLabel$ = derive((ctx) => {
-    if (ctx.get(running$)) return "Running";
-    if (ctx.get(remaining$) === 0) return "Done";
-    if (ctx.get(remaining$) === ctx.get(initial$)) return "Ready";
-    return "Paused";
-});
-
-const statusColor$ = derive((ctx) => {
-    if (ctx.get(running$)) return COLORS.start;
-    if (ctx.get(remaining$) === 0) return COLORS.textFaint;
-    if (ctx.get(remaining$) === ctx.get(initial$)) return COLORS.textMuted;
-    return COLORS.pause;
-});
 
 // --- Reusable button helpers ---------------------------------------------
 
@@ -244,7 +273,7 @@ function GhostButton({
 
 // --- Status pill ---------------------------------------------------------
 
-function StatusPill(): Element {
+function StatusPill(s: CountdownState): Element {
     return Container({
         padding: 6,
         borderRadius: 999,
@@ -260,11 +289,11 @@ function StatusPill(): Element {
                         width: 7,
                         height: 7,
                         borderRadius: 999,
-                        color: statusColor$,
+                        color: s.statusColor$,
                     }),
                     SizedBox({ width: 6 }),
                     Text({
-                        text: statusLabel$,
+                        text: s.statusLabel$,
                         fontSize: 11,
                         color: COLORS.textMuted,
                     }),
@@ -276,7 +305,7 @@ function StatusPill(): Element {
 
 // --- Main display --------------------------------------------------------
 
-function TimerView(): Element {
+function TimerView(s: CountdownState): Element {
     return Column({
         mainAxisSize: MainAxisSize.Min,
         crossAlignment: CrossAxisAlignment.Center,
@@ -288,41 +317,41 @@ function TimerView(): Element {
             }),
             SizedBox({ height: 10 }),
             Text({
-                text: derive((ctx) => formatTime(ctx.get(remaining$))),
+                text: derive((ctx) => formatTime(ctx.get(s.remaining$))),
                 fontSize: 72,
-                color: displayColor$,
+                color: s.displayColor$,
                 queryKey: ["display"],
             }),
             SizedBox({ height: 12 }),
-            StatusPill(),
+            StatusPill(s),
         ],
     });
 }
 
-function Controls(): Element {
+function Controls(s: CountdownState): Element {
     return Column({
         mainAxisSize: MainAxisSize.Min,
         crossAlignment: CrossAxisAlignment.Center,
         children: [
             // Primary action toggles between Start and Pause.
             Condition({
-                condition: running$,
+                condition: s.running$,
                 child: () =>
                     PrimaryButton({
                         label: "Pause",
                         bg: COLORS.pause,
                         shadowColor: COLORS.pauseShadow,
-                        onClick: pause$,
+                        onClick: s.pause$,
                         queryKey: ["btn-pause"],
                     }),
                 elseChild: () =>
                     PrimaryButton({
                         label: derive((ctx) =>
-                            ctx.get(remaining$) === 0 ? "Restart" : "Start",
+                            ctx.get(s.remaining$) === 0 ? "Restart" : "Start",
                         ),
                         bg: COLORS.start,
                         shadowColor: COLORS.startShadow,
-                        onClick: start$,
+                        onClick: s.start$,
                         queryKey: ["btn-start"],
                     }),
             }),
@@ -333,13 +362,13 @@ function Controls(): Element {
                 children: [
                     GhostButton({
                         label: "Edit",
-                        onClick: openEdit$,
+                        onClick: s.openEdit$,
                         queryKey: ["btn-edit"],
                     }),
                     SizedBox({ width: 10 }),
                     GhostButton({
                         label: "Reset",
-                        onClick: reset$,
+                        onClick: s.reset$,
                         queryKey: ["btn-reset"],
                     }),
                 ],
@@ -350,7 +379,7 @@ function Controls(): Element {
 
 // --- Edit modal ----------------------------------------------------------
 
-function EditModal(): Element {
+function EditModal(s: CountdownState): Element {
     // Click-anywhere-on-backdrop dismisses the modal. The inner card stops
     // propagation by being an opaque hit-test target itself.
     return Positioned({
@@ -360,7 +389,7 @@ function EditModal(): Element {
         bottom: 0,
         child: PointerInteract({
             behavior: HitTestBehavior.Opaque,
-            onClick: cancelEdit$,
+            onClick: s.cancelEdit$,
             child: Container({
                 color: COLORS.backdrop,
                 alignment: Alignment.Center,
@@ -404,7 +433,7 @@ function EditModal(): Element {
                                                 Input({
                                                     controller: derive((ctx) =>
                                                         ctx.get(
-                                                            editController$,
+                                                            s.editController$,
                                                         ),
                                                     ) as unknown as TextController,
                                                     placeholder:
@@ -423,7 +452,7 @@ function EditModal(): Element {
                                             children: [
                                                 GhostButton({
                                                     label: "Cancel",
-                                                    onClick: cancelEdit$,
+                                                    onClick: s.cancelEdit$,
                                                 }),
                                                 SizedBox({ width: 8 }),
                                                 PrimaryButton({
@@ -431,7 +460,7 @@ function EditModal(): Element {
                                                     bg: COLORS.start,
                                                     shadowColor:
                                                         COLORS.startShadow,
-                                                    onClick: confirmEdit$,
+                                                    onClick: s.confirmEdit$,
                                                     queryKey: ["btn-confirm"],
                                                 }),
                                             ],
@@ -449,8 +478,12 @@ function EditModal(): Element {
 
 // --- Page ----------------------------------------------------------------
 
-const App = view(() =>
-    Expanded({
+const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the whole
+    // countdown state cluster is stable for the life of the tree.
+    const s = createCountdownState();
+
+    return Expanded({
         child: Stack({
             children: [
                 Container({
@@ -462,21 +495,21 @@ const App = view(() =>
                             crossAlignment: CrossAxisAlignment.Center,
                             mainAxisSize: MainAxisSize.Min,
                             children: [
-                                TimerView(),
+                                TimerView(s),
                                 SizedBox({ height: 36 }),
-                                Controls(),
+                                Controls(s),
                             ],
                         }),
                     ],
                 }),
                 Condition({
-                    condition: editing$,
-                    child: () => EditModal(),
+                    condition: s.editing$,
+                    child: () => EditModal(s),
                 }),
             ],
         }),
-    }),
-);
+    });
+});
 
 export function start() {
     mount(App);

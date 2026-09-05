@@ -20,9 +20,10 @@ import {
 // Reactive anchor: `targetAnchor` is driven by a source. A button flips it
 // from TopLeft to BottomRight; the follower must relocate to the target's
 // bottom-right corner on the next frame.
-const anchor$ = source(Alignment.TopLeft);
-
 const App = view(() => {
+    // Local state: the view fn runs exactly once (at build), so the atom and
+    // link are stable for the life of the tree.
+    const anchor$ = source(Alignment.TopLeft);
     const link = createLayerLink();
     return Stack({
         children: [
