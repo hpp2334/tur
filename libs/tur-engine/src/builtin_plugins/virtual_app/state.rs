@@ -15,14 +15,16 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::{Context, JsValue, js_string};
+use boa_engine::{Context, JsError, JsNativeError, JsValue, js_string};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::app::HostTx;
 use crate::core::app::comm::HostMsg;
+use crate::core::app::runtime_error::RuntimeErrorReport;
+use crate::core::edgy::mutation::{MutationHandle, PendingMutationInvocationQueue};
 use crate::core::edgy::reactive::{Mutation, ReactiveBridgeStore, Source};
 use crate::core::image_resource::{ImageResource, ImageResourceId};
-use crate::core::js_runtime::js_value::IntoJs;
+use crate::core::js_runtime::js_value::{IntoJs, IntoJsArgs};
 use crate::core::render::RenderCommandBatch;
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::virtual_app::{VirtualAppId, VirtualControl};
@@ -60,6 +62,41 @@ impl crate::core::js_runtime::js_value::IntoJs for JsWorkerPoolHandle {
 #[derive(Debug, Clone)]
 pub(crate) struct VirtualControllerRef(pub(crate) u64);
 
+/// The `onRuntimeError$` callback argument: a reconstructed `Error` minted
+/// in the PARENT realm (`e instanceof Error`, `e.message`, best-effort
+/// `e.stack`). The child's thrown value never crosses the worker boundary
+/// — only its formatted message + stack do.
+pub(crate) struct RuntimeErrorArg {
+    message: String,
+    stack: Option<String>,
+}
+
+impl From<RuntimeErrorReport> for RuntimeErrorArg {
+    fn from(report: RuntimeErrorReport) -> Self {
+        Self {
+            message: report.message,
+            stack: report.stack,
+        }
+    }
+}
+
+impl IntoJsArgs for RuntimeErrorArg {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        let value = JsError::from(JsNativeError::error().with_message(self.message.clone()))
+            .into_opaque(ctx)
+            .unwrap_or_else(|_| JsValue::from(js_string!(self.message.as_str())));
+        if let (Some(stack), Some(obj)) = (&self.stack, value.as_object()) {
+            let _ = obj.set(
+                js_string!("stack"),
+                JsValue::from(js_string!(stack.as_str())),
+                true,
+                ctx,
+            );
+        }
+        vec![value]
+    }
+}
+
 impl crate::core::js_runtime::js_value::FromJs for VirtualControllerRef {
     fn from_js(value: &JsValue) -> Result<Self, boa_engine::JsError> {
         let obj = value.as_object().ok_or_else(|| {
@@ -88,6 +125,13 @@ pub(crate) struct ControllerRecord {
     /// `"virtual"` pool, resolved at controller creation).
     pub pool: WorkerPoolHandle,
     pub source: Arc<str>,
+    /// The `onRuntimeError$` mutation (optional) — dispatched when the
+    /// hosted child reports a runtime JS error.
+    pub on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
+    /// Last flush epoch an error was dispatched in — the per-frame
+    /// coalescing guard (a throwing-every-frame child cannot flood the
+    /// mutation queue). `u64::MAX` = never.
+    pub error_dispatch_frame: Cell<u64>,
     /// Live incarnation token, if this controller currently hosts a child
     /// (cleared by `destroy$` / unbind-destroy; a later bind respawns under
     /// a fresh token).
@@ -157,6 +201,7 @@ impl VirtualState {
         source: Arc<str>,
         pool: WorkerPoolHandle,
         keep_alive: bool,
+        on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
     ) -> u64 {
         let base = self.alloc_id();
         let status = self.bridge.decl_source(JsValue::from(js_string!("idle")));
@@ -169,6 +214,8 @@ impl VirtualState {
                 keep_alive,
                 pool,
                 source,
+                on_runtime_error,
+                error_dispatch_frame: Cell::new(u64::MAX),
                 current: Cell::new(None),
                 bound: Cell::new(false),
                 last_rect: Cell::new((-1.0, -1.0, -1.0, -1.0)),
@@ -307,6 +354,37 @@ impl VirtualState {
             Error => self.set_status(base, "error", detail.unwrap_or("unknown error")),
             Destroyed => self.handle_destroyed(token),
         }
+    }
+
+    /// A runtime JS error reported by the hosted child (the
+    /// `onRuntimeError$` rail). Dispatches the controller's mutation onto
+    /// the mutation queue — the `watch` convention: same-frame drain by the
+    /// flush fixed point, serialized ordering. At most one dispatch per
+    /// flush epoch per controller. A late event for a retired incarnation
+    /// (unknown token) is dropped.
+    pub(crate) fn handle_runtime_error(
+        &self,
+        token: VirtualAppId,
+        report: RuntimeErrorReport,
+        frame_id: u64,
+        queue: &Rc<RefCell<PendingMutationInvocationQueue>>,
+    ) {
+        let Some(base) = self.tokens.borrow().get(&token.0).copied() else {
+            return; // retired incarnation — nothing to dispatch to
+        };
+        let Some(record) = self.record(base) else {
+            return;
+        };
+        let Some(handle) = record.on_runtime_error else {
+            return; // controller has no onRuntimeError$ — status rail only
+        };
+        if record.error_dispatch_frame.get() == frame_id {
+            return; // already dispatched this frame — coalesce
+        }
+        record.error_dispatch_frame.set(frame_id);
+        queue
+            .borrow_mut()
+            .push(handle, RuntimeErrorArg::from(report));
     }
 
     // ── controls ──────────────────────────────────────────────────────

@@ -479,6 +479,10 @@ impl TurAppLooper {
                             host.handle_control(control);
                             MsgOutcome::Continue
                         }
+                        core::app::HostMsg::RuntimeError { report } => {
+                            host.forward_runtime_error(report);
+                            MsgOutcome::Continue
+                        }
                         msg => host.backend().apply_msg(msg),
                     };
                     let stop = match outcome {

@@ -929,6 +929,28 @@ declare module "tur:std" {
         pool?: WorkerPoolHandle;
         /** Survive element unbind (default `false`). */
         keepAlive?: boolean;
+        /**
+         * Notified of runtime JS errors inside the child after it reached
+         * `"running"`: throws from mutations / view closures / factories /
+         * microtask + async callbacks, and promise rejections that still
+         * have no handler at the end of a frame (a same-frame `.catch`
+         * retracts). The callback receives a reconstructed `Error` minted in
+         * the parent realm (`e instanceof Error`, `e.message`, best-effort
+         * `e.stack`) — the child's thrown value never crosses the worker
+         * boundary.
+         *
+         * Notification only: does NOT fire for module load/start failures
+         * (those ride `status$` / `errorMsg$` / `errorView`) and does not
+         * change `status$`. Coalesced: at most one dispatch per frame.
+         *
+         * ```js
+         * const app = createVirtualAppController({
+         *     source,
+         *     onRuntimeError$: mutate((ctx, e) => log(e.message, e.stack)),
+         * });
+         * ```
+         */
+        onRuntimeError$?: Mutation<[unknown]>;
     }): VirtualAppController;
 
     /** Element hosting a virtual app; draws the child's latest frame. */

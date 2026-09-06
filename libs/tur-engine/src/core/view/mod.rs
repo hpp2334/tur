@@ -49,6 +49,7 @@ fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("invoke_thunk JS error: {e}");
+            crate::core::app::runtime_error::report(boa, &e);
             return None;
         }
     };

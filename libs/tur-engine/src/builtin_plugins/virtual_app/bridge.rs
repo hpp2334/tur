@@ -18,7 +18,7 @@ use crate::core::js_runtime::helpers::{
 use crate::core::js_runtime::js_value::IntoJs;
 
 use super::element::VirtualAppView;
-use super::state::{JsWorkerPoolHandle, ModuleSourceHandle, VirtualState};
+use super::state::{JsWorkerPoolHandle, ModuleSourceHandle, RuntimeErrorArg, VirtualState};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![
@@ -131,8 +131,15 @@ fn tur_create_virtual_app_controller(
         let v = props.get(js_string!("keepAlive"), ctx)?;
         !v.is_null() && !v.is_undefined() && v.as_boolean().unwrap_or(false)
     };
+    // `onRuntimeError$` — optional mutation notified of runtime JS errors
+    // inside the hosted child (post-`Running`). Absent / non-mutation →
+    // `None` (the `p.mutation` convention).
+    let on_runtime_error = {
+        let mut p = crate::core::js_runtime::JsProps::new(&props, ctx);
+        p.mutation::<RuntimeErrorArg>("onRuntimeError$")
+    };
 
-    let base = state.create_controller(source, pool, keep_alive);
+    let base = state.create_controller(source, pool, keep_alive, on_runtime_error);
 
     // `destroy$` — the ONLY lifecycle action, a control mutation (the
     // `watch` `{ start$, stop$ }` convention: side effects ride the mutation

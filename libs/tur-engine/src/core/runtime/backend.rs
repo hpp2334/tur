@@ -704,6 +704,11 @@ impl HostBackend {
             HostMsg::VirtualControl(_) => {
                 unreachable!("HostMsg::VirtualControl is routed by TurAppLooper before apply_msg")
             }
+            // Same for runtime-error reports — forwarded to the parent
+            // worker (children) or logged (root) by the looper.
+            HostMsg::RuntimeError { .. } => {
+                unreachable!("HostMsg::RuntimeError is routed by TurAppLooper before apply_msg")
+            }
         }
     }
 

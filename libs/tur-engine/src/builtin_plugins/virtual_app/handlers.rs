@@ -15,7 +15,9 @@ use crate::core::layout::Offset;
 use crate::core::platform::PlatformEvent;
 use crate::core::shell::{PointerInput, ShellEvent};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
-use crate::core::virtual_app::{VirtualControl, VirtualFrameEvent, VirtualStatusEvent};
+use crate::core::virtual_app::{
+    VirtualControl, VirtualErrorEvent, VirtualFrameEvent, VirtualStatusEvent,
+};
 
 use super::element::VirtualAppElement;
 use super::state::VirtualState;
@@ -240,6 +242,18 @@ impl Subsystem for VirtualAppSubsystem {
                 |image| js_ctx.register_image(image),
             );
             cx.request_paint();
+        }
+        if let Some(error) = event.as_custom::<VirtualErrorEvent>() {
+            // Same-frame dispatch: the mutation queue drains later in this
+            // fixed-point iteration, and `handled_events` keeps the loop
+            // alive. A throwing parent callback is itself logged (and
+            // forwarded up the chain if this parent is itself a child).
+            self.state.handle_runtime_error(
+                error.token,
+                error.report.clone(),
+                cx.frame_id(),
+                &cx.mutation_queue,
+            );
         }
     }
 }

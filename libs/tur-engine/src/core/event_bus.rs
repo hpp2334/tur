@@ -246,6 +246,7 @@ impl Subsystem for EmbedderBusSubsystem {
                     let args: [JsValue; 1] = [u8a.clone()];
                     if let Err(e) = handler.call(&JsValue::undefined(), &args, cx.boa) {
                         tracing::error!("HostBus: JS handler error: {e}");
+                        crate::core::app::runtime_error::report(cx.boa, &e);
                     }
                 }
             }
