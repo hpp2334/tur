@@ -4,6 +4,8 @@
 //! - `Stack` + `Positioned` (z-axis stacking with anchored children).
 //! - `Container` / `SizedBox` (explicit width/height + decoration).
 //! - `Grid` (row-major tiling of static children into a max-extent grid).
+//! - `Table` (shared-column data table: fixed/flex column widths, reactive
+//!   rows via a builder, optional header, stripes + dividers).
 
 pub(in crate::builtin_plugins) mod composited_transform;
 pub(in crate::builtin_plugins) mod container;
@@ -13,6 +15,7 @@ pub(in crate::builtin_plugins) mod flex_item;
 pub(in crate::builtin_plugins) mod grid;
 pub(in crate::builtin_plugins) mod positioned;
 pub(in crate::builtin_plugins) mod stack;
+pub(in crate::builtin_plugins) mod table;
 
 // Temporary: tur-text (still external until Phase E inlines it) consumes
 // `ContainerView` for its Input impl. After Phase E moves tur-text into
@@ -26,6 +29,7 @@ pub use grid::{GridElement, GridView};
 pub(crate) use grid::{compute_grid_metrics, cross_offset};
 pub use positioned::{PositionedElement, PositionedView};
 pub use stack::{StackElement, StackView};
+pub use table::{TableElement, TableView};
 
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;
@@ -42,5 +46,6 @@ pub fn install_layout(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntr
     v.extend(grid::bridge::fns());
     v.extend(stack::bridge::fns());
     v.extend(positioned::bridge::fns());
+    v.extend(table::bridge::fns());
     Ok(v)
 }

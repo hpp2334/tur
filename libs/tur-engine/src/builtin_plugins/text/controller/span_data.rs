@@ -2,7 +2,12 @@ use crate::core::render::brush::Color;
 
 use crate::core::js_runtime::js_value::FromJs;
 
-#[derive(Clone)]
+/// One styled run of the controller's span tree.
+///
+/// `PartialEq` compares **rendered content** (text + every style field) so
+/// the controller can skip a content-revision bump for no-op re-highlights
+/// (the same tokens re-set with identical styles).
+#[derive(Clone, PartialEq)]
 pub struct SpanData {
     pub text: String,
     /// CSS-style numeric font weight (100–1000). `None` inherits the

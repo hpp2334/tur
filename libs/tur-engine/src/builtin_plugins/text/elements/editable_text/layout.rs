@@ -54,7 +54,6 @@ impl ElementLayout for EditableTextElement {
             color,
             cursor_color: cx.read_val_opt(self.view.cursor_color.as_ref()),
         };
-        let color = self.painting.color;
 
         // Resolve password-mode props (refreshed each layout so the gesture/
         // keyboard/IME/render handlers — which lack store access — read the
@@ -73,6 +72,43 @@ impl ElementLayout for EditableTextElement {
 
         let display_text = self.composition_display_text();
 
+        let text_color = if display_text.is_empty() {
+            placeholder_color.unwrap_or(Color::rgb(153, 153, 153))
+        } else {
+            color.unwrap_or(DEFAULT_TEXT_COLOR)
+        };
+
+        // ── Layout memo ────────────────────────────────────────────────────
+        // Everything below is a pure function of these inputs; if they are
+        // unchanged since the last build, reuse the cached layout instead of
+        // re-shaping the document. This is what makes cursor-only key
+        // events, scrolls (constraints never change), repeated fixed-point
+        // iterations, and no-op re-highlights O(1) instead of O(document).
+        let placeholder_for_key = if display_text.is_empty() {
+            placeholder.clone()
+        } else {
+            None
+        };
+        let key = super::element::EditableLayoutKey {
+            revision: self.controller().revision(),
+            font_size,
+            font_family: font_family.clone(),
+            font_weight: font_weight.map(|w| w as f64),
+            base_color: text_color,
+            placeholder: placeholder_for_key,
+            obscured,
+            obscuring_char: self.resolved_obscuring_char,
+            constraints: *constraints,
+        };
+        if self.layout_key.as_ref() == Some(&key)
+            && let Some(ref cached) = self.cached_layout
+        {
+            return constraints.constrain(Size::new(cached._width as f64, cached._height as f64));
+        }
+        self.layout_key = Some(key);
+        self.shape_count.set(self.shape_count.get() + 1);
+        // ──────────────────────────────────────────────────────────────────
+
         // Always build a layout (even for empty text with no placeholder) so
         // the caret can be painted at byte 0 with the correct line metrics
         // when the editor is focused + empty.
@@ -87,12 +123,6 @@ impl ElementLayout for EditableTextElement {
         let (is_composing, base_spans): (bool, Vec<SpanData>) = {
             let c = self.controller();
             (c.is_composing(), c.spans().to_vec())
-        };
-
-        let text_color = if display_text.is_empty() {
-            placeholder_color.unwrap_or(Color::rgb(153, 153, 153))
-        } else {
-            color.unwrap_or(DEFAULT_TEXT_COLOR)
         };
 
         let mut underline_ranges: Vec<(usize, usize)> = Vec::new();

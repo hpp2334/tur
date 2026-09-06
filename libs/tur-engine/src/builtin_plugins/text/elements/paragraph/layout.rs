@@ -193,6 +193,11 @@ impl ElementLayout for TextElement {
         let base_weight = cx
             .read_val_opt(self.view.font_weight.as_ref())
             .map(|w| w as f32);
+        let max_lines = cx.read_val_opt(self.view.max_lines.as_ref());
+        let overflow = cx
+            .read_val_opt(self.view.overflow.as_ref())
+            .unwrap_or_default();
+        let resolved_color = cx.read_val_opt(self.view.color.as_ref());
 
         // Resolve the spans to lay out. If the spec carries explicit spans,
         // use them; otherwise build a single anonymous span from the `text`
@@ -201,22 +206,48 @@ impl ElementLayout for TextElement {
             s.clone()
         } else {
             let text = cx.read_val_opt(self.view.text.as_ref()).unwrap_or_default();
-            let color = cx.read_val_opt(self.view.color.as_ref());
             vec![SpanData {
                 text,
                 weight: None,
                 italic: false,
                 underline: false,
                 font_size: None,
-                color,
+                color: resolved_color,
             }]
         };
+
+        let full_text: String = spans.iter().map(|s| s.text.as_str()).collect();
+
+        // ── Layout memo ────────────────────────────────────────────────────
+        // Everything below is a pure function of these inputs (spans are
+        // static for this element, so the resolved joined text carries their
+        // content); on an unchanged key, reuse the cached layout instead of
+        // re-shaping. One relayout per reactive change instead of one per
+        // dirty pass.
+        let key = super::element::TextLayoutKey {
+            full_text: full_text.clone(),
+            font_size: base_font_size,
+            font_weight: base_weight.map(|w| w as f64),
+            color: resolved_color,
+            max_lines,
+            overflow,
+            constraints: *constraints,
+        };
+        if self.layout_key.as_ref() == Some(&key)
+            && let Some(ref cached) = self.cached_layout
+        {
+            // Refresh the test-visible span snapshot (cheap move — no
+            // shaping, no extraction).
+            self.cached_spans = spans;
+            return constraints.constrain(Size::new(cached._width as f64, cached._height as f64));
+        }
+        self.layout_key = Some(key);
+        self.shape_count.set(self.shape_count.get() + 1);
+        // ──────────────────────────────────────────────────────────────────
 
         // Cache the resolved spans so test code can read the current text
         // via `TextElement::spans()` without re-resolving.
         self.cached_spans = spans.clone();
-
-        let full_text: String = spans.iter().map(|s| s.text.as_str()).collect();
 
         if full_text.is_empty() {
             self.cached_layout = None;
@@ -229,16 +260,10 @@ impl ElementLayout for TextElement {
             None
         };
 
-        let max_lines = cx.read_val_opt(self.view.max_lines.as_ref());
-        let overflow = cx
-            .read_val_opt(self.view.overflow.as_ref())
-            .unwrap_or_default();
         // Resolve the default color once, up-front: `cx` is mutably borrowed by
         // `text_layout_contexts()` for the rest of the function, so we can't
         // touch it again after that point.
-        let default_color = cx
-            .read_val_opt(self.view.color.as_ref())
-            .unwrap_or_else(|| Color::rgb(0, 0, 0));
+        let default_color = resolved_color.unwrap_or_else(|| Color::rgb(0, 0, 0));
 
         // Truncation applies only when an explicit `maxLines > 0` is set AND
         // the overflow mode is not `Visible` (which ignores `maxLines`,

@@ -1,5 +1,6 @@
 mod paint_context;
 mod scene_paint;
+mod text_culling;
 
 #[cfg(feature = "wgpu-backend")]
 mod renderer;

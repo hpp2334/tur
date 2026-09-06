@@ -33,7 +33,9 @@ impl ElementRender for EditableTextElement {
         let has_selection = c.has_selection();
         let composing_text = c.composing_text().cloned();
         let composing_start = c.composing_start();
-        let text_is_empty = c.text().is_empty();
+        // O(spans) emptiness check — `text()` would join the whole document
+        // (memoized, but still a clone) once per painted frame.
+        let text_is_empty = c.full_len() == 0;
         drop(c);
 
         let is_focused = paint_ctx.is_focused();

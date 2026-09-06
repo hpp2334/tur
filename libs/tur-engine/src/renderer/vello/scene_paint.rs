@@ -46,7 +46,15 @@ pub(crate) fn paint_commands_to_scene(
 ) {
     scene.reset();
     paint_base_background(scene, physical_width, physical_height, base_color);
-    let mut ctx = VelloPaintContext::new(scene, resources, Affine::scale(dpr), image_uploads);
+    let mut ctx = VelloPaintContext::new(
+        scene,
+        resources,
+        Affine::scale(dpr),
+        image_uploads,
+        // Surface rect in physical pixels — the playback counterpart of the
+        // worker's viewport seed; bounds text-line culling.
+        Rect::new(0.0, 0.0, physical_width as f64, physical_height as f64),
+    );
     play_commands(&mut ctx, commands);
 }
 

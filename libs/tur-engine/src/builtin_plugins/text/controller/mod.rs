@@ -17,6 +17,7 @@ use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
+use std::cell::RefCell;
 
 use crate::core::edgy::mutation::{MutationHandle, extract_mutation_from_opts};
 use crate::core::focus::{BlurEvent, FocusEvent};
@@ -35,6 +36,16 @@ pub struct TextEditingController {
     composing_text: Option<String>,
     composing_start: usize,
     handle: Option<JsObject>,
+    /// Content revision — bumped by every mutation that changes the *rendered
+    /// text or span styles* (insert / delete / setSpans / clear / composition
+    /// transitions). Pure caret/selection moves do NOT bump it, so the
+    /// `EditableTextElement` layout memo (keyed on the revision) can skip
+    /// re-shaping the whole document on cursor-only changes.
+    revision: u64,
+    /// Memoized join of `spans`, keyed by `revision`. `text()` is called
+    /// several times per keystroke and once per painted frame; the join is
+    /// O(document) so it is derived once per content change instead.
+    cached_text: RefCell<Option<(u64, String)>>,
     /// Back-reference to the `UndoController` attached via `Input`'s
     /// `undoController` prop. When `Some`, every text-mutating method pushes
     /// a snapshot of the *current* state to the recorder BEFORE mutating —
@@ -71,6 +82,8 @@ impl TextEditingController {
             composing_text: None,
             composing_start: 0,
             handle: None,
+            revision: 0,
+            cached_text: RefCell::new(None),
             undo_recorder: None,
             suppress_undo: false,
             on_input: None,
@@ -84,6 +97,20 @@ impl TextEditingController {
             on_composition_update: None,
             on_composition_end: None,
         }
+    }
+
+    /// Current content revision. Consumers pair this with the rendered
+    /// content they last derived (see `EditableTextElement`'s layout memo) so
+    /// unchanged content skips re-shaping.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Bump the content revision (rendered text / span styles changed).
+    /// Invalidates the memoized text join.
+    fn invalidate(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+        *self.cached_text.borrow_mut() = None;
     }
 
     /// Attach an `UndoController` recorder. Called by `Input`'s element
@@ -128,8 +155,18 @@ impl TextEditingController {
         }
     }
 
+    /// The full text (all spans joined). Memoized on the content revision —
+    /// the join is O(document) and this is called several times per keystroke
+    /// and once per painted frame.
     pub fn text(&self) -> String {
-        self.spans.iter().map(|s| s.text.as_str()).collect()
+        if let Some((rev, text)) = self.cached_text.borrow().as_ref()
+            && *rev == self.revision
+        {
+            return text.clone();
+        }
+        let joined: String = self.spans.iter().map(|s| s.text.as_str()).collect();
+        *self.cached_text.borrow_mut() = Some((self.revision, joined.clone()));
+        joined
     }
 
     pub fn spans(&self) -> &[SpanData] {
@@ -144,7 +181,15 @@ impl TextEditingController {
         if new_text != self.text() {
             self.maybe_push_undo();
         }
+        // Bump the revision only when the *rendered content* differs: a
+        // no-op re-highlight (identical spans) stays free — the element's
+        // layout memo keeps its hit and the document is not re-shaped.
+        // Clearing an active composition also changes the rendered text.
+        let content_changed = spans != self.spans || self.composing_text.is_some();
         self.spans = spans;
+        if content_changed {
+            self.invalidate();
+        }
         self.cursor_position = self.full_len();
         self.selection_anchor = self.cursor_position;
         self.selection_end = self.cursor_position;
@@ -162,8 +207,12 @@ impl TextEditingController {
         if new_text != self.text() {
             self.maybe_push_undo();
         }
+        let content_changed = spans != self.spans;
         let len = spans.iter().map(|s| s.text.len()).sum();
         self.spans = spans;
+        if content_changed {
+            self.invalidate();
+        }
         self.cursor_position = self.cursor_position.min(len);
         self.selection_anchor = self.selection_anchor.min(len);
         self.selection_end = self.selection_end.min(len);
@@ -175,12 +224,16 @@ impl TextEditingController {
         if !self.spans.is_empty() {
             self.maybe_push_undo();
         }
+        let had_content = !self.spans.is_empty() || self.composing_text.is_some();
         self.spans.clear();
         self.cursor_position = 0;
         self.selection_anchor = 0;
         self.selection_end = 0;
         self.composing_text = None;
         self.composing_start = 0;
+        if had_content {
+            self.invalidate();
+        }
     }
 
     pub fn cursor_position(&self) -> usize {
@@ -252,16 +305,22 @@ impl TextEditingController {
     pub fn start_composition(&mut self) {
         self.composing_text = Some(String::new());
         self.composing_start = self.cursor_position;
+        self.invalidate();
     }
 
     pub fn update_composition(&mut self, text: String) {
         if self.composing_text.is_some() {
             self.composing_text = Some(text);
+            self.invalidate();
         }
     }
 
     pub fn finish_composition(&mut self) -> Option<String> {
-        self.composing_text.take()
+        let taken = self.composing_text.take();
+        if taken.is_some() {
+            self.invalidate();
+        }
+        taken
     }
 
     pub fn composing_text(&self) -> Option<&String> {
@@ -338,6 +397,7 @@ impl TextEditingController {
             return;
         }
         self.maybe_push_undo();
+        self.invalidate();
         if self.spans.is_empty() {
             self.spans.push(SpanData {
                 text: text.to_string(),
@@ -365,6 +425,7 @@ impl TextEditingController {
         }
 
         self.maybe_push_undo();
+        self.invalidate();
 
         let (start_idx, start_local) = self.span_index_at(start);
         let (end_idx, end_local) = self.span_index_at(end);

@@ -1,5 +1,6 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsError, JsValue};
+use std::cell::Cell;
 use std::sync::Arc;
 
 use crate::builtin_plugins::text::controller::SelectionChangeEvent;
@@ -12,7 +13,7 @@ use crate::core::elements::{
 };
 use crate::core::js_runtime::JsProps;
 use crate::core::js_runtime::js_value::{FromJs, type_error};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::layout::{Constraints, ElementSubscribe, SubscribeCx};
 use crate::core::platform::PointerDeviceKind;
 use crate::core::render::brush::Color;
 use crate::core::text::text_layout::TextLayoutData;
@@ -108,12 +109,37 @@ impl View for TextView {
 // `cx.read_val`.
 // ---------------------------------------------------------------------------
 
+/// Inputs that fully determine `TextElement`'s parley layout (see the
+/// `EditableLayoutKey` docs for the memo contract). `Text`'s spans are
+/// parsed eagerly at factory time and never mutated, so span *styles* need
+/// no key component — the resolved joined text plus these props are
+/// sufficient.
+#[derive(PartialEq)]
+pub(crate) struct TextLayoutKey {
+    /// Resolved joined text — constant for the spans path, tracks the
+    /// reactive `text` Val for the plain path.
+    pub(crate) full_text: String,
+    pub(crate) font_size: f64,
+    pub(crate) font_weight: Option<f64>,
+    /// Anonymous-span color (plain-text path) — it colors the runs.
+    pub(crate) color: Option<Color>,
+    pub(crate) max_lines: Option<u32>,
+    pub(crate) overflow: TextOverflow,
+    pub(crate) constraints: Constraints,
+}
+
 pub struct TextElement {
     pub(crate) view: TextView,
     pub(crate) cached_layout: Option<Arc<TextLayoutData>>,
     pub(crate) cached_spans: Vec<SpanData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
+    /// Inputs of the last *built* layout (see `TextLayoutKey`). A pass that
+    /// resolves the same key reuses `cached_layout` without re-shaping.
+    pub(crate) layout_key: Option<TextLayoutKey>,
+    /// How many times a parley layout was built for this element (dev-tool
+    /// perf counter — surfaces as `shapeCount`).
+    pub(crate) shape_count: Cell<u64>,
 }
 
 impl TextElement {
@@ -124,6 +150,8 @@ impl TextElement {
             cached_spans: Vec::new(),
             selection_anchor: 0,
             selection_end: 0,
+            layout_key: None,
+            shape_count: Cell::new(0),
         }
     }
 
@@ -203,6 +231,24 @@ impl ElementTrace for TextElement {
             p.push(("fontSize", TraceValue::Num(*v)));
         }
         p
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        let mut extra = self
+            .cached_layout
+            .as_ref()
+            .map(|ld| {
+                vec![
+                    ("numLines", TraceValue::Num(ld.line_infos.len() as f64)),
+                    ("layoutWidth", TraceValue::Num(ld._width as f64)),
+                    ("layoutHeight", TraceValue::Num(ld._height as f64)),
+                ]
+            })
+            .unwrap_or_default();
+        // Perf counter: how many times the text was shaped. Stable across
+        // relayouts that resolve unchanged inputs (the layout memo).
+        extra.push(("shapeCount", TraceValue::Num(self.shape_count.get() as f64)));
+        extra
     }
 }
 

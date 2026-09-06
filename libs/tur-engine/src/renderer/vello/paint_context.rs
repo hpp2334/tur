@@ -14,6 +14,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::image_resource::ImageResourceId;
 use crate::core::render::Canvas;
 use crate::core::text::text_layout::TextLayoutData;
+use crate::renderer::vello::text_culling::{ClipMirror, local_clip_y, visible_line_range};
 
 /// Tolerance used when converting non-rectangular shapes (rounded rects,
 /// circles) into Bézier paths for the hybrid renderer.
@@ -34,6 +35,13 @@ pub struct VelloPaintContext<'a> {
     /// `set_transform`. This stack holds the running product; `push_transform`
     /// composes onto it, and every draw/clip/opacity op premultiplies by it.
     transform_stack: Vec<Affine>,
+    /// Mirror of the clip-layer stack as conservative scene-space AABBs
+    /// (seeded with the surface rect). Pushed/popped alongside the real GPU
+    /// clip layers — the same ops drive both, so they cannot diverge. Used
+    /// to cull text glyph runs down to the visible line range (a tall
+    /// editor inside a `ScrollView` must not re-encode its whole document
+    /// every frame). See `text_culling`.
+    clip_mirror: ClipMirror,
 }
 
 impl<'a> VelloPaintContext<'a> {
@@ -42,6 +50,7 @@ impl<'a> VelloPaintContext<'a> {
         resources: &'a mut Resources,
         root_transform: Affine,
         image_uploads: &'a HashMap<ImageResourceId, ImageId>,
+        surface: Rect,
     ) -> Self {
         // Seed the transform stack with the root transform (the dpr scale). The
         // hybrid scene has a single global transform state that layers do not
@@ -52,6 +61,7 @@ impl<'a> VelloPaintContext<'a> {
             resources,
             image_uploads,
             transform_stack: vec![root_transform],
+            clip_mirror: ClipMirror::new(surface),
         }
     }
 
@@ -157,7 +167,25 @@ impl Canvas for VelloPaintContext<'_> {
     fn fill_text_layout(&mut self, offset: Offset, layout: &Arc<TextLayoutData>) {
         let layout: &TextLayoutData = layout;
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        for run in &layout.runs {
+
+        // Cull to the visible line range (conservative — see `text_culling`):
+        // a layout taller than the active clip only encodes the runs whose
+        // lines intersect it (+ slop). Runs are grouped by ascending
+        // `line_index`, so binary-search the first candidate run and stop at
+        // the first line past the range.
+        let (first_line, end_line) = match self.clip_mirror.current() {
+            Some(clip) => match local_clip_y(transform, clip) {
+                Some(range) => visible_line_range(&layout.line_infos, Some(range)),
+                None => (0, usize::MAX),
+            },
+            None => (0, usize::MAX),
+        };
+        let first_run = layout.runs.partition_point(|r| r.line_index < first_line);
+
+        for run in &layout.runs[first_run..] {
+            if run.line_index >= end_line {
+                break;
+            }
             let brush_color =
                 PenikoColor::from_rgba8(run.brush[0], run.brush[1], run.brush[2], run.brush[3]);
             // Text color comes from the scene's current paint.
@@ -262,6 +290,8 @@ impl Canvas for VelloPaintContext<'_> {
         let clip = Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE);
         self.scene.set_transform(transform);
         self.scene.push_layer(Some(&clip), None, None, None, None);
+        self.clip_mirror
+            .push_local(transform, Rect::new(0.0, 0.0, size.width, size.height));
     }
 
     fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
@@ -275,10 +305,19 @@ impl Canvas for VelloPaintContext<'_> {
         };
         self.scene.set_transform(transform);
         self.scene.push_layer(Some(&clip), None, None, None, None);
+        // Conservative local AABB of the clip geometry (rounded rects and
+        // circles use their bounding box).
+        let local_aabb = match geometry {
+            Geometry::Rect(size) => Rect::new(0.0, 0.0, size.width, size.height),
+            Geometry::RoundedRect { size, .. } => Rect::new(0.0, 0.0, size.width, size.height),
+            Geometry::Circle { radius } => Rect::new(-radius, -radius, *radius, *radius),
+        };
+        self.clip_mirror.push_local(transform, local_aabb);
     }
 
     fn pop_clip(&mut self) {
         self.scene.pop_layer();
+        self.clip_mirror.pop();
     }
 
     fn push_opacity(&mut self, opacity: f32) {

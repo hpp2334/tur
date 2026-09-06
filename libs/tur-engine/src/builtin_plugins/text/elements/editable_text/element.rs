@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,7 +25,7 @@ use crate::core::elements::{
 };
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::js_runtime::JsProps;
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::layout::{Constraints, ElementSubscribe, SubscribeCx};
 use crate::core::platform::ImeEvent;
 use crate::core::platform::PointerDeviceKind;
 use crate::core::platform::key_event::KeydownEvent;
@@ -163,6 +164,8 @@ impl View for EditableTextView {
                 resolved_obscured: false,
                 resolved_obscuring_char: '\u{2022}',
                 painting: EditableTextPainting::default(),
+                layout_key: None,
+                shape_count: Cell::new(0),
                 blink_task: None,
             })
             .with_callbacks()
@@ -192,6 +195,34 @@ pub struct EditableTextPainting {
     pub(crate) cursor_color: Option<Color>,
 }
 
+/// Inputs that fully determine `EditableTextElement`'s parley layout. When
+/// two consecutive `perform_layout` passes resolve the same key, the second
+/// reuses the first's `cached_layout` instead of re-shaping the document —
+/// the win behind O(1) cursor-move layouts and scroll stability (scroll
+/// changes only the child offset, never the constraints).
+///
+/// Everything `perform_layout` reads that can affect the built layout must
+/// appear here: content (via the controller's content revision — covers
+/// spans, text, and IME composition), font style, the base brush color (it
+/// colors the layout's runs), the placeholder branch, password masking, and
+/// the incoming constraints.
+#[derive(PartialEq)]
+pub(crate) struct EditableLayoutKey {
+    pub(crate) revision: u64,
+    pub(crate) font_size: f64,
+    pub(crate) font_family: Option<String>,
+    pub(crate) font_weight: Option<f64>,
+    /// The base brush pushed over the whole text: the resolved `color`, or
+    /// `placeholder_color` while the placeholder is displayed.
+    pub(crate) base_color: Color,
+    /// Resolved placeholder string — `Some` only while the placeholder (not
+    /// the value) drives the laid-out text.
+    pub(crate) placeholder: Option<String>,
+    pub(crate) obscured: bool,
+    pub(crate) obscuring_char: char,
+    pub(crate) constraints: Constraints,
+}
+
 pub struct EditableTextElement {
     pub(crate) view: EditableTextView,
     pub(crate) cached_layout: Option<Arc<TextLayoutData>>,
@@ -203,6 +234,13 @@ pub struct EditableTextElement {
     /// Last-resolved `obscuringCharacter` (default `•`).
     pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
+    /// Inputs of the last *built* layout (see `EditableLayoutKey`). A pass
+    /// that resolves the same key reuses `cached_layout` without re-shaping.
+    pub(crate) layout_key: Option<EditableLayoutKey>,
+    /// How many times a parley layout was built for this element (dev-tool
+    /// perf counter — surfaces as `shapeCount`). Cursor-only changes and
+    /// no-op re-highlights leave it untouched.
+    pub(crate) shape_count: Cell<u64>,
     /// Handle to the caret-blink task. `Some` while focused (the spawned
     /// loop sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
     /// `request_frame`, which self-wakes the worker to render the toggle);
@@ -926,7 +964,8 @@ impl ElementTrace for EditableTextElement {
     }
 
     fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
-        self.cached_layout
+        let mut extra = self
+            .cached_layout
             .as_ref()
             .map(|ld| {
                 vec![
@@ -935,7 +974,12 @@ impl ElementTrace for EditableTextElement {
                     ("layoutHeight", TraceValue::Num(ld._height as f64)),
                 ]
             })
-            .unwrap_or_default()
+            .unwrap_or_default();
+        // Perf counter: how many times the document was shaped. Stable
+        // across cursor moves, scrolls, and no-op re-highlights (the layout
+        // memo); +1 per actual content/style change.
+        extra.push(("shapeCount", TraceValue::Num(self.shape_count.get() as f64)));
+        extra
     }
 }
 

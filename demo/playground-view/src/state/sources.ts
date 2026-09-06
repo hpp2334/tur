@@ -32,6 +32,8 @@ const WHITELIST = new Set([
     "grid-gallery",
     "grid-basic",
     "grid-aspect",
+    "table-basic",
+    "table-reactive",
     "jigsaw-puzzle",
     "countdown",
     "github-viewer",
