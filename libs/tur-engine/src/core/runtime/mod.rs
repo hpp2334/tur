@@ -248,6 +248,7 @@ impl TurRuntime {
         worker_pool: WorkerPoolHandle,
         instance_data_definer: Option<InstanceDataDefiner>,
         virtual_app_id: crate::core::virtual_app::VirtualAppId,
+        parent_rails: Option<crate::core::virtual_app::ParentRails>,
     ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
         // The shell owns the window's frame clock — take it exactly once
         // here (a second take returns `None`) and subscribe the loop's
@@ -317,6 +318,7 @@ impl TurRuntime {
             self.host_loop.clone(),
             vsync.clone(),
             Rc::new(backend),
+            parent_rails,
         ));
         let app = Rc::new(TurApp::new(host.clone()));
         let looper = TurAppLooper::new(host, host_rx, vsync_events);
@@ -344,6 +346,7 @@ impl TurRuntime {
         pool: WorkerPoolHandle,
         renderer: Box<dyn crate::core::render::Renderer>,
         shell: Box<dyn crate::core::shell::Shell>,
+        parent_rails: crate::core::virtual_app::ParentRails,
     ) -> Result<(Rc<TurApp>, TurAppLooper), TurError> {
         debug_assert!(
             token != crate::core::virtual_app::VirtualAppId::ROOT,
@@ -357,6 +360,7 @@ impl TurRuntime {
             pool,
             None,
             token,
+            Some(parent_rails),
         )
     }
 }
@@ -565,6 +569,7 @@ impl<'rt> TurAppBuilder<'rt> {
             // child identity is assigned by the hosting parent through
             // `spawn_hosted_instance` (never a builder option).
             crate::core::virtual_app::VirtualAppId::ROOT,
+            None,
         )
     }
 
@@ -608,6 +613,7 @@ impl<'rt> TurAppBuilder<'rt> {
             pool,
             instance_data_definer,
             crate::core::virtual_app::VirtualAppId::ROOT,
+            None,
         )
     }
 
@@ -663,12 +669,22 @@ pub(crate) fn build_worker_backend(
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
+    // Runtime-error reporter: reaches the boa Context two ways — as
+    // host-defined data (capture sites read it via
+    // `runtime_error::report(ctx, err)`) and via the promise-rejection
+    // host hook. One identity per instance, built from the shared
+    // worker→host sender.
+    let reporter = crate::core::app::runtime_error::RuntimeErrorReporter::new(host_tx.clone());
     let mut boa_context = Context::builder()
         .clock(Rc::new(ClockProxy(clock.clone())))
         .job_executor(executor.clone())
         .module_loader(module_loader.clone())
+        .host_hooks(Rc::new(
+            crate::core::app::runtime_error::PromiseRejectionHandler::new(reporter.clone()),
+        ))
         .build()
         .expect("failed to build boa context");
+    boa_context.insert_data(reporter);
 
     let mut internal = TurAppInternal::new(
         font_context,

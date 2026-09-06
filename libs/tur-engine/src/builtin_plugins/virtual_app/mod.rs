@@ -11,10 +11,13 @@
 //! JS surface (all on `tur:std`):
 //!
 //! ```js
-//! import { createModuleSource, createVirtualAppController, VirtualAppView } from "tur:std";
+//! import { createModuleSource, createVirtualAppController, mutate, VirtualAppView } from "tur:std";
 //!
 //! const src = createModuleSource(compiledJs);     // opaque handle, never the string
-//! const app = createVirtualAppController({ source: src, pool: "virtual", keepAlive: false });
+//! const app = createVirtualAppController({
+//!     source: src, pool: "virtual", keepAlive: false,
+//!     onRuntimeError$: mutate((ctx, e) => log(e.message)),  // runtime errors in the child
+//! });
 //! app.status$;    // "idle" | "spawning" | "running" | "error" | "destroyed"
 //! app.errorMsg$;
 //! store.set(app.destroy$);                        // control mutation — the only lifecycle action

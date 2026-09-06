@@ -202,6 +202,24 @@ impl CustomAppEvent for VirtualFrameEvent {
     }
 }
 
+/// Runtime-error egress: host → parent worker, riding `AppEvent::Custom`
+/// (the status/frame pattern). Dispatched to the controller's
+/// `onRuntimeError$` mutation by the parent's `VirtualAppSubsystem`.
+#[derive(Debug)]
+pub struct VirtualErrorEvent {
+    pub token: VirtualAppId,
+    pub report: crate::core::app::runtime_error::RuntimeErrorReport,
+}
+
+impl CustomAppEvent for VirtualErrorEvent {
+    fn name(&self) -> &'static str {
+        "virtual:error"
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 /// Ship a custom app event into the parent's worker and kick it (the queued
 /// event is drained by the next `pump()`; the wake re-arms an idle worker).
 fn send_app_event(tx: &WorkerTx, wake: &Rc<dyn Fn()>, event: impl CustomAppEvent + 'static) {
@@ -251,6 +269,15 @@ fn send_status(
 /// backend itself knows nothing about hosting. Children spawn from the
 /// same [`TurRuntime`] (shared plugins / capabilities / fonts / clock)
 /// while keeping fully isolated realms, stores, and trees.
+/// The parent's worker rails, held by an **element-hosted child** so its
+/// host side can ship events straight into the parent's worker (the
+/// `VirtualErrorEvent` egress — the same rails `send_status` uses). The
+/// embedder-hosted root has none.
+pub(crate) struct ParentRails {
+    pub(crate) worker_tx: WorkerTx,
+    pub(crate) wake: Rc<dyn Fn()>,
+}
+
 pub(crate) struct VirtualHost {
     /// This instance's identity (see the type docs).
     id: VirtualAppId,
@@ -258,6 +285,9 @@ pub(crate) struct VirtualHost {
     host_loop: Rc<dyn HostLoop>,
     vsync: Rc<dyn VsyncSource>,
     backend: Rc<crate::core::runtime::HostBackend>,
+    /// The parent's worker rails — present only for element-hosted
+    /// children (threaded from `spawn_child` via `spawn_hosted_instance`).
+    parent_rails: Option<ParentRails>,
     /// Set by [`Self::destroy`]; polled by the looper's vsync wake-ups.
     destroyed: Rc<Cell<bool>>,
     /// token → child instance. Literal recursion: each value is itself a
@@ -272,6 +302,7 @@ impl VirtualHost {
         host_loop: Rc<dyn HostLoop>,
         vsync: Rc<dyn VsyncSource>,
         backend: Rc<crate::core::runtime::HostBackend>,
+        parent_rails: Option<ParentRails>,
     ) -> Self {
         Self {
             id,
@@ -279,6 +310,7 @@ impl VirtualHost {
             host_loop,
             vsync,
             backend,
+            parent_rails,
             destroyed: Rc::new(Cell::new(false)),
             children: RefCell::new(HashMap::new()),
         }
@@ -303,6 +335,28 @@ impl VirtualHost {
     /// Polled by the looper's vsync wake-ups (set by [`Self::destroy`]).
     pub(crate) fn is_destroyed(&self) -> bool {
         self.destroyed.get()
+    }
+
+    /// Forward a runtime JS error (reported by this instance's worker) to
+    /// whoever observes the instance: an element-hosted child ships it to
+    /// the PARENT's worker as a [`VirtualErrorEvent`] (the controller's
+    /// `onRuntimeError$` rail); the embedder-hosted root just logs — the
+    /// capture site already logged at error level.
+    pub(crate) fn forward_runtime_error(
+        &self,
+        report: crate::core::app::runtime_error::RuntimeErrorReport,
+    ) {
+        match &self.parent_rails {
+            Some(rails) => send_app_event(
+                &rails.worker_tx,
+                &rails.wake,
+                VirtualErrorEvent {
+                    token: self.id,
+                    report,
+                },
+            ),
+            None => tracing::warn!("JS runtime error in root instance: {report:?}"),
+        }
     }
 
     /// The hosted children as host cores. The public surface
@@ -448,9 +502,19 @@ impl VirtualHost {
         // element's first `flush_post_layout` rect immediately corrects via
         // a `Resize` control, fixing `viewportSize$` before the child
         // paints anything meaningful.
-        let built =
-            self.runtime
-                .spawn_hosted_instance(token, pool, Box::new(renderer), Box::new(shell));
+        let built = self.runtime.spawn_hosted_instance(
+            token,
+            pool,
+            Box::new(renderer),
+            Box::new(shell),
+            // The parent's worker rails — the child's host forwards runtime
+            // errors (and any future egress) straight into the parent's
+            // worker through these.
+            ParentRails {
+                worker_tx: self.backend.worker_tx().clone(),
+                wake: self.backend.worker_wake_handle(),
+            },
+        );
         match built {
             Ok((app, looper)) => {
                 let child_host = app.host();
@@ -598,4 +662,5 @@ const _: fn() = || {
     assert_send::<VirtualControl>();
     assert_send::<VirtualStatusEvent>();
     assert_send::<VirtualFrameEvent>();
+    assert_send::<VirtualErrorEvent>();
 };

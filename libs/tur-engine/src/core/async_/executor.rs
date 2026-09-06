@@ -42,6 +42,7 @@ impl TurJobExecutor {
         for job in promise_jobs {
             if let Err(e) = job.call(context) {
                 tracing::error!("promise job error: {e}");
+                crate::core::app::runtime_error::report(context, &e);
             }
             count += 1;
         }
@@ -50,6 +51,7 @@ impl TurJobExecutor {
         for job in generic_jobs {
             if let Err(e) = job.call(context) {
                 tracing::error!("generic job error: {e}");
+                crate::core::app::runtime_error::report(context, &e);
             }
             count += 1;
         }

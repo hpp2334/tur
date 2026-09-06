@@ -80,6 +80,7 @@ impl CompletionQueue {
         for completion in completions {
             if let Err(e) = completion(ctx) {
                 tracing::error!("completion error: {e}");
+                crate::core::app::runtime_error::report(ctx, &e);
             }
         }
     }

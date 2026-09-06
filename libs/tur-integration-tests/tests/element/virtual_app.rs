@@ -959,3 +959,182 @@ fn virtual_app_forwarded_clicks_are_exact() {
         eval_js(&child_app, "String(globalThis.__a)"),
     );
 }
+
+// ---------------------------------------------------------------------------
+// onRuntimeError$ — runtime errors inside the child reach the parent
+// ---------------------------------------------------------------------------
+
+/// The parent module shape for the `onRuntimeError$` tests: a controller
+/// whose `onRuntimeError$` mutation records the reconstructed error on
+/// `globalThis.__err`.
+fn error_parent_module(child_src: &str) -> String {
+    format!(
+        r#"
+        import {{
+            Container, VirtualAppView, createModuleSource, createVirtualAppController,
+            mount, mutate, source, view,
+        }} from "tur:std";
+
+        const app$ = source(null);
+
+        export function start({{ store }}) {{
+            globalThis.__spawn = () => {{
+                const app = createVirtualAppController({{
+                    source: createModuleSource({child}),
+                    onRuntimeError$: mutate((_ctx, e) => {{
+                        globalThis.__err =
+                            (e instanceof Error && e.message) || String(e);
+                    }}),
+                }});
+                globalThis.__app = app;
+                store.set(app$, app);
+            }};
+            globalThis.__get = (a) => store.get(a);
+            // 50px padding: the host element sits at (50, 50), sized 300x200.
+            mount(view(() => Container({{
+                padding: 50,
+                children: [view(() => VirtualAppView({{ app$: app$ }}))],
+            }})));
+        }}
+    "#,
+        child = js_quote(child_src),
+    )
+}
+
+/// A runtime error thrown inside the child (a mutation closure) reaches the
+/// parent's `onRuntimeError$` with a reconstructed `Error` (real `message`,
+/// not the "Error: "-prefixed display form) — and it is a notification
+/// only: `status$` stays `"running"` and `errorMsg$` stays empty.
+#[test]
+fn virtual_app_runtime_error_reaches_on_runtime_error() {
+    let (runtime, driver, pool) = build_runtime();
+    let (app, looper) = build_parent(&runtime, &driver, &pool, BatchRecorder::default());
+
+    let child = r#"
+        import { Container, mutate, mount, PointerInteract, view } from "tur:std";
+        export function start() {
+            globalThis.__clicks = 0;
+            mount(view(() =>
+                PointerInteract({
+                    onClick: mutate(() => {
+                        globalThis.__clicks += 1;
+                        throw new Error("boom");
+                    }),
+                    // Fill the whole child viewport so any forwarded click hits.
+                    child: Container({ width: 300, height: 200 }),
+                }),
+            ));
+        }
+    "#;
+    let parent = error_parent_module(child);
+    futures::executor::block_on(app.load_module(parent.as_str())).expect("load parent");
+    eval_js(&app, "globalThis.__spawn()");
+    assert!(wait_status(&looper, &app, "running"));
+    let child_app = only_child(&app).expect("one hosted child");
+
+    // Click inside the host rect (host at (50,50), 300x200) → the child's
+    // onClick mutation throws.
+    click_at(&app, 120.0, 80.0, 1_000);
+    assert!(
+        looper.wait_for(|| eval_js(&app, "globalThis.__err") == "boom"),
+        "the child's throw must reach the parent's onRuntimeError$, got: {:?}",
+        eval_js(&app, "globalThis.__err"),
+    );
+    // The throwing handler ran in the child before it threw.
+    assert_eq!(
+        eval_js(&child_app, "String(globalThis.__clicks)"),
+        "1",
+        "the child's onClick must have run"
+    );
+    // Notification rail, not a lifecycle flip.
+    assert_eq!(
+        eval_js(&app, "globalThis.__get(globalThis.__app.status$)"),
+        "running"
+    );
+    assert_eq!(
+        eval_js(&app, "globalThis.__get(globalThis.__app.errorMsg$)"),
+        "",
+        "runtime errors must not touch errorMsg$ (load-error-only)"
+    );
+}
+
+/// A promise rejection with no handler inside the child reaches the parent's
+/// `onRuntimeError$` (we track rejections ourselves — the hooks + job run
+/// are ours — reporting whatever still has no handler at end of turn).
+#[test]
+fn virtual_app_promise_rejection_reaches_parent() {
+    let (runtime, driver, pool) = build_runtime();
+    let (app, looper) = build_parent(&runtime, &driver, &pool, BatchRecorder::default());
+
+    let child = r#"
+        import { Text, mount, view } from "tur:std";
+        export function start() {
+            Promise.reject(new Error("rejected"));
+            mount(view(() => Text({ text: "ok" })));
+        }
+    "#;
+    let parent = error_parent_module(child);
+    futures::executor::block_on(app.load_module(parent.as_str())).expect("load parent");
+    eval_js(&app, "globalThis.__spawn()");
+    assert!(wait_status(&looper, &app, "running"));
+
+    assert!(
+        looper.wait_for(|| eval_js(&app, "globalThis.__err") == "rejected"),
+        "the child's rejection must reach the parent's onRuntimeError$, got: {:?}",
+        eval_js(&app, "globalThis.__err"),
+    );
+}
+
+/// A rejection that gains a `.catch` within the same turn is NOT reported —
+/// the `Handle` tracker call retracts it before the end-of-flush report.
+#[test]
+fn virtual_app_rejected_promise_with_catch_not_reported() {
+    let (runtime, driver, pool) = build_runtime();
+    let (app, looper) = build_parent(&runtime, &driver, &pool, BatchRecorder::default());
+
+    let child = r#"
+        import { Text, mount, view } from "tur:std";
+        export function start() {
+            const p = Promise.reject(new Error("handled"));
+            p.catch(() => { globalThis.__caught = true; });
+            mount(view(() => Text({ text: "ok" })));
+        }
+    "#;
+    let parent = error_parent_module(child);
+    futures::executor::block_on(app.load_module(parent.as_str())).expect("load parent");
+    eval_js(&app, "globalThis.__spawn()");
+    assert!(wait_status(&looper, &app, "running"));
+    let child_app = only_child(&app).expect("one hosted child");
+
+    // Let the catch run + a turn settle.
+    assert!(
+        looper.wait_for(|| eval_js(&child_app, "String(globalThis.__caught)") == "true"),
+        "the catch handler must have run in the child"
+    );
+    let _ = looper.wait_for_timeout(std::time::Duration::from_millis(200));
+    assert_eq!(
+        eval_js(&app, "globalThis.__err"),
+        "undefined",
+        "a handled rejection must not fire onRuntimeError$"
+    );
+}
+
+/// Scope pin: module load/start failures do NOT fire `onRuntimeError$` —
+/// they keep their own rail (`status$`/`errorMsg$`/`errorView`).
+#[test]
+fn virtual_app_load_error_does_not_fire_on_runtime_error() {
+    let (runtime, driver, pool) = build_runtime();
+    let (app, looper) = build_parent(&runtime, &driver, &pool, BatchRecorder::default());
+
+    let broken = "export function start( { this is not valid javascript";
+    let parent = error_parent_module(broken);
+    futures::executor::block_on(app.load_module(parent.as_str())).expect("load parent");
+    eval_js(&app, "globalThis.__spawn()");
+    assert!(wait_status(&looper, &app, "error"));
+    let _ = looper.wait_for_timeout(std::time::Duration::from_millis(200));
+    assert_eq!(
+        eval_js(&app, "globalThis.__err"),
+        "undefined",
+        "load errors ride status$/errorMsg$ — they must not fire onRuntimeError$"
+    );
+}

@@ -165,6 +165,16 @@ pub enum HostMsg {
     /// flows back through `WorkerMsg::AppEvent(AppEvent::custom(...))`, so
     /// this is the only virtual-app message variant.
     VirtualControl(crate::core::virtual_app::VirtualControl),
+    /// A JS runtime error no caller could observe (a throwing handler /
+    /// view closure / microtask / async callback, or a promise rejection
+    /// with no handler at end of turn). Routed by `TurAppLooper` to the
+    /// instance's [`VirtualHost`](crate::core::virtual_app::VirtualHost):
+    /// an element-hosted child forwards it to its parent's worker
+    /// (`VirtualErrorEvent` → the controller's `onRuntimeError$`); the
+    /// embedder-hosted root logs it.
+    RuntimeError {
+        report: crate::core::app::runtime_error::RuntimeErrorReport,
+    },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
 }
@@ -281,6 +291,7 @@ impl fmt::Debug for HostMsg {
                 .field("len", &payload.len())
                 .finish(),
             Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
+            Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
             Self::Destroyed => write!(f, "Destroyed"),
         }
     }

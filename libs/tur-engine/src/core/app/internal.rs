@@ -413,6 +413,16 @@ impl TurAppInternal {
             }
         }
 
+        // End of turn: report promise rejections that still have no handler
+        // (a `.catch` / `await` attached within this flush retracted them
+        // from the pending set). See `runtime_error`.
+        if let Some(reporter) = boa_context
+            .get_data::<crate::core::app::runtime_error::RuntimeErrorReporter>()
+            .cloned()
+        {
+            reporter.report_pending_rejections(boa_context);
+        }
+
         if needs_paint {
             // Record the paint pass into a `Vec<RenderCommand>`; main
             // applies it to its renderer (`HostBackend::render_batch`).
@@ -702,6 +712,7 @@ impl TurAppInternal {
             // code threw) must not stall the flush — log and keep draining.
             if let Err(e) = mounted.invoke_mutation(inv.mutation, &args, boa_context) {
                 tracing::error!("mutation invocation failed: {e}");
+                crate::core::app::runtime_error::report(boa_context, &e);
             }
         }
         true
