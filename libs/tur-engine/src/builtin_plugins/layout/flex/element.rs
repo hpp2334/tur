@@ -48,6 +48,8 @@ impl View for FlexView {
                 constraints: None,
                 computed_size: None,
                 overflow: 0.0,
+                warned_stretch_unbounded: false,
+                warned_flex_unbounded: false,
             }),
             boa,
         );
@@ -73,6 +75,12 @@ pub struct FlexElement {
     pub(crate) constraints: Option<Constraints>,
     pub(crate) computed_size: Option<Size>,
     pub(crate) overflow: f64,
+    /// One-shot layout diagnostics (log once per element instance, not per
+    /// frame): cross-axis `Stretch` degraded under an unbounded cross axis.
+    pub(crate) warned_stretch_unbounded: bool,
+    /// One-shot layout diagnostics: flex (`Expanded`) children collapsed to
+    /// zero slots under unbounded main-axis constraints.
+    pub(crate) warned_flex_unbounded: bool,
 }
 
 impl Lifecycle for FlexElement {}

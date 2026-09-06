@@ -20,10 +20,52 @@ impl ElementLayout for StackElement {
 
         for &child_id in children {
             let child_constraints = match fit {
+                // `Expand` builds tight constraints from the incoming maxes —
+                // under an unbounded axis (e.g. a Stack that is a non-flex
+                // child of a Column) that would mint `min = max = ∞` and
+                // leak infinite sizes. Degrade that axis to loose instead
+                // (Flutter reports this as a layout error) and say so once.
+                StackFit::Expand => {
+                    let degraded =
+                        !constraints.max_width.is_finite() || !constraints.max_height.is_finite();
+                    if degraded && !self.warned_expand_unbounded {
+                        self.warned_expand_unbounded = true;
+                        tracing::error!(
+                            "Stack with fit=Expand has unbounded constraints \
+                             (width: {}, height: {}): Expand degrades to loose \
+                             on the unbounded axes. Give the Stack a bounded \
+                             size (e.g. wrap in Expanded) — Flutter reports \
+                             this as a layout error.",
+                            if constraints.max_width.is_finite() {
+                                "bounded"
+                            } else {
+                                "unbounded"
+                            },
+                            if constraints.max_height.is_finite() {
+                                "bounded"
+                            } else {
+                                "unbounded"
+                            },
+                        );
+                    }
+                    let base = constraints
+                        .constrain(Size::new(constraints.max_width, constraints.max_height));
+                    Constraints {
+                        min_width: if base.width.is_finite() {
+                            base.width
+                        } else {
+                            0.0
+                        },
+                        max_width: constraints.max_width,
+                        min_height: if base.height.is_finite() {
+                            base.height
+                        } else {
+                            0.0
+                        },
+                        max_height: constraints.max_height,
+                    }
+                }
                 StackFit::Loose => Constraints::loose(
-                    constraints.constrain(Size::new(constraints.max_width, constraints.max_height)),
-                ),
-                StackFit::Expand => Constraints::tight(
                     constraints.constrain(Size::new(constraints.max_width, constraints.max_height)),
                 ),
                 StackFit::Passthrough => *constraints,

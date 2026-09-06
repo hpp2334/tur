@@ -30,6 +30,7 @@ impl View for StackView {
             AnyElement::new(StackElement {
                 view: self.clone(),
                 computed_size: None,
+                warned_expand_unbounded: false,
             }),
             boa,
         );
@@ -53,6 +54,9 @@ impl View for StackView {
 pub struct StackElement {
     pub(crate) view: StackView,
     pub(crate) computed_size: Option<Size>,
+    /// One-shot layout diagnostic: `StackFit::Expand` degraded under an
+    /// unbounded axis.
+    pub(crate) warned_expand_unbounded: bool,
 }
 
 impl Lifecycle for StackElement {}

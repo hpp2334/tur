@@ -34,7 +34,10 @@ impl View for PositionedView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
-            AnyElement::new(PositionedElement { view: self.clone() }),
+            AnyElement::new(PositionedElement {
+                view: self.clone(),
+                warned_edges_unbounded: false,
+            }),
             boa,
         );
         let _child_id = self.child.build(cx, boa, id.into());
@@ -50,6 +53,9 @@ impl View for PositionedView {
 
 pub struct PositionedElement {
     pub(crate) view: PositionedView,
+    /// One-shot layout diagnostic: an opposing-edge pair degraded under an
+    /// unbounded axis.
+    pub(crate) warned_edges_unbounded: bool,
 }
 
 impl Lifecycle for PositionedElement {}

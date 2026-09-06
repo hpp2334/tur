@@ -529,20 +529,27 @@ Switch({
 
 Reserve `Switch` for cases where the **shape** of the subtree genuinely changes (different element types, different queryKeys, different children).
 
-### 9.4 Pattern: every `Row` inside a Container needs `mainAxisSize: Min`
+### 9.4 Layout: nested Rows/Columns shrink-wrap by default (Flutter parity)
 
-This is the most common layout bug in the redesign. The engine's `Row` defaults to `MainAxisSize::Max`, which means "expand to fill parent". When a Row is the child of an unset-width Container inside another Row, the inner Row will try to consume the outer Row's full available width — pushing siblings off-screen.
+> Engine note: non-flex children of a `Column`/`Row` receive **unbounded
+> main-axis constraints** (matching Flutter's `RenderFlex`). A nested flex's
+> default `MainAxisSize::Max` therefore degenerates to content size — nested
+> Rows/Columns "just shrink" exactly as they do in Flutter.
 
-**Rule**: any `Row` that is the direct child of a `Container` (without an explicit width) MUST set `mainAxisSize: MainAxisSize.Min` unless it is genuinely meant to fill the container's width.
+Historically the engine passed the parent's bounded main-axis max through to
+non-flex children, so every nested `Row`/`Column` inflated to the parent's full
+extent unless it set `mainAxisSize: MainAxisSize.Min`. That workaround is no
+longer required (though `Min` remains valid and self-documenting for
+content-sized rows like buttons and badges):
 
 ```ts
-// ✓ Buttons, badges, labels — content-sized
+// ✓ Buttons, badges, labels — content-sized (Min is optional now, kept for clarity)
 Container({
     padding: 6,
     borderRadius: 6,
     color: tokens.bg.button.primary,
     children: [Row({
-        mainAxisSize: MainAxisSize.Min,   // ← critical
+        mainAxisSize: MainAxisSize.Min,
         children: [
             Text({ text: "▶", ... }),
             SizedBox({ width: 4 }),
@@ -554,12 +561,19 @@ Container({
 // ✓ Layout row that should fill — no mainAxisSize needed
 Row({
     children: [
-        Brand(),                    // content-sized (its inner Row is Min)
+        Brand(),                    // content-sized
         Expanded({ child: ... }),   // fills remaining
         Actions(),                  // content-sized
     ],
 })
 ```
+
+**Fill requires bounded constraints**: a child that must fill its parent's main
+axis needs `Expanded` (or an explicit size). `ScrollView` follows Flutter's
+`SingleChildScrollView`: it shrink-wraps to its content on both axes (filling
+only under tight constraints — `Expanded`) — make scroll content fill the width
+with a `crossAlignment: Stretch` content Column. `LazyList`/`LazyGrid` keep
+ListView semantics and still require bounded constraints.
 
 **Symptom of violation**: a Container reports its width as the parent's full width even though its visible content is much narrower. Debug via `JSON.parse(globalThis.turDevTool.elementTree())`.
 
@@ -632,7 +646,7 @@ function Viewer(): Element {
 
 Add to §6's PR review checklist:
 
-- [ ] Every `Row` inside a `Container` without explicit width sets `mainAxisSize: MainAxisSize.Min` (unless it's meant to fill).
+- [ ] Content-sized `Row`/`Column` may set `mainAxisSize: MainAxisSize.Min` for clarity; anything meant to fill its parent's main axis uses `Expanded` or an explicit size.
 - [ ] Every interactive group uses one shared `hovered$` source, not per-item sources.
 - [ ] Layout changes that only affect flex ratios use `derive()` on `Expanded.flex`, not `Switch`.
 - [ ] Auto-run / debounce paths supersede the previous `Task` via `cancel()` before launching a new one (`launch` + `yield sleep`).

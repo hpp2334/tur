@@ -7,7 +7,7 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-import { mount, ScrollView, Input } from "tur:std";
+import { mount, ScrollView, Input, Column, CrossAxisAlignment } from "tur:std";
 
 const lines = [];
 for (let i = 0; i < 30; i++) lines.push("line " + i);
@@ -15,12 +15,19 @@ globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
 mount(ScrollView({
     queryKey: ["scroll"],
-    child: Input({
-        controller: globalThis.__ctrl,
-        multiline: true,
-        fontSize: 14,
-        fontFamily: "monospace",
-        queryKey: ["editor"],
+    // Stretch content so the editor fills the width — the ScrollView
+    // shrink-wraps to its content (Flutter parity), and an intrinsically
+    // ~60px-wide editor would otherwise sit centered, away from the
+    // top-left click the test performs.
+    child: Column({
+        crossAlignment: CrossAxisAlignment.Stretch,
+        children: [Input({
+            controller: globalThis.__ctrl,
+            multiline: true,
+            fontSize: 14,
+            fontFamily: "monospace",
+            queryKey: ["editor"],
+        })],
     }),
 }));
 "#;

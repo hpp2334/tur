@@ -531,7 +531,7 @@ Top chrome strip — brand, current case name, primary actions. Single horizonta
 
 **Background**: `bg.elevated`. **Border**: 1px `border.subtle` (visible only on bottom edge — top/left/right sit at canvas bounds). **Padding**: `space.sm` vertical × `space.md` horizontal. **Approximate height**: 40px.
 
-> **Engine note**: every inner `Row` in the toolbar MUST set `mainAxisSize: MainAxisSize.Min`. Default `Max` causes each region to consume the parent's full width, pushing other regions off-screen.
+> **Engine note**: inner `Row`s in the toolbar use `mainAxisSize: MainAxisSize.Min` for self-documentation. Since the Flutter-parity change (non-flex flex children get unbounded main-axis constraints), nested Rows shrink-wrap by default and the `Min` is optional — regions can no longer consume the parent's full width.
 
 ### 4.12 `RunButton` (implemented)
 
