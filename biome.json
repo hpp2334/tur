@@ -11,8 +11,7 @@
             "!!**/pkg",
             "!!**/generated",
             "!!**/cases-generated.ts",
-            "!!**/generated.ts",
-            "!!**/test-results"
+            "!!**/generated.ts"
         ]
     },
     "vcs": {

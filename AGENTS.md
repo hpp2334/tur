@@ -1120,7 +1120,7 @@ rendering, or `NoopRenderer` for debug logging.
 
 ## Debugging the playground (main agent + operator)
 
-The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly via Playwright MCP tools and delegates seeing + driving to the **operator** subagent (Task tool, `operator` type — `.opencode/agents/operator.md`): a multimodal agent that reads screenshots AND operates the playground browser itself (fresh cert-bypassed context, canvas-event dispatch, screenshots).
+The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly with the `agent-browser` CLI (Vercel's browser automation CLI for agents, run from the shell — `agent-browser skills get core --full` is the canonical command reference) and delegates seeing + driving to the **operator** subagent (Task tool, `operator` type — `.opencode/agents/operator.md`): a multimodal agent that reads screenshots AND operates the playground browser itself (open, screenshot, canvas input, last-resort turDevTool inspection). agent-browser keeps the browser alive in a background daemon, so open → inspect → click → screenshot are successive shell commands against the same live page.
 
 ### Start the dev server
 
@@ -1130,25 +1130,19 @@ cd demo/website && pnpm dev
 # → https://localhost:8080/ (self-signed cert)
 ```
 
-The dev server runs over HTTPS with a self-signed cert. Playwright MCP's default context rejects the cert — **bypass it** by opening a fresh context with `ignoreHTTPSErrors: true` via `playwright_browser_run_code_unsafe`:
+The dev server runs over HTTPS with a self-signed cert — pass `--ignore-https-errors` when opening it (no other cert plumbing needed):
 
-```js
-async (page) => {
-  const newCtx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
-  const newPage = await newCtx.newPage();
-  await newPage.goto('https://localhost:8080/', { waitUntil: 'load' });
-  // ...interact via newPage (the MCP snapshot tools won't see it — use evaluate / screenshot)
-}
+```sh
+agent-browser open https://localhost:8080/ --ignore-https-errors
+agent-browser wait 9000    # engine boot + first hosted case
 ```
-
-The new context's page isn't tracked by the MCP snapshot/click tools — use `newPage.evaluate(...)`, `newPage.screenshot(...)`, `newPage.on('console' | 'pageerror', ...)` directly inside the `run_code_unsafe` callback.
 
 ### Drive the canvas
 
-1. `playwright_browser_navigate` → `http://localhost:8080/`.
-2. `playwright_browser_evaluate` → read `JSON.parse(globalThis.turDevTool.elementTree())` for exact element rects. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `JSON.parse(globalThis.turDevTool.getElement(childId))`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
-3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: dispatch `KeyboardEvent` on the focused element (canvas or the hidden `<textarea>` when an `EditableText` has focus).
-4. Re-read `turDevTool.elementTree()` / `getElement(id)` or take a screenshot to confirm the result.
+1. `eval` reads exact element rects: `agent-browser eval "(async () => JSON.parse(await globalThis.turDevTool.elementTree()))()"`. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `(async () => JSON.parse(await globalThis.turDevTool.getElement(id)))()`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
+2. Click with real input at viewport coordinates: `agent-browser mouse move 30 200 && agent-browser mouse down && agent-browser mouse up`. Synthetic dispatch also works, but wrap it in an IIFE — plain top-level `const` in `eval` collides with page-level bindings: `agent-browser eval "(() => { const c = document.querySelector('canvas'); c.dispatchEvent(new MouseEvent('mousedown', { clientX: 30, clientY: 200, bubbles: true })); c.dispatchEvent(new MouseEvent('mouseup', { clientX: 30, clientY: 200, bubbles: true })); })()"`. Keyboard: `agent-browser focus canvas && agent-browser press Enter` (or focus the hidden `<textarea>` when an `EditableText` has focus).
+3. Confirm the result: re-run the turDevTool evals, or `agent-browser screenshot .agent-browser/check.png` and read the image. `agent-browser console` / `agent-browser errors` dump captured page output.
+4. `eval` returns the expression's value and awaits promises automatically — never write a bare top-level `await` (syntax error); wrap `await` / multi-statement code in an async IIFE as above. Add `--json` for machine-readable output.
 
 ### Verify visually with the operator
 
@@ -1156,14 +1150,21 @@ The new context's page isn't tracked by the MCP snapshot/click tools — use `ne
 
 ### Stop the dev server after verification
 
-Once visual verification is done, **kill the dev server** — free port 8080 with `lsof -ti:8080 | xargs kill` (or `pkill -f "rspack dev"`). Do not leave it running — it holds port 8080 and rebuilds wasm on every watch cycle.
+Once visual verification is done, close the browser and **kill the dev server**:
+
+```sh
+agent-browser close         # shut down the automation browser
+lsof -ti:8080 | xargs kill  # (or pkill -f "rspack dev")
+```
+
+Do not leave the dev server running — it holds port 8080 and rebuilds wasm on every watch cycle.
 
 ### Clean up screenshots after verification
 
-If a screenshot was saved with a bare `filename`, it lands at the workspace root and shows up as an untracked file. After every visual-verification round, remove stray workspace-root PNGs so the working tree stays clean:
+Save screenshots under the gitignored `.agent-browser/` directory (paths resolve relative to the invoking shell's cwd) — never the workspace root. After every visual-verification round, remove them:
 
 ```sh
-rm -f *.png  # only stray workspace-root screenshots; safe since no PNGs are tracked at root
+rm -rf .agent-browser    # scratch screenshots only; the dir is gitignored
 ```
 
 Verify with `git status` — only the intended source changes should remain. Never commit a screenshot.
