@@ -422,6 +422,45 @@ declare module "tur:std" {
         queryKey?: Val<string[]>;
     }
 
+    /** One `Table.columns` entry. `width` = fixed px; `flex` = share of the
+     *  leftover width (proportional to the total flex weight). A column with
+     *  neither defaults to `flex: 1`. `minWidth` clamps the distributed
+     *  share up (may overflow the available width). */
+    export interface TableColumnDef {
+        width?: number;
+        flex?: number;
+        minWidth?: number;
+    }
+
+    /** A non-scrollable data table with shared column geometry: the header
+     *  row and every body row lay their cells at the same resolved column
+     *  widths (CSS `table-layout: fixed` semantics). `rows` is a reactive
+     *  array — writing a new array value rebuilds the row subtrees (write a
+     *  fresh array; in-place mutation of the same array object with an
+     *  unchanged length is not observed). `build` returns one row's cells,
+     *  positionally mapped to the columns: a `null` entry is an empty cell
+     *  box (the column advances), entries beyond the column count are
+     *  ignored. `buildHeader` follows the same mapping and runs ONCE at
+     *  build — reactive header content flows through `Val` props inside
+     *  the returned cells. Without an extent, a row's height is the max
+     *  intrinsic cell height (cells get loose height constraints); with
+     *  one, cells fill it. Wrap in a `ScrollView` to scroll. */
+    export interface TableProps<T> {
+        columns: TableColumnDef[];
+        rows: Readable<T[]>;
+        build: (item: T, index: number) => (Element | null)[];
+        buildHeader?: () => (Element | null)[];
+        headerExtent?: Val<number>;
+        rowExtent?: Val<number>;
+        rowSpacing?: Val<number>;
+        /** Painted under odd body rows. */
+        stripeColor?: Val<Brush | null>;
+        /** Horizontal rules between body rows + under the header. */
+        dividerColor?: Val<Brush | null>;
+        dividerThickness?: Val<number>;
+        queryKey?: Val<string[]>;
+    }
+
     export interface EachProps<T> {
         items: Readable<T[]>;
         build: (item: T, index: number) => Element;
@@ -664,6 +703,7 @@ declare module "tur:std" {
     export function Each<T>(props: EachProps<T>): Element;
     export function LazyList(props: LazyListProps): Element;
     export function Grid(props: GridProps): Element;
+    export function Table<T>(props: TableProps<T>): Element;
     export function LazyGrid(props: LazyGridProps): Element;
     export function ScrollView(props: ScrollViewProps): Element;
     export function Scrollbar(props: ScrollbarProps): Element;
