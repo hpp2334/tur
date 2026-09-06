@@ -94,6 +94,7 @@ impl View for LazyListView {
                 first_mounted_offset: 0.0,
                 reported_start: 0,
                 reported_end: 0,
+                warned_unbounded: false,
             })
             .with_callbacks(),
             boa,
@@ -165,6 +166,9 @@ pub struct LazyListElement {
     pub(crate) first_mounted_offset: f64,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
+    /// One-shot layout diagnostic: viewport collapsed under unbounded
+    /// constraints.
+    pub(crate) warned_unbounded: bool,
 }
 
 impl LazyListElement {

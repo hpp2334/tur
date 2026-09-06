@@ -2,6 +2,47 @@ use tur_engine::builtin_plugins::scroll::ScrollViewElement;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
+// Flutter parity (_RenderSingleChildViewport): the ScrollView's own size is
+// `constraints.constrain(child.size)` — shrink-wrapped to its content on both
+// axes, clamped by the incoming constraints. It fills only under tight
+// constraints (e.g. inside an Expanded).
+#[test]
+fn scroll_view_shrink_wraps_to_content() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("scroll-view-shrink-wrap").unwrap();
+
+    let sv_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        ElementNodeId::new(root.children[0].as_u64())
+    };
+
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert_eq!(
+            sv.viewport_size().width,
+            120.0,
+            "viewport width shrink-wraps to the widest content child"
+        );
+        assert_eq!(
+            sv.viewport_size().height,
+            80.0,
+            "viewport height shrink-wraps to the content (40 + 40), not the 600px constraint max"
+        );
+    });
+
+    let rt = app.element_tree();
+    let sv = rt.get_element(sv_id).unwrap();
+    assert_eq!(sv.computed_layout.size.width, 120.0);
+    assert_eq!(sv.computed_layout.size.height, 80.0);
+    assert_eq!(
+        sv.computed_layout.offset.x, 140.0,
+        "root centers the shrink-wrapped viewport: (400 - 120) / 2"
+    );
+}
+
 #[test]
 fn scroll_view_viewport_constrained() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();

@@ -91,6 +91,7 @@ impl View for LazyGridView {
                 visible,
                 reported_start: 0,
                 reported_end: 0,
+                warned_unbounded: false,
             })
             .with_callbacks(),
             boa,
@@ -146,6 +147,9 @@ pub struct LazyGridElement {
     pub(crate) visible: Vec<(u64, NodeId)>,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
+    /// One-shot layout diagnostic: viewport collapsed under unbounded
+    /// constraints.
+    pub(crate) warned_unbounded: bool,
 }
 
 impl LazyGridElement {

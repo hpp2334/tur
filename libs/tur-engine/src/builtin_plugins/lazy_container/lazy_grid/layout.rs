@@ -23,6 +23,31 @@ impl ElementLayout for LazyGridElement {
         } else {
             0.0
         };
+        // LazyGrid follows ListView/GridView semantics (unlike ScrollView):
+        // it REQUIRES bounded constraints along its axis and fills them. An
+        // unbounded axis collapses the viewport to zero — Flutter reports
+        // this as a layout error; we log it once and degrade.
+        if (!constraints.max_width.is_finite() || !constraints.max_height.is_finite())
+            && !self.warned_unbounded
+        {
+            self.warned_unbounded = true;
+            tracing::error!(
+                "LazyGrid with unbounded constraints (width: {}, height: {}): \
+                 the viewport collapses to zero on the unbounded axes. Wrap it \
+                 in a bounded parent (e.g. Expanded) — Flutter reports this as \
+                 a layout error.",
+                if constraints.max_width.is_finite() {
+                    "bounded"
+                } else {
+                    "unbounded"
+                },
+                if constraints.max_height.is_finite() {
+                    "bounded"
+                } else {
+                    "unbounded"
+                },
+            );
+        }
         let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
 
         let (cross_axis_size, viewport_main) = match self.axis {

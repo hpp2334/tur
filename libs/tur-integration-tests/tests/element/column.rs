@@ -130,7 +130,7 @@ fn column_nested_children_do_not_overlap() {
     );
     assert_eq!(
         inner_col.computed_layout.size.height, 30.0,
-        "inner column with mainAxisSize=Min should size to content"
+        "nested column (default MainAxisSize.max) should shrink-wrap: non-flex children get unbounded main-axis constraints (Flutter RenderFlex parity)"
     );
 
     let sb3 = rt.get_element(ElementNodeId::new(sb3_id.as_u64())).unwrap();

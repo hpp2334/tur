@@ -108,8 +108,14 @@ fn wheel_chains_to_parent_at_boundary() {
         let row = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        let outer = tree
+        // The outer ScrollView is wrapped in an Expanded (non-flex Row
+        // children get unbounded width — Flutter parity), so navigate
+        // through the flex-item wrapper.
+        let expanded = tree
             .get_element(ElementNodeId::new(row.children[1].as_u64()))
+            .unwrap();
+        let outer = tree
+            .get_element(ElementNodeId::new(expanded.children[0].as_u64()))
             .unwrap();
         let col = tree
             .get_element(ElementNodeId::new(outer.children[0].as_u64()))

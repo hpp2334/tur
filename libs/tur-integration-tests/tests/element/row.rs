@@ -136,3 +136,68 @@ fn row_cross_center_in_column_does_not_starve_siblings() {
         "third child at y=50 (Row 20 + SizedBox 30), not starved"
     );
 }
+
+// Flutter parity: non-flex children of a flex receive UNBOUNDED main-axis
+// constraints (RenderFlex passes only the cross axis down). A nested Row with
+// the default MainAxisSize.max must therefore shrink-wrap to its content
+// width instead of consuming the outer Row's full width — the sibling after
+// it stays visible instead of being pushed past the outer extent.
+#[test]
+fn row_nested_row_shrink_wraps_and_keeps_sibling_visible() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("row-nested").unwrap();
+
+    let (outer_row_id, inner_row_id, sb1_id, sb2_id, sibling_id) = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        let outer_row = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        assert_eq!(outer_row.kind().unwrap(), ElementKind::new("tur_flex"));
+        assert_eq!(outer_row.children.len(), 2);
+        let inner_row = tree
+            .get_element(ElementNodeId::new(outer_row.children[0].as_u64()))
+            .unwrap();
+        assert_eq!(inner_row.kind().unwrap(), ElementKind::new("tur_flex"));
+        (
+            outer_row.id,
+            inner_row.id,
+            inner_row.children[0],
+            inner_row.children[1],
+            outer_row.children[1],
+        )
+    };
+
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let rt = app.element_tree();
+
+    let inner_row = rt.get_element(inner_row_id).unwrap();
+    assert_eq!(
+        inner_row.computed_layout.size.width, 50.0,
+        "nested Row (default MainAxisSize.max) should shrink-wrap to content (20 + 30)"
+    );
+
+    let sb2 = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    assert_eq!(
+        sb2.computed_layout.offset.x, 20.0,
+        "second child of the nested Row at x=20"
+    );
+
+    let sibling = rt
+        .get_element(ElementNodeId::new(sibling_id.as_u64()))
+        .unwrap();
+    assert_eq!(
+        sibling.computed_layout.offset.x, 50.0,
+        "sibling after the nested Row at x=50 — not pushed past the outer extent"
+    );
+    assert_eq!(sibling.computed_layout.size.width, 50.0);
+
+    let outer_row = rt.get_element(outer_row_id).unwrap();
+    assert_eq!(
+        outer_row.computed_layout.size.width, 400.0,
+        "outer (root) Row still fills the bounded screen width"
+    );
+
+    let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    assert_eq!(sb1.computed_layout.size.width, 20.0);
+}

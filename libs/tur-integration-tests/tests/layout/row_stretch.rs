@@ -12,8 +12,14 @@ fn row_stretch_non_expanded_with_expanded_sibling() {
         let column = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        let row = tree
+        // The Row is wrapped in an Expanded (a Stretch Row needs bounded
+        // height; non-flex Column children get unbounded main-axis
+        // constraints — Flutter parity), so navigate through the wrapper.
+        let row_wrapper = tree
             .get_element(ElementNodeId::new(column.children[0].as_u64()))
+            .unwrap();
+        let row = tree
+            .get_element(ElementNodeId::new(row_wrapper.children[0].as_u64()))
             .unwrap();
         assert_eq!(row.children.len(), 3, "row should have 3 children");
         (row.children[0], row.children[1], row.children[2])

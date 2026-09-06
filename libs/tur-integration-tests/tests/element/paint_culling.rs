@@ -42,7 +42,7 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.eval_module_source(
         r#"
-        import { mount, ScrollView, Column, Container, createColor } from "tur:std";
+        import { mount, ScrollView, Column, Container, createColor, CrossAxisAlignment } from "tur:std";
         const kids = [];
         for (let i = 0; i < 6; i++) {
             kids.push(Container({
@@ -51,7 +51,7 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
                 queryKey: ["item", i],
             }));
         }
-        mount(ScrollView({ queryKey: ["scroll"], child: Column({ children: kids }) }));
+        mount(ScrollView({ queryKey: ["scroll"], child: Column({ crossAlignment: CrossAxisAlignment.Stretch, children: kids }) }));
     "#,
     )
     .expect("mount");

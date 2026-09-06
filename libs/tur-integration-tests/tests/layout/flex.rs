@@ -1,6 +1,97 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
+// Flutter reports both degenerate cases below as layout errors ("RenderFlex
+// children have non-zero flex but incoming height constraints are unbounded";
+// stretch under unbounded cross). tur degrades gracefully instead: Stretch
+// falls back to loose cross constraints and flex slots collapse to zero —
+// and no infinite size may ever leak upward.
+#[test]
+fn flex_degenerate_unbounded_cases_degrade_finitely() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import {
+            mount,
+            Column,
+            CrossAxisAlignment,
+            Expanded,
+            Row,
+            SizedBox,
+        } from "tur:std";
+
+        mount(Column({
+            children: [
+                // Stretch Row under an unbounded cross axis (non-flex child
+                // of a Column): Stretch degrades to loose cross.
+                Row({
+                    crossAlignment: CrossAxisAlignment.Stretch,
+                    queryKey: ["stretch-row"],
+                    children: [SizedBox({ width: 50 })],
+                }),
+                // Expanded inside a Column with unbounded height: the flex
+                // slot collapses to zero instead of infinity.
+                Column({
+                    queryKey: ["flex-col"],
+                    children: [Expanded({ child: SizedBox({ height: 50 }) })],
+                }),
+            ],
+        }));
+    "#,
+    )
+    .unwrap();
+
+    let (stretch_row_id, flex_col_id, expanded_id) = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        let outer = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let stretch_row = tree
+            .get_element(ElementNodeId::new(outer.children[0].as_u64()))
+            .unwrap();
+        let flex_col = tree
+            .get_element(ElementNodeId::new(outer.children[1].as_u64()))
+            .unwrap();
+        assert_eq!(stretch_row.children.len(), 1);
+        (stretch_row.id, flex_col.id, flex_col.children[0])
+    };
+
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let rt = app.element_tree();
+
+    let stretch_row = rt.get_element(stretch_row_id).unwrap();
+    assert!(
+        stretch_row.computed_layout.size.height.is_finite(),
+        "Stretch under an unbounded cross axis must not leak infinite sizes, got {:?}",
+        stretch_row.computed_layout.size
+    );
+    assert_eq!(stretch_row.computed_layout.size.height, 0.0);
+
+    let flex_col = rt.get_element(flex_col_id).unwrap();
+    assert!(
+        flex_col.computed_layout.size.height.is_finite(),
+        "flex children under unbounded main must not leak infinite sizes, got {:?}",
+        flex_col.computed_layout.size
+    );
+    assert_eq!(
+        flex_col.computed_layout.size.height, 0.0,
+        "Expanded slot collapses to zero under unbounded main-axis constraints"
+    );
+
+    let expanded_inner_id = {
+        let expanded = rt
+            .get_element(ElementNodeId::new(expanded_id.as_u64()))
+            .unwrap();
+        ElementNodeId::new(expanded.children[0].as_u64())
+    };
+    let expanded_child = rt.get_element(expanded_inner_id).unwrap();
+    assert_eq!(
+        expanded_child.computed_layout.size.height, 0.0,
+        "the Expanded child itself gets the collapsed zero slot"
+    );
+}
+
 #[test]
 fn row_main_alignment_start() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

@@ -27,6 +27,18 @@ fn child_flex(cx: &mut LayoutContext, child_id: ElementNodeId) -> f64 {
     cx.read_val(&flex_val).unwrap_or(1.0).max(0.0)
 }
 
+/// Cross-axis `Stretch` tightens children to the incoming cross max. Under an
+/// UNBOUNDED cross max (e.g. a Stretch Row nested in a Column) that would
+/// mint `min = max = ∞` constraints and leak infinite sizes upward — Flutter
+/// errors here; we degrade to a loose cross axis instead.
+fn stretch_min(cross_alignment: CrossAxisAlignment, max: f64) -> f64 {
+    if cross_alignment == CrossAxisAlignment::Stretch && max.is_finite() {
+        max
+    } else {
+        0.0
+    }
+}
+
 impl ElementLayout for FlexElement {
     fn perform_layout(
         &mut self,
@@ -45,6 +57,29 @@ impl ElementLayout for FlexElement {
         self.child_data.clear();
         self.constraints = Some(*constraints);
 
+        // Degenerate-case diagnostics (Flutter throws layout errors here; we
+        // degrade gracefully but log once per element instance).
+        let cross_max = match direction {
+            Axis::Vertical => constraints.max_width,
+            Axis::Horizontal => constraints.max_height,
+        };
+        if cross_alignment == CrossAxisAlignment::Stretch
+            && !cross_max.is_finite()
+            && !self.warned_stretch_unbounded
+        {
+            self.warned_stretch_unbounded = true;
+            tracing::error!(
+                "{} with crossAlignment=Stretch has an unbounded cross axis: \
+                 Stretch has no effect (children fall back to loose cross \
+                 constraints). Give the parent a bounded size (e.g. wrap in \
+                 Expanded) — Flutter reports this as a layout error.",
+                match direction {
+                    Axis::Vertical => "Column",
+                    Axis::Horizontal => "Row",
+                }
+            );
+        }
+
         let mut total_main: f64 = 0.0;
         let mut max_cross: f64 = 0.0;
         let mut total_flex: f64 = 0.0;
@@ -62,25 +97,23 @@ impl ElementLayout for FlexElement {
                     flex,
                 });
             } else {
+                // Flutter RenderFlex parity: non-flex children get the CROSS
+                // axis constraint (tight max under `Stretch`, loose
+                // otherwise) but an UNBOUNDED main axis. A nested flex's
+                // `MainAxisSize.max` then degenerates to content size under
+                // infinite main constraints, so nested Columns/Rows
+                // shrink-wrap instead of consuming the parent's extent.
                 let child_constraints = match direction {
                     Axis::Vertical => Constraints {
-                        min_width: if cross_alignment == CrossAxisAlignment::Stretch {
-                            constraints.max_width
-                        } else {
-                            0.0
-                        },
+                        min_width: stretch_min(cross_alignment, constraints.max_width),
                         max_width: constraints.max_width,
                         min_height: 0.0,
-                        max_height: constraints.max_height,
+                        max_height: f64::INFINITY,
                     },
                     Axis::Horizontal => Constraints {
                         min_width: 0.0,
-                        max_width: constraints.max_width,
-                        min_height: if cross_alignment == CrossAxisAlignment::Stretch {
-                            constraints.max_height
-                        } else {
-                            0.0
-                        },
+                        max_width: f64::INFINITY,
+                        min_height: stretch_min(cross_alignment, constraints.max_height),
                         max_height: constraints.max_height,
                     },
                 };
@@ -98,7 +131,28 @@ impl ElementLayout for FlexElement {
 
         let available_main = direction
             .main(constraints.constrain(Size::new(constraints.max_width, constraints.max_height)));
-        let remaining_main = (available_main - total_main).max(0.0);
+        // Flex children under an unbounded main axis have no space to divide
+        // (Flutter: "RenderFlex children have non-zero flex but incoming
+        // constraints are unbounded"). Degrade to zero slots instead of
+        // leaking infinite sizes, and say so once.
+        if !available_main.is_finite() && total_flex > 0.0 && !self.warned_flex_unbounded {
+            self.warned_flex_unbounded = true;
+            tracing::error!(
+                "{} has flex (Expanded) children but unbounded main-axis \
+                 constraints: flex children collapse to zero size. Wrap it \
+                 in a bounded parent (e.g. Expanded outside a ScrollView's \
+                 scroll axis).",
+                match direction {
+                    Axis::Vertical => "Column",
+                    Axis::Horizontal => "Row",
+                }
+            );
+        }
+        let remaining_main = if available_main.is_finite() {
+            (available_main - total_main).max(0.0)
+        } else {
+            0.0
+        };
         let space_per_unit = if total_flex > 0.0 {
             remaining_main / total_flex
         } else {
@@ -110,11 +164,7 @@ impl ElementLayout for FlexElement {
                 let slot = space_per_unit * entry.flex;
                 let child_constraints = match direction {
                     Axis::Vertical => Constraints {
-                        min_width: if cross_alignment == CrossAxisAlignment::Stretch {
-                            constraints.max_width
-                        } else {
-                            0.0
-                        },
+                        min_width: stretch_min(cross_alignment, constraints.max_width),
                         max_width: constraints.max_width,
                         min_height: slot,
                         max_height: slot,
@@ -122,11 +172,7 @@ impl ElementLayout for FlexElement {
                     Axis::Horizontal => Constraints {
                         min_width: slot,
                         max_width: slot,
-                        min_height: if cross_alignment == CrossAxisAlignment::Stretch {
-                            constraints.max_height
-                        } else {
-                            0.0
-                        },
+                        min_height: stretch_min(cross_alignment, constraints.max_height),
                         max_height: constraints.max_height,
                     },
                 };

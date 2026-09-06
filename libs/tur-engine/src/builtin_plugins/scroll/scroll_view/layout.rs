@@ -18,18 +18,14 @@ impl ElementLayout for ScrollViewElement {
         // reads `self.painting` and never touches the store.
         self.painting.color = cx.read_val_opt(self.view.color.as_ref());
 
-        let viewport_w = if constraints.max_width.is_finite() {
-            constraints.max_width
-        } else {
-            0.0
-        };
-        let viewport_h = if constraints.max_height.is_finite() {
-            constraints.max_height
-        } else {
-            0.0
-        };
-        let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
-
+        // Flutter parity (`_RenderSingleChildViewport.performLayout`): the
+        // child is laid out FIRST with an unbounded scroll axis (and the
+        // incoming cross constraints), then the viewport sizes itself to
+        // `constraints.constrain(child.size)` — shrink-wrapped to the content
+        // on both axes, clamped by the incoming constraints. The ScrollView
+        // fills only under tight constraints (e.g. inside an Expanded); under
+        // unbounded constraints (e.g. directly inside a Column) it shows its
+        // full content instead, with no scroll extent.
         if let Some(&child_id) = children.first() {
             let (pad_w, pad_h) = match padding {
                 Some(p) => (p * 2.0, p * 2.0),
@@ -50,21 +46,18 @@ impl ElementLayout for ScrollViewElement {
                 },
             };
             let child_size = cx.layout_child(child_id, &child_constraints);
+            let viewport = constraints.constrain(Size::new(
+                child_size.width + pad_w,
+                child_size.height + pad_h,
+            ));
             self.position.apply_dimensions(viewport, child_size);
             let max_scroll = (self.axis.main(child_size) - self.axis.main(viewport)).max(0.0);
             self.position.set_extents(0.0, max_scroll);
             self.update_controller_metrics();
             self.apply_pending_initial_offset();
-        } else {
-            self.position.apply_dimensions(viewport, Size::ZERO);
-            self.position.set_extents(0.0, 0.0);
-            self.update_controller_metrics();
-            self.apply_pending_initial_offset();
-        }
 
-        // --- position (assign child offset) ---
-        if let Some(&child_id) = children.first() {
-            let padding = cx.read_val_opt(self.view.padding.as_ref()).unwrap_or(0.0);
+            // --- position (assign child offset) ---
+            let padding = padding.unwrap_or(0.0);
             let scroll_offset = match self.axis {
                 crate::core::layout::Axis::Vertical => {
                     Offset::new(padding, padding - self.position.pixels())
@@ -74,8 +67,16 @@ impl ElementLayout for ScrollViewElement {
                 }
             };
             cx.set_child_offset(child_id, scroll_offset);
-        }
 
-        viewport
+            viewport
+        } else {
+            // No child: Flutter sizes to `constraints.smallest`.
+            let viewport = Size::new(constraints.min_width, constraints.min_height);
+            self.position.apply_dimensions(viewport, Size::ZERO);
+            self.position.set_extents(0.0, 0.0);
+            self.update_controller_metrics();
+            self.apply_pending_initial_offset();
+            viewport
+        }
     }
 }
