@@ -44,9 +44,8 @@ logs/
 # Wrangler
 .wrangler/
 
-# Playwright test results
-test-results/
-.playwright-mcp/
+# agent-browser (browser automation CLI) — scratch screenshots + artifacts
+.agent-browser/
 
 # Android (Compose integration + demo app)
 #
