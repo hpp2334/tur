@@ -20,30 +20,34 @@ import {
 // overhangs off-screen right.
 const App = view(() => {
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: CompositedTransformTarget({
-                    link,
-                    child: SizedBox({ width: 60, height: 40 }),
-                }),
-            }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: Container({ width: 60, height: 40, color: "#2563eb" }),
-            }),
-            CompositedTransformFollower({
-                link,
-                targetAnchor: Alignment.BottomRight,
-                followerAnchor: Alignment.TopRight,
-                child: Container({ width: 60, height: 40, color: "#dc2626" }),
-            }),
-        ],
-    });
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(SizedBox().width(60).height(40).build())
+                        .build(),
+                )
+                .build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    Container().width(60).height(40).color("#2563eb").build(),
+                )
+                .build(),
+            CompositedTransformFollower({ link })
+                .targetAnchor(Alignment.BottomRight)
+                .followerAnchor(Alignment.TopRight)
+                .child(
+                    Container().width(60).height(40).color("#dc2626").build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

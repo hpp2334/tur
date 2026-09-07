@@ -139,105 +139,129 @@ const App = view(() => {
     // state cluster + link are stable for the life of the tree.
     const s = createAnchorState();
     const link = createLayerLink();
-    return Stack({
-        children: [
+    return Stack()
+        .children([
             // 1. Canvas background (also sizes the root Stack).
-            SizedBox({ width: 400, height: 600 }),
+            SizedBox().width(400).height(600).build(),
 
             // 2. The linked target — the follower tracks this box's anchors.
-            Positioned({
-                left: 30,
-                top: 300,
-                child: CompositedTransformTarget({
-                    link,
-                    child: Container({
-                        width: 140,
-                        height: 90,
-                        borderRadius: 8,
-                        color: C.target,
-                        alignment: Alignment.Center,
-                        children: [
-                            Text({
-                                text: "Target",
-                                fontSize: 12,
-                                color: C.targetLabel,
-                            }),
-                        ],
-                    }),
-                }),
-            }),
+            Positioned()
+                .left(30)
+                .top(300)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(
+                            Container()
+                                .width(140)
+                                .height(90)
+                                .borderRadius(8)
+                                .color(C.target)
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Text({ text: "Target" })
+                                        .fontSize(12)
+                                        .color(C.targetLabel)
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
 
             // 3. The follower — anchors + offset are fully reactive.
-            CompositedTransformFollower({
-                link,
-                targetAnchor: derive((ctx) => ctx.get(s.targetAnchor$)),
-                followerAnchor: derive((ctx) => ctx.get(s.followerAnchor$)),
-                targetOffset: derive((ctx) => ({
-                    x: ctx.get(s.offsetX$),
-                    y: ctx.get(s.offsetY$),
-                })),
-                child: Container({
-                    width: 48,
-                    height: 36,
-                    borderRadius: 6,
-                    color: C.red,
-                    alignment: Alignment.Center,
-                    children: [
-                        Text({ text: "F", fontSize: 13, color: C.white }),
-                    ],
-                }),
-            }),
+            CompositedTransformFollower({ link })
+                .targetAnchor(derive((ctx) => ctx.get(s.targetAnchor$)))
+                .followerAnchor(derive((ctx) => ctx.get(s.followerAnchor$)))
+                .targetOffset(
+                    derive((ctx) => ({
+                        x: ctx.get(s.offsetX$),
+                        y: ctx.get(s.offsetY$),
+                    })),
+                )
+                .child(
+                    Container()
+                        .width(48)
+                        .height(36)
+                        .borderRadius(6)
+                        .color(C.red)
+                        .alignment(Alignment.Center)
+                        .children([
+                            Text({ text: "F" })
+                                .fontSize(13)
+                                .color(C.white)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
 
             // 4. Click-outside backdrop (below the panel so triggers stay
             //    clickable while a menu is open; catches canvas clicks).
             Condition({
                 condition: derive((ctx) => ctx.get(s.openMenu$) !== null),
-                child: () =>
-                    Positioned({
-                        left: 0,
-                        top: 0,
-                        width: 400,
-                        height: 600,
-                        child: PointerInteract({
-                            behavior: HitTestBehavior.Opaque,
-                            onClick: click(
-                                mutate((ctx) => ctx.set(s.openMenu$, null)),
-                            ),
-                            child: SizedBox({ width: 400, height: 600 }),
-                        }),
-                    }),
-            }),
+            })
+                .child(() =>
+                    Positioned()
+                        .left(0)
+                        .top(0)
+                        .width(400)
+                        .height(600)
+                        .child(
+                            PointerInteract()
+                                .behavior(HitTestBehavior.Opaque)
+                                .onClick(
+                                    click(
+                                        mutate((ctx) =>
+                                            ctx.set(s.openMenu$, null),
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    SizedBox().width(400).height(600).build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
 
             // 5. Controls panel (triggers + steppers + readout).
-            Positioned({
-                left: PANEL_X,
-                top: PANEL_Y,
-                child: ControlsPanel(s),
-            }),
+            Positioned()
+                .left(PANEL_X)
+                .top(PANEL_Y)
+                .child(ControlsPanel(s))
+                .build(),
 
             // 6. Floating menus (root overlay → no clipping; on top of all).
-            Positioned({
-                left: MENU1_X,
-                top: MENU1_Y,
-                child: Condition({
-                    condition: derive(
-                        (ctx) => ctx.get(s.openMenu$) === "target",
-                    ),
-                    child: () => MenuList(s.targetAnchor$, s),
-                }),
-            }),
-            Positioned({
-                left: MENU2_X,
-                top: MENU2_Y,
-                child: Condition({
-                    condition: derive(
-                        (ctx) => ctx.get(s.openMenu$) === "follower",
-                    ),
-                    child: () => MenuList(s.followerAnchor$, s),
-                }),
-            }),
-        ],
-    });
+            Positioned()
+                .left(MENU1_X)
+                .top(MENU1_Y)
+                .child(
+                    Condition({
+                        condition: derive(
+                            (ctx) => ctx.get(s.openMenu$) === "target",
+                        ),
+                    })
+                        .child(() => MenuList(s.targetAnchor$, s))
+                        .build(),
+                )
+                .build(),
+            Positioned()
+                .left(MENU2_X)
+                .top(MENU2_Y)
+                .child(
+                    Condition({
+                        condition: derive(
+                            (ctx) => ctx.get(s.openMenu$) === "follower",
+                        ),
+                    })
+                        .child(() => MenuList(s.followerAnchor$, s))
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 // ---------------------------------------------------------------------------
@@ -245,36 +269,37 @@ const App = view(() => {
 // ---------------------------------------------------------------------------
 
 function ControlsPanel(s: AnchorState) {
-    return Container({
-        width: PANEL_W,
-        padding: PAD,
-        borderRadius: 8,
-        color: C.panel,
-        children: [
-            Column({
-                mainAxisSize: MainAxisSize.Min,
-                crossAlignment: CrossAxisAlignment.Start,
-                children: [
+    return Container()
+        .width(PANEL_W)
+        .padding(PAD)
+        .borderRadius(8)
+        .color(C.panel)
+        .children([
+            Column()
+                .mainAxisSize(MainAxisSize.Min)
+                .crossAlignment(CrossAxisAlignment.Start)
+                .children([
                     TriggerChip("target", s.targetAnchor$, "target", s),
-                    SizedBox({ height: 6 }),
+                    SizedBox().height(6).build(),
                     TriggerChip("follower", s.followerAnchor$, "follower", s),
-                    SizedBox({ height: 12 }),
+                    SizedBox().height(12).build(),
                     Stepper("offsetX", s.offsetX$, 5),
-                    SizedBox({ height: 4 }),
+                    SizedBox().height(4).build(),
                     Stepper("offsetY", s.offsetY$, 5),
-                    SizedBox({ height: 10 }),
+                    SizedBox().height(10).build(),
                     Text({
                         text: derive(
                             (ctx) =>
                                 `t:${labelFor(ctx.get(s.targetAnchor$))}  f:${labelFor(ctx.get(s.followerAnchor$))}  off:(${ctx.get(s.offsetX$)},${ctx.get(s.offsetY$)})`,
                         ),
-                        fontSize: 10,
-                        color: C.textMuted,
-                    }),
-                ],
-            }),
-        ],
-    });
+                    })
+                        .fontSize(10)
+                        .color(C.textMuted)
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 function TriggerChip(
@@ -283,66 +308,79 @@ function TriggerChip(
     menuKey: "target" | "follower",
     s: AnchorState,
 ) {
-    return PointerInteract({
-        onClick: click(
-            mutate((ctx) =>
-                ctx.set(
-                    s.openMenu$,
-                    ctx.get(s.openMenu$) === menuKey ? null : menuKey,
+    return PointerInteract()
+        .onClick(
+            click(
+                mutate((ctx) =>
+                    ctx.set(
+                        s.openMenu$,
+                        ctx.get(s.openMenu$) === menuKey ? null : menuKey,
+                    ),
                 ),
             ),
-        ),
-        child: Container({
-            width: TRIGGER_W,
-            height: TRIGGER_H,
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: C.slate,
-            color: derive((ctx) =>
-                ctx.get(s.openMenu$) === menuKey ? C.indigoSoft : C.white,
-            ),
-            padding: 6,
-            alignment: Alignment.CenterLeft,
-            children: [
-                Row({
-                    children: [
-                        Text({
-                            text: `${label}: `,
-                            fontSize: 11,
-                            color: C.textMid,
-                        }),
-                        Text({
-                            text: derive((ctx) => labelFor(ctx.get(value$))),
-                            fontSize: 11,
-                            color: C.text,
-                        }),
-                        SizedBox({ width: 6 }),
-                        Text({ text: "▾", fontSize: 10, color: C.slate }),
-                    ],
-                }),
-            ],
-        }),
-    });
+        )
+        .child(
+            Container()
+                .width(TRIGGER_W)
+                .height(TRIGGER_H)
+                .borderRadius(6)
+                .borderWidth(1)
+                .borderColor(C.slate)
+                .color(
+                    derive((ctx) =>
+                        ctx.get(s.openMenu$) === menuKey
+                            ? C.indigoSoft
+                            : C.white,
+                    ),
+                )
+                .padding(6)
+                .alignment(Alignment.CenterLeft)
+                .children([
+                    Row()
+                        .children([
+                            Text({ text: `${label}: ` })
+                                .fontSize(11)
+                                .color(C.textMid)
+                                .build(),
+                            Text({
+                                text: derive((ctx) =>
+                                    labelFor(ctx.get(value$)),
+                                ),
+                            })
+                                .fontSize(11)
+                                .color(C.text)
+                                .build(),
+                            SizedBox().width(6).build(),
+                            Text({ text: "▾" })
+                                .fontSize(10)
+                                .color(C.slate)
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 }
 
 function MenuList(value$: Readable<Alignment>, s: AnchorState) {
-    return Container({
-        width: MENU_W,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: C.slateLight,
-        shadowColor: C.shadow,
-        shadowBlur: 14,
-        shadowOffset: [0, 4],
-        color: C.white,
-        children: [
-            Column({
-                mainAxisSize: MainAxisSize.Min,
-                crossAlignment: CrossAxisAlignment.Stretch,
-                children: ANCHORS.map((opt) => OptionRow(opt, value$, s)),
-            }),
-        ],
-    });
+    return Container()
+        .width(MENU_W)
+        .borderRadius(8)
+        .borderWidth(1)
+        .borderColor(C.slateLight)
+        .shadowColor(C.shadow)
+        .shadowBlur(14)
+        .shadowOffset([0, 4])
+        .color(C.white)
+        .children([
+            Column()
+                .mainAxisSize(MainAxisSize.Min)
+                .crossAlignment(CrossAxisAlignment.Stretch)
+                .children(ANCHORS.map((opt) => OptionRow(opt, value$, s)))
+                .build(),
+        ])
+        .build();
 }
 
 function OptionRow(
@@ -353,83 +391,102 @@ function OptionRow(
     const isSel = (ctx: ReadonlyStoreCtx) => ctx.get(value$) === opt.value;
     const isHover = (ctx: ReadonlyStoreCtx) =>
         ctx.get(s.hoveredOpt$) === opt.label;
-    return MouseRegion({
-        cursor: "pointer",
-        behavior: HitTestBehavior.Translucent,
-        onEnter: hover(mutate((ctx) => ctx.set(s.hoveredOpt$, opt.label))),
-        onExit: hover(
-            mutate((ctx) => {
-                if (ctx.get(s.hoveredOpt$) === opt.label)
-                    ctx.set(s.hoveredOpt$, null);
-            }),
-        ),
-        child: PointerInteract({
-            onClick: click(
+    return MouseRegion()
+        .cursor("pointer")
+        .behavior(HitTestBehavior.Translucent)
+        .onEnter(hover(mutate((ctx) => ctx.set(s.hoveredOpt$, opt.label))))
+        .onExit(
+            hover(
                 mutate((ctx) => {
-                    ctx.set(value$, opt.value);
-                    ctx.set(s.openMenu$, null);
-                    ctx.set(s.hoveredOpt$, null);
+                    if (ctx.get(s.hoveredOpt$) === opt.label)
+                        ctx.set(s.hoveredOpt$, null);
                 }),
             ),
-            child: Container({
-                width: MENU_W,
-                height: ROW_H,
-                padding: 6,
-                color: derive((ctx) =>
-                    isSel(ctx)
-                        ? C.indigo
-                        : isHover(ctx)
-                          ? C.indigoSofter
-                          : C.white,
-                ),
-                children: [
-                    Text({
-                        text: opt.label,
-                        fontSize: 11,
-                        color: derive((ctx) => (isSel(ctx) ? C.white : C.text)),
-                    }),
-                ],
-            }),
-        }),
-    });
+        )
+        .child(
+            PointerInteract()
+                .onClick(
+                    click(
+                        mutate((ctx) => {
+                            ctx.set(value$, opt.value);
+                            ctx.set(s.openMenu$, null);
+                            ctx.set(s.hoveredOpt$, null);
+                        }),
+                    ),
+                )
+                .child(
+                    Container()
+                        .width(MENU_W)
+                        .height(ROW_H)
+                        .padding(6)
+                        .color(
+                            derive((ctx) =>
+                                isSel(ctx)
+                                    ? C.indigo
+                                    : isHover(ctx)
+                                      ? C.indigoSofter
+                                      : C.white,
+                            ),
+                        )
+                        .children([
+                            Text({ text: opt.label })
+                                .fontSize(11)
+                                .color(
+                                    derive((ctx) =>
+                                        isSel(ctx) ? C.white : C.text,
+                                    ),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function Stepper(label: string, value$: Readable<number>, step: number) {
-    return Row({
-        children: [
-            Text({ text: `${label}:`, fontSize: 11, color: C.textMid }),
-            SizedBox({ width: 6 }),
+    return Row()
+        .children([
+            Text({ text: `${label}:` })
+                .fontSize(11)
+                .color(C.textMid)
+                .build(),
+            SizedBox().width(6).build(),
             SmallButton(
                 "−",
                 mutate((ctx) => ctx.set(value$, ctx.get(value$) - step)),
             ),
-            SizedBox({ width: 6 }),
-            Text({
-                text: derive((ctx) => `${ctx.get(value$)}`),
-                fontSize: 11,
-                color: C.text,
-            }),
-            SizedBox({ width: 6 }),
+            SizedBox().width(6).build(),
+            Text({ text: derive((ctx) => `${ctx.get(value$)}`) })
+                .fontSize(11)
+                .color(C.text)
+                .build(),
+            SizedBox().width(6).build(),
             SmallButton(
                 "+",
                 mutate((ctx) => ctx.set(value$, ctx.get(value$) + step)),
             ),
-        ],
-    });
+        ])
+        .build();
 }
 
 function SmallButton(label: string, onClick: Mutation<[], void>) {
-    return PointerInteract({
-        onClick: click(onClick),
-        child: Container({
-            width: 20,
-            height: 20,
-            borderRadius: 4,
-            color: C.grayLight,
-            alignment: Alignment.Center,
-            children: [Text({ text: label, fontSize: 11, color: C.text })],
-        }),
-    });
+    return PointerInteract()
+        .onClick(click(onClick))
+        .child(
+            Container()
+                .width(20)
+                .height(20)
+                .borderRadius(4)
+                .color(C.grayLight)
+                .alignment(Alignment.Center)
+                .children([
+                    Text({ text: label }).fontSize(11).color(C.text).build(),
+                ])
+                .build(),
+        )
+        .build();
 }
 
 export function start() {

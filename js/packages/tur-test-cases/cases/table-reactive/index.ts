@@ -131,47 +131,52 @@ function createTableState(): TableState {
  *  direction marker — reactive *content* inside a once-built header cell,
  *  driven by `Val` props (`derive` closures re-read on each layout pass). */
 function HeaderCell(st: TableState, key: SortKey, label: string): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx) => ctx.set(st.sortBy$, key)),
-            child: Container({
-                padding: 8,
-                queryKey: [`hdr-${key}`],
-                color: derive((ctx) =>
-                    ctx.get(st.sortKey$) === key
-                        ? Color.hex("#334155")
-                        : Color.hex("#0f172a"),
-                ),
-                children: [
-                    Text({
-                        // ASCII markers — the bundled canvas font lacks the
-                        // ▲/▼ glyphs (they render as tofu boxes).
-                        text: derive((ctx) => {
-                            if (ctx.get(st.sortKey$) !== key) return label;
-                            return `${label} ${ctx.get(st.sortDir$) > 0 ? "^" : "v"}`;
-                        }),
-                        fontSize: 12,
-                        color: Color.hex("#94a3b8"),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(mutate((ctx) => ctx.set(st.sortBy$, key)))
+                .child(
+                    Container()
+                        .padding(8)
+                        .queryKey([`hdr-${key}`])
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(st.sortKey$) === key
+                                    ? Color.hex("#334155")
+                                    : Color.hex("#0f172a"),
+                            ),
+                        )
+                        .children([
+                            Text({
+                                text: derive((ctx) => {
+                                    if (ctx.get(st.sortKey$) !== key)
+                                        return label;
+                                    return `${label} ${ctx.get(st.sortDir$) > 0 ? "^" : "v"}`;
+                                }),
+                            })
+                                .fontSize(12)
+                                .color(Color.hex("#94a3b8"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 /** Body cell: padded text container at the Table's tight column width. */
 function Cell(text: string, emphasize = false): Element {
-    return Container({
-        padding: 8,
-        children: [
-            Text({
-                text,
-                fontSize: 14,
-                color: emphasize ? Color.hex("#f8fafc") : Color.hex("#cbd5e1"),
-            }),
-        ],
-    });
+    return Container()
+        .padding(8)
+        .children([
+            Text({ text })
+                .fontSize(14)
+                .color(emphasize ? Color.hex("#f8fafc") : Color.hex("#cbd5e1"))
+                .build(),
+        ])
+        .build();
 }
 
 // ── view ──────────────────────────────────────────────────────────────────
@@ -182,56 +187,60 @@ const App = view(() => {
     // `lifecycleView` ties the fetch to the subtree's mount: `load$` fires
     // once when the table mounts, `abort$` stops a pending fetch from
     // writing into a torn-down store if the case is switched mid-delay.
-    return Expanded({
-        child: lifecycleView(() => ({
-            element: Container({
-                // Dark base — see the table-basic case for why.
-                color: Color.hex("#0b1220"),
-                children: [
-                    Column({
-                        crossAlignment: CrossAxisAlignment.Stretch,
-                        children: [
-                            Table({
-                                queryKey: ["table-reactive"],
-                                columns: [
-                                    { flex: 2 },
-                                    { flex: 1 },
-                                    { flex: 1 },
-                                ],
-                                rows: st.rows$,
-                                headerExtent: 34,
-                                rowExtent: 34,
-                                stripeColor: Color.hex("#1e293b"),
-                                dividerColor: Color.hex("#334155"),
-                                dividerThickness: 1,
-                                buildHeader: () =>
-                                    COLS.map((c) =>
-                                        HeaderCell(st, c.key, c.label),
+    return Expanded()
+        .child(
+            lifecycleView(() => ({
+                element: Container()
+                    .color(Color.hex("#0b1220"))
+                    .children([
+                        Column()
+                            .crossAlignment(CrossAxisAlignment.Stretch)
+                            .children([
+                                Table({
+                                    columns: [
+                                        { flex: 2 },
+                                        { flex: 1 },
+                                        { flex: 1 },
+                                    ],
+                                    rows: st.rows$,
+                                })
+                                    .queryKey(["table-reactive"])
+                                    .headerExtent(34)
+                                    .rowExtent(34)
+                                    .stripeColor(Color.hex("#1e293b"))
+                                    .dividerColor(Color.hex("#334155"))
+                                    .dividerThickness(1)
+                                    .headerBuilder(() =>
+                                        COLS.map((c) =>
+                                            HeaderCell(st, c.key, c.label),
+                                        ),
+                                    )
+                                    .rowBuilder((row) => [
+                                        Cell(row.name, true),
+                                        Cell(String(row.moons)),
+                                        Cell(row.gravity.toFixed(1)),
+                                    ])
+                                    .build(),
+                                SizedBox().height(12).build(),
+                                Text({
+                                    text: derive((ctx) =>
+                                        ctx.get(st.loading$)
+                                            ? "Loading…"
+                                            : `Loaded ${ctx.get(st.rows$).length} rows · click a header to sort`,
                                     ),
-                                build: (row) => [
-                                    Cell(row.name, true),
-                                    Cell(String(row.moons)),
-                                    Cell(row.gravity.toFixed(1)),
-                                ],
-                            }),
-                            SizedBox({ height: 12 }),
-                            Text({
-                                text: derive((ctx) =>
-                                    ctx.get(st.loading$)
-                                        ? "Loading…"
-                                        : `Loaded ${ctx.get(st.rows$).length} rows · click a header to sort`,
-                                ),
-                                fontSize: 12,
-                                color: Color.hex("#64748b"),
-                            }),
-                        ],
-                    }),
-                ],
-            }),
-            onMounted$: st.load$,
-            beforeDestroy$: st.abort$,
-        })),
-    });
+                                })
+                                    .fontSize(12)
+                                    .color(Color.hex("#64748b"))
+                                    .build(),
+                            ])
+                            .build(),
+                    ])
+                    .build(),
+                onMounted$: st.load$,
+                beforeDestroy$: st.abort$,
+            })),
+        )
+        .build();
 });
 
 export function start() {

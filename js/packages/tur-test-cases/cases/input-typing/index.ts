@@ -9,9 +9,16 @@ import {
 const controller = createTextEditingController({});
 
 const App = view(() =>
-    Container({
-        children: [Input({ controller, fontSize: 14, width: 200, height: 30 })],
-    }),
+    Container()
+        .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

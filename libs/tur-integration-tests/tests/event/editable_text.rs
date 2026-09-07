@@ -521,7 +521,12 @@ const onKey = mutate((_storeCtx, ev) => {
     globalThis.__ctrlHeld = String(ev.ctrl);
 });
 globalThis.__ctrl = new globalThis.TextEditingController({ onKeyDown: onKey });
-mount(Input({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontSize(20)
+    .width(200)
+    .height(44)
+    .build());
 "#;
 
 /// Regression: the controller's `onKeyDown` listener must fire on every
@@ -570,12 +575,12 @@ import { mount, Input } from "tur:std";
 
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontSize: 20,
-    width: 200,
-    height: 44,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontSize(20)
+    .width(200)
+    .height(44)
+    .build());
 "#;
 
 /// `setSpansPreserveCursor` must keep the caret where it is across a
@@ -659,13 +664,13 @@ import { mount, Input } from "tur:std";
 
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontFamily: "monospace",
-    fontSize: 20,
-    width: 400,
-    height: 44,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontFamily("monospace")
+    .fontSize(20)
+    .width(400)
+    .height(44)
+    .build());
 "#;
 
 // Mirrors the playground code editor: syntax-highlighted spans with different
@@ -679,13 +684,13 @@ globalThis.__ctrl.setSpans([
     { content: "import", color: { r: 200, g: 120, b: 50, a: 255 } },
     { content: " {", color: { r: 80, g: 80, b: 80, a: 255 } },
 ]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontFamily: "monospace",
-    fontSize: 20,
-    width: 400,
-    height: 44,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontFamily("monospace")
+    .fontSize(20)
+    .width(400)
+    .height(44)
+    .build());
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"
@@ -693,14 +698,14 @@ import { mount, Input } from "tur:std";
 
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "abc\ndef\nghi" }]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    multiline: true,
-    fontFamily: "monospace",
-    fontSize: 20,
-    width: 400,
-    height: 200,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .multiline(true)
+    .fontFamily("monospace")
+    .fontSize(20)
+    .width(400)
+    .height(200)
+    .build());
 "#;
 
 /// Click in the middle of a single-line field should place the caret at the
@@ -877,13 +882,13 @@ globalThis.__ctrl.setSpans([
     { content: "CCCC", color: { r: 120, g: 80, b: 200, a: 255 } },
     { content: "DDDD", color: { r: 200, g: 200, b: 80, a: 255 } },
 ]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontFamily: "monospace",
-    fontSize: 20,
-    width: 400,
-    height: 44,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontFamily("monospace")
+    .fontSize(20)
+    .width(400)
+    .height(44)
+    .build());
 "#;
 
 #[test]
@@ -932,13 +937,13 @@ globalThis.__ctrl.setSpans([
     { content: "", color: { r: 80, g: 200, b: 120, a: 255 } },
     { content: "cd", color: { r: 120, g: 80, b: 200, a: 255 } },
 ]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontFamily: "monospace",
-    fontSize: 20,
-    width: 400,
-    height: 44,
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontFamily("monospace")
+    .fontSize(20)
+    .width(400)
+    .height(44)
+    .build());
 "#;
 
 #[test]
@@ -970,15 +975,15 @@ globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL",
 }]);
-mount(ScrollView({
-    child: Input({
-        controller: globalThis.__ctrl,
-        multiline: true,
-        fontFamily: "monospace",
-        fontSize: 16,
-        queryKey: ["scrolled-input"],
-    }),
-}));
+mount(ScrollView()
+    .child(Input()
+     .controller(globalThis.__ctrl)
+     .multiline(true)
+     .fontFamily("monospace")
+     .fontSize(16)
+     .queryKey(["scrolled-input"])
+     .build())
+    .build());
 "#;
 
 /// Clicking a line that is only visible AFTER scrolling must place the caret on
@@ -1072,13 +1077,13 @@ globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
 }]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    multiline: true,
-    fontFamily: "monospace",
-    fontSize: 16,
-    queryKey: ["softwrap-input"],
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .multiline(true)
+    .fontFamily("monospace")
+    .fontSize(16)
+    .queryKey(["softwrap-input"])
+    .build());
 "#;
 
 #[test]
@@ -1200,12 +1205,12 @@ globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
 }]);
-mount(Input({
-    controller: globalThis.__ctrl,
-    fontFamily: "monospace",
-    fontSize: 16,
-    queryKey: ["softwrap-single-input"],
-}));
+mount(Input()
+    .controller(globalThis.__ctrl)
+    .fontFamily("monospace")
+    .fontSize(16)
+    .queryKey(["softwrap-single-input"])
+    .build());
 "#;
 
 #[test]

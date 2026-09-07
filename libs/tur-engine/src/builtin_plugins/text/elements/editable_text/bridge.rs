@@ -1,4 +1,7 @@
 //! JS bridge for the `Input` element + text editing controllers.
+//!
+//! Builder pattern: `Input(props)` returns a chainable builder terminated by
+//! `.build()`, which runs the terminal below with the accumulated props.
 
 use std::rc::Rc;
 
@@ -6,13 +9,41 @@ use boa_engine::class::Class;
 use boa_engine::{Context, JsResult, JsValue};
 
 use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
+use crate::core::js_runtime::builder::builder_factory;
+use crate::core::js_runtime::builder::setters::*;
+use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
+static TABLE: BuilderTable = BuilderTable {
+    methods: &[
+        M::new("width", width),
+        M::new("height", height),
+        M::new("controller", controller),
+        M::new("undoController", undoController),
+        M::new("placeholder", placeholder),
+        M::new("color", color),
+        M::new("placeholderColor", placeholderColor),
+        M::new("cursorColor", cursorColor),
+        M::new("fontSize", fontSize),
+        M::new("fontFamily", fontFamily),
+        M::new("fontWeight", fontWeight),
+        M::new("multiline", multiline),
+        M::new("obscureText", obscureText),
+        M::new("obscuringCharacter", obscuringCharacter),
+        M::new("onContextMenu", onContextMenu),
+        M::new("queryKey", queryKey),
+    ],
+    child: false,
+    children: false,
+};
+
+builder_factory!(tur_input_factory, tur_input, &TABLE);
+
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("Input", 2, tur_input as Ptr),
+        ("Input", 2, tur_input_factory as Ptr),
         (
             "createTextEditingController",
             2,

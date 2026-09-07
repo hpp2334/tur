@@ -8,11 +8,15 @@ use tur_integration_tests::TurTestApp;
 const RESIZE_BUNDLE: &str = r#"
 import { mount, Column, Expanded, Container } from "tur:std";
 
-mount(Column({
-    children: [
-        Expanded({ child: Container({ queryKey: ["fill"] }) }),
-    ],
-}));
+mount(Column()
+    .children([
+        Expanded()
+            .child(Container()
+     .queryKey(["fill"])
+     .build())
+            .build(),
+    ])
+    .build());
 "#;
 
 fn fill_height(app: &TurTestApp) -> f64 {

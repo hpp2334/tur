@@ -45,20 +45,19 @@ function cellColor(i: number) {
 }
 
 const App = view(() =>
-    LazyGrid({
-        axis: Axis.Vertical,
-        itemCount: ITEM_COUNT,
-        maxCrossAxisExtent: 120,
-        mainAxisExtent: 60,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        overscan: 2,
-        queryKey: ["lazy-grid-scroll"],
-        builder: (i: number) =>
-            Container({
-                color: Color.hex(cellColor(i)),
-            }),
-    }),
+    LazyGrid({ itemCount: ITEM_COUNT, maxCrossAxisExtent: 120 })
+        .axis(Axis.Vertical)
+        .mainAxisExtent(60)
+        .crossAxisSpacing(6)
+        .mainAxisSpacing(6)
+        .overscan(2)
+        .queryKey(["lazy-grid-scroll"])
+        .builder((i: number) =>
+            Container()
+                .color(Color.hex(cellColor(i)))
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

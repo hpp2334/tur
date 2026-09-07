@@ -25,39 +25,48 @@ const App = view(() => {
     // link are stable for the life of the tree.
     const anchor$ = source(Alignment.TopLeft);
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: CompositedTransformTarget({
-                    link,
-                    child: SizedBox({ width: 60, height: 40 }),
-                }),
-            }),
-            CompositedTransformFollower({
-                link,
-                targetAnchor: derive((ctx) => ctx.get(anchor$)),
-                child: Container({ width: 20, height: 20, color: "red" }),
-            }),
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(SizedBox().width(60).height(40).build())
+                        .build(),
+                )
+                .build(),
+            CompositedTransformFollower({ link })
+                .targetAnchor(derive((ctx) => ctx.get(anchor$)))
+                .child(Container().width(20).height(20).color("red").build())
+                .build(),
             // Button at (20, 540), 60×30 — click flips the anchor.
-            Positioned({
-                left: 20,
-                top: 540,
-                child: PointerInteract({
-                    onClick: mutate((ctx) =>
-                        ctx.set(anchor$, Alignment.BottomRight),
-                    ) as unknown as Mutation<[PointerInteractEvent], void>,
-                    child: Container({
-                        width: 60,
-                        height: 30,
-                        color: "#4f46e5",
-                    }),
-                }),
-            }),
-        ],
-    });
+            Positioned()
+                .left(20)
+                .top(540)
+                .child(
+                    PointerInteract()
+                        .onClick(
+                            mutate((ctx) =>
+                                ctx.set(anchor$, Alignment.BottomRight),
+                            ) as unknown as Mutation<
+                                [PointerInteractEvent],
+                                void
+                            >,
+                        )
+                        .child(
+                            Container()
+                                .width(60)
+                                .height(30)
+                                .color("#4f46e5")
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

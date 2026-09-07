@@ -1,4 +1,8 @@
 //! JS bridge for the `ScrollView` element + scroll controller factory.
+//!
+//! Builder pattern: `ScrollView(props)` returns a chainable builder
+//! terminated by `.build()`, which runs the terminal below with the
+//! accumulated props (the required `child` fires there if missing).
 
 use std::rc::Rc;
 
@@ -6,13 +10,30 @@ use boa_engine::class::Class;
 use boa_engine::{Context, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::builtin_plugins::scroll::core::controller::ScrollController;
+use crate::core::js_runtime::builder::builder_factory;
+use crate::core::js_runtime::builder::setters::*;
+use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
+static TABLE: BuilderTable = BuilderTable {
+    methods: &[
+        M::new("axis", axis),
+        M::new("padding", padding),
+        M::new("color", color),
+        M::new("controller", controller),
+        M::new("queryKey", queryKey),
+    ],
+    child: true,
+    children: false,
+};
+
+builder_factory!(tur_scroll_view_factory, tur_scroll_view, &TABLE);
+
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("ScrollView", 2, tur_scroll_view as Ptr),
+        ("ScrollView", 2, tur_scroll_view_factory as Ptr),
         (
             "createScrollController",
             2,

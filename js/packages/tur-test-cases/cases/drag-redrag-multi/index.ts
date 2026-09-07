@@ -86,63 +86,78 @@ function tileScale(r: ReadonlyStoreCtx, id: number): number {
 }
 
 function makeTile(id: number) {
-    return Positioned({
-        left: derive((ctx) => readTile(ctx, id).x),
-        top: derive((ctx) => readTile(ctx, id).y),
-        width: TILE,
-        height: TILE,
-        child: Transform({
-            scale: derive((ctx) => tileScale(ctx, id)),
-            child: PointerInteract({
-                onPointerDown: mutate((ctx, ev) => {
-                    const me = readTile(ctx, id);
-                    dragOffset = {
-                        dx: ev.global.x - me.x,
-                        dy: ev.global.y - me.y,
-                    };
-                    dragId = id;
-                    lastDragId = id;
-                    events[id].push("down");
-                    liftCtrl.forward();
-                }),
-                onPointerMove: mutate((ctx, ev) => {
-                    if (dragId !== id) return;
-                    ctx.set(tilePos$[id], {
-                        x: ev.global.x - dragOffset.dx,
-                        y: ev.global.y - dragOffset.dy,
-                    });
-                    events[id].push("move");
-                }),
-                onPointerUp: mutate((_ctx, _ev) => {
-                    if (dragId !== id) return;
-                    dragId = null;
-                    events[id].push("up");
-                    liftCtrl.reverse();
-                }),
-                child: Container({
-                    width: TILE,
-                    height: TILE,
-                    color:
-                        id === 0 ? Color.hex("#6366f1") : Color.hex("#ef4444"),
-                    queryKey: [`tile-${id}`],
-                }),
-            }),
-        }),
-    });
+    return Positioned()
+        .left(derive((ctx) => readTile(ctx, id).x))
+        .top(derive((ctx) => readTile(ctx, id).y))
+        .width(TILE)
+        .height(TILE)
+        .child(
+            Transform()
+                .scale(derive((ctx) => tileScale(ctx, id)))
+                .child(
+                    PointerInteract()
+                        .onPointerDown(
+                            mutate((ctx, ev) => {
+                                const me = readTile(ctx, id);
+                                dragOffset = {
+                                    dx: ev.global.x - me.x,
+                                    dy: ev.global.y - me.y,
+                                };
+                                dragId = id;
+                                lastDragId = id;
+                                events[id].push("down");
+                                liftCtrl.forward();
+                            }),
+                        )
+                        .onPointerMove(
+                            mutate((ctx, ev) => {
+                                if (dragId !== id) return;
+                                ctx.set(tilePos$[id], {
+                                    x: ev.global.x - dragOffset.dx,
+                                    y: ev.global.y - dragOffset.dy,
+                                });
+                                events[id].push("move");
+                            }),
+                        )
+                        .onPointerUp(
+                            mutate((_ctx, _ev) => {
+                                if (dragId !== id) return;
+                                dragId = null;
+                                events[id].push("up");
+                                liftCtrl.reverse();
+                            }),
+                        )
+                        .child(
+                            Container()
+                                .width(TILE)
+                                .height(TILE)
+                                .color(
+                                    id === 0
+                                        ? Color.hex("#6366f1")
+                                        : Color.hex("#ef4444"),
+                                )
+                                .queryKey([`tile-${id}`])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() =>
-    Stack({
-        children: [
-            Container({
-                width: 300,
-                height: 200,
-                color: Color.hex("#0f172a"),
-            }),
+    Stack()
+        .children([
+            Container()
+                .width(300)
+                .height(200)
+                .color(Color.hex("#0f172a"))
+                .build(),
             makeTile(0),
             makeTile(1),
-        ],
-    }),
+        ])
+        .build(),
 );
 
 export function start({ store }: { store: Store }) {

@@ -9,17 +9,17 @@ import {
 const controller = createTextEditingController({});
 
 const App = view(() =>
-    Container({
-        children: [
-            Input({
-                controller,
-                multiline: true,
-                fontSize: 14,
-                width: 300,
-                height: 400,
-            }),
-        ],
-    }),
+    Container()
+        .children([
+            Input()
+                .controller(controller)
+                .multiline(true)
+                .fontSize(14)
+                .width(300)
+                .height(400)
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

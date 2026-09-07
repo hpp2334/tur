@@ -66,12 +66,11 @@ fn text_input_requests_fire_on_editable_focus() {
     app.eval_module_source(
         r#"
         import { Input, mount } from "tur:std";
-        mount(Input({
-            text: "",
-            width: 200,
-            height: 44,
-            queryKey: ["editor"],
-        }));
+        mount(Input({ text: "" })
+    .width(200)
+    .height(44)
+    .queryKey(["editor"])
+    .build());
         "#,
     )
     .unwrap();

@@ -33,14 +33,16 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
         const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
         });
-        const inner = Container({
-            children: [ Text({ text: cardText, fontSize: 16 }) ]
-        });
-        const tree = ReadableSubscribe({
-            readables: [flag],
-            onUpdate$: mutate(function () {}),
-            child: inner
-        });
+        const inner = Container()
+     .children([ Text({ text: cardText })
+     .fontSize(16)
+     .build() ])
+     .build();
+        const tree = ReadableSubscribe()
+     .readables([flag])
+     .onUpdate$(mutate(function () {}))
+     .child(inner)
+     .build();
         mount(tree);
     "#,
     )
@@ -83,16 +85,24 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
         });
-        const inner = Container({
-            children: [ Text({ text: cardText, fontSize: 16 }) ]
-        });
-        const rs = ReadableSubscribe({
-            readables: [flag],
-            onUpdate$: mutate(function () {}),
-            child: inner
-        });
-        const positioned = Positioned({ left: 30, top: 30, child: rs });
-        const stack = Stack({ children: [ positioned ] });
+        const inner = Container()
+     .children([ Text({ text: cardText })
+     .fontSize(16)
+     .build() ])
+     .build();
+        const rs = ReadableSubscribe()
+     .readables([flag])
+     .onUpdate$(mutate(function () {}))
+     .child(inner)
+     .build();
+        const positioned = Positioned()
+     .left(30)
+     .top(30)
+     .child(rs)
+     .build();
+        const stack = Stack()
+     .children([ positioned ])
+     .build();
         mount(stack);
     "#)
     .unwrap();
@@ -143,10 +153,12 @@ fn animated_container_pattern_inner_text_still_updates() {
         });
 
         // The Container's width is animated (reads progress); the Text reads flag.
-        const inner = Container({
-            width: derive(function (g) { return widthTween.lerp(g.get(progress)); }),
-            children: [ Text({ text: cardText, fontSize: 16 }) ]
-        });
+        const inner = Container()
+     .width(derive(function (g) { return widthTween.lerp(g.get(progress)); }))
+     .children([ Text({ text: cardText })
+     .fontSize(16)
+     .build() ])
+     .build();
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -154,15 +166,15 @@ fn animated_container_pattern_inner_text_still_updates() {
             onTick: mutate(function (_sctx, v) { store.set(progress, v); })
         });
 
-        const tree = ReadableSubscribe({
-            readables: [flag],
-            onUpdate$: mutate(function () {
+        const tree = ReadableSubscribe()
+     .readables([flag])
+     .onUpdate$(mutate(function () {
                 widthTween.begin = widthTween.lerp(1.0);
                 widthTween.end = 200;
                 ctrl.forward();
-            }),
-            child: inner
-        });
+            }))
+     .child(inner)
+     .build();
         mount(tree);
     "#)
     .unwrap();
@@ -216,13 +228,18 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
                 onTick: mutate(function (_s, v) { store.set(progress, v); })
             });
             const inner = animatedProp
-                ? Container({ width: derive(function (g) { return 100 + 50 * g.get(progress); }), children: [child] })
-                : Opacity({ value: derive(function (g) { return 0.5 + 0.5 * g.get(progress); }), child: child });
-            return ReadableSubscribe({
-                readables: [flag],
-                onUpdate$: mutate(function () { /* no-op */ }),
-                child: inner
-            });
+                ? Container()
+     .width(derive(function (g) { return 100 + 50 * g.get(progress); }))
+     .children([child])
+     .build()
+                : Opacity({ value: derive(function (g) { return 0.5 + 0.5 * g.get(progress); }) })
+     .child(child)
+     .build();
+            return ReadableSubscribe()
+     .readables([flag])
+     .onUpdate$(mutate(function () { /* no-op */ }))
+     .child(inner)
+     .build();
         }
 
         const cardText = derive(function (g) {
@@ -230,7 +247,9 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
             store.set(globalThis.__sink, v);
             return v;
         });
-        const text = Text({ text: cardText, fontSize: 16 });
+        const text = Text({ text: cardText })
+     .fontSize(16)
+     .build();
         const layer3 = makeLayer(text, true);
         const layer2 = makeLayer(layer3, false);
         const layer1 = makeLayer(layer2, true);
@@ -279,22 +298,22 @@ fn js_animated_container_pattern_animates_width_over_time() {
             begin: 100, end: 100,
             lerp: function (tt) { return this.begin + (this.end - this.begin) * tt; }
         };
-        const container = Container({
-            width: derive(function (g) { return widthTween.lerp(g.get(progress)); })
-        });
+        const container = Container()
+     .width(derive(function (g) { return widthTween.lerp(g.get(progress)); }))
+     .build();
         const ctrl = createAnimationController({
             duration: 200, curve: "linear",
             onTick: mutate(function (_s, v) { store.set(progress, v); })
         });
-        const tree = ReadableSubscribe({
-            readables: [target],
-            onUpdate$: mutate(function () {
+        const tree = ReadableSubscribe()
+     .readables([target])
+     .onUpdate$(mutate(function () {
                 widthTween.begin = widthTween.lerp(1.0);
                 widthTween.end = 200;
                 ctrl.forward();
-            }),
-            child: container
-        });
+            }))
+     .child(container)
+     .build();
         mount(tree);
     "#,
     )

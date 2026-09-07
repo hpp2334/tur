@@ -143,70 +143,72 @@ function buildRow(index: number): Element {
     const initials = initialsFor(name);
     const hue = hueFor(index);
 
-    return Container({
-        height: ITEM_HEIGHT,
-        padding: 12,
-        color: index % 2 === 0 ? Color.hex("#ffffff") : Color.hex("#f8fafc"),
-        children: [
-            Row({
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
-                    Container({
-                        width: 36,
-                        height: 36,
-                        borderRadius: 999,
-                        color: Color.hex(hslToHex(hue, 60, 55)),
-                        alignment: Alignment.Center,
-                        children: [
-                            Text({
-                                text: initials,
-                                fontSize: 13,
-                                color: Color.hex("#ffffff"),
-                            }),
-                        ],
-                    }),
-                    SizedBox({ width: 12 }),
-                    Expanded({
-                        child: Column({
-                            mainAlignment: MainAxisAlignment.Center,
-                            crossAlignment: CrossAxisAlignment.Start,
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                Text({
-                                    text: name,
-                                    fontSize: 13,
-                                    color: Color.hex("#0f172a"),
-                                }),
-                                SizedBox({ height: 2 }),
-                                Text({
-                                    text: `Item #${index + 1} of ${ITEM_COUNT}`,
-                                    fontSize: 11,
-                                    color: Color.hex("#64748b"),
-                                }),
-                            ],
-                        }),
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .height(ITEM_HEIGHT)
+        .padding(12)
+        .color(index % 2 === 0 ? Color.hex("#ffffff") : Color.hex("#f8fafc"))
+        .children([
+            Row()
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
+                    Container()
+                        .width(36)
+                        .height(36)
+                        .borderRadius(999)
+                        .color(Color.hex(hslToHex(hue, 60, 55)))
+                        .alignment(Alignment.Center)
+                        .children([
+                            Text({ text: initials })
+                                .fontSize(13)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                    SizedBox().width(12).build(),
+                    Expanded()
+                        .child(
+                            Column()
+                                .mainAlignment(MainAxisAlignment.Center)
+                                .crossAlignment(CrossAxisAlignment.Start)
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    Text({ text: name })
+                                        .fontSize(13)
+                                        .color(Color.hex("#0f172a"))
+                                        .build(),
+                                    SizedBox().height(2).build(),
+                                    Text({
+                                        text: `Item #${index + 1} of ${ITEM_COUNT}`,
+                                    })
+                                        .fontSize(11)
+                                        .color(Color.hex("#64748b"))
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 const App = view(() =>
-    Expanded({
-        child: Container({
-            color: Color.hex("#ffffff"),
-            children: [
-                LazyList({
-                    axis: Axis.Vertical,
-                    itemCount: ITEM_COUNT,
-                    itemExtent: ITEM_HEIGHT,
-                    overscan: 4,
-                    builder: buildRow,
-                }),
-            ],
-        }),
-    }),
+    Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#ffffff"))
+                .children([
+                    LazyList({ itemCount: ITEM_COUNT })
+                        .axis(Axis.Vertical)
+                        .itemExtent(ITEM_HEIGHT)
+                        .overscan(4)
+                        .builder(buildRow)
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

@@ -23,26 +23,29 @@ const App = view(() => {
     const controller = createTextEditingController({});
     const clicks$ = source(0);
 
-    return Column({
-        children: [
-            Input({
-                controller,
-                fontSize: 14,
-                width: 200,
-                height: 30,
-                queryKey: ["editable"],
-            }),
-            PointerInteract({
-                onClick: mutate((ctx) =>
-                    ctx.set(clicks$, ctx.get(clicks$) + 1),
-                ),
-                child: Text({
-                    text: derive((ctx) => `clicks: ${ctx.get(clicks$)}`),
-                    queryKey: ["button"],
-                }),
-            }),
-        ],
-    });
+    return Column()
+        .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .queryKey(["editable"])
+                .build(),
+            PointerInteract()
+                .onClick(
+                    mutate((ctx) => ctx.set(clicks$, ctx.get(clicks$) + 1)),
+                )
+                .child(
+                    Text({
+                        text: derive((ctx) => `clicks: ${ctx.get(clicks$)}`),
+                    })
+                        .queryKey(["button"])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

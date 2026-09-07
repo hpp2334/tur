@@ -23,89 +23,108 @@ const App = view(() => {
     const translucentOuterClicks$ = source(0);
     const translucentInnerClicks$ = source(0);
 
-    return Column({
-        crossAlignment: CrossAxisAlignment.Start,
-        mainAxisSize: MainAxisSize.Min,
-        children: [
-            PointerInteract({
-                onClick: mutate((ctx, _ev) =>
-                    ctx.set(outerClicks$, ctx.get(outerClicks$) + 1),
-                ),
-                child: Container({
-                    queryKey: ["outer-opaque"],
-                    width: 80,
-                    height: 40,
-                    children: [
-                        Row({
-                            children: [
-                                PointerInteract({
-                                    onClick: mutate((ctx, _ev) =>
-                                        ctx.set(
-                                            innerClicks$,
-                                            ctx.get(innerClicks$) + 1,
-                                        ),
-                                    ),
-                                    child: Container({
-                                        queryKey: ["inner-opaque"],
-                                        width: 60,
-                                        height: 30,
-                                    }),
-                                }),
-                            ],
-                        }),
-                    ],
-                }),
-            }),
-            PointerInteract({
-                onClick: mutate((ctx, _ev) =>
-                    ctx.set(
-                        translucentOuterClicks$,
-                        ctx.get(translucentOuterClicks$) + 1,
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .mainAxisSize(MainAxisSize.Min)
+        .children([
+            PointerInteract()
+                .onClick(
+                    mutate((ctx, _ev) =>
+                        ctx.set(outerClicks$, ctx.get(outerClicks$) + 1),
                     ),
-                ),
-                child: Container({
-                    queryKey: ["outer-translucent"],
-                    width: 80,
-                    height: 40,
-                    children: [
-                        Row({
-                            children: [
-                                PointerInteract({
-                                    behavior: HitTestBehavior.Translucent,
-                                    onClick: mutate((ctx, _ev) =>
-                                        ctx.set(
-                                            translucentInnerClicks$,
-                                            ctx.get(translucentInnerClicks$) +
-                                                1,
-                                        ),
-                                    ),
-                                    child: Container({
-                                        queryKey: ["inner-translucent"],
-                                        width: 60,
-                                        height: 30,
-                                    }),
-                                }),
-                            ],
-                        }),
-                    ],
-                }),
-            }),
+                )
+                .child(
+                    Container()
+                        .queryKey(["outer-opaque"])
+                        .width(80)
+                        .height(40)
+                        .children([
+                            Row()
+                                .children([
+                                    PointerInteract()
+                                        .onClick(
+                                            mutate((ctx, _ev) =>
+                                                ctx.set(
+                                                    innerClicks$,
+                                                    ctx.get(innerClicks$) + 1,
+                                                ),
+                                            ),
+                                        )
+                                        .child(
+                                            Container()
+                                                .queryKey(["inner-opaque"])
+                                                .width(60)
+                                                .height(30)
+                                                .build(),
+                                        )
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+            PointerInteract()
+                .onClick(
+                    mutate((ctx, _ev) =>
+                        ctx.set(
+                            translucentOuterClicks$,
+                            ctx.get(translucentOuterClicks$) + 1,
+                        ),
+                    ),
+                )
+                .child(
+                    Container()
+                        .queryKey(["outer-translucent"])
+                        .width(80)
+                        .height(40)
+                        .children([
+                            Row()
+                                .children([
+                                    PointerInteract()
+                                        .behavior(HitTestBehavior.Translucent)
+                                        .onClick(
+                                            mutate((ctx, _ev) =>
+                                                ctx.set(
+                                                    translucentInnerClicks$,
+                                                    ctx.get(
+                                                        translucentInnerClicks$,
+                                                    ) + 1,
+                                                ),
+                                            ),
+                                        )
+                                        .child(
+                                            Container()
+                                                .queryKey(["inner-translucent"])
+                                                .width(60)
+                                                .height(30)
+                                                .build(),
+                                        )
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
             Text({
                 text: derive(
                     (ctx) =>
                         `opaque:${ctx.get(outerClicks$)}/${ctx.get(innerClicks$)}`,
                 ),
-                queryKey: ["result-opaque"],
-            }),
+            })
+                .queryKey(["result-opaque"])
+                .build(),
             Text({
                 text: derive(
                     (ctx) =>
                         `translucent:${ctx.get(translucentOuterClicks$)}/${ctx.get(translucentInnerClicks$)}`,
                 ),
-                queryKey: ["result-translucent"],
-            }),
-        ],
-    });
+            })
+                .queryKey(["result-translucent"])
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

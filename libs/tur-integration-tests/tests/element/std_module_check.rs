@@ -15,10 +15,14 @@ fn std_module_imports_and_renders() {
         r#"
             import { Column, SizedBox, CrossAxisAlignment, mount, view } from "tur:std";
             mount(view(() =>
-                Column({
-                    crossAlignment: CrossAxisAlignment.Start,
-                    children: [ SizedBox({ height: 50 }), SizedBox({ height: 30 }) ],
-                })));
+                Column()
+                    .crossAlignment(CrossAxisAlignment.Start)
+                    .children([ SizedBox()
+     .height(50)
+     .build(), SizedBox()
+     .height(30)
+     .build() ])
+                    .build()));
         "#,
     )
     .unwrap();

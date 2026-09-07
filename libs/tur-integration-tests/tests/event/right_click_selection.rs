@@ -5,17 +5,17 @@ use tur_integration_tests::TurTestApp;
 const INPUT_BUNDLE: &str = r#"
     import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(Container({
-        children: [
-            Input({
-                controller: controller,
-                fontSize: 14,
-                width: 200,
-                height: 30,
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 fn find_editable(app: &TurTestApp) -> ElementNodeId {

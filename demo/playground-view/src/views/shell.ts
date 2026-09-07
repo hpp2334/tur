@@ -36,32 +36,34 @@ import { Viewer } from "./viewer";
  *  - `editor`: editor = Expanded (fills all), viewer hidden.
  *  - `viewer`: editor hidden, viewer = Expanded. */
 function EditorAndViewer(): Element {
-    return Row({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        children: [
+    return Row()
+        .crossAlignment(CrossAxisAlignment.Stretch)
+        .children([
             // Editor pane
-            Switch({
-                value: derive((ctx) => ctx.get(layoutMode$)),
-                cases: [
+            Switch({ value: derive((ctx) => ctx.get(layoutMode$)) })
+                .cases([
                     {
                         key: "split",
                         child: () =>
-                            Container({
-                                width: derive((ctx) => ctx.get(editorWidth$)),
-                                children: [Editor()],
-                            }),
+                            Container()
+                                .width(derive((ctx) => ctx.get(editorWidth$)))
+                                .children([Editor()])
+                                .build(),
                     },
                     {
                         key: "editor",
-                        child: () => Expanded({ child: Editor() }),
+                        child: () => Expanded().child(Editor()).build(),
                     },
-                ],
-                fallback: () => Container({ width: 0, children: [Editor()] }),
-            }),
+                ])
+                .fallback(() =>
+                    Container().width(0).children([Editor()]).build(),
+                )
+                .build(),
             // Divider — only in split mode
             Condition({
                 condition: derive((ctx) => ctx.get(layoutMode$) === "split"),
-                child: () =>
+            })
+                .child(() =>
                     VDivider({
                         onDrag: mutate((ctx, ev) => {
                             const next = Math.max(
@@ -71,115 +73,122 @@ function EditorAndViewer(): Element {
                             ctx.set(editorWidth$, next);
                         }),
                     }),
-            }),
+                )
+                .build(),
             // Viewer pane
-            Switch({
-                value: derive((ctx) => ctx.get(layoutMode$)),
-                cases: [
+            Switch({ value: derive((ctx) => ctx.get(layoutMode$)) })
+                .cases([
                     {
                         key: "split",
-                        child: () => Expanded({ child: Viewer() }),
+                        child: () => Expanded().child(Viewer()).build(),
                     },
                     {
                         key: "viewer",
-                        child: () => Expanded({ child: Viewer() }),
+                        child: () => Expanded().child(Viewer()).build(),
                     },
-                ],
-                fallback: () => Container({ width: 0, children: [Viewer()] }),
-            }),
-        ],
-    });
+                ])
+                .fallback(() =>
+                    Container().width(0).children([Viewer()]).build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 export const Shell: Element = view(() =>
-    Container({
-        color: tokens.bg.app,
-        children: [
-            Stack({
-                children: [
-                    Condition({
-                        condition: isMobile$,
-                        // Mobile: one full-width pane at a time, switched via
-                        // the bottom tab bar. No dividers — each pane fills.
-                        child: () =>
-                            Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                children: [
+    Container()
+        .color(tokens.bg.app)
+        .children([
+            Stack()
+                .children([
+                    Condition({ condition: isMobile$ })
+                        .elseChild(() =>
+                            Column()
+                                .crossAlignment(CrossAxisAlignment.Stretch)
+                                .children([
                                     Toolbar(),
-                                    Expanded({
-                                        child: Switch({
-                                            value: derive((ctx) =>
-                                                ctx.get(mobileTab$),
-                                            ),
-                                            cases: [
-                                                {
-                                                    key: "cases",
-                                                    child: () => Sidebar(),
-                                                },
-                                                {
-                                                    key: "edit",
-                                                    child: () => Editor(),
-                                                },
-                                            ],
-                                            fallback: () => Viewer(),
-                                        }),
-                                    }),
+                                    Expanded()
+                                        .child(
+                                            Row()
+                                                .crossAlignment(
+                                                    CrossAxisAlignment.Stretch,
+                                                )
+                                                .children([
+                                                    Sidebar(),
+                                                    VDivider({
+                                                        onDrag: mutate(
+                                                            (ctx, ev) => {
+                                                                const next =
+                                                                    Math.max(
+                                                                        120,
+                                                                        Math.min(
+                                                                            480,
+                                                                            ctx.get(
+                                                                                sidebarWidth$,
+                                                                            ) +
+                                                                                ev
+                                                                                    .deltaFromLast
+                                                                                    .x,
+                                                                        ),
+                                                                    );
+                                                                ctx.set(
+                                                                    sidebarWidth$,
+                                                                    next,
+                                                                );
+                                                            },
+                                                        ),
+                                                    }),
+                                                    Expanded()
+                                                        .child(
+                                                            EditorAndViewer(),
+                                                        )
+                                                        .build(),
+                                                ])
+                                                .build(),
+                                        )
+                                        .build(),
+                                    StatusBar(),
+                                ])
+                                .build(),
+                        )
+                        .child(() =>
+                            Column()
+                                .crossAlignment(CrossAxisAlignment.Stretch)
+                                .children([
+                                    Toolbar(),
+                                    Expanded()
+                                        .child(
+                                            Switch({
+                                                value: derive((ctx) =>
+                                                    ctx.get(mobileTab$),
+                                                ),
+                                            })
+                                                .cases([
+                                                    {
+                                                        key: "cases",
+                                                        child: () => Sidebar(),
+                                                    },
+                                                    {
+                                                        key: "edit",
+                                                        child: () => Editor(),
+                                                    },
+                                                ])
+                                                .fallback(() => Viewer())
+                                                .build(),
+                                        )
+                                        .build(),
                                     MobileTabBar(),
                                     StatusBar(),
-                                ],
-                            }),
-                        // Desktop: 3-pane layout (sidebar | editor | viewer)
-                        // with draggable dividers.
-                        elseChild: () =>
-                            Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                children: [
-                                    Toolbar(),
-                                    Expanded({
-                                        child: Row({
-                                            crossAlignment:
-                                                CrossAxisAlignment.Stretch,
-                                            children: [
-                                                Sidebar(),
-                                                VDivider({
-                                                    onDrag: mutate(
-                                                        (ctx, ev) => {
-                                                            const next =
-                                                                Math.max(
-                                                                    120,
-                                                                    Math.min(
-                                                                        480,
-                                                                        ctx.get(
-                                                                            sidebarWidth$,
-                                                                        ) +
-                                                                            ev
-                                                                                .deltaFromLast
-                                                                                .x,
-                                                                    ),
-                                                                );
-                                                            ctx.set(
-                                                                sidebarWidth$,
-                                                                next,
-                                                            );
-                                                        },
-                                                    ),
-                                                }),
-                                                Expanded({
-                                                    child: EditorAndViewer(),
-                                                }),
-                                            ],
-                                        }),
-                                    }),
-                                    StatusBar(),
-                                ],
-                            }),
-                    }),
+                                ])
+                                .build(),
+                        )
+                        .build(),
                     // Context-menu overlay — paints on top of everything
                     // when open. Lives at the canvas root so it can be
                     // positioned at any canvas-relative coord.
                     ContextMenuOverlay(),
-                ],
-            }),
-        ],
-    }),
+                ])
+                .build(),
+        ])
+        .build(),
 );

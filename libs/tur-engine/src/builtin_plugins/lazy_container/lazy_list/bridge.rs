@@ -1,17 +1,39 @@
 //! JS bridge for the `LazyList` element + its controller factory.
+//!
+//! Builder pattern: `LazyList(props)` returns a chainable builder terminated
+//! by `.build()`, which runs the terminal below with the accumulated props
+//! (required-prop validation fires there).
 
 use std::rc::Rc;
 
 use boa_engine::class::Class;
 use boa_engine::{Context, JsError, JsNativeError, JsResult, JsValue};
 
+use crate::core::js_runtime::builder::builder_factory;
+use crate::core::js_runtime::builder::setters::*;
+use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
+static TABLE: BuilderTable = BuilderTable {
+    methods: &[
+        M::new("itemCount", itemCount),
+        M::new("builder", builder),
+        M::new("axis", axis),
+        M::new("overscan", overscan),
+        M::new("itemExtent", itemExtent),
+        M::new("queryKey", queryKey),
+    ],
+    child: false,
+    children: false,
+};
+
+builder_factory!(tur_lazy_list_factory, tur_lazy_list, &TABLE);
+
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("LazyList", 2, tur_lazy_list as Ptr),
+        ("LazyList", 2, tur_lazy_list_factory as Ptr),
         (
             "createLazyListController",
             2,

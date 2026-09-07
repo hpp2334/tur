@@ -25,17 +25,16 @@ const HEX: Record<string, string> = {
 };
 
 function coloredPanel(label: string, hex: string) {
-    return Container({
-        color: Color.hex(hex),
-        alignment: Alignment.Center,
-        children: [
-            Text({
-                text: label,
-                fontSize: 36,
-                color: Color.hex("#ffffff"),
-            }),
-        ],
-    });
+    return Container()
+        .color(Color.hex(hex))
+        .alignment(Alignment.Center)
+        .children([
+            Text({ text: label })
+                .fontSize(36)
+                .color(Color.hex("#ffffff"))
+                .build(),
+        ])
+        .build();
 }
 
 const App = view(() => {
@@ -43,89 +42,102 @@ const App = view(() => {
     // stable for the life of the tree — no need to hoist it to module level.
     const tab$ = source("red");
 
-    return Expanded({
-        child: Container({
-            color: Color.hex("#1a1a2e"),
-            padding: 24,
-            children: [
-                Column({
-                    mainAlignment: MainAxisAlignment.Start,
-                    crossAlignment: CrossAxisAlignment.Stretch,
-                    children: [
-                        Row({
-                            mainAlignment: MainAxisAlignment.Center,
-                            children: TABS.map((c) =>
-                                PointerInteract({
-                                    onClick: mutate((ctx, _ev) =>
-                                        ctx.set(tab$, c),
+    return Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#1a1a2e"))
+                .padding(24)
+                .children([
+                    Column()
+                        .mainAlignment(MainAxisAlignment.Start)
+                        .crossAlignment(CrossAxisAlignment.Stretch)
+                        .children([
+                            Row()
+                                .mainAlignment(MainAxisAlignment.Center)
+                                .children(
+                                    TABS.map((c) =>
+                                        PointerInteract()
+                                            .onClick(
+                                                mutate((ctx, _ev) =>
+                                                    ctx.set(tab$, c),
+                                                ),
+                                            )
+                                            .child(
+                                                Container()
+                                                    .color(Color.hex(HEX[c]))
+                                                    .padding(12)
+                                                    .children([
+                                                        Text({ text: c })
+                                                            .fontSize(18)
+                                                            .color(
+                                                                Color.hex(
+                                                                    "#ffffff",
+                                                                ),
+                                                            )
+                                                            .build(),
+                                                    ])
+                                                    .build(),
+                                            )
+                                            .build(),
                                     ),
-                                    child: Container({
-                                        color: Color.hex(HEX[c]),
-                                        padding: 12,
-                                        children: [
-                                            Text({
-                                                text: c,
-                                                fontSize: 18,
-                                                color: Color.hex("#ffffff"),
-                                            }),
-                                        ],
-                                    }),
-                                }),
-                            ),
-                        }),
-                        Container({ height: 16 }),
-                        Expanded({
-                            child: Switch({
-                                value: tab$,
-                                cases: [
-                                    {
-                                        key: "red",
-                                        child: () =>
-                                            coloredPanel(
-                                                "Switch: RED",
-                                                HEX.red,
-                                            ),
-                                    },
-                                    {
-                                        key: "green",
-                                        child: () =>
-                                            coloredPanel(
-                                                "Switch: GREEN",
-                                                HEX.green,
-                                            ),
-                                    },
-                                    {
-                                        key: "blue",
-                                        child: () =>
-                                            coloredPanel(
-                                                "Switch: BLUE",
-                                                HEX.blue,
-                                            ),
-                                    },
-                                ],
-                            }),
-                        }),
-                        Container({ height: 16 }),
-                        Container({
-                            height: 60,
-                            color: Color.hex("#0f172a"),
-                            alignment: Alignment.Center,
-                            children: [
-                                Text({
-                                    text: derive(
-                                        (ctx) =>
-                                            `Switch sees: ${ctx.get(tab$).toUpperCase()}`,
-                                    ),
-                                    fontSize: 20,
-                                    color: Color.hex("#e2e8f0"),
-                                }),
-                            ],
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    });
+                                )
+                                .build(),
+                            Container().height(16).build(),
+                            Expanded()
+                                .child(
+                                    Switch({ value: tab$ })
+                                        .cases([
+                                            {
+                                                key: "red",
+                                                child: () =>
+                                                    coloredPanel(
+                                                        "Switch: RED",
+                                                        HEX.red,
+                                                    ),
+                                            },
+                                            {
+                                                key: "green",
+                                                child: () =>
+                                                    coloredPanel(
+                                                        "Switch: GREEN",
+                                                        HEX.green,
+                                                    ),
+                                            },
+                                            {
+                                                key: "blue",
+                                                child: () =>
+                                                    coloredPanel(
+                                                        "Switch: BLUE",
+                                                        HEX.blue,
+                                                    ),
+                                            },
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                            Container().height(16).build(),
+                            Container()
+                                .height(60)
+                                .color(Color.hex("#0f172a"))
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Text({
+                                        text: derive(
+                                            (ctx) =>
+                                                `Switch sees: ${ctx.get(tab$).toUpperCase()}`,
+                                        ),
+                                    })
+                                        .fontSize(20)
+                                        .color(Color.hex("#e2e8f0"))
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

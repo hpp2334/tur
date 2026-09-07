@@ -69,12 +69,12 @@ pub fn install_composited_transform(
         (
             "CompositedTransformTarget",
             2,
-            target::tur_target as crate::core::js_runtime::helpers::Ptr,
+            target::tur_target_factory as crate::core::js_runtime::helpers::Ptr,
         ),
         (
             "CompositedTransformFollower",
             2,
-            follower::tur_follower as crate::core::js_runtime::helpers::Ptr,
+            follower::tur_follower_factory as crate::core::js_runtime::helpers::Ptr,
         ),
         (
             "createLayerLink",

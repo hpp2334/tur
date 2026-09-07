@@ -214,30 +214,33 @@ function PrimaryButton({
     onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
 }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick,
-            queryKey,
-            child: Container({
-                width: 220,
-                height: 48,
-                borderRadius: 12,
-                color: bg,
-                shadowColor,
-                shadowBlur: 14,
-                shadowOffset: [0, 6],
-                alignment: Alignment.Center,
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 15,
-                        color: Color.hex("#ffffff"),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(onClick)
+                .queryKey(queryKey)
+                .child(
+                    Container()
+                        .width(220)
+                        .height(48)
+                        .borderRadius(12)
+                        .color(bg)
+                        .shadowColor(shadowColor)
+                        .shadowBlur(14)
+                        .shadowOffset([0, 6])
+                        .alignment(Alignment.Center)
+                        .children([
+                            Text({ text: label })
+                                .fontSize(15)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function GhostButton({
@@ -249,103 +252,94 @@ function GhostButton({
     onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
 }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick,
-            queryKey,
-            child: Container({
-                padding: 10,
-                borderRadius: 10,
-                borderColor: COLORS.divider,
-                borderWidth: 1,
-                color: Color.hex("#ffffff"),
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 13,
-                        color: COLORS.textMuted,
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(onClick)
+                .queryKey(queryKey)
+                .child(
+                    Container()
+                        .padding(10)
+                        .borderRadius(10)
+                        .borderColor(COLORS.divider)
+                        .borderWidth(1)
+                        .color(Color.hex("#ffffff"))
+                        .children([
+                            Text({ text: label })
+                                .fontSize(13)
+                                .color(COLORS.textMuted)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 // --- Status pill ---------------------------------------------------------
 
 function StatusPill(s: CountdownState): Element {
-    return Container({
-        padding: 6,
-        borderRadius: 999,
-        borderColor: COLORS.divider,
-        borderWidth: 1,
-        color: Color.hex("#ffffff"),
-        children: [
-            Row({
-                mainAxisSize: MainAxisSize.Min,
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
-                    Container({
-                        width: 7,
-                        height: 7,
-                        borderRadius: 999,
-                        color: s.statusColor$,
-                    }),
-                    SizedBox({ width: 6 }),
-                    Text({
-                        text: s.statusLabel$,
-                        fontSize: 11,
-                        color: COLORS.textMuted,
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .padding(6)
+        .borderRadius(999)
+        .borderColor(COLORS.divider)
+        .borderWidth(1)
+        .color(Color.hex("#ffffff"))
+        .children([
+            Row()
+                .mainAxisSize(MainAxisSize.Min)
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
+                    Container()
+                        .width(7)
+                        .height(7)
+                        .borderRadius(999)
+                        .color(s.statusColor$)
+                        .build(),
+                    SizedBox().width(6).build(),
+                    Text({ text: s.statusLabel$ })
+                        .fontSize(11)
+                        .color(COLORS.textMuted)
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 // --- Main display --------------------------------------------------------
 
 function TimerView(s: CountdownState): Element {
-    return Column({
-        mainAxisSize: MainAxisSize.Min,
-        crossAlignment: CrossAxisAlignment.Center,
-        children: [
-            Text({
-                text: "COUNTDOWN",
-                fontSize: 11,
-                color: COLORS.textFaint,
-            }),
-            SizedBox({ height: 10 }),
-            Text({
-                text: derive((ctx) => formatTime(ctx.get(s.remaining$))),
-                fontSize: 72,
-                color: s.displayColor$,
-                queryKey: ["display"],
-            }),
-            SizedBox({ height: 12 }),
+    return Column()
+        .mainAxisSize(MainAxisSize.Min)
+        .crossAlignment(CrossAxisAlignment.Center)
+        .children([
+            Text({ text: "COUNTDOWN" })
+                .fontSize(11)
+                .color(COLORS.textFaint)
+                .build(),
+            SizedBox().height(10).build(),
+            Text({ text: derive((ctx) => formatTime(ctx.get(s.remaining$))) })
+                .fontSize(72)
+                .color(s.displayColor$)
+                .queryKey(["display"])
+                .build(),
+            SizedBox().height(12).build(),
             StatusPill(s),
-        ],
-    });
+        ])
+        .build();
 }
 
 function Controls(s: CountdownState): Element {
-    return Column({
-        mainAxisSize: MainAxisSize.Min,
-        crossAlignment: CrossAxisAlignment.Center,
-        children: [
+    return Column()
+        .mainAxisSize(MainAxisSize.Min)
+        .crossAlignment(CrossAxisAlignment.Center)
+        .children([
             // Primary action toggles between Start and Pause.
-            Condition({
-                condition: s.running$,
-                child: () =>
-                    PrimaryButton({
-                        label: "Pause",
-                        bg: COLORS.pause,
-                        shadowColor: COLORS.pauseShadow,
-                        onClick: s.pause$,
-                        queryKey: ["btn-pause"],
-                    }),
-                elseChild: () =>
+            Condition({ condition: s.running$ })
+                .elseChild(() =>
                     PrimaryButton({
                         label: derive((ctx) =>
                             ctx.get(s.remaining$) === 0 ? "Restart" : "Start",
@@ -355,27 +349,37 @@ function Controls(s: CountdownState): Element {
                         onClick: s.start$,
                         queryKey: ["btn-start"],
                     }),
-            }),
-            SizedBox({ height: 12 }),
-            Row({
-                mainAxisSize: MainAxisSize.Min,
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
+                )
+                .child(() =>
+                    PrimaryButton({
+                        label: "Pause",
+                        bg: COLORS.pause,
+                        shadowColor: COLORS.pauseShadow,
+                        onClick: s.pause$,
+                        queryKey: ["btn-pause"],
+                    }),
+                )
+                .build(),
+            SizedBox().height(12).build(),
+            Row()
+                .mainAxisSize(MainAxisSize.Min)
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
                     GhostButton({
                         label: "Edit",
                         onClick: s.openEdit$,
                         queryKey: ["btn-edit"],
                     }),
-                    SizedBox({ width: 10 }),
+                    SizedBox().width(10).build(),
                     GhostButton({
                         label: "Reset",
                         onClick: s.reset$,
                         queryKey: ["btn-reset"],
                     }),
-                ],
-            }),
-        ],
-    });
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 // --- Edit modal ----------------------------------------------------------
@@ -383,98 +387,135 @@ function Controls(s: CountdownState): Element {
 function EditModal(s: CountdownState): Element {
     // Click-anywhere-on-backdrop dismisses the modal. The inner card stops
     // propagation by being an opaque hit-test target itself.
-    return Positioned({
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        child: PointerInteract({
-            behavior: HitTestBehavior.Opaque,
-            onClick: s.cancelEdit$,
-            child: Container({
-                color: COLORS.backdrop,
-                alignment: Alignment.Center,
-                children: [
-                    PointerInteract({
-                        behavior: HitTestBehavior.Opaque,
-                        onClick: mutate((_ctx, _ev: PointerInteractEvent) => {
-                            /* swallow click inside card */
-                        }),
-                        child: Container({
-                            width: 380,
-                            borderRadius: 14,
-                            padding: 22,
-                            color: COLORS.cardBg,
-                            borderColor: COLORS.cardBorder,
-                            borderWidth: 1,
-                            children: [
-                                Column({
-                                    mainAxisSize: MainAxisSize.Min,
-                                    crossAlignment: CrossAxisAlignment.Stretch,
-                                    children: [
-                                        Text({
-                                            text: "Set duration",
-                                            fontSize: 18,
-                                            color: COLORS.text,
-                                        }),
-                                        SizedBox({ height: 6 }),
-                                        Text({
-                                            text: "Enter a positive integer (seconds).",
-                                            fontSize: 13,
-                                            color: COLORS.textMuted,
-                                        }),
-                                        SizedBox({ height: 16 }),
-                                        Container({
-                                            padding: 4,
-                                            borderRadius: 8,
-                                            borderColor: COLORS.divider,
-                                            borderWidth: 1,
-                                            queryKey: ["edit-input"],
-                                            children: [
-                                                Input({
-                                                    controller: derive((ctx) =>
-                                                        ctx.get(
-                                                            s.editController$,
-                                                        ),
-                                                    ) as unknown as TextController,
-                                                    placeholder:
-                                                        "Positive integer",
-                                                    fontSize: 14,
-                                                    width: 332,
-                                                    height: 32,
-                                                }),
-                                            ],
-                                        }),
-                                        SizedBox({ height: 18 }),
-                                        Row({
-                                            mainAlignment:
-                                                MainAxisAlignment.End,
-                                            mainAxisSize: MainAxisSize.Min,
-                                            children: [
-                                                GhostButton({
-                                                    label: "Cancel",
-                                                    onClick: s.cancelEdit$,
-                                                }),
-                                                SizedBox({ width: 8 }),
-                                                PrimaryButton({
-                                                    label: "Save",
-                                                    bg: COLORS.start,
-                                                    shadowColor:
-                                                        COLORS.startShadow,
-                                                    onClick: s.confirmEdit$,
-                                                    queryKey: ["btn-confirm"],
-                                                }),
-                                            ],
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return Positioned()
+        .top(0)
+        .left(0)
+        .right(0)
+        .bottom(0)
+        .child(
+            PointerInteract()
+                .behavior(HitTestBehavior.Opaque)
+                .onClick(s.cancelEdit$)
+                .child(
+                    Container()
+                        .color(COLORS.backdrop)
+                        .alignment(Alignment.Center)
+                        .children([
+                            PointerInteract()
+                                .behavior(HitTestBehavior.Opaque)
+                                .onClick(
+                                    mutate(
+                                        (_ctx, _ev: PointerInteractEvent) => {
+                                            /* swallow click inside card */
+                                        },
+                                    ),
+                                )
+                                .child(
+                                    Container()
+                                        .width(380)
+                                        .borderRadius(14)
+                                        .padding(22)
+                                        .color(COLORS.cardBg)
+                                        .borderColor(COLORS.cardBorder)
+                                        .borderWidth(1)
+                                        .children([
+                                            Column()
+                                                .mainAxisSize(MainAxisSize.Min)
+                                                .crossAlignment(
+                                                    CrossAxisAlignment.Stretch,
+                                                )
+                                                .children([
+                                                    Text({
+                                                        text: "Set duration",
+                                                    })
+                                                        .fontSize(18)
+                                                        .color(COLORS.text)
+                                                        .build(),
+                                                    SizedBox()
+                                                        .height(6)
+                                                        .build(),
+                                                    Text({
+                                                        text: "Enter a positive integer (seconds).",
+                                                    })
+                                                        .fontSize(13)
+                                                        .color(COLORS.textMuted)
+                                                        .build(),
+                                                    SizedBox()
+                                                        .height(16)
+                                                        .build(),
+                                                    Container()
+                                                        .padding(4)
+                                                        .borderRadius(8)
+                                                        .borderColor(
+                                                            COLORS.divider,
+                                                        )
+                                                        .borderWidth(1)
+                                                        .queryKey([
+                                                            "edit-input",
+                                                        ])
+                                                        .children([
+                                                            Input()
+                                                                .controller(
+                                                                    derive(
+                                                                        (ctx) =>
+                                                                            ctx.get(
+                                                                                s.editController$,
+                                                                            ),
+                                                                    ) as unknown as TextController,
+                                                                )
+                                                                .placeholder(
+                                                                    "Positive integer",
+                                                                )
+                                                                .fontSize(14)
+                                                                .width(332)
+                                                                .height(32)
+                                                                .build(),
+                                                        ])
+                                                        .build(),
+                                                    SizedBox()
+                                                        .height(18)
+                                                        .build(),
+                                                    Row()
+                                                        .mainAlignment(
+                                                            MainAxisAlignment.End,
+                                                        )
+                                                        .mainAxisSize(
+                                                            MainAxisSize.Min,
+                                                        )
+                                                        .children([
+                                                            GhostButton({
+                                                                label: "Cancel",
+                                                                onClick:
+                                                                    s.cancelEdit$,
+                                                            }),
+                                                            SizedBox()
+                                                                .width(8)
+                                                                .build(),
+                                                            PrimaryButton({
+                                                                label: "Save",
+                                                                bg: COLORS.start,
+                                                                shadowColor:
+                                                                    COLORS.startShadow,
+                                                                onClick:
+                                                                    s.confirmEdit$,
+                                                                queryKey: [
+                                                                    "btn-confirm",
+                                                                ],
+                                                            }),
+                                                        ])
+                                                        .build(),
+                                                ])
+                                                .build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 // --- Page ----------------------------------------------------------------
@@ -484,37 +525,34 @@ const App = view(() => {
     // countdown state cluster is stable for the life of the tree.
     const s = createCountdownState();
 
-    return Expanded({
-        child: Stack({
-            // Expand tightens the background layer to the full box — the
-            // Stack (and thus the full-bleed modal scrim) covers the whole
-            // viewport. A content-sized background would shrink the Stack
-            // to the timer card and the overlay would miss outside it.
-            fit: StackFit.Expand,
-            children: [
-                Container({
-                    color: COLORS.pageBg,
-                    alignment: Alignment.Center,
-                    children: [
-                        Column({
-                            mainAlignment: MainAxisAlignment.Center,
-                            crossAlignment: CrossAxisAlignment.Center,
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                TimerView(s),
-                                SizedBox({ height: 36 }),
-                                Controls(s),
-                            ],
-                        }),
-                    ],
-                }),
-                Condition({
-                    condition: s.editing$,
-                    child: () => EditModal(s),
-                }),
-            ],
-        }),
-    });
+    return Expanded()
+        .child(
+            Stack()
+                .fit(StackFit.Expand)
+                .children([
+                    Container()
+                        .color(COLORS.pageBg)
+                        .alignment(Alignment.Center)
+                        .children([
+                            Column()
+                                .mainAlignment(MainAxisAlignment.Center)
+                                .crossAlignment(CrossAxisAlignment.Center)
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    TimerView(s),
+                                    SizedBox().height(36).build(),
+                                    Controls(s),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                    Condition({ condition: s.editing$ })
+                        .child(() => EditModal(s))
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

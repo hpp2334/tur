@@ -17,30 +17,34 @@ import {
 const hover$ = source("");
 
 const App = view(() =>
-    Column({
-        children: [
-            MouseRegion({
-                onEnter: mutate((ctx, _ev) => ctx.set(hover$, "A")),
-                onExit: mutate((ctx, _ev) => ctx.set(hover$, "")),
-                child: Container({
-                    width: 100,
-                    height: 50,
-                    color: Color.hex("#ef4444"),
-                    queryKey: ["a"],
-                }),
-            }),
-            MouseRegion({
-                onEnter: mutate((ctx, _ev) => ctx.set(hover$, "B")),
-                onExit: mutate((ctx, _ev) => ctx.set(hover$, "")),
-                child: Container({
-                    width: 100,
-                    height: 50,
-                    color: Color.hex("#22c55e"),
-                    queryKey: ["b"],
-                }),
-            }),
-        ],
-    }),
+    Column()
+        .children([
+            MouseRegion()
+                .onEnter(mutate((ctx, _ev) => ctx.set(hover$, "A")))
+                .onExit(mutate((ctx, _ev) => ctx.set(hover$, "")))
+                .child(
+                    Container()
+                        .width(100)
+                        .height(50)
+                        .color(Color.hex("#ef4444"))
+                        .queryKey(["a"])
+                        .build(),
+                )
+                .build(),
+            MouseRegion()
+                .onEnter(mutate((ctx, _ev) => ctx.set(hover$, "B")))
+                .onExit(mutate((ctx, _ev) => ctx.set(hover$, "")))
+                .child(
+                    Container()
+                        .width(100)
+                        .height(50)
+                        .color(Color.hex("#22c55e"))
+                        .queryKey(["b"])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start({ store }: { store: Store }) {

@@ -22,7 +22,7 @@
 //! app.errorMsg$;
 //! store.set(app.destroy$);                        // control mutation — the only lifecycle action
 //!
-//! VirtualAppView({ app$: app, background?, fallback?, errorView? });
+//! VirtualAppView({ app$: app }).background(…).fallback(…).errorView(…).build();
 //! ```
 //!
 //! The controller is a **lazy declaration** — nothing runs until an element

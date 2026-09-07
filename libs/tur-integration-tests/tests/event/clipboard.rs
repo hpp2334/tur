@@ -57,17 +57,17 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 const INPUT_BUNDLE: &str = r#"
     import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(Container({
-        children: [
-            Input({
-                controller: controller,
-                fontSize: 14,
-                width: 200,
-                height: 30,
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 fn setup_focused_input_with(text: &str) -> (TurTestApp, ElementNodeId) {

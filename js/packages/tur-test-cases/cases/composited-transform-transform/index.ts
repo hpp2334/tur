@@ -17,27 +17,29 @@ import {
 // (20 + 50, 20 + 10) = (70, 30) — not the layout position (20, 20).
 const App = view(() => {
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 20,
-                top: 20,
-                child: Transform({
-                    translateX: 50,
-                    translateY: 10,
-                    child: CompositedTransformTarget({
-                        link,
-                        child: SizedBox({ width: 40, height: 40 }),
-                    }),
-                }),
-            }),
-            CompositedTransformFollower({
-                link,
-                child: Container({ width: 15, height: 15, color: "red" }),
-            }),
-        ],
-    });
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(20)
+                .top(20)
+                .child(
+                    Transform()
+                        .translateX(50)
+                        .translateY(10)
+                        .child(
+                            CompositedTransformTarget({ link })
+                                .child(SizedBox().width(40).height(40).build())
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+            CompositedTransformFollower({ link })
+                .child(Container().width(15).height(15).color("red").build())
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

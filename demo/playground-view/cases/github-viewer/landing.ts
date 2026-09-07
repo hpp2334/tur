@@ -55,79 +55,83 @@ const cardWidth = derive((ctx) =>
 );
 
 function Suggestion({ repo }: { repo: Repo }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => {
-                repoCtrl.setSpans([{ content: repo.fullName }]);
-                ctx.set(repoDraft$, repo.fullName);
-                ctx.set(repoError$, null);
-                ctx.set(openRepo, repo);
-            }),
-            child: Container({
-                padding: 7,
-                borderRadius: 8,
-                color: COLORS.subtleButton,
-                children: [
-                    Text({
-                        text: repo.fullName,
-                        fontSize: 12,
-                        color: COLORS.subtleButtonFg,
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx: StoreCtx, _ev) => {
+                        repoCtrl.setSpans([{ content: repo.fullName }]);
+                        ctx.set(repoDraft$, repo.fullName);
+                        ctx.set(repoError$, null);
+                        ctx.set(openRepo, repo);
                     }),
-                ],
-            }),
-        }),
-    });
+                )
+                .child(
+                    Container()
+                        .padding(7)
+                        .borderRadius(8)
+                        .color(COLORS.subtleButton)
+                        .children([
+                            Text({ text: repo.fullName })
+                                .fontSize(12)
+                                .color(COLORS.subtleButtonFg)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 export function LandingScreen(): Element {
-    return Container({
-        alignment: Alignment.Center,
-        children: [
-            Container({
-                width: cardWidth,
-                padding: 34,
-                borderRadius: 14,
-                color: COLORS.panel,
-                borderColor: COLORS.border,
-                borderWidth: 1,
-                shadowColor: COLORS.shadowMd,
-                shadowBlur: 40,
-                shadowOffset: [0, 8],
-                children: [
-                    Column({
-                        crossAlignment: CrossAxisAlignment.Stretch,
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
+    return Container()
+        .alignment(Alignment.Center)
+        .children([
+            Container()
+                .width(cardWidth)
+                .padding(34)
+                .borderRadius(14)
+                .color(COLORS.panel)
+                .borderColor(COLORS.border)
+                .borderWidth(1)
+                .shadowColor(COLORS.shadowMd)
+                .shadowBlur(40)
+                .shadowOffset([0, 8])
+                .children([
+                    Column()
+                        .crossAlignment(CrossAxisAlignment.Stretch)
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
                             // Brand mark.
-                            Container({
-                                width: 40,
-                                height: 40,
-                                borderRadius: 10,
-                                color: COLORS.accentSoft,
-                                alignment: Alignment.Center,
-                                children: [
-                                    Image({
-                                        resourceId: getIcon("github"),
-                                        width: 24,
-                                        height: 24,
-                                        queryKey: ["gh-mark"],
-                                    }),
-                                ],
-                            }),
-                            SizedBox({ height: 18 }),
-                            Text({
-                                text: "Browse a public repo",
-                                fontSize: 18,
-                                color: COLORS.text,
-                            }),
-                            SizedBox({ height: 6 }),
+                            Container()
+                                .width(40)
+                                .height(40)
+                                .borderRadius(10)
+                                .color(COLORS.accentSoft)
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Image({ resourceId: getIcon("github") })
+                                        .width(24)
+                                        .height(24)
+                                        .queryKey(["gh-mark"])
+                                        .build(),
+                                ])
+                                .build(),
+                            SizedBox().height(18).build(),
+                            Text({ text: "Browse a public repo" })
+                                .fontSize(18)
+                                .color(COLORS.text)
+                                .build(),
+                            SizedBox().height(6).build(),
                             Text({
                                 text: 'Enter a repo as "owner/name" to explore its files.',
-                                fontSize: 13,
-                                color: COLORS.textMuted,
-                            }),
-                            SizedBox({ height: 20 }),
+                            })
+                                .fontSize(13)
+                                .color(COLORS.textMuted)
+                                .build(),
+                            SizedBox().height(20).build(),
                             Field({
                                 label: "Repository",
                                 controller: repoCtrl,
@@ -138,84 +142,93 @@ export function LandingScreen(): Element {
                                 condition: derive(
                                     (ctx) => ctx.get(repoError$) !== null,
                                 ),
-                                child: () =>
-                                    Column({
-                                        mainAxisSize: MainAxisSize.Min,
-                                        crossAlignment:
+                            })
+                                .elseChild(() => SizedBox().height(0).build())
+                                .child(() =>
+                                    Column()
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .crossAlignment(
                                             CrossAxisAlignment.Stretch,
-                                        children: [
-                                            SizedBox({ height: 8 }),
+                                        )
+                                        .children([
+                                            SizedBox().height(8).build(),
                                             Text({
                                                 text: derive(
                                                     (ctx) =>
                                                         ctx.get(repoError$) ??
                                                         "",
                                                 ),
-                                                fontSize: 12,
-                                                color: COLORS.danger,
-                                            }),
-                                        ],
-                                    }),
-                                elseChild: () => SizedBox({ height: 0 }),
-                            }),
-                            SizedBox({ height: 16 }),
+                                            })
+                                                .fontSize(12)
+                                                .color(COLORS.danger)
+                                                .build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                            SizedBox().height(16).build(),
                             // Submit row.
-                            Row({
-                                mainAlignment: MainAxisAlignment.End,
-                                mainAxisSize: MainAxisSize.Min,
-                                children: [
+                            Row()
+                                .mainAlignment(MainAxisAlignment.End)
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
                                     Button({
                                         label: "Browse",
                                         bg: COLORS.accent,
                                         fg: COLORS.accentFg,
                                         onClick: openRepoFromDraft,
                                     }),
-                                ],
-                            }),
-                            SizedBox({ height: 22 }),
-                            Text({
-                                text: "Try one of these",
-                                fontSize: 11,
-                                color: COLORS.textSubtle,
-                            }),
-                            SizedBox({ height: 8 }),
-                            Condition({
-                                condition: isMobile,
-                                child: () =>
-                                    Column({
-                                        mainAxisSize: MainAxisSize.Min,
-                                        crossAlignment:
-                                            CrossAxisAlignment.Start,
-                                        children: SUGGESTIONS.flatMap(
-                                            (repo, i) => [
+                                ])
+                                .build(),
+                            SizedBox().height(22).build(),
+                            Text({ text: "Try one of these" })
+                                .fontSize(11)
+                                .color(COLORS.textSubtle)
+                                .build(),
+                            SizedBox().height(8).build(),
+                            Condition({ condition: isMobile })
+                                .elseChild(() =>
+                                    Row()
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children(
+                                            SUGGESTIONS.flatMap((repo, i) => [
                                                 ...(i === 0
                                                     ? []
                                                     : [
-                                                          SizedBox({
-                                                              height: 6,
-                                                          }),
+                                                          SizedBox()
+                                                              .width(6)
+                                                              .build(),
                                                       ]),
                                                 Suggestion({ repo }),
-                                            ],
-                                        ),
-                                    }),
-                                elseChild: () =>
-                                    Row({
-                                        mainAxisSize: MainAxisSize.Min,
-                                        children: SUGGESTIONS.flatMap(
-                                            (repo, i) => [
+                                            ]),
+                                        )
+                                        .build(),
+                                )
+                                .child(() =>
+                                    Column()
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Start,
+                                        )
+                                        .children(
+                                            SUGGESTIONS.flatMap((repo, i) => [
                                                 ...(i === 0
                                                     ? []
-                                                    : [SizedBox({ width: 6 })]),
+                                                    : [
+                                                          SizedBox()
+                                                              .height(6)
+                                                              .build(),
+                                                      ]),
                                                 Suggestion({ repo }),
-                                            ],
-                                        ),
-                                    }),
-                            }),
-                        ],
-                    }),
-                ],
-            }),
-        ],
-    });
+                                            ]),
+                                        )
+                                        .build(),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }

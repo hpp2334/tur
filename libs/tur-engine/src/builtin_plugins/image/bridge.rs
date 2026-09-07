@@ -1,18 +1,38 @@
 //! JS bridge for the `Image` element + image/svg resource factories.
+//!
+//! Builder pattern: `Image(props)` returns a chainable builder terminated by
+//! `.build()`, which runs the terminal below with the accumulated props.
 
 use std::rc::Rc;
 
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
+use crate::core::js_runtime::builder::builder_factory;
+use crate::core::js_runtime::builder::setters::*;
+use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
 use super::decode::{decode_image_bytes, decode_svg};
 
+static TABLE: BuilderTable = BuilderTable {
+    methods: &[
+        M::new("resourceId", resourceId),
+        M::new("width", width),
+        M::new("height", height),
+        M::new("fit", fit),
+        M::new("queryKey", queryKey),
+    ],
+    child: true,
+    children: false,
+};
+
+builder_factory!(tur_image_factory, tur_image, &TABLE);
+
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("Image", 2, tur_image as Ptr),
+        ("Image", 2, tur_image_factory as Ptr),
         ("createImageResource", 2, tur_create_image_resource as Ptr),
         ("createSvgResource", 2, tur_create_svg_resource as Ptr),
     ]

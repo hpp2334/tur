@@ -4,24 +4,25 @@ import { Column, Container, mount, ScrollView, Text, view } from "tur:std";
 // wrapped in ScrollView(axis: Vertical) > Column. Expected: the container is
 // laid out at its intrinsic size inside the scrollable column.
 const App = view(() =>
-    ScrollView({
-        axis: "vertical",
-        child: Column({
-            children: [
-                Container({
-                    padding: 48,
-                    queryKey: ["container"],
-                    children: [
-                        Text({
-                            text: "Empty State",
-                            fontSize: 24,
-                            queryKey: ["text"],
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    }),
+    ScrollView()
+        .axis("vertical")
+        .child(
+            Column()
+                .children([
+                    Container()
+                        .padding(48)
+                        .queryKey(["container"])
+                        .children([
+                            Text({ text: "Empty State" })
+                                .fontSize(24)
+                                .queryKey(["text"])
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

@@ -9,14 +9,14 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.eval_module_source(
         r#"
         import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({
-            axis: 0,
-            itemCount: 10000,
-            maxCrossAxisExtent: 100,
-            overscan: 2,
-            queryKey: ["lg"],
-            builder: (i) => Container({ color: createColor(200, 200, 200, 255) }),
-        }));
+        mount(LazyGrid({ itemCount: 10000, maxCrossAxisExtent: 100 })
+    .axis(0)
+    .overscan(2)
+    .queryKey(["lg"])
+    .builder((i) => Container()
+     .color(createColor(200, 200, 200, 255))
+     .build())
+    .build());
         "#,
     )
     .unwrap();
@@ -180,14 +180,14 @@ fn lazy_grid_horizontal_axis() {
     app.eval_module_source(
         r#"
         import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({
-            axis: 1,
-            itemCount: 1000,
-            maxCrossAxisExtent: 100,
-            overscan: 1,
-            queryKey: ["lg"],
-            builder: (i) => Container({ color: createColor(180, 180, 220, 255) }),
-        }));
+        mount(LazyGrid({ itemCount: 1000, maxCrossAxisExtent: 100 })
+    .axis(1)
+    .overscan(1)
+    .queryKey(["lg"])
+    .builder((i) => Container()
+     .color(createColor(180, 180, 220, 255))
+     .build())
+    .build());
         "#,
     )
     .unwrap();

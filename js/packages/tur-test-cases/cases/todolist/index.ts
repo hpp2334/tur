@@ -43,26 +43,19 @@ const COLORS = {
 };
 
 function Header(): Element {
-    return Row({
-        mainAlignment: MainAxisAlignment.SpaceBetween,
-        crossAlignment: CrossAxisAlignment.Center,
-        // Row's main axis is horizontal and we *do* want it to fill the width
-        // so SpaceBetween can push the button to the right edge. We do NOT
-        // want its children to fill vertically — the inner Column below uses
-        // `MainAxisSize.Min` so it hugs its text content; otherwise it would
-        // expand to the parent's max height (the engine default) and starve
-        // the TaskList `Expanded` slot to zero.
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Start,
-                mainAxisSize: MainAxisSize.Min,
-                children: [
-                    Text({
-                        text: "Tasks",
-                        fontSize: 26,
-                        color: COLORS.text,
-                    }),
-                    SizedBox({ height: 4 }),
+    return Row()
+        .mainAlignment(MainAxisAlignment.SpaceBetween)
+        .crossAlignment(CrossAxisAlignment.Center)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Start)
+                .mainAxisSize(MainAxisSize.Min)
+                .children([
+                    Text({ text: "Tasks" })
+                        .fontSize(26)
+                        .color(COLORS.text)
+                        .build(),
+                    SizedBox().height(4).build(),
                     Text({
                         text: derive((ctx) => {
                             const tasks = ctx.get(tasks$);
@@ -71,118 +64,140 @@ function Header(): Element {
                             ).length;
                             return `${tasks.length} items · ${done} done`;
                         }),
-                        fontSize: 13,
-                        color: COLORS.textMuted,
-                    }),
-                ],
-            }),
-            MouseRegion({
-                cursor: "pointer",
-                child: PointerInteract({
-                    onClick: mutate((ctx, _ev) => openAddModal(ctx)),
-                    child: Container({
-                        padding: 10,
-                        borderRadius: 8,
-                        color: COLORS.accent,
-                        shadowColor: Color.rgba(79, 70, 229, 80),
-                        shadowBlur: 10,
-                        shadowOffset: [0, 4],
-                        children: [
-                            Row({
-                                mainAxisSize: MainAxisSize.Min,
-                                crossAlignment: CrossAxisAlignment.Center,
-                                children: [
-                                    Image({
-                                        resourceId: getIcon("plus"),
-                                        width: 13,
-                                        height: 13,
-                                        queryKey: ["plus-icon"],
-                                    }),
-                                    SizedBox({ width: 7 }),
-                                    Text({
-                                        text: "New Task",
-                                        fontSize: 13,
-                                        color: COLORS.accentFg,
-                                    }),
-                                ],
-                            }),
-                        ],
-                    }),
-                }),
-            }),
-        ],
-    });
+                    })
+                        .fontSize(13)
+                        .color(COLORS.textMuted)
+                        .build(),
+                ])
+                .build(),
+            MouseRegion()
+                .cursor("pointer")
+                .child(
+                    PointerInteract()
+                        .onClick(mutate((ctx, _ev) => openAddModal(ctx)))
+                        .child(
+                            Container()
+                                .padding(10)
+                                .borderRadius(8)
+                                .color(COLORS.accent)
+                                .shadowColor(Color.rgba(79, 70, 229, 80))
+                                .shadowBlur(10)
+                                .shadowOffset([0, 4])
+                                .children([
+                                    Row()
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Center,
+                                        )
+                                        .children([
+                                            Image({
+                                                resourceId: getIcon("plus"),
+                                            })
+                                                .width(13)
+                                                .height(13)
+                                                .queryKey(["plus-icon"])
+                                                .build(),
+                                            SizedBox().width(7).build(),
+                                            Text({ text: "New Task" })
+                                                .fontSize(13)
+                                                .color(COLORS.accentFg)
+                                                .build(),
+                                        ])
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 function TaskList(): Element {
-    return Expanded({
-        child: ScrollView({
-            child: Column({
-                crossAlignment: CrossAxisAlignment.Stretch,
-                children: [
-                    Each({
-                        items: tasks$,
-                        build: (task, index) =>
-                            Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                mainAxisSize: MainAxisSize.Min,
-                                children: [
-                                    index === 0
-                                        ? SizedBox({ width: 0, height: 0 })
-                                        : SizedBox({ height: 10 }),
-                                    TaskItem({ task, index }),
-                                ],
-                            }),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return Expanded()
+        .child(
+            ScrollView()
+                .child(
+                    Column()
+                        .crossAlignment(CrossAxisAlignment.Stretch)
+                        .children([
+                            Each({ items: tasks$ })
+                                .itemBuilder((task, index) =>
+                                    Column()
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Stretch,
+                                        )
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children([
+                                            index === 0
+                                                ? SizedBox()
+                                                      .width(0)
+                                                      .height(0)
+                                                      .build()
+                                                : SizedBox().height(10).build(),
+                                            TaskItem({ task, index }),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() =>
-    Expanded({
-        child: Stack({
-            children: [
-                Container({
-                    color: COLORS.pageBg,
-                    padding: 22,
-                    children: [
-                        Column({
-                            crossAlignment: CrossAxisAlignment.Stretch,
-                            children: [
-                                Header(),
-                                SizedBox({ height: 18 }),
-                                TaskList(),
-                            ],
-                        }),
-                    ],
-                }),
-                Condition({
-                    condition: addOpen$,
-                    child: () =>
-                        Positioned({
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: AddTaskModal(),
-                        }),
-                }),
-                Condition({
-                    condition: derive((ctx) => ctx.get(removeTarget$) !== null),
-                    child: () =>
-                        Positioned({
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: ConfirmRemoveModal(),
-                        }),
-                }),
-            ],
-        }),
-    }),
+    Expanded()
+        .child(
+            Stack()
+                .children([
+                    Container()
+                        .color(COLORS.pageBg)
+                        .padding(22)
+                        .children([
+                            Column()
+                                .crossAlignment(CrossAxisAlignment.Stretch)
+                                .children([
+                                    Header(),
+                                    SizedBox().height(18).build(),
+                                    TaskList(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                    Condition({ condition: addOpen$ })
+                        .child(() =>
+                            Positioned()
+                                .top(0)
+                                .left(0)
+                                .right(0)
+                                .bottom(0)
+                                .child(AddTaskModal())
+                                .build(),
+                        )
+                        .build(),
+                    Condition({
+                        condition: derive(
+                            (ctx) => ctx.get(removeTarget$) !== null,
+                        ),
+                    })
+                        .child(() =>
+                            Positioned()
+                                .top(0)
+                                .left(0)
+                                .right(0)
+                                .bottom(0)
+                                .child(ConfirmRemoveModal())
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

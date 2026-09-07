@@ -45,25 +45,25 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 const App = view(() =>
-    Grid({
-        maxCrossAxisExtent: 160,
-        childAspectRatio: 2,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
-        queryKey: ["grid-aspect"],
-        children: Array.from({ length: COUNT }, (_, i) =>
-            Container({
-                color: Color.hex(hslToHex(hueFor(i), 60, 55)),
-                children: [
-                    Text({
-                        text: `#${i}`,
-                        fontSize: 12,
-                        color: Color.hex("#ffffff"),
-                    }),
-                ],
-            }),
-        ),
-    }),
+    Grid({ maxCrossAxisExtent: 160 })
+        .childAspectRatio(2)
+        .crossAxisSpacing(6)
+        .mainAxisSpacing(6)
+        .queryKey(["grid-aspect"])
+        .children(
+            Array.from({ length: COUNT }, (_, i) =>
+                Container()
+                    .color(Color.hex(hslToHex(hueFor(i), 60, 55)))
+                    .children([
+                        Text({ text: `#${i}` })
+                            .fontSize(12)
+                            .color(Color.hex("#ffffff"))
+                            .build(),
+                    ])
+                    .build(),
+            ),
+        )
+        .build(),
 );
 
 export function start() {

@@ -46,17 +46,18 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 const App = view(() =>
-    Grid({
-        maxCrossAxisExtent: 140,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        queryKey: ["grid-basic"],
-        children: Array.from({ length: COUNT }, (_, i) =>
-            Container({
-                color: Color.hex(hslToHex(hueFor(i), 65, 55)),
-            }),
-        ),
-    }),
+    Grid({ maxCrossAxisExtent: 140 })
+        .crossAxisSpacing(8)
+        .mainAxisSpacing(8)
+        .queryKey(["grid-basic"])
+        .children(
+            Array.from({ length: COUNT }, (_, i) =>
+                Container()
+                    .color(Color.hex(hslToHex(hueFor(i), 65, 55)))
+                    .build(),
+            ),
+        )
+        .build(),
 );
 
 export function start() {

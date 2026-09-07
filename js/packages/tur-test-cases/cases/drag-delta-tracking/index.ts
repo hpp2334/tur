@@ -27,32 +27,40 @@ Object.assign(globalThis, {
 });
 
 const App = view(() =>
-    PointerInteract({
-        onPointerDown: mutate((_ctx, ev) => {
-            dragStart = { x: ev.global.x, y: ev.global.y };
-            dragLast = { x: ev.global.x, y: ev.global.y };
-        }),
-        onPointerMove: mutate((_ctx, ev) => {
-            if (!dragStart || !dragLast) return;
-            lastInfo = {
-                dsx: ev.global.x - dragStart.x,
-                dsy: ev.global.y - dragStart.y,
-                dlx: ev.global.x - dragLast.x,
-                dly: ev.global.y - dragLast.y,
-            };
-            dragLast = { x: ev.global.x, y: ev.global.y };
-        }),
-        onPointerUp: mutate((_ctx, _ev) => {
-            dragStart = null;
-            dragLast = null;
-        }),
-        child: Container({
-            width: 200,
-            height: 200,
-            color: Color.hex("#6366f1"),
-            queryKey: ["drag-target"],
-        }),
-    }),
+    PointerInteract()
+        .onPointerDown(
+            mutate((_ctx, ev) => {
+                dragStart = { x: ev.global.x, y: ev.global.y };
+                dragLast = { x: ev.global.x, y: ev.global.y };
+            }),
+        )
+        .onPointerMove(
+            mutate((_ctx, ev) => {
+                if (!dragStart || !dragLast) return;
+                lastInfo = {
+                    dsx: ev.global.x - dragStart.x,
+                    dsy: ev.global.y - dragStart.y,
+                    dlx: ev.global.x - dragLast.x,
+                    dly: ev.global.y - dragLast.y,
+                };
+                dragLast = { x: ev.global.x, y: ev.global.y };
+            }),
+        )
+        .onPointerUp(
+            mutate((_ctx, _ev) => {
+                dragStart = null;
+                dragLast = null;
+            }),
+        )
+        .child(
+            Container()
+                .width(200)
+                .height(200)
+                .color(Color.hex("#6366f1"))
+                .queryKey(["drag-target"])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

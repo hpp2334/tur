@@ -98,6 +98,18 @@ impl TargetView {
     }
 }
 
+pub(super) static TABLE: crate::core::js_runtime::builder::BuilderTable =
+    crate::core::js_runtime::builder::BuilderTable {
+        methods: &[crate::core::js_runtime::builder::BuilderMethod::new(
+            "link",
+            crate::core::js_runtime::builder::setters::link,
+        )],
+        child: true,
+        children: false,
+    };
+
+crate::core::js_runtime::builder::builder_factory!(tur_target_factory, tur_target, &TABLE);
+
 pub(super) fn tur_target(
     _this: &JsValue,
     args: &[JsValue],

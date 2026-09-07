@@ -351,7 +351,8 @@ fn plugin_subsystem_writes_to_minted_source_observable_from_js() {
         r#"import { mount, view, Text } from "tur:std";
 export function start({ store }) {
     globalThis.__store = store;
-    mount(view(() => Text({ text: "" })));
+    mount(view(() => Text({ text: "" })
+     .build()));
 }
 "#,
     )

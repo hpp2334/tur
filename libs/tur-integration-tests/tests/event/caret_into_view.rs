@@ -13,23 +13,19 @@ const lines = [];
 for (let i = 0; i < 30; i++) lines.push("line " + i);
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
-mount(ScrollView({
-    queryKey: ["scroll"],
-    // Stretch content so the editor fills the width — the ScrollView
-    // shrink-wraps to its content (Flutter parity), and an intrinsically
-    // ~60px-wide editor would otherwise sit centered, away from the
-    // top-left click the test performs.
-    child: Column({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        children: [Input({
-            controller: globalThis.__ctrl,
-            multiline: true,
-            fontSize: 14,
-            fontFamily: "monospace",
-            queryKey: ["editor"],
-        })],
-    }),
-}));
+mount(ScrollView()
+    .queryKey(["scroll"])
+    .child(Column()
+     .crossAlignment(CrossAxisAlignment.Stretch)
+     .children([Input()
+    .controller(globalThis.__ctrl)
+    .multiline(true)
+    .fontSize(14)
+    .fontFamily("monospace")
+    .queryKey(["editor"])
+    .build()])
+     .build())
+    .build());
 "#;
 
 fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {

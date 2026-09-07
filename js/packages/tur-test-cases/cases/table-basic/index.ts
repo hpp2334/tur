@@ -60,22 +60,27 @@ const PLANETS: Planet[] = [
 
 /** Header label cell — one per column. */
 function HeaderCell(label: string): Element {
-    return Container({
-        padding: 8,
-        children: [
-            Text({ text: label, fontSize: 12, color: Color.hex("#94a3b8") }),
-        ],
-    });
+    return Container()
+        .padding(8)
+        .children([
+            Text({ text: label })
+                .fontSize(12)
+                .color(Color.hex("#94a3b8"))
+                .build(),
+        ])
+        .build();
 }
 
 /** One body cell: padded container with left-aligned text. The Table gives
  *  cells a tight column width, so alignment inside the cell is up to the
  *  cell (wrap in your own Container with `alignment` for anything else). */
 function Cell(text: string): Element {
-    return Container({
-        padding: 8,
-        children: [Text({ text, fontSize: 14, color: Color.hex("#e2e8f0") })],
-    });
+    return Container()
+        .padding(8)
+        .children([
+            Text({ text }).fontSize(14).color(Color.hex("#e2e8f0")).build(),
+        ])
+        .build();
 }
 
 const App = view(() => {
@@ -84,46 +89,40 @@ const App = view(() => {
     // satisfies the Table's `rows: Readable<T[]>` contract.
     const rows$ = source(PLANETS);
 
-    return Expanded({
-        child: Container({
-            // Dark base so the un-striped (even) rows stay readable and the
-            // thin dividers show against it — the Table paints only its own
-            // chrome (stripes + dividers), not a base background.
-            color: Color.hex("#0b1220"),
-            children: [
-                Table({
-                    queryKey: ["table-basic"],
-                    columns: [
-                        { width: 150 },
-                        { flex: 1 },
-                        { flex: 2, minWidth: 120 },
-                    ],
-                    rows: rows$,
-                    // Fixed extents: cells fill the tight height, and paint
-                    // clips each row to its box — wrapped text that doesn't
-                    // fit is cut at the row boundary instead of bleeding.
-                    headerExtent: 36,
-                    rowExtent: 36,
-                    stripeColor: Color.hex("#1e293b"),
-                    dividerColor: Color.hex("#334155"),
-                    dividerThickness: 1,
-                    // `buildHeader` runs ONCE at build; reactive header
-                    // content would flow through `Val` props inside these
-                    // cells (see the table-reactive case).
-                    buildHeader: () => [
-                        HeaderCell("PLANET"),
-                        HeaderCell("NOTES"),
-                        HeaderCell("DISTANCE"),
-                    ],
-                    build: (row) => [
-                        Cell(row.name),
-                        Cell(row.notes),
-                        Cell(row.distance),
-                    ],
-                }),
-            ],
-        }),
-    });
+    return Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#0b1220"))
+                .children([
+                    Table({
+                        columns: [
+                            { width: 150 },
+                            { flex: 1 },
+                            { flex: 2, minWidth: 120 },
+                        ],
+                        rows: rows$,
+                    })
+                        .queryKey(["table-basic"])
+                        .headerExtent(36)
+                        .rowExtent(36)
+                        .stripeColor(Color.hex("#1e293b"))
+                        .dividerColor(Color.hex("#334155"))
+                        .dividerThickness(1)
+                        .headerBuilder(() => [
+                            HeaderCell("PLANET"),
+                            HeaderCell("NOTES"),
+                            HeaderCell("DISTANCE"),
+                        ])
+                        .rowBuilder((row) => [
+                            Cell(row.name),
+                            Cell(row.notes),
+                            Cell(row.distance),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

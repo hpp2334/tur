@@ -78,28 +78,33 @@ function Pill(props: {
     active: Readable<boolean>;
     onClick: Mutation<[PointerInteractEvent], void>;
 }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: props.onClick,
-            child: Container({
-                padding: 7,
-                borderRadius: 7,
-                color: derive((ctx) =>
-                    ctx.get(props.active)
-                        ? Color.hex("#6366f1")
-                        : Color.hex("#1e293b"),
-                ),
-                children: [
-                    Text({
-                        text: props.label,
-                        fontSize: 12,
-                        color: Color.hex("#e2e8f0"),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(props.onClick)
+                .child(
+                    Container()
+                        .padding(7)
+                        .borderRadius(7)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(props.active)
+                                    ? Color.hex("#6366f1")
+                                    : Color.hex("#1e293b"),
+                            ),
+                        )
+                        .children([
+                            Text({ text: props.label })
+                                .fontSize(12)
+                                .color(Color.hex("#e2e8f0"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() => {
@@ -110,28 +115,28 @@ const App = view(() => {
     const aspect$ = source<number>(1);
     const dense$ = source<boolean>(false);
 
-    return Container({
-        color: Color.hex("#0f172a"),
-        padding: 16,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Start,
-                children: [
-                    Text({
-                        text: "Lazy Grid Gallery",
-                        fontSize: 18,
-                        color: Color.hex("#f1f5f9"),
-                    }),
-                    SizedBox({ height: 4 }),
+    return Container()
+        .color(Color.hex("#0f172a"))
+        .padding(16)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Start)
+                .children([
+                    Text({ text: "Lazy Grid Gallery" })
+                        .fontSize(18)
+                        .color(Color.hex("#f1f5f9"))
+                        .build(),
+                    SizedBox().height(4).build(),
                     Text({
                         text: `${ITEM_COUNT.toLocaleString()} tiles · only the visible rows mount — scroll to explore`,
-                        fontSize: 12,
-                        color: Color.hex("#94a3b8"),
-                    }),
-                    SizedBox({ height: 12 }),
-                    Row({
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
+                    })
+                        .fontSize(12)
+                        .color(Color.hex("#94a3b8"))
+                        .build(),
+                    SizedBox().height(12).build(),
+                    Row()
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
                             Pill({
                                 label: "Square",
                                 active: derive(
@@ -142,7 +147,7 @@ const App = view(() => {
                                     ctx.set(aspect$, 1);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "Wide",
                                 active: derive((ctx) => ctx.get(aspect$) > 1),
@@ -150,7 +155,7 @@ const App = view(() => {
                                     ctx.set(aspect$, 2);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "Tall",
                                 active: derive((ctx) => ctx.get(aspect$) < 1),
@@ -158,12 +163,12 @@ const App = view(() => {
                                     ctx.set(aspect$, 0.5);
                                 }),
                             }),
-                        ],
-                    }),
-                    SizedBox({ height: 8 }),
-                    Row({
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
+                        ])
+                        .build(),
+                    SizedBox().height(8).build(),
+                    Row()
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
                             Pill({
                                 label: "Normal",
                                 active: derive((ctx) => !ctx.get(dense$)),
@@ -171,7 +176,7 @@ const App = view(() => {
                                     ctx.set(dense$, false);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "Dense",
                                 active: derive((ctx) => ctx.get(dense$)),
@@ -179,50 +184,58 @@ const App = view(() => {
                                     ctx.set(dense$, true);
                                 }),
                             }),
-                        ],
-                    }),
-                    SizedBox({ height: 12 }),
-                    Expanded({
-                        child: Container({
-                            color: Color.hex("#020617"),
-                            borderRadius: 10,
-                            children: [
-                                LazyGrid({
-                                    axis: Axis.Vertical,
-                                    itemCount: ITEM_COUNT,
-                                    maxCrossAxisExtent: derive((ctx) =>
-                                        ctx.get(dense$) ? 85 : 140,
-                                    ),
-                                    childAspectRatio: derive((ctx) =>
-                                        ctx.get(aspect$),
-                                    ),
-                                    crossAxisSpacing: 4,
-                                    mainAxisSpacing: 4,
-                                    overscan: 2,
-                                    queryKey: ["lazy-grid-gallery"],
-                                    builder: (i: number) => {
-                                        const hue = (i * 37) % 360;
-                                        return Container({
-                                            color: Color.hex(
-                                                hslToHex(hue, 52, 48),
-                                            ),
-                                            children: [
-                                                Text({
-                                                    text: `${i}`,
-                                                    fontSize: 10,
-                                                    color: Color.hex("#e2e8f0"),
-                                                }),
-                                            ],
-                                        });
-                                    },
-                                }),
-                            ],
-                        }),
-                    }),
-                ],
-            }),
-        ],
-    });
+                        ])
+                        .build(),
+                    SizedBox().height(12).build(),
+                    Expanded()
+                        .child(
+                            Container()
+                                .color(Color.hex("#020617"))
+                                .borderRadius(10)
+                                .children([
+                                    LazyGrid({
+                                        itemCount: ITEM_COUNT,
+                                        maxCrossAxisExtent: derive((ctx) =>
+                                            ctx.get(dense$) ? 85 : 140,
+                                        ),
+                                    })
+                                        .axis(Axis.Vertical)
+                                        .childAspectRatio(
+                                            derive((ctx) => ctx.get(aspect$)),
+                                        )
+                                        .crossAxisSpacing(4)
+                                        .mainAxisSpacing(4)
+                                        .overscan(2)
+                                        .queryKey(["lazy-grid-gallery"])
+                                        .builder((i: number) => {
+                                            const hue = (i * 37) % 360;
+                                            return Container()
+                                                .color(
+                                                    Color.hex(
+                                                        hslToHex(hue, 52, 48),
+                                                    ),
+                                                )
+                                                .children([
+                                                    Text({ text: `${i}` })
+                                                        .fontSize(10)
+                                                        .color(
+                                                            Color.hex(
+                                                                "#e2e8f0",
+                                                            ),
+                                                        )
+                                                        .build(),
+                                                ])
+                                                .build();
+                                        })
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

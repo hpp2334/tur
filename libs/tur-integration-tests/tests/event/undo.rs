@@ -49,20 +49,20 @@ const UNDO_INPUT_BUNDLE: &str = r#"
     import { createTextEditingController, createUndoController, mount, Container, Input } from "tur:std";
     globalThis.__ctrl = createTextEditingController({});
     globalThis.__undo = createUndoController();
-    mount(Container({
-        children: [
-            Input({
-                controller: globalThis.__ctrl,
-                undoController: globalThis.__undo,
-                multiline: true,
-                fontFamily: "monospace",
-                fontSize: 14,
-                width: 400,
-                height: 200,
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(globalThis.__ctrl)
+                .undoController(globalThis.__undo)
+                .multiline(true)
+                .fontFamily("monospace")
+                .fontSize(14)
+                .width(400)
+                .height(200)
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 /// Bundle that mirrors the playground editor: every `onInput` re-tokenizes via
@@ -81,20 +81,20 @@ const PLAYGROUND_BUNDLE: &str = r#"
         onInput: onInput,
     });
     globalThis.__undo = createUndoController();
-    mount(Container({
-        children: [
-            Input({
-                controller: globalThis.__ctrl,
-                undoController: globalThis.__undo,
-                multiline: true,
-                fontFamily: "monospace",
-                fontSize: 14,
-                width: 400,
-                height: 200,
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(globalThis.__ctrl)
+                .undoController(globalThis.__undo)
+                .multiline(true)
+                .fontFamily("monospace")
+                .fontSize(14)
+                .width(400)
+                .height(200)
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 fn setup() -> (TurTestApp, ElementNodeId) {

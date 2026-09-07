@@ -34,48 +34,64 @@ Object.assign(globalThis, {
 });
 
 const App = view(() =>
-    Stack({
-        children: [
+    Stack()
+        .children([
             // The scrollable beneath — wrapped in a gesture target so we can
             // observe pointer events reaching THROUGH the overlay.
-            PointerInteract({
-                onPointerDown: mutate(() => {
-                    beneathDowns += 1;
-                }),
-                child: ScrollView({
-                    queryKey: ["sv"],
-                    child: Column({
-                        crossAlignment: CrossAxisAlignment.Stretch,
-                        children: [
-                            SizedBox({ height: 300 }),
-                            SizedBox({ height: 300 }),
-                            SizedBox({ height: 300 }),
-                        ],
+            PointerInteract()
+                .onPointerDown(
+                    mutate(() => {
+                        beneathDowns += 1;
                     }),
-                }),
-            }),
+                )
+                .child(
+                    ScrollView()
+                        .queryKey(["sv"])
+                        .child(
+                            Column()
+                                .crossAlignment(CrossAxisAlignment.Stretch)
+                                .children([
+                                    SizedBox().height(300).build(),
+                                    SizedBox().height(300).build(),
+                                    SizedBox().height(300).build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
             // The invisible full-size overlay: no decoration, no gesture —
             // must be transparent to hit-testing.
-            SizedBox({ width: 400, height: 600, queryKey: ["overlay"] }),
+            SizedBox().width(400).height(600).queryKey(["overlay"]).build(),
             // The floating pill, anchored bottom-right (Flutter recipe).
-            Positioned({
-                right: 8,
-                bottom: 8,
-                child: PointerInteract({
-                    onClick: mutate(() => {
-                        pillClicks += 1;
-                    }),
-                    child: Container({
-                        width: 64,
-                        height: 28,
-                        color: Color.hex("#6366f1"),
-                        queryKey: ["pill"],
-                        children: [Text({ text: "to top", fontSize: 12 })],
-                    }),
-                }),
-            }),
-        ],
-    }),
+            Positioned()
+                .right(8)
+                .bottom(8)
+                .child(
+                    PointerInteract()
+                        .onClick(
+                            mutate(() => {
+                                pillClicks += 1;
+                            }),
+                        )
+                        .child(
+                            Container()
+                                .width(64)
+                                .height(28)
+                                .color(Color.hex("#6366f1"))
+                                .queryKey(["pill"])
+                                .children([
+                                    Text({ text: "to top" })
+                                        .fontSize(12)
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

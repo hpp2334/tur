@@ -8,7 +8,7 @@ const App = view(() =>
             { content: "Red", color: Color.hex("#ff0000") },
             { content: "Green", color: Color.hex("#00ff00") },
         ],
-    } as never),
+    } as never).build(),
 );
 
 export function start() {

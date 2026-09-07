@@ -38,22 +38,22 @@ const width$ = source(100);
 // (playground symptom: the editor scrollbar stayed painted at its old
 // position after a divider drag).
 const App = view(() =>
-    Container({
-        width: derive((ctx) => ctx.get(width$)),
-        children: [
-            Row({
-                mainAlignment: MainAxisAlignment.End,
-                children: [
-                    Container({
-                        width: 20,
-                        height: 20,
-                        color: Color.hex("#22c55e"),
-                        queryKey: ["tracker"],
-                    }),
-                ],
-            }),
-        ],
-    }),
+    Container()
+        .width(derive((ctx) => ctx.get(width$)))
+        .children([
+            Row()
+                .mainAlignment(MainAxisAlignment.End)
+                .children([
+                    Container()
+                        .width(20)
+                        .height(20)
+                        .color(Color.hex("#22c55e"))
+                        .queryKey(["tracker"])
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build(),
 );
 
 export function start({ store }: { store: Store }) {

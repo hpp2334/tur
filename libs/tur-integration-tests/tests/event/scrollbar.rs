@@ -10,23 +10,26 @@ import { mount, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "
 
 globalThis.__ctrl = new globalThis.ScrollController();
 const blocks = [];
-for (let i = 0; i < 6; i++) blocks.push(Container({ height: 100 }));
-mount(Row({
-    children: [
-        Expanded({
-            child: ScrollView({
-                controller: globalThis.__ctrl,
-                queryKey: ["scroll"],
-                child: Column({ children: blocks }),
-            }),
-        }),
-        Scrollbar({
-            controller: globalThis.__ctrl,
-            thickness: 10,
-            queryKey: ["bar"],
-        }),
-    ],
-}));
+for (let i = 0; i < 6; i++) blocks.push(Container()
+    .height(100)
+    .build());
+mount(Row()
+    .children([
+        Expanded()
+            .child(ScrollView()
+     .controller(globalThis.__ctrl)
+     .queryKey(["scroll"])
+     .child(Column()
+     .children(blocks)
+     .build())
+     .build())
+            .build(),
+        Scrollbar({ controller: globalThis.__ctrl })
+            .thickness(10)
+            .queryKey(["bar"])
+            .build(),
+    ])
+    .build());
 "#;
 
 fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {

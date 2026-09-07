@@ -4,23 +4,24 @@ import { Column, Container, Expanded, mount, Text, view } from "tur:std";
 // wrapped in Expanded, inside a Column with MainAxisSize.Max. Expected: the
 // Expanded fills remaining main axis; the inner container is visible.
 const App = view(() =>
-    Column({
-        children: [
-            Expanded({
-                child: Container({
-                    padding: 48,
-                    queryKey: ["container"],
-                    children: [
-                        Text({
-                            text: "Empty State",
-                            fontSize: 24,
-                            queryKey: ["text"],
-                        }),
-                    ],
-                }),
-            }),
-        ],
-    }),
+    Column()
+        .children([
+            Expanded()
+                .child(
+                    Container()
+                        .padding(48)
+                        .queryKey(["container"])
+                        .children([
+                            Text({ text: "Empty State" })
+                                .fontSize(24)
+                                .queryKey(["text"])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

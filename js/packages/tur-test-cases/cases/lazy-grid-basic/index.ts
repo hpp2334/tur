@@ -45,26 +45,24 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 const App = view(() =>
-    LazyGrid({
-        axis: Axis.Vertical,
-        itemCount: ITEM_COUNT,
-        maxCrossAxisExtent: 110,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-        overscan: 1,
-        queryKey: ["lazy-grid-basic"],
-        builder: (i: number) =>
-            Container({
-                color: Color.hex(hslToHex(hueFor(i), 55, 50)),
-                children: [
-                    Text({
-                        text: `${i}`,
-                        fontSize: 11,
-                        color: Color.hex("#ffffff"),
-                    }),
-                ],
-            }),
-    }),
+    LazyGrid({ itemCount: ITEM_COUNT, maxCrossAxisExtent: 110 })
+        .axis(Axis.Vertical)
+        .crossAxisSpacing(4)
+        .mainAxisSpacing(4)
+        .overscan(1)
+        .queryKey(["lazy-grid-basic"])
+        .builder((i: number) =>
+            Container()
+                .color(Color.hex(hslToHex(hueFor(i), 55, 50)))
+                .children([
+                    Text({ text: `${i}` })
+                        .fontSize(11)
+                        .color(Color.hex("#ffffff"))
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {
