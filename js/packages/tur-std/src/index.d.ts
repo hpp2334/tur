@@ -701,6 +701,8 @@ declare module "tur:std" {
         width?: Val<number>;
         height?: Val<number>;
         children?: Element[];
+        /** Shares the `Container` native fn, so `queryKey` works the same. */
+        queryKey?: Val<string[]>;
     }): Element;
     export function Column(props: FlexProps): Element;
     export function Row(props: FlexProps): Element;
