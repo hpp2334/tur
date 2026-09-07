@@ -14,7 +14,7 @@ use crate::core::fonts::FontManager;
 use crate::core::frame_env::PaintEnv;
 use crate::core::image_resource::ImageManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
-use crate::core::render::{Canvas, PaintContext};
+use crate::core::render::{Canvas, HitTestSelf, PaintContext};
 
 pub struct NodeTreeData {
     pub(crate) elements: HashMap<ElementNodeId, ElementObject>,
@@ -803,19 +803,29 @@ impl NodeTreeData {
             Offset::new(p.x, p.y)
         };
 
-        if !element.hit_test(local_position, &node.computed_layout) {
+        if !element.hit_test_bounds(local_position, &node.computed_layout) {
             return false;
         }
 
-        // Flatten fragment children and hit-test each in reverse paint order.
+        // Flutter `RenderBox.hitTest`: children first (reverse paint order,
+        // first hit short-circuits), then the element's own contribution.
+        // A bounds-only match absorbs NOTHING — an invisible wrapper is
+        // transparent unless it declares itself hit-testable.
         let children = self.flatten_children(&node.children);
+        let mut absorbed = false;
         for &child_id in children.iter().rev() {
             if self.hit_test_element(child_id, local_position) {
-                return true;
+                absorbed = true;
+                break;
             }
         }
+        if !absorbed
+            && element.hit_test_self(local_position, &node.computed_layout) == HitTestSelf::Opaque
+        {
+            absorbed = true;
+        }
 
-        true
+        absorbed
     }
 
     fn collect_hit_path(
@@ -840,20 +850,34 @@ impl NodeTreeData {
             Offset::new(p.x, p.y)
         };
 
-        if !element.hit_test(local_position, &node.computed_layout) {
+        if !element.hit_test_bounds(local_position, &node.computed_layout) {
             return false;
         }
 
-        // Flatten fragment children and recurse in reverse paint order.
+        // Children first (reverse paint order, first absorber
+        // short-circuits — elements behind never see the hit).
         let children = self.flatten_children(&node.children);
-        children
-            .iter()
-            .rev()
-            .any(|&child_id| self.collect_hit_path(child_id, local_position, path));
+        let mut absorbed = false;
+        for &child_id in children.iter().rev() {
+            if self.collect_hit_path(child_id, local_position, path) {
+                absorbed = true;
+                break;
+            }
+        }
 
-        path.push(id);
+        // Then this element's own contribution (Flutter `RenderBox.hitTest`:
+        // `hitTestChildren || hitTestSelf`):
+        // - `Opaque` absorbs (blocks what's behind) and joins the path;
+        // - `Translucent` joins the path WITHOUT absorbing — the walk
+        //   continues past it (Flutter's translucent listener behavior);
+        // - `Defer` (the default) contributes nothing: the element is on
+        //   the path only as an ancestor of an absorbing descendant.
+        let self_kind = element.hit_test_self(local_position, &node.computed_layout);
+        if absorbed || self_kind != HitTestSelf::Defer {
+            path.push(id);
+        }
 
-        true
+        absorbed || self_kind == HitTestSelf::Opaque
     }
 
     /// Structured snapshot of one node for the `turDevTool` API.

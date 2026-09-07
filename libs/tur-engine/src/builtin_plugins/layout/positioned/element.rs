@@ -37,6 +37,7 @@ impl View for PositionedView {
             AnyElement::new(PositionedElement {
                 view: self.clone(),
                 warned_edges_unbounded: false,
+                warned_anchor_unbounded: false,
             }),
             boa,
         );
@@ -56,6 +57,9 @@ pub struct PositionedElement {
     /// One-shot layout diagnostic: an opposing-edge pair degraded under an
     /// unbounded axis.
     pub(crate) warned_edges_unbounded: bool,
+    /// One-shot layout diagnostic: a `right`/`bottom` anchor degraded under
+    /// an unbounded stack axis.
+    pub(crate) warned_anchor_unbounded: bool,
 }
 
 impl Lifecycle for PositionedElement {}

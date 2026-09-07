@@ -1,14 +1,20 @@
-use crate::core::layout::{BoxFit, ComputedLayout};
+use crate::core::layout::{BoxFit, ComputedLayout, Offset};
 
 use crate::core::element::ElementNodeId;
 use crate::core::image_resource::ImageResourceId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::ImageElement;
 
 impl ElementRender for ImageElement {
     fn type_name(&self) -> &'static str {
         "tur_image"
+    }
+
+    // A decoded image paints the whole rect (Flutter `RenderImage`) — it
+    // absorbs hits within its bounds.
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        HitTestSelf::Opaque
     }
 
     fn paint(

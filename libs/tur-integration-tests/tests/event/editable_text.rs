@@ -1187,6 +1187,117 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     );
 }
 
+// A NON-multiline `Input` whose text soft-wraps. The text layout wraps at the
+// available width regardless of `multiline` (an `Input` has no horizontal
+// scrolling), so a "single-line" field with long content renders multiple
+// VISUAL lines. Reported bug: clicking a lower visual line placed the caret
+// on visual line 0 because the non-multiline hit-test path dropped the y
+// coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus `multiline: true`.
+const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"
+import { mount, Input } from "tur:std";
+
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{
+    content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
+}]);
+mount(Input({
+    controller: globalThis.__ctrl,
+    fontFamily: "monospace",
+    fontSize: 16,
+    queryKey: ["softwrap-single-input"],
+}));
+"#;
+
+#[test]
+fn click_on_wrapped_single_line_input_lands_on_clicked_visual_line() {
+    let mut app = TurTestApp::new(120.0, 300.0).unwrap();
+    app.eval_module_source(CLICK_SOFTWRAP_SINGLE_BUNDLE)
+        .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let id = find_editable_under(&app, &["softwrap-single-input"]);
+    let bounds = app.get_element_absolute_bounds(id).unwrap();
+    let (left, top) = (bounds.left, bounds.top);
+
+    // Focus + read layout state (number of visual lines + content height).
+    app.click(left + 2.0, top + 2.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (x0, y0, _) = caret_rect(&app);
+    let dev = app
+        .dev_tool_get_element(id.into())
+        .expect("editable dev node");
+    let extra = |name: &str| -> f64 {
+        dev.layout_extra
+            .iter()
+            .find(|(k, _)| *k == name)
+            .and_then(|(_, v)| {
+                if let tur_engine::core::elements::TraceValue::Num(n) = v {
+                    Some(*n)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0.0)
+    };
+    let num_lines = extra("numLines") as usize;
+    let lh = extra("layoutHeight") as f32;
+    eprintln!("softwrap-single: num_lines={num_lines} layout_h={lh:.1} x0={x0} y0={y0}");
+    assert!(
+        num_lines > 1,
+        "long text in a non-multiline Input must still soft-wrap (num_lines={num_lines})"
+    );
+    let line_h = lh / num_lines as f32;
+    app.send_key("ArrowRight");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (x1, _, _) = caret_rect(&app);
+    let cw = x1 - x0;
+
+    // Sweep y down the VISUAL lines (fixed x at column 2). The caret must
+    // strictly increase — every wrap continuation is further into the text.
+    // (Pre-fix, the y coordinate was dropped for non-multiline fields, so
+    // every click resolved within visual line 0 and the caret never grew.)
+    let mut prev = 0usize;
+    for ln in 0..num_lines.min(5) {
+        app.click(x0 + cw * 2.0, y0 + line_h as f64 * (ln as f64 + 0.5));
+        app.wait_for_timeout(std::time::Duration::ZERO);
+        let c = get_cursor_pos(&app, id);
+        eprintln!(
+            "softwrap-single: visual line {ln} (y={:.1}) → caret {c}",
+            y0 + line_h as f64 * (ln as f64 + 0.5)
+        );
+        assert!(
+            c > prev,
+            "y-sweep broken: visual line {ln} caret {c} not > prev {prev} — \
+             wrapped single-line input must hit-test its wrap continuations"
+        );
+        prev = c;
+    }
+
+    // Backspace on a wrap-continuation visual line deletes the char left of
+    // the caret on THAT line.
+    let target_line = 2usize.min(num_lines - 1);
+    app.click(
+        x0 + cw * 2.0,
+        y0 + line_h as f64 * (target_line as f64 + 0.5),
+    );
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let caret = get_cursor_pos(&app, id);
+    let original = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega";
+    let mut expected: String = original[..caret - 1].to_string();
+    expected.push_str(&original[caret..]);
+    app.send_key("Backspace");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    eprintln!(
+        "softwrap-single: after backspace at caret {caret} text='{}'",
+        get_text(&app, id)
+    );
+    assert_eq!(
+        get_text(&app, id),
+        expected,
+        "backspace on a wrap continuation must delete the char left of the caret"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Multi-click classification (engine-side): PointerDoubleDown selects the
 // word under the cursor, PointerTripleDown selects the whole line.

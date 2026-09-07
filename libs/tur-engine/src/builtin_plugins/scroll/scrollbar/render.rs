@@ -2,7 +2,7 @@ use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
 
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::{MIN_THUMB, ScrollbarElement};
 
@@ -12,6 +12,21 @@ const DEFAULT_THUMB_COLOR: Color = Color::rgba(130, 130, 130, 160);
 impl ElementRender for ScrollbarElement {
     fn type_name(&self) -> &'static str {
         "tur_scrollbar"
+    }
+
+    /// The scrollbar is interactive across its whole track while a thumb is
+    /// visible (thumb drag + track click-to-jump are both pinned behaviors
+    /// — see `tests/event/scrollbar.rs`); when the content fits (no thumb
+    /// painted) the track is transparent so events pass through.
+    fn hit_test_self(&self, _position: Offset, layout: &ComputedLayout) -> HitTestSelf {
+        let Some((_, _, max_extent, _)) = self.metrics() else {
+            return HitTestSelf::Defer;
+        };
+        if max_extent <= 0.0 || layout.size.height <= 0.0 {
+            // Content fits the viewport — no thumb is painted.
+            return HitTestSelf::Defer;
+        }
+        HitTestSelf::Opaque
     }
 
     fn paint(

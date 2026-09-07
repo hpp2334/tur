@@ -24,6 +24,7 @@ import {
     Row,
     SizedBox,
     Stack,
+    StackFit,
     sleep,
     source,
     type Task,
@@ -485,6 +486,11 @@ const App = view(() => {
 
     return Expanded({
         child: Stack({
+            // Expand tightens the background layer to the full box — the
+            // Stack (and thus the full-bleed modal scrim) covers the whole
+            // viewport. A content-sized background would shrink the Stack
+            // to the timer card and the overlay would miss outside it.
+            fit: StackFit.Expand,
             children: [
                 Container({
                     color: COLORS.pageBg,

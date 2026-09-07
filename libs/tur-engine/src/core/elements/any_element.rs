@@ -15,7 +15,7 @@ use crate::core::focus::Focusable;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::platform::key_event::KeyEvent;
 use crate::core::platform::{ImeEvent, PointerDeviceKind};
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 use crate::core::view::Lifecycle;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &KeyEvent);
@@ -74,7 +74,8 @@ trait Erased: 'static {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     );
-    fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+    fn hit_test_bounds(&self, position: Offset, layout: &ComputedLayout) -> bool;
+    fn hit_test_self(&self, position: Offset, layout: &ComputedLayout) -> HitTestSelf;
 
     fn relative_transform(&self, layout: &ComputedLayout) -> Affine;
 
@@ -191,8 +192,12 @@ where
         <Self as ElementRender>::paint(self, canvas, layout, children, paint_ctx);
     }
 
-    fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
-        <Self as ElementRender>::hit_test(self, position, layout)
+    fn hit_test_bounds(&self, position: Offset, layout: &ComputedLayout) -> bool {
+        <Self as ElementRender>::hit_test_bounds(self, position, layout)
+    }
+
+    fn hit_test_self(&self, position: Offset, layout: &ComputedLayout) -> HitTestSelf {
+        <Self as ElementRender>::hit_test_self(self, position, layout)
     }
 
     fn relative_transform(&self, layout: &ComputedLayout) -> Affine {
@@ -448,8 +453,14 @@ impl AnyElement {
         self.inner.paint(canvas, layout, children, paint_ctx);
     }
 
-    pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
-        self.inner.hit_test(position, layout)
+    pub fn hit_test_bounds(&self, position: Offset, layout: &ComputedLayout) -> bool {
+        self.inner.hit_test_bounds(position, layout)
+    }
+
+    /// Whether this element absorbs / joins a hit by itself (see
+    /// [`crate::core::render::HitTestSelf`]).
+    pub fn hit_test_self(&self, position: Offset, layout: &ComputedLayout) -> HitTestSelf {
+        self.inner.hit_test_self(position, layout)
     }
 
     /// This element's transform relative to its parent (see

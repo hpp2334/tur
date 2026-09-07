@@ -771,15 +771,15 @@ impl EditableTextElement {
             return 0;
         }
         drop(c);
+        // Always hit-test with the y coordinate: the layout soft-wraps at the
+        // available width regardless of `multiline` (an Input has no
+        // horizontal scrolling), so even a "single-line" field can render
+        // multiple VISUAL lines whose continuations must be independently
+        // clickable. `line_index_at_y` clamps, so for a genuinely
+        // single-visual-line layout this degenerates to a line-0 x lookup.
         self.cached_layout
             .as_ref()
-            .map(|ld| {
-                if self.resolved_multiline {
-                    ld.byte_index_at_xy(local_position.x as f32, local_position.y as f32)
-                } else {
-                    ld.byte_index_at_x(local_position.x as f32)
-                }
-            })
+            .map(|ld| ld.byte_index_at_xy(local_position.x as f32, local_position.y as f32))
             .unwrap_or(0)
     }
 }

@@ -143,15 +143,10 @@ impl TextLayoutData {
         self.line_infos.len()
     }
 
-    /// Single-line hit test: byte offset at the given x on line 0.
-    pub fn byte_index_at_x(&self, x: f32) -> usize {
-        let Some(info) = self.line_infos.first() else {
-            return 0;
-        };
-        byte_at_x(info, x)
-    }
-
-    /// Multi-line hit test: byte offset at the given (x, y).
+    /// Multi-line hit test: byte offset at the given (x, y). `y` selects the
+    /// visual line (clamped to the last); `x` resolves the byte within it.
+    /// For a single-visual-line layout this is equivalent to a line-0 x
+    /// lookup, so it serves wrapped single-line fields as well.
     pub fn byte_index_at_xy(&self, x: f32, y: f32) -> usize {
         let line = self.line_index_at_y(y);
         let Some(info) = self.line_infos.get(line) else {

@@ -93,6 +93,10 @@ pub fn consts(context: &mut Context) -> Vec<ConstEntry> {
             ),
         ),
         (
+            "StackFit",
+            build_enum(context, &[("Loose", 0), ("Expand", 1), ("Passthrough", 2)]),
+        ),
+        (
             "Alignment",
             build_enum(
                 context,

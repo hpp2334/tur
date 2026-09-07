@@ -3,7 +3,7 @@ use crate::core::render::brush::{Brush, Color};
 
 use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 use crate::core::text::text_layout;
 
 use super::element::{CARET_BLINK_HALF_PERIOD_MS, DEFAULT_TEXT_COLOR, EditableTextElement};
@@ -13,6 +13,12 @@ const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
 impl ElementRender for EditableTextElement {
     fn type_name(&self) -> &'static str {
         "tur_editable_text"
+    }
+
+    // The editor is a surface: caret placement + selection must work across
+    // the whole field, even where no glyph is painted.
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        HitTestSelf::Opaque
     }
 
     fn paint(

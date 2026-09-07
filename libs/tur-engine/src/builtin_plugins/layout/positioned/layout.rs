@@ -83,8 +83,43 @@ impl ElementLayout for PositionedElement {
         };
 
         // --- position (set own offset within the parent Stack) ---
-        let offset_x = cx.read_val_opt(self.view.left.as_ref()).unwrap_or(0.0);
-        let offset_y = cx.read_val_opt(self.view.top.as_ref()).unwrap_or(0.0);
+        // Edge anchoring (Flutter `RenderStack` position resolution):
+        // `left`/`top` win when set; otherwise `right`/`bottom` anchor from
+        // the stack's far edges — `x = stack_w - right - child_w`. The
+        // stack-size-bounded constraints make `max_width`/`max_height` equal
+        // the stack extent; a `right`/`bottom` anchor under an UNBOUNDED
+        // stack axis has no reference box and degrades to 0 (logged once).
+        let anchor_unbounded =
+            (right.is_some() && left.is_none() && !constraints.max_width.is_finite())
+                || (bottom.is_some() && top.is_none() && !constraints.max_height.is_finite());
+        if anchor_unbounded && !self.warned_anchor_unbounded {
+            self.warned_anchor_unbounded = true;
+            tracing::error!(
+                "Positioned anchored with {}inside a Stack with unbounded \
+                 constraints: the anchor is ignored (no reference size to \
+                 resolve against). Give the Stack a bounded size on that \
+                 axis — Flutter reports this as a layout error.",
+                if right.is_some() && left.is_none() && !constraints.max_width.is_finite() {
+                    "right "
+                } else {
+                    "bottom "
+                },
+            );
+        }
+        let offset_x = match (left, right) {
+            (Some(l), _) => l,
+            (None, Some(r)) if constraints.max_width.is_finite() => {
+                constraints.max_width - r - size.width
+            }
+            _ => 0.0,
+        };
+        let offset_y = match (top, bottom) {
+            (Some(t), _) => t,
+            (None, Some(b)) if constraints.max_height.is_finite() => {
+                constraints.max_height - b - size.height
+            }
+            _ => 0.0,
+        };
         cx.set_child_offset_self(Offset::new(offset_x, offset_y));
 
         size
