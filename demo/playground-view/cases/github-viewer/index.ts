@@ -20,27 +20,27 @@ import { COLORS } from "./theme";
 /** Capability guard: the viewer needs the playground's HTTP module; if it is
  *  somehow absent the whole viewer is replaced with a short notice. */
 function Unsupported(): Element {
-    return Container({
-        padding: 40,
-        alignment: Alignment.Center,
-        children: [
+    return Container()
+        .padding(40)
+        .alignment(Alignment.Center)
+        .children([
             Text({
                 text: "The GitHub viewer needs the browser playground (HTTP + file IO are wasm-only).",
-                fontSize: 14,
-                color: COLORS.textMuted,
-            }),
-        ],
-    });
+            })
+                .fontSize(14)
+                .color(COLORS.textMuted)
+                .build(),
+        ])
+        .build();
 }
 
 function Body(): Element {
-    return Switch({
-        value: view$,
-        cases: [
+    return Switch({ value: view$ })
+        .cases([
             { key: "landing", child: () => LandingScreen() },
             { key: "explorer", child: () => ExplorerScreen() },
-        ],
-    });
+        ])
+        .build();
 }
 
 /** The viewer component — a plain user-defined component that owns the
@@ -52,28 +52,29 @@ function Body(): Element {
  *  lifetime to its own subtree this way, from inside the component. */
 function GithubViewer(): Element {
     return lifecycleView(() => ({
-        element: Expanded({
-            child: Stack({
-                children: [
-                    Container({
-                        color: COLORS.pageBg,
-                        padding: 22,
-                        children: [
-                            Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                children: [
-                                    Condition({
-                                        condition: hasHttp,
-                                        child: () => Body(),
-                                        elseChild: () => Unsupported(),
-                                    }),
-                                ],
-                            }),
-                        ],
-                    }),
-                ],
-            }),
-        }),
+        element: Expanded()
+            .child(
+                Stack()
+                    .children([
+                        Container()
+                            .color(COLORS.pageBg)
+                            .padding(22)
+                            .children([
+                                Column()
+                                    .crossAlignment(CrossAxisAlignment.Stretch)
+                                    .children([
+                                        Condition({ condition: hasHttp })
+                                            .elseChild(() => Unsupported())
+                                            .child(() => Body())
+                                            .build(),
+                                    ])
+                                    .build(),
+                            ])
+                            .build(),
+                    ])
+                    .build(),
+            )
+            .build(),
         onMounted$: repoWatch.start$,
         beforeDestroy$: repoWatch.stop$,
     }));

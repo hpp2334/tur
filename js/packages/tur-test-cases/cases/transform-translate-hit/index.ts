@@ -24,35 +24,44 @@ const App = view(() => {
     // stable for the life of the tree — no need to hoist it to module level.
     const hit$ = source(false);
 
-    return Stack({
-        children: [
+    return Stack()
+        .children([
             // Sizes the root Stack to the full canvas so the box's absolute
             // position is deterministic (otherwise the Stack shrinks to its
             // 40×40 content and gets centered).
-            SizedBox({ width: 400, height: 600 }),
-            Transform({
-                translateX: 100,
-                translateY: 80,
-                child: PointerInteract({
-                    onClick: mutate((ctx) =>
-                        ctx.set(hit$, true),
-                    ) as unknown as Mutation<[PointerInteractEvent], void>,
-                    child: Container({
-                        width: 40,
-                        height: 40,
-                        color: "#4f46e5",
-                    }),
-                }),
-            }),
+            SizedBox().width(400).height(600).build(),
+            Transform()
+                .translateX(100)
+                .translateY(80)
+                .child(
+                    PointerInteract()
+                        .onClick(
+                            mutate((ctx) =>
+                                ctx.set(hit$, true),
+                            ) as unknown as Mutation<
+                                [PointerInteractEvent],
+                                void
+                            >,
+                        )
+                        .child(
+                            Container()
+                                .width(40)
+                                .height(40)
+                                .color("#4f46e5")
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
             // A second box appears once the click landed — observable from the
             // element tree so the test can assert the hit-test found the box.
-            Condition({
-                condition: derive((ctx) => ctx.get(hit$)),
-                child: () =>
-                    Container({ width: 10, height: 10, color: "#dc2626" }),
-            }),
-        ],
-    });
+            Condition({ condition: derive((ctx) => ctx.get(hit$)) })
+                .child(() =>
+                    Container().width(10).height(10).color("#dc2626").build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

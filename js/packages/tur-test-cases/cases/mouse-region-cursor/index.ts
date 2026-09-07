@@ -18,28 +18,29 @@ const App = view(() => {
     // stable for the life of the tree — no need to hoist it to module level.
     const state$ = source("idle");
 
-    return Column({
-        crossAlignment: CrossAxisAlignment.Start,
-        children: [
-            MouseRegion({
-                cursor: "col-resize",
-                onEnter: mutate((ctx, _ev) => ctx.set(state$, "entered")),
-                onExit: mutate((ctx, _ev) => ctx.set(state$, "exited")),
-                child: Container({
-                    width: 100,
-                    height: 50,
-                    color: Color.hex("#cccccc"),
-                    alignment: Alignment.Center,
-                    children: [
-                        Text({
-                            text: derive((ctx) => ctx.get(state$)),
-                            queryKey: ["mr-state"],
-                        }),
-                    ],
-                }),
-            }),
-        ],
-    });
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .children([
+            MouseRegion()
+                .cursor("col-resize")
+                .onEnter(mutate((ctx, _ev) => ctx.set(state$, "entered")))
+                .onExit(mutate((ctx, _ev) => ctx.set(state$, "exited")))
+                .child(
+                    Container()
+                        .width(100)
+                        .height(50)
+                        .color(Color.hex("#cccccc"))
+                        .alignment(Alignment.Center)
+                        .children([
+                            Text({ text: derive((ctx) => ctx.get(state$)) })
+                                .queryKey(["mr-state"])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

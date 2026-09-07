@@ -20,23 +20,29 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
             SizedBox,
         } from "tur:std";
 
-        mount(Column({
-            children: [
+        mount(Column()
+    .children([
                 // Stretch Row under an unbounded cross axis (non-flex child
                 // of a Column): Stretch degrades to loose cross.
-                Row({
-                    crossAlignment: CrossAxisAlignment.Stretch,
-                    queryKey: ["stretch-row"],
-                    children: [SizedBox({ width: 50 })],
-                }),
+                Row()
+                    .crossAlignment(CrossAxisAlignment.Stretch)
+                    .queryKey(["stretch-row"])
+                    .children([SizedBox()
+    .width(50)
+    .build()])
+                    .build(),
                 // Expanded inside a Column with unbounded height: the flex
                 // slot collapses to zero instead of infinity.
-                Column({
-                    queryKey: ["flex-col"],
-                    children: [Expanded({ child: SizedBox({ height: 50 }) })],
-                }),
-            ],
-        }));
+                Column()
+                    .queryKey(["flex-col"])
+                    .children([Expanded()
+    .child(SizedBox()
+     .height(50)
+     .build())
+    .build()])
+                    .build(),
+            ])
+    .build());
     "#,
     )
     .unwrap();

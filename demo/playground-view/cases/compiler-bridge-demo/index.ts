@@ -32,42 +32,42 @@ if (pos < HL.length) {
 }
 
 const App = view(() =>
-    Expanded({
-        child: Container({
-            color: Color.hex("#282c34"),
-            padding: 20,
-            children: [
-                Column({
-                    children: [
-                        Text({
-                            text: "transpileTsx (via tur-ext/demo-helper):",
-                            fontSize: 13,
-                            color: Color.hex("#848da5"),
-                        }),
-                        Container({ height: 6 }),
-                        Text({
-                            text: SRC,
-                            fontSize: 16,
-                            color: Color.hex("#e06c75"),
-                        }),
-                        Text({
-                            text: `→ ${OUT}`,
-                            fontSize: 16,
-                            color: Color.hex("#98c379"),
-                        }),
-                        Container({ height: 18 }),
-                        Text({
-                            text: "tokenizeTsx highlight:",
-                            fontSize: 13,
-                            color: Color.hex("#848da5"),
-                        }),
-                        Container({ height: 6 }),
-                        Text({ fontSize: 20, spans } as never),
-                    ],
-                }),
-            ],
-        }),
-    }),
+    Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#282c34"))
+                .padding(20)
+                .children([
+                    Column()
+                        .children([
+                            Text({
+                                text: "transpileTsx (via tur-ext/demo-helper):",
+                            })
+                                .fontSize(13)
+                                .color(Color.hex("#848da5"))
+                                .build(),
+                            Container().height(6).build(),
+                            Text({ text: SRC })
+                                .fontSize(16)
+                                .color(Color.hex("#e06c75"))
+                                .build(),
+                            Text({ text: `→ ${OUT}` })
+                                .fontSize(16)
+                                .color(Color.hex("#98c379"))
+                                .build(),
+                            Container().height(18).build(),
+                            Text({ text: "tokenizeTsx highlight:" })
+                                .fontSize(13)
+                                .color(Color.hex("#848da5"))
+                                .build(),
+                            Container().height(6).build(),
+                            Text({ fontSize: 20, spans } as never).build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

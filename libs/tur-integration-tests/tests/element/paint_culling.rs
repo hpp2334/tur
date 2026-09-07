@@ -45,13 +45,19 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
         import { mount, ScrollView, Column, Container, createColor, CrossAxisAlignment } from "tur:std";
         const kids = [];
         for (let i = 0; i < 6; i++) {
-            kids.push(Container({
-                height: 100,
-                color: createColor(255, 0, 0, 255),
-                queryKey: ["item", i],
-            }));
+            kids.push(Container()
+    .height(100)
+    .color(createColor(255, 0, 0, 255))
+    .queryKey(["item", i])
+    .build());
         }
-        mount(ScrollView({ queryKey: ["scroll"], child: Column({ crossAlignment: CrossAxisAlignment.Stretch, children: kids }) }));
+        mount(ScrollView()
+    .queryKey(["scroll"])
+    .child(Column()
+     .crossAlignment(CrossAxisAlignment.Stretch)
+     .children(kids)
+     .build())
+    .build());
     "#,
     )
     .expect("mount");
@@ -176,12 +182,12 @@ fn no_clip_means_no_culling() {
     app.eval_module_source(
         r#"
         import { mount, Container, createColor } from "tur:std";
-        mount(Container({
-            width: 100,
-            height: 100,
-            color: createColor(0, 128, 255, 255),
-            queryKey: ["onscreen"],
-        }));
+        mount(Container()
+    .width(100)
+    .height(100)
+    .color(createColor(0, 128, 255, 255))
+    .queryKey(["onscreen"])
+    .build());
     "#,
     )
     .expect("mount");

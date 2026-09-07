@@ -28,7 +28,11 @@ use tur_native::NativeFontLoader;
 const SOURCE: &str = r##"
 import { Container, createColor, mount } from "tur:std";
 export function start() {
-  mount(Container({ width: 40, height: 40, color: createColor(51, 102, 153, 255) }));
+  mount(Container()
+    .width(40)
+    .height(40)
+    .color(createColor(51, 102, 153, 255))
+    .build());
 }
 "##;
 

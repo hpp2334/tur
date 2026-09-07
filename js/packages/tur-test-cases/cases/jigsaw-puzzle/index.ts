@@ -315,123 +315,144 @@ function pieceById(ctx: ReadonlyStoreCtx, s: PuzzleState, id: number): Piece {
 }
 
 function makePiece(id: number, s: PuzzleState): Element {
-    return Positioned({
-        left: derive((ctx) => pieceById(ctx, s, id).x),
-        top: derive((ctx) => pieceById(ctx, s, id).y),
-        width: PIECE,
-        height: PIECE,
-        child: Transform({
-            scale: derive((ctx) => s.pieceScale(ctx, id)),
-            child: PointerInteract({
-                onPointerDown: s.onPieceDown(id),
-                onPointerMove: s.onPieceMove(id),
-                onPointerUp: s.onPieceUp(id),
-                child: Container({
-                    width: PIECE,
-                    height: PIECE,
-                    color: derive((ctx) => {
-                        const me = pieceById(ctx, s, id);
-                        return pieceColor(me.slot, me.placed);
-                    }),
-                    borderRadius: 14,
-                    borderColor: Color.hex("#ffffff"),
-                    borderWidth: 2,
-                    // Placed pieces glow in their own hue; unplaced pieces
-                    // cast a soft neutral shadow. Dragged pieces cast a
-                    // stronger, deeper shadow to reinforce the lift.
-                    shadowColor: derive((ctx) => {
-                        const me = pieceById(ctx, s, id);
-                        if (s.pieceDragging(ctx, id))
-                            return Color.rgba(0, 0, 0, 180);
-                        if (!me.placed) return Color.rgba(0, 0, 0, 110);
-                        const c = pieceRgb(me.slot);
-                        return Color.rgba(c.r, c.g, c.b, 140);
-                    }),
-                    shadowOffset: derive((ctx) =>
-                        s.pieceDragging(ctx, id) ? [0, 12] : [0, 4],
-                    ),
-                    shadowBlur: derive((ctx) => {
-                        const me = pieceById(ctx, s, id);
-                        if (s.pieceDragging(ctx, id)) return 28;
-                        return me.placed ? 18 : 10;
-                    }),
-                    alignment: Alignment.Center,
-                    children: [
-                        Text({
-                            text: derive(
-                                (ctx) => `${pieceById(ctx, s, id).slot + 1}`,
-                            ),
-                            fontSize: 28,
-                            color: Color.hex("#ffffff"),
-                        }),
-                    ],
-                }),
-            }),
-        }),
-    });
+    return Positioned()
+        .left(derive((ctx) => pieceById(ctx, s, id).x))
+        .top(derive((ctx) => pieceById(ctx, s, id).y))
+        .width(PIECE)
+        .height(PIECE)
+        .child(
+            Transform()
+                .scale(derive((ctx) => s.pieceScale(ctx, id)))
+                .child(
+                    PointerInteract()
+                        .onPointerDown(s.onPieceDown(id))
+                        .onPointerMove(s.onPieceMove(id))
+                        .onPointerUp(s.onPieceUp(id))
+                        .child(
+                            Container()
+                                .width(PIECE)
+                                .height(PIECE)
+                                .color(
+                                    derive((ctx) => {
+                                        const me = pieceById(ctx, s, id);
+                                        return pieceColor(me.slot, me.placed);
+                                    }),
+                                )
+                                .borderRadius(14)
+                                .borderColor(Color.hex("#ffffff"))
+                                .borderWidth(2)
+                                .shadowColor(
+                                    derive((ctx) => {
+                                        const me = pieceById(ctx, s, id);
+                                        if (s.pieceDragging(ctx, id))
+                                            return Color.rgba(0, 0, 0, 180);
+                                        if (!me.placed)
+                                            return Color.rgba(0, 0, 0, 110);
+                                        const c = pieceRgb(me.slot);
+                                        return Color.rgba(c.r, c.g, c.b, 140);
+                                    }),
+                                )
+                                .shadowOffset(
+                                    derive((ctx) =>
+                                        s.pieceDragging(ctx, id)
+                                            ? [0, 12]
+                                            : [0, 4],
+                                    ),
+                                )
+                                .shadowBlur(
+                                    derive((ctx) => {
+                                        const me = pieceById(ctx, s, id);
+                                        if (s.pieceDragging(ctx, id)) return 28;
+                                        return me.placed ? 18 : 10;
+                                    }),
+                                )
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Text({
+                                        text: derive(
+                                            (ctx) =>
+                                                `${pieceById(ctx, s, id).slot + 1}`,
+                                        ),
+                                    })
+                                        .fontSize(28)
+                                        .color(Color.hex("#ffffff"))
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function slotGhost(slot: number): Element {
     const pos = slotToPos(slot, BOARD_X, BOARD_Y);
-    return Positioned({
-        left: pos.x,
-        top: pos.y,
-        width: PIECE,
-        height: PIECE,
-        child: Container({
-            width: PIECE,
-            height: PIECE,
-            color: Color.hex("#1e293b"),
-            borderColor: Color.hex("#475569"),
-            borderWidth: 1,
-            borderRadius: 12,
-            alignment: Alignment.Center,
-            children: [
-                Text({
-                    text: `${slot + 1}`,
-                    fontSize: 18,
-                    color: Color.hex("#64748b"),
-                }),
-            ],
-        }),
-    });
+    return Positioned()
+        .left(pos.x)
+        .top(pos.y)
+        .width(PIECE)
+        .height(PIECE)
+        .child(
+            Container()
+                .width(PIECE)
+                .height(PIECE)
+                .color(Color.hex("#1e293b"))
+                .borderColor(Color.hex("#475569"))
+                .borderWidth(1)
+                .borderRadius(12)
+                .alignment(Alignment.Center)
+                .children([
+                    Text({ text: `${slot + 1}` })
+                        .fontSize(18)
+                        .color(Color.hex("#64748b"))
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 }
 
 function BoardBackground(): Element {
-    return Positioned({
-        left: BOARD_X - GAP / 2,
-        top: BOARD_Y - GAP / 2,
-        width: BOARD_W,
-        height: BOARD_W,
-        child: Container({
-            width: BOARD_W,
-            height: BOARD_W,
-            color: Color.hex("#0f172a"),
-            borderColor: Color.hex("#3b82f6"),
-            borderWidth: 2,
-            borderRadius: 16,
-            shadowColor: Color.rgba(59, 130, 246, 40),
-            shadowOffset: [0, 0],
-            shadowBlur: 18,
-        }),
-    });
+    return Positioned()
+        .left(BOARD_X - GAP / 2)
+        .top(BOARD_Y - GAP / 2)
+        .width(BOARD_W)
+        .height(BOARD_W)
+        .child(
+            Container()
+                .width(BOARD_W)
+                .height(BOARD_W)
+                .color(Color.hex("#0f172a"))
+                .borderColor(Color.hex("#3b82f6"))
+                .borderWidth(2)
+                .borderRadius(16)
+                .shadowColor(Color.rgba(59, 130, 246, 40))
+                .shadowOffset([0, 0])
+                .shadowBlur(18)
+                .build(),
+        )
+        .build();
 }
 
 function TrayBackground(): Element {
-    return Positioned({
-        left: TRAY_X - GAP / 2,
-        top: TRAY_Y - GAP / 2,
-        width: BOARD_W,
-        height: BOARD_W,
-        child: Container({
-            width: BOARD_W,
-            height: BOARD_W,
-            color: Color.hex("#0a0f1d"),
-            borderColor: Color.hex("#334155"),
-            borderWidth: 1,
-            borderRadius: 16,
-        }),
-    });
+    return Positioned()
+        .left(TRAY_X - GAP / 2)
+        .top(TRAY_Y - GAP / 2)
+        .width(BOARD_W)
+        .height(BOARD_W)
+        .child(
+            Container()
+                .width(BOARD_W)
+                .height(BOARD_W)
+                .color(Color.hex("#0a0f1d"))
+                .borderColor(Color.hex("#334155"))
+                .borderWidth(1)
+                .borderRadius(16)
+                .build(),
+        )
+        .build();
 }
 
 function TopBar(s: PuzzleState): Element {
@@ -439,89 +460,98 @@ function TopBar(s: PuzzleState): Element {
     // Shuffle to the left and the HUD counter to the right. (Positioned with
     // only `right` set is not honored by the engine — needs `left` too, so
     // we anchor the whole bar with both and let the Row distribute.)
-    return Positioned({
-        left: 12,
-        right: 12,
-        top: 12,
-        child: Row({
-            mainAlignment: MainAxisAlignment.SpaceBetween,
-            crossAlignment: CrossAxisAlignment.Center,
-            children: [
-                MouseRegion({
-                    cursor: "pointer",
-                    child: PointerInteract({
-                        onClick: s.resetPuzzle,
-                        child: Container({
-                            padding: 10,
-                            borderRadius: 20,
-                            color: Color.hex("#4f46e5"),
-                            borderColor: Color.hex("#818cf8"),
-                            borderWidth: 1,
-                            shadowColor: Color.rgba(79, 70, 229, 120),
-                            shadowOffset: [0, 4],
-                            shadowBlur: 12,
-                            children: [
-                                Text({
-                                    text: "Shuffle",
-                                    fontSize: 13,
-                                    color: Color.hex("#ffffff"),
-                                }),
-                            ],
-                        }),
-                    }),
-                }),
-                Container({
-                    padding: 10,
-                    borderRadius: 8,
-                    color: Color.hex("#1e293b"),
-                    borderColor: Color.hex("#334155"),
-                    borderWidth: 1,
-                    children: [
-                        Text({
-                            text: derive(
-                                (ctx) =>
-                                    `${ctx.get(s.placedCount$)} / 9 placed`,
-                            ),
-                            fontSize: 14,
-                            color: Color.hex("#e2e8f0"),
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    });
+    return Positioned()
+        .left(12)
+        .right(12)
+        .top(12)
+        .child(
+            Row()
+                .mainAlignment(MainAxisAlignment.SpaceBetween)
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
+                    MouseRegion()
+                        .cursor("pointer")
+                        .child(
+                            PointerInteract()
+                                .onClick(s.resetPuzzle)
+                                .child(
+                                    Container()
+                                        .padding(10)
+                                        .borderRadius(20)
+                                        .color(Color.hex("#4f46e5"))
+                                        .borderColor(Color.hex("#818cf8"))
+                                        .borderWidth(1)
+                                        .shadowColor(
+                                            Color.rgba(79, 70, 229, 120),
+                                        )
+                                        .shadowOffset([0, 4])
+                                        .shadowBlur(12)
+                                        .children([
+                                            Text({ text: "Shuffle" })
+                                                .fontSize(13)
+                                                .color(Color.hex("#ffffff"))
+                                                .build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                    Container()
+                        .padding(10)
+                        .borderRadius(8)
+                        .color(Color.hex("#1e293b"))
+                        .borderColor(Color.hex("#334155"))
+                        .borderWidth(1)
+                        .children([
+                            Text({
+                                text: derive(
+                                    (ctx) =>
+                                        `${ctx.get(s.placedCount$)} / 9 placed`,
+                                ),
+                            })
+                                .fontSize(14)
+                                .color(Color.hex("#e2e8f0"))
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 }
 
 function WinBanner(): Element {
-    return Positioned({
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-        child: Container({
-            color: Color.rgba(2, 6, 23, 200),
-            alignment: Alignment.Center,
-            children: [
-                Container({
-                    padding: 24,
-                    borderRadius: 18,
-                    color: Color.hex("#4f46e5"),
-                    borderColor: Color.hex("#818cf8"),
-                    borderWidth: 2,
-                    shadowColor: Color.rgba(79, 70, 229, 180),
-                    shadowOffset: [0, 8],
-                    shadowBlur: 32,
-                    children: [
-                        Text({
-                            text: "Solved!",
-                            fontSize: 36,
-                            color: Color.hex("#ffffff"),
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    });
+    return Positioned()
+        .left(0)
+        .right(0)
+        .top(0)
+        .bottom(0)
+        .child(
+            Container()
+                .color(Color.rgba(2, 6, 23, 200))
+                .alignment(Alignment.Center)
+                .children([
+                    Container()
+                        .padding(24)
+                        .borderRadius(18)
+                        .color(Color.hex("#4f46e5"))
+                        .borderColor(Color.hex("#818cf8"))
+                        .borderWidth(2)
+                        .shadowColor(Color.rgba(79, 70, 229, 180))
+                        .shadowOffset([0, 8])
+                        .shadowBlur(32)
+                        .children([
+                            Text({ text: "Solved!" })
+                                .fontSize(36)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() => {
@@ -534,59 +564,58 @@ const App = view(() => {
     // The puzzle itself is a fixed-size Stack (PLAY_W × PLAY_H) so the
     // Positioned piece/slot coordinates remain case-local; the surrounding
     // Column centers it within whatever size the viewer pane happens to be.
-    return Expanded({
-        child: Stack({
-            children: [
-                // Full-bleed background — fills the viewer regardless of
-                // puzzle dimensions.
-                Container({
-                    color: Color.hex("#020617"),
-                }),
-                // Centered puzzle. Column with MainAxisSize.Max fills the
-                // parent Container so the centering has the full viewer to
-                // center against; cross-axis Center handles horizontal.
-                Container({
-                    children: [
-                        Column({
-                            mainAlignment: MainAxisAlignment.Center,
-                            crossAlignment: CrossAxisAlignment.Center,
-                            children: [
-                                Stack({
-                                    children: [
-                                        // Sizer — gives the inner Stack a
-                                        // finite size so Positioned children
-                                        // resolve against it.
-                                        Container({
-                                            width: PLAY_W,
-                                            height: PLAY_H,
-                                        }),
-                                        BoardBackground(),
-                                        ...Array.from(
-                                            { length: GRID * GRID },
-                                            (_, i) => slotGhost(i),
-                                        ),
-                                        TrayBackground(),
-                                        ...Array.from(
-                                            { length: GRID * GRID },
-                                            (_, id) => makePiece(id, s),
-                                        ),
-                                        TopBar(s),
-                                    ],
-                                }),
-                            ],
-                        }),
-                    ],
-                }),
-                // Win banner overlays the FULL viewer (not just the puzzle
-                // area), so it can stay at its natural size without
-                // obscuring just one corner.
-                Condition({
-                    condition: s.done$,
-                    child: () => WinBanner(),
-                }),
-            ],
-        }),
-    });
+    return Expanded()
+        .child(
+            Stack()
+                .children([
+                    // Full-bleed background — fills the viewer regardless of
+                    // puzzle dimensions.
+                    Container().color(Color.hex("#020617")).build(),
+                    // Centered puzzle. Column with MainAxisSize.Max fills the
+                    // parent Container so the centering has the full viewer to
+                    // center against; cross-axis Center handles horizontal.
+                    Container()
+                        .children([
+                            Column()
+                                .mainAlignment(MainAxisAlignment.Center)
+                                .crossAlignment(CrossAxisAlignment.Center)
+                                .children([
+                                    Stack()
+                                        .children([
+                                            // Sizer — gives the inner Stack a
+                                            // finite size so Positioned children
+                                            // resolve against it.
+                                            Container()
+                                                .width(PLAY_W)
+                                                .height(PLAY_H)
+                                                .build(),
+                                            BoardBackground(),
+                                            ...Array.from(
+                                                { length: GRID * GRID },
+                                                (_, i) => slotGhost(i),
+                                            ),
+                                            TrayBackground(),
+                                            ...Array.from(
+                                                { length: GRID * GRID },
+                                                (_, id) => makePiece(id, s),
+                                            ),
+                                            TopBar(s),
+                                        ])
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                    // Win banner overlays the FULL viewer (not just the puzzle
+                    // area), so it can stay at its natural size without
+                    // obscuring just one corner.
+                    Condition({ condition: s.done$ })
+                        .child(() => WinBanner())
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

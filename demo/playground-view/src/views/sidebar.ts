@@ -36,154 +36,200 @@ import { tokens } from "../theme/tokens";
 
 /** Sidebar header: small uppercase label + count of available cases. */
 function SidebarHeader(): Element {
-    return Container({
-        padding: 14,
-        children: [
-            Row({
-                mainAlignment: MainAxisAlignment.SpaceBetween,
-                children: [
-                    Text({
-                        text: "CASES",
-                        fontSize: 10,
-                        color: tokens.text.tertiary,
-                    }),
-                    Text({
-                        text: `${CASE_NAMES.length}`,
-                        fontSize: 10,
-                        color: tokens.text.tertiary,
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .padding(14)
+        .children([
+            Row()
+                .mainAlignment(MainAxisAlignment.SpaceBetween)
+                .children([
+                    Text({ text: "CASES" })
+                        .fontSize(10)
+                        .color(tokens.text.tertiary)
+                        .build(),
+                    Text({ text: `${CASE_NAMES.length}` })
+                        .fontSize(10)
+                        .color(tokens.text.tertiary)
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 /** A case row in the navigation list. Renders as a card with a left accent
  *  bar when selected; multi-file cases expand an indented file list below
  *  the row when active. */
 function NavItem(name: string): Element {
-    return Column({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        children: [
-            SizedBox({ height: 2 }),
-            MouseRegion({
-                cursor: "pointer",
-                onEnter: mutate((ctx, _ev) => ctx.set(hoveredCase$, name)),
-                onExit: mutate((ctx, _ev) => ctx.set(hoveredCase$, null)),
-                child: PointerInteract({
-                    onClick: mutate((ctx, _ev) => ctx.set(loadCase, name)),
-                    child: Container({
-                        // Horizontal inset so the rounded card floats in
-                        // the sidebar rather than bleeding to the edge.
-                        padding: 8,
-                        children: [
-                            Row({
-                                children: [
-                                    // Left accent bar — only visible when
-                                    // selected. Reserved 3px width either
-                                    // way so the label doesn't shift. Fixed
-                                    // height avoids CrossAxisAlignment.Stretch
-                                    // issues in the unbounded ScrollView.
-                                    Container({
-                                        width: 3,
-                                        height: 20,
-                                        borderRadius: 2,
-                                        color: derive((ctx) =>
-                                            ctx.get(selectedCase$) === name
-                                                ? tokens.accent.solid
-                                                : null,
-                                        ) as unknown as Brush,
-                                    }),
-                                    SizedBox({ width: 8 }),
-                                    Expanded({
-                                        child: Container({
-                                            borderRadius: 5,
-                                            padding: 7,
-                                            color: derive((ctx) => {
-                                                const selected =
-                                                    ctx.get(selectedCase$) ===
-                                                    name;
-                                                const hovered =
-                                                    ctx.get(hoveredCase$) ===
-                                                    name;
-                                                if (selected)
-                                                    return hovered
-                                                        ? tokens.bg.strongHover
-                                                        : tokens.bg.elevated;
-                                                return hovered
-                                                    ? tokens.bg.hover
-                                                    : null;
-                                            }) as unknown as Brush,
-                                            children: [
-                                                Row({
-                                                    mainAlignment:
-                                                        MainAxisAlignment.SpaceBetween,
-                                                    children: [
-                                                        Text({
-                                                            text: name,
-                                                            fontSize: 13,
-                                                            color: derive(
-                                                                (ctx) =>
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Stretch)
+        .children([
+            SizedBox().height(2).build(),
+            MouseRegion()
+                .cursor("pointer")
+                .onEnter(mutate((ctx, _ev) => ctx.set(hoveredCase$, name)))
+                .onExit(mutate((ctx, _ev) => ctx.set(hoveredCase$, null)))
+                .child(
+                    PointerInteract()
+                        .onClick(mutate((ctx, _ev) => ctx.set(loadCase, name)))
+                        .child(
+                            Container()
+                                .padding(8)
+                                .children([
+                                    Row()
+                                        .children([
+                                            // Left accent bar — only visible when
+                                            // selected. Reserved 3px width either
+                                            // way so the label doesn't shift. Fixed
+                                            // height avoids CrossAxisAlignment.Stretch
+                                            // issues in the unbounded ScrollView.
+                                            Container()
+                                                .width(3)
+                                                .height(20)
+                                                .borderRadius(2)
+                                                .color(
+                                                    derive((ctx) =>
+                                                        ctx.get(
+                                                            selectedCase$,
+                                                        ) === name
+                                                            ? tokens.accent
+                                                                  .solid
+                                                            : null,
+                                                    ) as unknown as Brush,
+                                                )
+                                                .build(),
+                                            SizedBox().width(8).build(),
+                                            Expanded()
+                                                .child(
+                                                    Container()
+                                                        .borderRadius(5)
+                                                        .padding(7)
+                                                        .color(
+                                                            derive((ctx) => {
+                                                                const selected =
                                                                     ctx.get(
                                                                         selectedCase$,
-                                                                    ) === name
+                                                                    ) === name;
+                                                                const hovered =
+                                                                    ctx.get(
+                                                                        hoveredCase$,
+                                                                    ) === name;
+                                                                if (selected)
+                                                                    return hovered
                                                                         ? tokens
-                                                                              .text
-                                                                              .primary
-                                                                        : ctx.get(
-                                                                                hoveredCase$,
-                                                                            ) ===
-                                                                            name
-                                                                          ? tokens
-                                                                                .text
-                                                                                .primary
-                                                                          : tokens
-                                                                                .text
-                                                                                .body,
-                                                            ),
-                                                        }),
-                                                        // Edited indicator —
-                                                        // small coral dot when
-                                                        // this case's editor
-                                                        // text differs from
-                                                        // its last-compiled
-                                                        // version.
-                                                        Condition({
-                                                            condition: derive(
-                                                                (ctx) =>
-                                                                    ctx.get(
-                                                                        edited$,
-                                                                    ) &&
-                                                                    ctx.get(
-                                                                        selectedCase$,
-                                                                    ) === name,
-                                                            ),
-                                                            child: () =>
-                                                                Container({
-                                                                    width: 6,
-                                                                    height: 6,
-                                                                    borderRadius: 999,
-                                                                    color: tokens
-                                                                        .accent
-                                                                        .complement,
-                                                                }),
-                                                            elseChild: () =>
-                                                                SizedBox({
-                                                                    width: 0,
-                                                                    height: 0,
-                                                                }),
-                                                        }),
-                                                    ],
-                                                }),
-                                            ],
-                                        }),
-                                    }),
-                                ],
-                            }),
-                        ],
-                    }),
-                }),
-            }),
+                                                                              .bg
+                                                                              .strongHover
+                                                                        : tokens
+                                                                              .bg
+                                                                              .elevated;
+                                                                return hovered
+                                                                    ? tokens.bg
+                                                                          .hover
+                                                                    : null;
+                                                            }) as unknown as Brush,
+                                                        )
+                                                        .children([
+                                                            Row()
+                                                                .mainAlignment(
+                                                                    MainAxisAlignment.SpaceBetween,
+                                                                )
+                                                                .children([
+                                                                    Text({
+                                                                        text: name,
+                                                                    })
+                                                                        .fontSize(
+                                                                            13,
+                                                                        )
+                                                                        .color(
+                                                                            derive(
+                                                                                (
+                                                                                    ctx,
+                                                                                ) =>
+                                                                                    ctx.get(
+                                                                                        selectedCase$,
+                                                                                    ) ===
+                                                                                    name
+                                                                                        ? tokens
+                                                                                              .text
+                                                                                              .primary
+                                                                                        : ctx.get(
+                                                                                                hoveredCase$,
+                                                                                            ) ===
+                                                                                            name
+                                                                                          ? tokens
+                                                                                                .text
+                                                                                                .primary
+                                                                                          : tokens
+                                                                                                .text
+                                                                                                .body,
+                                                                            ),
+                                                                        )
+                                                                        .build(),
+                                                                    // Edited indicator —
+                                                                    // small coral dot when
+                                                                    // this case's editor
+                                                                    // text differs from
+                                                                    // its last-compiled
+                                                                    // version.
+                                                                    Condition({
+                                                                        condition:
+                                                                            derive(
+                                                                                (
+                                                                                    ctx,
+                                                                                ) =>
+                                                                                    ctx.get(
+                                                                                        edited$,
+                                                                                    ) &&
+                                                                                    ctx.get(
+                                                                                        selectedCase$,
+                                                                                    ) ===
+                                                                                        name,
+                                                                            ),
+                                                                    })
+                                                                        .elseChild(
+                                                                            () =>
+                                                                                SizedBox()
+                                                                                    .width(
+                                                                                        0,
+                                                                                    )
+                                                                                    .height(
+                                                                                        0,
+                                                                                    )
+                                                                                    .build(),
+                                                                        )
+                                                                        .child(
+                                                                            () =>
+                                                                                Container()
+                                                                                    .width(
+                                                                                        6,
+                                                                                    )
+                                                                                    .height(
+                                                                                        6,
+                                                                                    )
+                                                                                    .borderRadius(
+                                                                                        999,
+                                                                                    )
+                                                                                    .color(
+                                                                                        tokens
+                                                                                            .accent
+                                                                                            .complement,
+                                                                                    )
+                                                                                    .build(),
+                                                                        )
+                                                                        .build(),
+                                                                ])
+                                                                .build(),
+                                                        ])
+                                                        .build(),
+                                                )
+                                                .build(),
+                                        ])
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
             // File sublist — only the selected multi-file case shows its
             // files, indented under the case row.
             Condition({
@@ -192,130 +238,166 @@ function NavItem(name: string): Element {
                         ctx.get(selectedCase$) === name &&
                         getCaseFileNames(name).length > 1,
                 ),
-                child: () =>
-                    Container({
-                        padding: 8,
-                        children: [
+            })
+                .elseChild(() => SizedBox().width(0).height(0).build())
+                .child(() =>
+                    Container()
+                        .padding(8)
+                        .children([
                             // Leading indent to align files under the case
                             // label (past the accent bar + inset).
-                            Row({
-                                crossAlignment: CrossAxisAlignment.Start,
-                                children: [
-                                    SizedBox({ width: 19 }),
-                                    Expanded({
-                                        child: Column({
-                                            crossAlignment:
-                                                CrossAxisAlignment.Stretch,
-                                            children: [
-                                                Each({
-                                                    items: derive(() =>
-                                                        getCaseFileNames(
-                                                            name,
-                                                        ).map((filename) => ({
-                                                            caseName: name,
-                                                            filename,
-                                                        })),
-                                                    ),
-                                                    build: (item) =>
-                                                        FileItem(item.filename),
-                                                }),
-                                            ],
-                                        }),
-                                    }),
-                                ],
-                            }),
-                        ],
-                    }),
-                elseChild: () => SizedBox({ width: 0, height: 0 }),
-            }),
-        ],
-    });
+                            Row()
+                                .crossAlignment(CrossAxisAlignment.Start)
+                                .children([
+                                    SizedBox().width(19).build(),
+                                    Expanded()
+                                        .child(
+                                            Column()
+                                                .crossAlignment(
+                                                    CrossAxisAlignment.Stretch,
+                                                )
+                                                .children([
+                                                    Each({
+                                                        items: derive(() =>
+                                                            getCaseFileNames(
+                                                                name,
+                                                            ).map(
+                                                                (filename) => ({
+                                                                    caseName:
+                                                                        name,
+                                                                    filename,
+                                                                }),
+                                                            ),
+                                                        ),
+                                                    })
+                                                        .itemBuilder((item) =>
+                                                            FileItem(
+                                                                item.filename,
+                                                            ),
+                                                        )
+                                                        .build(),
+                                                ])
+                                                .build(),
+                                        )
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 /** A file tab in the nested file list. Only shown for multi-file cases. */
 function FileItem(filename: string): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        onEnter: mutate((ctx, _ev) => ctx.set(hoveredFile$, filename)),
-        onExit: mutate((ctx, _ev) => ctx.set(hoveredFile$, null)),
-        child: PointerInteract({
-            onClick: mutate((ctx, _ev) => ctx.set(selectFile, filename)),
-            child: Container({
-                padding: 5,
-                borderRadius: 4,
-                color: derive((ctx) => {
-                    const selected = ctx.get(selectedFile$) === filename;
-                    const hovered = ctx.get(hoveredFile$) === filename;
-                    if (selected) return tokens.bg.strongHover;
-                    return hovered ? tokens.bg.hover : null;
-                }) as unknown as Brush,
-                children: [
-                    Row({
-                        mainAlignment: MainAxisAlignment.SpaceBetween,
-                        children: [
-                            Text({
-                                text: filename,
-                                fontSize: 12,
-                                color: derive((ctx) =>
-                                    ctx.get(selectedFile$) === filename
-                                        ? tokens.text.primary
-                                        : ctx.get(hoveredFile$) === filename
-                                          ? tokens.text.primary
-                                          : tokens.text.secondary,
-                                ),
-                            }),
-                            // Active file marker — small accent dot.
-                            Condition({
-                                condition: derive(
-                                    (ctx) =>
-                                        ctx.get(selectedFile$) === filename,
-                                ),
-                                child: () =>
-                                    Container({
-                                        width: 4,
-                                        height: 4,
-                                        borderRadius: 999,
-                                        color: tokens.accent.solid,
-                                    }),
-                                elseChild: () =>
-                                    SizedBox({ width: 0, height: 0 }),
-                            }),
-                        ],
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .onEnter(mutate((ctx, _ev) => ctx.set(hoveredFile$, filename)))
+        .onExit(mutate((ctx, _ev) => ctx.set(hoveredFile$, null)))
+        .child(
+            PointerInteract()
+                .onClick(mutate((ctx, _ev) => ctx.set(selectFile, filename)))
+                .child(
+                    Container()
+                        .padding(5)
+                        .borderRadius(4)
+                        .color(
+                            derive((ctx) => {
+                                const selected =
+                                    ctx.get(selectedFile$) === filename;
+                                const hovered =
+                                    ctx.get(hoveredFile$) === filename;
+                                if (selected) return tokens.bg.strongHover;
+                                return hovered ? tokens.bg.hover : null;
+                            }) as unknown as Brush,
+                        )
+                        .children([
+                            Row()
+                                .mainAlignment(MainAxisAlignment.SpaceBetween)
+                                .children([
+                                    Text({ text: filename })
+                                        .fontSize(12)
+                                        .color(
+                                            derive((ctx) =>
+                                                ctx.get(selectedFile$) ===
+                                                filename
+                                                    ? tokens.text.primary
+                                                    : ctx.get(hoveredFile$) ===
+                                                        filename
+                                                      ? tokens.text.primary
+                                                      : tokens.text.secondary,
+                                            ),
+                                        )
+                                        .build(),
+                                    // Active file marker — small accent dot.
+                                    Condition({
+                                        condition: derive(
+                                            (ctx) =>
+                                                ctx.get(selectedFile$) ===
+                                                filename,
+                                        ),
+                                    })
+                                        .elseChild(() =>
+                                            SizedBox()
+                                                .width(0)
+                                                .height(0)
+                                                .build(),
+                                        )
+                                        .child(() =>
+                                            Container()
+                                                .width(4)
+                                                .height(4)
+                                                .borderRadius(999)
+                                                .color(tokens.accent.solid)
+                                                .build(),
+                                        )
+                                        .build(),
+                                ])
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 export function Sidebar(): Element {
-    return Container({
-        // On mobile the sidebar fills the pane (no fixed width). Returning
-        // `null` resolves to `None` at layout time → the container fills its
-        // parent's main axis. The cast escapes the `number | null` type since
-        // `Val<number>` isn't nullable in the prop signature.
-        width: derive((ctx) =>
-            ctx.get(isMobile$) ? null : ctx.get(sidebarWidth$),
-        ) as unknown as Val<number>,
-        color: tokens.bg.panel,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Stretch,
-                children: [
+    return Container()
+        .width(
+            derive((ctx) =>
+                ctx.get(isMobile$) ? null : ctx.get(sidebarWidth$),
+            ) as unknown as Val<number>,
+        )
+        .color(tokens.bg.panel)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Stretch)
+                .children([
                     SidebarHeader(),
-                    Expanded({
-                        child: ScrollView({
-                            child: Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                children: [
-                                    ...CASE_NAMES.map((name) => NavItem(name)),
-                                    SizedBox({ height: 8 }),
-                                ],
-                            }),
-                        }),
-                    }),
-                ],
-            }),
-        ],
-    });
+                    Expanded()
+                        .child(
+                            ScrollView()
+                                .child(
+                                    Column()
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Stretch,
+                                        )
+                                        .children([
+                                            ...CASE_NAMES.map((name) =>
+                                                NavItem(name),
+                                            ),
+                                            SizedBox().height(8).build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }

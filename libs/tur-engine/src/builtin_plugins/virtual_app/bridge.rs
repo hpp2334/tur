@@ -12,6 +12,9 @@ use std::sync::Arc;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 
+use crate::core::js_runtime::builder::builder_factory;
+use crate::core::js_runtime::builder::setters::*;
+use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
@@ -19,6 +22,22 @@ use crate::core::js_runtime::js_value::IntoJs;
 
 use super::element::VirtualAppView;
 use super::state::{JsWorkerPoolHandle, ModuleSourceHandle, RuntimeErrorArg, VirtualState};
+
+static TABLE: BuilderTable = BuilderTable {
+    methods: &[
+        M::renamed("app$", "app$", app_handle),
+        M::new("background", background),
+        M::new("width", width),
+        M::new("height", height),
+        M::new("fallback", fallback),
+        M::new("errorView", errorView),
+        M::new("queryKey", queryKey),
+    ],
+    child: false,
+    children: false,
+};
+
+builder_factory!(tur_virtual_app_view_factory, tur_virtual_app_view, &TABLE);
 
 pub fn fns() -> Vec<FnEntry> {
     vec![
@@ -28,7 +47,7 @@ pub fn fns() -> Vec<FnEntry> {
             2,
             tur_create_virtual_app_controller as Ptr,
         ),
-        ("VirtualAppView", 2, tur_virtual_app_view as Ptr),
+        ("VirtualAppView", 2, tur_virtual_app_view_factory as Ptr),
         ("forWorkerPool", 2, tur_for_worker_pool as Ptr),
     ]
 }

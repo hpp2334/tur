@@ -29,22 +29,19 @@ fn table_source(rows: usize, table_opts: &str) -> String {
         const rows$ = source(Array.from({{ length: {rows} }}, (_, i) => ({{ i }})));
         // Test seam: rewrite the rows atom through the injected store.
         globalThis.__set = (n) => store.set(rows$, Array.from({{ length: n }}, (_, i) => ({{ i }})));
-        mount(Table({{
-            queryKey: ["t"],
-            columns: [{{ width: 100 }}, {{ flex: 1, minWidth: 40 }}, {{ flex: 3 }}],
-            rows: rows$,
-            {table_opts}
-            buildHeader: () => [
-                Container({{ queryKey: ["h0"] }}),
-                Container({{ queryKey: ["h1"] }}),
-                Container({{ queryKey: ["h2"] }}),
-            ],
-            build: (item) => [
-                Container({{ queryKey: ["c0-" + item.i] }}),
-                Container({{ queryKey: ["c1-" + item.i] }}),
-                Container({{ queryKey: ["c2-" + item.i] }}),
-            ],
-        }}));
+        mount(Table({{ queryKey: ["t"], rows: rows$, {table_opts} }})
+            .columns([{{ width: 100 }}, {{ flex: 1, minWidth: 40 }}, {{ flex: 3 }}])
+            .headerBuilder(() => [
+                Container({{ queryKey: ["h0"] }}).build(),
+                Container({{ queryKey: ["h1"] }}).build(),
+                Container({{ queryKey: ["h2"] }}).build(),
+            ])
+            .rowBuilder((item) => [
+                Container({{ queryKey: ["c0-" + item.i] }}).build(),
+                Container({{ queryKey: ["c1-" + item.i] }}).build(),
+                Container({{ queryKey: ["c2-" + item.i] }}).build(),
+            ])
+            .build());
         "#,
     )
 }
@@ -135,17 +132,26 @@ fn table_intrinsic_row_height_is_max_cell() {
     app.eval_module_source(
         r#"import { mount, Table, Container, source } from "tur:std";
         const rows$ = source([{ i: 0 }, { i: 1 }]);
-        mount(Table({
-            queryKey: ["t"],
-            columns: [{ flex: 1 }, { flex: 1 }],
-            rows: rows$,
-            rowSpacing: 0,
-            buildHeader: () => [Container({ height: 30, queryKey: ["h0"] }), Container({ height: 30 })],
-            build: (item) => [
-                Container({ height: 20, queryKey: ["c0-" + item.i] }),
-                Container({ height: 50, queryKey: ["c1-" + item.i] }),
-            ],
-        }));
+        mount(Table({ columns: [{ flex: 1 }, { flex: 1 }], rows: rows$ })
+    .queryKey(["t"])
+    .rowSpacing(0)
+    .headerBuilder(() => [Container()
+    .height(30)
+    .queryKey(["h0"])
+    .build(), Container()
+     .height(30)
+     .build()])
+    .rowBuilder((item) => [
+                Container()
+                    .height(20)
+                    .queryKey(["c0-" + item.i])
+                    .build(),
+                Container()
+                    .height(50)
+                    .queryKey(["c1-" + item.i])
+                    .build(),
+            ])
+    .build());
         "#,
     )
     .unwrap();
@@ -217,21 +223,29 @@ fn table_missing_cells_leave_empty_box() {
         600.0,
         r#"import { mount, Table, Container, source } from "tur:std";
         const rows$ = source([{ i: 0 }, { i: 1 }]);
-        mount(Table({
-            queryKey: ["t"],
-            columns: [{ width: 100 }, { flex: 1 }, { flex: 1 }],
-            rows: rows$,
-            buildHeader: () => [
-                Container({ queryKey: ["h0"] }),
-                Container({ queryKey: ["h1"] }),
-                Container({ queryKey: ["h2"] }),
-            ],
-            build: (item) => [
-                Container({ queryKey: ["c0-" + item.i] }),
+        mount(Table({ columns: [{ width: 100 }, { flex: 1 }, { flex: 1 }], rows: rows$ })
+    .queryKey(["t"])
+    .headerBuilder(() => [
+                Container()
+                    .queryKey(["h0"])
+                    .build(),
+                Container()
+                    .queryKey(["h1"])
+                    .build(),
+                Container()
+                    .queryKey(["h2"])
+                    .build(),
+            ])
+    .rowBuilder((item) => [
+                Container()
+                    .queryKey(["c0-" + item.i])
+                    .build(),
                 null,
-                Container({ queryKey: ["c2-" + item.i] }),
-            ],
-        }));
+                Container()
+                    .queryKey(["c2-" + item.i])
+                    .build(),
+            ])
+    .build());
         "#,
     );
 
@@ -265,16 +279,22 @@ fn table_min_width_clamps_flex_share() {
         600.0,
         r#"import { mount, Table, Container, source } from "tur:std";
         const rows$ = source([{}]);
-        mount(Table({
-            queryKey: ["t"],
-            columns: [{ width: 350 }, { flex: 1, minWidth: 80 }],
-            rows: rows$,
-            buildHeader: () => [
-                Container({ queryKey: ["h0"] }),
-                Container({ queryKey: ["h1"] }),
-            ],
-            build: () => [Container({ queryKey: ["c0-0"] }), Container({ queryKey: ["c1-0"] })],
-        }));
+        mount(Table({ columns: [{ width: 350 }, { flex: 1, minWidth: 80 }], rows: rows$ })
+    .queryKey(["t"])
+    .headerBuilder(() => [
+                Container()
+                    .queryKey(["h0"])
+                    .build(),
+                Container()
+                    .queryKey(["h1"])
+                    .build(),
+            ])
+    .rowBuilder(() => [Container()
+    .queryKey(["c0-0"])
+    .build(), Container()
+     .queryKey(["c1-0"])
+     .build()])
+    .build());
         "#,
     );
 

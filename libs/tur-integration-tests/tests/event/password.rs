@@ -9,36 +9,36 @@ use tur_integration_tests::TurTestApp;
 const PASSWORD_BUNDLE: &str = r#"
     import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(Container({
-        children: [
-            Input({
-                controller: controller,
-                fontSize: 14,
-                width: 200,
-                height: 30,
-                obscureText: true,
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .obscureText(true)
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 const CUSTOM_CHAR_BUNDLE: &str = r#"
     import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(Container({
-        children: [
-            Input({
-                controller: controller,
-                fontSize: 14,
-                width: 200,
-                height: 30,
-                obscureText: true,
-                obscuringCharacter: "*",
-                queryKey: ["input"],
-            }),
-        ],
-    }));
+    mount(Container()
+    .children([
+            Input()
+                .controller(controller)
+                .fontSize(14)
+                .width(200)
+                .height(30)
+                .obscureText(true)
+                .obscuringCharacter("*")
+                .queryKey(["input"])
+                .build(),
+        ])
+    .build());
 "#;
 
 fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {

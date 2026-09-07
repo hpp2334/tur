@@ -35,38 +35,44 @@ Object.assign(globalThis, {
 });
 
 const App = view(() =>
-    Stack({
-        alignment: Alignment.TopLeft,
-        children: [
-            PointerInteract({
-                onPointerDown: mutate(() => {
-                    beneathDowns += 1;
-                }),
-                child: Container({ width: 400, height: 600 }),
-            }),
-            Container({ width: 400, height: 600, queryKey: ["plain"] }),
-            Container({
-                width: 200,
-                height: 200,
-                color: Color.hex("#ef4444"),
-                queryKey: ["red"],
-            }),
-            Positioned({
-                left: 200,
-                top: 0,
-                width: 200,
-                height: 600,
-                child: MouseRegion({
-                    behavior: HitTestBehavior.Translucent,
-                    child: SizedBox({
-                        width: 200,
-                        height: 600,
-                        queryKey: ["region"],
+    Stack()
+        .alignment(Alignment.TopLeft)
+        .children([
+            PointerInteract()
+                .onPointerDown(
+                    mutate(() => {
+                        beneathDowns += 1;
                     }),
-                }),
-            }),
-        ],
-    }),
+                )
+                .child(Container().width(400).height(600).build())
+                .build(),
+            Container().width(400).height(600).queryKey(["plain"]).build(),
+            Container()
+                .width(200)
+                .height(200)
+                .color(Color.hex("#ef4444"))
+                .queryKey(["red"])
+                .build(),
+            Positioned()
+                .left(200)
+                .top(0)
+                .width(200)
+                .height(600)
+                .child(
+                    MouseRegion()
+                        .behavior(HitTestBehavior.Translucent)
+                        .child(
+                            SizedBox()
+                                .width(200)
+                                .height(600)
+                                .queryKey(["region"])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

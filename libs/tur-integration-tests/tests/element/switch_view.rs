@@ -5,14 +5,19 @@ import { source, Switch, Text, mount } from "tur:std";
 
 globalThis.__key = source("a");
 globalThis.__store = store;
-const root = Switch({
-    value: globalThis.__key,
-    cases: [
-        { key: "a", child: () => Text({ text: "AAA", queryKey: ["case_a"] }) },
-        { key: "b", child: () => Text({ text: "BBB", queryKey: ["case_b"] }) },
-    ],
-    fallback: () => Text({ text: "FALL", queryKey: ["case_fallback"] }),
-});
+const root = Switch({ value: globalThis.__key })
+     .cases([
+        { key: "a", child: () => Text({ text: "AAA" })
+     .queryKey(["case_a"])
+     .build() },
+        { key: "b", child: () => Text({ text: "BBB" })
+     .queryKey(["case_b"])
+     .build() },
+    ])
+     .fallback(() => Text({ text: "FALL" })
+     .queryKey(["case_fallback"])
+     .build())
+     .build();
 mount(root);
 "#;
 
@@ -98,14 +103,19 @@ import { source, derive, Switch, Text, mount } from "tur:std";
 globalThis.__key = source("a");
 globalThis.__store = store;
 globalThis.__derived = derive(() => store.get(globalThis.__key));
-const root = Switch({
-    value: globalThis.__derived,
-    cases: [
-        { key: "a", child: () => Text({ text: "AAA", queryKey: ["d_case_a"] }) },
-        { key: "b", child: () => Text({ text: "BBB", queryKey: ["d_case_b"] }) },
-    ],
-    fallback: () => Text({ text: "FALL", queryKey: ["d_case_fallback"] }),
-});
+const root = Switch({ value: globalThis.__derived })
+     .cases([
+        { key: "a", child: () => Text({ text: "AAA" })
+     .queryKey(["d_case_a"])
+     .build() },
+        { key: "b", child: () => Text({ text: "BBB" })
+     .queryKey(["d_case_b"])
+     .build() },
+    ])
+     .fallback(() => Text({ text: "FALL" })
+     .queryKey(["d_case_fallback"])
+     .build())
+     .build();
 mount(root);
 "#;
 

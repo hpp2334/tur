@@ -21,6 +21,10 @@
  * displayed value, sets `end` to the new target, and restarts the
  * controller — Flutter's `ImplicitlyAnimatedWidget` retarget, inline in the
  * derive. `duration` / `curve` are static (parsed once at build).
+ *
+ * The `Animated*` factories follow the engine-wide builder pattern: they
+ * return a chainable builder (`AnimatedContainer().padding(v)…`) terminated
+ * by `.build()`, delegating to the underlying `tur:std` builders.
  */
 
 import { createAnimationController } from "tur:animation/native";
@@ -96,8 +100,24 @@ export function ColorTween(opts) {
 }
 
 // ---------------------------------------------------------------------------
-// AnimatedContainer / AnimatedOpacity / AnimatedPositioned
+// The `Animated*` builder — one explicit-table JS builder per widget,
+// mirroring the native builder pattern: methods record props and return
+// `this`; `.build()` computes the tween channels and delegates to the
+// underlying `tur:std` builder's `.build()`.
 // ---------------------------------------------------------------------------
+
+function makeAnimBuilder(fields, build) {
+    const state = {};
+    const b = {};
+    for (const f of fields) {
+        b[f] = (v) => {
+            state[f] = v;
+            return b;
+        };
+    }
+    b.build = () => build(state);
+    return b;
+}
 
 // Register one animatable channel: returns a `derive` closure that detects
 // the reactive target inline — `ctx.get(target)` throws for non-atoms, so
@@ -130,80 +150,125 @@ function animChannel(target, progress, makeTween, ctrl) {
     });
 }
 
-export function AnimatedContainer(props) {
-    const duration = props.duration ?? 300;
-    const curve = props.curve ?? "linear";
-    const progress$ = source(1.0);
-    // `color` props accept solid `Color`s; gradients / null snap to the new
-    // target (no interpolation).
-    const num = (i) => Tween({ begin: i, end: i });
-    const col = (i) => ColorTween({ begin: i, end: i });
+export function AnimatedContainer() {
+    return makeAnimBuilder(
+        [
+            "width",
+            "height",
+            "padding",
+            "color",
+            "borderColor",
+            "borderWidth",
+            "borderRadius",
+            "shadowColor",
+            "shadowBlur",
+            "alignment",
+            "borderPosition",
+            "shadowOffset",
+            "queryKey",
+            "children",
+            "duration",
+            "curve",
+            "onEnd",
+        ],
+        (props) => {
+            const duration = props.duration ?? 300;
+            const curve = props.curve ?? "linear";
+            const progress$ = source(1.0);
+            // `color` props accept solid `Color`s; gradients / null snap to
+            // the new target (no interpolation).
+            const num = (i) => Tween({ begin: i, end: i });
+            const col = (i) => ColorTween({ begin: i, end: i });
 
-    const ctrl = createAnimationController({
-        duration,
-        curve,
-        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
-        onEnd: props.onEnd,
-    });
+            const ctrl = createAnimationController({
+                duration,
+                curve,
+                onTick: mutate((ctx, t) => ctx.set(progress$, t)),
+                onEnd: props.onEnd,
+            });
 
-    const ch = (v, mk) => (v != null ? animChannel(v, progress$, mk, ctrl) : undefined);
-    return Container({
-        width: ch(props.width, num),
-        height: ch(props.height, num),
-        padding: ch(props.padding, num),
-        color: ch(props.color, col),
-        borderColor: ch(props.borderColor, col),
-        borderWidth: ch(props.borderWidth, num),
-        borderRadius: ch(props.borderRadius, num),
-        shadowColor: ch(props.shadowColor, col),
-        shadowBlur: ch(props.shadowBlur, num),
-        alignment: props.alignment,
-        borderPosition: props.borderPosition,
-        shadowOffset: props.shadowOffset,
-        queryKey: props.queryKey,
-        children: props.children,
-    });
+            const ch = (v, mk) =>
+                v != null ? animChannel(v, progress$, mk, ctrl) : undefined;
+            return Container()
+                .width(ch(props.width, num))
+                .height(ch(props.height, num))
+                .padding(ch(props.padding, num))
+                .color(ch(props.color, col))
+                .borderColor(ch(props.borderColor, col))
+                .borderWidth(ch(props.borderWidth, num))
+                .borderRadius(ch(props.borderRadius, num))
+                .shadowColor(ch(props.shadowColor, col))
+                .shadowBlur(ch(props.shadowBlur, num))
+                .alignment(props.alignment)
+                .borderPosition(props.borderPosition)
+                .shadowOffset(props.shadowOffset)
+                .queryKey(props.queryKey)
+                .children(props.children ?? [])
+                .build();
+        },
+    );
 }
 
-export function AnimatedOpacity(props) {
-    const duration = props.duration ?? 300;
-    const curve = props.curve ?? "linear";
-    const progress$ = source(1.0);
-    const num = (i) => Tween({ begin: i, end: i });
+export function AnimatedOpacity() {
+    return makeAnimBuilder(
+        ["value", "child", "queryKey", "duration", "curve", "onEnd"],
+        (props) => {
+            const duration = props.duration ?? 300;
+            const curve = props.curve ?? "linear";
+            const progress$ = source(1.0);
+            const num = (i) => Tween({ begin: i, end: i });
 
-    const ctrl = createAnimationController({
-        duration,
-        curve,
-        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
-        onEnd: props.onEnd,
-    });
+            const ctrl = createAnimationController({
+                duration,
+                curve,
+                onTick: mutate((ctx, t) => ctx.set(progress$, t)),
+                onEnd: props.onEnd,
+            });
 
-    const value =
-        props.value != null ? animChannel(props.value, progress$, num, ctrl) : undefined;
-    return Opacity({ value, child: props.child, queryKey: props.queryKey });
+            const value =
+                props.value != null ? animChannel(props.value, progress$, num, ctrl) : undefined;
+            return Opacity().value(value).child(props.child).queryKey(props.queryKey).build();
+        },
+    );
 }
 
-export function AnimatedPositioned(props) {
-    const duration = props.duration ?? 300;
-    const curve = props.curve ?? "linear";
-    const progress$ = source(1.0);
-    const num = (i) => Tween({ begin: i, end: i });
+export function AnimatedPositioned() {
+    return makeAnimBuilder(
+        [
+            "left",
+            "top",
+            "right",
+            "bottom",
+            "width",
+            "height",
+            "child",
+            "duration",
+            "curve",
+            "onEnd",
+        ],
+        (props) => {
+            const duration = props.duration ?? 300;
+            const curve = props.curve ?? "linear";
+            const progress$ = source(1.0);
+            const num = (i) => Tween({ begin: i, end: i });
 
-    const ctrl = createAnimationController({
-        duration,
-        curve,
-        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
-        onEnd: props.onEnd,
-    });
+            const ctrl = createAnimationController({
+                duration,
+                curve,
+                onTick: mutate((ctx, t) => ctx.set(progress$, t)),
+                onEnd: props.onEnd,
+            });
 
-    const ch = (v) => (v != null ? animChannel(v, progress$, num, ctrl) : undefined);
-    return Positioned({
-        left: ch(props.left),
-        top: ch(props.top),
-        right: ch(props.right),
-        bottom: ch(props.bottom),
-        width: ch(props.width),
-        height: ch(props.height),
-        child: props.child,
-    });
+            const ch = (v) => (v != null ? animChannel(v, progress$, num, ctrl) : undefined);
+            return Positioned()
+                .left(ch(props.left))
+                .top(ch(props.top))
+                .right(ch(props.right))
+                .bottom(ch(props.bottom))
+                .width(ch(props.width))
+                .height(ch(props.height))
+                .child(props.child)
+                .build();
+        },
+    );
 }

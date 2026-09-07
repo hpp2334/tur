@@ -5,7 +5,6 @@ import {
     CrossAxisAlignment,
     Each,
     Expanded,
-    MainAxisSize,
     mount,
     Row,
     SizedBox,
@@ -21,25 +20,29 @@ const App = view(() => {
     // build thunk (state there would be re-created on every items change).
     const seg$ = source<string[]>(["a", "b"]);
 
-    return Column({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        children: [
-            Row({
-                children: [
-                    SizedBox({ width: 16, height: 16 }),
-                    Each({
-                        items: seg$,
-                        mainAxisSize: MainAxisSize.Min,
-                        build: (s: string) => Text({ text: s, fontSize: 13 }),
-                    }),
-                ],
-            }),
-            SizedBox({ width: 40, height: 10 }),
-            Expanded({
-                child: Container({ color: 0x00000000 as unknown as Brush }),
-            }),
-        ],
-    });
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Stretch)
+        .children([
+            Row()
+                .children([
+                    SizedBox().width(16).height(16).build(),
+                    Each({ items: seg$ })
+                        .itemBuilder((s: string) =>
+                            Text({ text: s }).fontSize(13).build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+            SizedBox().width(40).height(10).build(),
+            Expanded()
+                .child(
+                    Container()
+                        .color(0x00000000 as unknown as Brush)
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

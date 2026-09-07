@@ -30,19 +30,16 @@ globalThis.__spans = spans;
 globalThis.__red = Color.hex("#ff0000");
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans(spans);
-mount(ScrollView({
-    queryKey: ["scroll"],
-    child: Input({
-        controller: globalThis.__ctrl,
-        multiline: true,
-        fontFamily: "monospace",
-        fontSize: 14,
-        // No explicit width: the editor fills the ScrollView's viewport, so
-        // a viewport resize changes the editable's max-width constraint (an
-        // explicit width would keep it fixed and, correctly, not reshape).
-        queryKey: ["ed"],
-    }),
-}));
+mount(ScrollView()
+    .queryKey(["scroll"])
+    .child(Input()
+     .controller(globalThis.__ctrl)
+     .multiline(true)
+     .fontFamily("monospace")
+     .fontSize(14)
+     .queryKey(["ed"])
+     .build())
+    .build());
 "##;
 
 /// The `tur_editable_text` node under the `Input` queryKey (the key lands

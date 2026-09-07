@@ -64,7 +64,7 @@ fn mount_view_renders() {
     app.eval_module_source(
         r#"
         import { mount, view, Text } from "tur:std";
-        mount(view(() => Text({ text: "hello-store" })));
+        mount(view(() => Text({ text: "hello-store" }).build()));
         "#,
     )
     .unwrap();
@@ -98,10 +98,11 @@ fn prop_declarations_share_the_instance_store() {
         const bump = mutate((ctx) => ctx.set(count, 99));
         globalThis.__bump = bump;
         const clickBump = mutate((ctx) => ctx.set(count, 55));
-        const ui = view(() => PointerInteract({
-            onClick: clickBump,
-            child: Text({ text: "click-me" }),
-        }));
+        const ui = view(() => PointerInteract()
+     .onClick(clickBump)
+     .child(Text({ text: "click-me" })
+     .build())
+     .build());
         export function start({ store }) {
             globalThis.__store = store;
             mount(ui);
@@ -156,7 +157,8 @@ fn engine_atoms_resolve_through_the_instance_store() {
         globalThis.__vp = viewportSize$;
         export function start({ store }) {
             globalThis.__store = store;
-            mount(view(() => Text({ text: "x" })));
+            mount(view(() => Text({ text: "x" })
+     .build()));
         }
         "#,
     )
@@ -231,7 +233,8 @@ fn declared_derive_over_engine_atom_updates_on_resize() {
         globalThis.__label = label;
         export function start({ store }) {
             globalThis.__store = store;
-            mount(view(() => Text({ text: label })));
+            mount(view(() => Text({ text: label })
+     .build()));
         }
         "#,
     )
@@ -293,7 +296,8 @@ fn ctx_threads_the_instance_store() {
 
         export function start({ store }) {
             globalThis.__store = store;
-            mount(view(() => Text({ text: "loop" })));
+            mount(view(() => Text({ text: "loop" })
+     .build()));
         }
         "#,
     )

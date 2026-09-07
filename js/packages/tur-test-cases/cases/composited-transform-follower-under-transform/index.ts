@@ -24,31 +24,35 @@ import {
 // lands exactly at (100, 80).
 const App = view(() => {
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: CompositedTransformTarget({
-                    link,
-                    child: SizedBox({ width: 60, height: 40 }),
-                }),
-            }),
-            Transform({
-                translateX: 50,
-                translateY: 30,
-                child: CompositedTransformFollower({
-                    link,
-                    child: Container({
-                        width: 20,
-                        height: 20,
-                        color: "#dc2626",
-                    }),
-                }),
-            }),
-        ],
-    });
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(SizedBox().width(60).height(40).build())
+                        .build(),
+                )
+                .build(),
+            Transform()
+                .translateX(50)
+                .translateY(30)
+                .child(
+                    CompositedTransformFollower({ link })
+                        .child(
+                            Container()
+                                .width(20)
+                                .height(20)
+                                .color("#dc2626")
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

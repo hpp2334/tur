@@ -9,7 +9,7 @@ use crate::builtin_plugins::layout::flex_item::ExpandedElement;
 
 use super::element::{ChildData, FlexElement};
 
-/// Resolve the `flex` weight of a flex-item child (`Expanded({ flex })`).
+/// Resolve the `flex` weight of a flex-item child (`Expanded().flex(…)`).
 /// Returns 0.0 if the child is not an `Expanded` element. If it is an
 /// `Expanded` but the `flex` prop is absent, returns 1.0 (Flutter default).
 ///

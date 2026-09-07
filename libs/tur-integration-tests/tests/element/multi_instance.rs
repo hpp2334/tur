@@ -52,7 +52,8 @@ const SET_ID_JS: &str = r#"
     import { Text, mount } from "tur:std";
     export function start({ store }) {
         globalThis.__instanceId = "VALUE";
-        mount(Text({ text: "VALUE" }));
+        mount(Text({ text: "VALUE" })
+    .build());
     }
 "#;
 
@@ -113,7 +114,9 @@ fn instances_have_isolated_element_trees() {
         r#"
             import { Text, mount } from "tur:std";
             export function start({ store }) {
-                mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
+                mount(Text({ text: "only-in-A" })
+    .queryKey(["a_only"])
+    .build());
             }
         "#,
     ))
@@ -426,7 +429,8 @@ fn platform_events_route_to_the_correct_instance() {
             r#"import { mount, view, Text, viewportSize$ } from "tur:std";
 
                export function start({ store }) {
-                   mount(view(() => Text({ text: "x" })));
+                   mount(view(() => Text({ text: "x" })
+     .build()));
                    globalThis.__vp = JSON.stringify(store.get(viewportSize$));
                }"#,
         ));

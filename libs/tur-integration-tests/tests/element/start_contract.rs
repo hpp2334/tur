@@ -31,7 +31,9 @@ fn start_is_called_and_cleanup_runs_before_reload() {
         globalThis.__log = [];
         export function start() {
             globalThis.__log.push("start1");
-            mount(Text({ text: "one", queryKey: ["one"] }));
+            mount(Text({ text: "one" })
+    .queryKey(["one"])
+    .build());
         }
     "#,
     )
@@ -47,7 +49,9 @@ fn start_is_called_and_cleanup_runs_before_reload() {
         import { mount, Text } from "tur:std";
         export function start() {
             globalThis.__log.push("start2");
-            mount(Text({ text: "two", queryKey: ["two"] }));
+            mount(Text({ text: "two" })
+    .queryKey(["two"])
+    .build());
             return () => {
                 globalThis.__log.push("cleanup2");
             };
@@ -114,7 +118,9 @@ fn reload_clears_leftover_root_tree() {
         r#"
         import { mount, Text } from "tur:std";
         export function start() {
-            mount(Text({ text: "one", queryKey: ["one"] }));
+            mount(Text({ text: "one" })
+    .queryKey(["one"])
+    .build());
         }
     "#,
     )
@@ -125,7 +131,9 @@ fn reload_clears_leftover_root_tree() {
         r#"
         import { mount, Text } from "tur:std";
         export function start() {
-            mount(Text({ text: "two", queryKey: ["two"] }));
+            mount(Text({ text: "two" })
+    .queryKey(["two"])
+    .build());
         }
     "#,
     )
@@ -154,7 +162,9 @@ fn remount_replaces_previous_root() {
         globalThis.__Text = Text;
         export function start({ store }) {
             globalThis.__store = store;
-            mount(Text({ text: "first", queryKey: ["first"] }));
+            mount(Text({ text: "first" })
+    .queryKey(["first"])
+    .build());
         }
     "#,
     )
@@ -164,7 +174,7 @@ fn remount_replaces_previous_root() {
 
     // Second mount via the stashed reference (same module still loaded).
     app.eval_js(
-        r#"globalThis.__mount(globalThis.__Text({ text: "second", queryKey: ["second"] }));"#,
+        r#"globalThis.__mount(globalThis.__Text({ text: "second" }).queryKey(["second"]).build());"#,
     );
     app.wait_for_timeout(Duration::ZERO);
 
@@ -215,7 +225,9 @@ fn start_returning_non_function_is_ok() {
         r#"
         import { mount, Text } from "tur:std";
         export function start() {
-            mount(Text({ text: "plain", queryKey: ["plain"] }));
+            mount(Text({ text: "plain" })
+    .queryKey(["plain"])
+    .build());
             // No cleanup — returning undefined is fine.
         }
     "#,
@@ -234,7 +246,8 @@ fn dev_tool_tree_reflects_reload() {
         r#"
         import { mount, Text } from "tur:std";
         export function start() {
-            mount(Text({ text: "x" }));
+            mount(Text({ text: "x" })
+    .build());
         }
     "#,
     )
@@ -275,10 +288,9 @@ fn start_receives_instance_store_and_single_arg_mount_works() {
         export function start({ store }) {
             globalThis.__instance_store = store;
             store.set(globalThis.__n, 11);
-            mount(Text({
-                text: String(store.get(globalThis.__n)),
-                queryKey: ["bound"],
-            }));
+            mount(Text({ text: String(store.get(globalThis.__n)) })
+    .queryKey(["bound"])
+    .build());
         }
     "#,
     )
@@ -307,7 +319,9 @@ fn reload_keeps_instance_tree_and_remounts_via_injected_store() {
         import { mount, Text } from "tur:std";
         export function start({ store }) {
             globalThis.__instance_store = store;
-            mount(Text({ text: "one", queryKey: ["one"] }));
+            mount(Text({ text: "one" })
+    .queryKey(["one"])
+    .build());
         }
     "#,
     )
@@ -322,7 +336,9 @@ fn reload_keeps_instance_tree_and_remounts_via_injected_store() {
             if (store !== globalThis.__instance_store) {
                 throw new Error("instance store identity changed across reload");
             }
-            mount(Text({ text: "two", queryKey: ["two"] }));
+            mount(Text({ text: "two" })
+    .queryKey(["two"])
+    .build());
         }
     "#,
     )

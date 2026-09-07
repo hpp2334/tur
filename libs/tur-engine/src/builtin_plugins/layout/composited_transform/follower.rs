@@ -261,6 +261,36 @@ fn decode_offset(v: &JsValue, ctx: &mut Context) -> Offset {
     Offset::new(x, y)
 }
 
+pub(super) static TABLE: crate::core::js_runtime::builder::BuilderTable =
+    crate::core::js_runtime::builder::BuilderTable {
+        methods: &[
+            crate::core::js_runtime::builder::BuilderMethod::new(
+                "link",
+                crate::core::js_runtime::builder::setters::link,
+            ),
+            crate::core::js_runtime::builder::BuilderMethod::new(
+                "targetAnchor",
+                crate::core::js_runtime::builder::setters::targetAnchor,
+            ),
+            crate::core::js_runtime::builder::BuilderMethod::new(
+                "followerAnchor",
+                crate::core::js_runtime::builder::setters::followerAnchor,
+            ),
+            crate::core::js_runtime::builder::BuilderMethod::new(
+                "targetOffset",
+                crate::core::js_runtime::builder::setters::targetOffset,
+            ),
+            crate::core::js_runtime::builder::BuilderMethod::new(
+                "showWhenUnlinked",
+                crate::core::js_runtime::builder::setters::showWhenUnlinked,
+            ),
+        ],
+        child: true,
+        children: false,
+    };
+
+crate::core::js_runtime::builder::builder_factory!(tur_follower_factory, tur_follower, &TABLE);
+
 pub(super) fn tur_follower(
     _this: &JsValue,
     args: &[JsValue],

@@ -53,32 +53,42 @@ const App = view(() => {
         }),
     });
 
-    return Transform({
-        scale: derive((ctx) => ctx.get(dragScale$)),
-        child: PointerInteract({
-            onPointerDown: mutate((_ctx, ev) => {
-                dragStart = { x: ev.global.x, y: ev.global.y };
-                lastEvent = "down";
-                liftCtrl.forward();
-            }),
-            onPointerMove: mutate((_ctx, _ev) => {
-                if (!dragStart) return;
-                lastEvent = "move";
-            }),
-            onPointerUp: mutate((_ctx, _ev) => {
-                dragStart = null;
-                lastEvent = "up";
-                liftCtrl.reverse();
-            }),
-            child: Container({
-                width: 200,
-                height: 200,
-                color: Color.hex("#6366f1"),
-                queryKey: ["lift-target"],
-                children: [Text({ text: "drag me" })],
-            }),
-        }),
-    });
+    return Transform()
+        .scale(derive((ctx) => ctx.get(dragScale$)))
+        .child(
+            PointerInteract()
+                .onPointerDown(
+                    mutate((_ctx, ev) => {
+                        dragStart = { x: ev.global.x, y: ev.global.y };
+                        lastEvent = "down";
+                        liftCtrl.forward();
+                    }),
+                )
+                .onPointerMove(
+                    mutate((_ctx, _ev) => {
+                        if (!dragStart) return;
+                        lastEvent = "move";
+                    }),
+                )
+                .onPointerUp(
+                    mutate((_ctx, _ev) => {
+                        dragStart = null;
+                        lastEvent = "up";
+                        liftCtrl.reverse();
+                    }),
+                )
+                .child(
+                    Container()
+                        .width(200)
+                        .height(200)
+                        .color(Color.hex("#6366f1"))
+                        .queryKey(["lift-target"])
+                        .children([Text({ text: "drag me" }).build()])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

@@ -240,17 +240,17 @@ fn lazy_list_virtualizes_large_item_count() {
     app.eval_module_source(
         r#"
         import { mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(LazyList({
-            axis: 0,
-            itemCount: 10000,
-            itemExtent: 50,
-            overscan: 2,
-            builder: (i) => Container({
-                height: 50,
-                color: createColor(200, 200, 200, 255),
-                children: [Text({ text: "Item " + i })],
-            }),
-        }));
+        mount(LazyList({ itemCount: 10000 })
+    .axis(0)
+    .itemExtent(50)
+    .overscan(2)
+    .builder((i) => Container()
+     .height(50)
+     .color(createColor(200, 200, 200, 255))
+     .children([Text({ text: "Item " + i })
+    .build()])
+     .build())
+    .build());
     "#,
     )
     .unwrap();
@@ -314,18 +314,18 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.eval_module_source(
         r#"
         import { mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(LazyList({
-            axis: 0,
-            itemCount: 10000,
-            itemExtent: 56,
-            overscan: 2,
-            queryKey: ["ll"],
-            builder: (i) => Container({
-                height: 56,
-                color: createColor(200, 200, 200, 255),
-                children: [Text({ text: "Item " + i })],
-            }),
-        }));
+        mount(LazyList({ itemCount: 10000 })
+    .axis(0)
+    .itemExtent(56)
+    .overscan(2)
+    .queryKey(["ll"])
+    .builder((i) => Container()
+     .height(56)
+     .color(createColor(200, 200, 200, 255))
+     .children([Text({ text: "Item " + i })
+    .build()])
+     .build())
+    .build());
         "#,
     )
     .unwrap();

@@ -27,42 +27,42 @@ const App = view(() => {
     });
     const plainCtrl = createTextEditingController({});
 
-    return Container({
-        padding: 32,
-        children: [
-            Column({
-                children: [
-                    Text({
-                        text: "Password Input",
-                        fontSize: 18,
-                        color: Color.rgb(15, 23, 42),
-                    }),
-                    Input({
-                        controller: plainCtrl,
-                        placeholder: "Plain",
-                        fontSize: 16,
-                        width: 240,
-                        height: 38,
-                        queryKey: ["plain"],
-                    }),
-                    Input({
-                        controller: pwCtrl,
-                        placeholder: "Password",
-                        obscureText: true,
-                        fontSize: 16,
-                        width: 240,
-                        height: 38,
-                        queryKey: ["password"],
-                    }),
+    return Container()
+        .padding(32)
+        .children([
+            Column()
+                .children([
+                    Text({ text: "Password Input" })
+                        .fontSize(18)
+                        .color(Color.rgb(15, 23, 42))
+                        .build(),
+                    Input()
+                        .controller(plainCtrl)
+                        .placeholder("Plain")
+                        .fontSize(16)
+                        .width(240)
+                        .height(38)
+                        .queryKey(["plain"])
+                        .build(),
+                    Input()
+                        .controller(pwCtrl)
+                        .placeholder("Password")
+                        .obscureText(true)
+                        .fontSize(16)
+                        .width(240)
+                        .height(38)
+                        .queryKey(["password"])
+                        .build(),
                     Text({
                         text: derive((ctx) => `value: "${ctx.get(value$)}"`),
-                        fontSize: 12,
-                        color: Color.rgb(100, 116, 139),
-                    }),
-                ],
-            }),
-        ],
-    });
+                    })
+                        .fontSize(12)
+                        .color(Color.rgb(100, 116, 139))
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

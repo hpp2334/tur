@@ -18,19 +18,21 @@ import {
 const cursor$ = source<Cursor>("pointer");
 
 const App = view(() =>
-    Column({
-        children: [
-            MouseRegion({
-                cursor: derive((ctx) => ctx.get(cursor$)),
-                child: Container({
-                    width: 100,
-                    height: 50,
-                    color: Color.hex("#cccccc"),
-                    children: [],
-                }),
-            }),
-        ],
-    }),
+    Column()
+        .children([
+            MouseRegion()
+                .cursor(derive((ctx) => ctx.get(cursor$)))
+                .child(
+                    Container()
+                        .width(100)
+                        .height(50)
+                        .color(Color.hex("#cccccc"))
+                        .children([])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start({ store }: { store: Store }) {

@@ -19,42 +19,46 @@ const App = view(() => {
     // organization — shared *values* like COLORS — not about state placement).
     const count$ = source(0);
 
-    return Container({
-        color: COLORS.bg,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
+    return Container()
+        .color(COLORS.bg)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
                     Text({
                         text: derive(
                             (ctx) => `Multi-file count: ${ctx.get(count$)}`,
                         ),
-                        fontSize: 24,
-                        color: COLORS.text,
-                    }),
-                    PointerInteract({
-                        onClick: mutate((ctx, _ev) =>
-                            ctx.set(count$, ctx.get(count$) + 1),
-                        ),
-                        child: Container({
-                            width: 120,
-                            height: 44,
-                            borderRadius: 8,
-                            color: COLORS.primary,
-                            alignment: Alignment.Center,
-                            children: [
-                                Text({
-                                    text: "+1",
-                                    fontSize: 18,
-                                    color: COLORS.white,
-                                }),
-                            ],
-                        }),
-                    }),
-                ],
-            }),
-        ],
-    });
+                    })
+                        .fontSize(24)
+                        .color(COLORS.text)
+                        .build(),
+                    PointerInteract()
+                        .onClick(
+                            mutate((ctx, _ev) =>
+                                ctx.set(count$, ctx.get(count$) + 1),
+                            ),
+                        )
+                        .child(
+                            Container()
+                                .width(120)
+                                .height(44)
+                                .borderRadius(8)
+                                .color(COLORS.primary)
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Text({ text: "+1" })
+                                        .fontSize(18)
+                                        .color(COLORS.white)
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

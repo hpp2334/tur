@@ -22,25 +22,27 @@ const App = view(() => {
     const color$ = derive((ctx) => (ctx.get(checked$) ? green : undefined));
     const borderColor$ = derive((ctx) => (ctx.get(checked$) ? green : gray));
 
-    return Container({
-        height: 100,
-        width: 200,
-        padding: 20,
-        children: [
-            PointerInteract({
-                onClick: mutate((ctx, _ev) => ctx.set(checked$, false)),
-                child: Container({
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    color: color$ as unknown as Brush,
-                    borderWidth: 2,
-                    borderColor: borderColor$,
-                    borderPosition: BorderPosition.Center,
-                }),
-            }),
-        ],
-    });
+    return Container()
+        .height(100)
+        .width(200)
+        .padding(20)
+        .children([
+            PointerInteract()
+                .onClick(mutate((ctx, _ev) => ctx.set(checked$, false)))
+                .child(
+                    Container()
+                        .width(40)
+                        .height(40)
+                        .borderRadius(8)
+                        .color(color$ as unknown as Brush)
+                        .borderWidth(2)
+                        .borderColor(borderColor$)
+                        .borderPosition(BorderPosition.Center)
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

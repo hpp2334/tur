@@ -11,7 +11,9 @@ fn animation_controller_forward_with_on_tick() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -76,7 +78,9 @@ fn animation_controller_reverse_with_on_tick() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(200);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -130,7 +134,9 @@ fn animation_controller_stop_freezes_value() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -192,7 +198,9 @@ fn animation_controller_repeats() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -247,7 +255,8 @@ fn animation_controller_status_transitions() {
         r#"
         import { Container, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -291,7 +300,8 @@ fn animation_controller_on_end_callback() {
         r#"
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__ended = false;
@@ -324,7 +334,9 @@ fn animation_controller_ease_in_curve() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(0);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -367,7 +379,9 @@ fn animation_controller_pause_freezes_and_resume_continues() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -445,7 +459,9 @@ fn animation_controller_seek_jumps_value() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -505,7 +521,9 @@ fn animation_controller_set_speed_scales_time() {
         import { source, Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
-        const container = Container({ width: width$ });
+        const container = Container()
+     .width(width$)
+     .build();
         mount(container);
 
         const ctrl = createAnimationController({
@@ -585,7 +603,8 @@ fn controller_on_tick_can_read_status_from_forward() {
         r#"
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__tick_status = null;
@@ -619,7 +638,8 @@ fn controller_on_end_can_read_status_after_complete() {
         r#"
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__end_status = null;
@@ -654,7 +674,8 @@ fn controller_on_tick_can_read_value_during_forward() {
         r#"
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__tick_values = [];
@@ -704,7 +725,8 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
         globalThis.__tick_count = 0;
         globalThis.__end_count = 0;
         globalThis.__last_tick_value = -1;
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__ctrl = createAnimationController({
@@ -776,7 +798,8 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__tick_values = [];
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__ctrl = createAnimationController({
@@ -835,7 +858,8 @@ fn controller_repeat_three_then_completes() {
         import { Container, mount, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__end_count = 0;
-        const container = Container({});
+        const container = Container()
+     .build();
         mount(container);
 
         globalThis.__ctrl = createAnimationController({
@@ -893,7 +917,9 @@ fn animation_started_from_handler_schedules_next_frame() {
             onTick: mutate(function(_ctx, v) { store.set(width$, 100 + (200 - 100) * v); }),
         });
         mount(lifecycleView(() => ({
-            element: Container({ width: width$ }),
+            element: Container()
+     .width(width$)
+     .build(),
             onMounted$: mutate((_ctx) => { ctrl.forward(); }),
         })));
     "#,

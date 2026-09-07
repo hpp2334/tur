@@ -31,34 +31,35 @@ ctrl.setSpans([
 ]);
 
 const App = view(() =>
-    Expanded({
-        child: Container({
-            color: Color.hex("#282c34"),
-            padding: 20,
-            children: [
-                Column({
-                    crossAlignment: CrossAxisAlignment.Start,
-                    children: [
-                        Text({
-                            text: "Editor — colored spans + monospace",
-                            fontSize: 14,
-                            color: Color.hex("#848da5"),
-                        }),
-                        Container({ height: 12 }),
-                        Input({
-                            controller: ctrl,
-                            multiline: true,
-                            fontFamily: "monospace",
-                            fontSize: 18,
-                            color: Color.hex("#abb2bf"),
-                            width: 360,
-                            height: 120,
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    }),
+    Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#282c34"))
+                .padding(20)
+                .children([
+                    Column()
+                        .crossAlignment(CrossAxisAlignment.Start)
+                        .children([
+                            Text({ text: "Editor — colored spans + monospace" })
+                                .fontSize(14)
+                                .color(Color.hex("#848da5"))
+                                .build(),
+                            Container().height(12).build(),
+                            Input()
+                                .controller(ctrl)
+                                .multiline(true)
+                                .fontFamily("monospace")
+                                .fontSize(18)
+                                .color(Color.hex("#abb2bf"))
+                                .width(360)
+                                .height(120)
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {

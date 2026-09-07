@@ -60,92 +60,118 @@ function FileRow({
     entry: DirEntry;
     index: number;
 }): Element {
-    return Column({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        mainAxisSize: MainAxisSize.Min,
-        children: [
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Stretch)
+        .mainAxisSize(MainAxisSize.Min)
+        .children([
             index === 0
-                ? SizedBox({ width: 0, height: 0 })
-                : SizedBox({ height: 4 }),
-            MouseRegion({
-                cursor: "pointer",
-                onEnter: mutate((ctx: StoreCtx, _ev) => {
-                    ctx.set(hoveredPath$, entry.path);
-                }),
-                onExit: mutate((ctx: StoreCtx, _ev) => {
-                    ctx.set(hoveredPath$, null);
-                }),
-                child: PointerInteract({
-                    onClick: mutate((ctx: StoreCtx, _ev) => {
-                        if (entry.isDir) ctx.set(openFolder, entry);
-                        else ctx.set(selectEntry, entry);
+                ? SizedBox().width(0).height(0).build()
+                : SizedBox().height(4).build(),
+            MouseRegion()
+                .cursor("pointer")
+                .onEnter(
+                    mutate((ctx: StoreCtx, _ev) => {
+                        ctx.set(hoveredPath$, entry.path);
                     }),
-                    child: Container({
-                        padding: 9,
-                        borderRadius: 8,
-                        color: derive((ctx) => {
-                            const sel = ctx.get(selectedPath$);
-                            const hov = ctx.get(hoveredPath$);
-                            if (sel === entry.path) return COLORS.rowSelected;
-                            if (hov === entry.path) return COLORS.rowHover;
-                            return COLORS.panel;
-                        }),
-                        children: [
-                            Row({
-                                children: [
-                                    Image({
-                                        resourceId: entry.isDir
-                                            ? getIcon("folder")
-                                            : getIcon("file"),
-                                        width: 17,
-                                        height: 17,
-                                        queryKey: ["row-icon"],
-                                    }),
-                                    SizedBox({ width: 10 }),
-                                    Expanded({
-                                        child: Text({
-                                            text: entry.name,
-                                            fontSize: 13,
-                                            color: COLORS.text,
-                                        }),
-                                    }),
-                                    SizedBox({ width: 10 }),
-                                    Text({
-                                        text: entry.isDir
-                                            ? "Folder"
-                                            : fmtSize(entry.size),
-                                        fontSize: 11,
-                                        color: COLORS.textSubtle,
-                                    }),
-                                ],
+                )
+                .onExit(
+                    mutate((ctx: StoreCtx, _ev) => {
+                        ctx.set(hoveredPath$, null);
+                    }),
+                )
+                .child(
+                    PointerInteract()
+                        .onClick(
+                            mutate((ctx: StoreCtx, _ev) => {
+                                if (entry.isDir) ctx.set(openFolder, entry);
+                                else ctx.set(selectEntry, entry);
                             }),
-                        ],
-                    }),
-                }),
-            }),
-        ],
-    });
+                        )
+                        .child(
+                            Container()
+                                .padding(9)
+                                .borderRadius(8)
+                                .color(
+                                    derive((ctx) => {
+                                        const sel = ctx.get(selectedPath$);
+                                        const hov = ctx.get(hoveredPath$);
+                                        if (sel === entry.path)
+                                            return COLORS.rowSelected;
+                                        if (hov === entry.path)
+                                            return COLORS.rowHover;
+                                        return COLORS.panel;
+                                    }),
+                                )
+                                .children([
+                                    Row()
+                                        .children([
+                                            Image({
+                                                resourceId: entry.isDir
+                                                    ? getIcon("folder")
+                                                    : getIcon("file"),
+                                            })
+                                                .width(17)
+                                                .height(17)
+                                                .queryKey(["row-icon"])
+                                                .build(),
+                                            SizedBox().width(10).build(),
+                                            Expanded()
+                                                .child(
+                                                    Text({ text: entry.name })
+                                                        .fontSize(13)
+                                                        .color(COLORS.text)
+                                                        .build(),
+                                                )
+                                                .build(),
+                                            SizedBox().width(10).build(),
+                                            Text({
+                                                text: entry.isDir
+                                                    ? "Folder"
+                                                    : fmtSize(entry.size),
+                                            })
+                                                .fontSize(11)
+                                                .color(COLORS.textSubtle)
+                                                .build(),
+                                        ])
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 // --- Breadcrumb -----------------------------------------------------------
 
 function RepoCrumb(): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx: StoreCtx, _ev) => ctx.set(navigateToRoot)),
-            child: Container({
-                padding: 4,
-                children: [
-                    Text({
-                        text: derive((ctx) => ctx.get(repo$)?.fullName ?? ""),
-                        fontSize: 13,
-                        color: COLORS.accent,
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx: StoreCtx, _ev) => ctx.set(navigateToRoot)),
+                )
+                .child(
+                    Container()
+                        .padding(4)
+                        .children([
+                            Text({
+                                text: derive(
+                                    (ctx) => ctx.get(repo$)?.fullName ?? "",
+                                ),
+                            })
+                                .fontSize(13)
+                                .color(COLORS.accent)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 // --- Download button (reactive: idle → loading w/ spinner → done/error) --
@@ -154,24 +180,24 @@ function RepoCrumb(): Element {
 // rather than relying on prop-level re-resolution.
 
 function Spinner(): Element {
-    return Transform({
-        rotate: derive((ctx) => ctx.get(spinProgress$) * 2 * Math.PI),
-        child: Image({
-            resourceId: getIcon("spinner"),
-            width: 14,
-            height: 14,
-            queryKey: ["dl-spinner"],
-        }),
-    });
+    return Transform()
+        .rotate(derive((ctx) => ctx.get(spinProgress$) * 2 * Math.PI))
+        .child(
+            Image({ resourceId: getIcon("spinner") })
+                .width(14)
+                .height(14)
+                .queryKey(["dl-spinner"])
+                .build(),
+        )
+        .build();
 }
 
 function CheckIcon(): Element {
-    return Image({
-        resourceId: getIcon("check"),
-        width: 14,
-        height: 14,
-        queryKey: ["dl-check"],
-    });
+    return Image({ resourceId: getIcon("check") })
+        .width(14)
+        .height(14)
+        .queryKey(["dl-check"])
+        .build();
 }
 
 /** One button body: coloured pill with an optional leading icon + label. */
@@ -181,82 +207,90 @@ function dlShell(
     label: string,
     leading: Element | null,
 ): Element {
-    const textEl = Text({ text: label, fontSize: 13, color: fg as Brush });
-    return Container({
-        padding: 7,
-        borderRadius: 7,
-        color: bg as Brush,
-        children: [
-            Row({
-                mainAxisSize: MainAxisSize.Min,
-                children: leading
-                    ? [leading, SizedBox({ width: 6 }), textEl]
-                    : [textEl],
-            }),
-        ],
-    });
+    const textEl = Text({ text: label })
+        .fontSize(13)
+        .color(fg as Brush)
+        .build();
+    return Container()
+        .padding(7)
+        .borderRadius(7)
+        .color(bg as Brush)
+        .children([
+            Row()
+                .mainAxisSize(MainAxisSize.Min)
+                .children(
+                    leading
+                        ? [leading, SizedBox().width(6).build(), textEl]
+                        : [textEl],
+                )
+                .build(),
+        ])
+        .build();
 }
 
 function DownloadButton(): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            // doDownload self-guards against re-entry.
-            onClick: mutate((_ctx: StoreCtx, _ev) => _ctx.set(doDownload)),
-            child: Switch({
-                value: derive((ctx) => ctx.get(downloadStatus$)),
-                cases: [
-                    {
-                        key: "loading",
-                        child: () =>
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(mutate((_ctx: StoreCtx, _ev) => _ctx.set(doDownload)))
+                .child(
+                    Switch({ value: derive((ctx) => ctx.get(downloadStatus$)) })
+                        .cases([
+                            {
+                                key: "loading",
+                                child: () =>
+                                    dlShell(
+                                        COLORS.accentSoft,
+                                        COLORS.accent,
+                                        "Downloading…",
+                                        Spinner(),
+                                    ),
+                            },
+                            {
+                                key: "done",
+                                child: () =>
+                                    dlShell(
+                                        COLORS.success,
+                                        COLORS.accentFg,
+                                        "Saved",
+                                        CheckIcon(),
+                                    ),
+                            },
+                            {
+                                key: "error",
+                                child: () =>
+                                    dlShell(
+                                        COLORS.dangerSoft,
+                                        COLORS.danger,
+                                        "Failed",
+                                        null,
+                                    ),
+                            },
+                        ])
+                        .fallback(() =>
                             dlShell(
-                                COLORS.accentSoft,
-                                COLORS.accent,
-                                "Downloading…",
-                                Spinner(),
-                            ),
-                    },
-                    {
-                        key: "done",
-                        child: () =>
-                            dlShell(
-                                COLORS.success,
-                                COLORS.accentFg,
-                                "Saved",
-                                CheckIcon(),
-                            ),
-                    },
-                    {
-                        key: "error",
-                        child: () =>
-                            dlShell(
-                                COLORS.dangerSoft,
-                                COLORS.danger,
-                                "Failed",
+                                derive((ctx) => {
+                                    const e = ctx.get(selectedEntry$);
+                                    return e && !e.isDir
+                                        ? COLORS.accent
+                                        : COLORS.subtleButton;
+                                }),
+                                derive((ctx) => {
+                                    const e = ctx.get(selectedEntry$);
+                                    return e && !e.isDir
+                                        ? COLORS.accentFg
+                                        : COLORS.textSubtle;
+                                }),
+                                "Download",
                                 null,
                             ),
-                    },
-                ],
-                fallback: () =>
-                    dlShell(
-                        derive((ctx) => {
-                            const e = ctx.get(selectedEntry$);
-                            return e && !e.isDir
-                                ? COLORS.accent
-                                : COLORS.subtleButton;
-                        }),
-                        derive((ctx) => {
-                            const e = ctx.get(selectedEntry$);
-                            return e && !e.isDir
-                                ? COLORS.accentFg
-                                : COLORS.textSubtle;
-                        }),
-                        "Download",
-                        null,
-                    ),
-            }),
-        }),
-    });
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 // --- Explorer screen ------------------------------------------------------
@@ -265,18 +299,18 @@ export function ExplorerScreen(): Element {
     // Top bar + toolbar are bare `Row`s (content-sized) — wrapping them in a
     // `Container` would inflate to the Column's full height and starve the
     // `Expanded` file list.
-    return Column({
-        crossAlignment: CrossAxisAlignment.Stretch,
-        children: [
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Stretch)
+        .children([
             // Top bar: back (up one level / back to landing) + repo crumb + path.
-            Row({
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
+            Row()
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
                     IconButton({
                         resourceId: getIcon("back"),
                         onClick: navigateUp,
                     }),
-                    SizedBox({ width: 8 }),
+                    SizedBox().width(8).build(),
                     RepoCrumb(),
                     // Path segments as a single reactive Text (avoids `Each`
                     // inflating this content-sized Row).
@@ -285,58 +319,60 @@ export function ExplorerScreen(): Element {
                             const segs = ctx.get(pathSegments$);
                             return segs.length ? ` / ${segs.join(" / ")}` : "";
                         }),
-                        fontSize: 13,
-                        color: COLORS.textSubtle,
-                    }),
-                    Expanded({ child: SizedBox({ width: 0, height: 0 }) }),
-                ],
-            }),
-            SizedBox({ height: 8 }),
+                    })
+                        .fontSize(13)
+                        .color(COLORS.textSubtle)
+                        .build(),
+                    Expanded()
+                        .child(SizedBox().width(0).height(0).build())
+                        .build(),
+                ])
+                .build(),
+            SizedBox().height(8).build(),
             // Toolbar.
-            Row({
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
+            Row()
+                .crossAlignment(CrossAxisAlignment.Center)
+                .children([
                     IconButton({
                         resourceId: getIcon("refresh"),
                         onClick: refresh,
                     }),
-                    SizedBox({ width: 8 }),
+                    SizedBox().width(8).build(),
                     DownloadButton(),
-                ],
-            }),
-            SizedBox({ height: 8 }),
-            Condition({
-                condition: derive((ctx) => ctx.get(error$) !== null),
-                child: () =>
-                    Container({
-                        padding: 10,
-                        borderRadius: 8,
-                        color: COLORS.dangerSoft,
-                        children: [
+                ])
+                .build(),
+            SizedBox().height(8).build(),
+            Condition({ condition: derive((ctx) => ctx.get(error$) !== null) })
+                .elseChild(() => SizedBox().width(0).height(0).build())
+                .child(() =>
+                    Container()
+                        .padding(10)
+                        .borderRadius(8)
+                        .color(COLORS.dangerSoft)
+                        .children([
                             Text({
                                 text: derive((ctx) => ctx.get(error$) ?? ""),
-                                fontSize: 12,
-                                color: COLORS.danger,
-                            }),
-                        ],
-                    }),
-                elseChild: () => SizedBox({ width: 0, height: 0 }),
-            }),
-            SizedBox({ height: 8 }),
+                            })
+                                .fontSize(12)
+                                .color(COLORS.danger)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+            SizedBox().height(8).build(),
             // File list (loading / empty / list). When an error is present
             // the banner above already explains it; render a blank area here
             // instead of the "folder is empty" state (which would mislead).
-            Expanded({
-                child: fileListView(),
-            }),
-        ],
-    });
+            Expanded().child(fileListView()).build(),
+        ])
+        .build();
 }
 
 function fileListView(): Element {
-    return Container({
-        padding: 4,
-        children: [
+    return Container()
+        .padding(4)
+        .children([
             Switch({
                 value: derive((ctx) => {
                     if (ctx.get(loading$) && ctx.get(entries$).length === 0)
@@ -345,20 +381,20 @@ function fileListView(): Element {
                         return ctx.get(error$) !== null ? "blank" : "empty";
                     return "list";
                 }),
-                cases: [
+            })
+                .cases([
                     {
                         key: "loading",
                         child: () =>
-                            Container({
-                                alignment: Alignment.Center,
-                                children: [
-                                    Text({
-                                        text: "Loading…",
-                                        fontSize: 13,
-                                        color: COLORS.textSubtle,
-                                    }),
-                                ],
-                            }),
+                            Container()
+                                .alignment(Alignment.Center)
+                                .children([
+                                    Text({ text: "Loading…" })
+                                        .fontSize(13)
+                                        .color(COLORS.textSubtle)
+                                        .build(),
+                                ])
+                                .build(),
                     },
                     {
                         key: "empty",
@@ -366,63 +402,68 @@ function fileListView(): Element {
                     },
                     {
                         key: "blank",
-                        child: () => SizedBox({ width: 0, height: 0 }),
+                        child: () => SizedBox().width(0).height(0).build(),
                     },
                     {
                         key: "list",
                         child: () =>
-                            ScrollView({
-                                axis: Axis.Vertical,
-                                child: Column({
-                                    crossAlignment: CrossAxisAlignment.Stretch,
-                                    mainAxisSize: MainAxisSize.Min,
-                                    children: [
-                                        Each({
-                                            items: entries$,
-                                            crossAlignment:
-                                                CrossAxisAlignment.Stretch,
-                                            build: (e: DirEntry, i: number) =>
-                                                FileRow({ entry: e, index: i }),
-                                        }),
-                                    ],
-                                }),
-                            }),
+                            ScrollView()
+                                .axis(Axis.Vertical)
+                                .child(
+                                    Column()
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Stretch,
+                                        )
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children([
+                                            Each({
+                                                items: entries$,
+                                            })
+                                                .itemBuilder(
+                                                    (e: DirEntry, i: number) =>
+                                                        FileRow({
+                                                            entry: e,
+                                                            index: i,
+                                                        }),
+                                                )
+                                                .build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
                     },
-                ],
-            }),
-        ],
-    });
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 function emptyFolder(): Element {
-    return Container({
-        alignment: Alignment.Center,
-        padding: 40,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Center,
-                mainAxisSize: MainAxisSize.Min,
-                children: [
-                    Image({
-                        resourceId: getIcon("folderSoft"),
-                        width: 40,
-                        height: 40,
-                        queryKey: ["empty-icon"],
-                    }),
-                    SizedBox({ height: 12 }),
-                    Text({
-                        text: "This folder is empty",
-                        fontSize: 14,
-                        color: COLORS.text,
-                    }),
-                    SizedBox({ height: 6 }),
-                    Text({
-                        text: "No files to show at this path.",
-                        fontSize: 12,
-                        color: COLORS.textSubtle,
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .alignment(Alignment.Center)
+        .padding(40)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Center)
+                .mainAxisSize(MainAxisSize.Min)
+                .children([
+                    Image({ resourceId: getIcon("folderSoft") })
+                        .width(40)
+                        .height(40)
+                        .queryKey(["empty-icon"])
+                        .build(),
+                    SizedBox().height(12).build(),
+                    Text({ text: "This folder is empty" })
+                        .fontSize(14)
+                        .color(COLORS.text)
+                        .build(),
+                    SizedBox().height(6).build(),
+                    Text({ text: "No files to show at this path." })
+                        .fontSize(12)
+                        .color(COLORS.textSubtle)
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }

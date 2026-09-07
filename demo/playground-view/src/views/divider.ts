@@ -49,59 +49,77 @@ export function VDivider(opts: {
     const myId = ++dividerCounter;
     let dragStart: Point | null = null;
     let dragLast: Point | null = null;
-    return MouseRegion({
-        cursor: "col-resize",
-        child: PointerInteract({
-            onPointerDown: mutate((ctx, ev) => {
-                ctx.set(dragOwner$, myId);
-                dragStart = { x: ev.global.x, y: ev.global.y };
-                dragLast = { x: ev.global.x, y: ev.global.y };
-            }),
-            onPointerMove: mutate((ctx, ev) => {
-                if (ctx.get(dragOwner$) !== myId || !dragStart || !dragLast)
-                    return;
-                const event: PointerDragEvent = {
-                    deltaFromStart: {
-                        x: ev.global.x - dragStart.x,
-                        y: ev.global.y - dragStart.y,
-                    },
-                    deltaFromLast: {
-                        x: ev.global.x - dragLast.x,
-                        y: ev.global.y - dragLast.y,
-                    },
-                };
-                dragLast = { x: ev.global.x, y: ev.global.y };
-                if (
-                    event.deltaFromLast.x !== 0 ||
-                    event.deltaFromLast.y !== 0
-                ) {
-                    ctx.set(opts.onDrag, event);
-                }
-            }),
-            onPointerUp: mutate((ctx, _ev) => {
-                if (ctx.get(dragOwner$) !== myId) return;
-                ctx.set(dragOwner$, null);
-                dragStart = null;
-                dragLast = null;
-            }),
-            child: Container({
-                width: 8,
-                color: derive((ctx) =>
-                    ctx.get(dragOwner$) === myId
-                        ? Color.hex("#0ea5e922")
-                        : Color.hex("#00000000"),
-                ),
-                children: [
-                    Container({
-                        width: 1,
-                        color: derive((ctx) =>
-                            ctx.get(dragOwner$) === myId
-                                ? tokens.accent.solid
-                                : tokens.border.subtle,
-                        ),
+    return MouseRegion()
+        .cursor("col-resize")
+        .child(
+            PointerInteract()
+                .onPointerDown(
+                    mutate((ctx, ev) => {
+                        ctx.set(dragOwner$, myId);
+                        dragStart = { x: ev.global.x, y: ev.global.y };
+                        dragLast = { x: ev.global.x, y: ev.global.y };
                     }),
-                ],
-            }),
-        }),
-    });
+                )
+                .onPointerMove(
+                    mutate((ctx, ev) => {
+                        if (
+                            ctx.get(dragOwner$) !== myId ||
+                            !dragStart ||
+                            !dragLast
+                        )
+                            return;
+                        const event: PointerDragEvent = {
+                            deltaFromStart: {
+                                x: ev.global.x - dragStart.x,
+                                y: ev.global.y - dragStart.y,
+                            },
+                            deltaFromLast: {
+                                x: ev.global.x - dragLast.x,
+                                y: ev.global.y - dragLast.y,
+                            },
+                        };
+                        dragLast = { x: ev.global.x, y: ev.global.y };
+                        if (
+                            event.deltaFromLast.x !== 0 ||
+                            event.deltaFromLast.y !== 0
+                        ) {
+                            ctx.set(opts.onDrag, event);
+                        }
+                    }),
+                )
+                .onPointerUp(
+                    mutate((ctx, _ev) => {
+                        if (ctx.get(dragOwner$) !== myId) return;
+                        ctx.set(dragOwner$, null);
+                        dragStart = null;
+                        dragLast = null;
+                    }),
+                )
+                .child(
+                    Container()
+                        .width(8)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(dragOwner$) === myId
+                                    ? Color.hex("#0ea5e922")
+                                    : Color.hex("#00000000"),
+                            ),
+                        )
+                        .children([
+                            Container()
+                                .width(1)
+                                .color(
+                                    derive((ctx) =>
+                                        ctx.get(dragOwner$) === myId
+                                            ? tokens.accent.solid
+                                            : tokens.border.subtle,
+                                    ),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }

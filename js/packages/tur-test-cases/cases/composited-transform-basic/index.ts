@@ -15,23 +15,23 @@ import {
 // target's top-left. The follower is a direct root-Stack child (overlay slot).
 const App = view(() => {
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: CompositedTransformTarget({
-                    link,
-                    child: SizedBox({ width: 60, height: 40 }),
-                }),
-            }),
-            CompositedTransformFollower({
-                link,
-                child: Container({ width: 20, height: 20, color: "red" }),
-            }),
-        ],
-    });
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(SizedBox().width(60).height(40).build())
+                        .build(),
+                )
+                .build(),
+            CompositedTransformFollower({ link })
+                .child(Container().width(20).height(20).color("red").build())
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

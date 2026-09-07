@@ -1,10 +1,10 @@
 import { Column, CrossAxisAlignment, mount, SizedBox, view } from "tur:std";
 
 const App = view(() =>
-    Column({
-        crossAlignment: CrossAxisAlignment.Start,
-        children: [SizedBox({ width: 100, height: 50 })],
-    }),
+    Column()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .children([SizedBox().width(100).height(50).build()])
+        .build(),
 );
 
 export function start() {

@@ -7,7 +7,7 @@ const App = view(() =>
             { content: "Inherited", color: Color.hex("#ff0000") },
             { content: "Override", fontSize: 10, color: Color.hex("#00ff00") },
         ],
-    } as never),
+    } as never).build(),
 );
 
 export function start() {

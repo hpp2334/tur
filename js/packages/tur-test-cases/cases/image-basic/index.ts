@@ -9,18 +9,17 @@ const pngBytes = new Uint8Array([
 const resource = createImageResource(pngBytes);
 
 const App = view(() =>
-    Container({
-        width: 200,
-        height: 100,
-        children: [
-            Image({
-                resourceId: resource,
-                width: 200,
-                height: 100,
-                fit: 0,
-            }),
-        ],
-    }),
+    Container()
+        .width(200)
+        .height(100)
+        .children([
+            Image({ resourceId: resource })
+                .width(200)
+                .height(100)
+                .fit(0)
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

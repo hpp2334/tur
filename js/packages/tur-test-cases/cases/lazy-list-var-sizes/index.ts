@@ -117,98 +117,104 @@ function buildItem(i: number, axis: Axis): Element {
         // Row spans full viewport width (clamped); row height = `main`.
         // Inner bar of width `cross` proves "different widths" per row.
         const barH = Math.min(main - 16, 26);
-        return Container({
-            height: main,
-            color: zebra,
-            padding: 8,
-            alignment: Alignment.CenterLeft,
-            children: [
-                Row({
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        Container({
-                            width: cross,
-                            height: barH,
-                            color: barColor,
-                            borderRadius: 4,
-                        }),
-                        SizedBox({ width: 10 }),
-                        Text({
-                            text: `#${i}  h=${main}  bar=${cross}`,
-                            fontSize: 11,
-                            color: labelColor,
-                        }),
-                    ],
-                }),
-            ],
-        });
+        return Container()
+            .height(main)
+            .color(zebra)
+            .padding(8)
+            .alignment(Alignment.CenterLeft)
+            .children([
+                Row()
+                    .mainAxisSize(MainAxisSize.Min)
+                    .children([
+                        Container()
+                            .width(cross)
+                            .height(barH)
+                            .color(barColor)
+                            .borderRadius(4)
+                            .build(),
+                        SizedBox().width(10).build(),
+                        Text({ text: `#${i}  h=${main}  bar=${cross}` })
+                            .fontSize(11)
+                            .color(labelColor)
+                            .build(),
+                    ])
+                    .build(),
+            ])
+            .build();
     }
 
     // Horizontal: column spans full viewport height (clamped); column
     // width = `main`. Inner bar of height `cross` proves "different heights".
     const barW = Math.min(main - 16, 26);
-    return Container({
-        width: main,
-        color: zebra,
-        padding: 8,
-        alignment: Alignment.TopCenter,
-        children: [
-            Column({
-                mainAxisSize: MainAxisSize.Min,
-                children: [
-                    Container({
-                        width: barW,
-                        height: cross,
-                        color: barColor,
-                        borderRadius: 4,
-                    }),
-                    SizedBox({ height: 8 }),
-                    Text({
-                        text: `#${i}`,
-                        fontSize: 11,
-                        color: labelColor,
-                    }),
-                    Text({
-                        text: `w=${main}`,
-                        fontSize: 10,
-                        color: Color.hex("#64748b"),
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .width(main)
+        .color(zebra)
+        .padding(8)
+        .alignment(Alignment.TopCenter)
+        .children([
+            Column()
+                .mainAxisSize(MainAxisSize.Min)
+                .children([
+                    Container()
+                        .width(barW)
+                        .height(cross)
+                        .color(barColor)
+                        .borderRadius(4)
+                        .build(),
+                    SizedBox().height(8).build(),
+                    Text({ text: `#${i}` })
+                        .fontSize(11)
+                        .color(labelColor)
+                        .build(),
+                    Text({ text: `w=${main}` })
+                        .fontSize(10)
+                        .color(Color.hex("#64748b"))
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 // Takes the reactive axis as a parameter (local state owned by the view fn).
 function ToggleButton(axis$: Readable<Axis>): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx, _ev: PointerInteractEvent) => {
-                const cur = ctx.get(axis$);
-                ctx.set(
-                    axis$,
-                    cur === Axis.Vertical ? Axis.Horizontal : Axis.Vertical,
-                );
-            }),
-            child: Container({
-                padding: 10,
-                borderRadius: 8,
-                color: Color.hex("#4f46e5"),
-                children: [
-                    Text({
-                        text: derive((ctx) =>
-                            ctx.get(axis$) === Axis.Vertical
-                                ? "Axis: Vertical  (click to flip)"
-                                : "Axis: Horizontal  (click to flip)",
-                        ),
-                        fontSize: 13,
-                        color: Color.hex("#ffffff"),
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx, _ev: PointerInteractEvent) => {
+                        const cur = ctx.get(axis$);
+                        ctx.set(
+                            axis$,
+                            cur === Axis.Vertical
+                                ? Axis.Horizontal
+                                : Axis.Vertical,
+                        );
                     }),
-                ],
-            }),
-        }),
-    });
+                )
+                .child(
+                    Container()
+                        .padding(10)
+                        .borderRadius(8)
+                        .color(Color.hex("#4f46e5"))
+                        .children([
+                            Text({
+                                text: derive((ctx) =>
+                                    ctx.get(axis$) === Axis.Vertical
+                                        ? "Axis: Vertical  (click to flip)"
+                                        : "Axis: Horizontal  (click to flip)",
+                                ),
+                            })
+                                .fontSize(13)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() => {
@@ -218,52 +224,61 @@ const App = view(() => {
     // Toggling flips vertical ↔ horizontal and rebuilds the list.
     const axis$ = source<Axis>(Axis.Vertical);
 
-    return Expanded({
-        child: Container({
-            color: Color.hex("#020617"),
-            padding: 16,
-            children: [
-                Column({
-                    crossAlignment: CrossAxisAlignment.Start,
-                    children: [
-                        ToggleButton(axis$),
-                        SizedBox({ height: 12 }),
-                        Expanded({
-                            child: Container({
-                                color: Color.hex("#0b1220"),
-                                borderRadius: 8,
-                                children: [
-                                    // Each rebuilds its single child when axis$
-                                    // changes — re-mounting the LazyList with
-                                    // the new axis. This is the canonical
-                                    // rebuild-on-change idiom in this codebase.
-                                    Each({
-                                        items: derive((ctx) => [
-                                            ctx.get(axis$),
-                                        ]),
-                                        build: (axis: Axis) =>
-                                            LazyList({
-                                                axis,
-                                                itemCount: ITEM_COUNT,
-                                                overscan: 2,
-                                                queryKey: [
-                                                    "lazy-list-var-sizes",
-                                                    axis === Axis.Vertical
-                                                        ? "v"
-                                                        : "h",
-                                                ],
-                                                builder: (i: number) =>
-                                                    buildItem(i, axis),
-                                            }),
-                                    }),
-                                ],
-                            }),
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    });
+    return Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#020617"))
+                .padding(16)
+                .children([
+                    Column()
+                        .crossAlignment(CrossAxisAlignment.Start)
+                        .children([
+                            ToggleButton(axis$),
+                            SizedBox().height(12).build(),
+                            Expanded()
+                                .child(
+                                    Container()
+                                        .color(Color.hex("#0b1220"))
+                                        .borderRadius(8)
+                                        .children([
+                                            // Each rebuilds its single child when axis$
+                                            // changes — re-mounting the LazyList with
+                                            // the new axis. This is the canonical
+                                            // rebuild-on-change idiom in this codebase.
+                                            Each({
+                                                items: derive((ctx) => [
+                                                    ctx.get(axis$),
+                                                ]),
+                                            })
+                                                .itemBuilder((axis: Axis) =>
+                                                    LazyList({
+                                                        itemCount: ITEM_COUNT,
+                                                    })
+                                                        .axis(axis)
+                                                        .overscan(2)
+                                                        .queryKey([
+                                                            "lazy-list-var-sizes",
+                                                            axis ===
+                                                            Axis.Vertical
+                                                                ? "v"
+                                                                : "h",
+                                                        ])
+                                                        .builder((i: number) =>
+                                                            buildItem(i, axis),
+                                                        )
+                                                        .build(),
+                                                )
+                                                .build(),
+                                        ])
+                                        .build(),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

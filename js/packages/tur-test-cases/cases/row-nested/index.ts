@@ -6,15 +6,18 @@ import { CrossAxisAlignment, mount, Row, SizedBox, view } from "tur:std";
 // width — leaving the following sibling visible instead of pushed past the
 // outer extent.
 const App = view(() =>
-    Row({
-        crossAlignment: CrossAxisAlignment.Start,
-        children: [
-            Row({
-                children: [SizedBox({ width: 20 }), SizedBox({ width: 30 })],
-            }),
-            SizedBox({ width: 50, height: 10 }),
-        ],
-    }),
+    Row()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .children([
+            Row()
+                .children([
+                    SizedBox().width(20).build(),
+                    SizedBox().width(30).build(),
+                ])
+                .build(),
+            SizedBox().width(50).height(10).build(),
+        ])
+        .build(),
 );
 
 export function start() {

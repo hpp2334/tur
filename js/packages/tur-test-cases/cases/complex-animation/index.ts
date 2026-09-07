@@ -167,81 +167,91 @@ function Card(s: AnimState): Element {
     // Tween / ColorTween abstractions (Flutter-aligned). The explicit
     // AnimationController drives `progress$` continuously; the tweens handle
     // the value interpolation that previously needed hand-rolled `lerp`.
-    return Container({
-        // Width: 120 → 280
-        width: derive((ctx) => widthTween.lerp(ctx.get(s.progress$))),
-        height: 160,
-        borderRadius: derive((ctx) => radiusTween.lerp(ctx.get(s.progress$))),
-        color: derive((ctx) => colorTween.lerp(ctx.get(s.progress$))),
-        shadowColor: Color.rgba(15, 23, 42, 80),
-        shadowBlur: 24,
-        shadowOffset: [0, 8],
-        alignment: Alignment.Center,
-        children: [
+    return Container()
+        .width(derive((ctx) => widthTween.lerp(ctx.get(s.progress$))))
+        .height(160)
+        .borderRadius(derive((ctx) => radiusTween.lerp(ctx.get(s.progress$))))
+        .color(derive((ctx) => colorTween.lerp(ctx.get(s.progress$))))
+        .shadowColor(Color.rgba(15, 23, 42, 80))
+        .shadowBlur(24)
+        .shadowOffset([0, 8])
+        .alignment(Alignment.Center)
+        .children([
             // Rotating inner shape — demonstrates the Transform element.
-            Transform({
-                rotate: derive((ctx) => ctx.get(s.progress$) * 2 * Math.PI),
-                child: Container({
-                    width: 60,
-                    height: 60,
-                    borderRadius: 12,
-                    color: Color.rgba(255, 255, 255, 255),
-                }),
-            }),
-        ],
-    });
+            Transform()
+                .rotate(derive((ctx) => ctx.get(s.progress$) * 2 * Math.PI))
+                .child(
+                    Container()
+                        .width(60)
+                        .height(60)
+                        .borderRadius(12)
+                        .color(Color.rgba(255, 255, 255, 255))
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 function OrbitingDot(s: AnimState): Element {
     // A dot that orbits around the card center.
-    return Positioned({
-        left: derive(
-            (ctx) => 140 + 80 * Math.cos(2 * Math.PI * ctx.get(s.progress$)),
-        ),
-        top: derive(
-            (ctx) => 80 + 80 * Math.sin(2 * Math.PI * ctx.get(s.progress$)),
-        ),
-        child: Container({
-            width: 20,
-            height: 20,
-            borderRadius: 999,
-            color: Color.rgba(34, 197, 94, 255),
-            shadowColor: Color.rgba(34, 197, 94, 120),
-            shadowBlur: 16,
-            shadowOffset: [0, 0],
-        }),
-    });
+    return Positioned()
+        .left(
+            derive(
+                (ctx) =>
+                    140 + 80 * Math.cos(2 * Math.PI * ctx.get(s.progress$)),
+            ),
+        )
+        .top(
+            derive(
+                (ctx) => 80 + 80 * Math.sin(2 * Math.PI * ctx.get(s.progress$)),
+            ),
+        )
+        .child(
+            Container()
+                .width(20)
+                .height(20)
+                .borderRadius(999)
+                .color(Color.rgba(34, 197, 94, 255))
+                .shadowColor(Color.rgba(34, 197, 94, 120))
+                .shadowBlur(16)
+                .shadowOffset([0, 0])
+                .build(),
+        )
+        .build();
 }
 
 function ProgressReadout(s: AnimState): Element {
     return Text({
         text: derive((ctx) => `${Math.round(ctx.get(s.progress$) * 100)}%`),
-        fontSize: 12,
-        color: Color.rgba(71, 85, 105, 255),
-    });
+    })
+        .fontSize(12)
+        .color(Color.rgba(71, 85, 105, 255))
+        .build();
 }
 
 function StatusBadge(s: AnimState): Element {
-    return Container({
-        padding: 6,
-        borderRadius: 999,
-        color: derive((ctx) => {
-            const s2 = ctx.get(s.status$);
-            if (s2 === "forward" || s2 === "reverse") {
-                return Color.rgba(34, 197, 94, 255);
-            }
-            if (s2 === "paused") return Color.rgba(245, 159, 11, 255);
-            if (s2 === "completed") return Color.rgba(99, 102, 241, 255);
-            return Color.rgba(148, 163, 184, 255);
-        }),
-        children: [
-            Text({
-                text: derive((ctx) => ctx.get(s.status$).toUpperCase()),
-                fontSize: 10,
-                color: Color.rgba(255, 255, 255, 255),
+    return Container()
+        .padding(6)
+        .borderRadius(999)
+        .color(
+            derive((ctx) => {
+                const s2 = ctx.get(s.status$);
+                if (s2 === "forward" || s2 === "reverse") {
+                    return Color.rgba(34, 197, 94, 255);
+                }
+                if (s2 === "paused") return Color.rgba(245, 159, 11, 255);
+                if (s2 === "completed") return Color.rgba(99, 102, 241, 255);
+                return Color.rgba(148, 163, 184, 255);
             }),
-        ],
-    });
+        )
+        .children([
+            Text({ text: derive((ctx) => ctx.get(s.status$).toUpperCase()) })
+                .fontSize(10)
+                .color(Color.rgba(255, 255, 255, 255))
+                .build(),
+        ])
+        .build();
 }
 
 function Button(
@@ -249,58 +259,72 @@ function Button(
     onClick: Mutation<[], void>,
     color = "#4f46e5",
 ): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: onClick as unknown as Mutation<
-                [PointerInteractEvent],
-                void
-            >,
-            child: Container({
-                padding: 8,
-                borderRadius: 6,
-                color: Color.hex(color),
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 11,
-                        color: Color.hex("#ffffff"),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    onClick as unknown as Mutation<
+                        [PointerInteractEvent],
+                        void
+                    >,
+                )
+                .child(
+                    Container()
+                        .padding(8)
+                        .borderRadius(6)
+                        .color(Color.hex(color))
+                        .children([
+                            Text({ text: label })
+                                .fontSize(11)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function SpeedButton(factor: number, label: string, s: AnimState): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx) =>
-                ctx.set(s.setSpeed, factor, label),
-            ) as unknown as Mutation<[PointerInteractEvent], void>,
-            child: Container({
-                padding: 6,
-                borderRadius: 6,
-                color: derive((ctx) =>
-                    ctx.get(s.speedLabel$) === label
-                        ? Color.hex("#1e293b")
-                        : Color.hex("#e2e8f0"),
-                ),
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 10,
-                        color: derive((ctx) =>
-                            ctx.get(s.speedLabel$) === label
-                                ? Color.hex("#ffffff")
-                                : Color.hex("#475569"),
-                        ),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx) =>
+                        ctx.set(s.setSpeed, factor, label),
+                    ) as unknown as Mutation<[PointerInteractEvent], void>,
+                )
+                .child(
+                    Container()
+                        .padding(6)
+                        .borderRadius(6)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(s.speedLabel$) === label
+                                    ? Color.hex("#1e293b")
+                                    : Color.hex("#e2e8f0"),
+                            ),
+                        )
+                        .children([
+                            Text({ text: label })
+                                .fontSize(10)
+                                .color(
+                                    derive((ctx) =>
+                                        ctx.get(s.speedLabel$) === label
+                                            ? Color.hex("#ffffff")
+                                            : Color.hex("#475569"),
+                                    ),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function CurveButton(
@@ -308,67 +332,87 @@ function CurveButton(
     label: string,
     s: AnimState,
 ): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx) =>
-                ctx.set(s.setCurve, curve),
-            ) as unknown as Mutation<[PointerInteractEvent], void>,
-            child: Container({
-                padding: 6,
-                borderRadius: 6,
-                color: derive((ctx) =>
-                    ctx.get(s.curveLabel$) === curve
-                        ? Color.hex("#0d9488")
-                        : Color.hex("#e2e8f0"),
-                ),
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 10,
-                        color: derive((ctx) =>
-                            ctx.get(s.curveLabel$) === curve
-                                ? Color.hex("#ffffff")
-                                : Color.hex("#475569"),
-                        ),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx) =>
+                        ctx.set(s.setCurve, curve),
+                    ) as unknown as Mutation<[PointerInteractEvent], void>,
+                )
+                .child(
+                    Container()
+                        .padding(6)
+                        .borderRadius(6)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(s.curveLabel$) === curve
+                                    ? Color.hex("#0d9488")
+                                    : Color.hex("#e2e8f0"),
+                            ),
+                        )
+                        .children([
+                            Text({ text: label })
+                                .fontSize(10)
+                                .color(
+                                    derive((ctx) =>
+                                        ctx.get(s.curveLabel$) === curve
+                                            ? Color.hex("#ffffff")
+                                            : Color.hex("#475569"),
+                                    ),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function LoopButton(s: AnimState): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx) => {
-                ctx.set(s.toggleLooping);
-            }) as unknown as Mutation<[PointerInteractEvent], void>,
-            child: Container({
-                padding: 6,
-                borderRadius: 6,
-                color: derive((ctx) =>
-                    ctx.get(s.looping$)
-                        ? Color.hex("#db2777")
-                        : Color.hex("#e2e8f0"),
-                ),
-                children: [
-                    Text({
-                        text: derive((ctx) =>
-                            ctx.get(s.looping$) ? "Loop ✓" : "Loop",
-                        ),
-                        fontSize: 10,
-                        color: derive((ctx) =>
-                            ctx.get(s.looping$)
-                                ? Color.hex("#ffffff")
-                                : Color.hex("#475569"),
-                        ),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx) => {
+                        ctx.set(s.toggleLooping);
+                    }) as unknown as Mutation<[PointerInteractEvent], void>,
+                )
+                .child(
+                    Container()
+                        .padding(6)
+                        .borderRadius(6)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(s.looping$)
+                                    ? Color.hex("#db2777")
+                                    : Color.hex("#e2e8f0"),
+                            ),
+                        )
+                        .children([
+                            Text({
+                                text: derive((ctx) =>
+                                    ctx.get(s.looping$) ? "Loop ✓" : "Loop",
+                                ),
+                            })
+                                .fontSize(10)
+                                .color(
+                                    derive((ctx) =>
+                                        ctx.get(s.looping$)
+                                            ? Color.hex("#ffffff")
+                                            : Color.hex("#475569"),
+                                    ),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 const App = view(() => {
@@ -376,123 +420,120 @@ const App = view(() => {
     // animation state cluster is stable for the life of the tree.
     const s = createAnimState();
 
-    return Expanded({
-        child: Container({
-            color: Color.hex("#f8fafc"),
-            children: [
-                Column({
-                    mainAlignment: MainAxisAlignment.Center,
-                    crossAlignment: CrossAxisAlignment.Center,
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        Text({
-                            text: "Animated Card Studio",
-                            fontSize: 16,
-                            color: Color.hex("#0f172a"),
-                        }),
-                        SizedBox({ height: 4 }),
-                        Row({
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                StatusBadge(s),
-                                SizedBox({ width: 12 }),
-                                ProgressReadout(s),
-                            ],
-                        }),
-                        SizedBox({ height: 32 }),
+    return Expanded()
+        .child(
+            Container()
+                .color(Color.hex("#f8fafc"))
+                .children([
+                    Column()
+                        .mainAlignment(MainAxisAlignment.Center)
+                        .crossAlignment(CrossAxisAlignment.Center)
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
+                            Text({ text: "Animated Card Studio" })
+                                .fontSize(16)
+                                .color(Color.hex("#0f172a"))
+                                .build(),
+                            SizedBox().height(4).build(),
+                            Row()
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    StatusBadge(s),
+                                    SizedBox().width(12).build(),
+                                    ProgressReadout(s),
+                                ])
+                                .build(),
+                            SizedBox().height(32).build(),
 
-                        // Animated card + orbiting dot
-                        Stack({
-                            children: [
-                                Container({
-                                    width: 360,
-                                    height: 200,
-                                }),
-                                Positioned({
-                                    left: 100,
-                                    top: 20,
-                                    child: Card(s),
-                                }),
-                                OrbitingDot(s),
-                            ],
-                        }),
+                            // Animated card + orbiting dot
+                            Stack()
+                                .children([
+                                    Container().width(360).height(200).build(),
+                                    Positioned()
+                                        .left(100)
+                                        .top(20)
+                                        .child(Card(s))
+                                        .build(),
+                                    OrbitingDot(s),
+                                ])
+                                .build(),
 
-                        SizedBox({ height: 32 }),
+                            SizedBox().height(32).build(),
 
-                        // Transport controls
-                        Row({
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                Button("Play", s.playForward, "#22c55e"),
-                                SizedBox({ width: 6 }),
-                                Button("Pause", s.pause, "#f59e0b"),
-                                SizedBox({ width: 6 }),
-                                Button("Resume", s.resume, "#0ea5e9"),
-                                SizedBox({ width: 6 }),
-                                Button("Reverse", s.playReverse, "#8b5cf6"),
-                                SizedBox({ width: 6 }),
-                                Button("Stop", s.stop, "#ef4444"),
-                            ],
-                        }),
+                            // Transport controls
+                            Row()
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    Button("Play", s.playForward, "#22c55e"),
+                                    SizedBox().width(6).build(),
+                                    Button("Pause", s.pause, "#f59e0b"),
+                                    SizedBox().width(6).build(),
+                                    Button("Resume", s.resume, "#0ea5e9"),
+                                    SizedBox().width(6).build(),
+                                    Button("Reverse", s.playReverse, "#8b5cf6"),
+                                    SizedBox().width(6).build(),
+                                    Button("Stop", s.stop, "#ef4444"),
+                                ])
+                                .build(),
 
-                        SizedBox({ height: 16 }),
+                            SizedBox().height(16).build(),
 
-                        // Speed selector
-                        Row({
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                Text({
-                                    text: "Speed:",
-                                    fontSize: 11,
-                                    color: Color.hex("#64748b"),
-                                }),
-                                SizedBox({ width: 8 }),
-                                SpeedButton(0.5, "0.5x", s),
-                                SizedBox({ width: 4 }),
-                                SpeedButton(1, "1x", s),
-                                SizedBox({ width: 4 }),
-                                SpeedButton(2, "2x", s),
-                                SizedBox({ width: 4 }),
-                                SpeedButton(4, "4x", s),
-                            ],
-                        }),
+                            // Speed selector
+                            Row()
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    Text({ text: "Speed:" })
+                                        .fontSize(11)
+                                        .color(Color.hex("#64748b"))
+                                        .build(),
+                                    SizedBox().width(8).build(),
+                                    SpeedButton(0.5, "0.5x", s),
+                                    SizedBox().width(4).build(),
+                                    SpeedButton(1, "1x", s),
+                                    SizedBox().width(4).build(),
+                                    SpeedButton(2, "2x", s),
+                                    SizedBox().width(4).build(),
+                                    SpeedButton(4, "4x", s),
+                                ])
+                                .build(),
 
-                        SizedBox({ height: 12 }),
+                            SizedBox().height(12).build(),
 
-                        // Curve selector
-                        Row({
-                            mainAxisSize: MainAxisSize.Min,
-                            children: [
-                                Text({
-                                    text: "Curve:",
-                                    fontSize: 11,
-                                    color: Color.hex("#64748b"),
-                                }),
-                                SizedBox({ width: 8 }),
-                                CurveButton("linear", "linear", s),
-                                SizedBox({ width: 4 }),
-                                CurveButton("easeIn", "easeIn", s),
-                                SizedBox({ width: 4 }),
-                                CurveButton("easeOut", "easeOut", s),
-                                SizedBox({ width: 4 }),
-                                CurveButton("easeInOut", "easeInOut", s),
-                                SizedBox({ width: 12 }),
-                                LoopButton(s),
-                            ],
-                        }),
+                            // Curve selector
+                            Row()
+                                .mainAxisSize(MainAxisSize.Min)
+                                .children([
+                                    Text({ text: "Curve:" })
+                                        .fontSize(11)
+                                        .color(Color.hex("#64748b"))
+                                        .build(),
+                                    SizedBox().width(8).build(),
+                                    CurveButton("linear", "linear", s),
+                                    SizedBox().width(4).build(),
+                                    CurveButton("easeIn", "easeIn", s),
+                                    SizedBox().width(4).build(),
+                                    CurveButton("easeOut", "easeOut", s),
+                                    SizedBox().width(4).build(),
+                                    CurveButton("easeInOut", "easeInOut", s),
+                                    SizedBox().width(12).build(),
+                                    LoopButton(s),
+                                ])
+                                .build(),
 
-                        SizedBox({ height: 16 }),
+                            SizedBox().height(16).build(),
 
-                        Text({
-                            text: "Controls: pause mid-play, change speed/curve, resume",
-                            fontSize: 10,
-                            color: Color.hex("#94a3b8"),
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    });
+                            Text({
+                                text: "Controls: pause mid-play, change speed/curve, resume",
+                            })
+                                .fontSize(10)
+                                .color(Color.hex("#94a3b8"))
+                                .build(),
+                        ])
+                        .build(),
+                ])
+                .build(),
+        )
+        .build();
 });
 
 export function start() {

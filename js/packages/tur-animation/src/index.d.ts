@@ -21,8 +21,9 @@
 
 declare module "tur:animation" {
     import type {
+        Alignment,
+        BorderPosition,
         Color,
-        ContainerProps,
         Element,
         Mutation,
         Val,
@@ -99,44 +100,62 @@ declare module "tur:animation" {
     }): ColorTweenValue;
 
     // ---------------------------------------------------------------------------
-    // AnimatedContainer / AnimatedOpacity / AnimatedPositioned
+    // AnimatedContainer / AnimatedOpacity / AnimatedPositioned — builder-
+    // pattern JS widgets mirroring the `tur:std` builders: chainable prop
+    // methods returning `this`, terminated by `.build()`.
     // ---------------------------------------------------------------------------
 
-    export interface AnimatedContainerProps extends ContainerProps {
-        /** Animation duration in milliseconds. Required. */
-        duration: Val<number>;
+    export interface AnimatedContainerBuilder {
+        width(v: Val<number>): this;
+        height(v: Val<number>): this;
+        padding(v: Val<number>): this;
+        color(v: Val<Color | null>): this;
+        borderColor(v: Val<Color | null>): this;
+        borderWidth(v: Val<number>): this;
+        borderRadius(v: Val<number>): this;
+        shadowColor(v: Val<Color | null>): this;
+        shadowBlur(v: Val<number>): this;
+        alignment(v: Val<Alignment>): this;
+        borderPosition(v: Val<BorderPosition>): this;
+        shadowOffset(v: [number, number]): this;
+        queryKey(keys: Val<string[]>): this;
+        children(children: Element[]): this;
+        /** Animation duration in milliseconds (default `300`). */
+        duration(v: Val<number>): this;
         /** Easing curve keyword (default `"linear"`). */
-        curve?: Val<Curve>;
+        curve(v: Val<Curve>): this;
         /** Fired once when an in-flight implicit animation completes. */
-        onEnd?: Mutation<[], void>;
+        onEnd(m: Mutation<[], void>): this;
+        build(): Element;
     }
 
-    export function AnimatedContainer(props: AnimatedContainerProps): Element;
+    export function AnimatedContainer(): AnimatedContainerBuilder;
 
-    export interface AnimatedOpacityProps {
-        value: Val<number>;
-        duration: Val<number>;
-        curve?: Val<Curve>;
-        onEnd?: Mutation<[], void>;
-        child?: Element;
-        queryKey?: Val<string[]>;
+    export interface AnimatedOpacityBuilder {
+        value(v: Val<number>): this;
+        duration(v: Val<number>): this;
+        curve(v: Val<Curve>): this;
+        onEnd(m: Mutation<[], void>): this;
+        child(child: Element): this;
+        queryKey(keys: Val<string[]>): this;
+        build(): Element;
     }
 
-    export function AnimatedOpacity(props: AnimatedOpacityProps): Element;
+    export function AnimatedOpacity(): AnimatedOpacityBuilder;
 
-    export interface AnimatedPositionedProps {
-        left?: Val<number>;
-        top?: Val<number>;
-        right?: Val<number>;
-        bottom?: Val<number>;
-        width?: Val<number>;
-        height?: Val<number>;
-        duration: Val<number>;
-        curve?: Val<Curve>;
-        onEnd?: Mutation<[], void>;
-        child: Element;
-        queryKey?: Val<string[]>;
+    export interface AnimatedPositionedBuilder {
+        left(v: Val<number>): this;
+        top(v: Val<number>): this;
+        right(v: Val<number>): this;
+        bottom(v: Val<number>): this;
+        width(v: Val<number>): this;
+        height(v: Val<number>): this;
+        duration(v: Val<number>): this;
+        curve(v: Val<Curve>): this;
+        onEnd(m: Mutation<[], void>): this;
+        child(child: Element): this;
+        build(): Element;
     }
 
-    export function AnimatedPositioned(props: AnimatedPositionedProps): Element;
+    export function AnimatedPositioned(): AnimatedPositionedBuilder;
 }

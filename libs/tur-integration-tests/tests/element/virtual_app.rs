@@ -204,7 +204,7 @@ fn parent_module_b(child_a: &str, child_b: Option<&str>, keep_alive: bool) -> St
             globalThis.__unspawn = () => {{ store.set(app$$, null); }};
             globalThis.__destroy = () => {{ if (app) store.set(app.destroy$); }};
             globalThis.__get = (a) => store.get(a);
-            mount(view(() => VirtualAppView({{ app$$: app$$ }})));
+            mount(view(() => VirtualAppView({{ app$$: app$$ }}).build()));
         }}
     "#,
         child = js_quote(child_a),
@@ -239,7 +239,8 @@ const CHILD_TEXT: &str = r#"
     import { Text, mount, view } from "tur:std";
     export function start() {
         globalThis.__who = "A";
-        mount(view(() => Text({ text: "hello-from-child" })));
+        mount(view(() => Text({ text: "hello-from-child" })
+     .build()));
         return () => { globalThis.__cleaned = "A"; };
     }
 "#;
@@ -248,7 +249,8 @@ const CHILD_B: &str = r#"
     import { Text, mount, view } from "tur:std";
     export function start() {
         globalThis.__who = "B";
-        mount(view(() => Text({ text: "hello-from-child-b" })));
+        mount(view(() => Text({ text: "hello-from-child-b" })
+     .build()));
     }
 "#;
 
@@ -410,7 +412,8 @@ fn virtual_app_resize_follows_layout() {
         export function start({ store }) {
             globalThis.__vpW = () => store.get(viewportSize$).width;
             globalThis.__vpH = () => store.get(viewportSize$).height;
-            mount(view(() => Text({ text: "v" })));
+            mount(view(() => Text({ text: "v" })
+     .build()));
         }
     "#;
     futures::executor::block_on(app.load_module(parent_module(child_src).as_str()))
@@ -455,11 +458,11 @@ fn virtual_app_rebind_after_resize_repaints_without_vsync() {
         import { Color, Container, derive, mount, view, viewportSize$ } from "tur:std";
         export function start({ store }) {
             globalThis.__vpW = () => store.get(viewportSize$).width;
-            mount(view(() => Container({
-                color: Color.hex("#ff00ff"),
-                width: derive((ctx) => ctx.get(viewportSize$).width),
-                height: 24,
-            })));
+            mount(view(() => Container()
+     .color(Color.hex("#ff00ff"))
+     .width(derive((ctx) => ctx.get(viewportSize$).width))
+     .height(24)
+     .build()));
         }
     "##;
     let parent_mod = parent_module_keep_alive(child_src);
@@ -549,7 +552,8 @@ fn virtual_app_child_animation_ticks() {
                 onTick: mutate(() => { ticks++; }),
             });
             ctrl.forward();
-            mount(view(() => Text({ text: "animating" })));
+            mount(view(() => Text({ text: "animating" })
+     .build()));
         }
     "#;
     futures::executor::block_on(app.load_module(parent_module(child_src).as_str()))
@@ -583,7 +587,10 @@ fn virtual_app_child_images_render() {
         ]);
         const resource = createImageResource(pngBytes);
         export function start() {
-            mount(view(() => Image({ resourceId: resource, width: 100, height: 100 })));
+            mount(view(() => Image({ resourceId: resource })
+     .width(100)
+     .height(100)
+     .build()));
         }
     "#;
     futures::executor::block_on(app.load_module(parent_module(child_src).as_str()))
@@ -720,7 +727,7 @@ fn for_worker_pool_named_pool_spawns_child() {
                 store.set(app$, app);
             }};
             globalThis.__get = (a) => store.get(a);
-            mount(view(() => VirtualAppView({{ app$: app$ }})));
+            mount(view(() => VirtualAppView({{ app$: app$ }}).build()));
         }}
     "#,
         child = js_quote(CHILD_TEXT),
@@ -783,20 +790,18 @@ fn virtual_app_forwards_pointer_events_to_child() {
             globalThis.__clicks = 0;
             globalThis.__local = "none";
             mount(view(() =>
-                PointerInteract({
-                    onClick: mutate((_ctx, ev) => {
+                PointerInteract()
+                    .onClick(mutate((_ctx, ev) => {
                         globalThis.__clicks += 1;
                         globalThis.__local =
                             ev && ev.local ? (ev.local.x + "," + ev.local.y) : "none";
-                    }),
-                    // Fill the whole child viewport (300x200 — the host
-                    // element's rect) so any forwarded click hits.
-                    child: Container({
-                        width: 300,
-                        height: 200,
-                        color: Color.hex("#6366f1"),
-                    }),
-                }),
+                    }))
+                    .child(Container()
+     .width(300)
+     .height(200)
+     .color(Color.hex("#6366f1"))
+     .build())
+                    .build(),
             ));
         }
     "##;
@@ -820,10 +825,10 @@ fn virtual_app_forwards_pointer_events_to_child() {
             globalThis.__get = (a) => store.get(a);
             // 50px padding: the host element sits at (50, 50) in the
             // 400x300 parent viewport, sized 300x200.
-            mount(view(() => Container({{
-                padding: 50,
-                children: [view(() => VirtualAppView({{ app$: app$ }}))],
-            }})));
+            mount(view(() => Container()
+     .padding(50)
+     .children([view(() => VirtualAppView({{ app$: app$ }}).build())])
+     .build()));
         }}
     "#,
         child = js_quote(child),
@@ -877,18 +882,26 @@ fn virtual_app_forwarded_clicks_are_exact() {
                 globalThis[which] += 1;
             });
             mount(view(() =>
-                Row({
-                    children: [
-                        PointerInteract({
-                            onClick: bump("__a"),
-                            child: Container({ width: 150, height: 200, color: Color.hex("#6366f1") }),
-                        }),
-                        PointerInteract({
-                            onClick: bump("__b"),
-                            child: Container({ width: 150, height: 200, color: Color.hex("#ec4899") }),
-                        }),
-                    ],
-                }),
+                Row()
+                    .children([
+                        PointerInteract()
+                            .onClick(bump("__a"))
+                            .child(Container()
+     .width(150)
+     .height(200)
+     .color(Color.hex("#6366f1"))
+     .build())
+                            .build(),
+                        PointerInteract()
+                            .onClick(bump("__b"))
+                            .child(Container()
+     .width(150)
+     .height(200)
+     .color(Color.hex("#ec4899"))
+     .build())
+                            .build(),
+                    ])
+                    .build(),
             ));
         }
     "##;
@@ -912,10 +925,10 @@ fn virtual_app_forwarded_clicks_are_exact() {
             globalThis.__get = (a) => store.get(a);
             // 50px padding: host rect (50,50,300,200). Child-local x<150 =
             // button A, x>=150 = button B.
-            mount(view(() => Container({{
-                padding: 50,
-                children: [view(() => VirtualAppView({{ app$: app$ }}))],
-            }})));
+            mount(view(() => Container()
+     .padding(50)
+     .children([view(() => VirtualAppView({{ app$: app$ }}).build())])
+     .build()));
         }}
     "#,
         child = js_quote(child),
@@ -991,10 +1004,10 @@ fn error_parent_module(child_src: &str) -> String {
             }};
             globalThis.__get = (a) => store.get(a);
             // 50px padding: the host element sits at (50, 50), sized 300x200.
-            mount(view(() => Container({{
-                padding: 50,
-                children: [view(() => VirtualAppView({{ app$: app$ }}))],
-            }})));
+            mount(view(() => Container()
+     .padding(50)
+     .children([view(() => VirtualAppView({{ app$: app$ }}).build())])
+     .build()));
         }}
     "#,
         child = js_quote(child_src),
@@ -1015,14 +1028,16 @@ fn virtual_app_runtime_error_reaches_on_runtime_error() {
         export function start() {
             globalThis.__clicks = 0;
             mount(view(() =>
-                PointerInteract({
-                    onClick: mutate(() => {
+                PointerInteract()
+                    .onClick(mutate(() => {
                         globalThis.__clicks += 1;
                         throw new Error("boom");
-                    }),
-                    // Fill the whole child viewport so any forwarded click hits.
-                    child: Container({ width: 300, height: 200 }),
-                }),
+                    }))
+                    .child(Container()
+     .width(300)
+     .height(200)
+     .build())
+                    .build(),
             ));
         }
     "#;
@@ -1070,7 +1085,8 @@ fn virtual_app_promise_rejection_reaches_parent() {
         import { Text, mount, view } from "tur:std";
         export function start() {
             Promise.reject(new Error("rejected"));
-            mount(view(() => Text({ text: "ok" })));
+            mount(view(() => Text({ text: "ok" })
+     .build()));
         }
     "#;
     let parent = error_parent_module(child);

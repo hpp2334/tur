@@ -8,7 +8,7 @@ const App = view(() =>
             { content: "Bold", weight: 700 },
             { content: " World" },
         ],
-    } as never),
+    } as never).build(),
 );
 
 export function start() {

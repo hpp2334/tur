@@ -7,25 +7,27 @@ import { mount, Positioned, SizedBox, Stack, view } from "tur:std";
 // RenderStack sizes itself from non-positioned children, then constrains
 // positioned children to that size and resolves their edge anchors).
 const App = view(() =>
-    Stack({
-        children: [
-            SizedBox({ width: 200, height: 300 }),
-            Positioned({
-                right: 8,
-                bottom: 8,
-                child: SizedBox({
-                    width: 60,
-                    height: 24,
-                    queryKey: ["rb-pill"],
-                }),
-            }),
-            Positioned({
-                left: 10,
-                right: 10,
-                child: SizedBox({ height: 20, queryKey: ["lr-pair"] }),
-            }),
-        ],
-    }),
+    Stack()
+        .children([
+            SizedBox().width(200).height(300).build(),
+            Positioned()
+                .right(8)
+                .bottom(8)
+                .child(
+                    SizedBox()
+                        .width(60)
+                        .height(24)
+                        .queryKey(["rb-pill"])
+                        .build(),
+                )
+                .build(),
+            Positioned()
+                .left(10)
+                .right(10)
+                .child(SizedBox().height(20).queryKey(["lr-pair"]).build())
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

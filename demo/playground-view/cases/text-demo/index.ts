@@ -56,24 +56,27 @@ function Section({
     title: string;
     children: Element[];
 }): Element {
-    return Container({
-        padding: 14,
-        borderRadius: 10,
-        color: C.cardBg,
-        borderColor: C.cardBorder,
-        borderWidth: 1,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Start,
-                mainAxisSize: MainAxisSize.Min,
-                children: [
-                    Text({ text: title, fontSize: 11, color: C.textMuted }),
-                    SizedBox({ height: 10 }),
+    return Container()
+        .padding(14)
+        .borderRadius(10)
+        .color(C.cardBg)
+        .borderColor(C.cardBorder)
+        .borderWidth(1)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Start)
+                .mainAxisSize(MainAxisSize.Min)
+                .children([
+                    Text({ text: title })
+                        .fontSize(11)
+                        .color(C.textMuted)
+                        .build(),
+                    SizedBox().height(10).build(),
                     ...children,
-                ],
-            }),
-        ],
-    });
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 function PrimaryButton({
@@ -83,24 +86,27 @@ function PrimaryButton({
     label: Val<string>;
     onClick: Mutation<[], void>;
 }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx, _ev) => ctx.set(onClick)),
-            child: Container({
-                padding: 10,
-                borderRadius: 8,
-                color: C.accent,
-                children: [
-                    Text({
-                        text: label,
-                        fontSize: 13,
-                        color: C.accentFg,
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(mutate((ctx, _ev) => ctx.set(onClick)))
+                .child(
+                    Container()
+                        .padding(10)
+                        .borderRadius(8)
+                        .color(C.accent)
+                        .children([
+                            Text({ text: label })
+                                .fontSize(13)
+                                .color(C.accentFg)
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function OverflowCard({
@@ -110,31 +116,33 @@ function OverflowCard({
     overflow: "clip" | "ellipsis" | "visible";
     maxLines$: Readable<number>;
 }): Element {
-    return Container({
-        width: 100,
-        padding: 8,
-        borderRadius: 8,
-        color: C.cardBg,
-        borderColor: C.cardBorder,
-        borderWidth: 1,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Start,
-                mainAxisSize: MainAxisSize.Min,
-                children: [
-                    Text({ text: overflow, fontSize: 11, color: C.textMuted }),
-                    SizedBox({ height: 6 }),
-                    Text({
-                        text: BROWN,
-                        fontSize: 12,
-                        color: C.text,
-                        maxLines: derive((ctx) => ctx.get(maxLines$)),
-                        overflow,
-                    }),
-                ],
-            }),
-        ],
-    });
+    return Container()
+        .width(100)
+        .padding(8)
+        .borderRadius(8)
+        .color(C.cardBg)
+        .borderColor(C.cardBorder)
+        .borderWidth(1)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Start)
+                .mainAxisSize(MainAxisSize.Min)
+                .children([
+                    Text({ text: overflow })
+                        .fontSize(11)
+                        .color(C.textMuted)
+                        .build(),
+                    SizedBox().height(6).build(),
+                    Text({ text: BROWN })
+                        .fontSize(12)
+                        .color(C.text)
+                        .maxLines(derive((ctx) => ctx.get(maxLines$)))
+                        .overflow(overflow)
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 }
 
 const App = view(() => {
@@ -148,218 +156,215 @@ const App = view(() => {
         ctx.set(maxLines$, cur === 2 ? 1 : cur === 1 ? 3 : 2);
     });
 
-    return Container({
-        color: C.pageBg,
-        children: [
-            ScrollView({
-                child: Column({
-                    crossAlignment: CrossAxisAlignment.Stretch,
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        SizedBox({ height: 16 }),
-                        Text({ text: "Text", fontSize: 22, color: C.text }),
-                        SizedBox({ height: 4 }),
-                        Text({
-                            text: "size · weight · color · spans · overflow",
-                            fontSize: 12,
-                            color: C.textMuted,
-                        }),
-                        SizedBox({ height: 16 }),
-                        Section({
-                            title: "FONT SIZE",
-                            children: [
-                                Row({
-                                    crossAlignment: CrossAxisAlignment.End,
-                                    mainAxisSize: MainAxisSize.Min,
-                                    children: [
-                                        Text({
-                                            text: "Aa",
-                                            fontSize: 10,
-                                            color: C.text,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "Aa",
-                                            fontSize: 14,
-                                            color: C.text,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "Aa",
-                                            fontSize: 20,
-                                            color: C.text,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "Aa",
-                                            fontSize: 28,
-                                            color: C.text,
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
-                        SizedBox({ height: 12 }),
-                        Section({
-                            title: "FONT WEIGHT",
-                            children: [
-                                Text({
-                                    text: BROWN,
-                                    fontSize: 14,
-                                    fontWeight: 300,
-                                    color: C.text,
-                                }),
-                                SizedBox({ height: 4 }),
-                                Text({
-                                    text: BROWN,
-                                    fontSize: 14,
-                                    fontWeight: 400,
-                                    color: C.text,
-                                }),
-                                SizedBox({ height: 4 }),
-                                Text({
-                                    text: BROWN,
-                                    fontSize: 14,
-                                    fontWeight: 700,
-                                    color: C.text,
-                                }),
-                                SizedBox({ height: 4 }),
-                                Text({
-                                    text: BROWN,
-                                    fontSize: 14,
-                                    fontWeight: 900,
-                                    color: C.text,
-                                }),
-                            ],
-                        }),
-                        SizedBox({ height: 12 }),
-                        Section({
-                            title: "COLOR",
-                            children: [
-                                Row({
-                                    mainAxisSize: MainAxisSize.Min,
-                                    children: [
-                                        Text({
-                                            text: "slate",
-                                            fontSize: 14,
-                                            color: C.text,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "rose",
-                                            fontSize: 14,
-                                            color: C.rose,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "emerald",
-                                            fontSize: 14,
-                                            color: C.emerald,
-                                        }),
-                                        SizedBox({ width: 12 }),
-                                        Text({
-                                            text: "amber",
-                                            fontSize: 14,
-                                            color: C.amber,
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
-                        SizedBox({ height: 12 }),
-                        Section({
-                            title: "RICH TEXT (SPANS)",
-                            children: [
-                                Text({
-                                    fontSize: 14,
-                                    spans: [
-                                        { content: "The ", color: C.text },
-                                        {
-                                            content: "quick ",
-                                            color: C.text,
-                                            italic: true,
-                                        },
-                                        {
-                                            content: "brown ",
-                                            color: C.amber,
-                                            weight: 700,
-                                        },
-                                        {
-                                            content: "fox ",
-                                            color: C.text,
-                                            underline: true,
-                                        },
-                                        {
-                                            content: "jumps ",
-                                            color: C.text,
-                                            fontSize: 18,
-                                        },
-                                        {
-                                            content: "over the ",
-                                            color: C.textMuted,
-                                        },
-                                        {
-                                            content: "lazy",
-                                            color: C.emerald,
-                                            weight: 700,
-                                        },
-                                        {
-                                            content: " dog.",
-                                            color: C.textMuted,
-                                        },
-                                    ],
-                                }),
-                            ],
-                        }),
-                        SizedBox({ height: 12 }),
-                        Section({
-                            title: "OVERFLOW",
-                            children: [
-                                Text({
-                                    text: derive(
-                                        (ctx) =>
-                                            `maxLines = ${ctx.get(maxLines$)}  ·  width = 100px`,
-                                    ),
-                                    fontSize: 11,
-                                    color: C.textMuted,
-                                }),
-                                SizedBox({ height: 8 }),
-                                Row({
-                                    crossAlignment: CrossAxisAlignment.Start,
-                                    mainAxisSize: MainAxisSize.Min,
-                                    children: [
-                                        OverflowCard({
-                                            overflow: "clip",
-                                            maxLines$,
-                                        }),
-                                        SizedBox({ width: 8 }),
-                                        OverflowCard({
-                                            overflow: "ellipsis",
-                                            maxLines$,
-                                        }),
-                                        SizedBox({ width: 8 }),
-                                        OverflowCard({
-                                            overflow: "visible",
-                                            maxLines$,
-                                        }),
-                                    ],
-                                }),
-                                SizedBox({ height: 10 }),
-                                PrimaryButton({
-                                    label: derive(
-                                        (ctx) =>
-                                            `cycle maxLines (now ${ctx.get(maxLines$)})`,
-                                    ),
-                                    onClick: cycleMaxLines,
-                                }),
-                            ],
-                        }),
-                        SizedBox({ height: 16 }),
-                    ],
-                }),
-            }),
-        ],
-    });
+    return Container()
+        .color(C.pageBg)
+        .children([
+            ScrollView()
+                .child(
+                    Column()
+                        .crossAlignment(CrossAxisAlignment.Stretch)
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
+                            SizedBox().height(16).build(),
+                            Text({ text: "Text" })
+                                .fontSize(22)
+                                .color(C.text)
+                                .build(),
+                            SizedBox().height(4).build(),
+                            Text({
+                                text: "size · weight · color · spans · overflow",
+                            })
+                                .fontSize(12)
+                                .color(C.textMuted)
+                                .build(),
+                            SizedBox().height(16).build(),
+                            Section({
+                                title: "FONT SIZE",
+                                children: [
+                                    Row()
+                                        .crossAlignment(CrossAxisAlignment.End)
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children([
+                                            Text({ text: "Aa" })
+                                                .fontSize(10)
+                                                .color(C.text)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "Aa" })
+                                                .fontSize(14)
+                                                .color(C.text)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "Aa" })
+                                                .fontSize(20)
+                                                .color(C.text)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "Aa" })
+                                                .fontSize(28)
+                                                .color(C.text)
+                                                .build(),
+                                        ])
+                                        .build(),
+                                ],
+                            }),
+                            SizedBox().height(12).build(),
+                            Section({
+                                title: "FONT WEIGHT",
+                                children: [
+                                    Text({ text: BROWN })
+                                        .fontSize(14)
+                                        .fontWeight(300)
+                                        .color(C.text)
+                                        .build(),
+                                    SizedBox().height(4).build(),
+                                    Text({ text: BROWN })
+                                        .fontSize(14)
+                                        .fontWeight(400)
+                                        .color(C.text)
+                                        .build(),
+                                    SizedBox().height(4).build(),
+                                    Text({ text: BROWN })
+                                        .fontSize(14)
+                                        .fontWeight(700)
+                                        .color(C.text)
+                                        .build(),
+                                    SizedBox().height(4).build(),
+                                    Text({ text: BROWN })
+                                        .fontSize(14)
+                                        .fontWeight(900)
+                                        .color(C.text)
+                                        .build(),
+                                ],
+                            }),
+                            SizedBox().height(12).build(),
+                            Section({
+                                title: "COLOR",
+                                children: [
+                                    Row()
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children([
+                                            Text({ text: "slate" })
+                                                .fontSize(14)
+                                                .color(C.text)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "rose" })
+                                                .fontSize(14)
+                                                .color(C.rose)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "emerald" })
+                                                .fontSize(14)
+                                                .color(C.emerald)
+                                                .build(),
+                                            SizedBox().width(12).build(),
+                                            Text({ text: "amber" })
+                                                .fontSize(14)
+                                                .color(C.amber)
+                                                .build(),
+                                        ])
+                                        .build(),
+                                ],
+                            }),
+                            SizedBox().height(12).build(),
+                            Section({
+                                title: "RICH TEXT (SPANS)",
+                                children: [
+                                    Text()
+                                        .fontSize(14)
+                                        .spans([
+                                            { content: "The ", color: C.text },
+                                            {
+                                                content: "quick ",
+                                                color: C.text,
+                                                italic: true,
+                                            },
+                                            {
+                                                content: "brown ",
+                                                color: C.amber,
+                                                weight: 700,
+                                            },
+                                            {
+                                                content: "fox ",
+                                                color: C.text,
+                                                underline: true,
+                                            },
+                                            {
+                                                content: "jumps ",
+                                                color: C.text,
+                                                fontSize: 18,
+                                            },
+                                            {
+                                                content: "over the ",
+                                                color: C.textMuted,
+                                            },
+                                            {
+                                                content: "lazy",
+                                                color: C.emerald,
+                                                weight: 700,
+                                            },
+                                            {
+                                                content: " dog.",
+                                                color: C.textMuted,
+                                            },
+                                        ])
+                                        .build(),
+                                ],
+                            }),
+                            SizedBox().height(12).build(),
+                            Section({
+                                title: "OVERFLOW",
+                                children: [
+                                    Text({
+                                        text: derive(
+                                            (ctx) =>
+                                                `maxLines = ${ctx.get(maxLines$)}  ·  width = 100px`,
+                                        ),
+                                    })
+                                        .fontSize(11)
+                                        .color(C.textMuted)
+                                        .build(),
+                                    SizedBox().height(8).build(),
+                                    Row()
+                                        .crossAlignment(
+                                            CrossAxisAlignment.Start,
+                                        )
+                                        .mainAxisSize(MainAxisSize.Min)
+                                        .children([
+                                            OverflowCard({
+                                                overflow: "clip",
+                                                maxLines$,
+                                            }),
+                                            SizedBox().width(8).build(),
+                                            OverflowCard({
+                                                overflow: "ellipsis",
+                                                maxLines$,
+                                            }),
+                                            SizedBox().width(8).build(),
+                                            OverflowCard({
+                                                overflow: "visible",
+                                                maxLines$,
+                                            }),
+                                        ])
+                                        .build(),
+                                    SizedBox().height(10).build(),
+                                    PrimaryButton({
+                                        label: derive(
+                                            (ctx) =>
+                                                `cycle maxLines (now ${ctx.get(maxLines$)})`,
+                                        ),
+                                        onClick: cycleMaxLines,
+                                    }),
+                                ],
+                            }),
+                            SizedBox().height(16).build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

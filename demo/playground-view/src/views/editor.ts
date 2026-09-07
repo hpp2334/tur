@@ -25,18 +25,18 @@ import {
 } from "../state";
 import { tokens } from "../theme/tokens";
 
-const editorInput: Element = Input({
-    controller: editorCtrl,
-    undoController: editorUndo,
-    multiline: true,
-    fontFamily: "monospace",
-    fontSize: 13,
-    color: tokens.text.code,
-    cursorColor: tokens.accent.cursor,
-    placeholderColor: tokens.text.placeholder,
-    onContextMenu: openContextMenu,
-    queryKey: ["editor-input"],
-});
+const editorInput: Element = Input()
+    .controller(editorCtrl)
+    .undoController(editorUndo)
+    .multiline(true)
+    .fontFamily("monospace")
+    .fontSize(13)
+    .color(tokens.text.code)
+    .cursorColor(tokens.accent.cursor)
+    .placeholderColor(tokens.text.placeholder)
+    .onContextMenu(openContextMenu)
+    .queryKey(["editor-input"])
+    .build();
 
 /** Per-instance hover state for the scrollbar — recreated every time the
  *  editor subtree rebuilds (so the source lives inside the factory). */
@@ -46,41 +46,53 @@ function scrollableEditor(): Element {
     const controller = createScrollController();
     // Light-gray track shows only while hovered.
     const trackHovered$ = source(false);
-    return Row({
-        children: [
-            Expanded({
-                child: ScrollView({ controller, child: editorInput }),
-            }),
+    return Row()
+        .children([
+            Expanded()
+                .child(
+                    ScrollView()
+                        .controller(controller)
+                        .child(editorInput)
+                        .build(),
+                )
+                .build(),
             // Dedicated 10px scrollbar column.
-            MouseRegion({
-                onEnter: mutate((ctx) =>
-                    ctx.set(trackHovered$, true),
-                ) as unknown as Mutation<[PointerRegionEvent], void>,
-                onExit: mutate((ctx) =>
-                    ctx.set(trackHovered$, false),
-                ) as unknown as Mutation<[PointerRegionEvent], void>,
-                child: Scrollbar({
-                    controller,
-                    color: tokens.text.placeholder,
-                    trackColor: derive((ctx) =>
-                        ctx.get(trackHovered$)
-                            ? tokens.bg.strongHover
-                            : Color.rgba(0, 0, 0, 0),
-                    ),
-                    thickness: 10,
-                    thumbRadius: 5,
-                    queryKey: ["editor-scrollbar"],
-                }),
-            }),
-        ],
-    });
+            MouseRegion()
+                .onEnter(
+                    mutate((ctx) =>
+                        ctx.set(trackHovered$, true),
+                    ) as unknown as Mutation<[PointerRegionEvent], void>,
+                )
+                .onExit(
+                    mutate((ctx) =>
+                        ctx.set(trackHovered$, false),
+                    ) as unknown as Mutation<[PointerRegionEvent], void>,
+                )
+                .child(
+                    Scrollbar()
+                        .color(tokens.text.placeholder)
+                        .trackColor(
+                            derive((ctx) =>
+                                ctx.get(trackHovered$)
+                                    ? tokens.bg.strongHover
+                                    : Color.rgba(0, 0, 0, 0),
+                            ),
+                        )
+                        .thickness(10)
+                        .thumbRadius(5)
+                        .queryKey(["editor-scrollbar"])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 }
 
 export function Editor(): Element {
-    return Container({
-        color: tokens.bg.code,
-        padding: 12,
-        children: [
+    return Container()
+        .color(tokens.bg.code)
+        .padding(12)
+        .children([
             // Rebuild the editor element whenever the selected case OR file
             // changes so it re-reads the controller spans (reset by
             // loadCase / selectFile).
@@ -91,8 +103,9 @@ export function Editor(): Element {
                         file: ctx.get(selectedFile$),
                     },
                 ]),
-                build: () => scrollableEditor(),
-            }),
-        ],
-    });
+            })
+                .itemBuilder(() => scrollableEditor())
+                .build(),
+        ])
+        .build();
 }

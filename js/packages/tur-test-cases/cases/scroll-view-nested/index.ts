@@ -15,45 +15,54 @@ import {
 // a vertical ScrollView there has unbounded width — `Expanded` is what gives
 // it the bounded viewport, exactly as in Flutter.
 const App = view(() =>
-    Row({
-        children: [
-            SizedBox({ width: 200 }),
-            Expanded({
-                child: ScrollView({
-                    queryKey: ["outer-scroll"],
-                    child: Column({
-                        crossAlignment: CrossAxisAlignment.Start,
-                        children: [
-                            SizedBox({ height: 100 }),
-                            Container({
-                                height: 200,
-                                queryKey: ["inner-wrapper"],
-                                children: [
-                                    ScrollView({
-                                        queryKey: ["inner-scroll"],
-                                        // Stretch content so the inner
-                                        // viewport is full-width (the
-                                        // ScrollView shrink-wraps to its
-                                        // content — Flutter parity).
-                                        child: Column({
-                                            crossAlignment:
-                                                CrossAxisAlignment.Stretch,
-                                            children: [
-                                                SizedBox({ height: 200 }),
-                                                SizedBox({ height: 200 }),
-                                                SizedBox({ height: 200 }),
-                                            ],
-                                        }),
-                                    }),
-                                ],
-                            }),
-                            SizedBox({ height: 400 }),
-                        ],
-                    }),
-                }),
-            }),
-        ],
-    }),
+    Row()
+        .children([
+            SizedBox().width(200).build(),
+            Expanded()
+                .child(
+                    ScrollView()
+                        .queryKey(["outer-scroll"])
+                        .child(
+                            Column()
+                                .crossAlignment(CrossAxisAlignment.Start)
+                                .children([
+                                    SizedBox().height(100).build(),
+                                    Container()
+                                        .height(200)
+                                        .queryKey(["inner-wrapper"])
+                                        .children([
+                                            ScrollView()
+                                                .queryKey(["inner-scroll"])
+                                                .child(
+                                                    Column()
+                                                        .crossAlignment(
+                                                            CrossAxisAlignment.Stretch,
+                                                        )
+                                                        .children([
+                                                            SizedBox()
+                                                                .height(200)
+                                                                .build(),
+                                                            SizedBox()
+                                                                .height(200)
+                                                                .build(),
+                                                            SizedBox()
+                                                                .height(200)
+                                                                .build(),
+                                                        ])
+                                                        .build(),
+                                                )
+                                                .build(),
+                                        ])
+                                        .build(),
+                                    SizedBox().height(400).build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

@@ -4,7 +4,7 @@ const App = view(() =>
     Text({
         fontSize: 14,
         spans: [{ content: "Small" }, { content: "Big", fontSize: 28 }],
-    } as never),
+    } as never).build(),
 );
 
 export function start() {

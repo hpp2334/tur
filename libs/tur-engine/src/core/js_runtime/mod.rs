@@ -9,6 +9,10 @@
 //!
 //! - [`module_loader`] — `TurModuleLoader` + synthetic-module builders
 //!   (`build_native_module` / `build_fn_module` / `bound_native`).
+//! - [`builder`] — the element builder (`Container(props)` → chainable
+//!   prop methods → `.build()`): `BuilderTable` / `BuilderState` /
+//!   `make_builder` + the shared per-key setter fns and the
+//!   `builder_factory!` macro every element bridge uses.
 //! - [`opaque`] — `BoaOpaque<T>` generic `NativeObject` downcast helper.
 //! - [`helpers`] — bridge plumbing: `FnEntry` / `ConstEntry` / `Ptr` type
 //!   aliases, `extract_js_ctx`, `require_props_object`, `wrap_view`,
@@ -20,6 +24,7 @@
 
 pub use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 
+pub mod builder;
 pub mod helpers;
 pub mod instance_context;
 pub mod js_props;

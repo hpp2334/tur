@@ -78,56 +78,66 @@ function Pill(props: {
     active: Readable<boolean>;
     onClick: Mutation<[PointerInteractEvent], void>;
 }): Element {
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: props.onClick,
-            child: Container({
-                padding: 7,
-                borderRadius: 7,
-                color: derive((ctx) =>
-                    ctx.get(props.active)
-                        ? Color.hex("#6366f1")
-                        : Color.hex("#1e293b"),
-                ),
-                children: [
-                    Text({
-                        text: props.label,
-                        fontSize: 12,
-                        color: Color.hex("#e2e8f0"),
-                    }),
-                ],
-            }),
-        }),
-    });
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(props.onClick)
+                .child(
+                    Container()
+                        .padding(7)
+                        .borderRadius(7)
+                        .color(
+                            derive((ctx) =>
+                                ctx.get(props.active)
+                                    ? Color.hex("#6366f1")
+                                    : Color.hex("#1e293b"),
+                            ),
+                        )
+                        .children([
+                            Text({ text: props.label })
+                                .fontSize(12)
+                                .color(Color.hex("#e2e8f0"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function tile(i: number, selected$: Readable<number>): Element {
     const hue = (i * 360) / TILE_COUNT;
     const base = Color.hex(hslToHex(hue, 58, 54));
-    return MouseRegion({
-        cursor: "pointer",
-        child: PointerInteract({
-            onClick: mutate((ctx) => {
-                ctx.set(selected$, i);
-            }),
-            child: Container({
-                color: base,
-                borderRadius: 8,
-                borderWidth: derive((ctx) =>
-                    ctx.get(selected$) === i ? 3 : 0,
-                ),
-                borderColor: Color.hex("#ffffff"),
-                children: [
-                    Text({
-                        text: `${i}`,
-                        fontSize: 13,
-                        color: Color.hex("#ffffff"),
+    return MouseRegion()
+        .cursor("pointer")
+        .child(
+            PointerInteract()
+                .onClick(
+                    mutate((ctx) => {
+                        ctx.set(selected$, i);
                     }),
-                ],
-            }),
-        }),
-    });
+                )
+                .child(
+                    Container()
+                        .color(base)
+                        .borderRadius(8)
+                        .borderWidth(
+                            derive((ctx) => (ctx.get(selected$) === i ? 3 : 0)),
+                        )
+                        .borderColor(Color.hex("#ffffff"))
+                        .children([
+                            Text({ text: `${i}` })
+                                .fontSize(13)
+                                .color(Color.hex("#ffffff"))
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
 }
 
 function aspectLabel(ctx: ReadonlyStoreCtx, aspect$: Readable<number>): string {
@@ -148,31 +158,31 @@ const App = view(() => {
     const maxExtent$ = source<number>(150);
     const selected$ = source<number>(0);
 
-    return Container({
-        color: Color.hex("#0f172a"),
-        padding: 16,
-        children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Start,
-                children: [
-                    Text({
-                        text: "Grid Gallery",
-                        fontSize: 18,
-                        color: Color.hex("#f1f5f9"),
-                    }),
-                    SizedBox({ height: 4 }),
+    return Container()
+        .color(Color.hex("#0f172a"))
+        .padding(16)
+        .children([
+            Column()
+                .crossAlignment(CrossAxisAlignment.Start)
+                .children([
+                    Text({ text: "Grid Gallery" })
+                        .fontSize(18)
+                        .color(Color.hex("#f1f5f9"))
+                        .build(),
+                    SizedBox().height(4).build(),
                     Text({
                         text: derive(
                             (ctx) =>
                                 `tile #${ctx.get(selected$)} · ${aspectLabel(ctx, aspect$)} · maxExtent ${ctx.get(maxExtent$)}`,
                         ),
-                        fontSize: 12,
-                        color: Color.hex("#94a3b8"),
-                    }),
-                    SizedBox({ height: 12 }),
-                    Row({
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
+                    })
+                        .fontSize(12)
+                        .color(Color.hex("#94a3b8"))
+                        .build(),
+                    SizedBox().height(12).build(),
+                    Row()
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
                             Pill({
                                 label: "1:1",
                                 active: derive(
@@ -183,7 +193,7 @@ const App = view(() => {
                                     ctx.set(aspect$, 1);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "16:9",
                                 active: derive((ctx) => ctx.get(aspect$) > 1),
@@ -191,7 +201,7 @@ const App = view(() => {
                                     ctx.set(aspect$, 16 / 9);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "9:16",
                                 active: derive((ctx) => ctx.get(aspect$) < 1),
@@ -199,12 +209,12 @@ const App = view(() => {
                                     ctx.set(aspect$, 9 / 16);
                                 }),
                             }),
-                        ],
-                    }),
-                    SizedBox({ height: 8 }),
-                    Row({
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
+                        ])
+                        .build(),
+                    SizedBox().height(8).build(),
+                    Row()
+                        .mainAxisSize(MainAxisSize.Min)
+                        .children([
                             Pill({
                                 label: "Dense",
                                 active: derive(
@@ -214,7 +224,7 @@ const App = view(() => {
                                     ctx.set(maxExtent$, 95);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "Normal",
                                 active: derive(
@@ -224,7 +234,7 @@ const App = view(() => {
                                     ctx.set(maxExtent$, 150);
                                 }),
                             }),
-                            SizedBox({ width: 6 }),
+                            SizedBox().width(6).build(),
                             Pill({
                                 label: "Sparse",
                                 active: derive(
@@ -234,40 +244,51 @@ const App = view(() => {
                                     ctx.set(maxExtent$, 220);
                                 }),
                             }),
-                        ],
-                    }),
-                    SizedBox({ height: 12 }),
-                    Expanded({
-                        child: Container({
-                            color: Color.hex("#020617"),
-                            borderRadius: 10,
-                            padding: 10,
-                            children: [
-                                ScrollView({
-                                    axis: Axis.Vertical,
-                                    child: Grid({
-                                        maxCrossAxisExtent: derive((ctx) =>
-                                            ctx.get(maxExtent$),
-                                        ),
-                                        childAspectRatio: derive((ctx) =>
-                                            ctx.get(aspect$),
-                                        ),
-                                        crossAxisSpacing: 8,
-                                        mainAxisSpacing: 8,
-                                        queryKey: ["grid-gallery"],
-                                        children: Array.from(
-                                            { length: TILE_COUNT },
-                                            (_, i) => tile(i, selected$),
-                                        ),
-                                    }),
-                                }),
-                            ],
-                        }),
-                    }),
-                ],
-            }),
-        ],
-    });
+                        ])
+                        .build(),
+                    SizedBox().height(12).build(),
+                    Expanded()
+                        .child(
+                            Container()
+                                .color(Color.hex("#020617"))
+                                .borderRadius(10)
+                                .padding(10)
+                                .children([
+                                    ScrollView()
+                                        .axis(Axis.Vertical)
+                                        .child(
+                                            Grid({
+                                                maxCrossAxisExtent: derive(
+                                                    (ctx) =>
+                                                        ctx.get(maxExtent$),
+                                                ),
+                                            })
+                                                .childAspectRatio(
+                                                    derive((ctx) =>
+                                                        ctx.get(aspect$),
+                                                    ),
+                                                )
+                                                .crossAxisSpacing(8)
+                                                .mainAxisSpacing(8)
+                                                .queryKey(["grid-gallery"])
+                                                .children(
+                                                    Array.from(
+                                                        { length: TILE_COUNT },
+                                                        (_, i) =>
+                                                            tile(i, selected$),
+                                                    ),
+                                                )
+                                                .build(),
+                                        )
+                                        .build(),
+                                ])
+                                .build(),
+                        )
+                        .build(),
+                ])
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

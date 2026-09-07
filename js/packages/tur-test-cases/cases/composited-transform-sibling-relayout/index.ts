@@ -28,45 +28,56 @@ const App = view(() => {
     // link are stable for the life of the tree.
     const tall$ = source(false);
     const link = createLayerLink();
-    return Stack({
-        children: [
-            SizedBox({ width: 400, height: 600 }),
-            Positioned({
-                left: 100,
-                top: 80,
-                child: CompositedTransformTarget({
-                    link,
-                    child: SizedBox({ width: 60, height: 40 }),
-                }),
-            }),
-            CompositedTransformFollower({
-                link,
-                child: Container({ width: 20, height: 20, color: "#dc2626" }),
-            }),
+    return Stack()
+        .children([
+            SizedBox().width(400).height(600).build(),
+            Positioned()
+                .left(100)
+                .top(80)
+                .child(
+                    CompositedTransformTarget({ link })
+                        .child(SizedBox().width(60).height(40).build())
+                        .build(),
+                )
+                .build(),
+            CompositedTransformFollower({ link })
+                .child(
+                    Container().width(20).height(20).color("#dc2626").build(),
+                )
+                .build(),
             // Reactive sibling (non-positioned): height flips 10 ↔ 120 so the
             // Stack's max child height changes, forcing a genuine relayout.
-            Container({
-                width: 40,
-                height: derive((ctx) => (ctx.get(tall$) ? 120 : 10)),
-                color: "#4f46e5",
-            }),
+            Container()
+                .width(40)
+                .height(derive((ctx) => (ctx.get(tall$) ? 120 : 10)))
+                .color("#4f46e5")
+                .build(),
             // Button (Positioned, away from the follower/target) to flip tall$.
-            Positioned({
-                left: 300,
-                top: 540,
-                child: PointerInteract({
-                    onClick: mutate((ctx) =>
-                        ctx.set(tall$, true),
-                    ) as unknown as Mutation<[PointerInteractEvent], void>,
-                    child: Container({
-                        width: 60,
-                        height: 30,
-                        color: "#16a34a",
-                    }),
-                }),
-            }),
-        ],
-    });
+            Positioned()
+                .left(300)
+                .top(540)
+                .child(
+                    PointerInteract()
+                        .onClick(
+                            mutate((ctx) =>
+                                ctx.set(tall$, true),
+                            ) as unknown as Mutation<
+                                [PointerInteractEvent],
+                                void
+                            >,
+                        )
+                        .child(
+                            Container()
+                                .width(60)
+                                .height(30)
+                                .color("#16a34a")
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

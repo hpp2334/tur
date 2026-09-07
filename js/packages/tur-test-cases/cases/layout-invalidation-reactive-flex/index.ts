@@ -19,24 +19,28 @@ const flexA$ = source(1);
 const flexB$ = source(1);
 
 const App = view(() =>
-    Row({
-        children: [
-            Expanded({
-                flex: derive((ctx) => ctx.get(flexA$)),
-                child: Container({
-                    color: Color.hex("#ef4444"),
-                    queryKey: ["a"],
-                }),
-            }),
-            Expanded({
-                flex: derive((ctx) => ctx.get(flexB$)),
-                child: Container({
-                    color: Color.hex("#22c55e"),
-                    queryKey: ["b"],
-                }),
-            }),
-        ],
-    }),
+    Row()
+        .children([
+            Expanded()
+                .flex(derive((ctx) => ctx.get(flexA$)))
+                .child(
+                    Container()
+                        .color(Color.hex("#ef4444"))
+                        .queryKey(["a"])
+                        .build(),
+                )
+                .build(),
+            Expanded()
+                .flex(derive((ctx) => ctx.get(flexB$)))
+                .child(
+                    Container()
+                        .color(Color.hex("#22c55e"))
+                        .queryKey(["b"])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start({ store }: { store: Store }) {

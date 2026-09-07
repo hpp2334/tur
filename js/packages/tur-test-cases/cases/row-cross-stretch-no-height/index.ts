@@ -13,34 +13,35 @@ import {
 // Row needs a bounded height for that — inside a Column (unbounded main
 // axis, Flutter parity) `Expanded` is what supplies it.
 const App = view(() =>
-    Column({
-        crossAlignment: CrossAxisAlignment.Start,
-        children: [
-            Expanded({
-                child: Row({
-                    crossAlignment: CrossAxisAlignment.Stretch,
-                    children: [
-                        // Sidebar-like: explicit width, no height.
-                        Container({
-                            width: 100,
-                            queryKey: ["sidebar"],
-                        }),
-                        // Divider-like: narrow explicit width, no height.
-                        Container({
-                            width: 8,
-                            queryKey: ["divider"],
-                        }),
-                        // Expanded fills remaining.
-                        Expanded({
-                            child: Container({
-                                queryKey: ["expanded-child"],
-                            }),
-                        }),
-                    ],
-                }),
-            }),
-        ],
-    }),
+    Column()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .children([
+            Expanded()
+                .child(
+                    Row()
+                        .crossAlignment(CrossAxisAlignment.Stretch)
+                        .children([
+                            // Sidebar-like: explicit width, no height.
+                            Container()
+                                .width(100)
+                                .queryKey(["sidebar"])
+                                .build(),
+                            // Divider-like: narrow explicit width, no height.
+                            Container().width(8).queryKey(["divider"]).build(),
+                            // Expanded fills remaining.
+                            Expanded()
+                                .child(
+                                    Container()
+                                        .queryKey(["expanded-child"])
+                                        .build(),
+                                )
+                                .build(),
+                        ])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build(),
 );
 
 export function start() {

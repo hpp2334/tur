@@ -4,7 +4,7 @@
  * Runtime is a synthetic boa module registered by tur-engine under the
  * specifier `"tur:std"`. It re-exports everything from
  * `"tur:core"` (the reactive primitives + meta-types) and adds the
- * widget layer: view factories, prop interfaces, enums, value types (Color /
+ * widget layer: element builders, enums, value types (Color /
  * LinearGradient / SpanData), view controllers, resources, and the event
  * detail payloads.
  *
@@ -12,6 +12,22 @@
  * convenience superset:
  * ```ts
  * import { Container, Column, source, Color, Axis } from "tur:std";
+ * ```
+ *
+ * ## Builder pattern
+ *
+ * Every element constructor takes a small props object with its
+ * **required** props only (or nothing when there are none) and returns a
+ * chainable builder. Each prop is also a builder method (camelCase,
+ * identical to the historical prop key; later calls overwrite), `.children`
+ * appends, `.child` sets the single child, and `.build()` materializes the
+ * `Element`:
+ * ```ts
+ * Container()
+ *     .padding(16)
+ *     .color(bg)
+ *     .children([Text({ text: "hi" }).fontSize(14).build()])
+ *     .build();
  * ```
  *
  * `@tur-ng/animation` and other libraries that need only the reactive
@@ -25,9 +41,9 @@ declare module "tur:std" {
     // Element/Source/Derived/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
     export * from "tur:core";
 
-    // Core meta-types used by the prop interfaces below. (`export *` alone
-    // re-exports but does not bind names locally — every core type used in
-    // this module body must also appear here.)
+    // Core meta-types used by the builder interfaces below. (`export *`
+    // alone re-exports but does not bind names locally — every core type
+    // used in this module body must also appear here.)
     import type { Derived, Element, Mutation, Readable, Val } from "tur:core";
 
     // ---------------------------------------------------------------------------
@@ -251,156 +267,69 @@ declare module "tur:std" {
     }
 
     // ---------------------------------------------------------------------------
-    // Prop interfaces
+    // Element builders — every element constructor takes a small required-props
+    // object (or nothing) and returns a fluent builder terminated by `.build()`.
+    // Prop methods accept the same `Val<…>` shapes the historical props object
+    // did; later calls overwrite; `.children(arr)` appends; `.child(el)` sets.
     // ---------------------------------------------------------------------------
 
-    export interface ContainerProps {
-        width?: Val<number>;
-        height?: Val<number>;
-        padding?: Val<number>;
-        color?: Val<Brush | null>;
-        borderColor?: Val<Brush | null>;
-        borderWidth?: Val<number>;
-        borderRadius?: Val<number>;
-        borderPosition?: Val<BorderPosition>;
-        clipBehavior?: Val<ClipBehavior>;
-        shadowColor?: Val<Brush | null>;
-        shadowOffset?: Val<[number, number]>;
-        shadowBlur?: Val<number>;
-        alignment?: Val<Alignment>;
-        queryKey?: Val<string[]>;
-        children?: Element[];
+    /** Terminal of every element builder: materialize the `Element`. */
+    export interface BuilderBuild {
+        build(): Element;
     }
 
-    export interface FlexProps {
-        mainAlignment?: Val<MainAxisAlignment>;
-        crossAlignment?: Val<CrossAxisAlignment>;
-        mainAxisSize?: Val<MainAxisSize>;
-        children: Element[];
+    export interface ContainerBuilder extends BuilderBuild {
+        width(v: Val<number | undefined>): this;
+        height(v: Val<number | undefined>): this;
+        padding(v: Val<number | undefined>): this;
+        color(v: Val<Brush | null | undefined>): this;
+        borderColor(v: Val<Brush | null | undefined>): this;
+        borderWidth(v: Val<number | undefined>): this;
+        borderRadius(v: Val<number | undefined>): this;
+        borderPosition(v: Val<BorderPosition | undefined>): this;
+        clipBehavior(v: Val<ClipBehavior | undefined>): this;
+        shadowColor(v: Val<Brush | null | undefined>): this;
+        shadowOffset(v: [number, number] | undefined): this;
+        shadowBlur(v: Val<number | undefined>): this;
+        alignment(v: Val<Alignment | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        children(children: Element[]): this;
     }
 
-    export interface ExpandedProps {
-        flex?: Val<number>;
-        child: Element;
+    export interface FlexBuilder extends BuilderBuild {
+        mainAlignment(v: Val<MainAxisAlignment | undefined>): this;
+        crossAlignment(v: Val<CrossAxisAlignment | undefined>): this;
+        mainAxisSize(v: Val<MainAxisSize | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        children(children: Element[]): this;
     }
 
-    export interface StackProps {
-        children: Element[];
+    export interface ExpandedBuilder extends BuilderBuild {
+        flex(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    export interface StackBuilder extends BuilderBuild {
         /** How to size non-positioned children (default `StackFit.Loose`).
-         * `Expand` tightens them to the Stack's constraints — the idiomatic
-         * way to build a full-bleed background layer for overlay stacks. */
-        fit?: Val<StackFit>;
+         *  `Expand` tightens them to the Stack's constraints — the idiomatic
+         *  way to build a full-bleed background layer for overlay stacks. */
+        fit(v: Val<StackFit | undefined>): this;
         /** Where to place non-positioned children (default TopLeft). */
-        alignment?: Val<Alignment>;
+        alignment(v: Val<Alignment | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        children(children: Element[]): this;
     }
 
-    export interface PositionedProps {
-        left?: Val<number>;
-        top?: Val<number>;
-        right?: Val<number>;
-        bottom?: Val<number>;
-        width?: Val<number>;
-        height?: Val<number>;
-        child: Element;
-    }
-
-    export interface TextProps {
-        text?: Val<string>;
-        fontSize?: Val<number>;
-        /** CSS-style numeric font weight (100–1000) applied to the whole
-         *  element. Per-span `weight` overrides it for that range. Omit for
-         *  the default (400). */
-        fontWeight?: Val<number>;
-        color?: Val<Brush | null>;
-        spans?: Val<SpanData[]>;
-        /** When `true`, the text can be drag-selected with the pointer. */
-        selectable?: boolean;
-        queryKey?: Val<string[]>;
-        /**
-         * Maximum number of lines to render. Ignored when `overflow` is
-         * `"visible"`. When omitted (or `0`), the text wraps without limit.
-         */
-        maxLines?: Val<number>;
-        /**
-         * How content beyond `maxLines` is handled. Defaults to `"clip"`
-         * when `maxLines` is set.
-         * - `"clip"`     — render at most `maxLines` lines, discard the rest.
-         * - `"ellipsis"` — render at most `maxLines` lines, appending `…`
-         *                  to the last visible line (trimmed to fit).
-         * - `"visible"`  — render all lines; `maxLines` is ignored.
-         */
-        overflow?: Val<TextOverflow>;
-    }
-
-    /**
-     * How `Text` handles content beyond `maxLines`. Mirrors Flutter's
-     * `TextOverflow`.
-     */
-    export type TextOverflow = "clip" | "ellipsis" | "visible";
-
-    export interface PointerInteractProps {
-        onClick?: Mutation<[PointerInteractEvent]>;
-        onPointerDown?: Mutation<[PointerInteractEvent]>;
-        onPointerMove?: Mutation<[PointerInteractEvent]>;
-        onPointerUp?: Mutation<[PointerInteractEvent]>;
-        onContextMenu?: Mutation<[PointerInteractEvent]>;
-        behavior?: Val<HitTestBehavior>;
-        queryKey?: Val<string[]>;
-        child?: Element;
-    }
-
-    export interface MouseRegionProps {
-        cursor?: Val<Cursor>;
-        onEnter?: Mutation<[PointerRegionEvent]>;
-        onExit?: Mutation<[PointerRegionEvent]>;
-        behavior?: Val<HitTestBehavior>;
-        child?: Element;
-    }
-
-    export interface ConditionProps {
-        condition: Val<boolean>;
-        child?: () => Element;
-        elseChild?: () => Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface SwitchCase {
-        key: string | number | boolean | null | undefined;
-        child: () => Element;
-    }
-
-    export interface SwitchProps {
-        value: Val<string | number | boolean | null | undefined>;
-        cases: SwitchCase[];
-        fallback?: () => Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface ScrollViewProps {
-        axis?: Val<Axis>;
-        padding?: Val<number>;
-        color?: Val<Brush | null>;
-        controller?: ScrollController;
-        child: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface ScrollbarProps {
-        controller?: ScrollController;
-        color?: Val<Brush | null>;
-        trackColor?: Val<Brush | null>;
-        thickness?: Val<number>;
-        thumbRadius?: Val<number>;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface LazyListProps {
-        axis?: Val<Axis>;
-        itemCount: Val<number>;
-        overscan?: Val<number>;
-        itemExtent?: Val<number>;
-        builder: (index: number) => Element;
-        queryKey?: Val<string[]>;
+    export interface PositionedBuilder extends BuilderBuild {
+        left(v: Val<number | undefined>): this;
+        top(v: Val<number | undefined>): this;
+        right(v: Val<number | undefined>): this;
+        bottom(v: Val<number | undefined>): this;
+        width(v: Val<number | undefined>): this;
+        height(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
     }
 
     /** A non-scrollable grid that tiles its static `children` row-major. The
@@ -408,30 +337,14 @@ declare module "tur:std" {
      *  `maxCrossAxisExtent` (`count = floor(width / maxCrossAxisExtent)`). Cell
      *  main-axis size is `mainAxisExtent` if given, else
      *  `cell_cross / childAspectRatio` (default square). */
-    export interface GridProps {
-        maxCrossAxisExtent: Val<number>;
-        childAspectRatio?: Val<number>;
-        mainAxisExtent?: Val<number>;
-        crossAxisSpacing?: Val<number>;
-        mainAxisSpacing?: Val<number>;
-        children: Element[];
-        queryKey?: Val<string[]>;
-    }
-
-    /** A scrollable, virtualized grid. Only the cells inside the viewport +
-     *  overscan are mounted. Same sizing model as `Grid`. `builder` receives
-     *  the flat item `index`; row/col are derived from `crossAxisCount`. */
-    export interface LazyGridProps {
-        axis?: Val<Axis>;
-        itemCount: Val<number>;
-        maxCrossAxisExtent: Val<number>;
-        childAspectRatio?: Val<number>;
-        mainAxisExtent?: Val<number>;
-        crossAxisSpacing?: Val<number>;
-        mainAxisSpacing?: Val<number>;
-        overscan?: Val<number>;
-        builder: (index: number) => Element;
-        queryKey?: Val<string[]>;
+    export interface GridBuilder extends BuilderBuild {
+        maxCrossAxisExtent(v: Val<number | undefined>): this;
+        childAspectRatio(v: Val<number | undefined>): this;
+        mainAxisExtent(v: Val<number | undefined>): this;
+        crossAxisSpacing(v: Val<number | undefined>): this;
+        mainAxisSpacing(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        children(children: Element[]): this;
     }
 
     /** One `Table.columns` entry. `width` = fixed px; `flex` = share of the
@@ -449,88 +362,269 @@ declare module "tur:std" {
      *  widths (CSS `table-layout: fixed` semantics). `rows` is a reactive
      *  array — writing a new array value rebuilds the row subtrees (write a
      *  fresh array; in-place mutation of the same array object with an
-     *  unchanged length is not observed). `build` returns one row's cells,
-     *  positionally mapped to the columns: a `null` entry is an empty cell
-     *  box (the column advances), entries beyond the column count are
-     *  ignored. `buildHeader` follows the same mapping and runs ONCE at
+     *  unchanged length is not observed). `rowBuilder` returns one row's
+     *  cells, positionally mapped to the columns: a `null` entry is an empty
+     *  cell box (the column advances), entries beyond the column count are
+     *  ignored. `headerBuilder` follows the same mapping and runs ONCE at
      *  build — reactive header content flows through `Val` props inside
      *  the returned cells. Without an extent, a row's height is the max
      *  intrinsic cell height (cells get loose height constraints); with
      *  one, cells fill it. Wrap in a `ScrollView` to scroll. */
-    export interface TableProps<T> {
-        columns: TableColumnDef[];
-        rows: Readable<T[]>;
-        build: (item: T, index: number) => (Element | null)[];
-        buildHeader?: () => (Element | null)[];
-        headerExtent?: Val<number>;
-        rowExtent?: Val<number>;
-        rowSpacing?: Val<number>;
+    export interface TableBuilder<T> extends BuilderBuild {
+        columns(cols: TableColumnDef[]): this;
+        rows(rows: Readable<T[]>): this;
+        rowBuilder(fn: (item: T, index: number) => (Element | null)[]): this;
+        headerBuilder(fn: () => (Element | null)[]): this;
+        headerExtent(v: Val<number | undefined>): this;
+        rowExtent(v: Val<number | undefined>): this;
+        rowSpacing(v: Val<number | undefined>): this;
         /** Painted under odd body rows. */
-        stripeColor?: Val<Brush | null>;
+        stripeColor(v: Val<Brush | null | undefined>): this;
         /** Horizontal rules between body rows + under the header. */
-        dividerColor?: Val<Brush | null>;
-        dividerThickness?: Val<number>;
-        queryKey?: Val<string[]>;
+        dividerColor(v: Val<Brush | null | undefined>): this;
+        dividerThickness(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
     }
 
-    export interface EachProps<T> {
-        items: Readable<T[]>;
-        build: (item: T, index: number) => Element;
-        mainAlignment?: Val<MainAxisAlignment>;
-        crossAlignment?: Val<CrossAxisAlignment>;
-        mainAxisSize?: Val<MainAxisSize>;
-        queryKey?: Val<string[]>;
+    /**
+     * How `Text` handles content beyond `maxLines`. Mirrors Flutter's
+     * `TextOverflow`.
+     */
+    export type TextOverflow = "clip" | "ellipsis" | "visible";
+
+    export interface TextBuilder extends BuilderBuild {
+        text(v: Val<string | undefined>): this;
+        fontSize(v: Val<number | undefined>): this;
+        /** CSS-style numeric font weight (100–1000) applied to the whole
+         *  element. Per-span `weight` overrides it for that range. Omit for
+         *  the default (400). */
+        fontWeight(v: Val<number | undefined>): this;
+        color(v: Val<Brush | null | undefined>): this;
+        spans(v: SpanData[] | undefined): this;
+        /** When `true`, the text can be drag-selected with the pointer. */
+        selectable(v: boolean | undefined): this;
+        onSelectionChange(m: Mutation<[unknown]> | undefined): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        /**
+         * Maximum number of lines to render. Ignored when `overflow` is
+         * `"visible"`. When omitted (or `0`), the text wraps without limit.
+         */
+        maxLines(v: Val<number | undefined>): this;
+        /**
+         * How content beyond `maxLines` is handled. Defaults to `"clip"`
+         * when `maxLines` is set.
+         * - `"clip"`     — render at most `maxLines` lines, discard the rest.
+         * - `"ellipsis"` — render at most `maxLines` lines, appending `…`
+         *                  to the last visible line (trimmed to fit).
+         * - `"visible"`  — render all lines; `maxLines` is ignored.
+         */
+        overflow(v: Val<TextOverflow | undefined>): this;
     }
 
-    export interface ImageProps {
-        resourceId: Val<number>;
-        width?: Val<number>;
-        height?: Val<number>;
-        fit?: Val<BoxFit>;
-        queryKey?: Val<string[]>;
-        child?: Element;
-    }
-
-    export interface InputProps {
-        controller?: TextController;
-        undoController?: UndoController;
-        placeholder?: Val<string>;
-        color?: Val<Brush | null>;
-        placeholderColor?: Val<Brush | null>;
-        cursorColor?: Val<Brush | null>;
-        fontSize?: Val<number>;
-        fontFamily?: Val<string>;
+    export interface InputBuilder extends BuilderBuild {
+        controller(
+            c: TextController | Readable<TextController> | undefined,
+        ): this;
+        undoController(c: UndoController | undefined): this;
+        placeholder(v: Val<string | undefined>): this;
+        color(v: Val<Brush | null | undefined>): this;
+        placeholderColor(v: Val<Brush | null | undefined>): this;
+        cursorColor(v: Val<Brush | null | undefined>): this;
+        fontSize(v: Val<number | undefined>): this;
+        fontFamily(v: Val<string | undefined>): this;
         /** CSS-style numeric font weight (100–1000). Omit for the default
          *  (400). Per-span `weight` overrides it. */
-        fontWeight?: Val<number>;
-        width?: Val<number>;
-        height?: Val<number>;
-        multiline?: Val<boolean>;
+        fontWeight(v: Val<number | undefined>): this;
+        width(v: Val<number | undefined>): this;
+        height(v: Val<number | undefined>): this;
+        multiline(v: Val<boolean | undefined>): this;
         /** When true, each character is rendered as `obscuringCharacter`
          *  (password mode). The controller's `text` keeps the real value. */
-        obscureText?: Val<boolean>;
+        obscureText(v: Val<boolean | undefined>): this;
         /** Mask glyph used when `obscureText` is on (default `"•"`). */
-        obscuringCharacter?: Val<string>;
-        onContextMenu?: Mutation<[PointerInteractEvent]>;
-        queryKey?: Val<string[]>;
+        obscuringCharacter(v: Val<string | undefined>): this;
+        onContextMenu(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        queryKey(keys: Val<string[] | undefined>): this;
     }
 
-    export interface FragmentProps {
-        children: Element[];
+    export interface ImageBuilder extends BuilderBuild {
+        resourceId(v: Val<number | undefined>): this;
+        width(v: Val<number | undefined>): this;
+        height(v: Val<number | undefined>): this;
+        fit(v: Val<BoxFit | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
     }
 
-    export interface FocusableProps {
-        onKeyDown?: Mutation<[KeyEvent]>;
-        onKeyUp?: Mutation<[KeyEvent]>;
-        onFocus?: Mutation<[]>;
-        onBlur?: Mutation<[]>;
-        child?: Element;
+    export interface ScrollViewBuilder extends BuilderBuild {
+        axis(v: Val<Axis | undefined>): this;
+        padding(v: Val<number | undefined>): this;
+        color(v: Val<Brush | null | undefined>): this;
+        controller(c: ScrollController | undefined): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
     }
 
-    export interface ReadableSubscribeProps {
-        readables: Readable<unknown>[];
-        onUpdate$: Mutation<[]>;
-        child: Element;
+    export interface ScrollbarBuilder extends BuilderBuild {
+        color(v: Val<Brush | null | undefined>): this;
+        trackColor(v: Val<Brush | null | undefined>): this;
+        thickness(v: Val<number | undefined>): this;
+        thumbRadius(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    export interface LazyListBuilder extends BuilderBuild {
+        itemCount(v: Val<number | undefined>): this;
+        builder(fn: (index: number) => Element): this;
+        axis(v: Val<Axis | undefined>): this;
+        overscan(v: Val<number | undefined>): this;
+        itemExtent(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    /** A scrollable, virtualized grid. Only the cells inside the viewport +
+     *  overscan are mounted. Same sizing model as `Grid`. `builder` receives
+     *  the flat item `index`; row/col are derived from `crossAxisCount`. */
+    export interface LazyGridBuilder extends BuilderBuild {
+        itemCount(v: Val<number | undefined>): this;
+        maxCrossAxisExtent(v: Val<number | undefined>): this;
+        builder(fn: (index: number) => Element): this;
+        axis(v: Val<Axis | undefined>): this;
+        overscan(v: Val<number | undefined>): this;
+        childAspectRatio(v: Val<number | undefined>): this;
+        mainAxisExtent(v: Val<number | undefined>): this;
+        crossAxisSpacing(v: Val<number | undefined>): this;
+        mainAxisSpacing(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    export interface OpacityBuilder extends BuilderBuild {
+        value(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    export interface TransformBuilder extends BuilderBuild {
+        scale(v: Val<number | undefined>): this;
+        scaleX(v: Val<number | undefined>): this;
+        scaleY(v: Val<number | undefined>): this;
+        rotate(v: Val<number | undefined>): this;
+        translateX(v: Val<number | undefined>): this;
+        translateY(v: Val<number | undefined>): this;
+        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
+         *  `Alignment.Center` (matches Flutter's `Transform`). */
+        alignment(v: Val<Alignment | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    export interface CompositedTransformTargetBuilder extends BuilderBuild {
+        /** A link created via `createLayerLink()`, shared with the follower. */
+        link(link: LayerLink): this;
+        child(child: Element): this;
+    }
+
+    export interface CompositedTransformFollowerBuilder extends BuilderBuild {
+        /** A link created via `createLayerLink()`, shared with the target. */
+        link(link: LayerLink): this;
+        /** Anchor point on the target that the follower aligns to. The
+         *  follower is translated so its `followerAnchor` lands here in global
+         *  space. Defaults to `Alignment.TopLeft`. Reactive: pass a `derive`
+         *  to change it at runtime. */
+        targetAnchor(v: Val<Alignment | undefined>): this;
+        /** Anchor point on this follower that lines up with `targetAnchor`.
+         *  Defaults to `Alignment.TopLeft`. Reactive. */
+        followerAnchor(v: Val<Alignment | undefined>): this;
+        /** Additional offset (in the target's local coordinate space) applied
+         *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. Reactive: pass a
+         *  `derive` to change it at runtime (e.g. steppers). */
+        targetOffset(v: { x: number; y: number } | undefined): this;
+        /** Whether to keep rendering at the follower's layout position when no
+         *  target is linked. Defaults to `true`. */
+        showWhenUnlinked(v: boolean | undefined): this;
+        child(child: Element): this;
+    }
+
+    export interface ConditionBuilder extends BuilderBuild {
+        condition(v: Val<boolean | undefined>): this;
+        /** The branch thunk (`() => Element`), re-invoked on condition flips. */
+        child(fn: () => Element): this;
+        elseChild(fn: (() => Element) | undefined): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    export interface SwitchCase {
+        key: string | number | boolean | null | undefined;
+        child: () => Element;
+    }
+
+    export interface SwitchBuilder extends BuilderBuild {
+        value(
+            v: Val<string | number | boolean | null | undefined | undefined>,
+        ): this;
+        cases(cases: SwitchCase[] | undefined): this;
+        fallback(fn: (() => Element) | undefined): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    export interface EachBuilder<T> extends BuilderBuild {
+        items(items: Readable<T[]>): this;
+        /** The item factory — the historical `build` prop (renamed: `build`
+         *  is the builder's terminal). */
+        itemBuilder(fn: (item: T, index: number) => Element): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+    }
+
+    export interface FragmentBuilder extends BuilderBuild {
+        queryKey(keys: Val<string[] | undefined>): this;
+        children(children: Element[]): this;
+    }
+
+    export interface PointerInteractBuilder extends BuilderBuild {
+        onClick(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        onPointerDown(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        onPointerMove(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        onPointerUp(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        onContextMenu(m: Mutation<[PointerInteractEvent]> | undefined): this;
+        behavior(v: Val<HitTestBehavior | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    export interface MouseRegionBuilder extends BuilderBuild {
+        cursor(v: Val<Cursor | undefined>): this;
+        onEnter(m: Mutation<[PointerRegionEvent]> | undefined): this;
+        onExit(m: Mutation<[PointerRegionEvent]> | undefined): this;
+        behavior(v: Val<HitTestBehavior | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    export interface FocusableBuilder extends BuilderBuild {
+        onKeyDown(m: Mutation<[KeyEvent]> | undefined): this;
+        onKeyUp(m: Mutation<[KeyEvent]> | undefined): this;
+        onFocus(m: Mutation<[]> | undefined): this;
+        onBlur(m: Mutation<[]> | undefined): this;
+        child(child: Element): this;
+    }
+
+    export interface ReadableSubscribeBuilder extends BuilderBuild {
+        readables(readables: Readable<unknown>[]): this;
+        onUpdate$(m: Mutation<[]> | undefined): this;
+        child(child: Element): this;
+    }
+
+    export interface VirtualAppViewBuilder extends BuilderBuild {
+        /** Reactive controller binding — `null` unbinds (destroys). */
+        app$(app: Readable<VirtualAppController | null>): this;
+        background(v: Val<Color | undefined>): this;
+        width(v: Val<number | undefined>): this;
+        height(v: Val<number | undefined>): this;
+        queryKey(keys: string[] | undefined): this;
+        /** Painted while the child isn't live. */
+        fallback(child: Element | undefined): this;
+        /** Painted on error. */
+        errorView(child: Element | undefined): this;
     }
 
     export interface LifecycleDescriptor {
@@ -690,73 +784,62 @@ declare module "tur:std" {
     export function sleep(ms: number): Task<void>;
 
     // ---------------------------------------------------------------------------
-    // Element factories
+    // Element factories — each takes its required props (or nothing) and
+    // returns a chainable builder terminated by `.build()`.
     // ---------------------------------------------------------------------------
 
-    export function Container(props: ContainerProps): Element;
-
-    /** A width/height-only `Container` (no decoration, no child layout props beyond
-     *  `children`). Sugar for `Container({ width, height, children })`. */
-    export function SizedBox(props: {
+    export function Container(): ContainerBuilder;
+    export function SizedBox(props?: {
         width?: Val<number>;
         height?: Val<number>;
-        children?: Element[];
-        /** Shares the `Container` native fn, so `queryKey` works the same. */
-        queryKey?: Val<string[]>;
-    }): Element;
-    export function Column(props: FlexProps): Element;
-    export function Row(props: FlexProps): Element;
-    export function Expanded(props: ExpandedProps): Element;
-    export function Stack(props: StackProps): Element;
-    export function Positioned(props: PositionedProps): Element;
-    export function Text(props: TextProps): Element;
-    export function PointerInteract(props: PointerInteractProps): Element;
-    export function MouseRegion(props: MouseRegionProps): Element;
-    export function Condition(props: ConditionProps): Element;
-    export function Switch(props: SwitchProps): Element;
-    export function Each<T>(props: EachProps<T>): Element;
-    export function LazyList(props: LazyListProps): Element;
-    export function Grid(props: GridProps): Element;
-    export function Table<T>(props: TableProps<T>): Element;
-    export function LazyGrid(props: LazyGridProps): Element;
-    export function ScrollView(props: ScrollViewProps): Element;
-    export function Scrollbar(props: ScrollbarProps): Element;
-    export function Image(props: ImageProps): Element;
-    export function Input(props: InputProps): Element;
-    export function Fragment(props: FragmentProps): Element;
-    export function Focusable(props: FocusableProps): Element;
+    }): ContainerBuilder;
+    export function Column(): FlexBuilder;
+    export function Row(): FlexBuilder;
+    export function Expanded(): ExpandedBuilder;
+    export function Stack(): StackBuilder;
+    export function Positioned(): PositionedBuilder;
+    export function Text(props?: { text?: Val<string> }): TextBuilder;
+    export function PointerInteract(): PointerInteractBuilder;
+    export function MouseRegion(): MouseRegionBuilder;
+    export function Condition(props?: {
+        condition?: Val<boolean>;
+    }): ConditionBuilder;
+    export function Switch(props?: {
+        value?: Val<string | number | boolean | null | undefined>;
+    }): SwitchBuilder;
+    export function Each<T>(props: { items: Readable<T[]> }): EachBuilder<T>;
+    export function LazyList(props: {
+        itemCount: Val<number>;
+    }): LazyListBuilder;
+    export function Grid(props: {
+        maxCrossAxisExtent: Val<number>;
+    }): GridBuilder;
+    export function Table<T>(props: {
+        columns: TableColumnDef[];
+        rows: Readable<T[]>;
+    }): TableBuilder<T>;
+    export function LazyGrid(props: {
+        itemCount: Val<number>;
+        maxCrossAxisExtent: Val<number>;
+    }): LazyGridBuilder;
+    export function ScrollView(): ScrollViewBuilder;
+    export function Scrollbar(): ScrollbarBuilder;
+    export function Image(props?: { resourceId?: Val<number> }): ImageBuilder;
+    export function Input(): InputBuilder;
+    export function Fragment(): FragmentBuilder;
+    export function Focusable(): FocusableBuilder;
     export function lifecycleView(f: () => LifecycleDescriptor): Element;
-    export function ReadableSubscribe(props: ReadableSubscribeProps): Element;
+    export function ReadableSubscribe(): ReadableSubscribeBuilder;
 
     // ---------------------------------------------------------------------------
     // Visual-effect elements (Opacity / Transform)
     // ---------------------------------------------------------------------------
 
-    export interface OpacityProps {
-        value: Val<number>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface TransformProps {
-        scale?: Val<number>;
-        scaleX?: Val<number>;
-        scaleY?: Val<number>;
-        rotate?: Val<number>;
-        translateX?: Val<number>;
-        translateY?: Val<number>;
-        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
-         *  `Alignment.Center` (matches Flutter's `Transform`). */
-        alignment?: Val<Alignment>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
     /** Alpha-mask its child subtree by `value` (0.0..=1.0). */
-    export function Opacity(props: OpacityProps): Element;
+    export function Opacity(props?: { value?: Val<number> }): OpacityBuilder;
 
     /** Apply a 2D affine rotate/scale/translate to its child subtree. */
-    export function Transform(props: TransformProps): Element;
+    export function Transform(): TransformBuilder;
 
     // ---------------------------------------------------------------------------
     // CompositedTransformTarget / Follower — Flutter-style anchor linking.
@@ -776,46 +859,17 @@ declare module "tur:std" {
     /** Create a shared `LayerLink` connecting a target and a follower. */
     export function createLayerLink(): LayerLink;
 
-    export interface CompositedTransformTargetProps {
-        /** A link created via `createLayerLink()`, shared with the follower. */
-        link: LayerLink;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface CompositedTransformFollowerProps {
-        /** A link created via `createLayerLink()`, shared with the target. */
-        link: LayerLink;
-        /** Anchor point on the target that the follower aligns to. The
-         *  follower is translated so its `followerAnchor` lands here in global
-         *  space. Defaults to `Alignment.TopLeft`. Reactive: pass a `derive`
-         *  to change it at runtime. */
-        targetAnchor?: Val<Alignment>;
-        /** Anchor point on this follower that lines up with `targetAnchor`.
-         *  Defaults to `Alignment.TopLeft`. Reactive. */
-        followerAnchor?: Val<Alignment>;
-        /** Additional offset (in the target's local coordinate space) applied
-         *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. Reactive: pass a
-         *  `derive` to change it at runtime (e.g. steppers). */
-        targetOffset?: Val<{ x: number; y: number }>;
-        /** Whether to keep rendering at the follower's layout position when no
-         *  target is linked. Defaults to `true`. */
-        showWhenUnlinked?: boolean;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
     /** Marks a spot in the tree for a `CompositedTransformFollower` to track.
      *  A transparent passthrough. */
-    export function CompositedTransformTarget(
-        props: CompositedTransformTargetProps,
-    ): Element;
+    export function CompositedTransformTarget(props: {
+        link: LayerLink;
+    }): CompositedTransformTargetBuilder;
 
     /** Renders at a target's anchor (tracked continuously). Place in a root
      *  overlay slot. */
-    export function CompositedTransformFollower(
-        props: CompositedTransformFollowerProps,
-    ): Element;
+    export function CompositedTransformFollower(props: {
+        link: LayerLink;
+    }): CompositedTransformFollowerBuilder;
 
     // ---------------------------------------------------------------------------
     // Controllers / resources / colors / focus
@@ -968,16 +1022,8 @@ declare module "tur:std" {
     }): VirtualAppController;
 
     /** Element hosting a virtual app; draws the child's latest frame. */
-    export function VirtualAppView(props: {
+    export function VirtualAppView(props?: {
         /** Reactive controller binding — `null` unbinds (destroys). */
-        app$: Readable<VirtualAppController | null>;
-        background?: Val<Color>;
-        width?: Val<number>;
-        height?: Val<number>;
-        queryKey?: Array<string>;
-        /** Painted while the child isn't live. */
-        fallback?: Element;
-        /** Painted on error. */
-        errorView?: Element;
-    }): Element;
+        app$?: Readable<VirtualAppController | null>;
+    }): VirtualAppViewBuilder;
 }

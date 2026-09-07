@@ -15,18 +15,19 @@ const App = view(() => {
     // stable for the life of the tree — no need to hoist it to module level.
     const content$ = source("before");
 
-    return Column({
-        crossAlignment: CrossAxisAlignment.Start,
-        children: [
-            PointerInteract({
-                onClick: mutate((ctx, _ev) => ctx.set(content$, "after")),
-                child: Text({
-                    text: derive((ctx) => ctx.get(content$)),
-                    queryKey: ["click-text"],
-                }),
-            }),
-        ],
-    });
+    return Column()
+        .crossAlignment(CrossAxisAlignment.Start)
+        .children([
+            PointerInteract()
+                .onClick(mutate((ctx, _ev) => ctx.set(content$, "after")))
+                .child(
+                    Text({ text: derive((ctx) => ctx.get(content$)) })
+                        .queryKey(["click-text"])
+                        .build(),
+                )
+                .build(),
+        ])
+        .build();
 });
 
 export function start() {

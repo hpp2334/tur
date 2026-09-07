@@ -40,21 +40,27 @@ Object.assign(globalThis, {
 });
 
 const App = view(() =>
-    PointerInteract({
-        onPointerDown: mutate(() => {
-            downCount += 1;
-        }),
-        onPointerMove: mutate(() => {
-            moveCount += 1;
-        }),
-        child: Container({
-            width: 200,
-            height: 200,
-            color: Color.hex("#6366f1"),
-            queryKey: ["drag-target"],
-            children: [Text({ text: "drag me" })],
-        }),
-    }),
+    PointerInteract()
+        .onPointerDown(
+            mutate(() => {
+                downCount += 1;
+            }),
+        )
+        .onPointerMove(
+            mutate(() => {
+                moveCount += 1;
+            }),
+        )
+        .child(
+            Container()
+                .width(200)
+                .height(200)
+                .color(Color.hex("#6366f1"))
+                .queryKey(["drag-target"])
+                .children([Text({ text: "drag me" }).build()])
+                .build(),
+        )
+        .build(),
 );
 
 export function start() {
