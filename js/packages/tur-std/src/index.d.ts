@@ -289,7 +289,7 @@ declare module "tur:std" {
         borderPosition(v: Val<BorderPosition | undefined>): this;
         clipBehavior(v: Val<ClipBehavior | undefined>): this;
         shadowColor(v: Val<Brush | null | undefined>): this;
-        shadowOffset(v: [number, number] | undefined): this;
+        shadowOffset(v: Val<[number, number]> | undefined): this;
         shadowBlur(v: Val<number | undefined>): this;
         alignment(v: Val<Alignment | undefined>): this;
         queryKey(keys: Val<string[] | undefined>): this;
@@ -538,7 +538,7 @@ declare module "tur:std" {
         /** Additional offset (in the target's local coordinate space) applied
          *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. Reactive: pass a
          *  `derive` to change it at runtime (e.g. steppers). */
-        targetOffset(v: { x: number; y: number } | undefined): this;
+        targetOffset(v: Val<{ x: number; y: number }> | undefined): this;
         /** Whether to keep rendering at the follower's layout position when no
          *  target is linked. Defaults to `true`. */
         showWhenUnlinked(v: boolean | undefined): this;
