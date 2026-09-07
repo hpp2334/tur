@@ -244,6 +244,12 @@ declare module "tur:std" {
         AntiAliasWithSaveLayer = 3,
     }
 
+    export enum StackFit {
+        Loose = 0,
+        Expand = 1,
+        Passthrough = 2,
+    }
+
     // ---------------------------------------------------------------------------
     // Prop interfaces
     // ---------------------------------------------------------------------------
@@ -280,6 +286,12 @@ declare module "tur:std" {
 
     export interface StackProps {
         children: Element[];
+        /** How to size non-positioned children (default `StackFit.Loose`).
+         * `Expand` tightens them to the Stack's constraints — the idiomatic
+         * way to build a full-bleed background layer for overlay stacks. */
+        fit?: Val<StackFit>;
+        /** Where to place non-positioned children (default TopLeft). */
+        alignment?: Val<Alignment>;
     }
 
     export interface PositionedProps {
@@ -689,6 +701,8 @@ declare module "tur:std" {
         width?: Val<number>;
         height?: Val<number>;
         children?: Element[];
+        /** Shares the `Container` native fn, so `queryKey` works the same. */
+        queryKey?: Val<string[]>;
     }): Element;
     export function Column(props: FlexProps): Element;
     export function Row(props: FlexProps): Element;

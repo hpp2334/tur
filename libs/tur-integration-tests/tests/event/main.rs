@@ -7,6 +7,7 @@ mod counter;
 mod drag_delta;
 mod editable_text;
 mod focus_clear_on_click;
+mod hit_test_transparency;
 mod mouse_region;
 mod password;
 mod pointer_drag;

@@ -1,14 +1,24 @@
-use crate::core::layout::ComputedLayout;
+use crate::core::layout::{ComputedLayout, HitTestBehavior, Offset};
 use crate::core::shell::Cursor;
 
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::MouseRegionElement;
 
 impl ElementRender for MouseRegionElement {
     fn type_name(&self) -> &'static str {
         "tur_mouse_region"
+    }
+
+    // Flutter `MouseRegion` defaults to `opaque: true` — the region absorbs
+    // hits (hover + enter/exit work over empty content); `Translucent`
+    // joins the hit path without blocking what's behind.
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        match self.behavior {
+            HitTestBehavior::Opaque => HitTestSelf::Opaque,
+            HitTestBehavior::Translucent => HitTestSelf::Translucent,
+        }
     }
 
     fn paint(

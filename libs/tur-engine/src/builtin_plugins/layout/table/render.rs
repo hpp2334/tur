@@ -1,12 +1,25 @@
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::TableElement;
 
 impl ElementRender for TableElement {
     fn type_name(&self) -> &'static str {
         "tur_table"
+    }
+
+    // Chrome (row stripes / dividers) paints a surface, which absorbs hits
+    // (DecoratedBox parity). A chrome-less table is a plain wrapper —
+    // transparent; the cells' own contents absorb.
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        let p = &self.painting;
+        let has_chrome = p.stripe.is_some() || p.divider.is_some() && p.divider_thickness > 0.0;
+        if has_chrome {
+            HitTestSelf::Opaque
+        } else {
+            HitTestSelf::Defer
+        }
     }
 
     fn paint(

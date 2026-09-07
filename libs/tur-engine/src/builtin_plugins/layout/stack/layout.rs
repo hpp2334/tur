@@ -16,9 +16,26 @@ impl ElementLayout for StackElement {
             .read_val_opt(self.view.fit.as_ref())
             .unwrap_or(StackFit::Loose);
 
+        // Positioned children are laid out in a SECOND pass — after the
+        // Stack's own size is known — so their edge anchors (`right`/
+        // `bottom`) and opposing-edge extents resolve against the STACK's
+        // size rather than the incoming constraints (Flutter `RenderStack`:
+        // non-positioned children size the stack, then
+        // `constraintsForPositionedChild` bounds each axis to the stack
+        // extent).
+        let mut non_positioned: Vec<ElementNodeId> = Vec::new();
+        let mut positioned: Vec<ElementNodeId> = Vec::new();
+        for &child_id in children {
+            if cx.child_type_name(child_id) == "tur_positioned" {
+                positioned.push(child_id);
+            } else {
+                non_positioned.push(child_id);
+            }
+        }
+
         let mut max_size = Size::ZERO;
 
-        for &child_id in children {
+        for &child_id in &non_positioned {
             let child_constraints = match fit {
                 // `Expand` builds tight constraints from the incoming maxes —
                 // under an unbounded axis (e.g. a Stack that is a non-flex
@@ -77,7 +94,46 @@ impl ElementLayout for StackElement {
             );
         }
 
-        let final_size = constraints.constrain(max_size);
+        // --- stack size ---
+        // Sized by its non-positioned children; a positioned-only stack
+        // takes the biggest size its constraints allow (Flutter
+        // `RenderStack`: `size = constraints.biggest`) — the reference box
+        // `right`/`bottom` anchors resolve against. An unbounded axis
+        // degrades to the positioned children's max extent (resolved after
+        // their pass) instead of leaking `∞` (Flutter reports this as a
+        // layout error).
+        let (mut stack_w, mut stack_h) = if !non_positioned.is_empty() || positioned.is_empty() {
+            let s = constraints.constrain(max_size);
+            (s.width, s.height)
+        } else {
+            let biggest =
+                constraints.constrain(Size::new(constraints.max_width, constraints.max_height));
+            (biggest.width, biggest.height)
+        };
+
+        // --- pass 2: positioned children, bounded per-axis by the stack size ---
+        let mut pos_max = Size::ZERO;
+        for &child_id in &positioned {
+            let child_constraints = Constraints {
+                min_width: 0.0,
+                max_width: stack_w,
+                min_height: 0.0,
+                max_height: stack_h,
+            };
+            let size = cx.layout_child(child_id, &child_constraints);
+            pos_max = Size::new(
+                pos_max.width.max(size.width),
+                pos_max.height.max(size.height),
+            );
+        }
+        if !stack_w.is_finite() {
+            stack_w = pos_max.width;
+        }
+        if !stack_h.is_finite() {
+            stack_h = pos_max.height;
+        }
+
+        let final_size = Size::new(stack_w, stack_h);
         self.computed_size = Some(final_size);
 
         // --- position (assign non-positioned child offsets) ---
@@ -85,15 +141,10 @@ impl ElementLayout for StackElement {
         let alignment = cx
             .read_val_opt(self.view.alignment.as_ref())
             .unwrap_or_default();
-        for &child_id in children {
-            let kind = cx.child_type_name(child_id);
-            let is_positioned = kind == "tur_positioned";
-
-            if !is_positioned {
-                let child_size = cx.child_computed_size(child_id);
-                let offset = alignment.align_offset(stack_size, child_size);
-                cx.set_child_offset(child_id, offset);
-            }
+        for &child_id in &non_positioned {
+            let child_size = cx.child_computed_size(child_id);
+            let offset = alignment.align_offset(stack_size, child_size);
+            cx.set_child_offset(child_id, offset);
         }
 
         final_size

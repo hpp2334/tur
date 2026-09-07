@@ -82,6 +82,13 @@ impl PointerInteractElement {
         self.view.on_click.is_some()
     }
 
+    /// The resolved hit-test behavior (default `Opaque`). Drives both the
+    /// element-tree hit walk (`hit_test_self`) and the gesture handler's
+    /// claim probing.
+    pub fn behavior(&self) -> HitTestBehavior {
+        self.behavior
+    }
+
     pub fn has_gesture_callbacks(&self) -> bool {
         self.view.on_pointer_down.is_some()
             || self.view.on_pointer_move.is_some()

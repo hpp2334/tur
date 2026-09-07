@@ -1,13 +1,29 @@
 use crate::core::layout::{BorderPosition, ClipBehavior, ComputedLayout, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::ContainerElement;
 
 impl ElementRender for ContainerElement {
     fn type_name(&self) -> &'static str {
         "tur_container"
+    }
+
+    // A painted surface absorbs hits (Flutter `DecoratedBox` / `ColoredBox`:
+    // `hitTestSelf => true` when a decoration is painted). A decoration-less
+    // Container is a plain wrapper — transparent (Flutter's
+    // `RenderConstrainedBox`).
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        let p = &self.painting;
+        let has_surface = p.color.is_some()
+            || p.border_color.is_some() && p.border_width.unwrap_or(0.0) > 0.0
+            || p.shadow_color.is_some() && p.shadow_blur.unwrap_or(0.0) > 0.0;
+        if has_surface {
+            HitTestSelf::Opaque
+        } else {
+            HitTestSelf::Defer
+        }
     }
 
     fn paint(

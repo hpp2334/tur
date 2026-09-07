@@ -1,13 +1,20 @@
 use crate::core::layout::{ComputedLayout, Geometry, Offset};
 
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::ScrollViewElement;
 
 impl ElementRender for ScrollViewElement {
     fn type_name(&self) -> &'static str {
         "tur_scroll_view"
+    }
+
+    // The scrollable absorbs hits across its viewport (Flutter's `Scrollable`
+    // wraps its viewport in an opaque `Listener`, so wheel/drag work over
+    // empty content areas too).
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        HitTestSelf::Opaque
     }
 
     fn paint(

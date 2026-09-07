@@ -1,13 +1,20 @@
 use crate::core::layout::{ComputedLayout, Offset};
 
 use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 
 use super::element::LazyListElement;
 
 impl ElementRender for LazyListElement {
     fn type_name(&self) -> &'static str {
         "tur_lazy_list"
+    }
+
+    // The scrollable absorbs hits across its viewport (Flutter's `Scrollable`
+    // wraps its viewport in an opaque `Listener`, so wheel/drag work over
+    // empty content areas too).
+    fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
+        HitTestSelf::Opaque
     }
 
     fn paint(

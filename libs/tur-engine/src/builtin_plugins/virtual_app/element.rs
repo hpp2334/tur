@@ -213,6 +213,18 @@ impl ElementRender for VirtualAppElement {
         "tur_virtual_app"
     }
 
+    // The host surface is opaque (a platform-view analog): input forwarding
+    // relies on the host being on the hit path, and an idle/empty child app
+    // still consumes events over its viewport rather than leaking them to
+    // the parent's content behind it.
+    fn hit_test_self(
+        &self,
+        _position: Offset,
+        _layout: &crate::core::layout::ComputedLayout,
+    ) -> crate::core::render::HitTestSelf {
+        crate::core::render::HitTestSelf::Opaque
+    }
+
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
