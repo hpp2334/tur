@@ -26,7 +26,6 @@ mod paint_culling;
 mod positioned;
 mod reactive;
 mod reactive_plugin;
-mod readable_subscribe;
 mod reentrant_module_check;
 mod rich_text;
 mod rich_text_perf;

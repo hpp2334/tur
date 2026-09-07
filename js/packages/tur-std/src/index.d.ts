@@ -608,12 +608,6 @@ declare module "tur:std" {
         child(child: Element): this;
     }
 
-    export interface ReadableSubscribeBuilder extends BuilderBuild {
-        readables(readables: Readable<unknown>[]): this;
-        onUpdate$(m: Mutation<[]> | undefined): this;
-        child(child: Element): this;
-    }
-
     export interface VirtualAppViewBuilder extends BuilderBuild {
         /** Reactive controller binding — `null` unbinds (destroys). */
         app$(app: Readable<VirtualAppController | null>): this;
@@ -829,7 +823,6 @@ declare module "tur:std" {
     export function Fragment(): FragmentBuilder;
     export function Focusable(): FocusableBuilder;
     export function lifecycleView(f: () => LifecycleDescriptor): Element;
-    export function ReadableSubscribe(): ReadableSubscribeBuilder;
 
     // ---------------------------------------------------------------------------
     // Visual-effect elements (Opacity / Transform)
