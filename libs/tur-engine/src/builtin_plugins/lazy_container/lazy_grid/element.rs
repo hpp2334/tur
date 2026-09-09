@@ -89,6 +89,7 @@ impl View for LazyGridView {
                 cross_axis_spacing: 0.0,
                 main_axis_spacing: 0.0,
                 visible,
+                declared_count: item_count,
                 reported_start: 0,
                 reported_end: 0,
                 warned_unbounded: false,
@@ -145,6 +146,12 @@ pub struct LazyGridElement {
     /// `(index, built node id)` for every cell currently in the tree. Kept
     /// sorted by index.
     pub(crate) visible: Vec<(u64, NodeId)>,
+    /// The declared item count as of the last fresh read (at `build`, then
+    /// refreshed on every `react_to_prop_changes` pass). For a reactive
+    /// `itemCount` this — NOT `visible.len()` — is the authoritative count
+    /// for window math (the LazyList `declared_count` rationale: clamping
+    /// ranges to the mounted-set size froze the count after a shrink).
+    pub(crate) declared_count: u64,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
     /// One-shot layout diagnostic: viewport collapsed under unbounded
@@ -157,16 +164,25 @@ impl LazyGridElement {
         self.position.pixels()
     }
 
+    /// Maximum scrollable offset along the main axis (content − viewport,
+    /// clamped to be non-negative). Mirrors
+    /// [`ScrollViewElement::max_scroll_extent`](crate::builtin_plugins::scroll::ScrollViewElement::max_scroll_extent).
+    pub fn max_scroll_extent(&self) -> f64 {
+        self.position.max_scroll_extent()
+    }
+
     pub fn axis(&self) -> Axis {
         self.axis
     }
 
-    /// The declared item count (static value only; reactive counts fall back
-    /// to the number of items actually built).
+    /// The declared item count. Static: the literal. Reactive: the value as
+    /// of the latest fresh read (`build` / `react_to_prop_changes`) — never
+    /// `visible.len()`, which froze the count at the shrunken mounted set
+    /// and made tail growth after a shrink unreachable.
     pub fn item_count(&self) -> u64 {
         match &self.view.item_count {
             Val::Static(v) => *v,
-            Val::Reactive(_) => self.visible.len() as u64,
+            Val::Reactive(_) => self.declared_count,
         }
     }
 
@@ -246,8 +262,12 @@ impl LazyGridElement {
             self.stride_main = 0.0;
         }
 
+        // itemCount: always refresh the declared count (the authoritative
+        // value for window math). A read failure keeps the previous declared
+        // value rather than collapsing it to 0.
+        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(0);
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
         if new_count < current_max {
             let to_destroy: Vec<NodeId> = self

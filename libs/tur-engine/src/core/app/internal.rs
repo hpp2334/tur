@@ -5,7 +5,7 @@ use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
 use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerContext;
@@ -332,7 +332,7 @@ impl TurAppInternal {
             // `do_update(dirties)` to the mounted root. This may mutate
             // the ElementTree, which sets `dirty`/`need_paint` for the next
             // layout pass.
-            let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context, frame_id);
+            let reactive_changed = self.flush_reactive(boa_context, frame_id);
 
             // LazyList remount now happens *inside* `perform_layout` (it uses
             // the real viewport from constraints), so there is no separate
@@ -384,9 +384,9 @@ impl TurAppInternal {
                 drop(ctx_guard);
             }
             // Lifecycle hooks fire after layout: on_mounted for inserted
-            // elements, on_updated for dirtied elements, before_destroy for
-            // removed elements. Pushed mutations are drained right after.
-            self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
+            // elements, before_destroy for removed elements. Pushed mutations
+            // are drained right after.
+            self.run_lifecycle_hooks(boa_context);
             {
                 let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
                 cx.flush_focus_notifications(boa_context);
@@ -451,27 +451,21 @@ impl TurAppInternal {
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the
-    /// subscriber graph. Returns `(reactive_changed, dirty_element_ids)`:
-    /// the element ids whose subscribed atoms changed this flush — used by
-    /// the flush loop to fire `on_updated` lifecycle hooks after layout.
+    /// subscriber graph. Returns whether any subscriber was dirtied.
     ///
     /// Also delivers `watch()` callbacks: due watchers (their watched atom is
     /// dirtied, at most once per `frame_id`) are pushed onto the mutation
     /// queue, so `flush_pending_mutations` invokes them later this iteration
     /// — same rail, same frame, against the mounted store.
-    fn flush_reactive(
-        &self,
-        boa_context: &mut boa_engine::Context,
-        frame_id: u64,
-    ) -> (bool, Vec<ElementNodeId>) {
+    fn flush_reactive(&self, boa_context: &mut boa_engine::Context, frame_id: u64) -> bool {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {
-            return (false, Vec::new());
+            return false;
         }
         let dirties = flush_engine.flush_atoms();
         if dirties.is_empty() {
-            return (false, Vec::new());
+            return false;
         }
 
         // Watchers (non-element subscribers) — queue due callbacks before the
@@ -499,8 +493,8 @@ impl TurAppInternal {
             }
         }
 
-        // Split dirty subscribers into elements and fragments so fragment
-        // rebuilds only process dirty fragments (not a full scan).
+        // Split dirty subscribers into fragments so fragment rebuilds only
+        // process dirty fragments (not a full scan).
         let dirty_frag_ids: Vec<FragmentNodeId> = {
             let tree = self.js_context.element_tree.borrow();
             dirty_subs
@@ -509,34 +503,20 @@ impl TurAppInternal {
                 .map(|s| FragmentNodeId::new(s.as_u64()))
                 .collect()
         };
-        // Element ids dirtied this flush (for the post-layout `on_updated` pass).
-        let dirty_element_ids: Vec<ElementNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            dirty_subs
-                .iter()
-                .filter(|s| !tree.is_fragment(NodeId::new(s.as_u64())))
-                .map(|s| ElementNodeId::new(s.as_u64()))
-                .collect()
-        };
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
         if !dirty_frag_ids.is_empty() {
             self.rebuild_fragments(boa_context, &dirty_frag_ids);
         }
 
-        (!dirty_subs.is_empty(), dirty_element_ids)
+        !dirty_subs.is_empty()
     }
 
-    /// Fire element lifecycle hooks: `on_mounted` for newly-inserted elements,
-    /// `on_updated` for elements whose subscribed atoms were dirtied this
-    /// flush, and `before_destroy` for elements removed since the last pass.
+    /// Fire element lifecycle hooks: `on_mounted` for newly-inserted elements
+    /// and `before_destroy` for elements removed since the last pass.
     /// All hooks run after layout (so the mutation queue is drained by the
     /// subsequent `flush_pending_mutations`).
-    fn run_lifecycle_hooks(
-        &self,
-        boa_context: &mut boa_engine::Context,
-        dirty_element_ids: &[ElementNodeId],
-    ) {
+    fn run_lifecycle_hooks(&self, boa_context: &mut boa_engine::Context) {
         let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
 
         // on_mounted — freshly-inserted elements.
@@ -556,23 +536,6 @@ impl TurAppInternal {
             if let Some(elem) = element {
                 let mut tree = self.js_context.element_tree.borrow_mut();
                 if let Some(node) = tree.get_element_mut(id) {
-                    node.element = Some(elem);
-                }
-            }
-        }
-
-        // on_updated — elements dirtied this flush (post-layout).
-        for id in dirty_element_ids {
-            let mut element = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_element_mut(*id).and_then(|n| n.element.take())
-            };
-            if let Some(ref mut elem) = element {
-                elem.run_on_updated(&mut cx, boa_context);
-            }
-            if let Some(elem) = element {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(node) = tree.get_element_mut(*id) {
                     node.element = Some(elem);
                 }
             }
@@ -724,7 +687,7 @@ impl TurAppInternal {
     /// against the still-bound mounted store. The caller drops the tree
     /// right after: it must not outlive its pending lifecycle work.
     pub(crate) fn drain_teardown_lifecycle(&self, boa_context: &mut boa_engine::Context) {
-        self.run_lifecycle_hooks(boa_context, &[]);
+        self.run_lifecycle_hooks(boa_context);
         self.flush_pending_mutations(boa_context);
     }
 }

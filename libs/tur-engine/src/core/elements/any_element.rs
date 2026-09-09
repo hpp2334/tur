@@ -82,7 +82,6 @@ trait Erased: 'static {
     fn subscribe(&self, cx: &mut SubscribeCx);
 
     fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
-    fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
     fn run_on_focus_changed(
         &mut self,
         focused: bool,
@@ -210,10 +209,6 @@ where
 
     fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         <Self as Lifecycle>::on_mounted(self, cx, boa);
-    }
-
-    fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
-        <Self as Lifecycle>::on_updated(self, cx, boa);
     }
 
     fn run_on_focus_changed(
@@ -479,13 +474,6 @@ impl AnyElement {
     /// after the element is inserted into the tree). No-op for most elements.
     pub fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         self.inner.run_on_mounted(cx, boa);
-    }
-
-    /// Fire the element's `on_updated` lifecycle hook (called after layout,
-    /// for elements whose subscribed atoms were dirtied this flush).
-    /// No-op for most elements.
-    pub fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
-        self.inner.run_on_updated(cx, boa);
     }
 
     /// Fire the element's `on_focus_changed` lifecycle hook (called when the

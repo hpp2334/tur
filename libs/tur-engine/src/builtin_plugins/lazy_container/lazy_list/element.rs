@@ -90,6 +90,7 @@ impl View for LazyListView {
                 child_extents: Vec::new(),
                 extent_cache: std::collections::BTreeMap::new(),
                 visible,
+                declared_count: item_count,
                 first_mounted_index: 0,
                 first_mounted_offset: 0.0,
                 reported_start: 0,
@@ -150,6 +151,14 @@ pub struct LazyListElement {
     /// (index, built node id) for every item currently in the tree. Kept
     /// sorted by index.
     pub(crate) visible: Vec<(u64, NodeId)>,
+    /// The declared item count as of the last fresh read (at `build`, then
+    /// refreshed on every `react_to_prop_changes` pass). For a reactive
+    /// `itemCount` this — NOT `visible.len()` — is the authoritative count
+    /// for window math: the mounted-set size is an artifact of
+    /// virtualization, and clamping ranges to it froze the effective count
+    /// at the shrunken value after any shrink, making tail growth
+    /// (shrink→grow of a filtered list) unreachable.
+    pub(crate) declared_count: u64,
     /// Logical index of the first mounted item (`visible[0].0`, cached for
     /// O(1) access). Together with `first_mounted_offset`, forms the
     /// persistent anchor for layout positioning: each mounted child's
@@ -176,17 +185,25 @@ impl LazyListElement {
         self.position.pixels()
     }
 
+    /// Maximum scrollable offset along the main axis (content − viewport,
+    /// clamped to be non-negative). Mirrors
+    /// [`ScrollViewElement::max_scroll_extent`](crate::builtin_plugins::scroll::ScrollViewElement::max_scroll_extent).
+    pub fn max_scroll_extent(&self) -> f64 {
+        self.position.max_scroll_extent()
+    }
+
     pub fn axis(&self) -> Axis {
         self.axis
     }
 
-    /// The declared item count (static value only; reactive counts fall back
-    /// to the number of items actually built, which is kept in sync by the
-    /// effect).
+    /// The declared item count. Static: the literal. Reactive: the value as
+    /// of the latest fresh read (`build` / `react_to_prop_changes`) — never
+    /// `visible.len()`, which froze the count at the shrunken mounted set
+    /// and made tail growth after a shrink unreachable.
     pub fn item_count(&self) -> u64 {
         match &self.view.item_count {
             Val::Static(v) => *v,
-            Val::Reactive(_) => self.visible.len() as u64,
+            Val::Reactive(_) => self.declared_count,
         }
     }
 
@@ -329,8 +346,13 @@ impl LazyListElement {
             self.first_mounted_offset = 0.0;
         }
 
+        // itemCount: always refresh the declared count (the authoritative
+        // value for all window math below — remount, extents, scrollbar). A
+        // read failure keeps the previous declared value rather than
+        // collapsing it to 0 (which would tear the list down spuriously).
+        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(0);
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
         if new_count < current_max {
             let to_destroy: Vec<NodeId> = self

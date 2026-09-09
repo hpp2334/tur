@@ -764,6 +764,164 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 // scrolls — only their positions change.
 // ===========================================================================
 
+// ===========================================================================
+// Regression: a reactive itemCount must survive a shrink→grow cycle. The
+// declared count (freshly read at build and on every reactive flush) — not
+// `visible.len()` — is the authoritative window bound, so tail items past
+// the shrunken mounted set re-mount when the count grows back. The frozen
+// variant left the list blank past the previous count (e.g. a filtered
+// list restored to the full set showed only the filtered prefix).
+// ===========================================================================
+
+/// Shrink step of the regression — kept as its own test so the mid-state is
+/// pinned independently of the grow-back.
+#[test]
+fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { mount, LazyList, Container, Text, source } from "tur:std";
+        const count$ = source(20);
+        mount(LazyList({ itemCount: count$ })
+            .axis(0)
+            .itemExtent(50)
+            .overscan(2)
+            .queryKey(["ll"])
+            .builder((i) => Container()
+                .height(50)
+                .children([Text({ text: "Item " + i }).build()])
+                .build())
+            .build());
+        globalThis.__setCount = (n) => store.set(count$, n);
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
+
+    app.eval_js("globalThis.__setCount(5)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        assert!(
+            ll.built_count() <= 5,
+            "after shrink to 5, at most 5 items should stay mounted, got {}",
+            ll.built_count()
+        );
+    })
+    .unwrap();
+}
+
+/// 20 → 5 → 20: after grow-back the viewport window must re-mount AND the
+/// content extent must cover all 20 items again (scrollbar truth).
+#[test]
+fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { mount, LazyList, Container, Text, source } from "tur:std";
+        const count$ = source(20);
+        mount(LazyList({ itemCount: count$ })
+            .axis(0)
+            .itemExtent(50)
+            .overscan(2)
+            .queryKey(["ll"])
+            .builder((i) => Container()
+                .height(50)
+                .children([Text({ text: "Item " + i }).build()])
+                .build())
+            .build());
+        globalThis.__setCount = (n) => store.set(count$, n);
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
+
+    // Shrink 20 → 5: the tail (indices ≥ 5) unmounts.
+    app.eval_js("globalThis.__setCount(5)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        assert!(
+            ll.built_count() <= 5,
+            "after shrink to 5, at most 5 items should stay mounted, got {}",
+            ll.built_count()
+        );
+    })
+    .unwrap();
+
+    // Grow back 5 → 20: the viewport window (600/50 = 12 + 2×overscan)
+    // must re-mount, and the content extent must cover all 20 items again.
+    app.eval_js("globalThis.__setCount(20)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        let built = ll.built_count();
+        assert!(
+            built >= 12,
+            "after grow-back to 20, the viewport window must re-mount \
+             (≥ 12 items), got {built} — tail items past the shrunken \
+             count are frozen out"
+        );
+        let max = ll.max_scroll_extent();
+        let expected = 20.0 * 50.0 - 600.0;
+        assert!(
+            (max - expected).abs() < 1.0,
+            "content extent must cover all 20 items again \
+             (maxScrollExtent ≈ {expected}), got {max}"
+        );
+    })
+    .unwrap();
+}
+
+/// Shrinking to zero and growing back must fully rebuild the list (the
+/// zero-count teardown path leaves no stale state that blocks regrowth).
+#[test]
+fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { mount, LazyList, Container, Text, source } from "tur:std";
+        const count$ = source(20);
+        mount(LazyList({ itemCount: count$ })
+            .axis(0)
+            .itemExtent(50)
+            .overscan(2)
+            .queryKey(["ll"])
+            .builder((i) => Container()
+                .height(50)
+                .children([Text({ text: "Item " + i }).build()])
+                .build())
+            .build());
+        globalThis.__setCount = (n) => store.set(count$, n);
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
+
+    app.eval_js("globalThis.__setCount(0)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        assert_eq!(ll.built_count(), 0, "zero count must unmount everything");
+    })
+    .unwrap();
+
+    app.eval_js("globalThis.__setCount(20)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        let built = ll.built_count();
+        assert!(
+            built >= 12,
+            "after 0 → 20, the viewport window must mount (≥ 12 items), got {built}"
+        );
+    })
+    .unwrap();
+}
+
 /// Scrolling does not re-measure children that stay mounted: their SIZES
 /// are stable, only their offsets shift. The per-node `dirty_layout` cache
 /// keeps each descendant's `perform_layout` short-circuited on scroll

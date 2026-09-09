@@ -393,7 +393,7 @@ fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> 
 The JS side is unchanged — atoms minted by Rust are indistinguishable from
 atoms minted by JS. JS reads/writes via `store.get(atom)` /
 `store.set(source, v)` / `store.set(mutation, ...args)` /
-`ReadableSubscribe(...)`.
+`watch(atom, cb)`.
 
 **The store is the KV.** JS `source(v)` / `derive(fn)` / `mutate(fn)` return
 *pure declarations* — no state is stored at call time; the seed (initial
@@ -684,7 +684,7 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
 - **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
 - **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `tur:animation`.
 - **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
-- **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
+- **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. The retarget is detected inline in each channel's `derive` closure — it probes `ctx.get(target)` (throws for non-atoms, so static props pass through), compares against the last-seen target, and on change rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
 
 `tur-animation` registers ONE combined consumer-facing module `tur:animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
 
@@ -789,8 +789,7 @@ libs/
                              #   mutation/ (MutationHandle/
                              #   PendingMutationInvocationQueue) +
                              #   source/derive/mutate/watch/view bridge +
-                             #   ReadableSubscribe (the engine's own
-                             #   tur:core) + watch/
+                             #   watch/
                              #   (WatcherRegistry — non-element
                              #   subscribers: start$/stop$ handles,
                              #   epoch coalescing, loop guard)

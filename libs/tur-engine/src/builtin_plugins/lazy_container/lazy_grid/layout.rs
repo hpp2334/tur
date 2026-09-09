@@ -55,6 +55,14 @@ impl ElementLayout for LazyGridElement {
             Axis::Horizontal => (viewport.height, viewport.width),
         };
 
+        // Refresh the declared count BEFORE the zero-count gate below: the
+        // gate early-returns, so a stale `declared_count == 0` from a
+        // previous pass would freeze the grid at zero (the grow-back could
+        // never re-mount — `react_to_prop_changes` lives past the gate).
+        if let Some(n) = cx.read_val(&self.view.item_count) {
+            self.declared_count = n;
+        }
+
         if self.item_count() == 0 {
             self.position.apply_dimensions(viewport, Size::ZERO);
             self.position.set_extents(0.0, 0.0);

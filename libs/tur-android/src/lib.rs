@@ -500,6 +500,19 @@ pub mod ops {
                 return Err("ANativeWindow_fromSurface returned null".into());
             }
             let window_handle = unsafe { crate::surface::AndroidWindowHandle::new(anw) };
+            // Unit-contract check (ground truth: the ANativeWindow buffer).
+            // The engine's layout is logical-unit only — it trusts that
+            // `width`/`height` are LOGICAL and `dpr` scales them to the
+            // physical buffer. A caller that passes physical px as logical
+            // (or a density that doesn't match the window's real px/dp —
+            // display zoom / compatibility scaling) makes every fixed-size
+            // prop land off by the dpr factor with no engine-internal way
+            // to detect it (e.g. text ellipsizes at ~1/dpr of its budget
+            // while the glyphs paint normally). Nothing inside the layout
+            // or text-measurement code can catch this — only the boundary
+            // can, so fail loudly here.
+            #[cfg(target_os = "android")]
+            crate::surface::check_logical_dpr_against_window(anw, width, height, dpr);
             // The raw pointer escapes the handle for the failure/absent
             // release paths — attach_surface retains the handle (and with
             // it the ref) only on success; whoever still owns the ref
@@ -737,6 +750,12 @@ pub mod ops {
     /// renderer's owning thread). (v1 keeps the original wgpu surface
     /// for the instance lifetime; full surface re-attach with a renderer
     /// swap is a follow-up.)
+    ///
+    /// Unit contract: `width`/`height` are LOGICAL (dp) and `dpr` scales
+    /// them to the physical buffer — same contract
+    /// [`attach_instance`](Self::attach_instance) validates against the
+    /// `ANativeWindow` buffer (this path can't reach the window handle,
+    /// so keep the units consistent with the initial attach).
     pub fn resize(env: &mut JNIEnv, handle: jlong, width: jint, height: jint, dpr: jdouble) {
         catch_void(env, "resize", |_env| {
             let route = handle_to_instance(handle).ok_or("invalid instance handle")?;

@@ -412,7 +412,7 @@ or `ColorTween` inside a `derive` (see `cases/complex-animation`).
   `Switch({ value, cases, fallback })` (same), `Each<T>({ items:
   Readable<T[]>, build })` (build re-runs for every item on any items
   change), `Fragment`, `lifecycleView(() => ({ element, onMounted$,
-  beforeDestroy$ }))`, `ReadableSubscribe({ readables, onUpdate$, child })`.
+  beforeDestroy$ }))`.
 - **Effects / overlay**: `Opacity({ value, child })`, `Transform({ rotate,
   scale, translateX/Y, alignment, child })`,
   `CompositedTransformTarget/Follower` + `createLayerLink()` (anchor

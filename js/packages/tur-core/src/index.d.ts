@@ -55,7 +55,7 @@
  * `tur:std` — core is event-type-agnostic.
  *
  * `watch(atom, cb)` subscribes a mutation to an atom OUTSIDE the element
- * tree — the non-element counterpart of `ReadableSubscribe`. `cb` is a
+ * tree. `cb` is a
  * `mutate((ctx) => …)` handle (the same convention as `onTick`). It
  * returns `{ start$, stop$ }` mutations: dispatch `start$` to begin
  * delivery (`store.set(handle.start$)`, or hand it to `lifecycleView` as
@@ -148,9 +148,9 @@ declare module "tur:core" {
     ): Mutation<Args, R>;
 
     // ---------------------------------------------------------------------------
-    // watch — non-element subscription over an atom. The counterpart of
-    // `ReadableSubscribe` for state flows that live outside the view tree:
-    // fetch-on-change, persistence, loggers, derived side effects.
+    // watch — non-element subscription over an atom, for state flows that
+    // live outside the view tree: fetch-on-change, persistence, loggers,
+    // derived side effects.
     // ---------------------------------------------------------------------------
 
     /** Control handle returned by `watch` — both fields are mutations.

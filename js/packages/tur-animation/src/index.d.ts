@@ -11,7 +11,7 @@
  *    interpolation channels.
  *
  * The widgets are composed entirely from `tur:std` primitives
- * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — the only
+ * (`derive` + `Tween` + `createAnimationController`) — the only
  * native elements involved (`Opacity`/`Transform`/`Container`/`Positioned`)
  * all ship as part of `tur:std`.
  */
