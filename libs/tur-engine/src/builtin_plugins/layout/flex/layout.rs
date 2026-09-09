@@ -96,8 +96,61 @@ impl ElementLayout for FlexElement {
         let mut max_cross: f64 = 0.0;
         let mut total_flex: f64 = 0.0;
 
+        let available_main = direction
+            .main(constraints.constrain(Size::new(constraints.max_width, constraints.max_height)));
+        // Flutter RenderFlex parity (`_computeSizes`): flex space can only be
+        // divided under a FINITE main axis (`canFlex == maxMainSize.isFinite`).
+        // Under an unbounded main axis, flex-item children are laid out as
+        // INFLEXIBLE — unbounded main + loose cross — and their actual sizes
+        // feed `total_main`, so a `MainAxisSize.min` Row shrink-wraps its
+        // `Flexible` children (the pill shape: `Row(mainAxisSize: Min)` as a
+        // non-flex child of a bounded Row). Flutter ALLOWS exactly that shape
+        // (loose fit + min size); it rejects tight fits / `MainAxisSize.max`
+        // under unbounded main ("RenderFlex children have non-zero flex but
+        // incoming constraints are unbounded") — those degrade the same way
+        // here, with a one-time error log (never zero-size slots, which used
+        // to collapse the child AND let its unbounded internal layout paint
+        // natural-width glyphs from a zero-wide box).
+        let can_flex = available_main.is_finite();
+
+        if !can_flex && !self.warned_flex_unbounded {
+            let has_flex_items = children
+                .iter()
+                .any(|&id| cx.child_type_name(id) == "tur_flexible");
+            // Only the degenerate shape logs: a tight fit (Expanded) or
+            // MainAxisSize.max under an unbounded main axis, where the flex
+            // declaration cannot be honored. The legal shape (Flexible +
+            // MainAxisSize.min — the pill) lays out silently as inflexible.
+            let degenerate_flex_shape = has_flex_items
+                && (main_axis_size == MainAxisSize::Max
+                    || children.iter().any(|&id| {
+                        cx.child_type_name(id) == "tur_flexible"
+                            && child_fit(cx, id) == FlexFit::Tight
+                    }));
+            if degenerate_flex_shape {
+                self.warned_flex_unbounded = true;
+                tracing::error!(
+                    "{} has Expanded (tight-fit) children or MainAxisSize.max \
+                     but unbounded main-axis constraints — a shape Flutter \
+                     rejects (\"RenderFlex children have non-zero flex but \
+                     incoming constraints are unbounded\"). Degrading per \
+                     Flutter's algorithm: the flex children lay out as \
+                     inflexible (unbounded main axis). Wrap the flex in a \
+                     bounded parent (e.g. Expanded outside a ScrollView's \
+                     scroll axis) — or use Flexible + MainAxisSize.min, the \
+                     shape Flutter allows.",
+                    match direction {
+                        Axis::Vertical => "Column",
+                        Axis::Horizontal => "Row",
+                    }
+                );
+            }
+        }
+
         for &child_id in children {
-            let is_flex = cx.child_type_name(child_id) == "tur_flex_item";
+            // Under an unbounded main axis (`!can_flex`) flex items take the
+            // non-flex path (see the comment above).
+            let is_flex = can_flex && cx.child_type_name(child_id) == "tur_flexible";
 
             if is_flex {
                 let flex = child_flex(cx, child_id).max(0.0);
@@ -147,25 +200,6 @@ impl ElementLayout for FlexElement {
             }
         }
 
-        let available_main = direction
-            .main(constraints.constrain(Size::new(constraints.max_width, constraints.max_height)));
-        // Flex children under an unbounded main axis have no space to divide
-        // (Flutter: "RenderFlex children have non-zero flex but incoming
-        // constraints are unbounded"). Degrade to zero slots instead of
-        // leaking infinite sizes, and say so once.
-        if !available_main.is_finite() && total_flex > 0.0 && !self.warned_flex_unbounded {
-            self.warned_flex_unbounded = true;
-            tracing::error!(
-                "{} has flex (Expanded) children but unbounded main-axis \
-                 constraints: flex children collapse to zero size. Wrap it \
-                 in a bounded parent (e.g. Expanded outside a ScrollView's \
-                 scroll axis).",
-                match direction {
-                    Axis::Vertical => "Column",
-                    Axis::Horizontal => "Row",
-                }
-            );
-        }
         let remaining_main = if available_main.is_finite() {
             (available_main - total_main).max(0.0)
         } else {

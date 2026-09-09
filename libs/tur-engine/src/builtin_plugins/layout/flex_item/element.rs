@@ -11,7 +11,7 @@ use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // FlexibleView — declares a flex item. Has exactly one child; the parent
-// FlexElement detects it via the `tur_flex_item` type name and allocates
+// FlexElement detects it via the `tur_flexible` type name and allocates
 // remaining main-axis space. `fit` selects how the child is inscribed into
 // its slot (Flutter `FlexFit`):
 //
@@ -25,6 +25,7 @@ use crate::core::view::{Lifecycle, Val, View, ViewCx};
 pub struct FlexibleView {
     pub(crate) flex: Option<Val<f64>>,
     pub(crate) fit: FlexFit,
+    pub(crate) query_key: Option<Vec<String>>,
     child: Rc<dyn View>,
 }
 
@@ -37,6 +38,9 @@ impl View for FlexibleView {
             boa,
         );
         let _child_id = self.child.build(cx, boa, id.into());
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
         cx.link_child(parent, id.into());
         id.into()
     }
@@ -110,6 +114,7 @@ impl FlexibleView {
                 .val::<FlexFit>("fit")
                 .and_then(|v| v.as_static().copied())
                 .unwrap_or(default_fit),
+            query_key: p.query_key("queryKey"),
             child,
         })
     }

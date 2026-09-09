@@ -7,7 +7,7 @@ use super::element::FlexibleElement;
 
 impl ElementRender for FlexibleElement {
     fn type_name(&self) -> &'static str {
-        "tur_flex_item"
+        "tur_flexible"
     }
 
     fn paint(

@@ -254,8 +254,13 @@ impl ElementLayout for TextElement {
             return constraints.constrain(Size::ZERO);
         }
 
-        let max_width = if constraints.max_width.is_finite() && constraints.max_width > 0.0 {
-            Some(constraints.max_width as f32)
+        // A FINITE max_width is a real budget — including exactly 0 (a
+        // collapsed flex slot): treating 0 as "unbounded" let the internal
+        // layout run at natural width and paint full-width glyphs from a
+        // zero-wide box while the computed size clamped to 0. Only
+        // +infinity means "no budget".
+        let max_width = if constraints.max_width.is_finite() {
+            Some(constraints.max_width.max(0.0) as f32)
         } else {
             None
         };
@@ -303,12 +308,15 @@ impl ElementLayout for TextElement {
         );
         let leftover = {
             let mut breaker = layout.break_lines();
-            if let Some(max) = max_width {
-                // parley's `break_next` asserts `line_max_advance` ≈
-                // `layout_max_advance`; mirror what `break_remaining` does.
-                breaker.state_mut().set_layout_max_advance(max);
-                breaker.state_mut().set_line_max_advance(max);
-            }
+            // A missing budget means UNBOUNDED — parley's incremental breaker
+            // defaults `line_max_advance` to 0.0 (its own `break_all_lines`
+            // maps `None` to `f32::MAX`), so "no budget" must explicitly set
+            // `f32::MAX` too. Leaving the 0.0 default broke the first line at
+            // a near-zero advance and ellipsized text that was never given a
+            // width budget at all (a Flexible under an unbounded main axis).
+            let advance = max_width.unwrap_or(f32::MAX);
+            breaker.state_mut().set_layout_max_advance(advance);
+            breaker.state_mut().set_line_max_advance(advance);
             for _ in 0..n {
                 if breaker.break_next().is_none() {
                     break;
