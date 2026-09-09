@@ -127,6 +127,74 @@ fn lazy_grid_scroll_shifts_visible_window() {
     );
 }
 
+// ===========================================================================
+// Regression: a reactive itemCount must survive a shrink→grow cycle (the
+// LazyList twin bug — the declared count, not `visible.len()`, is the
+// authoritative window bound).
+// ===========================================================================
+
+/// 100 → 8 → 100: after grow-back the viewport rows must re-mount and the
+/// content extent must cover all 25 rows again.
+#[test]
+fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(
+        r#"
+        import { mount, LazyGrid, Container, createColor, source } from "tur:std";
+        const count$ = source(100);
+        mount(LazyGrid({ itemCount: count$, maxCrossAxisExtent: 100 })
+            .axis(0)
+            .overscan(2)
+            .queryKey(["lg"])
+            .builder((i) => Container()
+                .color(createColor(200, 200, 200, 255))
+                .build())
+            .build());
+        globalThis.__setCount = (n) => store.set(count$, n);
+        "#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    // Shrink 100 → 8 (2 rows of 4 columns).
+    app.eval_js("globalThis.__setCount(8)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let lg = e.cast::<LazyGridElement>().unwrap();
+        assert!(
+            lg.built_count() <= 8,
+            "after shrink to 8, at most 8 cells should stay mounted, got {}",
+            lg.built_count()
+        );
+    })
+    .unwrap();
+
+    // Grow back 8 → 100 (25 rows): the viewport window (6 visible rows × 4
+    // columns + overscan) must re-mount, and the content extent must cover
+    // all 25 rows again.
+    app.eval_js("globalThis.__setCount(100)");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let lg = e.cast::<LazyGridElement>().unwrap();
+        let built = lg.built_count();
+        assert!(
+            built >= 24,
+            "after grow-back to 100, the viewport rows must re-mount \
+             (≥ 24 cells), got {built} — tail cells past the shrunken \
+             count are frozen out"
+        );
+        let max = lg.max_scroll_extent();
+        let expected = 25.0 * 100.0 - 600.0;
+        assert!(
+            (max - expected).abs() < 1.0,
+            "content extent must cover all 25 rows again \
+             (maxScrollExtent ≈ {expected}), got {max}"
+        );
+    })
+    .unwrap();
+}
+
 /// Children stay ordered by logical index after scroll-up (move_child_before
 /// preserves tree order for newly-mounted lower-index cells).
 #[test]

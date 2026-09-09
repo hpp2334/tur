@@ -149,6 +149,33 @@ impl ScrollViewElement {
         self.position.correct_pixels(clamped);
         ctrl.offset = clamped;
     }
+
+    /// Fire the controller's `onScroll` mutation for a layout-driven pixels
+    /// correction — the content-shrink clamp in `perform_layout` (Flutter
+    /// fires scroll notifications when `applyContentDimensions` moves
+    /// pixels). The event is pushed onto the mutation queue, so the flush
+    /// loop invokes it after layout in the same frame — the same rail the
+    /// wheel path uses. Metrics are read from the controller, which
+    /// `update_controller_metrics` has already synced against the clamped
+    /// position.
+    pub(super) fn notify_layout_driven_scroll(
+        &self,
+        cx: &crate::core::layout::LayoutContext<'_, '_>,
+    ) {
+        let Some(ref ctrl_obj) = self.view.controller else {
+            return;
+        };
+        let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>() else {
+            return;
+        };
+        let Some(on_scroll) = ctrl.on_scroll else {
+            return;
+        };
+        cx.mutation_queue.borrow_mut().push(
+            on_scroll,
+            ScrollEvent::new(ctrl.offset, ctrl.max_scroll_extent, ctrl.viewport_dimension),
+        );
+    }
 }
 
 impl Lifecycle for ScrollViewElement {}

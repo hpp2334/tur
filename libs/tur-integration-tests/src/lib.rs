@@ -480,6 +480,25 @@ impl TurTestApp {
         Self::build(width, height, None, None, Vec::new(), None, None)
     }
 
+    /// Construct with a custom device-pixel ratio (default 1.0). Layout is
+    /// logical-unit only — dpr scales the render surface at scene-paint
+    /// playback — so tests use this to pin that layout (and text
+    /// measurement in particular) is DPR-invariant on high-density
+    /// devices (e.g. 1440×3200 @3.5×).
+    pub fn new_with_dpr(width: f64, height: f64, dpr: f64) -> Result<Self, TurError> {
+        Self::build_with_driver(
+            width,
+            height,
+            None,
+            None,
+            Vec::new(),
+            None,
+            None,
+            TestSchedulerDriver::new(),
+            dpr,
+        )
+    }
+
     /// Construct with a custom [`Shell`] installed at construction time
     /// (replacing the default `RecordingShell`). Cursor /
     /// `take_current_cursor` / `take_current_text_input_state` recorders
@@ -508,6 +527,7 @@ impl TurTestApp {
             None,
             Some(shell),
             driver,
+            1.0,
         )
     }
 
@@ -586,6 +606,7 @@ impl TurTestApp {
             renderer,
             shell,
             TestSchedulerDriver::new(),
+            1.0,
         )
     }
 
@@ -602,6 +623,7 @@ impl TurTestApp {
         renderer: Option<Box<dyn Renderer>>,
         shell: Option<Box<dyn tur_engine::Shell>>,
         driver: Rc<TestSchedulerDriver>,
+        dpr: f64,
     ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
@@ -656,7 +678,7 @@ impl TurTestApp {
         let (inner, mut looper) = runtime
             .app_builder()
             .worker_pool(worker_pool)
-            .renderer(renderer, (width, height), 1.0)
+            .renderer(renderer, (width, height), dpr)
             .shell(shell)
             .build()?;
         // Drive the production autonomous loop (the same loop wasm/Android

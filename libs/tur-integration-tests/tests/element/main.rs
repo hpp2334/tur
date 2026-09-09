@@ -46,5 +46,6 @@ mod transform;
 mod virtual_app;
 mod vsync_source;
 mod watch;
+mod with_tree_panic;
 mod worker_pool;
 mod worker_spawn_blocking;

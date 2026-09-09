@@ -89,9 +89,25 @@ impl ScrollPosition {
         self.content_size
     }
 
-    pub fn set_extents(&mut self, min: f64, max: f64) {
+    /// Write the new scroll extents AND clamp `pixels` into them — Flutter
+    /// `applyContentDimensions` parity. Called from layout each pass with
+    /// the freshly-measured content; without the clamp, content that shrinks
+    /// below the current offset leaves the viewport scrolled past the
+    /// content end (blank viewport) until the next wheel/drag delta.
+    ///
+    /// Returns `true` when the clamp moved `pixels` (callers sync controller
+    /// metrics and fire `onScroll` for the correction in that case).
+    pub fn set_extents(&mut self, min: f64, max: f64) -> bool {
+        debug_assert!(min <= max, "scroll extents must be ordered");
         self.metrics.min_scroll_extent = min;
         self.metrics.max_scroll_extent = max;
+        let clamped = self.metrics.pixels.clamp(min, max);
+        if clamped != self.metrics.pixels {
+            self.metrics.pixels = clamped;
+            true
+        } else {
+            false
+        }
     }
 
     fn apply_boundary_conditions(&self, value: f64) -> f64 {

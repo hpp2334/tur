@@ -310,6 +310,17 @@ impl TurApp {
     /// The tree always exists (instance-owned) but may be root-less before
     /// the first `mount` / after module teardown.
     ///
+    /// A panic inside `cb` (e.g. a failing `assert!` in a test's
+    /// introspection closure) is re-raised on the AWAITING caller's thread:
+    /// the runner catches it so the reply still fires, then the caller
+    /// panics with the original payload message. Without this the panic
+    /// vanished on the worker (reply never sent → `None` returned) and a
+    /// caller that ignored the `Option` — like a bare
+    /// `app.with_element(id, |e| assert!(…));` in a test — passed
+    /// vacuously. The worker's own stderr still carries the original
+    /// file/line (the default panic hook runs at panic time, before
+    /// `catch_unwind` sees it).
+    ///
     /// Returns `None` if the worker is gone (`R: Send + 'static`,
     /// `cb: Send + 'static`). Production code should never call this.
     pub async fn with_tree<R: Send + 'static>(
@@ -318,16 +329,47 @@ impl TurApp {
     ) -> Option<R> {
         use core::app::comm::{Reply, TreeRunner, WorkerMsg};
 
-        let (tx, rx) = Reply::<Option<R>>::pair();
+        let (tx, rx) = Reply::<Result<R, String>>::pair();
         let runner: TreeRunner = Box::new(move |tree, focus| {
-            tx.send(Some(cb(tree, focus)));
+            // `AssertUnwindSafe` is honest here: the surface is read-only
+            // introspection (shared refs into tree/focus), and the RefCell
+            // guards held by the dispatch arm (`WorkerMsg::WithTree`) drop
+            // normally when this closure returns — the contained unwind
+            // never reaches the worker loop's own panic containment.
+            let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cb(tree, focus)));
+            match caught {
+                Ok(value) => tx.send(Ok(value)),
+                Err(payload) => tx.send(Err(panic_payload_message(&payload))),
+            }
         });
         let _ = self
             .host
             .backend()
             .worker_tx()
             .unbounded_send(WorkerMsg::WithTree { runner });
-        rx.rx.await.unwrap_or(None)
+        match rx.rx.await {
+            Ok(Ok(value)) => Some(value),
+            Ok(Err(message)) => panic!(
+                "`with_tree` closure panicked on the worker: {message} \
+                 (original location is in the worker thread's stderr above)"
+            ),
+            // Worker gone: no reply will ever fire.
+            Err(_) => None,
+        }
+    }
+}
+
+/// Extract the display message from a caught panic payload — `panic!` with
+/// format args yields `String`, `panic!("literal")` yields `&'static str`,
+/// anything else (e.g. `resume_unwind` with a custom type) gets a generic
+/// placeholder. Test-only companion to [`TurApp::with_tree`].
+fn panic_payload_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_string()
+    } else {
+        "worker closure panicked (non-string payload)".to_string()
     }
 }
 

@@ -321,3 +321,65 @@ fn text_max_lines_no_truncation_when_fits() {
         "full text should be visible (width > 200): width={w}",
     );
 }
+
+/// Layout — and text measurement in particular — is DPR-invariant: the same
+/// tree built at dpr 1.0 and dpr 3.5 must produce byte-identical logical
+/// geometry. Pins the class of bug where a high-density device
+/// (1440×3200 @3.5×) ellipsizes text at ~1/dpr of its width budget: the
+/// ellipsis decision compares logical glyph stops against the logical
+/// `max_width` constraint, and DPR must never enter that math (it is a
+/// render-surface concern only, applied at scene-paint playback).
+#[test]
+fn text_layout_is_dpr_invariant() {
+    let fixture = r#"
+        import { mount, Container, Text } from "tur:std";
+        mount(Container()
+            .width(164)
+            .height(40)
+            .children([Text({ text: "Last Week Todos" })
+                .fontSize(14)
+                .maxLines(1)
+                .overflow("ellipsis")
+                .build()])
+            .build());
+    "#;
+
+    let measure = |dpr: f64| -> (f64, f64) {
+        let mut app = TurTestApp::new_with_dpr(400.0, 300.0, dpr).unwrap();
+        app.eval_module_source(fixture).unwrap();
+        app.wait_for_timeout(std::time::Duration::ZERO);
+        let rt = app.element_tree();
+        let root = rt.root_element().unwrap();
+        let container = rt
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let text = rt
+            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .unwrap();
+        (
+            text.computed_layout.size.width,
+            text.computed_layout.size.height,
+        )
+    };
+
+    let (w1, h1) = measure(1.0);
+    let (w35, h35) = measure(3.5);
+
+    assert!(
+        (w1 - w35).abs() < 0.5 && (h1 - h35).abs() < 0.5,
+        "text layout must be DPR-invariant: dpr 1.0 = ({w1:.2}, {h1:.2}), \
+         dpr 3.5 = ({w35:.2}, {h35:.2})"
+    );
+
+    // "Last Week Todos" at 14px measures ~100 logical px — comfortably
+    // inside the 164px budget, so it must NOT truncate. (The reported bug
+    // cut it at ~164/3.5 ≈ 47px.)
+    assert!(
+        w1 > 80.0,
+        "text must not prematurely ellipsize inside a 164px budget: width={w1}"
+    );
+    assert!(
+        w1 <= 164.0,
+        "text must respect the 164px budget: width={w1}"
+    );
+}

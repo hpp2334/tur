@@ -92,6 +92,8 @@ mod ffi {
         pub fn ANativeWindow_fromSurface(env: *mut c_void, surface: *mut c_void) -> *mut c_void;
         #[allow(dead_code)]
         pub fn ANativeWindow_release(window: *mut c_void);
+        pub fn ANativeWindow_getWidth(window: *mut c_void) -> i32;
+        pub fn ANativeWindow_getHeight(window: *mut c_void) -> i32;
     }
 }
 
@@ -122,3 +124,68 @@ pub unsafe fn release_native_window(window: *mut c_void) {
 
 #[cfg(not(target_os = "android"))]
 pub unsafe fn release_native_window(_window: *mut c_void) {}
+
+/// Query an `ANativeWindow`'s buffer size in PHYSICAL pixels. The ground
+/// truth for the embedder unit contract: the engine expects `width/height`
+/// in logical units and `dpr` to scale them to this buffer size. Returns
+/// `None` on non-Android targets or a null window.
+pub fn native_window_size(window: *mut c_void) -> Option<(u32, u32)> {
+    if window.is_null() {
+        return None;
+    }
+    #[cfg(target_os = "android")]
+    unsafe {
+        let w = ffi::ANativeWindow_getWidth(window);
+        let h = ffi::ANativeWindow_getHeight(window);
+        if w > 0 && h > 0 {
+            Some((w as u32, h as u32))
+        } else {
+            None
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        None
+    }
+}
+
+/// Cross-check the embedder-declared logical size × dpr against the
+/// window's real buffer size (physical px), logging a loud error on
+/// mismatch. The engine's layout is logical-unit only and scales the
+/// painted scene by `dpr` at the render surface — it has no internal way
+/// to detect a caller passing physical px as logical (or a density that
+/// doesn't match the window's real px/dp under display zoom /
+/// compatibility scaling). Such a mismatch silently scales every
+/// fixed-size prop by the dpr factor; the classic symptom is text
+/// ellipsizing at ~1/dpr of its width budget while glyphs paint
+/// normally. Log-not-panic: a wrong-size surface still renders
+/// (degraded), matching the renderer's device-quirk policy.
+///
+/// Android-only: on other targets `native_window_size` is always `None`
+/// and the check is meaningless (the attach op fails earlier on the null
+/// window stub anyway).
+#[cfg(target_os = "android")]
+pub fn check_logical_dpr_against_window(window: *mut c_void, width: i32, height: i32, dpr: f64) {
+    let Some((buf_w, buf_h)) = native_window_size(window) else {
+        return;
+    };
+    let expected_w = width as f64 * dpr;
+    let expected_h = height as f64 * dpr;
+    // Tolerance: ~2 logical px of rounding between the reported size and
+    // the native buffer.
+    let tol = 2.0 * dpr.max(1.0);
+    if (buf_w as f64 - expected_w).abs() > tol || (buf_h as f64 - expected_h).abs() > tol {
+        log::error!(
+            "tur attach: logical size {}x{} @{dpr}x (= {expected_w:.0}x{expected_h:.0} \
+             physical) does not match the ANativeWindow buffer {buf_w}x{buf_h}. The engine \
+             lays out in LOGICAL units and scales the scene by dpr at paint — passing \
+             physical px as logical (or a mismatched density) silently scales every \
+             fixed-size prop by the dpr factor (symptom: text ellipsizes at ~1/dpr of \
+             its width budget with normal-size glyphs). Fix the caller's px↔dp conversion \
+             — e.g. TurView divides holder.surfaceFrame (physical px) by \
+             Resources.displayMetrics.density.",
+            width.max(1),
+            height.max(1),
+        );
+    }
+}
