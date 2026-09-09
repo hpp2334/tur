@@ -3,9 +3,9 @@ use crate::core::layout::{Constraints, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 
-use super::element::ExpandedElement;
+use super::element::FlexibleElement;
 
-impl ElementLayout for ExpandedElement {
+impl ElementLayout for FlexibleElement {
     fn perform_layout(
         &mut self,
         constraints: &Constraints,

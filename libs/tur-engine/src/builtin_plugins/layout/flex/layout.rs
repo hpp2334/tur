@@ -1,30 +1,42 @@
 use crate::core::layout::{
-    Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Offset, Size,
+    Axis, Constraints, CrossAxisAlignment, FlexFit, MainAxisAlignment, MainAxisSize, Offset, Size,
 };
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 
-use crate::builtin_plugins::layout::flex_item::ExpandedElement;
+use crate::builtin_plugins::layout::flex_item::FlexibleElement;
 
 use super::element::{ChildData, FlexElement};
 
-/// Resolve the `flex` weight of a flex-item child (`Expanded().flex(…)`).
-/// Returns 0.0 if the child is not an `Expanded` element. If it is an
-/// `Expanded` but the `flex` prop is absent, returns 1.0 (Flutter default).
+/// Resolve the `flex` weight of a flex-item child (`Expanded().flex(…)` /
+/// `Flexible().flex(…)`). Returns 0.0 if the child is not a flex item. If it
+/// is one but the `flex` prop is absent, returns 1.0 (Flutter default).
 ///
 /// This is a flex-plugin helper rather than a `LayoutContext` method:
-/// `LayoutContext` is generic infra and shouldn't know about `ExpandedElement`
-/// specifically. The generic primitive `LayoutContext::child_element::<T>()`
-/// is the only thing this needs from the engine.
+/// `LayoutContext` is generic infra and shouldn't know about
+/// `FlexibleElement` specifically. The generic primitive
+/// `LayoutContext::child_element::<T>()` is the only thing this needs from
+/// the engine.
 fn child_flex(cx: &mut LayoutContext, child_id: ElementNodeId) -> f64 {
-    let Some(expanded) = cx.child_element::<ExpandedElement>(child_id) else {
+    let Some(flex_item) = cx.child_element::<FlexibleElement>(child_id) else {
         return 0.0;
     };
-    let Some(flex_val) = expanded.view.flex.clone() else {
+    let Some(flex_val) = flex_item.view.flex.clone() else {
         return 1.0;
     };
     cx.read_val(&flex_val).unwrap_or(1.0).max(0.0)
+}
+
+/// Resolve how a flex-item child is inscribed into its slot (Flutter
+/// `FlexFit`): `Tight` (`Expanded`) forces the child to fill the slot;
+/// `Loose` (`Flexible`) caps it at the slot but allows smaller. Defaults to
+/// `Tight` (Expanded semantics — the historical behavior) if the element
+/// can't be read.
+fn child_fit(cx: &mut LayoutContext, child_id: ElementNodeId) -> FlexFit {
+    cx.child_element::<FlexibleElement>(child_id)
+        .map(|flex_item| flex_item.view.fit)
+        .unwrap_or(FlexFit::Tight)
 }
 
 /// Cross-axis `Stretch` tightens children to the incoming cross max. Under an
@@ -97,12 +109,18 @@ impl ElementLayout for FlexElement {
                     flex,
                 });
             } else {
-                // Flutter RenderFlex parity: non-flex children get the CROSS
-                // axis constraint (tight max under `Stretch`, loose
-                // otherwise) but an UNBOUNDED main axis. A nested flex's
-                // `MainAxisSize.max` then degenerates to content size under
-                // infinite main constraints, so nested Columns/Rows
-                // shrink-wrap instead of consuming the parent's extent.
+                // Flutter RenderFlex parity (`_constraintsForNonFlexChild`):
+                // non-flex children get the CROSS axis constraint (tight max
+                // under `Stretch`, loose otherwise) but an UNBOUNDED main
+                // axis — "Layout each child with a null or zero flex factor
+                // with unbounded main axis constraints and the incoming
+                // cross axis constraints" (RenderFlex docs, step 1). A
+                // nested flex's `MainAxisSize.max` then degenerates to
+                // content size under infinite main constraints, so nested
+                // Columns/Rows shrink-wrap instead of consuming the parent's
+                // extent — and a Text that should ellipsize needs an
+                // `Expanded`/`Flexible` wrapper to receive a finite budget,
+                // exactly as in Flutter.
                 let child_constraints = match direction {
                     Axis::Vertical => Constraints {
                         min_width: stretch_min(cross_alignment, constraints.max_width),
@@ -162,15 +180,22 @@ impl ElementLayout for FlexElement {
         for entry in &mut self.child_data {
             if entry.is_flex {
                 let slot = space_per_unit * entry.flex;
+                // Flutter `_constraintsForFlexChild` parity: `FlexFit.tight`
+                // (Expanded) tightens the child to the slot; `FlexFit.loose`
+                // (Flexible) caps it at the slot with min 0 — the child may
+                // be smaller (shrink-wraps), e.g. a label that ellipsizes at
+                // the true available width without being force-filled.
+                let fit = child_fit(cx, entry.id);
+                let min_main = if fit == FlexFit::Tight { slot } else { 0.0 };
                 let child_constraints = match direction {
                     Axis::Vertical => Constraints {
                         min_width: stretch_min(cross_alignment, constraints.max_width),
                         max_width: constraints.max_width,
-                        min_height: slot,
+                        min_height: min_main,
                         max_height: slot,
                     },
                     Axis::Horizontal => Constraints {
-                        min_width: slot,
+                        min_width: min_main,
                         max_width: slot,
                         min_height: stretch_min(cross_alignment, constraints.max_height),
                         max_height: constraints.max_height,

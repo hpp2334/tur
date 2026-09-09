@@ -3,9 +3,9 @@ use crate::core::layout::ComputedLayout;
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::ExpandedElement;
+use super::element::FlexibleElement;
 
-impl ElementRender for ExpandedElement {
+impl ElementRender for FlexibleElement {
     fn type_name(&self) -> &'static str {
         "tur_flex_item"
     }

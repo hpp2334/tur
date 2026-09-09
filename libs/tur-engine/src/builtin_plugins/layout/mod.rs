@@ -1,6 +1,8 @@
 //! Layout primitives — Flutter-inspired flex layout model:
 //! - `Column` / `Row` (flex containers, vertical / horizontal main axis).
-//! - `Expanded` (flex-item factor for filling remaining main-axis space).
+//! - `Flexible` (flex item; `FlexFit.loose` by default — at most its slot,
+//!   smaller allowed) and `Expanded` (= `Flexible` with `FlexFit.tight` —
+//!   forced to fill the remaining main-axis space).
 //! - `Stack` + `Positioned` (z-axis stacking with anchored children).
 //! - `Container` / `SizedBox` (explicit width/height + decoration).
 //! - `Grid` (row-major tiling of static children into a max-extent grid).
@@ -24,7 +26,7 @@ pub(in crate::builtin_plugins) mod table;
 pub use container::ContainerElement;
 pub use container::ContainerView;
 pub use flex::{FlexElement, FlexView};
-pub use flex_item::{ExpandedElement, ExpandedView};
+pub use flex_item::{FlexibleElement, FlexibleView};
 pub use grid::{GridElement, GridView};
 pub(crate) use grid::{compute_grid_metrics, cross_offset};
 pub use positioned::{PositionedElement, PositionedView};

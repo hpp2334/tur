@@ -1,4 +1,4 @@
-//! The 8 enum const-objects exported by `tur:std` (Axis,
+//! The enum const-objects exported by `tur:std` (Axis,
 //! MainAxisAlignment, …). Each mirrors a `core::layout` C-like enum so JS
 //! callers write `Axis.Vertical` and `Axis[0] === "Vertical"`.
 
@@ -57,6 +57,10 @@ pub fn consts(context: &mut Context) -> Vec<ConstEntry> {
         (
             "MainAxisSize",
             build_enum(context, &[("Max", 0), ("Min", 1)]),
+        ),
+        (
+            "FlexFit",
+            build_enum(context, &[("Tight", 0), ("Loose", 1)]),
         ),
         (
             "HitTestBehavior",
