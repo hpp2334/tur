@@ -1,11 +1,13 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
-// Flutter reports both degenerate cases below as layout errors ("RenderFlex
+// Flutter reports the degenerate cases below as layout errors ("RenderFlex
 // children have non-zero flex but incoming height constraints are unbounded";
 // stretch under unbounded cross). tur degrades gracefully instead: Stretch
-// falls back to loose cross constraints and flex slots collapse to zero —
-// and no infinite size may ever leak upward.
+// falls back to loose cross constraints, and flex children under an
+// unbounded main axis lay out as INFLEXIBLE (Flutter's `canFlex == false`
+// mechanics — unbounded main passed through), never zero-size slots — and
+// no infinite size may ever leak upward.
 #[test]
 fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
@@ -32,7 +34,8 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     .build()])
                     .build(),
                 // Expanded inside a Column with unbounded height: the flex
-                // slot collapses to zero instead of infinity.
+                // child lays out as inflexible (natural size), never a
+                // zero slot and never infinity.
                 Column()
                     .queryKey(["flex-col"])
                     .children([Expanded()
@@ -81,8 +84,9 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
         flex_col.computed_layout.size
     );
     assert_eq!(
-        flex_col.computed_layout.size.height, 0.0,
-        "Expanded slot collapses to zero under unbounded main-axis constraints"
+        flex_col.computed_layout.size.height, 50.0,
+        "under an unbounded main axis the flex child lays out as inflexible \
+         (Flutter `canFlex == false`): the Column degenerates to its content"
     );
 
     let expanded_inner_id = {
@@ -93,8 +97,9 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     };
     let expanded_child = rt.get_element(expanded_inner_id).unwrap();
     assert_eq!(
-        expanded_child.computed_layout.size.height, 0.0,
-        "the Expanded child itself gets the collapsed zero slot"
+        expanded_child.computed_layout.size.height, 50.0,
+        "the flex-item child itself lays out with unbounded main (natural \
+         size), not a collapsed zero slot"
     );
 }
 
