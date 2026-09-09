@@ -3,4 +3,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{ExpandedElement, ExpandedView};
+pub use element::{FlexibleElement, FlexibleView};

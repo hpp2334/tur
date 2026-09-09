@@ -221,6 +221,14 @@ declare module "tur:std" {
         Min = 1,
     }
 
+    /** How a flex item is inscribed into its slot (Flutter `FlexFit`).
+     *  `Tight` (Expanded) forces the child to fill the slot; `Loose`
+     *  (Flexible) caps it at the slot — smaller allowed. */
+    export enum FlexFit {
+        Tight = 0,
+        Loose = 1,
+    }
+
     export enum HitTestBehavior {
         Opaque = 0,
         Translucent = 1,
@@ -306,6 +314,19 @@ declare module "tur:std" {
 
     export interface ExpandedBuilder extends BuilderBuild {
         flex(v: Val<number | undefined>): this;
+        queryKey(keys: Val<string[] | undefined>): this;
+        child(child: Element): this;
+    }
+
+    /** `Flexible` — a flex item with `FlexFit.loose` by default: the child
+     *  may be at most its slot but is allowed to be smaller (shrink-wraps).
+     *  The Flutter-idiomatic wrapper for ellipsizing `Text` labels in a
+     *  `Row` (a bare non-flex child gets an unbounded main axis and cannot
+     *  ellipsize — in Flutter too). `.fit(FlexFit.Tight)` opts into
+     *  `Expanded` semantics. */
+    export interface FlexibleBuilder extends BuilderBuild {
+        flex(v: Val<number | undefined>): this;
+        fit(v: Val<FlexFit | undefined>): this;
         queryKey(keys: Val<string[] | undefined>): this;
         child(child: Element): this;
     }
@@ -790,6 +811,7 @@ declare module "tur:std" {
     export function Column(): FlexBuilder;
     export function Row(): FlexBuilder;
     export function Expanded(): ExpandedBuilder;
+    export function Flexible(): FlexibleBuilder;
     export function Stack(): StackBuilder;
     export function Positioned(): PositionedBuilder;
     export function Text(props?: { text?: Val<string> }): TextBuilder;
