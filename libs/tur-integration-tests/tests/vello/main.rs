@@ -1,3 +1,4 @@
+mod deferred_resize;
 mod raw;
 mod snapshot;
 mod surface_lifecycle;
@@ -62,6 +63,10 @@ fn main() {
         }),
         Trial::test("vello_resize_zero_area_degrades_and_recovers", || {
             surface_lifecycle::resize_zero_area_degrades_and_recovers();
+            Ok(())
+        }),
+        Trial::test("vello_resize_defers_surface_swap_until_next_frame", || {
+            deferred_resize::resize_defers_surface_swap_until_next_frame();
             Ok(())
         }),
     ];

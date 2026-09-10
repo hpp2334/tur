@@ -124,13 +124,21 @@ pub enum WorkerMsg {
 /// [`WorkerMsg`] RPC (`Reply<T>` slots).
 pub enum HostMsg {
     /// One frame's worth of paint state. Main applies the batch to its
-    /// renderer (owned by `HostBackend`) directly.
+    /// renderer (owned by `HostBackend`) directly, at the render commit
+    /// point.
     ///
     /// Images are NOT shipped here — they travel once per new resource via
     /// [`HostMsg::UploadImage`] (main uploads them into its atlas
-    /// incrementally). Resizes travel via [`HostMsg::Resized`] (main calls
-    /// `renderer.resize(...)` only when the viewport actually changes).
-    RenderCommands { commands: Vec<RenderCommand> },
+    /// incrementally). Geometry travels WITH the batch: `viewport` is what
+    /// this frame was laid out for (the worker's `Screen` at record time),
+    /// and the host syncs its renderer to it immediately before playback —
+    /// so the backing-store swap and the frame content are one atomic
+    /// operation (never a cleared surface between a resize and its
+    /// replacement frame).
+    RenderCommands {
+        commands: Vec<RenderCommand>,
+        viewport: crate::core::screen::ScreenViewport,
+    },
     /// A newly-registered image resource (`createImageResource` /
     /// `createSvgResource` on the worker). Shipped exactly once per id
     /// (sent directly from the `createImageResource` bridge via the shared

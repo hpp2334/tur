@@ -321,11 +321,19 @@ impl TurRuntime {
             parent_rails,
         ));
         let app = Rc::new(TurApp::new(host.clone()));
-        let looper = TurAppLooper::new(host, host_rx, vsync_events);
-        // Bootstrap the viewport: resize the host-side renderer directly
-        // AND seed the worker's screen state + `viewportSize$` atom before
-        // frame 1 (the forwarded shell `Resize` event does the worker
-        // half).
+        let looper = TurAppLooper::new(host.clone(), host_rx, vsync_events);
+        // Bootstrap the viewport: seed the host's viewport tracking with
+        // the geometry the embedder's renderer was constructed with (so the
+        // first batch's commit-point sync dedups — no redundant backing
+        // -store swap at frame 1), then seed the worker's screen state +
+        // `viewportSize$` before frame 1 via the forwarded shell `Resize`
+        // event.
+        host.backend()
+            .sync_viewport(crate::core::screen::ScreenViewport {
+                logical_width: viewport.0 as u32,
+                logical_height: viewport.1 as u32,
+                dpr,
+            });
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok((app, looper))
     }

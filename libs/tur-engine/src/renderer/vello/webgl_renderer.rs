@@ -21,6 +21,11 @@ use web_sys::HtmlCanvasElement;
 
 pub struct WebGlVelloRenderer {
     renderer: WebGlRenderer,
+    /// The bound canvas — the renderer owns its backing-store size (the
+    /// `width`/`height` attributes); they are only ever swapped at the
+    /// render commit point (see `resize`), in the same task as the frame
+    /// painted for the new size.
+    canvas: HtmlCanvasElement,
     scene: Scene,
     resources: Resources,
     dpr: f64,
@@ -56,6 +61,7 @@ impl WebGlVelloRenderer {
 
         WebGlVelloRenderer {
             renderer,
+            canvas,
             scene,
             resources: Resources::new(),
             dpr,
@@ -123,8 +129,8 @@ impl WebGlVelloRenderer {
 
 impl TurRenderer for WebGlVelloRenderer {
     fn render_commands(&mut self, commands: &[RenderCommand]) {
-        // Surface geometry is tracked on `self` (synced via `resize`, which
-        // fires on viewport-change events only).
+        // Surface geometry is synced immediately before this call by the
+        // engine's render commit point (see `resize`).
         self.render_commands_to_scene(commands);
     }
 
@@ -137,6 +143,16 @@ impl TurRenderer for WebGlVelloRenderer {
         self.dpr = dpr;
         self.physical_width = (logical_width as f64 * dpr) as u32;
         self.physical_height = (logical_height as f64 * dpr) as u32;
+        // Setting the attributes resets the bitmap to transparent
+        // SYNCHRONOUSLY — that is only safe because the engine calls this
+        // from the render commit point, immediately before
+        // `render_commands` repaints in the same task (the browser samples
+        // the canvas only at composite time, after the task). Never resize
+        // at resize-event-receipt time: the replacement frame is still a
+        // worker round-trip away, and the cleared canvas composites white
+        // in the gap (the resize white flash).
+        self.canvas.set_width(self.physical_width);
+        self.canvas.set_height(self.physical_height);
         // The hybrid `Scene` is created with fixed pixel dimensions, so it must
         // be recreated on resize.
         self.scene = new_scene(self.physical_width, self.physical_height);

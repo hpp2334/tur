@@ -222,8 +222,12 @@ impl TurApp {
     }
 
     /// Resize the surface. The embedder calls this at resize-event-receipt
-    /// time (DOM `ResizeObserver` / winit / JNI). Event-driven, not
-    /// per-frame, so no dedup is needed — see
+    /// time (DOM `ResizeObserver` / winit / JNI). It only forwards the shell
+    /// `Resize` event to the worker (layout at the new size); the host
+    /// renderer's geometry syncs at the render commit point — stamped on
+    /// the next painted batch — so the presented frame is never destroyed
+    /// before its replacement lands. Event-driven, not per-frame, so no
+    /// dedup is needed — see
     /// [`VirtualHost::resize`](core::virtual_app::VirtualHost::resize)
     /// (the single implementation, shared with the `Resize` control arm).
     pub fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
@@ -457,7 +461,8 @@ impl TurAppLooper {
     ///   N+1 while main encodes N below), then paint the latest buffered batch
     ///   (vsync-aligned, latest-wins).
     /// - **worker msg** — dispatch via the internal host-side backend's
-    ///   `apply_msg`, the single shared handler. `RenderCommands` is buffered into
+    ///   `apply_msg`, the single shared handler. `RenderCommands` (batch +
+    ///   the viewport it was laid out for) is buffered into
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
     ///   quiescence). Side-effects (shell commands, image uploads) are
@@ -484,8 +489,14 @@ impl TurAppLooper {
         use futures::future::{Either, select};
         use futures::stream::StreamExt;
 
-        // Pipelining buffer: the latest un-rendered batch from the worker.
-        let mut pending: Option<core::render::RenderCommandBatch> = None;
+        // Pipelining buffer: the latest un-rendered batch from the worker,
+        // with the viewport it was laid out for (geometry commits with the
+        // batch at the render commit point — see
+        // `HostBackend::render_batch`).
+        let mut pending: Option<(
+            core::render::RenderCommandBatch,
+            core::screen::ScreenViewport,
+        )> = None;
 
         loop {
             // Race vsync + host_msg streams — first to fire wins.
@@ -505,8 +516,8 @@ impl TurAppLooper {
                     //    latest-wins). Skip empty batches — an empty command
                     //    list paints a blank frame (clears the surface), which
                     //    is never desirable.
-                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
-                        host.backend().render_batch(&batch);
+                    if let Some((batch, viewport)) = pending.take().filter(|(b, _)| !b.is_empty()) {
+                        host.backend().render_batch(&batch, viewport);
                     }
                 }
                 Either::Left((None, _)) => break,
@@ -528,10 +539,10 @@ impl TurAppLooper {
                         msg => host.backend().apply_msg(msg),
                     };
                     let stop = match outcome {
-                        MsgOutcome::Render(batch) => {
+                        MsgOutcome::Render(batch, viewport) => {
                             // Pipelined: buffer (latest-wins); rendered at
                             // the next vsync.
-                            pending = Some(batch);
+                            pending = Some((batch, viewport));
                             false
                         }
                         MsgOutcome::Frame(outcome) => {
@@ -544,7 +555,9 @@ impl TurAppLooper {
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 host.vsync().request_frame();
                                 false
-                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
+                            } else if let Some((batch, viewport)) =
+                                pending.take().filter(|(b, _)| !b.is_empty())
+                            {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
                                 // would stall with an un-rendered batch
@@ -552,7 +565,7 @@ impl TurAppLooper {
                                 // paint request). Flush it now (empty
                                 // batches skipped — they'd paint blank) —
                                 // the next frame only starts on a new input.
-                                host.backend().render_batch(&batch);
+                                host.backend().render_batch(&batch, viewport);
                                 false
                             } else {
                                 // Idle + empty pending: no-op. The loop

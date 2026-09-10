@@ -20,9 +20,10 @@ pub trait Renderer {
     /// `Affine::scale(dpr)` as the root transform, and plays the commands
     /// back via [`crate::core::render::play_commands`].
     ///
-    /// Surface geometry lives on `self` (kept in sync via [`Self::resize`],
-    /// which fires only on viewport-change events) — no dimensions are
-    /// passed. Images are uploaded incrementally via
+    /// Surface geometry lives on `self` — the engine syncs it via
+    /// [`Self::resize`] immediately before this method, at the render
+    /// commit point, so geometry and content land in one operation — no
+    /// dimensions are passed. Images are uploaded incrementally via
     /// [`Self::upload_image_resource`] as the worker registers them; the
     /// command batch itself only carries `ImageResourceId`s.
     ///
@@ -35,6 +36,19 @@ pub trait Renderer {
         Ok(())
     }
 
+    /// Reconfigure the backing store to the given geometry (logical size +
+    /// device pixel ratio).
+    ///
+    /// The engine calls this ONLY at the render commit point —
+    /// immediately before [`Self::render_commands`], with the viewport the
+    /// batch about to be played was laid out for (deduped, so a steady
+    /// frame stream never reconfigures). That ordering is the whole
+    /// contract: resizing a backing store (the WebGL canvas — setting
+    /// `width`/`height` resets the bitmap synchronously; a wgpu swapchain)
+    /// destroys the presented frame, so doing it anywhere earlier leaves a
+    /// cleared surface composited until the replacement frame lands (the
+    /// resize white flash). The old frame stays visible (CSS-stretched on
+    /// the web) until the new frame swaps it out in the same operation.
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
 
     /// Upload (or refresh) one image resource in the GPU atlas. Called once
