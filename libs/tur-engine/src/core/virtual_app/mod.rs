@@ -412,12 +412,16 @@ impl VirtualHost {
     }
 
     /// Resize the surface. The single implementation — the facade and the
-    /// `Resize` control arm both land here. Resizes the host-side renderer
-    /// directly (no flush + worker→host round-trip — lower latency) AND
-    /// forwards the shell `Resize` event to the worker so `ResizeSubsystem`
-    /// updates `Screen` / `viewportSize$` for layout.
+    /// `Resize` control arm both land here. It only forwards the shell
+    /// `Resize` event to the worker (so `ResizeSubsystem` updates `Screen`
+    /// / `viewportSize$` and the next flush lays out + paints at the new
+    /// size); the host renderer is NOT touched here. Its geometry syncs at
+    /// the render commit point, stamped on the next painted batch (see
+    /// `HostBackend::render_batch`) — resizing the backing store at
+    /// event-receipt time would destroy the presented frame a full worker
+    /// round-trip + vsync before its replacement lands (the resize white
+    /// flash).
     pub(crate) fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.backend.resize(logical_width, logical_height, dpr);
         self.backend
             .send_worker_msg(WorkerMsg::PlatformEvent(PlatformEvent::Shell(
                 crate::core::shell::ShellEvent::Resize {
@@ -430,10 +434,12 @@ impl VirtualHost {
     }
 
     /// Attach (or replace) the host-side renderer — the **attach** half of
-    /// the two-phase (initialize → attach) lifecycle. Installs the renderer,
-    /// then routes through [`Self::resize`] so the renderer is
-    /// sized/configured and the worker's `viewportSize$` is seeded with a
-    /// fresh frame request. See [`TurApp::attach_renderer`].
+    /// the two-phase (initialize → attach) lifecycle. Installs the renderer
+    /// and sizes it immediately (safe: nothing has been presented on it
+    /// yet), then routes through [`Self::resize`] so the worker's
+    /// `viewportSize$` is seeded with a fresh frame request. Subsequent
+    /// geometry changes arrive with painted batches (see
+    /// [`Self::resize`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(
         &self,
         renderer: Box<dyn crate::core::render::Renderer>,
@@ -442,6 +448,12 @@ impl VirtualHost {
         dpr: f64,
     ) {
         self.backend.attach_renderer(renderer);
+        self.backend
+            .sync_viewport(crate::core::screen::ScreenViewport {
+                logical_width,
+                logical_height,
+                dpr,
+            });
         self.resize(logical_width, logical_height, dpr);
     }
 

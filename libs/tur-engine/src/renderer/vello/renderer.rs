@@ -178,6 +178,16 @@ impl VelloRenderer {
         self.base_color
     }
 
+    /// Reconfigure the surface to the given geometry (immediate).
+    ///
+    /// The engine only ever calls this at the **render commit point** —
+    /// [`HostBackend::render_batch`](crate::core::runtime::HostBackend)
+    /// syncs geometry to the batch's viewport immediately before
+    /// `render_commands`, deduped so only actual changes reconfigure. The
+    /// renderer must not be resized at resize-event-receipt time by other
+    /// paths: a swapchain reconfigure destroys the presented frame, and the
+    /// replacement is still a worker round-trip away (the resize white
+    /// flash).
     pub fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
         self.dpr = dpr;
         self.physical_width = ((logical_width as f64 * dpr) as u32).min(self.max_texture_dimension);
@@ -410,9 +420,8 @@ impl VelloRenderer {
 
 impl TurRenderer for VelloRenderer {
     fn render_commands(&mut self, commands: &[RenderCommand]) {
-        // `physical_width` / `physical_height` / `dpr` are tracked on `self`
-        // (kept in sync via `resize`, which fires on viewport-change events
-        // only).
+        // Surface geometry is synced immediately before this call by the
+        // engine's render commit point (see `resize`).
         self.render_commands_to_scene(commands);
     }
 

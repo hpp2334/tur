@@ -30,7 +30,7 @@
 //! supplies the driving executor (`wasm_bindgen_futures::spawn_local` on
 //! wasm, `block_on` on the test/native caller thread).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -335,6 +335,14 @@ impl WorkerBackend {
         }
     }
 
+    /// The viewport the worker's `Screen` currently holds — what a batch
+    /// being shipped to the host was laid out for. Stamped onto every
+    /// `HostMsg::RenderCommands` so the host syncs its renderer at the
+    /// render commit point (see `HostBackend::render_batch`).
+    pub(crate) fn screen_viewport(&self) -> crate::core::screen::ScreenViewport {
+        self.internal.app_context.borrow().screen.viewport()
+    }
+
     pub(crate) fn focused_element(&self) -> Option<ElementNodeId> {
         self.internal.js_context.focus_manager.borrow().focused()
     }
@@ -390,8 +398,10 @@ impl WorkerBackend {
 pub(crate) enum MsgOutcome {
     /// Side-effects already applied; the driver should keep draining.
     Continue,
-    /// A render-command batch. The driver decides when to paint it.
-    Render(RenderCommandBatch),
+    /// A render-command batch + the viewport it was laid out for. The
+    /// driver decides when to paint it (and syncs geometry then — the
+    /// render commit point).
+    Render(RenderCommandBatch, crate::core::screen::ScreenViewport),
     /// A completed frame. Terminal for a single-frame advance.
     Frame(FrameOutcome),
     /// The worker's flush errored. Terminal.
@@ -422,11 +432,14 @@ pub(crate) enum MsgOutcome {
 /// `app_builder().renderer(Box::new(renderer), …).build()`. Both
 /// `HostBackend` and the renderer live on the main thread, so there is no
 /// callback indirection: each `HostMsg::RenderCommands` batch is applied
-/// directly via [`Self::render_batch`] (renderer only). Resize is
-/// driven by the embedder at event-receipt time via
+/// directly via [`Self::render_batch`] — the render commit point, where the
+/// renderer's geometry is synced to the batch's viewport immediately
+/// before playback. The embedder's
 /// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
-/// / JNI), which calls [`Self::resize`] directly and forwards
-/// the shell `Resize` event to the worker for layout — no `HostMsg` round-trip.
+/// / JNI) only forwards the shell `Resize` event to the worker for layout
+/// — the host renderer's backing store is never swapped there, so a resize
+/// can never destroy the presented frame before its replacement lands (no
+/// `HostMsg` round-trip either).
 ///
 /// ## Shell egress
 ///
@@ -470,6 +483,12 @@ pub(crate) struct HostBackend {
     /// context-loss re-upload. The worker only ever holds the sizes
     /// (`ImageManager`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
+    /// The last viewport actually applied to the owned renderer. The render
+    /// commit point (`render_batch`) syncs geometry to each batch's
+    /// viewport, deduped against this — a steady frame stream never
+    /// reconfigures the surface, and a resize is applied exactly once (with
+    /// the first frame painted for it). `None` until the first sync.
+    last_viewport: Cell<Option<crate::core::screen::ScreenViewport>>,
 }
 
 impl HostBackend {
@@ -555,6 +574,7 @@ impl HostBackend {
                 image_resource_map: RefCell::new(
                     crate::core::image_resource::ImageResourceMap::default(),
                 ),
+                last_viewport: Cell::new(None),
             },
             host_rx,
         )
@@ -589,15 +609,49 @@ impl HostBackend {
         self.worker_wake.deref()();
     }
 
-    /// Apply a render-command batch to the owned renderer (encode +
-    /// present). Called from `TurAppLooper::run` (both the vsync-aligned
-    /// pipelining path and the quiescence flush) — single source of truth
-    /// for render application. A no-op while detached (`None` slot).
-    pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
+    /// Apply a render-command batch to the owned renderer (geometry sync +
+    /// encode + present) — the **render commit point**. Called from
+    /// `TurAppLooper::run` (both the vsync-aligned pipelining path and the
+    /// quiescence flush) — single source of truth for render application.
+    ///
+    /// Geometry is synced FIRST (deduped via [`Self::sync_viewport`]), so
+    /// the backing-store swap and this frame's content land in one
+    /// operation: the renderer's currently-presented frame is never
+    /// destroyed by a resize whose replacement frame hasn't arrived yet
+    /// (which is what resizing at event-receipt time did — the resize white
+    /// flash). A no-op while detached (`None` slot).
+    pub(crate) fn render_batch(
+        &self,
+        commands: &[RenderCommand],
+        viewport: crate::core::screen::ScreenViewport,
+    ) {
+        self.sync_viewport(viewport);
         if let Some(r) = self.renderer.borrow_mut().as_mut() {
             r.render_commands(commands);
             let _ = r.present();
         }
+    }
+
+    /// Sync the owned renderer to the given viewport — the geometry half of
+    /// the render commit point. Deduped against the last viewport actually
+    /// applied ([`Self::last_viewport`]), so a steady frame stream never
+    /// reconfigures the surface and a resize is applied exactly once — with
+    /// the first frame painted for it. A no-op on the renderer itself while
+    /// detached (the shell `Resize` event still reached the worker, so
+    /// `viewportSize$` tracks the size; the next attached renderer is
+    /// synced by its explicit attach, and the next batch re-syncs).
+    pub(crate) fn sync_viewport(&self, viewport: crate::core::screen::ScreenViewport) {
+        if self.last_viewport.get() == Some(viewport) {
+            return;
+        }
+        if let Some(r) = self.renderer.borrow_mut().as_mut() {
+            r.resize(
+                viewport.logical_width,
+                viewport.logical_height,
+                viewport.dpr,
+            );
+        }
+        self.last_viewport.set(Some(viewport));
     }
 
     /// Upload a newly-registered image resource to the owned renderer (a
@@ -620,21 +674,9 @@ impl HostBackend {
             .insert_with_id(id, image);
     }
 
-    /// Resize the owned renderer (a no-op while detached — the shell
-    /// `Resize` event is still forwarded so the worker's `viewportSize$`
-    /// tracks the size; a later attach sizes the fresh renderer itself).
-    /// Called by `TurApp::resize`, which the embedder invokes at
-    /// resize-event-receipt time (DOM `ResizeObserver` / winit / JNI) —
-    /// event-driven, not per-frame, so no dedup is needed.
-    pub(crate) fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        if let Some(r) = self.renderer.borrow_mut().as_mut() {
-            r.resize(logical_width, logical_height, dpr);
-        }
-    }
-
     /// Install (or replace) the renderer — the **attach** half of the
     /// two-phase lifecycle. Host-thread method (same discipline as
-    /// [`Self::resize`]). See [`TurApp::attach_renderer`].
+    /// [`Self::sync_viewport`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(&self, renderer: Box<dyn Renderer>) {
         *self.renderer.borrow_mut() = Some(renderer);
     }
@@ -670,7 +712,9 @@ impl HostBackend {
     /// here.
     pub(crate) fn apply_msg(&self, msg: HostMsg) -> MsgOutcome {
         match msg {
-            HostMsg::RenderCommands { commands } => MsgOutcome::Render(commands),
+            HostMsg::RenderCommands { commands, viewport } => {
+                MsgOutcome::Render(commands, viewport)
+            }
             HostMsg::UploadImage { id, image } => {
                 // Retain the full resource (pixel Blob) on main for
                 // context-loss re-upload, then upload into the GPU atlas.
@@ -774,9 +818,10 @@ impl HostBackend {
 /// `HostMsg::UploadImage` is **not** shipped here — decoded images are
 /// shipped directly from the `createImageResource` bridge via the shared
 /// `host_tx` clone held in `TurInstanceContext` (one ship per decode, FIFO).
-/// `HostMsg::Resized` is also not shipped — the embedder resizes the
-/// host-side renderer directly at event-receipt time and forwards
-/// the shell `Resize` event here for layout.
+/// `HostMsg::Resized` does not exist — geometry travels inside
+/// `HostMsg::RenderCommands` (the batch's viewport), so the host resizes
+/// its renderer only at the render commit point, atomically with the frame
+/// painted for that size.
 ///
 /// All other variants (`PlatformEvent`, RPCs) are
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
@@ -805,9 +850,16 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                         Err(e.to_string())
                     }
                 };
-                // Ship render commands if the flush painted.
+                // Ship render commands if the flush painted — stamped with
+                // the viewport they were laid out for, so the host syncs its
+                // renderer at the render commit point (see
+                // `HostBackend::render_batch`).
                 if let Some(batch) = backend.take_pending_render_batch() {
-                    let _ = host_tx.unbounded_send(HostMsg::RenderCommands { commands: batch });
+                    let viewport = backend.screen_viewport();
+                    let _ = host_tx.unbounded_send(HostMsg::RenderCommands {
+                        commands: batch,
+                        viewport,
+                    });
                 }
                 let _ = host_tx.unbounded_send(HostMsg::FrameOutcome(payload));
                 // Ship cursor changes (deduped against the last emitted).

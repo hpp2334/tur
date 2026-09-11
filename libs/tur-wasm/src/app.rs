@@ -485,14 +485,31 @@ impl WasmApp {
         canvas.set_width(physical_width);
         canvas.set_height(physical_height);
 
+        // Defense-in-depth against blank flashes: give the canvas an opaque
+        // CSS background matching the renderer's base color, so any moment
+        // the WebGL buffer itself is transparent (before the first present,
+        // a skipped/empty frame) shows the app's background instead of the
+        // page behind the canvas. Only when the base color is fully opaque —
+        // a translucent base composites over the buffer, where a CSS
+        // background would corrupt the blending.
+        let resolved_base = base_color.unwrap_or(Color::WHITE);
+        if resolved_base.a() == 255 {
+            let css = format!(
+                "#{:02x}{:02x}{:02x}",
+                resolved_base.r(),
+                resolved_base.g(),
+                resolved_base.b()
+            );
+            let _ = canvas.style().set_property("background", &css);
+        }
+
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr)
-            .with_base_color(base_color.unwrap_or(Color::WHITE));
+            .with_base_color(resolved_base);
 
         // Spawn an isolated engine instance. The engine runs on a worker
         // thread; `HostBackend` owns the WebGL renderer on main and drives
-        // it directly (render batches, image uploads, resize-on-event) —
-        // `build` pushes the initial Resize
-        // internally.
+        // it at the render commit point (geometry sync + batch + present;
+        // image uploads as resources register).
         // Build a WasmShell that handles cursor + text-input egress
         // AND carries the window's frame clock (rAF). The shell is
         // created before the app so it can be passed at construction
@@ -542,13 +559,17 @@ impl WasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     (rect.width() as u32, rect.height() as u32)
                 };
-                let physical_width = (logical_width as f64 * dpr) as u32;
-                let physical_height = (logical_height as f64 * dpr) as u32;
-                s._canvas.set_width(physical_width);
-                s._canvas.set_height(physical_height);
-                // Resize the host-side renderer directly + forward the
-                // resize to the worker for layout (single call — see
-                // `TurApp::resize`).
+                // Forward the resize to the engine (single call — see
+                // `TurApp::resize`). The canvas's CSS box already follows
+                // layout; its BACKING STORE must NOT be resized here:
+                // setting the `width`/`height` attributes resets the bitmap
+                // to transparent synchronously, which composites as a white
+                // flash until the frame laid out for the new size arrives (a
+                // worker round-trip + vsync later). The engine stamps the
+                // new viewport onto that frame's render batch, and the host
+                // swaps the backing store at the render commit point — the
+                // same task as the repaint — so the old frame stays visible
+                // (CSS-stretched) meanwhile.
                 s.app.resize(logical_width, logical_height, dpr);
             }
         });
