@@ -89,6 +89,20 @@ impl Color {
         }
     }
 
+    /// Mix this color toward transparent by `factor` in `[0, 1]` — CSS
+    /// `color-mix(in srgb, <color> 50%, transparent)` semantics: the RGB
+    /// channels are preserved, the alpha channel is multiplied by `factor`
+    /// (rounded to nearest). `factor` outside `[0, 1]` is clamped: `0.0`
+    /// yields fully transparent, `1.0` returns `self` unchanged.
+    pub fn mix_alpha(self, factor: f64) -> Color {
+        let factor = factor.clamp(0.0, 1.0);
+        if factor == 1.0 {
+            return self;
+        }
+        let a = ((self.a() as f64) * factor).round().clamp(0.0, 255.0) as u8;
+        Color::rgba(self.r(), self.g(), self.b(), a)
+    }
+
     /// Linear interpolation between two colors at parameter `t` in `[0, 1]`,
     /// component-wise in u8 space (each channel rounded to nearest). Matches
     /// Flutter's `Color.lerp` semantics: `t=0` returns `a` exactly, `t=1`
