@@ -18,6 +18,7 @@ mod flexible;
 mod grid;
 mod host_module_check;
 mod image;
+mod input_placeholder_color;
 mod instance_data;
 mod lazy_grid;
 mod lazy_list;

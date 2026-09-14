@@ -73,7 +73,11 @@ impl ElementLayout for EditableTextElement {
         let display_text = self.composition_display_text();
 
         let text_color = if display_text.is_empty() {
-            placeholder_color.unwrap_or(Color::rgb(153, 153, 153))
+            // Default placeholder: the text color (explicit `color`, else the
+            // default text color) mixed with 50% alpha — currentColor
+            // semantics, CSS `color-mix(in srgb, currentColor 50%,
+            // transparent)`. An explicit `placeholderColor` wins outright.
+            placeholder_color.unwrap_or_else(|| color.unwrap_or(DEFAULT_TEXT_COLOR).mix_alpha(0.5))
         } else {
             color.unwrap_or(DEFAULT_TEXT_COLOR)
         };
