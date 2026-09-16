@@ -8,6 +8,7 @@
 import {
     createSvgResource,
     createTextEditingController,
+    type ImageResourceHandle,
     mutate,
     type StoreCtx,
     source,
@@ -152,11 +153,11 @@ const ICON_SVGS: Record<string, string> = {
     plus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
 };
 
-const iconIds: Record<string, number> = {};
+const iconIds: Record<string, ImageResourceHandle> = {};
 for (const name of Object.keys(ICON_SVGS)) {
     iconIds[name] = createSvgResource(ICON_SVGS[name]);
 }
 
-export function getIcon(name: "check" | "close" | "plus"): number {
+export function getIcon(name: "check" | "close" | "plus"): ImageResourceHandle {
     return iconIds[name];
 }

@@ -1,4 +1,4 @@
-import { createSvgResource } from "tur:std";
+import { createSvgResource, type ImageResourceHandle } from "tur:std";
 
 // Inline SVG icons registered once at module load. Vello rasterises them up
 // front via `createSvgResource` (the same path the todolist icons use). Keep
@@ -20,12 +20,13 @@ const PAUSE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24
 const STOP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#ffffff"><rect x="5" y="5" width="14" height="14"/></svg>`;
 const REVERSE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#ffffff"><polygon points="18 4 4 12 18 20"/></svg>`;
 
-export const runIconId: number = createSvgResource(RUN_SVG);
-export const resetIconId: number = createSvgResource(RESET_SVG);
-export const cutIconId: number = createSvgResource(CUT_SVG);
-export const copyIconId: number = createSvgResource(COPY_SVG);
-export const pasteIconId: number = createSvgResource(PASTE_SVG);
-export const playIconId: number = createSvgResource(PLAY_SVG);
-export const pauseIconId: number = createSvgResource(PAUSE_SVG);
-export const stopIconId: number = createSvgResource(STOP_SVG);
-export const reverseIconId: number = createSvgResource(REVERSE_SVG);
+export const runIconId: ImageResourceHandle = createSvgResource(RUN_SVG);
+export const resetIconId: ImageResourceHandle = createSvgResource(RESET_SVG);
+export const cutIconId: ImageResourceHandle = createSvgResource(CUT_SVG);
+export const copyIconId: ImageResourceHandle = createSvgResource(COPY_SVG);
+export const pasteIconId: ImageResourceHandle = createSvgResource(PASTE_SVG);
+export const playIconId: ImageResourceHandle = createSvgResource(PLAY_SVG);
+export const pauseIconId: ImageResourceHandle = createSvgResource(PAUSE_SVG);
+export const stopIconId: ImageResourceHandle = createSvgResource(STOP_SVG);
+export const reverseIconId: ImageResourceHandle =
+    createSvgResource(REVERSE_SVG);
