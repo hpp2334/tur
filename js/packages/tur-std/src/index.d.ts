@@ -469,7 +469,7 @@ declare module "tur:std" {
     }
 
     export interface ImageBuilder extends BuilderBuild {
-        resourceId(v: Val<number | undefined>): this;
+        resourceId(v: Val<number | ImageResourceHandle | undefined>): this;
         width(v: Val<number | undefined>): this;
         height(v: Val<number | undefined>): this;
         fit(v: Val<BoxFit | undefined>): this;
@@ -840,7 +840,9 @@ declare module "tur:std" {
     }): LazyGridBuilder;
     export function ScrollView(): ScrollViewBuilder;
     export function Scrollbar(): ScrollbarBuilder;
-    export function Image(props?: { resourceId?: Val<number> }): ImageBuilder;
+    export function Image(props?: {
+        resourceId?: Val<number | ImageResourceHandle>;
+    }): ImageBuilder;
     export function Input(): InputBuilder;
     export function Fragment(): FragmentBuilder;
     export function Focusable(): FocusableBuilder;
@@ -903,10 +905,28 @@ declare module "tur:std" {
     export function createLazyGridController(
         opts?: LazyGridControllerOpts,
     ): LazyGridController;
+    /**
+     * Opaque handle to a registered image resource. Returned by
+     * `createImageResource` / `createSvgResource`, or wrapped from a
+     * host-delivered numeric id via `imageResourceHandle` (host-side
+     * registration — the embedder's `register_image` keeps the pixel bytes
+     * out of JS and hands over only the id). Pass it to
+     * `Image().resourceId(...)`.
+     */
+    export interface ImageResourceHandle {
+        readonly __brand: "ImageResourceHandle";
+    }
+    /**
+     * Wrap a numeric image resource id into the opaque handle
+     * `Image().resourceId(...)` accepts. Validates the id against the
+     * engine's registered resources — an unknown / stale id throws instead
+     * of silently rendering as a zero-sized image.
+     */
+    export function imageResourceHandle(id: number): ImageResourceHandle;
     export function createImageResource(
         bytes: Uint8Array | ArrayBuffer,
-    ): number;
-    export function createSvgResource(svg: string): number;
+    ): ImageResourceHandle;
+    export function createSvgResource(svg: string): ImageResourceHandle;
     export function createColor(
         r: number,
         g: number,

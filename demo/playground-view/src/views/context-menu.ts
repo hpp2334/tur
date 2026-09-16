@@ -6,6 +6,7 @@ import {
     type Element,
     Expanded,
     Image,
+    type ImageResourceHandle,
     MainAxisSize,
     MouseRegion,
     type Mutation,
@@ -37,7 +38,7 @@ import { copyIconId, cutIconId, pasteIconId } from "./icons";
 
 interface MenuItemSpec {
     label: string;
-    iconId?: number;
+    iconId?: number | ImageResourceHandle;
     shortcut?: string;
     /** Zero-arg mutations (`mutate(() => …)`) are adapted to the
      *  `Mutation<[PointerInteractEvent]>` signature that `PointerInteract.onClick`

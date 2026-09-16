@@ -317,7 +317,9 @@ feature-detect with `typeof request === "function"` before importing it (see
 
 ### 4.5 Image (from `cases/image-basic`)
 
-Resources are created once and referenced by numeric id:
+Resources are created once and referenced by opaque handle (also accepted:
+a plain numeric id, or a host-registered handle via `imageResourceHandle(id)`
+— see the engine's `TurApp::register_image`):
 
 ```ts
 import { BoxFit, createImageResource, Image, mount, view } from "tur:std";

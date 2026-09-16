@@ -6,6 +6,7 @@ import {
     CrossAxisAlignment,
     type Element,
     Image,
+    type ImageResourceHandle,
     Input,
     MainAxisSize,
     MouseRegion,
@@ -66,7 +67,7 @@ export function IconButton({
     resourceId,
     onClick,
 }: {
-    resourceId: number;
+    resourceId: number | ImageResourceHandle;
     onClick: Mutation<[], void>;
 }): Element {
     return MouseRegion()

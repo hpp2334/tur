@@ -55,6 +55,11 @@ pub use crate::core::app::ModuleSourceRegistry;
 // `tur_engine::WorkerPoolHandle` (registered via
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
 pub use crate::core::scheduler::WorkerPoolHandle;
+// Re-export the image contract types so embedders can build resources
+// host-side (`ImageResource::from_rgba`) and hold handles without reaching
+// into `core::image_resource`. Host-side registration:
+// `TurApp::register_image` + the paint/layout contract below.
+pub use crate::core::image_resource::{ImageResource, ImageResourceId};
 
 use std::rc::Rc;
 
@@ -167,6 +172,31 @@ impl TurApp {
     #[doc(hidden)]
     pub fn image_resource_count(&self) -> usize {
         self.host.backend().image_resource_count()
+    }
+
+    /// Register a host-formed image resource and return its handle. The
+    /// embedder-side mirror of JS `createImageResource`: the host builds the
+    /// [`ImageResource`] itself (raw pixels via
+    /// [`ImageResource::from_rgba`](core::image_resource::ImageResource::from_rgba),
+    /// or a decode in the embedder crate) and hands JS only the numeric
+    /// handle — the pixel bytes never enter the JS realm.
+    ///
+    /// Synchronous, host-thread (same discipline as
+    /// [`Self::resize`](Self::resize)): the resource is retained host-side
+    /// for context-loss re-upload and uploaded to the owned renderer
+    /// immediately; the worker is told only the natural size (FIFO —
+    /// recorded before any rail can expose the id to JS). The id is minted
+    /// from the host range
+    /// ([`HOST_IMAGE_ID_BASE`](core::image_resource::HOST_IMAGE_ID_BASE),
+    /// counting down — disjoint from worker-minted ids and exactly
+    /// representable as an f64, the precision it crosses the JS number
+    /// boundary with).
+    ///
+    /// JS wraps the delivered id via the `tur:std` `imageResourceHandle(id)`
+    /// bridge (a validated, opaque `ImageResourceHandle`) and passes it to
+    /// `Image().resourceId(...)`.
+    pub fn register_image(&self, image: core::image_resource::ImageResource) -> ImageResourceId {
+        self.host.backend().register_image(image)
     }
 
     /// Handle-based module load: resolve `handle` in `registry` and load

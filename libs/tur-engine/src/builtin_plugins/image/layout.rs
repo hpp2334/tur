@@ -15,12 +15,12 @@ impl ElementLayout for ImageElement {
     ) -> Size {
         let resource_id = cx
             .read_val_opt(self.view.resource_id.as_ref())
-            .map(ImageResourceId::new);
+            .map(|r| ImageResourceId::new(r.0));
 
         // Resolve paint props here (layout holds the store); paint reads
         // `self.painting` and never touches the store.
         self.painting = super::element::ImagePainting {
-            resource_id: cx.read_val_opt(self.view.resource_id.as_ref()),
+            resource_id: cx.read_val_opt(self.view.resource_id.as_ref()).map(|r| r.0),
             fit: cx.read_val_opt(self.view.fit.as_ref()),
         };
 

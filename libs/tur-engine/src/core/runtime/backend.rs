@@ -287,6 +287,16 @@ impl WorkerBackend {
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
             }
+            WorkerMsg::RegisterImageMetadata { id, size } => {
+                // Host-registered image receipt: record the natural size so
+                // layout + paint serve the id (`insert_with_id` — the id was
+                // minted host-side, never by `ImageManager::allocate`).
+                self.internal
+                    .js_context
+                    .image_manager
+                    .borrow_mut()
+                    .insert_with_id(id, crate::core::image_resource::ImageMetadata { size });
+            }
             WorkerMsg::Destroy { reply } => {
                 // Module lifecycle contract: run the loaded module's
                 // cleanup (best-effort) before the worker tears down.
@@ -483,6 +493,12 @@ pub(crate) struct HostBackend {
     /// context-loss re-upload. The worker only ever holds the sizes
     /// (`ImageManager`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
+    /// Next host-minted image id, counting DOWN from
+    /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)
+    /// (disjoint from the worker's up-counting range; every value stays
+    /// f64-exact for the JS number boundary). Consumed by
+    /// [`Self::register_image`].
+    next_host_image_id: Cell<u64>,
     /// The last viewport actually applied to the owned renderer. The render
     /// commit point (`render_batch`) syncs geometry to each batch's
     /// viewport, deduped against this — a steady frame stream never
@@ -574,6 +590,7 @@ impl HostBackend {
                 image_resource_map: RefCell::new(
                     crate::core::image_resource::ImageResourceMap::default(),
                 ),
+                next_host_image_id: Cell::new(crate::core::image_resource::HOST_IMAGE_ID_BASE),
                 last_viewport: Cell::new(None),
             },
             host_rx,
@@ -674,6 +691,40 @@ impl HostBackend {
             .insert_with_id(id, image);
     }
 
+    /// Retain + upload — the shared body of the `HostMsg::UploadImage` arm
+    /// (worker-decoded images) and [`Self::register_image`] (host-registered
+    /// images): the full resource is retained for context-loss re-upload,
+    /// then uploaded into the GPU atlas (a no-op while detached).
+    fn retain_and_upload_image(&self, id: ImageResourceId, image: &ImageResource) {
+        self.insert_image_resource(id, image.clone());
+        self.upload_image_resource(id, image);
+    }
+
+    /// Register a host-formed image resource: mint an id from the host range
+    /// (counting down from
+    /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)),
+    /// retain the pixel Blob + upload it to the renderer (identical rail to
+    /// the `UploadImage` arm — no `HostMsg` needed, we ARE the host thread),
+    /// and notify the worker with just the natural size via
+    /// `WorkerMsg::RegisterImageMetadata` so layout + paint can serve the id.
+    ///
+    /// The pixel bytes never cross to the worker — JS references the image
+    /// through the returned handle (a plain number once it crosses the JS
+    /// boundary, wrapped into an `ImageResourceHandle` by the
+    /// `imageResourceHandle` bridge). The FIFO worker channel guarantees the
+    /// worker records the metadata before any later message can expose the
+    /// id to JS. Host-thread method.
+    pub(crate) fn register_image(&self, image: ImageResource) -> ImageResourceId {
+        let id = ImageResourceId::new(self.next_host_image_id.get());
+        self.next_host_image_id.set(id.as_u64() - 1);
+        self.retain_and_upload_image(id, &image);
+        self.send_worker_msg(WorkerMsg::RegisterImageMetadata {
+            id,
+            size: image.natural_size,
+        });
+        id
+    }
+
     /// Install (or replace) the renderer — the **attach** half of the
     /// two-phase lifecycle. Host-thread method (same discipline as
     /// [`Self::sync_viewport`]). See [`TurApp::attach_renderer`].
@@ -718,8 +769,7 @@ impl HostBackend {
             HostMsg::UploadImage { id, image } => {
                 // Retain the full resource (pixel Blob) on main for
                 // context-loss re-upload, then upload into the GPU atlas.
-                self.insert_image_resource(id, image.clone());
-                self.upload_image_resource(id, &image);
+                self.retain_and_upload_image(id, &image);
                 MsgOutcome::Continue
             }
             HostMsg::Shell(cmd) => {

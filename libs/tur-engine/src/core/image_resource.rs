@@ -32,6 +32,18 @@ use vello_common::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ImageResourceId(u64);
 
+/// Base of the host-minted id range. Worker-minted ids (`ImageManager::allocate`)
+/// count up from 0; ids minted host-side (`HostBackend::register_image`) count
+/// DOWN from this base. Two properties fall out:
+///
+/// - The ranges are disjoint by construction (the worker would need 2^53
+///   allocations to collide — guarded by a `debug_assert` in `allocate`).
+/// - Every host id is ≤ 2^53, i.e. exactly representable as an f64 — the
+///   precision the id crosses the JS number boundary with (ids round-trip as
+///   plain JS numbers via `imageResourceHandle` / `resourceId`). A base above
+///   2^53 would alias early host ids in JS.
+pub const HOST_IMAGE_ID_BASE: u64 = 1 << 53;
+
 impl ImageResourceId {
     pub fn new(id: u64) -> Self {
         Self(id)
@@ -39,6 +51,12 @@ impl ImageResourceId {
 
     pub fn as_u64(self) -> u64 {
         self.0
+    }
+
+    /// Whether this id was minted host-side (in the [`HOST_IMAGE_ID_BASE`]
+    /// range) rather than by the worker's `ImageManager`.
+    pub fn is_host_minted(self) -> bool {
+        self.0 >= HOST_IMAGE_ID_BASE
     }
 }
 
@@ -123,6 +141,10 @@ impl ImageManager {
     /// so layout + paint can never observe a stale size for an id the bridge
     /// already handed out.
     pub fn allocate(&mut self, image: &ImageResource) -> ImageResourceId {
+        debug_assert!(
+            self.next_id < HOST_IMAGE_ID_BASE,
+            "worker image ids crossed into the host-minted range (2^53 allocations?!)"
+        );
         let id = ImageResourceId::new(self.next_id);
         self.next_id += 1;
         self.metadata.insert(
@@ -132,6 +154,15 @@ impl ImageManager {
             },
         );
         id
+    }
+
+    /// Record metadata under an already-minted id — the worker-side receipt
+    /// for host-registered images (`WorkerMsg::RegisterImageMetadata`): the
+    /// host mints the id, retains the pixel Blob, and ships only the natural
+    /// size across. Layout + paint then read the size exactly as they do for
+    /// worker-minted ids.
+    pub fn insert_with_id(&mut self, id: ImageResourceId, metadata: ImageMetadata) {
+        self.metadata.insert(id, metadata);
     }
 
     /// Natural-size lookup for layout (`get_image_natural_size`) + paint

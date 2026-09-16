@@ -10,6 +10,8 @@ use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
+use super::handle::ImageResourceRef;
+
 // ---------------------------------------------------------------------------
 // ImageView — the user's declaration. Pure Rust, no JsValues.
 //
@@ -21,7 +23,7 @@ use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 #[derive(Clone)]
 pub struct ImageView {
-    pub(crate) resource_id: Option<Val<u64>>,
+    pub(crate) resource_id: Option<Val<ImageResourceRef>>,
     pub(crate) width: Option<Val<f64>>,
     pub(crate) height: Option<Val<f64>>,
     pub(crate) fit: Option<Val<BoxFit>>,
@@ -91,7 +93,7 @@ impl ElementTrace for ImageElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
         if let Some(Val::Static(rid)) = &self.view.resource_id {
-            parts.push(format!("resource={rid}"));
+            parts.push(format!("resource={}", rid.0));
         }
         if let Some(Val::Static(w)) = &self.view.width {
             parts.push(format!("width={w}"));
@@ -109,7 +111,7 @@ impl ElementTrace for ImageElement {
         let c = &self.view;
         let mut p = Vec::new();
         if let Some(v) = c.resource_id.as_ref().and_then(Val::as_static) {
-            p.push(("resourceId", TraceValue::Num(*v as f64)));
+            p.push(("resourceId", TraceValue::Num(v.0 as f64)));
         }
         if let Some(v) = c.width.as_ref().and_then(Val::as_static) {
             p.push(("width", TraceValue::Num(*v)));
@@ -133,7 +135,7 @@ impl ImageView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         let mut p = JsProps::new(props, ctx);
         ImageView {
-            resource_id: p.val::<u64>("resourceId"),
+            resource_id: p.val::<ImageResourceRef>("resourceId"),
             width: p.val::<f64>("width"),
             height: p.val::<f64>("height"),
             fit: p.val::<BoxFit>("fit"),

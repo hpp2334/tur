@@ -14,6 +14,7 @@ import {
     createTextEditingController,
     decodeUtf8,
     derive,
+    type ImageResourceHandle,
     isCancelError,
     mutate,
     type Readable,
@@ -561,11 +562,11 @@ const ICON_SVGS: Record<string, string> = {
     github: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#4f46e5"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>`,
 };
 
-const iconIds: Record<string, number> = {};
+const iconIds: Record<string, ImageResourceHandle> = {};
 for (const name of Object.keys(ICON_SVGS)) {
     iconIds[name] = createSvgResource(ICON_SVGS[name]);
 }
 
-export function getIcon(name: keyof typeof ICON_SVGS): number {
+export function getIcon(name: keyof typeof ICON_SVGS): ImageResourceHandle {
     return iconIds[name];
 }
