@@ -114,6 +114,19 @@ pub enum WorkerMsg {
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
+    /// Host-registered image receipt (`TurApp::register_image`): the host
+    /// minted the id (host range — see
+    /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)),
+    /// retained the pixel Blob host-side, uploaded it to its renderer, and
+    /// ships the worker only the natural size so layout + paint can serve
+    /// the id. Fire-and-forget with no Reply: the host side is already
+    /// committed, and the shared FIFO worker channel guarantees this is
+    /// processed before any later message that could hand the id to JS
+    /// (`EventBusToJs`, `LoadModule`).
+    RegisterImageMetadata {
+        id: crate::core::image_resource::ImageResourceId,
+        size: crate::core::layout::Size,
+    },
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
@@ -275,6 +288,9 @@ impl fmt::Debug for WorkerMsg {
                 .field("len", &payload.len())
                 .finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
+            Self::RegisterImageMetadata { id, .. } => {
+                f.debug_tuple("RegisterImageMetadata").field(id).finish()
+            }
             Self::Destroy { .. } => write!(f, "Destroy"),
         }
     }

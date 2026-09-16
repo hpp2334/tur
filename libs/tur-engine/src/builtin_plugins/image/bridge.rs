@@ -13,8 +13,10 @@ use crate::core::js_runtime::builder::{BuilderMethod as M, BuilderTable};
 use crate::core::js_runtime::helpers::{
     FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
+use crate::core::js_runtime::js_value::IntoJs;
 
 use super::decode::{decode_image_bytes, decode_svg};
+use super::handle::ImageResourceHandle;
 
 static TABLE: BuilderTable = BuilderTable {
     methods: &[
@@ -35,6 +37,7 @@ pub fn fns() -> Vec<FnEntry> {
         ("Image", 2, tur_image_factory as Ptr),
         ("createImageResource", 2, tur_create_image_resource as Ptr),
         ("createSvgResource", 2, tur_create_svg_resource as Ptr),
+        ("imageResourceHandle", 2, tur_image_resource_handle as Ptr),
     ]
 }
 
@@ -85,13 +88,13 @@ fn tur_create_image_resource(
         )
     })?;
     let id = js_ctx.register_image(image);
-    Ok(JsValue::from(id.as_u64() as f64))
+    Ok(ImageResourceHandle(id).into_js(context))
 }
 
 fn tur_create_svg_resource(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let svg = args
@@ -103,5 +106,37 @@ fn tur_create_svg_resource(
         JsError::from(JsNativeError::range().with_message("failed to parse/render SVG"))
     })?;
     let id = js_ctx.register_image(image);
-    Ok(JsValue::from(id.as_u64() as f64))
+    Ok(ImageResourceHandle(id).into_js(context))
+}
+
+/// `imageResourceHandle(id: number) -> ImageResourceHandle` — wrap a
+/// host-delivered numeric id (from `TurApp::register_image`, shipped over an
+/// embedder rail such as the event bus) into the JS-opaque handle
+/// `Image().resourceId(...)` accepts. Validates against the worker's image
+/// metadata, so a stale / unknown id fails loudly here instead of rendering
+/// as a silently zero-sized image. (The engine's FIFO worker channel
+/// guarantees a host-registered id's metadata is processed before any rail
+/// that could deliver it to JS, so a fresh registration always validates.)
+fn tur_image_resource_handle(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_js_ctx(args)?;
+    let id = args.get_or_undefined(1).as_number().ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("imageResourceHandle(id): expected a numeric image resource id"),
+        )
+    })? as u64;
+    let id = crate::core::image_resource::ImageResourceId::new(id);
+    let known = js_ctx.image_manager.borrow().get(id).is_some();
+    if !known {
+        return Err(JsError::from(JsNativeError::range().with_message(format!(
+            "unknown image resource id {} — was it registered \
+             (createImageResource / TurApp::register_image)?",
+            id.as_u64()
+        ))));
+    }
+    Ok(ImageResourceHandle(id).into_js(context))
 }

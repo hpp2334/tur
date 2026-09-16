@@ -21,6 +21,7 @@
 pub mod bridge;
 pub mod decode;
 pub mod element;
+pub mod handle;
 pub mod layout;
 pub mod render;
 
