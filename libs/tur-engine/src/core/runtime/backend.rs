@@ -489,9 +489,11 @@ pub(crate) struct HostBackend {
     renderer: RefCell<Option<Box<dyn Renderer>>>,
     /// Main-side image resources — the full `ImageResource` (pixel `Blob`
     /// retained) per worker-assigned id. Inserted on `HostMsg::UploadImage`
-    /// (under the worker-assigned id) alongside the GPU upload; retained for
-    /// context-loss re-upload. The worker only ever holds the sizes
-    /// (`ImageManager`).
+    /// (under the worker-assigned id) alongside the GPU upload; replayed
+    /// into every freshly attached renderer by [`Self::attach_renderer`] —
+    /// the retention exists precisely so a re-attach (surface recreation,
+    /// context loss) can repopulate an empty atlas. The worker only ever
+    /// holds the sizes (`ImageManager`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
     /// Next host-minted image id, counting DOWN from
     /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)
@@ -672,10 +674,9 @@ impl HostBackend {
     }
 
     /// Upload a newly-registered image resource to the owned renderer (a
-    /// no-op while detached — a later attach re-uploads nothing; the worker
-    /// ships uploads as resources register, and any registered before the
-    /// attach simply aren't visible to the fresh renderer until re-use
-    /// re-registers them).
+    /// no-op while detached — the resource stays retained in the host-side
+    /// map, and the next [`Self::attach_renderer`] replays the whole map
+    /// into the fresh renderer).
     pub(crate) fn upload_image_resource(&self, id: ImageResourceId, image: &ImageResource) {
         if let Some(r) = self.renderer.borrow_mut().as_mut() {
             r.upload_image_resource(id, image);
@@ -693,8 +694,9 @@ impl HostBackend {
 
     /// Retain + upload — the shared body of the `HostMsg::UploadImage` arm
     /// (worker-decoded images) and [`Self::register_image`] (host-registered
-    /// images): the full resource is retained for context-loss re-upload,
-    /// then uploaded into the GPU atlas (a no-op while detached).
+    /// images): the full resource is retained host-side (replayed into every
+    /// freshly attached renderer — see [`Self::attach_renderer`]), then
+    /// uploaded into the GPU atlas (a no-op while detached).
     fn retain_and_upload_image(&self, id: ImageResourceId, image: &ImageResource) {
         self.insert_image_resource(id, image.clone());
         self.upload_image_resource(id, image);
@@ -726,9 +728,21 @@ impl HostBackend {
     }
 
     /// Install (or replace) the renderer — the **attach** half of the
-    /// two-phase lifecycle. Host-thread method (same discipline as
+    /// two-phase lifecycle. Before installing, every retained image resource
+    /// ([`Self::image_resource_map`]) is uploaded into the incoming renderer:
+    /// a fresh renderer's atlas is empty, and JS-cached handles (which only
+    /// fetch missing ids) would otherwise never see pre-attach registrations
+    /// again. The replay happens before the install, so it precedes the
+    /// viewport sync + the first frame the looper plays on the new renderer
+    /// (see
+    /// [`VirtualHost::attach_renderer`](crate::core::virtual_app::VirtualHost::attach_renderer)).
+    /// Host-thread method (same discipline as
     /// [`Self::sync_viewport`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(&self, renderer: Box<dyn Renderer>) {
+        let mut renderer = renderer;
+        for (id, image) in self.image_resource_map.borrow().iter_images() {
+            renderer.upload_image_resource(id, image);
+        }
         *self.renderer.borrow_mut() = Some(renderer);
     }
 

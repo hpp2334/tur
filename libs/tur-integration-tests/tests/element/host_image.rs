@@ -11,13 +11,36 @@
 //!   validated, JS-opaque `ImageResourceHandle`); `Image().resourceId(...)`
 //!   accepts the handle (and, back-compat, a plain number).
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::Duration;
 
 use tur_engine::EventBus;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::core::elements::NodeTreeSnapshot;
-use tur_engine::core::image_resource::{HOST_IMAGE_ID_BASE, ImageResource};
+use tur_engine::core::image_resource::{HOST_IMAGE_ID_BASE, ImageResource, ImageResourceId};
+use tur_engine::core::render::{RenderCommand, Renderer};
 use tur_integration_tests::TurTestApp;
+
+/// Records `render_commands` + `upload_image_resource` calls into a shared
+/// log (call order preserved — the replay-must-precede-first-frame assertion
+/// reads it).
+struct RecordingRenderer {
+    calls: Rc<RefCell<Vec<String>>>,
+}
+
+impl Renderer for RecordingRenderer {
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        self.calls
+            .borrow_mut()
+            .push(format!("render_commands:{}", commands.len()));
+    }
+    fn upload_image_resource(&mut self, id: ImageResourceId, _image: &ImageResource) {
+        self.calls
+            .borrow_mut()
+            .push(format!("upload:{}", id.as_u64()));
+    }
+}
 
 /// The 1×1 PNG used by the JS-decode path (`createImageResource`).
 const PNG_1X1: &[u8] = &[
@@ -212,5 +235,96 @@ fn image_resource_handle_rejects_unknown_id() {
     assert!(
         err.to_string().contains("unknown image resource"),
         "error should name the problem, got: {err}"
+    );
+}
+
+/// Detach → attach replays the retained image resources into the freshly
+/// attached renderer. Both retention rails share one map (the
+/// `UploadImage` arm for worker-decoded images + `register_image` for
+/// host-registered ones), and the replay must cover both — a JS-cached
+/// handle only ever fetches missing ids, so pre-fix a re-attached renderer
+/// (empty atlas, nothing replayed) rendered every previously-registered
+/// image blank until re-use re-registered it. The replay also must land
+/// BEFORE the first frame paints on the fresh renderer.
+#[test]
+fn reattach_replays_retained_images_into_fresh_renderer() {
+    let app = TurTestApp::new_with_renderer(
+        400.0,
+        600.0,
+        Box::new(RecordingRenderer {
+            calls: Rc::new(RefCell::new(Vec::new())),
+        }),
+    )
+    .unwrap();
+
+    // Both retention rails: one host-registered + one JS-decoded image.
+    let rgba = vec![7u8; 4 * 2 * 4];
+    let host_id = app
+        .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
+
+    app.eval_module_source(&format!(
+        r#"
+        import {{ Column, createImageResource, imageResourceHandle, Image, mount, view }} from "tur:std";
+        const pngBytes = new Uint8Array({png:?});
+        const jsHandle = createImageResource(pngBytes);     // worker-minted id
+        const hostHandle = imageResourceHandle({host_id});  // host-minted id
+        export function start() {{
+            mount(view(() => Column().children([
+                Image().resourceId(jsHandle).width(1).build(),
+                Image().resourceId(hostHandle).width(4).build(),
+            ]).build()));
+        }}
+        "#,
+        png = PNG_1X1,
+        host_id = host_id.as_u64(),
+    ))
+    .expect("load module");
+    app.wait_for_timeout(Duration::ZERO);
+
+    let count = app.with_app(|a| a.image_resource_count());
+    assert_eq!(count, 2, "both resources retained host-side");
+
+    // DETACH → ATTACH a fresh renderer at a different size (the changed
+    // viewport forces a relayout + repaint, so the fresh log carries frames
+    // to order the replay against).
+    app.with_app(|a| a.detach_renderer());
+    let fresh_calls = Rc::new(RefCell::new(Vec::new()));
+    app.with_app(|a| {
+        a.attach_renderer(
+            Box::new(RecordingRenderer {
+                calls: fresh_calls.clone(),
+            }),
+            320,
+            480,
+            1.0,
+        )
+    });
+    app.wait_for_timeout(Duration::ZERO);
+
+    let log = fresh_calls.borrow();
+    let first_frame = log
+        .iter()
+        .position(|c| c.starts_with("render_commands:"))
+        .expect("fresh renderer must paint after attach");
+    let upload_positions: Vec<usize> = log
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.starts_with("upload:"))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(
+        upload_positions.len(),
+        2,
+        "both retained images must be replayed into the fresh renderer, got {log:?}"
+    );
+    assert!(
+        upload_positions
+            .iter()
+            .any(|&i| log[i] == format!("upload:{}", host_id.as_u64())),
+        "host-registered id must be among the replayed resources, got {log:?}"
+    );
+    assert!(
+        upload_positions.iter().all(|&i| i < first_frame),
+        "replay must land before the first frame paints on the fresh renderer, got {log:?}"
     );
 }
