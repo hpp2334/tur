@@ -35,10 +35,15 @@ impl Renderer for RecordingRenderer {
             .borrow_mut()
             .push(format!("render_commands:{}", commands.len()));
     }
+    /// Idempotent, like the real renderers (the `contains_key` guard in
+    /// `VelloRenderer`/`WebGlVelloRenderer`) — a repeated ensure for an
+    /// already-present id is logged once.
     fn upload_image_resource(&mut self, id: ImageResourceId, _image: &ImageResource) {
-        self.calls
-            .borrow_mut()
-            .push(format!("upload:{}", id.as_u64()));
+        let mut calls = self.calls.borrow_mut();
+        let entry = format!("upload:{}", id.as_u64());
+        if !calls.contains(&entry) {
+            calls.push(entry);
+        }
     }
 }
 
@@ -238,16 +243,16 @@ fn image_resource_handle_rejects_unknown_id() {
     );
 }
 
-/// Detach → attach replays the retained image resources into the freshly
-/// attached renderer. Both retention rails share one map (the
+/// Detach → attach: the freshly attached renderer paints every
+/// previously-registered image. Both retention rails share one map (the
 /// `UploadImage` arm for worker-decoded images + `register_image` for
-/// host-registered ones), and the replay must cover both — a JS-cached
-/// handle only ever fetches missing ids, so pre-fix a re-attached renderer
-/// (empty atlas, nothing replayed) rendered every previously-registered
-/// image blank until re-use re-registered it. The replay also must land
-/// BEFORE the first frame paints on the fresh renderer.
+/// host-registered ones), and the render commit point re-ensures every
+/// image a frame references before painting it — a JS-cached handle only
+/// ever fetches missing ids, so without the ensure-pass a re-attached
+/// renderer (empty atlas) would render previously-registered images blank
+/// forever. The ensures must land BEFORE the first frame paints.
 #[test]
-fn reattach_replays_retained_images_into_fresh_renderer() {
+fn reattach_ensures_retained_images_before_first_frame() {
     let app = TurTestApp::new_with_renderer(
         400.0,
         600.0,
@@ -286,7 +291,7 @@ fn reattach_replays_retained_images_into_fresh_renderer() {
 
     // DETACH → ATTACH a fresh renderer at a different size (the changed
     // viewport forces a relayout + repaint, so the fresh log carries frames
-    // to order the replay against).
+    // to order the ensures against).
     app.with_app(|a| a.detach_renderer());
     let fresh_calls = Rc::new(RefCell::new(Vec::new()));
     app.with_app(|a| {
@@ -315,16 +320,84 @@ fn reattach_replays_retained_images_into_fresh_renderer() {
     assert_eq!(
         upload_positions.len(),
         2,
-        "both retained images must be replayed into the fresh renderer, got {log:?}"
+        "both mounted images must be ensured into the fresh renderer, got {log:?}"
     );
     assert!(
         upload_positions
             .iter()
             .any(|&i| log[i] == format!("upload:{}", host_id.as_u64())),
-        "host-registered id must be among the replayed resources, got {log:?}"
+        "host-registered id must be among the ensured resources, got {log:?}"
     );
     assert!(
         upload_positions.iter().all(|&i| i < first_frame),
-        "replay must land before the first frame paints on the fresh renderer, got {log:?}"
+        "ensures must land before the first frame paints on the fresh renderer, got {log:?}"
+    );
+}
+
+/// Pay for what you paint: the render commit point re-ensures only the
+/// images a frame actually references. Three resources are retained but the
+/// module paints one — the freshly attached renderer must be ensured with
+/// exactly that one (the eager full-map replay form uploaded all three at
+/// attach, charging surface recreation for images the frame never shows).
+#[test]
+fn reattach_uploads_only_painted_images() {
+    let app = TurTestApp::new_with_renderer(
+        400.0,
+        600.0,
+        Box::new(RecordingRenderer {
+            calls: Rc::new(RefCell::new(Vec::new())),
+        }),
+    )
+    .unwrap();
+
+    // Three retained resources; the module paints only the first.
+    let ids: Vec<ImageResourceId> = (0..3)
+        .map(|i| {
+            let rgba = vec![10u8 + i; 4 * 2 * 4];
+            app.with_app(|a| {
+                a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims"))
+            })
+        })
+        .collect();
+
+    app.eval_module_source(&format!(
+        r#"
+        import {{ Column, imageResourceHandle, Image, mount, view }} from "tur:std";
+        const handle = imageResourceHandle({});
+        export function start() {{
+            mount(view(() => Column().children([
+                Image().resourceId(handle).width(4).build(),
+            ]).build()));
+        }}
+        "#,
+        ids[0].as_u64(),
+    ))
+    .expect("load module");
+    app.wait_for_timeout(Duration::ZERO);
+
+    let count = app.with_app(|a| a.image_resource_count());
+    assert_eq!(count, 3, "all three resources retained host-side");
+
+    // DETACH → ATTACH: only the painted image may be ensured.
+    app.with_app(|a| a.detach_renderer());
+    let fresh_calls = Rc::new(RefCell::new(Vec::new()));
+    app.with_app(|a| {
+        a.attach_renderer(
+            Box::new(RecordingRenderer {
+                calls: fresh_calls.clone(),
+            }),
+            320,
+            480,
+            1.0,
+        )
+    });
+    app.wait_for_timeout(Duration::ZERO);
+
+    let log = fresh_calls.borrow();
+    let uploads: Vec<&String> = log.iter().filter(|c| c.starts_with("upload:")).collect();
+    assert_eq!(
+        uploads,
+        vec![&format!("upload:{}", ids[0].as_u64())],
+        "only the painted image may be ensured on the fresh renderer, got {log:?}"
     );
 }

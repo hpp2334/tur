@@ -268,15 +268,15 @@ impl TurApp {
     /// the two-phase (initialize → attach) lifecycle. Installs the renderer
     /// into the host-side slot, then routes through [`Self::resize`] so the
     /// renderer is sized/configured **and** the worker's `viewportSize$` is
-    /// seeded (a fresh frame is requested). Every image resource retained
-    /// host-side is replayed into the incoming renderer first (a fresh
-    /// renderer's atlas is empty — JS-cached handles only fetch missing
-    /// ids, so nothing else would re-register pre-attach images). Use for
-    /// an instance built via `build_headless` (or previously
-    /// [`detach`](Self::detach_renderer)ed): surface acquisition and
-    /// renderer construction are the embedder's job — e.g. tur-android's
-    /// `attachInstance` op builds the wgpu surface + `VelloRenderer` on the
-    /// host thread and hands it over here.
+    /// seeded (a fresh frame is requested). The renderer starts with an
+    /// empty atlas; retained image resources are re-ensured at the render
+    /// commit point before the first frame that paints them (JS-cached
+    /// handles only fetch missing ids, so nothing else would re-register
+    /// pre-attach images). Use for an instance built via `build_headless`
+    /// (or previously [`detach`](Self::detach_renderer)ed): surface
+    /// acquisition and renderer construction are the embedder's job — e.g.
+    /// tur-android's `attachInstance` op builds the wgpu surface +
+    /// `VelloRenderer` on the host thread and hands it over here.
     ///
     /// Host-thread method (same discipline as [`Self::resize`]).
     pub fn attach_renderer(
@@ -296,7 +296,8 @@ impl TurApp {
     /// next [`attach_renderer`](Self::attach_renderer); the engine loop
     /// (JS, capabilities, events) keeps running. Retained image resources
     /// survive the detach (the map is renderer-independent) and are
-    /// replayed into the freshly attached renderer. The embedder must drop
+    /// re-ensured before the first frame that paints them after the
+    /// re-attach. The embedder must drop
     /// its own surface-side resources that must not outlive the renderer
     /// **before** calling this if ordering matters, and release them after
     /// (e.g. tur-android releases its `ANativeWindow` ref only after this

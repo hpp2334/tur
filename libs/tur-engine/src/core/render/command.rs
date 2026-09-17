@@ -122,3 +122,25 @@ const _: fn() = || {
     assert_send::<CanvasOp>();
     assert_send::<RenderCommand>();
 };
+
+/// Every image id the batch references (`CanvasOp::DrawImage` inside each
+/// `Paint`'s ops). Used by the host-side render commit point to re-ensure
+/// the renderer's atlas holds everything a frame is about to paint —
+/// idempotent renderer uploads make the pass a hashmap probe when nothing
+/// is missing.
+///
+/// Must be extended when a new image-bearing `CanvasOp` variant appears —
+/// kept beside the enum so the two move together.
+pub(crate) fn referenced_image_ids(
+    commands: &[RenderCommand],
+) -> impl Iterator<Item = ImageResourceId> + '_ {
+    commands
+        .iter()
+        .flat_map(|cmd| match cmd {
+            RenderCommand::Paint { ops, .. } => ops.iter(),
+        })
+        .filter_map(|op| match op {
+            CanvasOp::DrawImage { resource_id, .. } => Some(*resource_id),
+            _ => None,
+        })
+}

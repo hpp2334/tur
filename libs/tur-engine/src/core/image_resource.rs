@@ -217,4 +217,9 @@ impl ImageResourceMap {
     pub fn has_image(&self, id: ImageResourceId) -> bool {
         self.resources.contains_key(&id)
     }
+
+    /// Whether no image resources are retained.
+    pub fn is_empty(&self) -> bool {
+        self.resources.is_empty()
+    }
 }

@@ -44,7 +44,7 @@ use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
-use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
+use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer, referenced_image_ids};
 use crate::core::scheduler::WorkerTicket;
 use crate::error::TurError;
 
@@ -489,11 +489,11 @@ pub(crate) struct HostBackend {
     renderer: RefCell<Option<Box<dyn Renderer>>>,
     /// Main-side image resources — the full `ImageResource` (pixel `Blob`
     /// retained) per worker-assigned id. Inserted on `HostMsg::UploadImage`
-    /// (under the worker-assigned id) alongside the GPU upload; replayed
-    /// into every freshly attached renderer by [`Self::attach_renderer`] —
-    /// the retention exists precisely so a re-attach (surface recreation,
-    /// context loss) can repopulate an empty atlas. The worker only ever
-    /// holds the sizes (`ImageManager`).
+    /// (under the worker-assigned id) alongside the GPU upload; re-ensured
+    /// at the render commit point for every id a painted frame references
+    /// ([`Self::ensure_batch_images`]) — the retention exists precisely so
+    /// an empty atlas (fresh attach, surface recreation) repopulates at
+    /// first paint. The worker only ever holds the sizes (`ImageManager`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
     /// Next host-minted image id, counting DOWN from
     /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)
@@ -629,16 +629,20 @@ impl HostBackend {
     }
 
     /// Apply a render-command batch to the owned renderer (geometry sync +
-    /// encode + present) — the **render commit point**. Called from
-    /// `TurAppLooper::run` (both the vsync-aligned pipelining path and the
-    /// quiescence flush) — single source of truth for render application.
+    /// image re-ensure + encode + present) — the **render commit point**.
+    /// Called from `TurAppLooper::run` (both the vsync-aligned pipelining
+    /// path and the quiescence flush) — single source of truth for render
+    /// application.
     ///
     /// Geometry is synced FIRST (deduped via [`Self::sync_viewport`]), so
     /// the backing-store swap and this frame's content land in one
     /// operation: the renderer's currently-presented frame is never
     /// destroyed by a resize whose replacement frame hasn't arrived yet
     /// (which is what resizing at event-receipt time did — the resize white
-    /// flash). A no-op while detached (`None` slot).
+    /// flash). Then every image the batch references is re-ensured into the
+    /// atlas (idempotent — see [`Self::ensure_batch_images`]) BEFORE
+    /// playback, so a paint can never hit a mapped-id miss. A no-op while
+    /// detached (`None` slot).
     pub(crate) fn render_batch(
         &self,
         commands: &[RenderCommand],
@@ -646,8 +650,29 @@ impl HostBackend {
     ) {
         self.sync_viewport(viewport);
         if let Some(r) = self.renderer.borrow_mut().as_mut() {
+            self.ensure_batch_images(r.as_mut(), commands);
             r.render_commands(commands);
             let _ = r.present();
+        }
+    }
+
+    /// Ensure the renderer's atlas holds every image this batch is about to
+    /// paint — the lazy half of retention: registration uploads eagerly,
+    /// and the render commit point re-ensures (idempotently; renderers
+    /// dedupe), so an empty atlas (fresh attach, anything that skipped the
+    /// registration rail) can never paint a mapped id blank. Only ids the
+    /// frame actually references are ensured — pay for what you paint. A
+    /// no-op when nothing is retained. `r` arrives through the caller's
+    /// held `RefMut` — going through `self.upload_image_resource` here
+    /// would double-borrow `self.renderer`.
+    fn ensure_batch_images(&self, r: &mut dyn Renderer, commands: &[RenderCommand]) {
+        if self.image_resource_map.borrow().is_empty() {
+            return;
+        }
+        for id in referenced_image_ids(commands) {
+            if let Some(image) = self.image_resource_map.borrow().get_image(id) {
+                r.upload_image_resource(id, image);
+            }
         }
     }
 
@@ -675,8 +700,8 @@ impl HostBackend {
 
     /// Upload a newly-registered image resource to the owned renderer (a
     /// no-op while detached — the resource stays retained in the host-side
-    /// map, and the next [`Self::attach_renderer`] replays the whole map
-    /// into the fresh renderer).
+    /// map, and the render commit point re-ensures it before the next frame
+    /// that paints it).
     pub(crate) fn upload_image_resource(&self, id: ImageResourceId, image: &ImageResource) {
         if let Some(r) = self.renderer.borrow_mut().as_mut() {
             r.upload_image_resource(id, image);
@@ -694,9 +719,10 @@ impl HostBackend {
 
     /// Retain + upload — the shared body of the `HostMsg::UploadImage` arm
     /// (worker-decoded images) and [`Self::register_image`] (host-registered
-    /// images): the full resource is retained host-side (replayed into every
-    /// freshly attached renderer — see [`Self::attach_renderer`]), then
-    /// uploaded into the GPU atlas (a no-op while detached).
+    /// images): the full resource is retained host-side (re-ensured at the
+    /// render commit point before any frame that paints it — see
+    /// [`Self::ensure_batch_images`]), then uploaded into the GPU atlas (a
+    /// no-op while detached).
     fn retain_and_upload_image(&self, id: ImageResourceId, image: &ImageResource) {
         self.insert_image_resource(id, image.clone());
         self.upload_image_resource(id, image);
@@ -728,21 +754,12 @@ impl HostBackend {
     }
 
     /// Install (or replace) the renderer — the **attach** half of the
-    /// two-phase lifecycle. Before installing, every retained image resource
-    /// ([`Self::image_resource_map`]) is uploaded into the incoming renderer:
-    /// a fresh renderer's atlas is empty, and JS-cached handles (which only
-    /// fetch missing ids) would otherwise never see pre-attach registrations
-    /// again. The replay happens before the install, so it precedes the
-    /// viewport sync + the first frame the looper plays on the new renderer
-    /// (see
-    /// [`VirtualHost::attach_renderer`](crate::core::virtual_app::VirtualHost::attach_renderer)).
-    /// Host-thread method (same discipline as
+    /// two-phase lifecycle. A bare install: the fresh renderer's atlas
+    /// repopulates lazily — the render commit point re-ensures every image
+    /// a frame references before painting it (see
+    /// [`Self::render_batch`]). Host-thread method (same discipline as
     /// [`Self::sync_viewport`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(&self, renderer: Box<dyn Renderer>) {
-        let mut renderer = renderer;
-        for (id, image) in self.image_resource_map.borrow().iter_images() {
-            renderer.upload_image_resource(id, image);
-        }
         *self.renderer.borrow_mut() = Some(renderer);
     }
 

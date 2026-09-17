@@ -51,9 +51,14 @@ pub trait Renderer {
     /// the web) until the new frame swaps it out in the same operation.
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
 
-    /// Upload (or refresh) one image resource in the GPU atlas. Called once
-    /// per newly-registered resource (`HostMsg::UploadImage`), replacing
-    /// the old per-frame full-map upload sweep. Default: no-op.
+    /// Upload (or refresh) one image resource in the GPU atlas. Called when
+    /// a resource registers (`HostMsg::UploadImage`) and re-called by the
+    /// render commit point for every id a frame is about to paint — the
+    /// contract is **idempotent**: implementations must skip ids already in
+    /// the atlas (both in-tree renderers guard with a `contains_key` probe),
+    /// so a re-ensure costs a hashmap lookup. That idempotency is what lets
+    /// a freshly attached renderer repopulate lazily, at first paint.
+    /// Default: no-op.
     fn upload_image_resource(&mut self, _id: ImageResourceId, _image: &ImageResource) {}
 
     fn render_to_pixels(&mut self) -> Option<Vec<u8>> {

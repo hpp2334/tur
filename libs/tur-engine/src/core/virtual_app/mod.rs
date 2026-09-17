@@ -434,13 +434,14 @@ impl VirtualHost {
     }
 
     /// Attach (or replace) the host-side renderer — the **attach** half of
-    /// the two-phase (initialize → attach) lifecycle. The backend replays
-    /// the retained image resources into the incoming renderer first (a
-    /// fresh renderer's atlas is empty), then this installs it and sizes it
-    /// immediately (safe: nothing has been presented on it yet), then routes
-    /// through [`Self::resize`] so the worker's `viewportSize$` is seeded
-    /// with a fresh frame request. Subsequent geometry changes arrive with
-    /// painted batches (see [`Self::resize`]). See [`TurApp::attach_renderer`].
+    /// the two-phase (initialize → attach) lifecycle. A bare install (the
+    /// fresh renderer's atlas repopulates lazily — the render commit point
+    /// re-ensures every image a frame references before painting it); this
+    /// sizes the renderer immediately (safe: nothing has been presented on
+    /// it yet), then routes through [`Self::resize`] so the worker's
+    /// `viewportSize$` is seeded with a fresh frame request. Subsequent
+    /// geometry changes arrive with painted batches (see
+    /// [`Self::resize`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(
         &self,
         renderer: Box<dyn crate::core::render::Renderer>,
