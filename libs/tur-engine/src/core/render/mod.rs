@@ -9,6 +9,7 @@ mod renderer;
 pub mod brush;
 
 pub use canvas::*;
+pub(crate) use command::fingerprint_batch;
 pub(crate) use command::referenced_image_ids;
 pub use command::{CanvasOp, RenderCommand};
 pub use element_render::*;

@@ -766,6 +766,20 @@ pub(crate) fn build_worker_backend(
         0,
         "reactiveStats",
     );
+    let fs_fn = bound_native(
+        &mut boa_context,
+        ctx_val.clone(),
+        dev_tool::tur_dev_tool_frame_stats,
+        0,
+        "frameStats",
+    );
+    let hft_fn = bound_native(
+        &mut boa_context,
+        ctx_val.clone(),
+        dev_tool::tur_dev_tool_set_host_frame_timing,
+        1,
+        "setHostFrameTiming",
+    );
     let _ = dt_obj.create_data_property(
         js_string!("elementTree"),
         boa_engine::JsValue::from(et_fn),
@@ -779,6 +793,16 @@ pub(crate) fn build_worker_backend(
     let _ = dt_obj.create_data_property(
         js_string!("reactiveStats"),
         boa_engine::JsValue::from(rs_fn),
+        &mut boa_context,
+    );
+    let _ = dt_obj.create_data_property(
+        js_string!("frameStats"),
+        boa_engine::JsValue::from(fs_fn),
+        &mut boa_context,
+    );
+    let _ = dt_obj.create_data_property(
+        js_string!("setHostFrameTiming"),
+        boa_engine::JsValue::from(hft_fn),
         &mut boa_context,
     );
     let _ =

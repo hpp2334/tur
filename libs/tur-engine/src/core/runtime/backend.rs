@@ -44,7 +44,9 @@ use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
-use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer, referenced_image_ids};
+use crate::core::render::{
+    RenderCommand, RenderCommandBatch, Renderer, fingerprint_batch, referenced_image_ids,
+};
 use crate::core::scheduler::WorkerTicket;
 use crate::error::TurError;
 
@@ -103,7 +105,7 @@ impl WorkerBackend {
             .last_applied_cursor()
     }
 
-    pub(crate) fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
+    pub(crate) fn take_pending_render_batch(&self) -> Option<(Vec<RenderCommand>, u64)> {
         self.internal.take_pending_render_batch()
     }
 
@@ -234,6 +236,11 @@ impl WorkerBackend {
             WorkerMsg::Wake => {
                 // The worker_loop drives flush via `pump()` (separate method
                 // so it can capture the FrameOutcome + ship commands).
+            }
+            WorkerMsg::FrameTiming { .. } => {
+                // Host-side render-commit timing push-back. Intercepted by
+                // `worker_loop` (record-only, no pump); this arm only keeps
+                // the dispatch exhaustive.
             }
             WorkerMsg::LoadModule { source, reply } => {
                 let res = self.load_module_inner(&source);
@@ -408,10 +415,11 @@ impl WorkerBackend {
 pub(crate) enum MsgOutcome {
     /// Side-effects already applied; the driver should keep draining.
     Continue,
-    /// A render-command batch + the viewport it was laid out for. The
-    /// driver decides when to paint it (and syncs geometry then — the
-    /// render commit point).
-    Render(RenderCommandBatch, crate::core::screen::ScreenViewport),
+    /// A render-command batch + the viewport it was laid out for + the
+    /// flush epoch it was recorded under. The driver decides when to paint
+    /// it (and syncs geometry then — the render commit point); the epoch
+    /// flows through so host render-commit timings are attributable.
+    Render(RenderCommandBatch, crate::core::screen::ScreenViewport, u64),
     /// A completed frame. Terminal for a single-frame advance.
     Frame(FrameOutcome),
     /// The worker's flush errored. Terminal.
@@ -507,6 +515,18 @@ pub(crate) struct HostBackend {
     /// reconfigures the surface, and a resize is applied exactly once (with
     /// the first frame painted for it). `None` until the first sync.
     last_viewport: Cell<Option<crate::core::screen::ScreenViewport>>,
+    /// Host-side frame-timing collection gate — set by
+    /// `HostMsg::FrameTimingEnabled` (the `turDevTool.setHostFrameTiming`
+    /// bridge). While on, every applied frame's render-commit timings ship
+    /// back via `WorkerMsg::FrameTiming` (no wake — record-only on the
+    /// worker). Off by default: zero per-frame overhead when unused.
+    frame_timing_enabled: Cell<bool>,
+    /// Content fingerprint of the last APPLIED frame — the frame-dedup
+    /// signal. `None` after attach/detach (a fresh renderer has painted
+    /// nothing, so the next batch must always apply). Skips scene rebuild +
+    /// re-encode + re-raster when a new batch carries identical content
+    /// (see [`Self::render_batch`]).
+    last_frame_fingerprint: Cell<Option<u64>>,
 }
 
 impl HostBackend {
@@ -594,6 +614,8 @@ impl HostBackend {
                 ),
                 next_host_image_id: Cell::new(crate::core::image_resource::HOST_IMAGE_ID_BASE),
                 last_viewport: Cell::new(None),
+                frame_timing_enabled: Cell::new(false),
+                last_frame_fingerprint: Cell::new(None),
             },
             host_rx,
         )
@@ -643,16 +665,62 @@ impl HostBackend {
     /// atlas (idempotent — see [`Self::ensure_batch_images`]) BEFORE
     /// playback, so a paint can never hit a mapped-id miss. A no-op while
     /// detached (`None` slot).
+    ///
+    /// **Frame dedup:** a batch whose content fingerprint matches the last
+    /// APPLIED frame's (same content + viewport; the presented surface
+    /// already shows this exact frame) skips scene rebuild, re-encode, and
+    /// re-raster entirely. The fingerprint resets on renderer attach/detach
+    /// — a fresh renderer has never painted anything, so the next batch
+    /// must always apply.
+    ///
+    /// When frame timing is enabled, the apply (scene rebuild + playback)
+    /// and present (encode + raster + composite) phases are timed and the
+    /// results ship back to the worker via `WorkerMsg::FrameTiming`
+    /// (record-only — no wake, no flush feedback).
     pub(crate) fn render_batch(
         &self,
         commands: &[RenderCommand],
         viewport: crate::core::screen::ScreenViewport,
+        frame_id: u64,
     ) {
         self.sync_viewport(viewport);
-        if let Some(r) = self.renderer.borrow_mut().as_mut() {
-            self.ensure_batch_images(r.as_mut(), commands);
-            r.render_commands(commands);
-            let _ = r.present();
+        let mut renderer = self.renderer.borrow_mut();
+        let Some(r) = renderer.as_mut() else {
+            return;
+        };
+
+        // Frame dedup: identical content + identical viewport ⇒ the
+        // presented frame already shows it — skip the whole pipeline.
+        let fingerprint = fingerprint_batch(commands, &viewport);
+        if self.last_frame_fingerprint.get() == Some(fingerprint) {
+            return;
+        }
+
+        let timing = self.frame_timing_enabled.get();
+        let apply_start = timing.then(std::time::Instant::now);
+        self.ensure_batch_images(r.as_mut(), commands);
+        r.as_mut().render_commands(commands);
+        let apply_us = match apply_start {
+            Some(t) => t.elapsed().as_micros() as u64,
+            None => 0,
+        };
+        let present_start = timing.then(std::time::Instant::now);
+        let _ = r.present();
+        let present_us = match present_start {
+            Some(t) => t.elapsed().as_micros() as u64,
+            None => 0,
+        };
+        drop(renderer);
+        self.last_frame_fingerprint.set(Some(fingerprint));
+        if timing {
+            let _ = self.worker_tx.unbounded_send(WorkerMsg::FrameTiming {
+                frame_id,
+                apply_us,
+                present_us,
+            });
+            // No wake: a busy worker delivers within the frame stream; an
+            // idle worker doesn't need this message (and must not flush on
+            // it).
         }
     }
 
@@ -760,6 +828,10 @@ impl HostBackend {
     /// [`Self::render_batch`]). Host-thread method (same discipline as
     /// [`Self::sync_viewport`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(&self, renderer: Box<dyn Renderer>) {
+        // A fresh renderer has never painted anything — reset the frame
+        // dedup signal so the next batch always applies (and its atlas
+        // repopulates via the image re-ensure).
+        self.last_frame_fingerprint.set(None);
         *self.renderer.borrow_mut() = Some(renderer);
     }
 
@@ -767,6 +839,9 @@ impl HostBackend {
     /// Idempotent (detaching an already-detached instance is a no-op). See
     /// [`TurApp::detach_renderer`].
     pub(crate) fn detach_renderer(&self) {
+        // Same as attach: the dedup signal describes the OLD renderer's
+        // presented content; the next renderer must paint from scratch.
+        self.last_frame_fingerprint.set(None);
         self.renderer.borrow_mut().take();
     }
 
@@ -794,9 +869,11 @@ impl HostBackend {
     /// here.
     pub(crate) fn apply_msg(&self, msg: HostMsg) -> MsgOutcome {
         match msg {
-            HostMsg::RenderCommands { commands, viewport } => {
-                MsgOutcome::Render(commands, viewport)
-            }
+            HostMsg::RenderCommands {
+                commands,
+                viewport,
+                frame_id,
+            } => MsgOutcome::Render(commands, viewport, frame_id),
             HostMsg::UploadImage { id, image } => {
                 // Retain the full resource (pixel Blob) on main for
                 // context-loss re-upload, then upload into the GPU atlas.
@@ -814,6 +891,10 @@ impl HostBackend {
             HostMsg::FrameOutcome(Ok(outcome)) => MsgOutcome::Frame(outcome),
             HostMsg::FrameOutcome(Err(e)) => MsgOutcome::Failed(e),
             HostMsg::Destroyed => MsgOutcome::Closed,
+            HostMsg::FrameTimingEnabled(on) => {
+                self.frame_timing_enabled.set(on);
+                MsgOutcome::Continue
+            }
             HostMsg::EventBusToEmbedder {
                 channel_id,
                 payload,
@@ -935,11 +1016,12 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 // the viewport they were laid out for, so the host syncs its
                 // renderer at the render commit point (see
                 // `HostBackend::render_batch`).
-                if let Some(batch) = backend.take_pending_render_batch() {
+                if let Some((batch, frame_id)) = backend.take_pending_render_batch() {
                     let viewport = backend.screen_viewport();
                     let _ = host_tx.unbounded_send(HostMsg::RenderCommands {
                         commands: batch,
                         viewport,
+                        frame_id,
                     });
                 }
                 let _ = host_tx.unbounded_send(HostMsg::FrameOutcome(payload));
@@ -961,6 +1043,24 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                         current_focus,
                     )));
                 }
+            }
+            WorkerMsg::FrameTiming {
+                frame_id,
+                apply_us,
+                present_us,
+            } => {
+                // Host-side render-commit timing push-back (opt-in).
+                // Record-only — deliberately no pump: this message must not
+                // drive a flush (it would create a render↔timing feedback
+                // loop). A busy worker delivers it within the current frame
+                // stream; an idle worker doesn't need it.
+                backend.internal.js_context.frame_stats.record_host_timing(
+                    crate::core::app::frame_stats::HostFrameTiming {
+                        frame_id,
+                        apply_us,
+                        present_us,
+                    },
+                );
             }
             msg @ WorkerMsg::Destroy { .. } => {
                 // Module lifecycle contract: the loaded module's cleanup
