@@ -7,6 +7,7 @@ use crate::core::layout::Constraints;
 use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 
+use crate::core::app::frame_stats::{FrameTimingParts, estimate_batch_bytes};
 use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
@@ -58,6 +59,11 @@ pub struct TurAppContext {
     /// embedder via a callback installed by a plugin). Owns the time source
     /// shared with the boa `Context`. See [`FrameEnv`].
     pub(crate) frame_env: FrameEnv,
+    /// Retained record canvas for [`Self::build_render_batch`] — the worker
+    /// keeps ONE recording canvas across frames (op-log Vec + transform/clip
+    /// stacks), re-`reset` per record pass so the dominant allocation is
+    /// reused instead of dropped-and-reallocated per painted frame.
+    recording: Option<RecordingCanvas>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -97,6 +103,7 @@ impl TurAppContext {
             completion_handle,
             capabilities,
             frame_env: FrameEnv::new(clock),
+            recording: None,
         }
     }
 
@@ -203,40 +210,57 @@ impl TurAppContext {
     /// `Vec<RenderCommand>` (paint commands in playback order), and return
     /// the batch.
     ///
+    /// Also returns the frame-stats probe parts (walk/post timings + node/op
+    /// counters) for the caller to fold into the instance's
+    /// [`FrameStats`](crate::core::app::FrameStats). Never drives behavior.
+    ///
     /// The caller is responsible for shipping the batch to whichever
     /// thread/realm owns the actual renderer. The worker stores it in
     /// `TurAppInternal::pending_render_batch` for `HostBackend::worker_loop`
     /// to drain and ship via `HostMsg::RenderCommands`.
-    pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
+    pub fn build_render_batch(&mut self) -> (Vec<RenderCommand>, FrameTimingParts) {
         let focused_node_id = self.focus_manager.borrow().focused();
 
-        // Record the paint pass. Seed the recording canvas with the logical
-        // viewport as the bottom-of-stack clip so off-screen subtrees are
-        // culled during the walk (content outside the screen is invisible
-        // anyway). Explicit element clips (ScrollView, overflow-Flex, …)
-        // push further inner clips intersected with this viewport.
+        // Record the paint pass on the RETAINED canvas. Seed the clip stack
+        // with the logical viewport as the bottom-of-stack clip so
+        // off-screen subtrees are culled during the walk (content outside
+        // the screen is invisible anyway). Explicit element clips
+        // (ScrollView, overflow-Flex, …) push further inner clips
+        // intersected with this viewport.
+        let walk_start = std::time::Instant::now();
         let tree = self.element_tree.borrow();
         let (vp_w, vp_h) = self.screen.logical_size;
-        let mut recording = RecordingCanvas::new_with_viewport(vello_common::kurbo::Rect::new(
-            0.0, 0.0, vp_w, vp_h,
-        ));
+        let recording = self.recording.get_or_insert_with(RecordingCanvas::new);
+        recording.reset(Some(vello_common::kurbo::Rect::new(0.0, 0.0, vp_w, vp_h)));
         {
             let frame_env = self.frame_env.paint_env();
             tree.paint(
-                &mut recording,
+                recording,
                 focused_node_id,
                 &self.image_manager.borrow(),
                 frame_env,
             );
         }
+        let (nodes_walked, ops_recorded) = recording.counters();
         drop(tree);
+        let walk_us = walk_start.elapsed().as_micros() as u64;
 
-        // Collect the paint commands into one batch.
-        let batch = recording.into_render_commands();
+        // Collect the paint commands into one batch (retained capacity).
+        let post_start = std::time::Instant::now();
+        let batch = self.recording.as_mut().unwrap().finish();
+        let post_us = post_start.elapsed().as_micros() as u64;
 
         // Flush cursor claims accumulated during the record pass.
         self.frame_env.apply_cursor_changes();
 
-        batch
+        let parts = FrameTimingParts {
+            walk_us,
+            post_us,
+            nodes_walked,
+            ops_recorded,
+            commands_emitted: batch.len() as u64,
+            batch_bytes: estimate_batch_bytes(batch.len(), ops_recorded as usize),
+        };
+        (batch, parts)
     }
 }

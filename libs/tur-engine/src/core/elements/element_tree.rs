@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -38,6 +38,10 @@ pub struct NodeTreeData {
     /// dropping it. Keeping them here (rather than dropping immediately) lets
     /// the hook run with a live element + mutation queue in scope.
     pending_destroy: Vec<AnyElement>,
+    /// Frame-stats probe: nodes that actually performed layout (the
+    /// dirty/constraints short-circuit did not hit) since the last
+    /// `take_layout_count`. Never drives behavior.
+    layout_ops: Cell<u64>,
 }
 
 impl NodeTreeData {
@@ -52,6 +56,7 @@ impl NodeTreeData {
             read_face,
             pending_mounted: Vec::new(),
             pending_destroy: Vec::new(),
+            layout_ops: Cell::new(0),
         }
     }
 
@@ -526,6 +531,8 @@ impl NodeTreeData {
                 .map(|n| n.computed_layout.size)
                 .unwrap_or(Size::ZERO);
         }
+        // Frame-stats probe: this node actually performs layout.
+        self.layout_ops.set(self.layout_ops.get() + 1);
 
         let direct = self
             .elements
@@ -1260,6 +1267,15 @@ impl NodeTree {
     }
     pub fn has_dirty_layout(&self) -> bool {
         self.data.borrow().has_dirty_layout()
+    }
+
+    /// Frame-stats probe: drain the count of nodes that performed layout
+    /// since the last call. Never drives behavior.
+    pub fn take_layout_count(&self) -> u64 {
+        let data = self.data.borrow();
+        let count = data.layout_ops.get();
+        data.layout_ops.set(0);
+        count
     }
     pub fn hit_test(&self, position: Offset) -> bool {
         self.data.borrow().hit_test(position)

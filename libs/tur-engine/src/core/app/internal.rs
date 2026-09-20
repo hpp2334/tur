@@ -4,6 +4,7 @@ use std::rc::Rc;
 use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
+use crate::core::app::frame_stats::FrameTiming;
 use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurInstanceContext;
@@ -96,7 +97,12 @@ pub struct TurAppInternal {
     /// that painted. Drained by `HostBackend`'s `worker_loop` and shipped
     /// to main via `HostMsg::RenderCommands`. `None` if no paint happened
     /// this flush (or already drained).
-    pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
+    /// The batch recorded by the last painted flush, plus the flush epoch
+    /// it was recorded under (echoed to the host in
+    /// `HostMsg::RenderCommands.frame_id` and back in
+    /// `WorkerMsg::FrameTiming`, so host-side render-commit timings are
+    /// attributable). Drained by `HostBackend`'s `worker_loop`.
+    pub(crate) pending_render_batch: RefCell<Option<(Vec<RenderCommand>, u64)>>,
 }
 
 /// RAII guard set up at `flush()` entry; clears `in_flush` on drop so the
@@ -181,6 +187,10 @@ impl TurAppInternal {
         // explicit store swaps the binding in place.
         let element_tree = NodeTree::new(store.clone());
 
+        // Frame statistics — one probe per instance, shared by the flush
+        // loop (writer) and the `turDevTool` bridge (reader).
+        let frame_stats = Rc::new(crate::core::app::FrameStats::default());
+
         let js_context = TurInstanceContext::new(
             element_tree.clone(),
             mutation_queue.clone(),
@@ -196,6 +206,7 @@ impl TurAppInternal {
             wake_worker.clone(),
             capabilities,
             worker_pools,
+            frame_stats,
         );
 
         // Share the capability registry between the JS context (bridge fns)
@@ -240,6 +251,11 @@ impl TurAppInternal {
         self.js_context.begin_flush();
         let _flush_guard = FlushGuard(self);
         let mut needs_paint = false;
+        // Frame-stats probe: per-flush timing + counter accumulation (µs,
+        // rounded). Never drives behavior.
+        let flush_start = std::time::Instant::now();
+        let mut layout_us: u64 = 0;
+        let mut dirty_layout_nodes: u64 = 0;
         // Per-`flush()` epoch, bumped once per call. Stable across the
         // fixed-point iterations below so subsystems can self-gate "advance
         // once per frame" (clock sampling) via `cx.frame_id()`.
@@ -343,9 +359,12 @@ impl TurAppInternal {
                 || subsystem_dirtied;
             if dirty {
                 needs_paint = true;
+                let layout_start = std::time::Instant::now();
                 self.app_context
                     .borrow_mut()
                     .layout(self.js_context.dirty.clone(), boa_context);
+                layout_us += layout_start.elapsed().as_micros() as u64;
+                dirty_layout_nodes += self.js_context.element_tree.take_layout_count();
             }
             // Post-layout subsystem flush — runs every fixed-point iteration, in
             // registration order, AFTER the layout step, so subscribers read the
@@ -426,8 +445,22 @@ impl TurAppInternal {
         if needs_paint {
             // Record the paint pass into a `Vec<RenderCommand>`; main
             // applies it to its renderer (`HostBackend::render_batch`).
-            let batch = self.app_context.borrow_mut().build_render_batch();
-            *self.pending_render_batch.borrow_mut() = Some(batch);
+            let (batch, parts) = self.app_context.borrow_mut().build_render_batch();
+            *self.pending_render_batch.borrow_mut() = Some((batch, frame_id));
+            self.js_context.frame_stats.record_painted(FrameTiming {
+                frame_id,
+                nodes_walked: parts.nodes_walked,
+                ops_recorded: parts.ops_recorded,
+                commands_emitted: parts.commands_emitted,
+                batch_bytes: parts.batch_bytes,
+                dirty_layout_nodes,
+                flush_us: flush_start.elapsed().as_micros() as u64,
+                layout_us,
+                record_walk_us: parts.walk_us,
+                batch_post_us: parts.post_us,
+            });
+        } else {
+            self.js_context.frame_stats.record_idle_flush();
         }
 
         // Decide how the caller should schedule the next frame.
@@ -653,7 +686,7 @@ impl TurAppInternal {
     /// `HostBackend::worker_loop` calls this after each `pump()` to ship the
     /// batch to main via `HostMsg::RenderCommands`. Returns `None` if no
     /// paint happened this flush (or already drained).
-    pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
+    pub fn take_pending_render_batch(&self) -> Option<(Vec<RenderCommand>, u64)> {
         self.pending_render_batch.borrow_mut().take()
     }
 
