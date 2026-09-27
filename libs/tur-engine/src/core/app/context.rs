@@ -227,7 +227,10 @@ impl TurAppContext {
         // the screen is invisible anyway). Explicit element clips
         // (ScrollView, overflow-Flex, …) push further inner clips
         // intersected with this viewport.
-        let walk_start = std::time::Instant::now();
+        // Frame-stats timings ride the engine clock (std::time::Instant is
+        // unavailable on wasm — see `clock_now_us`).
+        let clock = self.frame_env.clock();
+        let walk_start = crate::core::app::frame_stats::clock_now_us(&*clock);
         let tree = self.element_tree.borrow();
         let (vp_w, vp_h) = self.screen.logical_size;
         let recording = self.recording.get_or_insert_with(RecordingCanvas::new);
@@ -243,12 +246,12 @@ impl TurAppContext {
         }
         let (nodes_walked, ops_recorded) = recording.counters();
         drop(tree);
-        let walk_us = walk_start.elapsed().as_micros() as u64;
+        let walk_us = crate::core::app::frame_stats::clock_now_us(&*clock) - walk_start;
 
         // Collect the paint commands into one batch (retained capacity).
-        let post_start = std::time::Instant::now();
+        let post_start = crate::core::app::frame_stats::clock_now_us(&*clock);
         let batch = self.recording.as_mut().unwrap().finish();
-        let post_us = post_start.elapsed().as_micros() as u64;
+        let post_us = crate::core::app::frame_stats::clock_now_us(&*clock) - post_start;
 
         // Flush cursor claims accumulated during the record pass.
         self.frame_env.apply_cursor_changes();

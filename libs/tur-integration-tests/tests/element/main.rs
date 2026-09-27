@@ -46,6 +46,7 @@ mod table;
 mod task;
 mod task_promise;
 mod text;
+mod text_huge_document;
 mod text_input;
 mod transform;
 mod virtual_app;

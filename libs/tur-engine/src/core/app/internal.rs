@@ -252,8 +252,10 @@ impl TurAppInternal {
         let _flush_guard = FlushGuard(self);
         let mut needs_paint = false;
         // Frame-stats probe: per-flush timing + counter accumulation (µs,
-        // rounded). Never drives behavior.
-        let flush_start = std::time::Instant::now();
+        // rounded). Times via the engine clock — `std::time::Instant` is
+        // unavailable on wasm (see `clock_now_us`). Never drives behavior.
+        let clock = self.app_context.borrow().frame_env.clock();
+        let flush_start = crate::core::app::frame_stats::clock_now_us(&*clock);
         let mut layout_us: u64 = 0;
         let mut dirty_layout_nodes: u64 = 0;
         // Per-`flush()` epoch, bumped once per call. Stable across the
@@ -359,11 +361,11 @@ impl TurAppInternal {
                 || subsystem_dirtied;
             if dirty {
                 needs_paint = true;
-                let layout_start = std::time::Instant::now();
+                let layout_start = crate::core::app::frame_stats::clock_now_us(&*clock);
                 self.app_context
                     .borrow_mut()
                     .layout(self.js_context.dirty.clone(), boa_context);
-                layout_us += layout_start.elapsed().as_micros() as u64;
+                layout_us += crate::core::app::frame_stats::clock_now_us(&*clock) - layout_start;
                 dirty_layout_nodes += self.js_context.element_tree.take_layout_count();
             }
             // Post-layout subsystem flush — runs every fixed-point iteration, in
@@ -454,7 +456,8 @@ impl TurAppInternal {
                 commands_emitted: parts.commands_emitted,
                 batch_bytes: parts.batch_bytes,
                 dirty_layout_nodes,
-                flush_us: flush_start.elapsed().as_micros() as u64,
+                flush_us: crate::core::app::frame_stats::clock_now_us(&*clock)
+                    .saturating_sub(flush_start),
                 layout_us,
                 record_walk_us: parts.walk_us,
                 batch_post_us: parts.post_us,

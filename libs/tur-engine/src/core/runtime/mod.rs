@@ -266,6 +266,9 @@ impl TurRuntime {
             })?;
         let vsync_events = vsync.subscribe();
         let clock = self.clock.clone();
+        // Host-side clock clone — times the render commit point for the
+        // frame-timing probe (`std::time::Instant` is unavailable on wasm).
+        let host_clock = clock.clone();
         let font_context = self.font_context.clone();
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
@@ -302,6 +305,7 @@ impl TurRuntime {
         };
         let (backend, host_rx) = HostBackend::new(
             self.worker_spawner.clone(),
+            host_clock,
             renderer,
             shell,
             worker_pool,

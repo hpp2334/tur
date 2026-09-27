@@ -65,8 +65,10 @@ impl View for LazyGridView {
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
         let mut visible: Vec<(u64, NodeId)> = Vec::new();
+        let mut warned_builder_error = false;
         for index in 0..initial_count {
-            let Some(spec) = build_item_spec(&builder, index, boa) else {
+            let Some(spec) = build_item_spec(&builder, index, &mut warned_builder_error, boa)
+            else {
                 continue;
             };
             let item_id = spec.build(cx, boa, id.into());
@@ -93,6 +95,7 @@ impl View for LazyGridView {
                 reported_start: 0,
                 reported_end: 0,
                 warned_unbounded: false,
+                warned_builder_error,
             })
             .with_callbacks(),
             boa,
@@ -110,11 +113,30 @@ impl View for LazyGridView {
 }
 
 /// Invoke the JS builder closure for `index`, returning the produced spec.
-fn build_item_spec(builder: &JsFunction, index: u64, boa: &mut Context) -> Option<Rc<dyn View>> {
-    let result = builder
-        .call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa)
-        .ok()?;
-    extract_view(&result)
+/// A throwing builder is swallowed by `call` → `None`, which would render a
+/// silently EMPTY grid — so the first failure is logged (one error per
+/// element, matching the `warned_unbounded` convention) before returning.
+fn build_item_spec(
+    builder: &JsFunction,
+    index: u64,
+    warned_builder_error: &mut bool,
+    boa: &mut Context,
+) -> Option<Rc<dyn View>> {
+    let result = builder.call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa);
+    match result {
+        Ok(result) => extract_view(&result),
+        Err(err) => {
+            if !*warned_builder_error {
+                *warned_builder_error = true;
+                let message = err.to_string();
+                tracing::error!(
+                    "LazyGrid item builder threw for index {index} — item not \
+                     built (further failures silenced): {message}"
+                );
+            }
+            None
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +179,9 @@ pub struct LazyGridElement {
     /// One-shot layout diagnostic: viewport collapsed under unbounded
     /// constraints.
     pub(crate) warned_unbounded: bool,
+    /// Set after the first item-builder exception is logged — a throwing
+    /// builder fires once per element, not per item per frame.
+    pub(crate) warned_builder_error: bool,
 }
 
 impl LazyGridElement {
@@ -331,7 +356,9 @@ impl LazyGridElement {
             if existing.contains(&index) {
                 continue;
             }
-            if let Some(spec) = build_item_spec(&builder, index, boa) {
+            if let Some(spec) =
+                build_item_spec(&builder, index, &mut self.warned_builder_error, boa)
+            {
                 let item_id = spec.build(cx, boa, node_id.into());
                 let next_higher = self
                     .visible

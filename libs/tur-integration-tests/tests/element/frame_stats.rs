@@ -133,7 +133,6 @@ fn flushes_count_all_painted_or_not() {
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let before_flushes = stat(&app, "flushes");
-    let before_painted = stat(&app, "paintedFrames");
     let before_last_frame = stat(&app, "last.frame");
 
     for _ in 0..3 {

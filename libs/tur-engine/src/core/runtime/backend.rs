@@ -527,6 +527,10 @@ pub(crate) struct HostBackend {
     /// re-encode + re-raster when a new batch carries identical content
     /// (see [`Self::render_batch`]).
     last_frame_fingerprint: Cell<Option<u64>>,
+    /// The runtime clock (same source boa + the worker use) — times the
+    /// host-side render-commit phases for the frame-timing probe. Held as
+    /// an `Arc` clone; `std::time::Instant` is unavailable on wasm.
+    clock: std::sync::Arc<dyn boa_engine::context::time::Clock>,
 }
 
 impl HostBackend {
@@ -557,6 +561,7 @@ impl HostBackend {
     /// only the sending-side plumbing.
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
+        clock: std::sync::Arc<dyn boa_engine::context::time::Clock>,
         renderer: Option<Box<dyn Renderer>>,
         shell: Box<dyn crate::core::shell::Shell>,
         worker_pool: crate::core::scheduler::WorkerPoolHandle,
@@ -616,6 +621,7 @@ impl HostBackend {
                 last_viewport: Cell::new(None),
                 frame_timing_enabled: Cell::new(false),
                 last_frame_fingerprint: Cell::new(None),
+                clock,
             },
             host_rx,
         )
@@ -697,19 +703,22 @@ impl HostBackend {
         }
 
         let timing = self.frame_timing_enabled.get();
-        let apply_start = timing.then(std::time::Instant::now);
+        let apply_start = timing.then(|| crate::core::app::frame_stats::clock_now_us(&*self.clock));
         self.ensure_batch_images(r.as_mut(), commands);
         r.as_mut().render_commands(commands);
-        let apply_us = match apply_start {
-            Some(t) => t.elapsed().as_micros() as u64,
-            None => 0,
-        };
-        let present_start = timing.then(std::time::Instant::now);
+        let apply_us = apply_start
+            .map(|start| {
+                crate::core::app::frame_stats::clock_now_us(&*self.clock).saturating_sub(start)
+            })
+            .unwrap_or(0);
+        let present_start =
+            timing.then(|| crate::core::app::frame_stats::clock_now_us(&*self.clock));
         let _ = r.present();
-        let present_us = match present_start {
-            Some(t) => t.elapsed().as_micros() as u64,
-            None => 0,
-        };
+        let present_us = present_start
+            .map(|start| {
+                crate::core::app::frame_stats::clock_now_us(&*self.clock).saturating_sub(start)
+            })
+            .unwrap_or(0);
         drop(renderer);
         self.last_frame_fingerprint.set(Some(fingerprint));
         if timing {

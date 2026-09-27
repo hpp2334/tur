@@ -66,6 +66,16 @@ pub fn estimate_batch_bytes(commands: usize, ops: usize) -> u64 {
     (commands * command_size + ops * op_size) as u64
 }
 
+/// Microsecond timestamp from the engine `Clock` — the ONLY timing source
+/// the probe may use. `std::time::Instant` is **unavailable on
+/// wasm32-unknown-unknown**: calling it panics
+/// ("time not implemented on this platform"), which took down the worker
+/// the first time a frame-stats flush ran on web. The engine clock is
+/// injected everywhere (boa uses the same source), so the probe rides it.
+pub(crate) fn clock_now_us(clock: &dyn boa_engine::context::time::Clock) -> u64 {
+    (clock.now().nanos_since_epoch() / 1_000) as u64
+}
+
 /// Host-side render-commit timings for one painted frame, pushed back via
 /// `WorkerMsg::FrameTiming` when frame timing is enabled. Kept in a
 /// **separate slot** from the worker-side `FrameTiming` — frames pipeline

@@ -154,4 +154,25 @@ impl TurDevTool {
     pub fn get_element(&self, id: u32) -> js_sys::Promise {
         self.app.get_element(id)
     }
+
+    /// JSON frame-stats snapshot from the engine realm — the render
+    /// performance probe (`turDevTool.frameStats()`):
+    /// `{ flushes, paintedFrames, totals, last, lastHost, hostTimingEnabled }`.
+    /// `last` is the most recent painted frame's worker-side timing; `lastHost`
+    /// the most recent host render-commit timing (`applyUs`/`presentUs`) —
+    /// populated only while frame timing is enabled.
+    #[wasm_bindgen(js_name = frameStats)]
+    pub fn frame_stats(&self) -> js_sys::Promise {
+        self.app
+            .eval_js_promise("JSON.stringify(turDevTool.frameStats())".to_string())
+    }
+
+    /// Toggle host-side render-commit timing collection. While on, every
+    /// applied frame's `applyUs`/`presentUs` timings are measured and land in
+    /// `frameStats().lastHost`. Off by default (zero per-frame overhead).
+    #[wasm_bindgen(js_name = setHostFrameTiming)]
+    pub fn set_host_frame_timing(&self, enabled: bool) -> js_sys::Promise {
+        self.app
+            .eval_js_promise(format!("turDevTool.setHostFrameTiming({enabled})"))
+    }
 }
