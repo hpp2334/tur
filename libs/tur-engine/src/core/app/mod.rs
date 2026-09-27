@@ -1,6 +1,7 @@
 pub mod comm;
 mod context;
 pub mod event;
+pub mod frame_stats;
 mod internal;
 pub mod module_source;
 pub mod mount;
@@ -14,6 +15,7 @@ pub use comm::{
 };
 pub use context::TurAppContext;
 pub use event::{AppEvent, CustomAppEvent};
+pub use frame_stats::{FRAME_TIMING_CHANNEL, FrameStats, FrameTiming, FrameTimingParts};
 pub use internal::{FrameOutcome, NextFrame, TurAppInternal};
 pub use module_source::ModuleSourceRegistry;
 pub use queue::AppEventQueue;

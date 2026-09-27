@@ -43,6 +43,25 @@ pub fn extract_layout_data(
         // of a text ending in `\n`; keep start within bounds.
         let start_byte = start_byte.min(full_text.len());
 
+        // parley stores per-cluster source offsets as `u16`
+        // (`ClusterData::text_offset = char_index as u16`), so for a shaped
+        // segment past 65 535 bytes the cluster — and therefore the line —
+        // text ranges WRAP (e.g. `65527..28`). Slicing with an inverted range
+        // would panic and, on wasm, take down the worker. Skip such lines
+        // (their glyph data is corrupt regardless — an upstream parley
+        // limitation, unfixed through 0.11.1) and report the degradation once.
+        if end_byte < start_byte {
+            static WRAP_WARN: std::sync::Once = std::sync::Once::new();
+            WRAP_WARN.call_once(|| {
+                tracing::error!(
+                    "text document exceeds 64 KiB: parley's u16 cluster offsets \
+                     wrap and line text ranges are corrupt past the wrap point; \
+                     affected lines are not drawn"
+                );
+            });
+            continue;
+        }
+
         let mut stops: Vec<LineGlyphStop> = Vec::new();
         let mut right_x = 0.0f32;
 

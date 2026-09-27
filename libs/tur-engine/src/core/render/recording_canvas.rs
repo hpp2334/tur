@@ -64,6 +64,11 @@ pub struct RecordingCanvas {
     /// `None` → no culling). A viewport seed can populate it at construction
     /// (see [`RecordingCanvas::new_with_viewport`]).
     clip_stack: Vec<Rect>,
+    /// Frame-stats probe: element nodes entered during the record walk
+    /// (post-cull). Read via [`Self::counters`].
+    nodes_recorded: u64,
+    /// Frame-stats probe: canvas ops recorded (all nodes' segments summed).
+    ops_recorded: u64,
 }
 
 impl fmt::Debug for RecordingCanvas {
@@ -86,6 +91,8 @@ impl RecordingCanvas {
             ops: Vec::new(),
             transform_stack: vec![Affine::IDENTITY],
             clip_stack: Vec::new(),
+            nodes_recorded: 0,
+            ops_recorded: 0,
         }
     }
 
@@ -98,7 +105,22 @@ impl RecordingCanvas {
             ops: Vec::new(),
             transform_stack: vec![Affine::IDENTITY],
             clip_stack: vec![viewport],
+            nodes_recorded: 0,
+            ops_recorded: 0,
         }
+    }
+
+    /// Frame-stats probe: `(nodes walked, ops recorded)` for this record
+    /// pass. Both count at record sites (cull-excluded), so they are valid
+    /// any time after `new` — including after [`Self::into_render_commands`].
+    pub fn counters(&self) -> (u64, u64) {
+        (self.nodes_recorded, self.ops_recorded)
+    }
+
+    /// Record one canvas op (the single counting point for the ops probe).
+    fn record_canvas(&mut self, op: CanvasOp) {
+        self.ops_recorded += 1;
+        self.ops.push(RecordingOp::Canvas(op));
     }
 
     /// Current accumulated transform (logical space). Always defined because
@@ -139,7 +161,8 @@ impl RecordingCanvas {
     }
 
     /// Post-process the recorded op stream into a flat `Vec<RenderCommand>`
-    /// (one or more `Paint` commands per node, in playback order).
+    /// (one or more `Paint` commands per node, in playback order) and
+    /// consume the canvas.
     ///
     /// Algorithm: stack-based walk over the recorded ops. Each `NodeStart`
     /// closes the parent's current segment (emits a `Paint` if non-empty),
@@ -152,13 +175,44 @@ impl RecordingCanvas {
     /// their own `NodeStart`/`NodeEnd`) then emits `[PopClip]` becomes
     /// three `Paint` commands — `[PushClip]` before the children,
     /// children's `Paint`s in order, then `[PopClip]` after.
-    pub fn into_render_commands(self) -> Vec<RenderCommand> {
+    pub fn into_render_commands(mut self) -> Vec<RenderCommand> {
+        self.finish()
+    }
+
+    /// Reset all per-record-pass state, keeping buffer capacity — the
+    /// retained-record API ([`Self::finish`] + this) lets the worker keep
+    /// one canvas across frames instead of dropping reallocation-heavy
+    /// buffers each painted frame. `viewport` re-seeds the clip stack (the
+    /// bottom-of-stack screen clip, as in [`Self::new_with_viewport`];
+    /// `None` → no seed, legacy behavior).
+    pub fn reset(&mut self, viewport: Option<Rect>) {
+        self.ops.clear();
+        self.transform_stack.clear();
+        self.transform_stack.push(Affine::IDENTITY);
+        self.clip_stack.clear();
+        if let Some(vp) = viewport {
+            self.clip_stack.push(vp);
+        }
+        self.nodes_recorded = 0;
+        self.ops_recorded = 0;
+    }
+
+    /// Retained form of [`Self::into_render_commands`]: post-process the
+    /// recorded op stream into a flat `Vec<RenderCommand>` and reset the
+    /// canvas for the next record pass, keeping buffer capacity. The
+    /// returned batch is identical to what the consuming variant produces.
+    pub fn finish(&mut self) -> Vec<RenderCommand> {
+        // Drain the ops into an owned vec (retaining `self.ops`' capacity —
+        // the take leaves an empty Vec in place).
+        let ops = std::mem::take(&mut self.ops);
+        // Rebuild the batch from a fresh stack. The scratch segment Vecs are
+        // per-node and handed to the commands, so they cannot be retained
+        // without shipping them — but the op-log Vec (the dominant
+        // allocation for large trees) is fully reused.
         let mut commands: Vec<RenderCommand> = Vec::new();
-        // Stack of (id, transform, size, current_segment_ops). The bottom
-        // of the stack is the outermost node being painted.
         let mut stack: Vec<(ElementNodeId, Affine, Size, Vec<CanvasOp>)> = Vec::new();
 
-        for op in self.ops {
+        for op in ops {
             match op {
                 RecordingOp::Canvas(canvas_op) => {
                     // Append to the top frame's current segment. If there's
@@ -204,17 +258,20 @@ impl RecordingCanvas {
             }
         }
 
+        // Reset for the next record pass (capacity retained). The caller
+        // re-seeds the viewport at the start of the next pass.
+        self.reset(None);
         commands
     }
 }
 
 impl Canvas for RecordingCanvas {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::FillGeometry {
+        self.record_canvas(CanvasOp::FillGeometry {
             offset,
             geometry: *geometry,
             brush: brush.clone(),
-        }));
+        });
     }
 
     fn stroke_geometry(
@@ -224,27 +281,27 @@ impl Canvas for RecordingCanvas {
         color: &Color,
         stroke_width: f64,
     ) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::StrokeGeometry {
+        self.record_canvas(CanvasOp::StrokeGeometry {
             offset,
             geometry: *geometry,
             color: *color,
             stroke_width,
-        }));
+        });
     }
 
     fn fill_text_layout(&mut self, offset: Offset, layout: &Arc<TextLayoutData>) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::FillTextLayout {
+        self.record_canvas(CanvasOp::FillTextLayout {
             offset,
             layout: Arc::clone(layout),
-        }));
+        });
     }
 
     fn draw_image(&mut self, resource_id: ImageResourceId, natural_size: Size, transform: Affine) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::DrawImage {
+        self.record_canvas(CanvasOp::DrawImage {
             resource_id,
             natural_size,
             transform,
-        }));
+        });
     }
 
     fn draw_shadow(
@@ -256,19 +313,18 @@ impl Canvas for RecordingCanvas {
         blur: f64,
         shadow_offset: (f64, f64),
     ) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::DrawShadow {
+        self.record_canvas(CanvasOp::DrawShadow {
             offset,
             size,
             color: *color,
             border_radius,
             blur,
             shadow_offset,
-        }));
+        });
     }
 
     fn push_clip(&mut self, offset: Offset, size: Size) {
-        self.ops
-            .push(RecordingOp::Canvas(CanvasOp::PushClip { offset, size }));
+        self.record_canvas(CanvasOp::PushClip { offset, size });
         self.push_clip_local(Rect::new(
             offset.x,
             offset.y,
@@ -278,11 +334,10 @@ impl Canvas for RecordingCanvas {
     }
 
     fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
-        self.ops
-            .push(RecordingOp::Canvas(CanvasOp::PushClipGeometry {
-                offset,
-                geometry: *geometry,
-            }));
+        self.record_canvas(CanvasOp::PushClipGeometry {
+            offset,
+            geometry: *geometry,
+        });
         // Conservative local AABB of the clip shape (rounded/circle → its
         // bounding box) — a rotated clip's true shape isn't axis-aligned,
         // but its AABB is a superset, so culling never drops a visible node.
@@ -299,7 +354,7 @@ impl Canvas for RecordingCanvas {
     }
 
     fn pop_clip(&mut self) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::PopClip));
+        self.record_canvas(CanvasOp::PopClip);
         // The viewport seed (if any) is the bottom of the stack and is never
         // popped by element paint bodies, so only pop when there's more than
         // the seed. Defensive: never drain below empty.
@@ -307,28 +362,27 @@ impl Canvas for RecordingCanvas {
     }
 
     fn push_opacity(&mut self, opacity: f32) {
-        self.ops
-            .push(RecordingOp::Canvas(CanvasOp::PushOpacity(opacity)));
+        self.record_canvas(CanvasOp::PushOpacity(opacity));
     }
 
     fn pop_opacity(&mut self) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::PopOpacity));
+        self.record_canvas(CanvasOp::PopOpacity);
     }
 
     fn push_transform(&mut self, transform: Affine) {
-        self.ops
-            .push(RecordingOp::Canvas(CanvasOp::PushTransform(transform)));
+        self.record_canvas(CanvasOp::PushTransform(transform));
         // Mirror VelloPaintContext: compose onto the current top.
         let next = self.current_transform() * transform;
         self.transform_stack.push(next);
     }
 
     fn pop_transform(&mut self) {
-        self.ops.push(RecordingOp::Canvas(CanvasOp::PopTransform));
+        self.record_canvas(CanvasOp::PopTransform);
         self.transform_stack.pop();
     }
 
     fn notify_node_entry(&mut self, id: ElementNodeId, transform: Affine, size: Size) {
+        self.nodes_recorded += 1;
         self.ops.push(RecordingOp::NodeStart {
             id,
             transform,

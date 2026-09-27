@@ -130,6 +130,20 @@ pub enum WorkerMsg {
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
+    /// Host-side render-commit timings, pushed back per painted frame when
+    /// frame timing is enabled (`turDevTool.setHostFrameTiming(true)`).
+    /// Fire-and-forget (no wake — a busy worker delivers it within the
+    /// current frame stream; an idle worker doesn't need it). Recorded into
+    /// the instance's `FrameStats::last_host`.
+    FrameTiming {
+        /// The flush epoch of the frame these timings belong to (echoed
+        /// from the `RenderCommands` stamp).
+        frame_id: u64,
+        /// Scene rebuild + command playback (`Renderer::render_commands`).
+        apply_us: u64,
+        /// Encode + raster + composite (`Renderer::present`).
+        present_us: u64,
+    },
 }
 
 /// worker → host. Emitted by the worker either during a flush
@@ -151,6 +165,10 @@ pub enum HostMsg {
     RenderCommands {
         commands: Vec<RenderCommand>,
         viewport: crate::core::screen::ScreenViewport,
+        /// The flush epoch the batch was recorded under (stamped by the
+        /// worker). Echoed back in `WorkerMsg::FrameTiming` so host-side
+        /// render-commit timings can be attributed to the right frame.
+        frame_id: u64,
     },
     /// A newly-registered image resource (`createImageResource` /
     /// `createSvgResource` on the worker). Shipped exactly once per id
@@ -198,6 +216,11 @@ pub enum HostMsg {
     },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
+    /// Enable/disable host-side frame-timing collection (the per-frame
+    /// `WorkerMsg::FrameTiming` push-back). Sent once per toggle from the
+    /// `turDevTool.setHostFrameTiming(...)` bridge; `HostBackend` applies it
+    /// to its local gate.
+    FrameTimingEnabled(bool),
 }
 
 /// A deduped shell-layer request shipped worker → host inside
@@ -292,6 +315,16 @@ impl fmt::Debug for WorkerMsg {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
             }
             Self::Destroy { .. } => write!(f, "Destroy"),
+            Self::FrameTiming {
+                frame_id,
+                apply_us,
+                present_us,
+            } => f
+                .debug_struct("FrameTiming")
+                .field("frame_id", frame_id)
+                .field("apply_us", apply_us)
+                .field("present_us", present_us)
+                .finish(),
         }
     }
 }
@@ -317,6 +350,7 @@ impl fmt::Debug for HostMsg {
             Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
             Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
             Self::Destroyed => write!(f, "Destroyed"),
+            Self::FrameTimingEnabled(on) => f.debug_tuple("FrameTimingEnabled").field(on).finish(),
         }
     }
 }

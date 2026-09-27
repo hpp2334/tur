@@ -24,6 +24,7 @@ use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
 use crate::core::render::brush::Color;
+use crate::renderer::vello::paint_context::PaintScratch;
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use std::collections::HashMap;
 use vello_common::paint::{ImageId, ImageSource};
@@ -74,6 +75,9 @@ pub struct VelloRenderer {
     /// `ImageId`. The WebGPU backend only supports `ImageSource::OpaqueId`, so
     /// every image must be uploaded to the atlas before painting.
     image_uploads: HashMap<ImageResourceId, ImageId>,
+    /// Per-frame scene-rebuild allocation reuse (flattened-path cache +
+    /// gradient stops) — borrowed by each frame's paint context.
+    scratch: PaintScratch,
 }
 
 impl VelloRenderer {
@@ -155,6 +159,7 @@ impl VelloRenderer {
             max_texture_dimension,
             base_color: Color::WHITE,
             image_uploads: HashMap::new(),
+            scratch: PaintScratch::new(),
         })
     }
 
@@ -212,6 +217,7 @@ impl VelloRenderer {
             &mut self.scene,
             &mut self.resources,
             &self.image_uploads,
+            &mut self.scratch,
             self.physical_width,
             self.physical_height,
             self.dpr,

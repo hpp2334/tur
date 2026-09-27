@@ -142,21 +142,59 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
     let worker = web_sys::Worker::new_with_options(&blob_url, &options)
         .expect("tur worker: failed to spawn worker");
 
-    // Surface worker-side load/eval errors on the main console. Logged raw
-    // (some failure modes — e.g. import resolution — produce events whose
-    // typed fields aren't reliably string-convertible, so avoid
-    // `ev.message()`).
+    // Surface worker-side load/eval errors on the main console. The raw
+    // stringify is logged as a fallback (some failure modes — e.g. import
+    // resolution — produce events whose typed fields aren't reliably
+    // string-convertible), but the typed `message`/`filename`/`lineno` fields
+    // are logged first: they carry the actual trap text (e.g. a wasm
+    // `unreachable` panic) that the raw form omits.
     let onerr_closure =
         Closure::<dyn FnMut(web_sys::ErrorEvent)>::new(|ev: web_sys::ErrorEvent| {
-            let ev_val: JsValue = ev.into();
-            let raw = js_sys::JSON::stringify(&ev_val)
-                .ok()
-                .and_then(|s| s.as_string())
-                .unwrap_or_else(|| "<non-stringifiable ErrorEvent>".into());
-            tracing::error!("[tur-main] worker error event: {raw}");
+            let message = ev.message();
+            let filename = ev.filename();
+            let lineno = ev.lineno();
+            let colno = ev.colno();
+            if message.is_empty() && filename.is_empty() {
+                let ev_val: JsValue = ev.into();
+                let raw = js_sys::JSON::stringify(&ev_val)
+                    .ok()
+                    .and_then(|s| s.as_string())
+                    .unwrap_or_else(|| "<non-stringifiable ErrorEvent>".into());
+                tracing::error!("[tur-main] worker error event: {raw}");
+            } else {
+                tracing::error!("[tur-main] worker error: {message} ({filename}:{lineno}:{colno})");
+            }
         });
     worker.set_onerror(Some(onerr_closure.as_ref().unchecked_ref()));
     onerr_closure.forget();
+
+    // Panic relay: the worker's console is a SEPARATE context (page-console
+    // capture never sees it), so a Rust panic inside the worker would die as
+    // an opaque `unreachable` trap with its message unreachable. The worker's
+    // panic hook (installed in `tur_worker_main`) posts `{ t: "tur-panic",
+    // message }` back; this ADDITIVE `message` listener (the engine's wake
+    // protocol rides the `onmessage` property, so a plain listener
+    // coexists) relays it to the page console.
+    let onmsg_closure =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(|ev: web_sys::MessageEvent| {
+            let data = ev.data();
+            let tag = js_sys::Reflect::get(&data, &JsValue::from_str("t")).ok();
+            let is_panic = tag
+                .as_ref()
+                .and_then(|t| t.as_string())
+                .is_some_and(|s| s == "tur-panic");
+            if is_panic {
+                let message = js_sys::Reflect::get(&data, &JsValue::from_str("message"))
+                    .ok()
+                    .and_then(|m| m.as_string())
+                    .unwrap_or_else(|| "<no message>".into());
+                tracing::error!("[tur-worker] PANIC: {message}");
+            }
+        });
+    worker
+        .add_event_listener_with_callback("message", onmsg_closure.as_ref().unchecked_ref())
+        .expect("tur worker: failed to add panic relay listener");
+    onmsg_closure.forget();
 
     // Box the factory + post `[module, memory, ptr]`. The pointer is valid
     // across threads (shared linear memory); the worker reconstitutes it.
@@ -185,6 +223,40 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
 /// `setTimeout` repoll chain.
 #[wasm_bindgen]
 pub fn tur_worker_main(ptr: f64) {
+    // Install the panic relay: the worker console is a separate context the
+    // page never sees, so panics are posted to main (`{ t: "tur-panic" }`,
+    // relayed by the main-side listener in `spawn`) instead of only hitting
+    // the invisible worker console. Without this, a worker panic surfaces as
+    // an opaque `unreachable` trap on the main thread's `onerror`.
+    std::panic::set_hook(Box::new(|info| {
+        let message = format!("{info}");
+        // Capture the JS stack at panic time — this is what makes re-entrancy
+        // panics (e.g. a double `RefCell` borrow inside the cooperative
+        // executor) diagnosable from the relayed message alone.
+        let err = js_sys::Error::new("");
+        let stack = js_sys::Reflect::get(&err, &JsValue::from_str("stack"))
+            .ok()
+            .and_then(|s| s.as_string())
+            .unwrap_or_default();
+        let global = js_sys::global();
+        let post = js_sys::Reflect::get(&global, &JsValue::from_str("postMessage"))
+            .ok()
+            .and_then(|p| p.dyn_into::<js_sys::Function>().ok());
+        if let Some(post) = post {
+            let payload = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("t"),
+                &JsValue::from_str("tur-panic"),
+            );
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("message"),
+                &JsValue::from_str(&format!("{message}\n{stack}")),
+            );
+            let _ = post.call1(&global, &payload);
+        }
+    }));
     // SAFETY: `ptr` was produced by `Box::into_raw` on the main thread;
     // the wasm linear memory is shared, so the pointer is valid here.
     let entry = unsafe { Box::from_raw(ptr as u32 as *mut FactoryPayload) };

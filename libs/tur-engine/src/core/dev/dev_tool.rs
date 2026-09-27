@@ -10,8 +10,9 @@
 
 use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsArray;
-use boa_engine::{Context, JsArgs, JsResult, JsValue, js_string};
+use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 
+use crate::core::app::frame_stats::{FrameTiming, HostFrameTiming};
 use crate::core::elements::{DevNodeData, TraceValue};
 use crate::core::js_runtime::helpers::extract_js_ctx;
 
@@ -161,4 +162,125 @@ pub fn tur_dev_tool_reactive_stats(
     )?;
     obj.create_data_property(js_string!("edges"), JsValue::from(edges as f64), ctx)?;
     Ok(obj.into())
+}
+
+/// `turDevTool.frameStats()` — per-instance render-performance probe (see
+/// `core::app::frame_stats`). Worker-side counters are always-on; host-side
+/// render-commit timings arrive via `WorkerMsg::FrameTiming` only after
+/// `setHostFrameTiming(true)`.
+///
+/// Returns `{ flushes, paintedFrames, totals, last, lastHost }` where
+/// `last` is the most recent painted frame's worker timing (or `null`)
+/// and `lastHost` the most recent host render-commit timing (or `null`).
+pub fn tur_dev_tool_frame_stats(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_js_ctx(args)?;
+    let stats = &js_ctx.frame_stats;
+
+    fn timing_object(t: &FrameTiming, ctx: &mut Context) -> JsResult<JsValue> {
+        let obj = JsObject::with_object_proto(ctx.intrinsics());
+        let fields: &[(&str, f64)] = &[
+            ("frame", t.frame_id as f64),
+            ("nodesWalked", t.nodes_walked as f64),
+            ("opsRecorded", t.ops_recorded as f64),
+            ("commands", t.commands_emitted as f64),
+            ("batchBytes", t.batch_bytes as f64),
+            ("dirtyLayoutNodes", t.dirty_layout_nodes as f64),
+            ("flushUs", t.flush_us as f64),
+            ("layoutUs", t.layout_us as f64),
+            ("recordWalkUs", t.record_walk_us as f64),
+            ("batchPostUs", t.batch_post_us as f64),
+        ];
+        for (k, v) in fields {
+            obj.create_data_property(js_string!(*k), JsValue::from(*v), ctx)?;
+        }
+        Ok(obj.into())
+    }
+
+    fn host_timing_object(t: &HostFrameTiming, ctx: &mut Context) -> JsResult<JsValue> {
+        let obj = JsObject::with_object_proto(ctx.intrinsics());
+        for (k, v) in [
+            ("frame", t.frame_id as f64),
+            ("applyUs", t.apply_us as f64),
+            ("presentUs", t.present_us as f64),
+        ] {
+            obj.create_data_property(js_string!(k), JsValue::from(v), ctx)?;
+        }
+        Ok(obj.into())
+    }
+
+    let obj = JsObject::with_object_proto(ctx.intrinsics());
+    obj.create_data_property(
+        js_string!("flushes"),
+        JsValue::from(stats.flushes.get() as f64),
+        ctx,
+    )?;
+    obj.create_data_property(
+        js_string!("paintedFrames"),
+        JsValue::from(stats.painted_frames.get() as f64),
+        ctx,
+    )?;
+
+    let totals = JsObject::with_object_proto(ctx.intrinsics());
+    for (k, v) in [
+        ("flushUs", stats.total_flush_us.get() as f64),
+        ("nodesWalked", stats.total_nodes_walked.get() as f64),
+        ("opsRecorded", stats.total_ops_recorded.get() as f64),
+    ] {
+        totals.create_data_property(js_string!(k), JsValue::from(v), ctx)?;
+    }
+    obj.create_data_property(js_string!("totals"), JsValue::from(totals), ctx)?;
+
+    let last = stats.last.borrow().clone();
+    match last {
+        Some(t) => {
+            let o = timing_object(&t, ctx)?;
+            obj.create_data_property(js_string!("last"), o, ctx)?;
+        }
+        None => {
+            obj.create_data_property(js_string!("last"), JsValue::null(), ctx)?;
+        }
+    }
+    let last_host = stats.last_host.borrow().clone();
+    match last_host {
+        Some(t) => {
+            let o = host_timing_object(&t, ctx)?;
+            obj.create_data_property(js_string!("lastHost"), o, ctx)?;
+        }
+        None => {
+            obj.create_data_property(js_string!("lastHost"), JsValue::null(), ctx)?;
+        }
+    }
+    obj.create_data_property(
+        js_string!("hostTimingEnabled"),
+        JsValue::from(stats.host_timing_enabled.get()),
+        ctx,
+    )?;
+    Ok(obj.into())
+}
+
+/// `turDevTool.setHostFrameTiming(enabled)` — toggle host-side render-commit
+/// timing collection. Sets the worker-side flag (reflected in
+/// `frameStats()`) and ships the toggle to main (`HostMsg::FrameTimingEnabled`),
+/// where `HostBackend` gates its per-frame `WorkerMsg::FrameTiming` push-back.
+pub fn tur_dev_tool_set_host_frame_timing(
+    _this: &JsValue,
+    args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_js_ctx(args)?;
+    let enabled = args.get_or_undefined(1).as_boolean().ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("setHostFrameTiming: expected a boolean as the first argument"),
+        )
+    })?;
+    js_ctx.frame_stats.host_timing_enabled.set(enabled);
+    let _ = js_ctx
+        .host_tx
+        .unbounded_send(crate::core::app::HostMsg::FrameTimingEnabled(enabled));
+    Ok(JsValue::undefined())
 }

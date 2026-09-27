@@ -532,6 +532,7 @@ impl TurAppLooper {
         let mut pending: Option<(
             core::render::RenderCommandBatch,
             core::screen::ScreenViewport,
+            u64, // frame_id — echoed to `WorkerMsg::FrameTiming`
         )> = None;
 
         loop {
@@ -552,8 +553,10 @@ impl TurAppLooper {
                     //    latest-wins). Skip empty batches — an empty command
                     //    list paints a blank frame (clears the surface), which
                     //    is never desirable.
-                    if let Some((batch, viewport)) = pending.take().filter(|(b, _)| !b.is_empty()) {
-                        host.backend().render_batch(&batch, viewport);
+                    if let Some((batch, viewport, frame_id)) =
+                        pending.take().filter(|(b, _, _)| !b.is_empty())
+                    {
+                        host.backend().render_batch(&batch, viewport, frame_id);
                     }
                 }
                 Either::Left((None, _)) => break,
@@ -575,10 +578,10 @@ impl TurAppLooper {
                         msg => host.backend().apply_msg(msg),
                     };
                     let stop = match outcome {
-                        MsgOutcome::Render(batch, viewport) => {
+                        MsgOutcome::Render(batch, viewport, frame_id) => {
                             // Pipelined: buffer (latest-wins); rendered at
                             // the next vsync.
-                            pending = Some((batch, viewport));
+                            pending = Some((batch, viewport, frame_id));
                             false
                         }
                         MsgOutcome::Frame(outcome) => {
@@ -591,8 +594,8 @@ impl TurAppLooper {
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 host.vsync().request_frame();
                                 false
-                            } else if let Some((batch, viewport)) =
-                                pending.take().filter(|(b, _)| !b.is_empty())
+                            } else if let Some((batch, viewport, frame_id)) =
+                                pending.take().filter(|(b, _, _)| !b.is_empty())
                             {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
@@ -601,7 +604,7 @@ impl TurAppLooper {
                                 // paint request). Flush it now (empty
                                 // batches skipped — they'd paint blank) —
                                 // the next frame only starts on a new input.
-                                host.backend().render_batch(&batch, viewport);
+                                host.backend().render_batch(&batch, viewport, frame_id);
                                 false
                             } else {
                                 // Idle + empty pending: no-op. The loop

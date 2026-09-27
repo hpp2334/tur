@@ -30,7 +30,11 @@ struct WasmClock;
 
 impl Clock for WasmClock {
     fn now(&self) -> JsInstant {
-        let ms = js_sys::Date::now();
+        // Prefer `performance.now()` — monotonic AND sub-millisecond (the
+        // frame-stats probe measures µs-scale phase times, which
+        // `Date.now()`'s whole-ms resolution cannot see). Available on both
+        // the window and worker global scopes; `Date.now()` is the fallback.
+        let ms = performance_now().unwrap_or_else(js_sys::Date::now);
         let secs = (ms / 1000.0) as u64;
         let nanos = ((ms % 1000.0) * 1_000_000.0) as u32;
         JsInstant::new(secs, nanos)
@@ -39,6 +43,16 @@ impl Clock for WasmClock {
     fn system_time_millis(&self) -> i64 {
         js_sys::Date::now() as i64
     }
+}
+
+/// `performance.now()` via the current global scope (window OR worker) —
+/// `None` where the API is somehow absent.
+fn performance_now() -> Option<f64> {
+    let global = js_sys::global();
+    let perf = js_sys::Reflect::get(&global, &JsValue::from_str("performance")).ok()?;
+    let now = js_sys::Reflect::get(&perf, &JsValue::from_str("now")).ok()?;
+    let now = now.dyn_into::<js_sys::Function>().ok()?;
+    now.call0(&perf).ok()?.as_f64()
 }
 
 struct WasmState {
@@ -1111,13 +1125,13 @@ impl WasmApp {
         Ok(())
     }
 
-    /// JSON snapshot of the root node, or `""` if no tree is mounted.
-    /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
-    ///
-    /// Async: the underlying RPC is `async`. Drives it to completion via
-    /// `wasm_bindgen_futures::future_to_promise` — the JS caller `await`s
-    /// the returned `Promise`.
-    pub fn element_tree(&self) -> js_sys::Promise {
+    /// Evaluate a JS expression in the engine realm (the boa world is a
+    /// separate JS universe from the page) and resolve to its string result —
+    /// the shared dev-tool transport (JSON strings are the simplest
+    /// cross-realm shape). The returned Promise rejects never: an eval error
+    /// surfaces as the engine's error display string, like the test-only
+    /// `eval_js` RPC it wraps.
+    pub fn eval_js_promise(&self, source: String) -> js_sys::Promise {
         // Bail out synchronously if no state is mounted (avoids borrowing
         // the RefCell across the async boundary).
         let app = {
@@ -1128,27 +1142,24 @@ impl WasmApp {
             }
         };
         wasm_bindgen_futures::future_to_promise(async move {
-            let s = app
-                .eval_js("JSON.stringify(turDevTool.elementTree())")
-                .await;
+            let s = app.eval_js(&source).await;
             Ok(JsValue::from_str(&s))
         })
+    }
+
+    /// JSON snapshot of the root node, or `""` if no tree is mounted.
+    /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
+    ///
+    /// Async: the underlying RPC is `async`. Drives it to completion via
+    /// `wasm_bindgen_futures::future_to_promise` — the JS caller `await`s
+    /// the returned `Promise`.
+    pub fn element_tree(&self) -> js_sys::Promise {
+        self.eval_js_promise("JSON.stringify(turDevTool.elementTree())".to_string())
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
     /// are returned as bare `{id}` handles). Returns `""` if not found.
     pub fn get_element(&self, id: u32) -> js_sys::Promise {
-        let app = {
-            let guard = self.state.borrow();
-            match guard.as_ref() {
-                Some(s) => s.app.clone(),
-                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
-            }
-        };
-        let source = format!("JSON.stringify(turDevTool.getElement({id}))");
-        wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.eval_js(&source).await;
-            Ok(JsValue::from_str(&s))
-        })
+        self.eval_js_promise(format!("JSON.stringify(turDevTool.getElement({id}))"))
     }
 }

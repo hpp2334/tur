@@ -6,7 +6,7 @@ use crate::core::image_resource::ImageResourceId;
 use crate::core::render::RenderCommand;
 use crate::core::render::brush::Color;
 use crate::core::render::play_commands;
-use crate::renderer::vello::paint_context::{VelloPaintContext, to_peniko_color};
+use crate::renderer::vello::paint_context::{PaintScratch, VelloPaintContext, to_peniko_color};
 use vello_common::kurbo::{Affine, Rect};
 use vello_common::paint::{ImageId, PaintType};
 use vello_common::peniko::Fill;
@@ -29,7 +29,8 @@ pub(crate) fn new_scene(physical_width: u32, physical_height: u32) -> Scene {
 /// transform, then plays the commands back via [`play_commands`]. Each
 /// [`RenderCommand::Paint`] wraps its ops in `notify_node_entry` /
 /// `notify_node_exit` so the `VelloPaintContext` composes the per-node
-/// absolute affine.
+/// absolute affine. `scratch` carries the renderer-owned per-frame
+/// allocation reuse (flattened-path cache + gradient stops).
 ///
 /// Image upload (backend-specific) must be performed by the caller *before*
 /// calling this.
@@ -38,6 +39,7 @@ pub(crate) fn paint_commands_to_scene(
     scene: &mut Scene,
     resources: &mut Resources,
     image_uploads: &HashMap<ImageResourceId, ImageId>,
+    scratch: &mut PaintScratch,
     physical_width: u32,
     physical_height: u32,
     dpr: f64,
@@ -54,6 +56,7 @@ pub(crate) fn paint_commands_to_scene(
         // Surface rect in physical pixels — the playback counterpart of the
         // worker's viewport seed; bounds text-line culling.
         Rect::new(0.0, 0.0, physical_width as f64, physical_height as f64),
+        scratch,
     );
     play_commands(&mut ctx, commands);
 }

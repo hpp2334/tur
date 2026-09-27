@@ -1,11 +1,11 @@
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::core::layout::{Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
 use glifo::Glyph;
-use std::collections::HashMap;
-use std::sync::Arc;
-use vello_common::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Shape, Stroke};
+use vello_common::kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Shape, Stroke};
 use vello_common::paint::{Image, ImageId, ImageSource, PaintType};
 use vello_common::peniko::{BlendMode, Color as PenikoColor, Fill, Gradient};
 use vello_hybrid::{Resources, Scene};
@@ -19,6 +19,70 @@ use crate::renderer::vello::text_culling::{ClipMirror, local_clip_y, visible_lin
 /// Tolerance used when converting non-rectangular shapes (rounded rects,
 /// circles) into Bézier paths for the hybrid renderer.
 const TOLERANCE: f64 = 0.1;
+
+/// Cap on cached flattened paths — a UI draws a bounded set of distinct
+/// shape geometries; past this, clear (a pathological per-frame-unique-shape
+/// workload would otherwise grow the maps unboundedly).
+const PATH_CACHE_CAP: usize = 1024;
+
+/// Scratch state shared between a renderer and every paint context it
+/// creates — per-frame allocation reuse for the scene-rebuild pass.
+///
+/// Flattened Bézier paths for rounded rects / circles / plain-rect clips are
+/// cached by exact-geometry (f64-bit-pattern keys): the same shape drawn
+/// every frame flattens once instead of per fill. The gradient-stop Vec is
+/// reused across fills (`Gradient::with_stops` copies the stops, so the
+/// scratch is safe to recycle). Owned by the renderer (host-thread);
+/// borrowed `&mut` by each frame's [`VelloPaintContext`].
+#[derive(Default, Debug)]
+pub struct PaintScratch {
+    rounded_rects: HashMap<(u64, u64, u64), BezPath>,
+    circles: HashMap<u64, BezPath>,
+    rects: HashMap<(u64, u64), BezPath>,
+    gradient_stops: Vec<(f32, PenikoColor)>,
+}
+
+impl PaintScratch {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Flattened path for a rounded rect (cached by `(w, h, r)` bits).
+    fn rounded_rect_path(&mut self, width: f64, height: f64, radius: f64) -> &BezPath {
+        let key = (width.to_bits(), height.to_bits(), radius.to_bits());
+        if self.rounded_rects.len() >= PATH_CACHE_CAP {
+            self.rounded_rects.clear();
+        }
+        self.rounded_rects
+            .entry(key)
+            .or_insert_with(|| RoundedRect::new(0.0, 0.0, width, height, radius).to_path(TOLERANCE))
+    }
+
+    /// Flattened path for a circle (cached by radius bits).
+    fn circle_path(&mut self, radius: f64) -> &BezPath {
+        let key = radius.to_bits();
+        if self.circles.len() >= PATH_CACHE_CAP {
+            self.circles.clear();
+        }
+        self.circles
+            .entry(key)
+            .or_insert_with(|| Circle::new((0.0, 0.0), radius).to_path(TOLERANCE))
+    }
+
+    /// Flattened path for an origin-aligned rect (a rect's `to_path` still
+    /// allocates a BezPath per call otherwise — one per clip push per frame).
+    /// Only origin-aligned rects (clips) are cached: a translated rect's path
+    /// is its (0,0)-corner path under a different transform.
+    fn rect_path(&mut self, width: f64, height: f64) -> &BezPath {
+        let key = (width.to_bits(), height.to_bits());
+        if self.rects.len() >= PATH_CACHE_CAP {
+            self.rects.clear();
+        }
+        self.rects
+            .entry(key)
+            .or_insert_with(|| Rect::new(0.0, 0.0, width, height).to_path(TOLERANCE))
+    }
+}
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
@@ -42,15 +106,21 @@ pub struct VelloPaintContext<'a> {
     /// editor inside a `ScrollView` must not re-encode its whole document
     /// every frame). See `text_culling`.
     clip_mirror: ClipMirror,
+    /// Per-frame allocation reuse (flattened-shape path cache + gradient
+    /// stop scratch) — owned by the renderer, borrowed per frame. See
+    /// [`PaintScratch`].
+    scratch: &'a mut PaintScratch,
 }
 
 impl<'a> VelloPaintContext<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         scene: &'a mut Scene,
         resources: &'a mut Resources,
         root_transform: Affine,
         image_uploads: &'a HashMap<ImageResourceId, ImageId>,
         surface: Rect,
+        scratch: &'a mut PaintScratch,
     ) -> Self {
         // Seed the transform stack with the root transform (the dpr scale). The
         // hybrid scene has a single global transform state that layers do not
@@ -62,6 +132,7 @@ impl<'a> VelloPaintContext<'a> {
             image_uploads,
             transform_stack: vec![root_transform],
             clip_mirror: ClipMirror::new(surface),
+            scratch,
         }
     }
 
@@ -81,8 +152,10 @@ impl fmt::Debug for VelloPaintContext<'_> {
     }
 }
 
-/// Build the hybrid `PaintType` for a tur `Brush`.
-fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
+/// Build the hybrid `PaintType` for a tur `Brush`. Gradient stops flow
+/// through the scratch Vec (refilled per fill; `Gradient::with_stops`
+/// copies them, so the scratch is safe to recycle).
+fn to_paint(scratch: &mut PaintScratch, brush: &Brush, geometry: &Geometry) -> PaintType {
     match brush {
         Brush::SolidColor(color) => PaintType::Solid(to_peniko_color(color)),
         Brush::LinearGradient { start, end, stops } => {
@@ -91,10 +164,9 @@ fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
             let y0 = start.1 * size.height;
             let x1 = end.0 * size.width;
             let y1 = end.1 * size.height;
-            let peniko_stops: Vec<(f32, PenikoColor)> = stops
-                .iter()
-                .map(|s| (s.offset, to_peniko_color(&s.color)))
-                .collect();
+            let peniko_stops = &mut scratch.gradient_stops;
+            peniko_stops.clear();
+            peniko_stops.extend(stops.iter().map(|s| (s.offset, to_peniko_color(&s.color))));
             let gradient =
                 Gradient::new_linear((x0, y0), (x1, y1)).with_stops(peniko_stops.as_slice());
             PaintType::Gradient(gradient)
@@ -102,7 +174,13 @@ fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
     }
 }
 
-fn fill_geometry(scene: &mut Scene, transform: Affine, geometry: &Geometry, paint: &PaintType) {
+fn fill_geometry(
+    scene: &mut Scene,
+    transform: Affine,
+    geometry: &Geometry,
+    paint: &PaintType,
+    scratch: &mut PaintScratch,
+) {
     scene.set_transform(transform);
     scene.set_paint(paint.clone());
     scene.set_fill_rule(Fill::NonZero);
@@ -111,13 +189,12 @@ fn fill_geometry(scene: &mut Scene, transform: Affine, geometry: &Geometry, pain
             scene.fill_rect(&Rect::new(0.0, 0.0, size.width, size.height));
         }
         Geometry::RoundedRect { size, radius } => {
-            let path =
-                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
-            scene.fill_path(&path);
+            let path = scratch.rounded_rect_path(size.width, size.height, *radius);
+            scene.fill_path(path);
         }
         Geometry::Circle { radius } => {
-            let path = Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE);
-            scene.fill_path(&path);
+            let path = scratch.circle_path(*radius);
+            scene.fill_path(path);
         }
     }
 }
@@ -128,6 +205,7 @@ fn stroke_geometry(
     geometry: &Geometry,
     paint: &PaintType,
     stroke_width: f64,
+    scratch: &mut PaintScratch,
 ) {
     scene.set_transform(transform);
     scene.set_paint(paint.clone());
@@ -137,13 +215,12 @@ fn stroke_geometry(
             scene.stroke_rect(&Rect::new(0.0, 0.0, size.width, size.height));
         }
         Geometry::RoundedRect { size, radius } => {
-            let path =
-                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
-            scene.stroke_path(&path);
+            let path = scratch.rounded_rect_path(size.width, size.height, *radius);
+            scene.stroke_path(path);
         }
         Geometry::Circle { radius } => {
-            let path = Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE);
-            scene.stroke_path(&path);
+            let path = scratch.circle_path(*radius);
+            scene.stroke_path(path);
         }
     }
 }
@@ -159,8 +236,8 @@ fn geometry_size(geometry: &Geometry) -> Size {
 impl Canvas for VelloPaintContext<'_> {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        let paint = to_paint(brush, geometry);
-        fill_geometry(self.scene, transform, geometry, &paint);
+        let paint = to_paint(self.scratch, brush, geometry);
+        fill_geometry(self.scene, transform, geometry, &paint, self.scratch);
     }
 
     #[allow(private_interfaces)]
@@ -262,7 +339,14 @@ impl Canvas for VelloPaintContext<'_> {
         let peniko_color = to_peniko_color(color);
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         let paint = PaintType::Solid(peniko_color);
-        stroke_geometry(self.scene, transform, geometry, &paint, stroke_width);
+        stroke_geometry(
+            self.scene,
+            transform,
+            geometry,
+            &paint,
+            stroke_width,
+            self.scratch,
+        );
     }
 
     fn draw_shadow(
@@ -287,9 +371,9 @@ impl Canvas for VelloPaintContext<'_> {
 
     fn push_clip(&mut self, offset: Offset, size: Size) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        let clip = Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE);
+        let clip = self.scratch.rect_path(size.width, size.height);
         self.scene.set_transform(transform);
-        self.scene.push_layer(Some(&clip), None, None, None, None);
+        self.scene.push_layer(Some(clip), None, None, None, None);
         self.clip_mirror
             .push_local(transform, Rect::new(0.0, 0.0, size.width, size.height));
     }
@@ -297,14 +381,15 @@ impl Canvas for VelloPaintContext<'_> {
     fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         let clip = match geometry {
-            Geometry::Rect(size) => Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE),
+            Geometry::Rect(size) => self.scratch.rect_path(size.width, size.height),
             Geometry::RoundedRect { size, radius } => {
-                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE)
+                self.scratch
+                    .rounded_rect_path(size.width, size.height, *radius)
             }
-            Geometry::Circle { radius } => Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE),
+            Geometry::Circle { radius } => self.scratch.circle_path(*radius),
         };
         self.scene.set_transform(transform);
-        self.scene.push_layer(Some(&clip), None, None, None, None);
+        self.scene.push_layer(Some(clip), None, None, None, None);
         // Conservative local AABB of the clip geometry (rounded rects and
         // circles use their bounding box).
         let local_aabb = match geometry {

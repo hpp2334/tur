@@ -33,6 +33,13 @@ rustflags = [
     "link-arg=--shared-memory",
     "-C",
     "link-arg=--max-memory=1073741824",
+    # Wasm worker stacks are browser-controlled (V8 default ≈ 1 MB) and
+    # ignore `RUST_MIN_STACK`; deep recursion during playground module
+    # evaluation (text shaping / reactive graph) overflows it and traps as an
+    # opaque `unreachable` (the panic hook itself cannot run — no stack left).
+    # Declare an 8 MB wasm stack, matching the native lanes.
+    "-C",
+    "link-arg=-zstack-size=8388608",
     "-C",
     "link-arg=--import-memory",
     "-C",

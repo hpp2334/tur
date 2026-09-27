@@ -14,6 +14,7 @@ use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
 use crate::core::render::brush::Color;
+use crate::renderer::vello::paint_context::PaintScratch;
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer};
@@ -40,6 +41,9 @@ pub struct WebGlVelloRenderer {
     /// `ImageId`. The WebGL backend only supports `ImageSource::OpaqueId`, so
     /// every image must be uploaded to the atlas before painting.
     image_uploads: HashMap<ImageResourceId, ImageId>,
+    /// Per-frame scene-rebuild allocation reuse (flattened-path cache +
+    /// gradient stops) — borrowed by each frame's paint context.
+    scratch: PaintScratch,
 }
 
 impl WebGlVelloRenderer {
@@ -69,6 +73,7 @@ impl WebGlVelloRenderer {
             physical_height,
             base_color: Color::WHITE,
             image_uploads: HashMap::new(),
+            scratch: PaintScratch::new(),
         }
     }
 
@@ -101,6 +106,7 @@ impl WebGlVelloRenderer {
             &mut self.scene,
             &mut self.resources,
             &self.image_uploads,
+            &mut self.scratch,
             self.physical_width,
             self.physical_height,
             self.dpr,

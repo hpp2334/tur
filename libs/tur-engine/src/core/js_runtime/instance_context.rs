@@ -155,6 +155,15 @@ pub struct TurInstanceContext {
     /// (`Arc<[WorkerPoolHandle]>` — each an `Arc` over plain data), no
     /// `boa_gc::Gc`/`GcRefCell`.
     pub(crate) worker_pools: Arc<[WorkerPoolHandle]>,
+    /// Per-instance frame statistics — the render-performance probe (see
+    /// [`FrameStats`](crate::core::app::frame_stats::FrameStats)). Always-on
+    /// worker-side counters, surfaced via `turDevTool.frameStats()`.
+    ///
+    /// Sound to keep out of boa's GC trace: pure Rust state (`Rc` over
+    /// `Cell`/`RefCell` counters), no `boa_gc::Gc`/`GcRefCell`. Same
+    /// trade-off as the other fields with a struct-level
+    /// `#[boa_gc(unsafe_empty_trace)]`.
+    pub frame_stats: Rc<crate::core::app::FrameStats>,
 }
 
 impl TurInstanceContext {
@@ -178,6 +187,7 @@ impl TurInstanceContext {
         wake_worker: Arc<dyn Fn() + Send + Sync>,
         capabilities: Capabilities,
         worker_pools: Arc<[WorkerPoolHandle]>,
+        frame_stats: Rc<crate::core::app::FrameStats>,
     ) -> Self {
         Self {
             element_tree,
@@ -198,6 +208,7 @@ impl TurInstanceContext {
             instance_data: Rc::new(RefCell::new(HashMap::new())),
             plugin_state: Rc::new(OnceCell::new()),
             worker_pools,
+            frame_stats,
         }
     }
 

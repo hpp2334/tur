@@ -848,6 +848,26 @@ impl TurTestApp {
         });
     }
 
+    /// Install (or replace) the app's renderer — two-phase lifecycle attach.
+    /// Replaces the harness's default renderer; the next painted frame flows
+    /// into it (fresh renderers always apply — the frame-dedup signal
+    /// resets).
+    pub fn attach_renderer(
+        &self,
+        renderer: Box<dyn tur_engine::core::render::Renderer>,
+        width: u32,
+        height: u32,
+        dpr: f64,
+    ) {
+        self.inner.attach_renderer(renderer, width, height, dpr);
+    }
+
+    /// Drop the app's renderer. All render-side work skips until the next
+    /// `attach_renderer`; the engine loop keeps running.
+    pub fn detach_renderer(&self) {
+        self.inner.detach_renderer();
+    }
+
     /// Snapshot of the live element tree, built on the worker via the
     /// `with_tree` escape hatch. Returns an owned value (not a `Ref`) —
     /// the live tree lives on the worker thread; main can only see
