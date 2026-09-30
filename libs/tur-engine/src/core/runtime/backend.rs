@@ -64,7 +64,7 @@ use crate::error::TurError;
 /// `TurAppInternal::pending_render_batch`, where [`HostBackend`]'s
 /// `worker_loop` drains it and ships to main.
 pub(crate) struct WorkerBackend {
-    pub(crate) boa_context: std::rc::Rc<std::cell::RefCell<Context>>,
+    pub(crate) boa_context: RefCell<Context>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// The argument object handed to the loaded module's `start`:
@@ -90,7 +90,7 @@ impl WorkerBackend {
         start_arg: JsObject,
     ) -> Self {
         Self {
-            boa_context: std::rc::Rc::new(std::cell::RefCell::new(boa_context)),
+            boa_context: RefCell::new(boa_context),
             internal,
             executor,
             start_arg: RefCell::new(start_arg),
@@ -169,11 +169,7 @@ impl WorkerBackend {
         self.teardown_rut_module();
 
         let js = &self.internal.js_context;
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(
-            source,
-            js.clone(),
-            self.boa_context.clone(),
-        )?;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone())?;
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, with the caller's boa borrow (rut rows never race
         // the flush's borrow).

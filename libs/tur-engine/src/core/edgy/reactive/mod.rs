@@ -14,7 +14,7 @@ mod store;
 
 pub use store::Store;
 pub use store::{
-    FlushEngineStore, ReactiveBridgeStore, ReactiveReadJsContext, ReactiveReadStore,
+    FlushEngineStore, ReactiveBridgeStore, ReactiveReadJsContext, ReactiveReadStore, ScalarRead,
     SharedReactive, StoreKv, SubscriberIndexStore, WatchDispatchStore,
 };
 

@@ -744,6 +744,16 @@ pub struct Store {
     pub(crate) kv: Rc<StoreKv>,
 }
 
+/// A decoded scalar from [`Store::read_source_scalar`] — the rut rail's
+/// boa-free read. (Rut's own types mirror these three widths + bytes; the
+/// string covers the rest for now.)
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScalarRead {
+    Bool(bool),
+    Num(f64),
+    Str(String),
+}
+
 impl Store {
     pub fn new(app_dirty: Rc<Cell<bool>>) -> Store {
         let shared = Rc::new(SharedReactive::new(app_dirty));
@@ -786,11 +796,29 @@ impl Store {
     /// ability to create atoms, write, or touch the subscriber index / engine.
     /// Declarations materialize into this face's default store (the mounted
     /// store for tree-driven flows).
-    pub fn read_only(&self) -> ReactiveReadStore {
-        ReactiveReadStore {
+    pub fn read_only(&self) -> ReactiveReadStore {        ReactiveReadStore {
             shared: self.shared.clone(),
             default: self.kv.clone(),
         }
+    }
+
+    /// Boa-free SOURCE-atom read for the rut rail: serve the fresh cached
+    /// slot and decode the scalar without ever touching the realm. Returns
+    /// `None` when the slot is missing/stale (no materialization — a source
+    /// written through `bridge().set_source` is always fresh).
+    ///
+    /// Derived atoms need closure evaluation (a realm affair) and are out of
+    /// scope by design; the rut rail reads sources only.
+    pub(crate) fn read_source_scalar(&self, id: AtomId) -> Option<ScalarRead> {
+        let epoch = self.shared.graph.generation_of(id);
+        let slot = self.kv.values.borrow().get(&id).filter(|s| s.epoch == epoch)?.value.clone();
+        if let Some(b) = slot.as_boolean() {
+            return Some(ScalarRead::Bool(b));
+        }
+        if let Some(n) = slot.as_number() {
+            return Some(ScalarRead::Num(n));
+        }
+        slot.as_string().map(|s| ScalarRead::Str(s.to_std_string_escaped()))
     }
 
     /// View over the atom↔subscriber index (the shared `SubscriberGraph`):

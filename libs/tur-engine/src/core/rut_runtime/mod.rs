@@ -243,26 +243,20 @@ fn install_tur_pkg(
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_f64", (u64,) -> f64, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        let readable = crate::core::edgy::reactive::Readable::Source(
-            crate::core::edgy::reactive::Source::<f64>::from_id(AtomId(atom as u32)),
-        );
-        let mut boa = h.boa.borrow_mut();
-        let v = h.store.read_only().read(readable, &mut boa);
-        drop(boa);
-        Ok(v.as_number().unwrap_or(0.0))
+        match h.store.read_source_scalar(AtomId(atom as u32)) {
+            Some(crate::core::edgy::reactive::ScalarRead::Num(n)) => Ok(n),
+            _ => Ok(0.0),
+        }
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
         // Reads materialize a JsValue — borrow the realm (free outside
         // flush iterations; see the pump's drain ordering).
-        let readable = crate::core::edgy::reactive::Readable::Source(
-            crate::core::edgy::reactive::Source::<String>::from_id(AtomId(atom as u32)),
-        );
-        let mut boa = h.boa.borrow_mut();
-        let v = h.store.read_only().read(readable, &mut boa);
-        drop(boa);
-        Ok(v.as_string().map(|s| s.to_std_string_escaped()).unwrap_or_default())
+        match h.store.read_source_scalar(AtomId(atom as u32)) {
+            Some(crate::core::edgy::reactive::ScalarRead::Str(s)) => Ok(s),
+            _ => Ok(String::new()),
+        }
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_set_f64", (u64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: f64| {
@@ -409,13 +403,10 @@ fn install_tur_pkg(
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_bool", (u64,) -> bool, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        let readable = crate::core::edgy::reactive::Readable::Source(
-            crate::core::edgy::reactive::Source::<bool>::from_id(AtomId(atom as u32)),
-        );
-        let mut boa = h.boa.borrow_mut();
-        let v = h.store.read_only().read(readable, &mut boa);
-        drop(boa);
-        Ok(v.as_boolean().unwrap_or(false))
+        match h.store.read_source_scalar(AtomId(atom as u32)) {
+            Some(crate::core::edgy::reactive::ScalarRead::Bool(b)) => Ok(b),
+            _ => Ok(false),
+        }
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_set_bool", (u64, bool) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: bool| {
@@ -437,11 +428,6 @@ pub struct RutHandles {
     /// The instance's reactive store — the SAME KV the JS realm and the
     /// element tree share; rut atoms are edgy atoms addressed by raw id.
     pub store: crate::core::edgy::reactive::Store,
-    /// The instance's boa realm — rows that must read atom values
-    /// (`rs_get_*`) borrow it on demand. NEVER borrowed during a flush
-    /// iteration (the pump holds it there); callback drains and RPC-level
-    /// rows run with it free.
-    pub boa: std::rc::Rc<std::cell::RefCell<Context>>,
     /// The instance's app-dirty flag (rut callbacks raise it when they
     /// stash work so an idle worker wakes).
     pub dirty: Rc<std::cell::Cell<bool>>,
@@ -511,13 +497,11 @@ impl RutRuntime {
     pub fn boot(
         source: &str,
         js_ctx: TurInstanceContext,
-        boa: std::rc::Rc<std::cell::RefCell<Context>>,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) = Self::compile(source).map_err(crate::core::app::ModuleError::Parse)?;
 
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
-            boa,
             dirty: js_ctx.dirty.clone(),
             element_tree: js_ctx.element_tree.clone(),
             pending_root: std::cell::RefCell::new(None),
