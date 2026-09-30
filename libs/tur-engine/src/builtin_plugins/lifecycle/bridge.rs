@@ -27,6 +27,8 @@ fn tur_lifecycle_view(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("expected a function")))?;
     let factory = JsFunction::from_object(obj.clone())
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("expected a function")))?;
-    let view: Rc<dyn View> = Rc::new(super::LifecycleView { factory });
+    let view: Rc<dyn View> = Rc::new(super::LifecycleView {
+        factory: super::LifecycleFactory::Js(factory),
+    });
     Ok(wrap_view(view, context))
 }

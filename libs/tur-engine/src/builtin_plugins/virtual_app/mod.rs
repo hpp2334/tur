@@ -30,9 +30,9 @@
 //! child unless `keepAlive`.
 
 mod bridge;
-mod element;
+pub(crate) mod element;
 mod handlers;
-mod state;
+pub(crate) mod state;
 
 pub(crate) use state::VirtualState;
 

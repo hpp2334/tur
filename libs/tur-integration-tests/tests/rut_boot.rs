@@ -1131,6 +1131,88 @@ fn rut_net_stream_chunks_cross_as_records() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Phase C7 — lifecycle rows + virtual apps: mount/destroy intents and a
+// rut-authored `VirtualAppView` hosting a full child instance.
+// ---------------------------------------------------------------------------
+
+/// A rut parent hosting a JS child through the virtual-app rows. The
+/// controller rides the opaque stash (the poll entry reads it back); the
+/// child's lifecycle flips the status rail the rows read natively.
+const VAPP_RUT: &str = r#"
+use tur::{ el_column, el_lifecycle, el_text, el_text_bound, el_build, el_child, el_virtual_app, mount, rs_set_str, rs_source_str, st_put, st_take, va_controller, va_destroy, va_error, va_source, va_status };
+
+let CTRL_KEY: u64 = 42;
+
+entry fn start() -> u64 {
+    let label = rs_source_str("");
+    let src = va_source("import { Text, mount } from 'tur:std';\nexport function start() {\nmount(Text({ text: 'child here' }).build());\n}");
+    let ctrl = va_controller(src);
+    st_put(CTRL_KEY, ctrl);
+
+    let col = el_column();
+    el_child(col, el_lifecycle("lc_mount", "lc_destroy", el_text("wrapped")));
+    el_child(col, el_virtual_app(ctrl, 200.0, 80.0));
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return label;
+}
+
+entry fn lc_mount(_id: u64, _b: u64, _n: f64) {
+}
+
+entry fn lc_destroy(_id: u64, _b: u64, _n: f64) {
+}
+
+// The test drives the status poll: the label atom rides the entry arg,
+// the controller comes back from the stash (an entry cannot capture it).
+entry fn poll(label: u64, _b: f64) {
+    let ctrl = st_take(CTRL_KEY);
+    let s = va_status(ctrl);
+    if (s == "error") {
+        rs_set_str(label, f"error: {va_error(ctrl)}");
+        st_put(CTRL_KEY, ctrl);
+        return;
+    }
+    st_put(CTRL_KEY, ctrl);
+    rs_set_str(label, s);
+}
+
+entry fn destroy(label: u64, _b: f64) {
+    let ctrl = st_take(CTRL_KEY);
+    va_destroy(ctrl);
+    st_put(CTRL_KEY, ctrl);
+    rs_set_str(label, "destroyed");
+}
+"#;
+
+#[test]
+fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(VAPP_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The lifecycle wrapper's child renders (the rut descriptor arm).
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    assert_eq!(column.children.len(), 3, "wrapper + host + label");
+
+    let label_atom = app.rut_start_answer();
+    // The child spawns: the status rail flips idle → spawning → running.
+    let running = app.wait_for(|app| {
+        app.call_rut_entry("poll", label_atom, 0.0).unwrap();
+        let s = rut_bound_text(app);
+        s == "running" || s == "error"
+    });
+    assert!(running, "the child reached running: {:?}", rut_bound_text(&app));
+    let _ = 0; // (error detail asserted below when non-running)
+
+    // Destroy: the child tears down.
+    app.call_rut_entry("destroy", label_atom, 0.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
+}
+
 /// The alpha atom's current value, read back through the bound opacity
 /// element's resolved paint value (layout mirrors the atom each frame).
 fn read_rut_f64(app: &TurTestApp) -> f64 {

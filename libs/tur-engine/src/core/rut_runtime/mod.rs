@@ -44,6 +44,7 @@ mod container;
 mod gesture;
 mod realm;
 mod text;
+mod virtual_app;
 
 pub use realm::RutRealm;
 
@@ -201,6 +202,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
     // C6 — async capabilities (clipboard + bytes helpers; the async rows
     // ride the driver's five-row family expansion).
     host_funcs.extend(async_caps::decl_rows());
+    // C7 — lifecycle + virtual apps.
+    host_funcs.extend(virtual_app::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     let consts = container::decl_consts();
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -607,6 +610,8 @@ fn install_tur_pkg(
     gesture::install(&mut pkg, handles);
     // C6 — async capabilities.
     async_caps::install(&mut pkg, handles);
+    // C7 — lifecycle + virtual apps.
+    virtual_app::install(&mut pkg, handles);
     // The opaque stash (the cross-entry hand-off rail).
     {
         let h = handles.clone();

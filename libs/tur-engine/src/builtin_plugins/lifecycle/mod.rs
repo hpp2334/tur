@@ -7,7 +7,7 @@ pub(in crate::builtin_plugins) mod element;
 pub(in crate::builtin_plugins) mod layout;
 pub(in crate::builtin_plugins) mod render;
 
-pub(in crate::builtin_plugins) use element::LifecycleView;
+pub(crate) use element::{LifecycleFactory, LifecycleView};
 
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;

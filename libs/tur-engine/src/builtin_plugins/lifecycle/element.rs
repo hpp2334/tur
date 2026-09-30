@@ -1,4 +1,6 @@
 use boa_engine::JsValue;
+use std::rc::Rc;
+
 use boa_engine::object::builtins::JsFunction;
 
 use crate::core::edgy::mutation::MutationHandle;
@@ -18,18 +20,51 @@ use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 // ---------------------------------------------------------------------------
 
 pub struct LifecycleView {
-    pub(crate) factory: JsFunction,
+    pub(crate) factory: LifecycleFactory,
+}
+
+/// The descriptor source: a JS thunk (the JS rail) or a pre-built rut
+/// descriptor (child + intent mutations — the C7 rows).
+pub(crate) enum LifecycleFactory {
+    Js(JsFunction),
+    Rut {
+        child: Rc<dyn View>,
+        on_mounted: Option<MutationHandle<()>>,
+        before_destroy: Option<MutationHandle<()>>,
+    },
 }
 
 impl View for LifecycleView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
+        // The rut descriptor needs no realm — resolve it first.
+        if let LifecycleFactory::Rut {
+            child,
+            on_mounted,
+            before_destroy,
+        } = &self.factory
+        {
+            let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+            cx.insert_node(
+                id,
+                AnyElement::new(LifecycleElement {
+                    on_mounted: *on_mounted,
+                    before_destroy: *before_destroy,
+                }),
+            );
+            child.build(cx, id.into());
+            cx.link_child(parent, id.into());
+            return id.into();
+        }
         // The descriptor factory is a JS thunk — it can only exist on an
         // instance with a realm. A realm-free build cannot reach this arm.
+        let LifecycleFactory::Js(factory) = &self.factory else {
+            unreachable!("rut arm returned above");
+        };
         let Some(boa) = cx.realm() else {
             tracing::warn!("lifecycleView::build skipped: no JS realm (JS factory)");
             return parent;
         };
-        let descriptor = match self.factory.call(&JsValue::undefined(), &[], boa) {
+        let descriptor = match factory.call(&JsValue::undefined(), &[], boa) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("lifecycleView factory error: {e}");
