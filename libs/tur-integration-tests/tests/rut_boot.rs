@@ -138,12 +138,12 @@ entry fn start() -> u64 {
     let atom = rs_source_str("taps: 0");
     let col = el_column();
     el_child(col, el_text_bound(atom));
-    el_child(col, el_button(atom, "ts_click", "tap me"));
+    el_child(col, el_button(atom, atom, "ts_click", "tap me"));
     mount(el_build(col));
     return atom;
 }
 
-entry fn ts_click(atom: u64, n: f64) {
+entry fn ts_click(atom: u64, _label: u64, n: f64) {
     rs_set_str(atom, f"taps: {n}");
 }
 "#;
@@ -170,6 +170,67 @@ fn rut_button_click_mutates_bound_text() {
         app.wait_for_timeout(Duration::ZERO);
         assert_eq!(rut_bound_text(&app), format!("taps: {n}"), "click {n} drove the rut callback");
     }
+}
+
+/// The Phase-4 journey gate: a complete rut counter app — inc/dec buttons
+/// with REAL state (an f64 count atom read-modify-written in the
+/// callbacks), a bound reactive label, and cleanup — the rut twin of the
+/// JS counter case. Callbacks receive (count_atom, label_atom, seq).
+const COUNTER_APP_RUT: &str = r#"
+use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
+
+entry fn start() -> u64 {
+    let label = rs_source_str("Count: 0");
+    let count = rs_source_f64();
+    let col = el_column();
+    el_child(col, el_text_bound(label));
+    el_child(col, el_button(count, label, "ts_inc", "+1"));
+    el_child(col, el_button(count, label, "ts_dec", "-1"));
+    mount(el_build(col));
+    return count;
+}
+
+fn show(count: u64, label: u64) {
+    let v = rs_get_f64(count);
+    rs_set_str(label, f"Count: {v}");
+}
+
+entry fn ts_inc(count: u64, label: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1);
+    show(count, label);
+}
+
+entry fn ts_dec(count: u64, label: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) - 1);
+    show(count, label);
+}
+"#;
+
+#[test]
+fn rut_counter_app_full_journey() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(COUNTER_APP_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "Count: 0");
+
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let center = |id| {
+        let n = app.dev_tool_get_element(id).unwrap();
+        (n.absolute.0 + n.size.0 / 2.0, n.absolute.1 + n.size.1 / 2.0)
+    };
+    let (inc_x, inc_y) = center(column.children[1]);
+    let (dec_x, dec_y) = center(column.children[2]);
+
+    app.click(inc_x, inc_y);
+    app.wait_for_timeout(Duration::ZERO);
+    app.click(inc_x, inc_y);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "Count: 2", "two +1 taps");
+
+    app.click(dec_x, dec_y);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "Count: 1", "one -1 tap");
 }
 
 #[test]

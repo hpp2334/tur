@@ -64,7 +64,7 @@ use crate::error::TurError;
 /// `TurAppInternal::pending_render_batch`, where [`HostBackend`]'s
 /// `worker_loop` drains it and ships to main.
 pub(crate) struct WorkerBackend {
-    pub(crate) boa_context: RefCell<Context>,
+    pub(crate) boa_context: std::rc::Rc<std::cell::RefCell<Context>>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// The argument object handed to the loaded module's `start`:
@@ -90,7 +90,7 @@ impl WorkerBackend {
         start_arg: JsObject,
     ) -> Self {
         Self {
-            boa_context: RefCell::new(boa_context),
+            boa_context: std::rc::Rc::new(std::cell::RefCell::new(boa_context)),
             internal,
             executor,
             start_arg: RefCell::new(start_arg),
@@ -169,7 +169,11 @@ impl WorkerBackend {
         self.teardown_rut_module();
 
         let js = &self.internal.js_context;
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone())?;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(
+            source,
+            js.clone(),
+            self.boa_context.clone(),
+        )?;
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, with the caller's boa borrow (rut rows never race
         // the flush's borrow).
@@ -391,21 +395,25 @@ impl WorkerBackend {
         // be returned to the worker_loop, which then ships any pending
         // render batch.
         //
-        // The rut VM drains FIRST — outside the boa borrow (rut rows must
-        // never run while flush holds it; see `core::rut_runtime`).
+        // The rut VM drains FIRST — with the boa borrow RELEASED, so rut
+        // rows may borrow the realm on demand (rs_get_*). Rut invocation
+        // still never happens inside a flush iteration (core::rut_runtime).
         if let Some(rut) = self.rut.borrow_mut().as_mut() {
             rut.run_ready();
         }
-        let mut boa = self.boa_context.borrow_mut();
-        let mut outcome = self.internal.flush(&mut boa)?;
+        let mut outcome = {
+            let mut boa = self.boa_context.borrow_mut();
+            self.internal.flush(&mut boa)?
+        };
         // Callback intents queued during the flush (rut element callbacks)
-        // drain here — pump level, boa borrowed by this scope only. Any
-        // atom writes they made are stale-but-unflushed, so a drained
-        // intent runs one convergence flush (the reactive fixed point
-        // re-renders in it).
-        if let Some(rut) = self.rut.borrow_mut().as_mut()
-            && rut.drain_pending_calls(&mut boa) > 0
-        {
+        // drain with the realm free — a callback may read atoms and mount.
+        let drained = self.rut.borrow_mut().as_mut().map(|rut| rut.drain_pending_calls());
+        if drained.unwrap_or(0) > 0 {
+            // Convergence flush: the callback's atom writes re-render here.
+            let mut boa = self.boa_context.borrow_mut();
+            if let Some(rut) = self.rut.borrow_mut().as_mut() {
+                rut.apply_root(&mut boa).map_err(TurError::Other)?; // a callback may re-mount
+            }
             outcome = self.internal.flush(&mut boa)?;
         }
         Ok(outcome)

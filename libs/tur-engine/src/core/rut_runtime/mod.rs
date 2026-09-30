@@ -81,14 +81,16 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_row", vec![], TY_OPAQUE),
         row("el_text", vec![TY_STR], TY_OPAQUE),
         row("el_text_bound", vec![TY_U64], TY_OPAQUE),
-        row("el_button", vec![TY_U64, TY_STR, TY_STR], TY_OPAQUE),
+        row("el_button", vec![TY_U64, TY_U64, TY_STR, TY_STR], TY_OPAQUE),
         row("el_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("el_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("mount", vec![TY_OPAQUE], TY_NIL),
         row("rs_source_str", vec![TY_STR], TY_U64),
         row("rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
+        row("rs_get_str", vec![TY_U64], TY_STR),
         row("rs_source_f64", vec![], TY_U64),
         row("rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
+        row("rs_get_f64", vec![TY_U64], TY_F64),
     ];
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -198,11 +200,35 @@ fn install_tur_pkg(
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_get_f64", (u64,) -> f64, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+        let _ = vm;
+        let readable = crate::core::edgy::reactive::Readable::Source(
+            crate::core::edgy::reactive::Source::<f64>::from_id(AtomId(atom as u32)),
+        );
+        let mut boa = h.boa.borrow_mut();
+        let v = h.store.read_only().read(readable, &mut boa);
+        drop(boa);
+        Ok(v.as_number().unwrap_or(0.0))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+        let _ = vm;
+        // Reads materialize a JsValue — borrow the realm (free outside
+        // flush iterations; see the pump's drain ordering).
+        let readable = crate::core::edgy::reactive::Readable::Source(
+            crate::core::edgy::reactive::Source::<String>::from_id(AtomId(atom as u32)),
+        );
+        let mut boa = h.boa.borrow_mut();
+        let v = h.store.read_only().read(readable, &mut boa);
+        drop(boa);
+        Ok(v.as_string().map(|s| s.to_std_string_escaped()).unwrap_or_default())
+    });
+    let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_set_f64", (u64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: f64| {
         let _ = vm;
         h.store
             .bridge()
-            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(boa_engine::js_string!(v)))
+            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(v))
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_f64: {e}")))
     });
     // a Text bound to a str atom — re-renders when the atom changes
@@ -234,14 +260,14 @@ fn install_tur_pkg(
     // per-button count (full event payloads arrive with the gesture
     // bridge later in the migration).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "el_button", (u64, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, cb: &str, label: &str| {
+    rut_vm::pkg_fn!(pkg, "el_button", (u64, u64, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id_a: u64, id_b: u64, cb: &str, label: &str| {
         let h2 = h.clone();
         let cb = cb.to_string();
         let dirty = h.dirty.clone();
         let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
             let n = h2.click_seq.get() + 1;
             h2.click_seq.set(n);
-            h2.pending_calls.borrow_mut().push((cb.clone(), id, n as f64));
+            h2.pending_calls.borrow_mut().push((cb.clone(), id_a, id_b, n as f64));
             dirty.set(true);
             Ok(JsValue::undefined())
         });
@@ -282,6 +308,11 @@ pub struct RutHandles {
     /// The instance's reactive store — the SAME KV the JS realm and the
     /// element tree share; rut atoms are edgy atoms addressed by raw id.
     pub store: crate::core::edgy::reactive::Store,
+    /// The instance's boa realm — rows that must read atom values
+    /// (`rs_get_*`) borrow it on demand. NEVER borrowed during a flush
+    /// iteration (the pump holds it there); callback drains and RPC-level
+    /// rows run with it free.
+    pub boa: std::rc::Rc<std::cell::RefCell<Context>>,
     /// The instance's app-dirty flag (rut callbacks raise it when they
     /// stash work so an idle worker wakes).
     pub dirty: Rc<std::cell::Cell<bool>>,
@@ -294,7 +325,7 @@ pub struct RutHandles {
     /// Callback intents queued by element callbacks (the rut closure
     /// closures are boa-free: they only push here). Drained at pump level
     /// after flush — `(callback name, id, payload)`.
-    pub pending_calls: std::cell::RefCell<Vec<(String, u64, f64)>>,
+    pub pending_calls: std::cell::RefCell<Vec<(String, u64, u64, f64)>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
 }
@@ -351,11 +382,13 @@ impl RutRuntime {
     pub fn boot(
         source: &str,
         js_ctx: TurInstanceContext,
+        boa: std::rc::Rc<std::cell::RefCell<Context>>,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) = Self::compile(source).map_err(crate::core::app::ModuleError::Parse)?;
 
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
+            boa,
             dirty: js_ctx.dirty.clone(),
             element_tree: js_ctx.element_tree.clone(),
             pending_root: std::cell::RefCell::new(None),
@@ -458,20 +491,19 @@ impl RutRuntime {
         }
     }
 
-    /// Drain the callback intents queued by element callbacks this frame
-    /// (pump-level, with the pump's boa borrow — a callback may mount).
-    /// Returns the number of callbacks drained.
-    pub fn drain_pending_calls(&mut self, boa: &mut Context) -> usize {
-        let calls: Vec<(String, u64, f64)> =
+    /// Drain the callback intents queued by element callbacks this frame.
+    /// Runs with the boa borrow RELEASED — rows may borrow the realm on
+    /// demand (`rs_get_*`). Re-mount stashing is applied by the caller
+    /// (the pump, which re-borrows for `apply_root` + the convergence
+    /// flush). Returns the number of callbacks drained.
+    pub fn drain_pending_calls(&mut self) -> usize {
+        let calls: Vec<(String, u64, u64, f64)> =
             std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
-        for (name, a, b) in &calls {
-            if let Err(t) = self.vm.call::<_, ()>(name, (*a, *b)) {
-                tracing::error!("rut callback {name}: {} — {}", t.name(), t.msg);
-                continue;
-            }
-            // A callback may have stashed a new root (view swap on tap).
-            if let Err(e) = self.apply_root(boa) {
-                tracing::error!("rut callback {name} apply_root: {e}");
+        for (name, a, b, c) in &calls {
+            if let Err(t) = self.vm.call::<_, ()>(name, (*a, *b, *c)) {
+                eprintln!("[rut-dbg] callback {name}({a},{b},{c}) TRAP: {} — {}", t.name(), t.msg);
+            } else {
+                eprintln!("[rut-dbg] callback {name}({a},{b},{c}) ok");
             }
         }
         calls.len()
