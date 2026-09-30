@@ -112,6 +112,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_row", vec![], TY_OPAQUE),
         row("el_text", vec![TY_STR], TY_OPAQUE),
         row("el_text_bound", vec![TY_U64], TY_OPAQUE),
+        row("el_text_styled", vec![TY_STR, TY_F64, TY_U64], TY_OPAQUE),
+        row("el_scroll", vec![TY_BOOL, TY_OPAQUE], TY_OPAQUE),
         row("el_button", vec![TY_U64, TY_U64, TY_STR, TY_STR], TY_OPAQUE),
         row("el_stack", vec![], TY_OPAQUE),
         row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
@@ -389,6 +391,33 @@ fn install_tur_pkg(
             )),
             Rc::new(PreBuilt(then_v)),
             Rc::new(PreBuilt(else_v)),
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // styled text: explicit font size + packed color (every real UI styles)
+    rut_vm::pkg_fn!(pkg, "el_text_styled", (&str, f64, u64) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, content: &str, size: f64, color: u64| {
+        let view = Rc::new(TextView {
+            text: Some(Val::Static(content.to_string())),
+            font_size: Some(Val::Static(size)),
+            font_weight: None,
+            color: Some(Val::Static(color_of(color))),
+            spans: None,
+            query_key: None,
+            on_selection_change: None,
+            selectable: false,
+            max_lines: None,
+            overflow: None,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // a scroll viewport (wheel-driven; controller support comes with the
+    // controller rows)
+    rut_vm::pkg_fn!(pkg, "el_scroll", (bool, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, vertical: bool, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(crate::builtin_plugins::scroll::ScrollViewView::new_rut(
+            Some(Val::Static(if vertical { Axis::Vertical } else { Axis::Horizontal })),
+            child,
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });

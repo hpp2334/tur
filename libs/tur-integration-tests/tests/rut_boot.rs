@@ -313,6 +313,60 @@ fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f
     (n.absolute.0 + n.size.0 / 2.0, n.absolute.1 + n.size.1 / 2.0)
 }
 
+/// Scroll + styled-text gate: a scroll viewport wrapping tall styled
+/// content — the long-list pattern every real app needs.
+const SCROLL_RUT: &str = r#"
+use tur::{ el_column, el_expand, el_scroll, el_text_styled, el_build, el_child, mount, rs_source_f64 };
+
+entry fn start() -> u64 {
+    let col = el_column();
+    let mut i = 0;
+    while (i < 60) {
+        el_child(col, el_text_styled(f"row {i}", 16.0, 0x222222FF));
+        i += 1;
+    }
+    let scroller = el_scroll(true, el_build(col));
+    let root = el_column();
+    el_child(root, el_expand(1.0, scroller));
+    mount(el_build(root));
+    return rs_source_f64();
+}
+"#;
+
+#[test]
+fn rut_scroll_view_with_styled_rows() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(SCROLL_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // Root column -> scroll view -> content column -> 20 styled rows.
+    let root = app.dev_tool_element_tree().unwrap();
+    let root_col = app.dev_tool_get_element(root.children[0]).unwrap();
+    assert_eq!(root_col.children.len(), 1, "the expanded scroller is the only child");
+    let flexible = app.dev_tool_get_element(root_col.children[0]).unwrap();
+    let scroller = app.dev_tool_get_element(flexible.children[0]).unwrap();
+    assert!(scroller.size.1 > 0.0 && scroller.size.1 <= 600.0, "scroll viewport bounded: {:?}", scroller.size);
+    let content = app.dev_tool_get_element(scroller.children[0]).unwrap();
+    assert_eq!(content.children.len(), 60, "all 60 rut-authored rows mounted");
+    // The content is taller than the viewport (that's why it scrolls).
+    assert!(content.size.1 > scroller.size.1, "content overflows: content {:?} viewport {:?}", content.size, scroller.size);
+
+    // A wheel event over the viewport scrolls the content.
+    let cx = scroller.absolute.0 + scroller.size.0 / 2.0;
+    let cy = scroller.absolute.1 + scroller.size.1 / 2.0;
+    app.wheel(0.0, 120.0, cx, cy);
+    app.wait_for_timeout(Duration::ZERO);
+    let flexible2 = app.dev_tool_get_element(root_col.children[0]).unwrap();
+    let scrolled = app.dev_tool_get_element(flexible2.children[0]).unwrap();
+    let content2 = app.dev_tool_get_element(scrolled.children[0]).unwrap();
+    assert!(
+        content2.absolute.1 < content.absolute.1,
+        "wheel scrolled the content up: {:?} -> {:?}",
+        content.absolute.1,
+        content2.absolute.1
+    );
+}
+
 #[test]
 fn rut_reload_runs_stop_and_replaces_root() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

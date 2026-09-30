@@ -266,6 +266,19 @@ impl ElementOnWheel for ScrollViewElement {
 // ---------------------------------------------------------------------------
 
 impl ScrollViewView {
+    /// Rut-rail constructor (`core::rut_runtime`): axis + child, no
+    /// controller (wheel scrolling works without one).
+    pub(crate) fn new_rut(axis: Option<Val<Axis>>, child: Rc<dyn View>) -> Self {
+        ScrollViewView {
+            axis,
+            padding: None,
+            color: None,
+            controller: None,
+            query_key: None,
+            child,
+        }
+    }
+
     /// Build a `ScrollViewView` from a JS props object. Returns `None` when
     /// the required `child` prop is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
