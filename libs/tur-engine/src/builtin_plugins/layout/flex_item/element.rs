@@ -97,6 +97,12 @@ impl ElementTrace for FlexibleElement {
 // ---------------------------------------------------------------------------
 
 impl FlexibleView {
+    /// Rut-rail constructor (`core::rut_runtime`): authored flex + fit with
+    /// a pre-built child.
+    pub(crate) fn new_rut(flex: Option<Val<f64>>, fit: FlexFit, child: Rc<dyn View>) -> Self {
+        FlexibleView { flex, fit, query_key: None, child }
+    }
+
     /// Build a `FlexibleView` from a JS props object. `default_fit` is the
     /// constructor's fit (`Expanded` → `Tight`, `Flexible` → `Loose`); an
     /// explicit `fit` prop (e.g. `Flexible().fit(FlexFit.Tight)`) overrides

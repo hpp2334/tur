@@ -22,11 +22,14 @@ use crate::core::app::root::RootView;
 use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::Axis;
-use crate::core::view::{SharedViewCx, View, Val};
+use crate::core::view::{SharedViewCx, View, ViewFactory, Val};
+use crate::builtin_plugins::control_flow::ConditionView;
 use crate::builtin_plugins::gesture::PointerInteractView;
-use crate::builtin_plugins::layout::FlexView;
+use crate::builtin_plugins::layout::{ContainerView, FlexView, FlexibleView, PositionedView, StackView};
 use crate::builtin_plugins::text::TextView;
-use rut_core::types::{TypeId, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
+use crate::core::layout::FlexFit;
+use crate::core::render::brush::{Brush, Color};
+use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
 
@@ -49,6 +52,7 @@ pub struct RutView(pub Rc<dyn View>);
 /// A builder under construction — materialized by `tur::el_build`.
 enum ViewBuilder {
     Flex { axis: Axis, children: Vec<Rc<dyn View>> },
+    Stack { children: Vec<Rc<dyn View>> },
 }
 
 impl ViewBuilder {
@@ -62,7 +66,34 @@ impl ViewBuilder {
                 children,
                 query_key: None,
             }),
+            ViewBuilder::Stack { children } => Rc::new(StackView {
+                fit: None,
+                alignment: None,
+                children,
+                query_key: None,
+            }),
         }
+    }
+}
+
+/// `0xRRGGBBAA` packed color → engine `Color`.
+fn color_of(packed: u64) -> Color {
+    Color::rgba(
+        ((packed >> 24) & 0xFF) as u8,
+        ((packed >> 16) & 0xFF) as u8,
+        ((packed >> 8) & 0xFF) as u8,
+        (packed & 0xFF) as u8,
+    )
+}
+
+/// A pre-built branch for `tur::condition` — `create` clones the Rc, so a
+/// branch swap needs NO rut invocation during flush (the factory is pure
+/// Rust; the subtree was authored at `start` time).
+struct PreBuilt(Rc<dyn View>);
+
+impl ViewFactory for PreBuilt {
+    fn create(&self, _boa: &mut Context) -> Option<Rc<dyn View>> {
+        Some(self.0.clone())
     }
 }
 
@@ -82,6 +113,14 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_text", vec![TY_STR], TY_OPAQUE),
         row("el_text_bound", vec![TY_U64], TY_OPAQUE),
         row("el_button", vec![TY_U64, TY_U64, TY_STR, TY_STR], TY_OPAQUE),
+        row("el_stack", vec![], TY_OPAQUE),
+        row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row("el_expand", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row("el_positioned", vec![TY_F64, TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row("condition", vec![TY_U64, TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
+        row("rs_source_bool", vec![TY_BOOL], TY_U64),
+        row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
+        row("rs_get_bool", vec![TY_U64], TY_BOOL),
         row("el_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("el_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("mount", vec![TY_OPAQUE], TY_NIL),
@@ -152,10 +191,12 @@ fn install_tur_pkg(
     rut_vm::pkg_fn!(pkg, "el_child", (Opaque<ViewBuilder>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, child: Opaque<RutView>| {
         let child_view = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, b| {
-            // The only builder kind today; the match keeps future kinds honest.
-            #[allow(irrefutable_let_patterns)]
-            if let ViewBuilder::Flex { children, .. } = b {
-                children.push(child_view);
+            match b {
+                // The only multi-child builders today; the match keeps
+                // future kinds honest.
+                ViewBuilder::Flex { children, .. } | ViewBuilder::Stack { children } => {
+                    children.push(child_view);
+                }
             }
         })?;
         Ok(())
@@ -295,6 +336,94 @@ fn install_tur_pkg(
             })),
         });
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // stack builder — same el_child/el_build flow as flex
+    rut_vm::pkg_fn!(pkg, "el_stack", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+        Ok(Opaque::alloc(vm, ViewBuilder::Stack { children: Vec::new() })?.handle().clone())
+    });
+    // a painted box: color + padding around one child
+    rut_vm::pkg_fn!(pkg, "el_box", (u64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, color: u64, padding: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(ContainerView {
+            width: None,
+            height: None,
+            padding: Some(Val::Static(padding)),
+            color: Some(Val::Static(Brush::SolidColor(color_of(color)))),
+            border_color: None,
+            border_width: None,
+            border_radius: None,
+            border_position: None,
+            clip_behavior: None,
+            shadow_color: None,
+            shadow_blur: None,
+            alignment: None,
+            shadow_offset: None,
+            query_key: None,
+            children: vec![child],
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // a flex item that fills its slot (Expanded)
+    rut_vm::pkg_fn!(pkg, "el_expand", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Tight, child));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // a child anchored inside a Stack
+    rut_vm::pkg_fn!(pkg, "el_positioned", (f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(PositionedView {
+            left: Some(Val::Static(left)),
+            top: Some(Val::Static(top)),
+            right: None,
+            bottom: None,
+            width: None,
+            height: None,
+            child,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // conditional: both branches authored at start time; the swap is pure
+    // engine (the factory clones a pre-built Rc — no rut during flush).
+    rut_vm::pkg_fn!(pkg, "condition", (u64, Opaque<RutView>, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, when: u64, then_v: Opaque<RutView>, else_v: Opaque<RutView>| {
+        let then_v = then_v.with(|v| v.0.clone())?;
+        let else_v = else_v.with(|v| v.0.clone())?;
+        let view = Rc::new(ConditionView::new_rut(
+            Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<bool>::from_id(AtomId(when as u32)),
+            )),
+            Rc::new(PreBuilt(then_v)),
+            Rc::new(PreBuilt(else_v)),
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // bool atoms (the condition rail's driver)
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_source_bool", (bool,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: bool| {
+        let _ = vm;
+        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(v));
+        Ok(s.id().0 as u64)
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_get_bool", (u64,) -> bool, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+        let _ = vm;
+        let readable = crate::core::edgy::reactive::Readable::Source(
+            crate::core::edgy::reactive::Source::<bool>::from_id(AtomId(atom as u32)),
+        );
+        let mut boa = h.boa.borrow_mut();
+        let v = h.store.read_only().read(readable, &mut boa);
+        drop(boa);
+        Ok(v.as_boolean().unwrap_or(false))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_bool", (u64, bool) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: bool| {
+        let _ = vm;
+        h.store
+            .bridge()
+            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(v))
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_bool: {e}")))
     });
 
     hosts.install_host_pkg(ctx, pkg);

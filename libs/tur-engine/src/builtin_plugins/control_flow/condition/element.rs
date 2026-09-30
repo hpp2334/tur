@@ -173,6 +173,22 @@ impl FragmentKind for ConditionFragment {
 // ---------------------------------------------------------------------------
 
 impl ConditionView {
+    /// Rut-rail constructor (`core::rut_runtime`): a bool-atom condition
+    /// with both branches pre-built (the factory clones them — no scripting
+    /// invocation during flush).
+    pub(crate) fn new_rut(
+        condition: Val<bool>,
+        then_child: Rc<dyn ViewFactory>,
+        else_child: Rc<dyn ViewFactory>,
+    ) -> Self {
+        ConditionView {
+            condition,
+            then_child: Some(then_child),
+            else_child: Some(else_child),
+            query_key: None,
+        }
+    }
+
     /// Build a `ConditionView` from a JS props object.
     ///
     /// `child` is the then-branch, `elseChild` is the else-branch (mirroring

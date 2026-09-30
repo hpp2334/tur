@@ -233,6 +233,86 @@ fn rut_counter_app_full_journey() {
     assert_eq!(rut_bound_text(&app), "Count: 1", "one -1 tap");
 }
 
+/// The Phase-3-breadth gate: painted box (color+padding), Expanded fill,
+/// Stack+Positioned, and `condition` with pre-built branches toggled by a
+/// button — all authored in rut.
+const CONDITION_RUT: &str = r#"
+use tur::{ el_box, el_button, el_column, el_expand, el_positioned, el_stack, el_text, el_text_bound, el_build, el_child, condition, mount, rs_get_bool, rs_set_bool, rs_source_bool, rs_source_str };
+
+entry fn start() -> u64 {
+    let on = rs_source_bool(true);
+    let on_label = rs_source_str("ON");
+    let off_label = rs_source_str("OFF");
+    let col = el_column();
+    el_child(col, el_box(0x336699FF, 8.0, el_text("boxed")));
+    el_child(col, el_expand(1.0, el_text("fills the column")));
+    el_child(col, condition(on, el_text_bound(on_label), el_text_bound(off_label)));
+    let overlay = el_stack();
+    el_child(overlay, el_text("base"));
+    el_child(overlay, el_positioned(4.0, 4.0, el_text("floating")));
+    el_child(col, el_build(overlay));
+    el_child(col, el_button(on, on, "ts_toggle", "toggle"));
+    mount(el_build(col));
+    return on;
+}
+
+entry fn ts_toggle(on: u64, _b: u64, _n: f64) {
+    rs_set_bool(on, !(rs_get_bool(on)));
+}
+"#;
+
+#[test]
+fn rut_layout_and_condition_breadth() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(CONDITION_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // Box paints around its padded child: the box is wider than its text
+    // child by exactly 2× the 8.0 padding.
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    assert_eq!(column.children.len(), 5, "all five authored children");
+    let box_node = app.dev_tool_get_element(column.children[0]).unwrap();
+    let boxed_text = app.dev_tool_get_element(box_node.children[0]).unwrap();
+    assert!(
+        box_node.size.0 >= boxed_text.size.0 + 16.0,
+        "box wraps its child with padding: box {:?} text {:?}",
+        box_node.size,
+        boxed_text.size
+    );
+
+    // Expanded fills the column's remaining main axis (tall).
+    let expanded = app.dev_tool_get_element(column.children[1]).unwrap();
+    assert!(expanded.size.1 > 100.0, "expanded child fills: {:?}", expanded.size);
+
+    // Stack + positioned overlay: both children present, the positioned
+    // one offset by (4, 4) from the stack origin.
+    let overlay = app.dev_tool_get_element(column.children[3]).unwrap();
+    assert_eq!(overlay.children.len(), 2, "stack holds base + floating");
+    let floating = app.dev_tool_get_element(overlay.children[1]).unwrap();
+    let dx = floating.absolute.0 - overlay.absolute.0;
+    let dy = floating.absolute.1 - overlay.absolute.1;
+    assert!((dx - 4.0).abs() < 0.5 && (dy - 4.0).abs() < 0.5,
+        "positioned child anchored at +4,+4: dx={dy:+.1} dx={dx:+.1}");
+
+    // The ON branch is the visible bound text.
+    assert_eq!(rut_bound_text(&app), "ON", "the truthy branch renders");
+
+    // Toggle → the OFF branch swaps in (pure engine swap — no rut in flush).
+    let (bx, by) = center_of(&app, column.children[4]);
+    app.click(bx, by);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "OFF", "the branch swapped after the toggle tap");
+    app.click(bx, by);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "ON", "and back");
+}
+
+fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f64) {
+    let n = app.dev_tool_get_element(id).unwrap();
+    (n.absolute.0 + n.size.0 / 2.0, n.absolute.1 + n.size.1 / 2.0)
+}
+
 #[test]
 fn rut_reload_runs_stop_and_replaces_root() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

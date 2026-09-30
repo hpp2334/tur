@@ -8,6 +8,9 @@ pub(in crate::builtin_plugins) mod each;
 pub(in crate::builtin_plugins) mod fragment;
 pub(in crate::builtin_plugins) mod switch;
 
+// The rut rail (`core::rut_runtime`) authors ConditionView branches.
+pub use condition::ConditionView;
+
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
