@@ -106,6 +106,10 @@ object TurNative {
      */
     external fun loadModule(handle: Long, sourceHandle: Long)
 
+    /** Compile + boot a rut module (the zero-JS scripting rail) on the
+     *  instance — the module exports `entry fn start()`. */
+    external fun loadRutModule(handle: Long, source: String)
+
     /**
      * Fire one engine wake — call each Choreographer / Handler tick. Posts
      * the vsync pump onto the native tur-host thread (which fires the vsync

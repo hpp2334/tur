@@ -118,6 +118,19 @@ impl TurWebsiteApp {
         })
     }
 
+    /// Compile + boot `source` as a **rut** module and render. The zero-JS
+    /// load path (the engine's `load_rut_module` RPC) — the module exports
+    /// `entry fn start()`.
+    #[wasm_bindgen(js_name = loadAndRunRutModule)]
+    pub fn load_and_run_rut_module(&self, source: &str) -> js_sys::Promise {
+        let app = self.app.clone();
+        let source = source.to_string();
+        wasm_bindgen_futures::future_to_promise(async move {
+            app.load_and_run_rut_module(&source).await?;
+            Ok(JsValue::undefined())
+        })
+    }
+
     /// Return a host-side dev-tool handle. Methods eval the in-engine
     /// `turDevTool` global, returning JSON strings for the host to parse.
     pub fn dev_tool(&self) -> TurDevTool {

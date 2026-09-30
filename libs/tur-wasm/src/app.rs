@@ -1125,6 +1125,25 @@ impl WasmApp {
         Ok(())
     }
 
+    /// Compile + boot `source` as a **rut** module (the boa-replacement
+    /// scripting rail) and start the frame loop. The module must export
+    /// `entry fn start()` (the module lifecycle contract). Mirrors
+    /// [`Self::load_and_run_module`] on the engine's `load_rut_module`
+    /// RPC — zero JS is parsed or evaluated.
+    pub async fn load_and_run_rut_module(&self, source: &str) -> Result<(), JsValue> {
+        let app = {
+            let guard = self.state.borrow();
+            let Some(s) = guard.as_ref() else {
+                return Err(JsValue::from_str("app not initialized"));
+            };
+            s.app.clone()
+        };
+        app.load_rut_module(source)
+            .await
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
     /// Evaluate a JS expression in the engine realm (the boa world is a
     /// separate JS universe from the page) and resolve to its string result —
     /// the shared dev-tool transport (JSON strings are the simplest

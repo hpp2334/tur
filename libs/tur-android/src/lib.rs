@@ -679,6 +679,37 @@ pub mod ops {
         });
     }
 
+    /// Compile + boot `source` as a **rut** module (the zero-JS scripting
+    /// rail — `core::rut_runtime`) on the given instance, then request a
+    /// paint. The module must export `entry fn start()`.
+    ///
+    /// Posted to the tur-host thread (FIFO behind the instance build); a
+    /// failed load logs to logcat instead of throwing. Rut sources are
+    /// small, so the string crosses JNI directly (no registry hop).
+    pub fn load_rut_module(env: &mut JNIEnv, handle: jlong, source: JString) {
+        catch_void(env, "loadRutModule", move |env| {
+            let source: String = env.get_string(&source)?.into();
+            let route = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let id = route.id;
+            let posted = route.host.post(move |state| {
+                let Some(instance) = state.instance(id) else {
+                    log::warn!(
+                        "loadRutModule: instance {id} not present (build failed or destroyed) — load skipped"
+                    );
+                    return;
+                };
+                match futures::executor::block_on(instance.app.load_rut_module(source)) {
+                    Ok(()) => log::info!("loadRutModule: module booted OK"),
+                    Err(e) => log::error!("loadRutModule: module load failed: {e}"),
+                }
+            });
+            if !posted {
+                return Err("tur-host thread has shut down".into());
+            }
+            Ok(())
+        });
+    }
+
     /// Fire one engine wake (the Kotlin `Choreographer` / `Handler` calls this
     /// when due) — posted onto the tur-host thread, which fires the vsync
     /// event and polls the loop (applying the frame's render batch to the
@@ -1212,6 +1243,16 @@ macro_rules! standard_jni_exports {
             source_handle: $crate::jlong,
         ) {
             $crate::ops::load_module(&mut env, handle, source_handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_loadRutModule(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            source: $crate::JString,
+        ) {
+            $crate::ops::load_rut_module(&mut env, handle, source)
         }
 
         #[unsafe(no_mangle)]
