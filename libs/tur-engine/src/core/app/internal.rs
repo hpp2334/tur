@@ -85,7 +85,7 @@ pub struct TurAppInternal {
     /// between the Rust host and the JS realm. Created in
     /// [`TurAppInternal::new`]; the host-side handle is retrieved via
     /// [`crate::TurApp::event_bus`]. Plugins (specifically
-    /// `install_event_bus`) read this via
+    /// `event_bus_consts`) read this via
     /// [`crate::core::plugin::PluginRegisterContext::event_bus`] to register the
     /// JS-side bridge (`eventBus.on`/`send`) and the
     /// [`EmbedderBusSubsystem`] that drains the queues
@@ -242,7 +242,17 @@ impl TurAppInternal {
         }
     }
 
-    pub fn flush(&self, boa_context: &mut boa_engine::Context) -> Result<FrameOutcome, TurError> {
+    /// Run one flush. `boa` is the instance's JS realm — `None` on a
+    /// realm-free instance (a rut-only build never allocates one). Every
+    /// realm use site below is a match arm: JS-mutation invocation, JS
+    /// lifecycle hooks, JS event handlers, and JS-derived materialization
+    /// no-op (with a `tracing::warn!` where JS state could plausibly exist)
+    /// when the realm is absent; the Rust paths (subsystems, reactive flush,
+    /// layout, paint, Rust-closure mutations, `watch`) run realm-free.
+    pub fn flush(
+        &self,
+        boa: &mut Option<&mut boa_engine::Context>,
+    ) -> Result<FrameOutcome, TurError> {
         // Enter the flush window: mark in-flush (so out-of-flush self-wakes
         // raised by `request_paint` / `set_dirty` during this flush don't
         // emit redundant `Wake`s) and re-arm the wake coalescing gate for
@@ -285,7 +295,11 @@ impl TurAppInternal {
             // flush iteration. Completions settle JsPromises (e.g.
             // clipboard read resolve) under `&mut Context`, enqueuing
             // PromiseJobs that boa's microtask drain (below) picks up.
-            self.completion_queue.drain(boa_context);
+            // Realm-free instances cannot have pending completions (only
+            // JS bridges push them) — skip when the realm is absent.
+            if let Some(boa) = boa.as_deref_mut() {
+                self.completion_queue.drain(boa);
+            }
 
             // Poll engine-internal async tasks (`sleep`, `launch`) pushed
             // to the flush-driven queue. Done BEFORE the rest of the
@@ -296,7 +310,7 @@ impl TurAppInternal {
             // drain those completions. See `async_::flush_tasks`.
             let tasks_completed = self.flush_task_queue.poll_all();
 
-            let handled_events = self.flush_app_events(boa_context, &signals);
+            let handled_events = self.flush_app_events(boa.as_deref_mut(), &signals);
 
             // Pre-layout subsystem flush — runs every fixed-point iteration,
             // in registration order, BEFORE the layout step. Each subsystem
@@ -321,7 +335,7 @@ impl TurAppInternal {
                 let mut ctx_guard = self.app_context.borrow_mut();
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
-                    boa: boa_context,
+                    boa: boa.as_deref_mut(),
                     element_tree: ctx.element_tree.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
@@ -350,7 +364,7 @@ impl TurAppInternal {
             // `do_update(dirties)` to the mounted root. This may mutate
             // the ElementTree, which sets `dirty`/`need_paint` for the next
             // layout pass.
-            let reactive_changed = self.flush_reactive(boa_context, frame_id);
+            let reactive_changed = self.flush_reactive(boa.as_deref_mut(), frame_id);
 
             // LazyList remount now happens *inside* `perform_layout` (it uses
             // the real viewport from constraints), so there is no separate
@@ -364,7 +378,7 @@ impl TurAppInternal {
                 let layout_start = crate::core::app::frame_stats::clock_now_us(&*clock);
                 self.app_context
                     .borrow_mut()
-                    .layout(self.js_context.dirty.clone(), boa_context);
+                    .layout(self.js_context.dirty.clone(), boa.as_deref_mut());
                 layout_us += crate::core::app::frame_stats::clock_now_us(&*clock) - layout_start;
                 dirty_layout_nodes += self.js_context.element_tree.take_layout_count();
             }
@@ -381,7 +395,7 @@ impl TurAppInternal {
                 let mut ctx_guard = self.app_context.borrow_mut();
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
-                    boa: boa_context,
+                    boa: boa.as_deref_mut(),
                     element_tree: ctx.element_tree.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
@@ -407,18 +421,25 @@ impl TurAppInternal {
             // Lifecycle hooks fire after layout: on_mounted for inserted
             // elements, before_destroy for removed elements. Pushed mutations
             // are drained right after.
-            self.run_lifecycle_hooks(boa_context);
+            self.run_lifecycle_hooks(boa.as_deref_mut());
             {
-                let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
-                cx.flush_focus_notifications(boa_context);
+                let mut cx = crate::core::view::SharedViewCx::new(
+                    self.js_context.clone(),
+                    boa.as_deref_mut(),
+                );
+                cx.flush_focus_notifications();
             }
-            let handled_mutations = self.flush_pending_mutations(boa_context);
+            let handled_mutations = self.flush_pending_mutations(boa.as_deref_mut());
             // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
             // PromiseJobs fire `.then` callbacks which may call bridge fns
             // that spawn more Rust futures via `worker_ctx.spawn_local`.
             // Those futures' completions are drained at the top of the next
-            // iteration, keeping the fixed-point loop alive.
-            let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
+            // iteration, keeping the fixed-point loop alive. Realm-free
+            // instances have no promise jobs — skip.
+            let jobs_run = match boa.as_deref_mut() {
+                Some(boa) => self.executor.drain(boa).unwrap_or(0),
+                None => 0,
+            };
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
             // Quiescence: no events, no mutations, no dirty state, no
             // completions drained this iteration, no microtasks ran, and no
@@ -436,12 +457,14 @@ impl TurAppInternal {
 
         // End of turn: report promise rejections that still have no handler
         // (a `.catch` / `await` attached within this flush retracted them
-        // from the pending set). See `runtime_error`.
-        if let Some(reporter) = boa_context
-            .get_data::<crate::core::app::runtime_error::RuntimeErrorReporter>()
-            .cloned()
+        // from the pending set). See `runtime_error`. Realm-free instances
+        // have no promises — skip.
+        if let Some(boa) = boa.as_deref_mut()
+            && let Some(reporter) = boa
+                .get_data::<crate::core::app::runtime_error::RuntimeErrorReporter>()
+                .cloned()
         {
-            reporter.report_pending_rejections(boa_context);
+            reporter.report_pending_rejections(boa);
         }
 
         if needs_paint {
@@ -493,7 +516,7 @@ impl TurAppInternal {
     /// dirtied, at most once per `frame_id`) are pushed onto the mutation
     /// queue, so `flush_pending_mutations` invokes them later this iteration
     /// — same rail, same frame, against the mounted store.
-    fn flush_reactive(&self, boa_context: &mut boa_engine::Context, frame_id: u64) -> bool {
+    fn flush_reactive(&self, boa: Option<&mut boa_engine::Context>, frame_id: u64) -> bool {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {
@@ -542,7 +565,7 @@ impl TurAppInternal {
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
         if !dirty_frag_ids.is_empty() {
-            self.rebuild_fragments(boa_context, &dirty_frag_ids);
+            self.rebuild_fragments(boa, &dirty_frag_ids);
         }
 
         !dirty_subs.is_empty()
@@ -551,9 +574,11 @@ impl TurAppInternal {
     /// Fire element lifecycle hooks: `on_mounted` for newly-inserted elements
     /// and `before_destroy` for elements removed since the last pass.
     /// All hooks run after layout (so the mutation queue is drained by the
-    /// subsequent `flush_pending_mutations`).
-    fn run_lifecycle_hooks(&self, boa_context: &mut boa_engine::Context) {
-        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+    /// subsequent `flush_pending_mutations`). Realm-free: hooks are Rust
+    /// closures / mutation enqueues (the JS-authored hook callbacks cannot
+    /// exist without a realm); the realm rides the SharedViewCx.
+    fn run_lifecycle_hooks(&self, boa: Option<&mut boa_engine::Context>) {
+        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone(), boa);
 
         // on_mounted — freshly-inserted elements.
         let mounted_ids = self
@@ -567,7 +592,7 @@ impl TurAppInternal {
                 tree.get_element_mut(id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
-                elem.run_on_mounted(&mut cx, boa_context);
+                elem.run_on_mounted(&mut cx);
             }
             if let Some(elem) = element {
                 let mut tree = self.js_context.element_tree.borrow_mut();
@@ -586,7 +611,7 @@ impl TurAppInternal {
             .borrow_mut()
             .take_pending_destroy();
         for mut elem in destroyed {
-            elem.run_before_destroy(&mut cx, boa_context);
+            elem.run_before_destroy(&mut cx);
         }
     }
 
@@ -596,10 +621,10 @@ impl TurAppInternal {
     /// resolves the current value and swaps the branch/items if changed.
     fn rebuild_fragments(
         &self,
-        boa_context: &mut boa_engine::Context,
+        boa: Option<&mut boa_engine::Context>,
         dirty_frag_ids: &[FragmentNodeId],
     ) {
-        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone(), boa);
 
         for fid in dirty_frag_ids {
             let mut kind = {
@@ -617,7 +642,7 @@ impl TurAppInternal {
                     .unwrap_or((Vec::new(), (*fid).into()))
             };
 
-            let new_children = k.perform_update(&mut cx, boa_context, *fid);
+            let new_children = k.perform_update(&mut cx, *fid);
 
             if let Some(new) = new_children {
                 // frag.children now has old + new; replace with just new.
@@ -646,7 +671,7 @@ impl TurAppInternal {
 
     fn flush_app_events(
         &self,
-        boa_context: &mut boa_engine::Context,
+        mut boa: Option<&mut boa_engine::Context>,
         signals: &crate::core::subsystem::FlushSignals<'_>,
     ) -> bool {
         let (platform_events, app_events) = {
@@ -664,7 +689,7 @@ impl TurAppInternal {
         let mut subsystems = self.subsystems.borrow_mut();
         for event in &platform_events {
             self.app_context.borrow_mut().dispatch_platform_event(
-                boa_context,
+                boa.as_deref_mut(),
                 event,
                 &need_paint,
                 &mut subsystems,
@@ -674,7 +699,7 @@ impl TurAppInternal {
 
         for event in &app_events {
             self.app_context.borrow_mut().dispatch_app_event(
-                boa_context,
+                boa.as_deref_mut(),
                 event,
                 &need_paint,
                 &mut subsystems,
@@ -699,19 +724,37 @@ impl TurAppInternal {
     /// only for `Js`-variant closures, so here we pass only the user args.
     /// Invocations run against the **mounted** store (the tree's store), so
     /// atoms touched by the mutation's closure materialize there.
-    fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
+    /// Drain the pending-mutation queue and invoke each mutation via the
+    /// reactive store. The per-store `{get, set}` JsObject is built inside
+    /// [`crate::core::edgy::reactive::SharedReactive::invoke_mutation_by_id`]
+    /// only for `Js`-variant closures, so here we pass only the user args.
+    /// Invocations run against the **mounted** store (the tree's store), so
+    /// atoms touched by the mutation's closure materialize there.
+    ///
+    /// Realm-free instances: only `MutateRust` closures can exist there (the
+    /// rut rail's element callbacks — realm-free by design), so invocation
+    /// proceeds with **empty args** (the event payloads are JS-shaped; the
+    /// realm-free callbacks read none — the rut click intent carries its
+    /// payload in closure captures). A `Js` closure reaching a realm-free
+    /// flush is an anomaly; `invoke_mutation_by_id` warns and skips it.
+    fn flush_pending_mutations(&self, mut boa: Option<&mut boa_engine::Context>) -> bool {
         let invs = self.js_context.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {
             return false;
         }
         let mounted = self.js_context.element_tree.store();
         for inv in invs {
-            let args = inv.args.to_js_args(boa_context);
+            let args = match boa.as_deref_mut() {
+                Some(boa) => inv.args.to_js_args(boa),
+                None => Vec::new(),
+            };
             // A failed invocation (e.g. a watch loop rejected a write, or user
             // code threw) must not stall the flush — log and keep draining.
-            if let Err(e) = mounted.invoke_mutation(inv.mutation, &args, boa_context) {
+            if let Err(e) = mounted.invoke_mutation(inv.mutation, &args, boa.as_deref_mut()) {
                 tracing::error!("mutation invocation failed: {e}");
-                crate::core::app::runtime_error::report(boa_context, &e);
+                if let Some(boa) = boa.as_deref_mut() {
+                    crate::core::app::runtime_error::report(boa, &e);
+                }
             }
         }
         true
@@ -722,8 +765,8 @@ impl TurAppInternal {
     /// `destroy_subtree`) and drain the mutations they queued — invoked
     /// against the still-bound mounted store. The caller drops the tree
     /// right after: it must not outlive its pending lifecycle work.
-    pub(crate) fn drain_teardown_lifecycle(&self, boa_context: &mut boa_engine::Context) {
-        self.run_lifecycle_hooks(boa_context);
-        self.flush_pending_mutations(boa_context);
+    pub(crate) fn drain_teardown_lifecycle(&self, mut boa: Option<&mut boa_engine::Context>) {
+        self.run_lifecycle_hooks(boa.as_deref_mut());
+        self.flush_pending_mutations(boa);
     }
 }

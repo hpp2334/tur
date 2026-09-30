@@ -121,14 +121,14 @@ pub struct EditableTextView {
 }
 
 impl View for EditableTextView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         let mut spec = self.clone();
 
         if spec.controller.is_none()
             && let Some(readable) = spec.controller_atom
         {
-            let js_val = read_atom_raw(cx, readable, boa);
+            let js_val = read_atom_raw(cx, readable);
             if let Some(obj) = js_val.as_object()
                 && obj.downcast_ref::<TextEditingController>().is_some()
             {
@@ -137,11 +137,24 @@ impl View for EditableTextView {
         }
 
         if spec.controller.is_none() {
-            let data = TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
-                .expect("failed to construct default TextEditingController");
-            let obj = TextEditingController::from_data(data, boa)
-                .expect("failed to wrap default TextEditingController");
-            spec.controller = Some(obj.upcast().clone());
+            // A default controller object needs the realm. An Input without
+            // a controller cannot exist on a realm-free instance (the view
+            // arrives from JS), so degrade with a warning and skip.
+            match cx.realm() {
+                Some(boa) => {
+                    let data =
+                        TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
+                            .expect("failed to construct default TextEditingController");
+                    let obj = TextEditingController::from_data(data, boa)
+                        .expect("failed to wrap default TextEditingController");
+                    spec.controller = Some(obj.upcast().clone());
+                }
+                None => {
+                    tracing::warn!(
+                        "EditableText::build: no controller + no JS realm — element left controller-less"
+                    );
+                }
+            }
         }
 
         // Attach the undo recorder to the controller so every text mutation
@@ -171,7 +184,6 @@ impl View for EditableTextView {
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
             .with_focusable::<EditableTextElement>(),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
@@ -882,7 +894,7 @@ impl IntoJsArgs for ContextMenuEvent {
 }
 
 impl Lifecycle for EditableTextElement {
-    fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
+    fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx) {
         if focused {
             // Spawn the blink loop on the worker. Each half-period it sleeps,
             // then calls `request_frame`, which sets the paint flag and —

@@ -41,7 +41,7 @@ pub struct InputView {
 }
 
 impl View for InputView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let editable = Rc::new(EditableTextView {
             controller: self.controller.clone(),
             controller_atom: self.controller_atom,
@@ -66,7 +66,7 @@ impl View for InputView {
             query_key: self.query_key.clone(),
             ..Default::default()
         };
-        container_spec.build(cx, boa, parent)
+        container_spec.build(cx, parent)
     }
 }
 

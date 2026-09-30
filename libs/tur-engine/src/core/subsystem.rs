@@ -184,10 +184,13 @@ pub struct FlushSignals<'a> {
 /// sampling): it is stable across the fixed-point iterations of one
 /// `TurAppInternal::flush` call and differs across `flush` calls.
 pub struct SubsystemFlushContext<'a> {
-    /// The engine's boa `Context`. Borrowed for the duration of one subsystem
-    /// tick or event dispatch; the borrow is released before the next
-    /// subsystem (or the rest of the flush loop) runs.
-    pub boa: &'a mut Context,
+    /// The engine's boa `Context`, when the instance has a JS realm. A
+    /// rut-only instance (no JS module ever loaded) never allocates a realm —
+    /// this is `None` for its whole life, and every Rust subsystem path runs
+    /// realm-free. Borrowed for the duration of one subsystem tick or event
+    /// dispatch; the borrow is released before the next subsystem (or the
+    /// rest of the flush loop) runs.
+    pub boa: Option<&'a mut Context>,
     /// Element tree (shared handle). Borrow on demand via `.borrow()` /
     /// `.borrow_mut()`. The tree is instance-owned — rootless before the
     /// first `mount` (empty layout/paint), root cleared at module teardown.

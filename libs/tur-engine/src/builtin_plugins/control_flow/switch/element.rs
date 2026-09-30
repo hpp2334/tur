@@ -91,11 +91,11 @@ impl Mounted {
 }
 
 impl View for SwitchView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
-        let value = read_val(cx, &self.value, boa);
+        let value = read_val(cx, &self.value);
         let mounted = Mounted::resolve(self, value);
 
         let kind = SwitchFragment {
@@ -124,7 +124,7 @@ impl View for SwitchView {
             view: self.clone(),
             mounted,
         };
-        kind.build_branch(cx, boa, frag_id);
+        kind.build_branch(cx, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -141,16 +141,11 @@ pub struct SwitchFragment {
 }
 
 impl SwitchFragment {
-    fn build_branch(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        fragment_id: FragmentNodeId,
-    ) -> Vec<NodeId> {
+    fn build_branch(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
         if let Some(factory) = self.mounted.factory(&self.view)
-            && let Some(view) = factory.create(boa)
+            && let Some(view) = factory.create(cx.realm())
         {
-            return vec![view.build(cx, boa, NodeId::from(fragment_id))];
+            return vec![view.build(cx, NodeId::from(fragment_id))];
         }
         Vec::new()
     }
@@ -185,16 +180,15 @@ impl FragmentKind for SwitchFragment {
     fn perform_update(
         &mut self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        let new_value = read_val(cx, &self.view.value, boa);
+        let new_value = read_val(cx, &self.view.value);
         let new_mounted = Mounted::resolve(&self.view, new_value);
         if new_mounted == self.mounted {
             return None;
         }
         self.mounted = new_mounted;
-        Some(self.build_branch(cx, boa, fragment_id))
+        Some(self.build_branch(cx, fragment_id))
     }
 }
 

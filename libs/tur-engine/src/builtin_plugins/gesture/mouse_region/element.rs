@@ -32,11 +32,11 @@ pub struct MouseRegionView {
 }
 
 impl View for MouseRegionView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let behavior = self
             .behavior
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or_default();
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -48,10 +48,9 @@ impl View for MouseRegionView {
                 cursor: None,
             })
             .with_callbacks(),
-            boa,
         );
         if let Some(child) = &self.child {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()

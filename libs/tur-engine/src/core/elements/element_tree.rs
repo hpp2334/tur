@@ -483,7 +483,7 @@ impl NodeTreeData {
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
         >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
-        boa: &mut boa_engine::Context,
+        boa: Option<&mut boa_engine::Context>,
     ) -> Size {
         let root_id = match self.root_id {
             Some(id) => id,
@@ -1325,7 +1325,7 @@ impl NodeTree {
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
         >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
-        boa: &mut boa_engine::Context,
+        boa: Option<&mut boa_engine::Context>,
     ) -> Size {
         self.data.borrow_mut().compute_layout(
             constraints,

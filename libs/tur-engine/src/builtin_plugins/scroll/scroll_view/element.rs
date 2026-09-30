@@ -37,13 +37,13 @@ pub struct ScrollViewView {
 }
 
 impl View for ScrollViewView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         // Resolve axis eagerly — the wheel handler and controller-metric
         // updates need it at event time where no store/Context is available.
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(Axis::Vertical);
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -56,7 +56,6 @@ impl View for ScrollViewView {
                 painting: ScrollViewPainting::default(),
             })
             .with_callbacks(),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
@@ -71,7 +70,7 @@ impl View for ScrollViewView {
             ctrl.mutation_queue = Some(cx.mutation_queue());
             ctrl.dirty_flag = Some(cx.dirty());
         }
-        let _child_id = self.child.build(cx, boa, id.into());
+        let _child_id = self.child.build(cx, id.into());
         cx.link_child(parent, id.into());
         id.into()
     }

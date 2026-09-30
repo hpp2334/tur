@@ -40,7 +40,7 @@ fn reentrant_module_load_via_host_fn() {
             // Builder produces a fresh NativeFunction per instance (Phase 7:
             // `NativeFunction` is `!Send`, so we hold a Send+Sync builder
             // closure instead of a pre-built value).
-            builder: Box::new(|_ctx| NativeFunction::from_fn_ptr(test_load_module)),
+            builder: std::sync::Arc::new(|_ctx| NativeFunction::from_fn_ptr(test_load_module)),
             length: 1,
         }],
     };

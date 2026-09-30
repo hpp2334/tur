@@ -34,7 +34,6 @@ impl View for GridView {
     fn build(
         &self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         parent: crate::core::element::NodeId,
     ) -> crate::core::element::NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -47,13 +46,12 @@ impl View for GridView {
                 computed_size: None,
                 overflow: 0.0,
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()

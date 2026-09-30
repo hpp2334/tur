@@ -110,10 +110,12 @@ impl TurAppContext {
     /// Dispatch a platform (input) event to every registered subsystem via
     /// [`Subsystem::handle_platform_event`]. Mouse `PointerMove`s also
     /// update the frame_env's tracked pointer position and request a paint, since
-    /// the cursor is resolved during paint (not in a subsystem).
+    /// the cursor is resolved during paint (not in a subsystem). The realm
+    /// rides through (`None` on realm-free instances — Rust subsystem paths
+    /// are realm-free).
     pub fn dispatch_platform_event(
         &mut self,
-        boa: &mut boa_engine::Context,
+        boa: Option<&mut boa_engine::Context>,
         event: &PlatformEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
@@ -151,10 +153,11 @@ impl TurAppContext {
     }
 
     /// Dispatch an engine-internal event to every registered subsystem via
-    /// [`Subsystem::handle_app_event`].
+    /// [`Subsystem::handle_app_event`]. The realm rides through (`None` on
+    /// realm-free instances).
     pub fn dispatch_app_event(
         &mut self,
-        boa: &mut boa_engine::Context,
+        boa: Option<&mut boa_engine::Context>,
         event: &AppEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
@@ -181,7 +184,7 @@ impl TurAppContext {
         }
     }
 
-    pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: &mut boa_engine::Context) {
+    pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: Option<&mut boa_engine::Context>) {
         let (width, height) = self.screen.logical_size;
         let constraints = Constraints {
             min_width: width,

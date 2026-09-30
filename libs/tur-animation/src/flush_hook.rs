@@ -78,7 +78,7 @@ impl Subsystem for AnimationSubsystem {
             self.last_frame = id;
             let now_ms = self.clock.now().millis_since_epoch();
             let mut mgr = self.manager.borrow_mut();
-            mgr.tick_controllers(now_ms, cx.boa);
+            mgr.tick_controllers(now_ms, cx.boa.as_deref_mut());
             // Ticking may have enqueued `onTick`/`onEnd` mutations + updated
             // controller values; mark dirty so this frame lays out the new
             // state. (The enqueued mutations also keep the loop iterating.)

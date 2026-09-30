@@ -92,7 +92,7 @@ fn color_of(packed: u64) -> Color {
 struct PreBuilt(Rc<dyn View>);
 
 impl ViewFactory for PreBuilt {
-    fn create(&self, _boa: &mut Context) -> Option<Rc<dyn View>> {
+    fn create(&self, _realm: Option<&mut Context>) -> Option<Rc<dyn View>> {
         Some(self.0.clone())
     }
 }
@@ -604,9 +604,11 @@ impl RutRuntime {
     }
 
     /// Apply the root stashed by `tur::mount` into the instance tree —
-    /// the engine-side twin of the JS `mount(view)` bridge. Runs with the
-    /// caller's boa borrow (never inside the VM).
-    pub fn apply_root(&mut self, boa: &mut Context) -> Result<(), String> {
+    /// the engine-side twin of the JS `mount(view)` bridge. **Realm-free**:
+    /// rut rows materialize pure-Rust `Rc<dyn View>` values and the tree
+    /// build path is realm-optional, so a rut-only instance never touches
+    /// the JS realm here.
+    pub fn apply_root(&mut self) -> Result<(), String> {
         let Some(user_view) = self.handles.pending_root.borrow_mut().take() else {
             return Ok(());
         };
@@ -618,9 +620,9 @@ impl RutRuntime {
         }
 
         let root_view = RootView { child: user_view };
-        let mut cx = SharedViewCx::new(self.js_ctx.clone());
+        let mut cx = SharedViewCx::new(self.js_ctx.clone(), None);
         let temp_parent = cx.alloc_node();
-        let root_id = root_view.build(&mut cx, boa, temp_parent);
+        let root_id = root_view.build(&mut cx, temp_parent);
         tree.borrow_mut()
             .set_root_element(crate::core::element::ElementNodeId::new(root_id.as_u64()));
         Ok(())

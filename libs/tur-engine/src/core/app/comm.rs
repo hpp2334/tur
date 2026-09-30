@@ -153,6 +153,12 @@ pub enum WorkerMsg {
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
+    /// Test-only probe: whether the instance's JS realm exists. The
+    /// realm-existence observable for the realm-optional engine — a
+    /// rut-only instance (no JS module ever loaded) stays `false`.
+    /// Surfaced via `TurApp::realm_allocated` (a plain bool; no boa type
+    /// crosses the embedder boundary).
+    RealmAllocated { reply: ReplySender<bool> },
     /// Host-side render-commit timings, pushed back per painted frame when
     /// frame timing is enabled (`turDevTool.setHostFrameTiming(true)`).
     /// Fire-and-forget (no wake — a busy worker delivers it within the
@@ -349,6 +355,7 @@ impl fmt::Debug for WorkerMsg {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
             }
             Self::Destroy { .. } => write!(f, "Destroy"),
+            Self::RealmAllocated { .. } => write!(f, "RealmAllocated"),
             Self::FrameTiming {
                 frame_id,
                 apply_us,

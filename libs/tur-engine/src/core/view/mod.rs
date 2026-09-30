@@ -25,10 +25,13 @@ pub use val::{Val, val_from_js};
 // `build` takes `&mut dyn ViewCx` so the trait stays object-safe (`dyn View`
 // is used by `ViewHandle` / builders) while still accepting either a `SharedViewCx`
 // (normal builds) or a layout-backed `ViewCx` impl (build-during-layout).
+//
+// The JS realm rides the context (`ViewCx::realm`) — a rut-only instance
+// never allocates one, and every Rust-authored view builds realm-free.
 // ---------------------------------------------------------------------------
 
 pub trait View: 'static {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId;
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,10 +40,14 @@ pub trait View: 'static {
 // Used for branches whose concrete subtree is only determined at runtime
 // (Condition/Switch branches). The factory is retained and `create()` is
 // invoked when the branch is selected, and re-invoked on a branch swap.
+//
+// The realm rides the call (folded out of the flush's `Option<&mut Context>`):
+// Rust factories (the rut rail's pre-built branches) ignore it; JS thunks
+// need it.
 // ---------------------------------------------------------------------------
 
 pub trait ViewFactory: 'static {
-    fn create(&self, boa: &mut Context) -> Option<Rc<dyn View>>;
+    fn create(&self, realm: Option<&mut Context>) -> Option<Rc<dyn View>>;
 }
 
 /// Invoke a JS thunk `() => Element` and resolve the returned View.
@@ -68,9 +75,13 @@ fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
 pub struct JsView(pub JsFunction);
 
 impl View for JsView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
+        let Some(boa) = cx.realm() else {
+            tracing::warn!("JsView::build skipped: no JS realm");
+            return parent;
+        };
         match invoke_thunk(&self.0, boa) {
-            Some(inner) => inner.build(cx, boa, parent),
+            Some(inner) => inner.build(cx, parent),
             None => parent,
         }
     }
@@ -85,8 +96,8 @@ impl View for JsView {
 pub struct JsViewFactory(pub JsFunction);
 
 impl ViewFactory for JsViewFactory {
-    fn create(&self, boa: &mut Context) -> Option<Rc<dyn View>> {
-        invoke_thunk(&self.0, boa)
+    fn create(&self, realm: Option<&mut Context>) -> Option<Rc<dyn View>> {
+        invoke_thunk(&self.0, realm?)
     }
 }
 
@@ -131,7 +142,7 @@ pub fn extract_view(value: &JsValue) -> Option<Rc<dyn View>> {
 // ---------------------------------------------------------------------------
 
 pub trait Lifecycle {
-    fn on_mounted(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
-    fn on_focus_changed(&mut self, _focused: bool, _cx: &mut SharedViewCx, _boa: &mut Context) {}
-    fn before_destroy(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
+    fn on_mounted(&mut self, _cx: &mut SharedViewCx) {}
+    fn on_focus_changed(&mut self, _focused: bool, _cx: &mut SharedViewCx) {}
+    fn before_destroy(&mut self, _cx: &mut SharedViewCx) {}
 }

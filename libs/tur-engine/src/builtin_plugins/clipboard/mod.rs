@@ -93,13 +93,17 @@ impl Plugin for TurClipboardPlugin {
         ctx.register_subsystem(Box::new(handlers::ClipboardPlatformSubsystem));
         ctx.register_subsystem(Box::new(handlers::ClipboardWriteSubsystem));
 
-        // Build the `clipboard` object (with `readText`/`writeText` methods)
-        // and register it as the module's only export.
-        let ctx_value = ctx.js_ctx_value.clone();
-        let clipboard_obj = bridge::build_clipboard_object(ctx.boa_mut(), ctx_value);
-        let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
-
-        ctx.register_module("tur:clipboard", bridge::fns(), consts);
+        // Realm-bound half — deferred to realm construction on a realm-free
+        // build: the `clipboard` object (with `readText`/`writeText`
+        // methods) is built against the realm and registered as the
+        // `tur:clipboard` module's only export.
+        ctx.defer(move |cx| {
+            let ctx_value = cx.js_ctx_value();
+            let clipboard_obj = bridge::build_clipboard_object(cx.boa_mut(), ctx_value);
+            let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
+            cx.register_module("tur:clipboard", bridge::fns(), consts);
+            Ok(())
+        });
 
         Ok(())
     }

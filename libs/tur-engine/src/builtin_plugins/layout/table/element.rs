@@ -99,19 +99,13 @@ pub(super) fn array_len(v: &JsValue, boa: &mut Context) -> usize {
         .unwrap_or(0) as usize
 }
 
-/// Invoke the row `build(item, index)` closure and materialize its cell
-/// specs under `parent`. Returns `(column, node)` pairs — null placeholders
-/// skip their column, and entries beyond the declared column count are
-/// ignored. A throwing builder yields no cells for that row — layout
-/// continues (same tolerance as `LazyList`/`Each`).
-pub(super) fn build_row_cells(
-    view: &TableView,
-    item: &JsValue,
-    index: u64,
-    boa: &mut Context,
-    cx: &mut dyn ViewCx,
-    parent: NodeId,
-) -> Vec<(usize, NodeId)> {
+/// One row's resolved cell specs — `None` placeholders skip their column.
+pub(super) type RowSpecs = Vec<Option<Rc<dyn View>>>;
+
+/// Invoke the row `build(item, index)` closure and resolve its cell specs
+/// (the JS phase — no tree access). Returns the raw spec list; null
+/// placeholders stay `None`.
+fn resolve_row_specs(view: &TableView, item: &JsValue, index: u64, boa: &mut Context) -> RowSpecs {
     let Ok(result) = view.build.call(
         &JsValue::undefined(),
         &[item.clone(), JsValue::from(index as f64)],
@@ -120,21 +114,35 @@ pub(super) fn build_row_cells(
         return Vec::new();
     };
     specs_from_array(&result, boa)
+}
+
+/// Build resolved row specs into the tree under `parent` (the realm-free
+/// phase). Returns `(column, node)` pairs — null placeholders skip their
+/// column, and entries beyond the declared column count are ignored.
+fn build_row_cells(
+    view: &TableView,
+    specs: RowSpecs,
+    cx: &mut dyn ViewCx,
+    parent: NodeId,
+) -> Vec<(usize, NodeId)> {
+    specs
         .into_iter()
         .zip(0..)
         .filter_map(|(spec, col)| {
             let spec = spec?;
-            (col < view.columns.len()).then_some((col, spec.build(cx, boa, parent)))
+            (col < view.columns.len()).then_some((col, spec.build(cx, parent)))
         })
         .collect()
 }
 
 /// Read the current `rows` array from the store and materialize every row's
-/// cells under `parent`. Returns the per-row cell ids in array order.
+/// cells under `parent`. Returns the per-row cell ids in array order. Two
+/// phases per row: resolve specs through the JS `build` closure (realm,
+/// taken from the build context), then build the resolved views into the
+/// tree (realm-free).
 pub(super) fn build_all_rows(
     view: &TableView,
     raw: &JsValue,
-    boa: &mut Context,
     cx: &mut dyn ViewCx,
     parent: NodeId,
 ) -> Vec<Vec<(usize, NodeId)>> {
@@ -144,49 +152,90 @@ pub(super) fn build_all_rows(
     else {
         return Vec::new();
     };
-    let len = arr.length(boa).unwrap_or(0);
+    // JS phase: resolve every row's cell specs while the realm is borrowed.
+    let resolved: Vec<Vec<Option<Rc<dyn View>>>> = match cx.realm() {
+        Some(boa) => {
+            let len = arr.length(boa).unwrap_or(0);
+            (0..len as i64)
+                .map(|i| match arr.at(i, boa) {
+                    Ok(item) => resolve_row_specs(view, &item, i as u64, boa),
+                    Err(_) => Vec::new(),
+                })
+                .collect()
+        }
+        None => {
+            tracing::warn!("Table build_all_rows skipped: no JS realm (JS row builder)");
+            Vec::new()
+        }
+    };
 
-    let mut rows = Vec::with_capacity(len as usize);
-    for i in 0..len as i64 {
-        let Ok(item) = arr.at(i, boa) else {
-            rows.push(Vec::new());
-            continue;
-        };
-        rows.push(build_row_cells(view, &item, i as u64, boa, cx, parent));
-    }
-    rows
+    // Realm-free phase: build the resolved specs into the tree.
+    resolved
+        .into_iter()
+        .map(|specs| build_row_cells(view, specs, cx, parent))
+        .collect()
 }
 
 impl View for TableView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
-        // Header cells first — they precede the body cells in child order.
-        // `buildHeader` runs exactly once, here; reactive header *content*
-        // flows through `Val` props inside the returned cells. Built before
-        // the element node exists, so their self-links to `id` no-op — they
-        // are linked explicitly after `insert_node` (LazyList's order).
-        let header_cells: Vec<(usize, NodeId)> = self
-            .build_header
-            .as_ref()
-            .and_then(|f| f.call(&JsValue::undefined(), &[], boa).ok())
-            .map(|result| specs_from_array(&result, boa))
-            .map(|specs| {
-                specs
-                    .into_iter()
-                    .zip(0..)
-                    .filter_map(|(spec, col)| {
-                        let spec = spec?;
-                        (col < self.columns.len()).then_some((col, spec.build(cx, boa, id.into())))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Current rows value (realm-free read — fresh source slots serve
+        // without the realm).
+        let raw = read_atom_raw(cx, self.rows);
 
-        // Body rows — built eagerly from the current array value.
-        let raw = read_atom_raw(cx, self.rows, boa);
-        let rows_len = array_len(&raw, boa);
-        let row_cells = build_all_rows(self, &raw, boa, cx, id.into());
+        // The header/row builders are JS functions — they can only exist on
+        // an instance with a realm (the props arrive from JS). Realm-scoped
+        // phase next (resolve specs through the JS builders), then the
+        // realm-free tree-build phase below.
+        let Some(boa) = cx.realm() else {
+            tracing::warn!("Table::build skipped: no JS realm (JS row builders)");
+            return id.into();
+        };
+
+        // Realm-scoped phase: header specs + body-row specs, resolved
+        // eagerly from the current array value while the realm is borrowed.
+        // `buildHeader` runs exactly once, here; reactive header *content*
+        // flows through `Val` props inside the returned cells.
+        let (header_specs, rows_len, resolved_rows): (RowSpecs, usize, Vec<RowSpecs>) = {
+            let header_specs: RowSpecs = self
+                .build_header
+                .as_ref()
+                .and_then(|f| f.call(&JsValue::undefined(), &[], boa).ok())
+                .map(|result| specs_from_array(&result, boa))
+                .unwrap_or_default();
+            let rows_len = array_len(&raw, boa);
+            let resolved_rows: Vec<RowSpecs> = match raw
+                .as_object()
+                .and_then(|o| JsArray::from_object(o.clone()).ok())
+            {
+                Some(arr) => {
+                    let len = arr.length(boa).unwrap_or(0);
+                    (0..len as i64)
+                        .map(|i| match arr.at(i, boa) {
+                            Ok(item) => resolve_row_specs(self, &item, i as u64, boa),
+                            Err(_) => Vec::new(),
+                        })
+                        .collect()
+                }
+                None => Vec::new(),
+            };
+            (header_specs, rows_len, resolved_rows)
+        };
+
+        // Realm-free phase: build the resolved specs into the tree.
+        let header_cells: Vec<(usize, NodeId)> = header_specs
+            .into_iter()
+            .zip(0..)
+            .filter_map(|(spec, col)| {
+                let spec = spec?;
+                (col < self.columns.len()).then_some((col, spec.build(cx, id.into())))
+            })
+            .collect();
+        let row_cells: Vec<Vec<(usize, NodeId)>> = resolved_rows
+            .into_iter()
+            .map(|specs| build_row_cells(self, specs, cx, id.into()))
+            .collect();
 
         cx.insert_node(
             id,
@@ -203,7 +252,6 @@ impl View for TableView {
                 header_height: 0.0,
                 painting: TablePainting::default(),
             }),
-            boa,
         );
 
         // Link the built cells in declaration order (header, then rows

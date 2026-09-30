@@ -190,6 +190,17 @@ impl TurApp {
         self.host.backend().rut_start_answer().await
     }
 
+    /// Whether the instance's JS realm exists. `#[doc(hidden)]` test-only
+    /// introspection for the realm-optional engine: a rut-only instance
+    /// (no JS module ever loaded) reports `false` for its whole life; the
+    /// first JS module/script load constructs the realm and it reports
+    /// `true` from then on. A plain bool — no boa type crosses the
+    /// embedder boundary.
+    #[doc(hidden)]
+    pub async fn realm_allocated(&self) -> bool {
+        self.host.backend().realm_allocated().await
+    }
+
     /// Synchronous JS expression evaluation. Dev-tool / test-only —
     /// production code uses [`Self::load_module`]. Useful for inspecting
     /// JS-side state via `globalThis.__x = ...`.

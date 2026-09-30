@@ -22,13 +22,13 @@ pub struct FragmentView {
 }
 
 impl View for FragmentView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         // FragmentElement is truly transparent — no node is created. Children are
         // built directly under the parent. This matches React FragmentElement
         // semantics and keeps the tree flat for tests that navigate
         // root.children directly.
         for child_spec in &self.children {
-            child_spec.build(cx, boa, parent);
+            child_spec.build(cx, parent);
         }
         parent
     }

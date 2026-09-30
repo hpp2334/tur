@@ -21,17 +21,30 @@ impl ElementLayout for TableElement {
         // layout's read-only JS face (disjoint from the tree borrow).
         // Scoped so `cx.layout_child` can reborrow the tree below. ---
         {
-            let boa = cx.js.boa_mut();
             let mut vcx = LayoutViewCx::new(
                 cx.tree,
+                cx.js.realm_mut(),
                 cx.node_tree.clone(),
                 cx.mutation_queue.clone(),
                 cx.dirty.clone(),
             );
-            let raw = crate::core::view::read_atom_raw(&vcx, self.view.rows, boa);
-            let len = array_len(&raw, boa);
-            let changed =
-                self.rows_stamp.as_ref().is_none_or(|prev| *prev != raw) || self.rows_len != len;
+            // Fresh rows value (realm-free — fresh source slots serve
+            // without the realm).
+            let raw = crate::core::view::read_atom_raw(&mut vcx, self.view.rows);
+            // Row-length probe + rebuild need the JS `build` closure (realm-
+            // scoped). A realm-free instance has no JS builders — degrade.
+            let (len, changed) = match vcx.realm() {
+                Some(boa) => {
+                    let len = array_len(&raw, boa);
+                    let changed = self.rows_stamp.as_ref().is_none_or(|prev| *prev != raw)
+                        || self.rows_len != len;
+                    (len, changed)
+                }
+                None => {
+                    tracing::warn!("Table row reconcile skipped: no JS realm (JS row builder)");
+                    (self.rows_len, false)
+                }
+            };
             if changed {
                 for row in std::mem::take(&mut self.row_cells) {
                     for (_, cell) in row {
@@ -39,7 +52,7 @@ impl ElementLayout for TableElement {
                     }
                 }
                 self.row_cells =
-                    build_all_rows(&self.view, &raw, boa, &mut vcx, NodeId::from(self.node_id));
+                    build_all_rows(&self.view, &raw, &mut vcx, NodeId::from(self.node_id));
                 self.rows_stamp = Some(raw);
                 self.rows_len = len;
             }

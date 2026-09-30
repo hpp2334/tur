@@ -30,7 +30,7 @@ pub struct PositionedView {
 }
 
 impl View for PositionedView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -39,9 +39,8 @@ impl View for PositionedView {
                 warned_edges_unbounded: false,
                 warned_anchor_unbounded: false,
             }),
-            boa,
         );
-        let _child_id = self.child.build(cx, boa, id.into());
+        let _child_id = self.child.build(cx, id.into());
         cx.link_child(parent, id.into());
         id.into()
     }

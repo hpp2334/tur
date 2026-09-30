@@ -15,6 +15,12 @@ use crate::core::view::{FromJs, Val};
 // ViewCx — the build capability a `View::build` impl needs to mount itself
 // into the node tree.
 //
+// The JS realm is folded into the context (not a `build` parameter): a
+// rut-only instance never allocates a realm, so every realm-free build path
+// (all Rust-authored views) runs with `realm() == None`. JS-authored views
+// (JsView thunks, Each/LazyList item builders) degrade with a warning when
+// absent — they cannot exist on a realm-free instance anyway.
+//
 // `SharedViewCx` (the normal, non-layout build context) implements this via its
 // interior-mutability helpers. A layout-backed adapter (added in a later
 // phase) implements the same trait against a `&mut NodeTreeData` borrow, so
@@ -24,7 +30,7 @@ use crate::core::view::{FromJs, Val};
 // Object-safety: this trait is used as `&mut dyn ViewCx` (so that `View` stays
 // object-safe: `View::build` takes `&mut dyn ViewCx`, no generics). Generic
 // helpers that don't fit a vtable (`read_val<T>`, `read_atom_raw<T>`) live as
-// free functions below, taking `&dyn ViewCx` for the store handle.
+// free functions below, taking `&mut dyn ViewCx` for the store handle + realm.
 // ---------------------------------------------------------------------------
 
 pub trait ViewCx {
@@ -32,7 +38,14 @@ pub trait ViewCx {
     fn alloc_node(&mut self) -> NodeId;
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
-    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement, boa: &mut Context);
+    /// Realm-free: the node's JS-visible handle materializes lazily (on
+    /// first access from JS).
+    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement);
+
+    /// The JS realm, when the instance has one. `None` on a realm-free
+    /// instance (a rut-only build); JS-authored views/branches degrade with
+    /// a warning.
+    fn realm(&mut self) -> Option<&mut Context>;
 
     /// Insert a `FragmentHost` into the fragments map.
     fn insert_fragment(&mut self, host: FragmentHost);
@@ -82,21 +95,19 @@ pub trait ViewCx {
 
 // ---------------------------------------------------------------------------
 // Generic helpers — free functions (not on the trait) so `ViewCx` stays
-// object-safe. They take `&dyn ViewCx` for the store handle.
+// object-safe. They take `&mut dyn ViewCx` for the store handle + realm.
 // ---------------------------------------------------------------------------
 
 /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom is
-/// lazily read from the store (untracked).
-pub fn read_val<T: FromJs + Clone + 'static>(
-    cx: &dyn ViewCx,
-    val: &Val<T>,
-    boa: &mut Context,
-) -> Option<T> {
+/// lazily read from the store (untracked). The realm borrow is taken from the
+/// context — fresh source slots (the realm-free rail's atoms) read without
+/// it; stale JS-authored deriveds degrade when absent.
+pub fn read_val<T: FromJs + Clone + 'static>(cx: &mut dyn ViewCx, val: &Val<T>) -> Option<T> {
     match val {
         Val::Static(t) => Some(t.clone()),
         Val::Reactive(readable) => {
             let store = cx.store_read_only();
-            let js = store.read(*readable, boa);
+            let js = store.read(*readable, cx.realm());
             T::from_js(&js).ok()
         }
     }
@@ -104,17 +115,17 @@ pub fn read_val<T: FromJs + Clone + 'static>(
 
 /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
 pub fn read_val_opt<T: FromJs + Clone + 'static>(
-    cx: &dyn ViewCx,
+    cx: &mut dyn ViewCx,
     val: Option<&Val<T>>,
-    boa: &mut Context,
 ) -> Option<T> {
-    val.and_then(|v| read_val(cx, v, boa))
+    val.and_then(|v| read_val(cx, v))
 }
 
 /// Read an atom's current value as a raw `JsValue` (untracked), via the
 /// build context's reactive store.
-pub fn read_atom_raw<T>(cx: &dyn ViewCx, readable: Readable<T>, boa: &mut Context) -> JsValue {
-    cx.store_read_only().read(readable, boa)
+pub fn read_atom_raw<T>(cx: &mut dyn ViewCx, readable: Readable<T>) -> JsValue {
+    let store = cx.store_read_only();
+    store.read(readable, cx.realm())
 }
 
 /// Borrow the shared handles a controller needs, from a `TurInstanceContext`.

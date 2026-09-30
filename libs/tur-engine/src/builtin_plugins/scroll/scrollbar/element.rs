@@ -68,7 +68,7 @@ pub struct ScrollbarElement {
 }
 
 impl View for ScrollbarView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -79,7 +79,6 @@ impl View for ScrollbarView {
                 drag: None,
             })
             .with_callbacks(),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());

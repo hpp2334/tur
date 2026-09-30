@@ -25,14 +25,14 @@ pub struct TargetView {
 }
 
 impl View for TargetView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(TargetElement), boa);
+        cx.insert_node(id, AnyElement::new(TargetElement));
         if let Some(state) = &self.link {
             state.target_node.set(Some(id));
         }
         if let Some(child_spec) = &self.child {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()

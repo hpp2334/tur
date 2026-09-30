@@ -44,7 +44,7 @@ pub struct VirtualAppView {
 }
 
 impl View for VirtualAppView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -53,16 +53,15 @@ impl View for VirtualAppView {
                 painting: VirtualPainting::default(),
                 bound_base: Cell::new(None),
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child) = &self.fallback {
-            let _ = child.build(cx, boa, id.into());
+            let _ = child.build(cx, id.into());
         }
         if let Some(child) = &self.error_view {
-            let _ = child.build(cx, boa, id.into());
+            let _ = child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -105,7 +104,7 @@ pub struct VirtualAppElement {
 }
 
 impl Lifecycle for VirtualAppElement {
-    fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx, _boa: &mut Context) {
+    fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx) {
         if let Some(base) = self.bound_base.take() {
             self.view.state.unbind(base);
         }

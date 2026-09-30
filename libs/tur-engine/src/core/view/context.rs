@@ -11,15 +11,18 @@ use crate::core::view::{View, ViewCx};
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
 ///
-/// The boa `Context` is passed alongside (not stored) so callers can reborrow
-/// freely while holding `&mut SharedViewCx`.
-pub struct SharedViewCx {
+/// The JS realm is folded in as [`SharedViewCx::boa`] — `None` on a
+/// realm-free instance (a rut-only build never allocates one). Every
+/// tree/store path is realm-free; only JS-authored views, factories, and
+/// thunk invocations touch the realm.
+pub struct SharedViewCx<'a> {
     js_ctx: TurInstanceContext,
+    boa: Option<&'a mut Context>,
 }
 
-impl SharedViewCx {
-    pub fn new(js_ctx: TurInstanceContext) -> Self {
-        SharedViewCx { js_ctx }
+impl<'a> SharedViewCx<'a> {
+    pub fn new(js_ctx: TurInstanceContext, boa: Option<&'a mut Context>) -> Self {
+        SharedViewCx { js_ctx, boa }
     }
 
     pub fn js_ctx(&self) -> &TurInstanceContext {
@@ -42,8 +45,9 @@ impl SharedViewCx {
     }
 
     /// Read an atom's current value as a raw `JsValue` (untracked).
-    pub fn read_atom_raw<T>(&self, readable: Readable<T>, boa: &mut Context) -> JsValue {
-        self.store_read_only().read(readable, boa)
+    pub fn read_atom_raw<T>(&mut self, readable: Readable<T>) -> JsValue {
+        let store = self.store_read_only();
+        store.read(readable, self.boa.as_deref_mut())
     }
 
     /// Create a `SubscribeCx` scoped to a fragment, so the fragment can
@@ -59,15 +63,14 @@ impl SharedViewCx {
     /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
     /// Declaration ids materialize into the mounted store.
     pub fn read_val<T: crate::core::view::FromJs + Clone + 'static>(
-        &self,
+        &mut self,
         val: &crate::core::view::Val<T>,
-        boa: &mut Context,
     ) -> Option<T> {
         use crate::core::view::Val;
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let js = self.store_read_only().read(*readable, boa);
+                let js = self.read_atom_raw(*readable);
                 T::from_js(&js).ok()
             }
         }
@@ -81,8 +84,9 @@ impl SharedViewCx {
     }
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
-    pub fn insert_node(&self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
-        let node = ElementObject::new(id, element, boa);
+    /// Realm-free: the node's JS-visible handle materializes lazily.
+    pub fn insert_node(&self, id: ElementNodeId, element: AnyElement) {
+        let node = ElementObject::new(id, element);
         self.js_ctx.element_tree.borrow_mut().insert_element(node);
     }
 
@@ -167,13 +171,8 @@ impl SharedViewCx {
     }
 
     /// Build a child view under `parent` and return the resulting node id.
-    pub fn build_child<Cx: ViewCx>(
-        cx: &mut Cx,
-        view: &dyn View,
-        boa: &mut Context,
-        parent: NodeId,
-    ) -> NodeId {
-        view.build(cx, boa, parent)
+    pub fn build_child<Cx: ViewCx>(cx: &mut Cx, view: &dyn View, parent: NodeId) -> NodeId {
+        view.build(cx, parent)
     }
 
     /// Mark a node dirty (needs re-layout + re-paint).
@@ -208,8 +207,10 @@ impl SharedViewCx {
     /// Phase 1 enqueues JS mutations (on_focus / on_blur); Phase 2 fires
     /// Rust-level `on_focus_changed` lifecycle callbacks on each affected
     /// element, giving them a chance to spawn/cancel async tasks tied to
-    /// focus state (e.g. caret blink).
-    pub fn flush_focus_notifications(&mut self, boa: &mut Context) {
+    /// focus state (e.g. caret blink). The callbacks receive this context —
+    /// the realm rides it (None on realm-free instances, which have no
+    /// focusable JS widgets to notify; the mutation enqueue stays realm-free).
+    pub fn flush_focus_notifications(&mut self) {
         let focus_changes = {
             let tree = self.js_ctx.element_tree.borrow();
             let mut focus = self.js_ctx.focus_manager.borrow_mut();
@@ -225,7 +226,7 @@ impl SharedViewCx {
                 tree.get_element_mut(*id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
-                elem.run_on_focus_changed(*focused, self, boa);
+                elem.run_on_focus_changed(*focused, self);
             }
             if let Some(elem) = element {
                 let mut tree = self.js_ctx.element_tree.borrow_mut();
@@ -244,12 +245,15 @@ impl SharedViewCx {
 // `&mut NodeTreeData` borrow (added in a later phase).
 // ---------------------------------------------------------------------------
 
-impl ViewCx for SharedViewCx {
+impl ViewCx for SharedViewCx<'_> {
     fn alloc_node(&mut self) -> NodeId {
         SharedViewCx::alloc_node(self)
     }
-    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
-        SharedViewCx::insert_node(self, id, element, boa);
+    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement) {
+        SharedViewCx::insert_node(self, id, element);
+    }
+    fn realm(&mut self) -> Option<&mut Context> {
+        self.boa.as_deref_mut()
     }
     fn insert_fragment(&mut self, host: FragmentHost) {
         SharedViewCx::insert_fragment(self, host);

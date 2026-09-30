@@ -3,23 +3,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::Context;
 use boa_engine::context::time::Clock;
-use boa_engine::js_string;
-use boa_engine::object::JsObject;
-use boa_engine::property::Attribute;
 
 use crate::core::app::TurAppInternal;
-use crate::core::app::mount;
 use crate::core::async_::TurJobExecutor;
 use crate::core::capability::{Capabilities, CapabilityDecls};
-use crate::core::dev::dev_tool;
-use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
-use crate::core::js_runtime::helpers::FnEntry;
+use crate::core::js_runtime::TurModuleLoader;
 use crate::core::js_runtime::instance_context::InstanceDataCx;
-use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
-use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
 use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginRegisterContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::error::TurError;
@@ -664,6 +655,13 @@ impl<'rt> TurAppBuilder<'rt> {
 /// responsible for ensuring `clock`, `font_loader`, etc. are constructed
 /// on the right thread (e.g. the threaded factory constructs them inside
 /// the closure so the `!Send` `Rc`s never cross threads).
+///
+/// **Realm-free build**: no boa `Context` is constructed here. Plugins
+/// register their realm-free halves (subsystems, plugin state, atoms);
+/// realm-bound registrations (JS modules, classes, globals, consts) are
+/// recorded as deferred thunks and replayed by
+/// `WorkerBackend::ensure_realm` when a JS module/script actually loads.
+/// A rut-only instance never allocates a realm.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_worker_backend(
     clock: Arc<dyn Clock + Send + Sync>,
@@ -681,54 +679,18 @@ pub(crate) fn build_worker_backend(
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
-    // Runtime-error reporter: reaches the boa Context two ways — as
-    // host-defined data (capture sites read it via
-    // `runtime_error::report(ctx, err)`) and via the promise-rejection
-    // host hook. One identity per instance, built from the shared
-    // worker→host sender.
-    let reporter = crate::core::app::runtime_error::RuntimeErrorReporter::new(host_tx.clone());
-    let mut boa_context = Context::builder()
-        .clock(Rc::new(ClockProxy(clock.clone())))
-        .job_executor(executor.clone())
-        .module_loader(module_loader.clone())
-        .host_hooks(Rc::new(
-            crate::core::app::runtime_error::PromiseRejectionHandler::new(reporter.clone()),
-        ))
-        .build()
-        .expect("failed to build boa context");
-    boa_context.insert_data(reporter);
 
     let mut internal = TurAppInternal::new(
         font_context,
         font_loader,
         executor.clone(),
-        clock,
+        clock.clone(),
         capabilities,
         worker_ctx,
         wake_worker,
-        host_tx,
+        host_tx.clone(),
         worker_pools,
     );
-
-    let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
-    let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
-
-    // The instance store as a JS `{get, set}` object — the `store` handed to
-    // every module's `start({ store })`. The instance-owned tree is
-    // born-bound to this store at build, so a module that mounts
-    // `mount(view)` (no explicit store) builds against exactly the store it
-    // was handed; `mount(store, view)` swaps the binding (legacy shape).
-    let start_arg = {
-        let store_obj =
-            reactive::make_store_js_object(&mut boa_context, internal.js_context.store.clone());
-        let obj = JsObject::with_object_proto(boa_context.intrinsics());
-        let _ = obj.create_data_property(
-            js_string!("store"),
-            boa_engine::JsValue::from(store_obj),
-            &mut boa_context,
-        );
-        obj
-    };
 
     // Seed the worker-side screen state with the build-time viewport. The
     // `viewportSize$` engine atom — backing source, public derive handle,
@@ -736,81 +698,6 @@ pub(crate) fn build_worker_backend(
     // `TurStdPlugin` (the canonical plugin-facing engine-atom recipe, see
     // `builtin_plugins/std.rs`), seeded via `PluginRegisterContext::viewport()`.
     internal.app_context.borrow_mut().screen.logical_size = viewport;
-
-    let mut core_fns: Vec<FnEntry> = Vec::new();
-    core_fns.extend(crate::core::edgy::bridge::fns());
-    core_fns.extend(mount::fns());
-    let core_module = build_native_module(
-        &mut boa_context,
-        opaque.object().clone().into(),
-        &core_fns,
-        &[],
-    );
-    module_loader.register("tur:core", core_module);
-
-    let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
-    let et_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_element_tree,
-        0,
-        "elementTree",
-    );
-    let ge_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_get_element,
-        1,
-        "getElement",
-    );
-    let rs_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_reactive_stats,
-        0,
-        "reactiveStats",
-    );
-    let fs_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_frame_stats,
-        0,
-        "frameStats",
-    );
-    let hft_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_set_host_frame_timing,
-        1,
-        "setHostFrameTiming",
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("elementTree"),
-        boa_engine::JsValue::from(et_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("getElement"),
-        boa_engine::JsValue::from(ge_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("reactiveStats"),
-        boa_engine::JsValue::from(rs_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("frameStats"),
-        boa_engine::JsValue::from(fs_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("setHostFrameTiming"),
-        boa_engine::JsValue::from(hft_fn),
-        &mut boa_context,
-    );
-    let _ =
-        boa_context.register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
 
     // Replay the build-time `instance_data` definer (from
     // `TurAppBuilder::instance_data`) — runs on the worker, before any
@@ -829,33 +716,46 @@ pub(crate) fn build_worker_backend(
     // becomes the instance's registries — the natural freeze: no handle
     // into either survives the builder, so registration after build is
     // structurally impossible.
+    //
+    // Realm-free: `boa` is `None` (and `js_ctx_value` with it) — plugins'
+    // realm-bound registrations land in the `deferred` collector and
+    // replay at realm construction.
     let mut register_cx = PluginRegisterContext {
-        boa: &mut boa_context,
+        boa: None,
         loader: module_loader.clone(),
-        js_ctx_value: ctx_val.clone(),
+        js_ctx_value: None,
         js_ctx: internal.js_context.clone(),
         app: internal.app_context.clone(),
         subsystems: Vec::new(),
         plugin_state: HashMap::new(),
+        deferred: Vec::new(),
         event_bus: internal.event_bus.clone(),
         host_exec: host_exec.clone(),
     };
     for plugin in plugins {
         plugin.register(&mut register_cx)?;
     }
-    // Consume the register-phase collectors (subsystems + plugin state) —
-    // both installed once; runtime code can read both but there is no
-    // write path left in existence.
+    // Consume the register-phase collectors (subsystems + plugin state +
+    // deferred realm-bound registrations) — all installed once; runtime
+    // code can read the first two but there is no write path left in
+    // existence.
     let parts = register_cx.into_parts();
     internal.js_context.install_plugin_state(parts.plugin_state);
     internal.subsystems = RefCell::new(parts.subsystems);
 
-    tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
+    tracing::info!(
+        "WorkerBackend built realm-free ({} plugins, {} deferred realm registrations)",
+        plugins.len(),
+        parts.deferred.len()
+    );
     Ok(WorkerBackend::new(
-        boa_context,
         internal,
         executor,
-        start_arg,
+        module_loader,
+        clock,
+        host_tx,
+        host_exec,
+        parts.deferred,
     ))
 }
 

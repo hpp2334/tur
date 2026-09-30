@@ -85,13 +85,19 @@ enum Closure {
 }
 
 /// Rust-native derive closure signature: receives a read-only face (gets
-/// only) and the JS engine. Returns the recomputed value.
-type DeriveRustFn = dyn Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue>;
+/// only) and the JS realm — `None` on a realm-free instance (a rut-only
+/// instance never allocates one); a closure that needs the realm degrades
+/// (warn + skip) rather than being reachable at all in practice, since
+/// realm-free instances cannot evaluate JS-authored atoms. Returns the
+/// recomputed value.
+type DeriveRustFn = dyn Fn(&ReactiveReadStore, Option<&mut Context>) -> JsResult<JsValue>;
 
 /// Rust-native mutate closure signature: receives the read+write bridge
 /// face, the user-supplied args (no `{get,set}` JsObject prepended), and
-/// the JS engine. Returns whatever the closure chooses to hand back to JS.
-type MutateRustFn = dyn Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue>;
+/// the JS realm (`None` on a realm-free instance — e.g. the rut rail's
+/// element-callback mutations, which are realm-free by design). Returns
+/// whatever the closure chooses to hand back to JS.
+type MutateRustFn = dyn Fn(&ReactiveBridgeStore, &[JsValue], Option<&mut Context>) -> JsResult<JsValue>;
 
 /// Derived-recomputation graph: per-derived dependency sets, the reverse
 /// `dependents` edges, the stale-derived set, the reentrancy tracker
@@ -385,7 +391,7 @@ impl SharedReactive {
         &self,
         id: AtomId,
         via: &Rc<StoreKv>,
-        ctx: &mut Context,
+        ctx: Option<&mut Context>,
     ) -> JsResult<JsValue> {
         // Auto-dependency tracking: any read inside a running derived closure
         // records the dep.
@@ -433,7 +439,12 @@ impl SharedReactive {
         }
     }
 
-    fn ensure_computed(&self, id: AtomId, ctx: &mut Context, kv: &Rc<StoreKv>) -> JsResult<()> {
+    fn ensure_computed(
+        &self,
+        id: AtomId,
+        ctx: Option<&mut Context>,
+        kv: &Rc<StoreKv>,
+    ) -> JsResult<()> {
         // Fresh in THIS store already? (A compute elsewhere does not count —
         // per-store values.)
         let fresh_here = kv
@@ -468,15 +479,32 @@ impl SharedReactive {
         // hands the closure a typed `&ReactiveReadStore` face (no JsObject
         // round-trip). The MutateRust branch is unreachable here — derive
         // handles never carry a MutateRust closure.
+        //
+        // Realm-free degradation: a `Js` closure needs the realm to run.
+        // On a realm-free instance (no JS module ever loaded) a JS-authored
+        // derived cannot exist, so hitting this arm is an engine-internal
+        // anomaly — leave the atom unmaterialized (the next read retries,
+        // matching the throwing-closure semantics) and warn.
         let result = match closure {
-            Closure::Js(f) => {
-                let store_ctx_obj = self.build_store_ctx_obj(ctx, kv.clone());
-                f.call(
-                    &JsValue::undefined(),
-                    std::slice::from_ref(&store_ctx_obj),
-                    ctx,
-                )
-            }
+            Closure::Js(f) => match ctx {
+                Some(ctx) => {
+                    let store_ctx_obj = self.build_store_ctx_obj(ctx, kv.clone());
+                    f.call(
+                        &JsValue::undefined(),
+                        std::slice::from_ref(&store_ctx_obj),
+                        ctx,
+                    )
+                }
+                None => {
+                    self.graph.tracker_stack.borrow_mut().pop();
+                    self.graph.in_flight_derives.borrow_mut().pop();
+                    tracing::warn!(
+                        "derived atom {} needs the JS realm but none exists — returning undefined",
+                        id.0
+                    );
+                    return Ok(());
+                }
+            },
             Closure::DeriveRust(f) => {
                 let read_store = ReactiveReadStore {
                     shared: self.self_rc(),
@@ -649,12 +677,22 @@ impl SharedReactive {
         id: AtomId,
         via: &Rc<StoreKv>,
         args: &[JsValue],
-        ctx: &mut Context,
+        ctx: Option<&mut Context>,
     ) -> JsResult<JsValue> {
         let closure = match self.seeds.borrow().get(&id) {
             Some(Seed::Mutate(c)) => c.clone(),
             _ => return Ok(JsValue::undefined()),
         };
+        // Realm-free degradation: a `Js` closure needs the realm to run.
+        // A realm-free instance cannot have JS-authored mutations, so this
+        // arm is an engine-internal anomaly — skip with a warning.
+        if matches!(closure, Closure::Js(_)) && ctx.is_none() {
+            tracing::warn!(
+                "mutation atom {} needs the JS realm but none exists — skipping invocation",
+                id.0
+            );
+            return Ok(JsValue::undefined());
+        }
         // Arm the watch-loop guard when this mutation is a watcher callback,
         // so writes inside the closure run `detect_watch_loop`.
         let armed = self.watchers.arm(id);
@@ -662,6 +700,8 @@ impl SharedReactive {
             Closure::Js(f) => {
                 // Build the per-store `{get, set}` JsObject and prepend it
                 // before invoking — JS closures expect `(ctx, ...args)`.
+                // (`ctx` is guaranteed `Some` by the guard above.)
+                let ctx = ctx.expect("realm presence checked above");
                 let ctx_obj = self.build_store_ctx_obj(ctx, via.clone());
                 let mut full: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
                 full.push(ctx_obj);
@@ -670,7 +710,9 @@ impl SharedReactive {
             }
             Closure::MutateRust(f) => {
                 // Skip the JsObject entirely; hand the closure the bridge
-                // face plus the user args verbatim.
+                // face plus the user args verbatim. `ctx` is `None` on a
+                // realm-free instance (the rut rail's callbacks) — closures
+                // that need the realm degrade.
                 let bridge = ReactiveBridgeStore {
                     store: Store {
                         shared: self.self_rc(),
@@ -780,7 +822,7 @@ impl Store {
         &self,
         mutation: Mutation,
         args: &[JsValue],
-        ctx: &mut Context,
+        ctx: Option<&mut Context>,
     ) -> JsResult<JsValue> {
         self.shared
             .invoke_mutation_by_id(mutation.id(), &self.kv, args, ctx)
@@ -898,7 +940,7 @@ pub struct ReactiveReadStore {
 }
 
 impl ReactiveReadStore {
-    pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
+    pub fn read<T>(&self, readable: Readable<T>, ctx: Option<&mut Context>) -> JsValue {
         let (id, derived) = match readable {
             Readable::Source(s) => (s.id(), false),
             Readable::Derived(d) => (d.id(), true),
@@ -929,28 +971,32 @@ impl std::fmt::Debug for ReactiveReadStore {
 
 pub struct ReactiveReadJsContext<'a> {
     read: ReactiveReadStore,
-    boa: &'a mut Context,
+    /// The JS realm, when the instance has one. A rut-only instance never
+    /// allocates a realm — reads of fresh source atoms (the only atoms a
+    /// realm-free instance can hold) never touch it.
+    boa: Option<&'a mut Context>,
 }
 
 impl<'a> ReactiveReadJsContext<'a> {
-    pub fn new(read: ReactiveReadStore, boa: &'a mut Context) -> Self {
+    pub fn new(read: ReactiveReadStore, boa: Option<&'a mut Context>) -> Self {
         ReactiveReadJsContext { read, boa }
     }
 
     /// Resolve a `Readable<T>` to its current JS value, lazily recomputing a
     /// stale `Derived` if necessary. This is the only operation exposed to the
     /// layout phase — there is no `set`, no mutation, no engine mutation here.
+    /// Realm-free: a fresh source slot is served without the realm; a stale
+    /// JS-authored derived degrades (warn + undefined) when absent.
     pub fn read<T>(&mut self, readable: Readable<T>) -> JsValue {
-        self.read.read(readable, self.boa)
+        self.read.read(readable, self.boa.as_deref_mut())
     }
 
-    /// Borrow the underlying JS `Context`. Layout-phase build (e.g. LazyList
-    // remount) needs it to call the JS item builder and construct
-    /// `ElementObject`s. The read-only guarantee is weakened only for code
-    /// that chooses to call mutating JS.
-    #[allow(dead_code)]
-    pub fn boa_mut(&mut self) -> &mut Context {
-        self.boa
+    /// Borrow the underlying JS `Context`, when the instance has a realm.
+    /// Layout-phase build (e.g. LazyList remount) needs it to call the JS
+    /// item builder and construct `ElementObject`s. `None` on a realm-free
+    /// instance — JS-authored item builders cannot exist there.
+    pub fn realm_mut(&mut self) -> Option<&mut Context> {
+        self.boa.as_deref_mut()
     }
 }
 
@@ -1077,7 +1123,7 @@ impl ReactiveBridgeStore {
     /// JS then reads it through `store.get(handle)`.
     pub fn build_derive<F>(&self, closure: F) -> Derived<JsValue>
     where
-        F: Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue> + 'static,
+        F: Fn(&ReactiveReadStore, Option<&mut Context>) -> JsResult<JsValue> + 'static,
     {
         let id = self
             .store
@@ -1097,7 +1143,7 @@ impl ReactiveBridgeStore {
     /// which routes the user args here verbatim.
     pub fn build_mutate<F>(&self, closure: F) -> Mutation
     where
-        F: Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue> + 'static,
+        F: Fn(&ReactiveBridgeStore, &[JsValue], Option<&mut Context>) -> JsResult<JsValue> + 'static,
     {
         Mutation(
             self.store
@@ -1155,7 +1201,7 @@ impl ReactiveBridgeStore {
         (start, stop)
     }
 
-    pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
+    pub fn read<T>(&self, readable: Readable<T>, ctx: Option<&mut Context>) -> JsValue {
         self.store.read_only().read(readable, ctx)
     }
 
@@ -1194,7 +1240,7 @@ impl ReactiveBridgeStore {
         &self,
         mutation: Mutation,
         args: &[JsValue],
-        ctx: &mut Context,
+        ctx: Option<&mut Context>,
     ) -> JsResult<JsValue> {
         self.store.invoke_mutation(mutation, args, ctx)
     }

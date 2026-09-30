@@ -86,10 +86,9 @@ pub(in crate::builtin_plugins) fn register_console_globals(context: &mut Context
         .expect("failed to register console");
 }
 
-/// Install the global `console` object (`console.log` / `.warn` / `.error` /
-/// `.info` / `.debug`) on the boa context. Returns an empty `FnEntry` vec —
-/// console registers globals, not bridge fns.
-pub fn install_console(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError> {
-    register_console_globals(ctx.boa_mut());
+/// The realm-free half of the console install: console is a global, not a
+/// `tur:std` export, so there are no bridge fns — returns an empty vec for
+/// the std fn-table merge site.
+pub fn install_console_fns(_ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError> {
     Ok(Vec::new())
 }

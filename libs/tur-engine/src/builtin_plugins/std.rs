@@ -29,11 +29,22 @@
 //!   (renderer/async/edgy infra, not plugin affinity).
 
 use crate::builtin_plugins::{
-    console::install_console, control_flow::install_control_flow, effects::install_effects,
-    encode::install_encode, focus::install_focus, gesture::install_gesture, image::install_image,
-    input::install_input, layout::composited_transform::install_composited_transform,
-    layout::enums, layout::install_layout, lazy_container::install_lazy_container,
-    lifecycle::install_lifecycle, scroll::install_scroll, text::install_text, virtual_app,
+    console::{install_console_fns, register_console_globals},
+    control_flow::install_control_flow,
+    effects::install_effects,
+    encode::install_encode,
+    focus::install_focus,
+    gesture::install_gesture,
+    image::install_image,
+    input::install_input,
+    layout::composited_transform::install_composited_transform,
+    layout::enums,
+    layout::install_layout,
+    lazy_container::install_lazy_container,
+    lifecycle::install_lifecycle,
+    scroll::install_scroll,
+    text::install_text,
+    virtual_app,
 };
 use crate::core::app::mount;
 use crate::core::async_::task;
@@ -77,10 +88,16 @@ impl Plugin for TurStdPlugin {
         // `Resize` events. Registered FIRST, so the atom exists before
         // anything can read it and subsystem dispatch order stays:
         // resize → gesture → keyboard → ime → pointer_region.
+        //
+        // The atom itself is realm-free (a declaration + a Rust derive
+        // closure). Its seed — a `{width, height}` JS object — needs the
+        // realm, so the seed write is deferred to realm construction: a
+        // rut-only instance holds the unmaterialized declaration, which
+        // nothing can read (JS reads are the only readers).
         let bridge = ctx.reactive();
         let initial = ctx.viewport();
         let backing: Source<boa_engine::JsValue> =
-            bridge.decl_source(viewport_size_value(initial.0, initial.1, ctx.boa_mut()));
+            bridge.decl_source(boa_engine::JsValue::undefined());
         let read_face = bridge.read_only();
         let viewport_size_handle =
             bridge.build_derive(move |_read, boa| Ok(read_face.read(Readable::from(backing), boa)));
@@ -101,7 +118,9 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(install_scroll(ctx)?);
         std_fns.extend(install_lazy_container(ctx)?);
         // Global `console.log` / `.warn` / `.error` / `.info` / `.debug`.
-        std_fns.extend(install_console(ctx)?);
+        // The FnEntries are realm-free; the global `console` object
+        // registration is deferred (below).
+        std_fns.extend(install_console_fns(ctx)?);
         // Engine-owned builtin plugins. Each plugin's `install_xxx` returns
         // the bridge entries for every element + JS-facing primitive in that
         // plugin (e.g. `install_layout` returns Column/Row/Expanded/Stack/
@@ -132,25 +151,47 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(task::fns());
         std_fns.extend(crate::core::render::brush::bridge::fns());
 
-        let mut std_consts: Vec<ConstEntry> = Vec::new();
-        let js_ctx_value = ctx.js_ctx_value.clone();
-        std_consts.extend(crate::core::render::brush::bridge::consts(
-            ctx.boa_mut(),
-            js_ctx_value,
-        ));
-        std_consts.extend(enums::consts(ctx.boa_mut()));
-        // Engine-owned reactive source exposing the live canvas size as
-        // `{width, height}` (CSS pixels) — minted at the top of `register`;
-        // `ResizeSubsystem` publishes into it on shell `Resize` events. JS
-        // reads it via `get(viewportSize$).width`.
-        std_consts.push(("viewportSize$", viewport_size_handle.into_js(ctx.boa_mut())));
-        // Event bus: bidirectional byte-channel between host and JS.
-        // Engine infrastructure (lives in `core::event_bus`); the shared
-        // state is created up-front by `TurAppInternal::new`, so
-        // `install_event_bus` just hooks up the JS bridge + subsystem.
-        std_consts.extend(crate::core::event_bus::install_event_bus(ctx)?);
+        // Event bus (realm-free half): the EmbedderBusSubsystem drains the
+        // queues each flush whether or not the realm exists.
+        crate::core::event_bus::install_event_bus_subsystem(ctx);
 
-        ctx.register_module("tur:std", std_fns, std_consts);
+        // Realm-bound half — recorded for replay at realm construction (a
+        // rut-only instance never replays it): the seed write into the
+        // `viewportSize$` backing, the `console` global, the JS consts
+        // (brush enums, layout enums, `viewportSize$` handle, the eventBus
+        // object), and the `tur:std` module registration itself (its bound
+        // natives capture the JS-side ctx object).
+        ctx.defer(move |cx| {
+            // Seed the `viewportSize$` backing with the CURRENT screen size
+            // (a pre-realm resize updated the screen + the subsystem's dedup
+            // guard — the seed must agree with both).
+            let (w, h) = cx.app.borrow().screen.logical_size;
+            let bridge = cx.js_ctx().reactive();
+            if let Err(e) = bridge.set_source(backing, viewport_size_value(w, h, cx.boa_mut())) {
+                tracing::error!("viewportSize$ seed failed: {e}");
+            }
+
+            let mut std_consts: Vec<ConstEntry> = Vec::new();
+            let js_ctx_value = cx.js_ctx_value();
+            std_consts.extend(crate::core::render::brush::bridge::consts(
+                cx.boa_mut(),
+                js_ctx_value,
+            ));
+            std_consts.extend(enums::consts(cx.boa_mut()));
+            // Engine-owned reactive source exposing the live canvas size as
+            // `{width, height}` (CSS pixels) — minted at the top of
+            // `register`; `ResizeSubsystem` publishes into it on shell
+            // `Resize` events. JS reads it via `get(viewportSize$).width`.
+            std_consts.push(("viewportSize$", viewport_size_handle.into_js(cx.boa_mut())));
+            // Event bus: bidirectional byte-channel between host and JS —
+            // the `eventBus` object (on/send).
+            std_consts.extend(crate::core::event_bus::event_bus_consts(cx)?);
+            // Global `console` object.
+            register_console_globals(cx.boa_mut());
+
+            cx.register_module("tur:std", std_fns, std_consts);
+            Ok(())
+        });
 
         Ok(())
     }

@@ -41,7 +41,7 @@ pub struct FollowerView {
 }
 
 impl View for FollowerView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -54,13 +54,12 @@ impl View for FollowerView {
                 resolved_follower_anchor: Alignment::TopLeft,
                 resolved_target_offset: Offset::ZERO,
             }),
-            boa,
         );
         if let Some(state) = &self.link {
             state.follower_node.set(Some(id));
         }
         if let Some(child_spec) = &self.child {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -161,7 +160,17 @@ impl ElementLayout for FollowerElement {
             .as_ref()
             .and_then(|v| cx.read_val(v));
         self.resolved_target_offset = match &offset_js {
-            Some(v) => decode_offset(v, cx.js.boa_mut()),
+            // Field access needs the realm (JS-shaped value); a realm-free
+            // instance cannot hold this prop (it arrives from JS) — degrade.
+            Some(v) => match cx.js.realm_mut() {
+                Some(boa) => decode_offset(v, boa),
+                None => {
+                    tracing::warn!(
+                        "CompositedTransformFollower offset decode skipped: no JS realm"
+                    );
+                    Offset::ZERO
+                }
+            },
             None => Offset::ZERO,
         };
 

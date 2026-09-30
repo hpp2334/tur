@@ -82,15 +82,26 @@ impl Subsystem for ResizeSubsystem {
         // same fixed-point iteration. `set_source`-with-equal-size dedups
         // via `last`. Pre-mount the tree is simply rootless —
         // `mark_root_dirty` is a no-op then.
+        //
+        // Realm-free when the instance has no JS realm: the atom's value
+        // shape is a `{width, height}` JS object, which needs the realm to
+        // materialize. A realm-free instance has no JS readers for the atom
+        // (rut atoms are addressed by raw id; nothing hands `viewportSize$`
+        // across), so the write skips with a warning and the screen state
+        // below still updates.
         if size != self.last {
             self.last = size;
-            let value = viewport_size_value(size.0, size.1, cx.boa);
-            // A resize can never be a watch loop (it originates from the
-            // platform event queue, never inside a watcher callback
-            // delivery), so an error here would be an engine invariant
-            // violation — log, don't crash.
-            if let Err(e) = self.bridge.set_source(self.backing, value) {
-                tracing::error!("viewportSize$ sync failed: {e}");
+            if let Some(boa) = cx.boa.as_deref_mut() {
+                let value = viewport_size_value(size.0, size.1, boa);
+                // A resize can never be a watch loop (it originates from the
+                // platform event queue, never inside a watcher callback
+                // delivery), so an error here would be an engine invariant
+                // violation — log, don't crash.
+                if let Err(e) = self.bridge.set_source(self.backing, value) {
+                    tracing::error!("viewportSize$ sync failed: {e}");
+                }
+            } else {
+                tracing::warn!("viewportSize$ resize skipped: no JS realm (rut-only instance)");
             }
         }
         cx.element_tree.borrow_mut().mark_root_dirty();

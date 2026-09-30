@@ -408,7 +408,7 @@ fn store_ctx_of(this: &JsValue) -> JsResult<(Rc<SharedReactive>, Rc<StoreKv>)> {
 fn tur_store_ctx_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let (shared, kv) = store_ctx_of(this)?;
     let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-    shared.read_by_id(readable.id(), &kv, ctx)
+    shared.read_by_id(readable.id(), &kv, Some(ctx))
 }
 
 fn tur_store_ctx_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -419,7 +419,7 @@ fn tur_store_ctx_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsR
         // and prepends it for `Js`-variant closures; pass only the
         // user args (no recursive ctx_obj construction here).
         let user_args = args.get(1..).unwrap_or(&[]);
-        return shared.invoke_mutation_by_id(mutation.id(), &kv, user_args, ctx);
+        return shared.invoke_mutation_by_id(mutation.id(), &kv, user_args, Some(ctx));
     }
     if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {
@@ -515,7 +515,7 @@ fn tur_store_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResul
     let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
     store
         .shared()
-        .read_by_id(readable.id(), &store.kv_handle(), ctx)
+        .read_by_id(readable.id(), &store.kv_handle(), Some(ctx))
 }
 
 fn tur_store_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -523,7 +523,7 @@ fn tur_store_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResul
     let v = args.get_or_undefined(0);
     if let Ok(mutation) = Mutation::from_js(v) {
         let user_args = args.get(1..).unwrap_or(&[]);
-        return store.invoke_mutation(mutation, user_args, ctx);
+        return store.invoke_mutation(mutation, user_args, Some(ctx));
     }
     if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {

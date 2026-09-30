@@ -25,10 +25,15 @@ use tur_integration_tests::TurTestApp;
 struct MintSourcePlugin;
 impl Plugin for MintSourcePlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+        // The atom mint is realm-free; the JS handle + global are
+        // realm-bound — deferred to realm construction.
         let bridge = ctx.reactive();
         let s: Source<JsValue> = bridge.decl_source(JsValue::new(42.0));
-        let js_handle = s.into_js(ctx.boa_mut());
-        ctx.register_global("rustSource", js_handle);
+        ctx.defer(move |cx| {
+            let js_handle = s.into_js(cx.boa_mut());
+            cx.register_global("rustSource", js_handle);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -86,20 +91,27 @@ impl Plugin for BuildDerivePlugin {
         // Rust-native derive that reads both sources. Reads flow through the
         // same `ReactiveCore::read` path as JS closures, so auto-dependency
         // tracking is inherited for free.
-        let sum = bridge.build_derive(move |read, boa| {
-            let av = read.read(Readable::from(a), boa).as_number().unwrap_or(0.0);
+        let sum = bridge.build_derive(move |read, mut boa| {
+            let av = read
+                .read(Readable::from(a), boa.as_deref_mut())
+                .as_number()
+                .unwrap_or(0.0);
             let bv = read.read(Readable::from(b), boa).as_number().unwrap_or(0.0);
             Ok(JsValue::new(av + bv))
         });
 
-        // Build all JS handles under a single `boa_mut()` borrow scope.
-        let (a_js, b_js, sum_js) = {
-            let boa = ctx.boa_mut();
-            (a.into_js(boa), b.into_js(boa), sum.into_js(boa))
-        };
-        ctx.register_global("a$", a_js);
-        ctx.register_global("b$", b_js);
-        ctx.register_global("sum$", sum_js);
+        // JS handles + globals are realm-bound — deferred to realm
+        // construction.
+        ctx.defer(move |cx| {
+            let (a_js, b_js, sum_js) = {
+                let boa = cx.boa_mut();
+                (a.into_js(boa), b.into_js(boa), sum.into_js(boa))
+            };
+            cx.register_global("a$", a_js);
+            cx.register_global("b$", b_js);
+            cx.register_global("sum$", sum_js);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -190,12 +202,17 @@ impl Plugin for BuildMutatePlugin {
             Ok(JsValue::undefined())
         });
 
-        let (flag_js, toggle_js) = {
-            let boa = ctx.boa_mut();
-            (flag.into_js(boa), toggle.into_js(boa))
-        };
-        ctx.register_global("flag$", flag_js);
-        ctx.register_global("toggle", toggle_js);
+        // JS handles + globals are realm-bound — deferred to realm
+        // construction.
+        ctx.defer(move |cx| {
+            let (flag_js, toggle_js) = {
+                let boa = cx.boa_mut();
+                (flag.into_js(boa), toggle.into_js(boa))
+            };
+            cx.register_global("flag$", flag_js);
+            cx.register_global("toggle", toggle_js);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -251,12 +268,17 @@ impl Plugin for BuildMutateWithArgsPlugin {
             Ok(JsValue::undefined())
         });
 
-        let (sink_js, write_msg_js) = {
-            let boa = ctx.boa_mut();
-            (sink.into_js(boa), write_msg.into_js(boa))
-        };
-        ctx.register_global("sink$", sink_js);
-        ctx.register_global("writeMsg", write_msg_js);
+        // JS handles + globals are realm-bound — deferred to realm
+        // construction.
+        ctx.defer(move |cx| {
+            let (sink_js, write_msg_js) = {
+                let boa = cx.boa_mut();
+                (sink.into_js(boa), write_msg.into_js(boa))
+            };
+            cx.register_global("sink$", sink_js);
+            cx.register_global("writeMsg", write_msg_js);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -326,14 +348,19 @@ impl Plugin for SubsystemTickPlugin {
         let engine_read = bridge.read_only();
         let handle = bridge
             .build_derive(move |_read, boa| Ok(engine_read.read(Readable::from(counter), boa)));
-        let counter_js = handle.into_js(ctx.boa_mut());
-        ctx.register_global("counter$", counter_js);
         ctx.register_subsystem(Box::new(CounterSubsystem {
             source: counter,
             bridge,
             last_frame: 0,
             tick: 0,
         }));
+        // The JS handle + global are realm-bound — deferred to realm
+        // construction.
+        ctx.defer(move |cx| {
+            let counter_js = handle.into_js(cx.boa_mut());
+            cx.register_global("counter$", counter_js);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -397,8 +424,13 @@ impl Plugin for SelfReadDerivePlugin {
         });
         *handle.borrow_mut() = Some(d);
 
-        let d_js = d.into_js(ctx.boa_mut());
-        ctx.register_global("cycle$", d_js);
+        // The JS handle + global are realm-bound — deferred to realm
+        // construction.
+        ctx.defer(move |cx| {
+            let d_js = d.into_js(cx.boa_mut());
+            cx.register_global("cycle$", d_js);
+            Ok(())
+        });
         Ok(())
     }
 }

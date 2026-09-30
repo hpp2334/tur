@@ -29,7 +29,7 @@ impl AnimationManager {
     /// **enqueues** (does not fire) any `onTick` / `onEnd` callbacks on the
     /// mutation queue. The callbacks fire later in `flush_pending_mutations`,
     /// after the `RefMut` on each controller is released.
-    pub fn tick_controllers(&mut self, now_ms: u64, _ctx: &mut boa_engine::Context) {
+    pub fn tick_controllers(&mut self, now_ms: u64, _ctx: Option<&mut boa_engine::Context>) {
         let mut active = Vec::new();
         for obj in self.controllers.drain(..) {
             let keep = {

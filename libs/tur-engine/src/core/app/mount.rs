@@ -46,9 +46,9 @@ fn tur_mount(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResu
     // layout plugin (historical FlexView wrapper removed).
     let root_view = RootView { child: user_view };
 
-    let mut cx = SharedViewCx::new(js_ctx.clone());
+    let mut cx = SharedViewCx::new(js_ctx.clone(), Some(context));
     let temp_parent = cx.alloc_node();
-    let root_id = root_view.build(&mut cx, context, temp_parent);
+    let root_id = root_view.build(&mut cx, temp_parent);
     tree.borrow_mut()
         .set_root_element(crate::core::element::ElementNodeId::new(root_id.as_u64()));
 

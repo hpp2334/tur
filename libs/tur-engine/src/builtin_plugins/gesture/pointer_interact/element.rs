@@ -38,11 +38,11 @@ pub struct PointerInteractView {
 }
 
 impl View for PointerInteractView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let behavior = self
             .behavior
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or_default();
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -53,13 +53,12 @@ impl View for PointerInteractView {
                 behavior,
             })
             .with_callbacks(),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child) = &self.child {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()

@@ -53,37 +53,49 @@ fn build_item_spec(
 impl EachView {
     /// Read the current `items` array from the store and build one child per
     /// entry under `fragment_id`. Returns the built children in array order.
-    fn build_items(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        fragment_id: FragmentNodeId,
-    ) -> Vec<NodeId> {
-        let raw = read_atom_raw(cx, self.items, boa);
+    fn build_items(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
+        // The item builder is a JS function — it can only exist on an
+        // instance with a realm (the `build` prop arrives from JS). A
+        // realm-free build cannot reach this arm; degrade with a warning.
+        let raw = read_atom_raw(cx, self.items);
         let Some(arr) = raw
             .as_object()
             .and_then(|o| JsArray::from_object(o.clone()).ok())
         else {
             return Vec::new();
         };
-        let len = arr.length(boa).unwrap_or(0);
-
-        let mut out = Vec::with_capacity(len as usize);
-        for i in 0..len as i64 {
-            let Ok(item) = arr.at(i, boa) else {
-                continue;
-            };
-            let Some(spec) = build_item_spec(&self.build, &item, i as u64, boa) else {
-                continue;
-            };
-            out.push(spec.build(cx, boa, NodeId::from(fragment_id)));
+        // Realm-scoped phase: resolve items + invoke the JS item builder.
+        let specs: Vec<Rc<dyn View>> = match cx.realm() {
+            Some(boa) => {
+                let len = arr.length(boa).unwrap_or(0);
+                let mut specs = Vec::with_capacity(len as usize);
+                for i in 0..len as i64 {
+                    let Ok(item) = arr.at(i, boa) else {
+                        continue;
+                    };
+                    let Some(spec) = build_item_spec(&self.build, &item, i as u64, boa) else {
+                        continue;
+                    };
+                    specs.push(spec);
+                }
+                specs
+            }
+            None => {
+                tracing::warn!("Each::build skipped: no JS realm (JS item builder)");
+                Vec::new()
+            }
+        };
+        // Realm-free phase: build the resolved item views into the tree.
+        let mut out = Vec::with_capacity(specs.len());
+        for spec in specs {
+            out.push(spec.build(cx, NodeId::from(fragment_id)));
         }
         out
     }
 }
 
 impl View for EachView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
@@ -107,7 +119,7 @@ impl View for EachView {
         cx.insert_fragment(host);
 
         // Build items under `frag_id` — each auto-links to the fragment.
-        self.build_items(cx, boa, frag_id);
+        self.build_items(cx, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -143,13 +155,12 @@ impl FragmentKind for EachFragment {
     fn perform_update(
         &mut self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
         // Rebuild-all reconciliation: tear down every previously mounted item
         // and rebuild from the current array. Simple and correct; the item
         // subtrees are stateless widgets so rebuilding them is cheap.
-        Some(self.view.build_items(cx, boa, fragment_id))
+        Some(self.view.build_items(cx, fragment_id))
     }
 }
 

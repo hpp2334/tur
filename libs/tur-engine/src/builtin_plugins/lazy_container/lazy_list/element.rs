@@ -46,36 +46,47 @@ pub struct LazyListView {
 }
 
 impl View for LazyListView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         // Resolve the eager props needed by the element up-front.
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(Axis::Vertical);
-        let item_count = read_val(cx, &self.item_count, boa).unwrap_or(0);
+        let item_count = read_val(cx, &self.item_count).unwrap_or(0);
         let overscan = self
             .overscan
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(3);
-        let item_extent = self.item_extent.as_ref().and_then(|v| read_val(cx, v, boa));
+        let item_extent = self.item_extent.as_ref().and_then(|v| read_val(cx, v));
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
-        // will adjust the mounted set to match the actual viewport.
+        // will adjust the mounted set to match the actual viewport. The
+        // item builder is a JS function — realm-scoped phase (resolve
+        // specs), then the realm-free build phase. A realm-free build
+        // cannot reach the JS arm; degrade with a warning.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut visible: Vec<(u64, NodeId)> = Vec::new();
         let mut warned_builder_error = false;
-        for index in 0..initial_count {
-            let Some(spec) = build_item_spec(&builder, index, &mut warned_builder_error, boa)
-            else {
-                continue;
-            };
-            let item_id = spec.build(cx, boa, id.into());
+        let resolved: Vec<(u64, Rc<dyn View>)> = match cx.realm() {
+            Some(boa) => (0..initial_count)
+                .filter_map(|index| {
+                    build_item_spec(&builder, index, &mut warned_builder_error, boa)
+                        .map(|spec| (index, spec))
+                })
+                .collect(),
+            None => {
+                tracing::warn!("LazyList::build skipped: no JS realm (JS item builder)");
+                Vec::new()
+            }
+        };
+        let mut visible: Vec<(u64, NodeId)> = Vec::new();
+        for (index, spec) in resolved {
+            let item_id = spec.build(cx, id.into());
             visible.push((index, item_id));
         }
         let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
@@ -101,7 +112,6 @@ impl View for LazyListView {
                 warned_builder_error,
             })
             .with_callbacks(),
-            boa,
         );
 
         for item_id in item_ids {
@@ -342,14 +352,14 @@ impl LazyListElement {
     /// read value, subsequent passes are no-ops. Called at the top of
     /// `perform_layout` (with a `LayoutViewCx` so tree mutations work);
     /// replaces the former pre-layout `Effect` handler.
-    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx, boa: &mut Context) {
+    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx) {
         // Axis change: cached extents are axis-specific, so invalidate them
         // and reset the positioning anchor.
         let new_axis = self
             .view
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(self.axis);
         if new_axis != self.axis {
             self.axis = new_axis;
@@ -359,11 +369,7 @@ impl LazyListElement {
         }
 
         // itemExtent change: invalidate cached measurements and the anchor.
-        let new_extent = self
-            .view
-            .item_extent
-            .as_ref()
-            .and_then(|v| read_val(cx, v, boa));
+        let new_extent = self.view.item_extent.as_ref().and_then(|v| read_val(cx, v));
         if new_extent != self.item_extent {
             self.item_extent = new_extent;
             self.extent_cache.clear();
@@ -375,7 +381,7 @@ impl LazyListElement {
         // value for all window math below — remount, extents, scrollbar). A
         // read failure keeps the previous declared value rather than
         // collapsing it to 0 (which would tear the list down spuriously).
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        let new_count = read_val(cx, &self.view.item_count).unwrap_or(self.declared_count);
         self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
@@ -409,7 +415,7 @@ impl LazyListElement {
     /// Called from `perform_layout` with the **real** viewport (from
     /// constraints) via a `LayoutViewCx` — so remount runs during layout,
     /// not as a separate pre-layout pass.
-    pub fn remount(&mut self, cx: &mut dyn ViewCx, boa: &mut Context, viewport_main: f64) {
+    pub fn remount(&mut self, cx: &mut dyn ViewCx, viewport_main: f64) {
         // Defer remount until we have a real viewport size. Until then keep
         // the initial set mounted so the first paint isn't blank.
         if viewport_main <= 0.0 {
@@ -448,14 +454,24 @@ impl LazyListElement {
         let builder = self.view.builder.clone();
         let node_id = self.node_id;
         let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
-        for index in new_start..=new_end {
-            if existing.contains(&index) {
-                continue;
+        // The item builder is a JS function — realm-scoped per item. A
+        // realm-free instance has no JS builders; degrade with a warning.
+        let mut warned = std::mem::take(&mut self.warned_builder_error);
+        let built: Vec<(u64, Rc<dyn View>)> = match cx.realm() {
+            Some(boa) => (new_start..=new_end)
+                .filter(|index| !existing.contains(index))
+                .filter_map(|index| {
+                    build_item_spec(&builder, index, &mut warned, boa).map(|spec| (index, spec))
+                })
+                .collect(),
+            None => {
+                tracing::warn!("LazyList remount skipped: no JS realm (JS item builder)");
+                Vec::new()
             }
-            if let Some(spec) =
-                build_item_spec(&builder, index, &mut self.warned_builder_error, boa)
+        };
+        self.warned_builder_error = warned;
+        for (index, spec) in built {
             {
-                let item_id = spec.build(cx, boa, node_id.into());
                 // Ensure the tree children vector stays ordered by logical
                 // index. `spec.build` already appended the new child to the
                 // end of `node.children`; if there's an existing mounted
@@ -466,6 +482,7 @@ impl LazyListElement {
                 // Using `link_child_before` here would double-add the id
                 // and crash layout; `move_child_before` removes the
                 // existing slot first, then re-inserts.
+                let item_id = spec.build(cx, node_id.into());
                 let next_higher = self
                     .visible
                     .iter()

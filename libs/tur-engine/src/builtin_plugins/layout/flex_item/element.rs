@@ -30,14 +30,13 @@ pub struct FlexibleView {
 }
 
 impl View for FlexibleView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(FlexibleElement { view: self.clone() }),
-            boa,
         );
-        let _child_id = self.child.build(cx, boa, id.into());
+        let _child_id = self.child.build(cx, id.into());
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }

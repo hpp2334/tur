@@ -84,20 +84,37 @@ pub struct NativeModulePlugin {
 
 /// One export of a [`NativeModulePlugin`]. The `builder` closure produces a
 /// fresh `NativeFunction` for each instance (called inside `register`).
+#[derive(Clone)]
 pub struct NativeExport {
     pub name: String,
-    pub builder: Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>,
+    /// Fresh-`NativeFunction`-per-instance builder. `Send + Sync` so the
+    /// plugin config can cross threads; called inside `register` (or the
+    /// deferred realm-construction replay) per instance. Manually `Clone`
+    /// by re-boxing a shared-`&` call — closures aren't `Clone`.
+    pub builder: BuilderFn,
     pub length: usize,
 }
 
+/// Shared builder closure type. `Arc` makes [`NativeExport`] `Clone` so the
+/// plugin's register can capture the export list into the deferred
+/// realm-construction thunk.
+pub type BuilderFn = std::sync::Arc<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>;
+
 impl Plugin for NativeModulePlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-        let exports: Vec<(String, NativeFunction, usize)> = self
-            .exports
-            .iter()
-            .map(|e| (e.name.clone(), (e.builder)(ctx.boa_mut()), e.length))
-            .collect();
-        ctx.register_native_module(self.specifier, exports);
+        // Realm-bound: the exports' builders need the realm. Deferred to
+        // realm construction on a realm-free build. The export list is
+        // shared into the thunk via `Arc` (builders aren't `Clone`).
+        let exports: std::sync::Arc<Vec<NativeExport>> = std::sync::Arc::new(self.exports.clone());
+        let specifier = self.specifier;
+        ctx.defer(move |cx| {
+            let exports: Vec<(String, NativeFunction, usize)> = exports
+                .iter()
+                .map(|e| (e.name.clone(), (e.builder)(cx.boa_mut()), e.length))
+                .collect();
+            cx.register_native_module(specifier, exports);
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -773,6 +790,14 @@ impl TurTestApp {
     /// `EventBus::of(app)` that need `&TurApp`.
     pub fn app(&self) -> &TurApp {
         &self.inner
+    }
+
+    /// Whether the instance's JS realm exists. Test-only probe for the
+    /// realm-optional engine: a rut-only instance (no JS module/script ever
+    /// loaded) reports `false` for its whole life. The async RPC is driven
+    /// synchronously (test context).
+    pub fn realm_allocated(&self) -> bool {
+        block_on(self.inner.realm_allocated())
     }
 
     /// Drive the production loop forward by exactly one frame: fire one

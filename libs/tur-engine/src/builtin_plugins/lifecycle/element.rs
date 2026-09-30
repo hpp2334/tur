@@ -1,5 +1,5 @@
+use boa_engine::JsValue;
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsValue};
 
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
@@ -22,7 +22,13 @@ pub struct LifecycleView {
 }
 
 impl View for LifecycleView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
+        // The descriptor factory is a JS thunk — it can only exist on an
+        // instance with a realm. A realm-free build cannot reach this arm.
+        let Some(boa) = cx.realm() else {
+            tracing::warn!("lifecycleView::build skipped: no JS realm (JS factory)");
+            return parent;
+        };
         let descriptor = match self.factory.call(&JsValue::undefined(), &[], boa) {
             Ok(v) => v,
             Err(e) => {
@@ -55,10 +61,9 @@ impl View for LifecycleView {
                 on_mounted,
                 before_destroy,
             }),
-            boa,
         );
         if let Some(child) = element_view {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -80,13 +85,13 @@ impl ElementTrace for LifecycleElement {
 impl ElementSubscribe for LifecycleElement {}
 
 impl Lifecycle for LifecycleElement {
-    fn on_mounted(&mut self, cx: &mut SharedViewCx, _boa: &mut Context) {
+    fn on_mounted(&mut self, cx: &mut SharedViewCx) {
         if let Some(m) = self.on_mounted {
             cx.mutation_queue().borrow_mut().push(m, ());
         }
     }
 
-    fn before_destroy(&mut self, cx: &mut SharedViewCx, _boa: &mut Context) {
+    fn before_destroy(&mut self, cx: &mut SharedViewCx) {
         if let Some(m) = self.before_destroy {
             cx.mutation_queue().borrow_mut().push(m, ());
         }

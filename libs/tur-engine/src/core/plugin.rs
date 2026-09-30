@@ -121,12 +121,34 @@ pub struct CompileContext<'a> {
 pub(crate) struct RegisterParts {
     pub(crate) subsystems: Vec<Box<dyn Subsystem>>,
     pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
+    /// Realm-bound registrations recorded during a realm-free build (a
+    /// rut-only instance never allocates a realm at build). Replayed — in
+    /// plugin order — when the realm is constructed (see
+    /// `WorkerBackend::ensure_realm`); the instance is root-less and
+    /// module-less until then, which is exactly the contract: no JS can run
+    /// before its realm exists.
+    pub(crate) deferred: Vec<DeferredRegistration>,
 }
 
+/// A realm-bound registration thunk. Captures the plugin's realm-free
+/// handles (fn tables, atom handles, specifiers) and rebuilds the JS
+/// objects (modules, classes, globals, consts) against the realm at replay.
+/// A `Parse`-style failure surfaces at realm construction (the embedder's
+/// first JS load).
+pub(crate) type DeferredRegistration =
+    Box<dyn FnOnce(&mut PluginRegisterContext<'_>) -> Result<(), TurError>>;
+
 pub struct PluginRegisterContext<'a> {
-    pub(crate) boa: &'a mut Context,
+    /// The boa realm, when one exists. `None` during a realm-free build
+    /// (a rut-only instance) — realm-bound registrations made during that
+    /// pass are recorded via [`Self::defer`] and replayed at realm
+    /// construction. Inside a deferred thunk this is always `Some`.
+    pub(crate) boa: Option<&'a mut Context>,
     pub(crate) loader: Rc<TurModuleLoader>,
-    pub js_ctx_value: JsValue,
+    /// The JS-side opaque wrapping the instance context. `None` while no
+    /// realm exists (the object needs the realm to materialize); always
+    /// `Some` inside a deferred thunk.
+    pub(crate) js_ctx_value: Option<JsValue>,
     pub(crate) js_ctx: TurInstanceContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
     /// Build-time collector for plugin-registered flush subsystems. Owned by
@@ -145,9 +167,12 @@ pub struct PluginRegisterContext<'a> {
     /// the last plugin registers. No runtime write path exists at all: the
     /// collector is consumed, not flagged.
     pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
+    /// Realm-bound registrations recorded while `boa` is `None`. Replayed
+    /// in order at realm construction.
+    pub(crate) deferred: Vec<DeferredRegistration>,
     /// Always-installed event bus — shared with
     /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
-    /// (specifically `install_event_bus`) read this to wire up the JS bridge
+    /// (specifically `event_bus_consts`) read this to wire up the JS bridge
     /// (`eventBus.on`/`send`) and the [`EmbedderBusSubsystem`] against the same
     /// handle that [`TurApp::event_bus`](crate::TurApp::event_bus) returns to
     /// embedders.
@@ -165,6 +190,20 @@ pub struct PluginRegisterContext<'a> {
     pub(crate) host_exec: HostExecutor,
 }
 
+impl PluginRegisterContext<'_> {
+    /// Record a realm-bound registration for replay at realm construction.
+    /// The thunk runs with `boa` / `js_ctx_value` guaranteed present, in
+    /// plugin order, before any JS module can load. During a build that
+    /// already carries a realm this is unnecessary — prefer calling the
+    /// realm-bound API directly.
+    pub fn defer(
+        &mut self,
+        f: impl FnOnce(&mut PluginRegisterContext<'_>) -> Result<(), TurError> + 'static,
+    ) {
+        self.deferred.push(Box::new(f));
+    }
+}
+
 impl<'a> PluginRegisterContext<'a> {
     /// Register a ctx-bound native module: bridge fns that receive
     /// `TurInstanceContext` as their first argument (`args[0]`, user args
@@ -176,45 +215,100 @@ impl<'a> PluginRegisterContext<'a> {
     /// [`TurInstanceContext::plugin_state`](crate::core::js_runtime::TurInstanceContext::plugin_state)),
     /// and per-object method state rides the JS object's `JsData` payload
     /// (read off `this`). There is deliberately no closure escape hatch.
+    ///
+    /// Realm-free builds record the registration for replay at realm
+    /// construction (the bound natives capture the JS-side ctx object,
+    /// which needs the realm).
     pub fn register_module(&mut self, specifier: &str, fns: Vec<FnEntry>, consts: Vec<ConstEntry>) {
-        let module = build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &consts);
-        self.loader.register(specifier, module);
         tracing::info!(
             "registered module {specifier} ({} fns, {} consts)",
             fns.len(),
             consts.len()
         );
+        if self.boa.is_some() {
+            let ctx_value = self.js_ctx_value();
+            let module = build_native_module(self.boa_mut(), ctx_value, &fns, &consts);
+            self.loader.register(specifier, module);
+        } else {
+            let specifier = specifier.to_string();
+            self.deferred.push(Box::new(move |cx| {
+                let ctx_value = cx.js_ctx_value();
+                let module = build_native_module(cx.boa_mut(), ctx_value, &fns, &consts);
+                cx.loader.register(&specifier, module);
+                Ok(())
+            }));
+        }
     }
 
     /// Register a ctx-free native module (free functions that don't need `TurInstanceContext`).
     /// Used for `tur:net`, `tur-ext/demo-helper`, etc.
+    ///
+    /// Realm-free builds record the registration for replay at realm
+    /// construction (`Module::synthetic` needs the realm).
     pub fn register_native_module(
         &mut self,
         specifier: &str,
         exports: Vec<(String, NativeFunction, usize)>,
     ) {
-        let owned: Vec<(&str, NativeFunction, usize)> = exports
-            .iter()
-            .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
-            .collect();
-        let module = build_fn_module(self.boa, &owned);
-        self.loader.register(specifier, module);
         tracing::info!(
             "registered native module {specifier} ({} exports)",
-            owned.len()
+            exports.len()
         );
+        if self.boa.is_some() {
+            let owned: Vec<(&str, NativeFunction, usize)> = exports
+                .iter()
+                .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
+                .collect();
+            let module = build_fn_module(self.boa_mut(), &owned);
+            self.loader.register(specifier, module);
+        } else {
+            let specifier = specifier.to_string();
+            self.deferred.push(Box::new(move |cx| {
+                let owned: Vec<(&str, NativeFunction, usize)> = exports
+                    .iter()
+                    .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
+                    .collect();
+                let module = build_fn_module(cx.boa_mut(), &owned);
+                cx.loader.register(&specifier, module);
+                Ok(())
+            }));
+        }
     }
 
     /// Register a boa `JsData` global class (e.g. `TextEditingController`).
+    ///
+    /// Realm-free builds record the registration for replay at realm
+    /// construction (class registration needs the realm's intrinsics).
     pub fn register_class<T: Class>(&mut self) -> Result<(), JsError> {
-        self.boa.register_global_class::<T>()
+        if self.boa.is_some() {
+            return self.boa_mut().register_global_class::<T>();
+        }
+        self.deferred.push(Box::new(|cx| {
+            let _ = cx.boa_mut().register_global_class::<T>();
+            Ok(())
+        }));
+        Ok(())
     }
 
-    /// Register a global JS property on `globalThis`.
+    /// Register a global JS property on `globalThis`. The value is built by
+    /// the caller — on a realm-free build the value's JS objects cannot
+    /// exist yet, so realm-bound call sites belong inside a
+    /// [`defer`](Self::defer) thunk; this method defers only the property
+    /// write itself (a primitive `JsValue` is realm-free to carry).
     pub fn register_global(&mut self, name: &str, value: JsValue) {
-        let _ = self
-            .boa
-            .register_global_property(js_string!(name), value, Attribute::all());
+        if self.boa.is_some() {
+            let _ =
+                self.boa_mut()
+                    .register_global_property(js_string!(name), value, Attribute::all());
+            return;
+        }
+        let name = name.to_string();
+        self.deferred.push(Box::new(move |cx| {
+            let _ =
+                cx.boa_mut()
+                    .register_global_property(js_string!(name), value, Attribute::all());
+            Ok(())
+        }));
     }
 
     /// Access the shared JS context (reactive store, node tree, etc.).
@@ -230,9 +324,29 @@ impl<'a> PluginRegisterContext<'a> {
         self.js_ctx.capability()
     }
 
-    /// Access the boa `Context` directly (for custom registration needs).
+    /// Access the boa `Context` directly. Panics on a realm-free build —
+    /// realm-bound work belongs inside a [`defer`](Self::defer) thunk (or
+    /// behind [`try_boa_mut`](Self::try_boa_mut)), since the realm does not
+    /// exist during a realm-free registration pass.
     pub fn boa_mut(&mut self) -> &mut Context {
         self.boa
+            .as_deref_mut()
+            .expect("no JS realm: call realm-bound registration from a `defer` thunk")
+    }
+
+    /// The boa `Context`, when the instance has a realm.
+    pub fn try_boa_mut(&mut self) -> Option<&mut Context> {
+        self.boa.as_deref_mut()
+    }
+
+    /// The JS-side opaque wrapping the instance context — the `ctx_value`
+    /// the bound bridge fns capture. Panics on a realm-free build (the
+    /// object materializes with the realm; access it from a
+    /// [`defer`](Self::defer) thunk).
+    pub fn js_ctx_value(&mut self) -> JsValue {
+        self.js_ctx_value.clone().expect(
+            "no JS realm: js_ctx_value materializes with the realm — call from a `defer` thunk",
+        )
     }
 
     /// Spawn a worker-side async task, handing it an
@@ -379,22 +493,24 @@ impl<'a> PluginRegisterContext<'a> {
     }
 
     /// Builder-facing: consume the register-phase collectors (subsystems +
-    /// plugin state), ending the register phase. After this call the only
-    /// registration path in existence is gone — the collected state is
-    /// installed once and immutable for the instance's lifetime.
+    /// plugin state + deferred realm-bound registrations), ending the
+    /// register phase. After this call the only registration path in
+    /// existence is gone — the collected state is installed once and
+    /// immutable for the instance's lifetime. The deferred registrations
+    /// replay at realm construction (inside `ensure_realm`).
     pub(crate) fn into_parts(self) -> RegisterParts {
         RegisterParts {
             subsystems: self.subsystems,
             plugin_state: self.plugin_state,
+            deferred: self.deferred,
         }
     }
 
     /// The always-installed event bus handle (shared with
     /// [`TurApp::event_bus`](crate::TurApp::event_bus)). Plugins that need to
-    /// wire up host↔JS byte traffic (specifically [`install_event_bus`])
+    /// wire up host↔JS byte traffic (specifically
+    /// [`event_bus_consts`](crate::core::event_bus::event_bus_consts))
     /// read this and clone the `Rc` for their subsystem / bridge captures.
-    ///
-    /// [`install_event_bus`]: crate::core::event_bus::install_event_bus
     pub fn event_bus(&self) -> Rc<crate::core::event_bus::EventBus> {
         self.event_bus.clone()
     }
@@ -408,15 +524,35 @@ impl<'a> PluginRegisterContext<'a> {
     /// (e.g. `tur-animation` ships an `index.js` defining `AnimatedContainer`
     /// etc. on top of native bridge fns registered via
     /// [`register_module`](Self::register_module)).
+    ///
+    /// Realm-free builds record the parse for replay at realm construction
+    /// (`Module::parse` needs the realm).
     pub fn register_js_module(
         &mut self,
         specifier: &str,
         source: &str,
         path: &Path,
     ) -> Result<(), TurError> {
-        let module = Module::parse(Source::from_bytes(source).with_path(path), None, self.boa)
-            .map_err(|e| TurError::Other(format!("failed to parse JS module {specifier}: {e}")))?;
-        self.loader.register(specifier, module);
+        if let Some(boa) = self.boa.as_deref_mut() {
+            let module = Module::parse(Source::from_bytes(source).with_path(path), None, boa)
+                .map_err(|e| {
+                    TurError::Other(format!("failed to parse JS module {specifier}: {e}"))
+                })?;
+            self.loader.register(specifier, module);
+        } else {
+            let specifier = specifier.to_string();
+            let source = source.to_string();
+            let path = path.to_path_buf();
+            self.deferred.push(Box::new(move |cx| {
+                let boa = cx.boa.as_deref_mut().expect("realm in deferred thunk");
+                let module = Module::parse(Source::from_bytes(&source).with_path(&path), None, boa)
+                    .map_err(|e| {
+                        TurError::Other(format!("failed to parse JS module {specifier}: {e}"))
+                    })?;
+                cx.loader.register(&specifier, module);
+                Ok(())
+            }));
+        }
         tracing::info!("registered JS module {specifier} ({} bytes)", source.len());
         Ok(())
     }

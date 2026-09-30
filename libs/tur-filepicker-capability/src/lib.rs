@@ -148,11 +148,17 @@ impl Plugin for TurFilePickerPlugin {
     }
 
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-        let ctx_value = ctx.js_ctx_value.clone();
-        let filepicker_obj = bridge::build_filepicker_object(ctx.boa_mut(), ctx_value);
-        let consts: Vec<tur_engine::core::js_runtime::helpers::ConstEntry> =
-            vec![("filePicker", filepicker_obj)];
-        ctx.register_module("tur:filepicker", bridge::fns(), consts);
+        // Realm-bound half — deferred to realm construction on a realm-free
+        // build: the `filePicker` object is built against the realm and
+        // registered as the `tur:filepicker` module's only export.
+        ctx.defer(move |cx| {
+            let ctx_value = cx.js_ctx_value();
+            let filepicker_obj = bridge::build_filepicker_object(cx.boa_mut(), ctx_value);
+            let consts: Vec<tur_engine::core::js_runtime::helpers::ConstEntry> =
+                vec![("filePicker", filepicker_obj)];
+            cx.register_module("tur:filepicker", bridge::fns(), consts);
+            Ok(())
+        });
         Ok(())
     }
 }

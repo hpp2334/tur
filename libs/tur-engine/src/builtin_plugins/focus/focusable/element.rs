@@ -26,17 +26,16 @@ pub struct FocusableView {
 }
 
 impl View for FocusableView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(FocusableElement { view: self.clone() })
                 .with_focusable::<FocusableElement>()
                 .with_callbacks(),
-            boa,
         );
         if let Some(child) = &self.child {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()

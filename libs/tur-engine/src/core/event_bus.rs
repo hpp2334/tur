@@ -3,8 +3,10 @@
 //!
 //! The bus is engine infrastructure (always installed by `TurStdPlugin`),
 //! so the type lives in `core` rather than `builtin_plugins`. The
-//! registration code (`install_event_bus`) and the JS bridge closures live
-//! here too; `TurStdPlugin::register` just calls `install_event_bus`.
+//! registration code (`event_bus_consts`) and the JS bridge closures live
+//! here too; `TurStdPlugin` calls `install_event_bus_subsystem` (realm-free)
+//! at register and `event_bus_consts` (realm-bound) in its deferred
+//! realm-construction thunk.
 //!
 //! Every message carries a `channel_id`. A handler registered on channel `N`
 //! only receives messages sent/emitted on channel `N` — there is no
@@ -231,26 +233,36 @@ impl Subsystem for EmbedderBusSubsystem {
             // Snapshot the handler map so JS callbacks calling `on`/`send`
             // during dispatch don't cause a double-borrow of the RefCell.
             let handlers_snapshot = inner.js_handlers.borrow().clone();
-            for (channel_id, msg) in host_msgs {
-                let Some(channel_handlers) = handlers_snapshot.get(&channel_id) else {
-                    continue;
-                };
-                let u8a = match JsUint8Array::from_iter(msg, cx.boa) {
-                    Ok(a) => JsValue::from(a),
-                    Err(e) => {
-                        tracing::error!("HostBus: failed to create Uint8Array: {e}");
+            // Realm-free instances have no JS handlers (registration happens
+            // from JS), so the delivery loop below can never run — guard the
+            // realm borrow anyway and warn if traffic arrives realm-free.
+            if let Some(boa) = cx.boa.as_deref_mut() {
+                for (channel_id, msg) in host_msgs {
+                    let Some(channel_handlers) = handlers_snapshot.get(&channel_id) else {
                         continue;
-                    }
-                };
-                for handler in channel_handlers {
-                    let args: [JsValue; 1] = [u8a.clone()];
-                    if let Err(e) = handler.call(&JsValue::undefined(), &args, cx.boa) {
-                        tracing::error!("HostBus: JS handler error: {e}");
-                        crate::core::app::runtime_error::report(cx.boa, &e);
+                    };
+                    let u8a = match JsUint8Array::from_iter(msg, boa) {
+                        Ok(a) => JsValue::from(a),
+                        Err(e) => {
+                            tracing::error!("HostBus: failed to create Uint8Array: {e}");
+                            continue;
+                        }
+                    };
+                    for handler in channel_handlers {
+                        let args: [JsValue; 1] = [u8a.clone()];
+                        if let Err(e) = handler.call(&JsValue::undefined(), &args, boa) {
+                            tracing::error!("HostBus: JS handler error: {e}");
+                            crate::core::app::runtime_error::report(boa, &e);
+                        }
                     }
                 }
+                cx.mark_dirty();
+            } else {
+                tracing::warn!(
+                    "eventBus: {} host→JS message(s) undelivered — no JS realm",
+                    host_msgs.len()
+                );
             }
-            cx.mark_dirty();
         }
 
         let js_msgs: Vec<(u64, Vec<u8>)> = inner.js_to_embedder.lock().unwrap().drain(..).collect();
@@ -382,17 +394,23 @@ fn extract_bytes_from_value(v: &JsValue, ctx: &mut Context) -> JsResult<Vec<u8>>
 // Install — called by TurStdPlugin::register
 // ---------------------------------------------------------------------------
 
-/// Wire up the event bus: register the [`EmbedderBusSubsystem`] (drains queues
-/// each flush) and the JS-side `eventBus` object (`on`/`send`). The shared
-/// state is created up-front in [`crate::core::app::TurAppInternal::new`]
-/// and exposed to plugins via
-/// [`PluginRegisterContext::event_bus`](crate::core::plugin::PluginRegisterContext::event_bus);
-/// this function just hooks up the JS bridge + subsystem to that shared
-/// state.
-pub fn install_event_bus(ctx: &mut PluginRegisterContext) -> Result<Vec<ConstEntry>, TurError> {
+/// Wire up the event bus's realm-free half: register the
+/// [`EmbedderBusSubsystem`] (drains queues each flush). Runs during plugin
+/// registration whether or not the instance has a JS realm.
+pub fn install_event_bus_subsystem(ctx: &mut PluginRegisterContext) {
     let inner = ctx.event_bus();
+    ctx.register_subsystem(Box::new(EmbedderBusSubsystem(inner)));
+}
 
-    ctx.register_subsystem(Box::new(EmbedderBusSubsystem(inner.clone())));
+/// Wire up the event bus's realm-bound half: build the JS-side `eventBus`
+/// object (`on`/`send`) as a `tur:std` const. Called from the std plugin's
+/// deferred realm-registration thunk (the object needs the boa realm).
+/// The shared state is created up-front in
+/// [`crate::core::app::TurAppInternal::new`] and exposed to plugins via
+/// [`PluginRegisterContext::event_bus`](crate::core::plugin::PluginRegisterContext::event_bus);
+/// this function just hooks up the JS bridge to that shared state.
+pub fn event_bus_consts(ctx: &mut PluginRegisterContext) -> Result<Vec<ConstEntry>, TurError> {
+    let inner = ctx.event_bus();
 
     let on_obj = FunctionObjectBuilder::new(
         ctx.boa_mut().realm(),

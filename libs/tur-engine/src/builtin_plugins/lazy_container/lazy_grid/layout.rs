@@ -71,6 +71,7 @@ impl ElementLayout for LazyGridElement {
                 self.visible.clear();
                 let mut vcx = LayoutViewCx::new(
                     cx.tree,
+                    None,
                     cx.node_tree.clone(),
                     cx.mutation_queue.clone(),
                     cx.dirty.clone(),
@@ -118,14 +119,14 @@ impl ElementLayout for LazyGridElement {
 
         // --- reactive-change reaction + remount (build-during-layout) ---
         if viewport_main > 0.0 {
-            let boa = cx.js.boa_mut();
             let mut vcx = LayoutViewCx::new(
                 cx.tree,
+                cx.js.realm_mut(),
                 cx.node_tree.clone(),
                 cx.mutation_queue.clone(),
                 cx.dirty.clone(),
             );
-            self.react_to_prop_changes(&mut vcx, boa);
+            self.react_to_prop_changes(&mut vcx);
             // On column-count change, unmount everything so the visible set is
             // rebuilt against the new line/slot mapping with no stragglers.
             if count_changed {
@@ -135,7 +136,7 @@ impl ElementLayout for LazyGridElement {
                 }
                 self.visible.clear();
             }
-            self.remount(&mut vcx, boa, viewport_main);
+            self.remount(&mut vcx, viewport_main);
         }
 
         // --- measure phase: lay out every currently-mounted cell at its

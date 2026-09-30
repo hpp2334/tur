@@ -44,34 +44,45 @@ pub struct LazyGridView {
 }
 
 impl View for LazyGridView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(Axis::Vertical);
-        let item_count = read_val(cx, &self.item_count, boa).unwrap_or(0);
+        let item_count = read_val(cx, &self.item_count).unwrap_or(0);
         let overscan = self
             .overscan
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(3);
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
-        // adjusts the mounted set to match the actual viewport.
+        // adjusts the mounted set to match the actual viewport. The item
+        // builder is a JS function — realm-scoped phase (resolve specs),
+        // then the realm-free build phase. A realm-free build cannot reach
+        // the JS arm; degrade with a warning.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut visible: Vec<(u64, NodeId)> = Vec::new();
         let mut warned_builder_error = false;
-        for index in 0..initial_count {
-            let Some(spec) = build_item_spec(&builder, index, &mut warned_builder_error, boa)
-            else {
-                continue;
-            };
-            let item_id = spec.build(cx, boa, id.into());
+        let resolved: Vec<(u64, Rc<dyn View>)> = match cx.realm() {
+            Some(boa) => (0..initial_count)
+                .filter_map(|index| {
+                    build_item_spec(&builder, index, &mut warned_builder_error, boa)
+                        .map(|spec| (index, spec))
+                })
+                .collect(),
+            None => {
+                tracing::warn!("LazyGrid::build skipped: no JS realm (JS item builder)");
+                Vec::new()
+            }
+        };
+        let mut visible: Vec<(u64, NodeId)> = Vec::new();
+        for (index, spec) in resolved {
+            let item_id = spec.build(cx, id.into());
             visible.push((index, item_id));
         }
         let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
@@ -98,7 +109,6 @@ impl View for LazyGridView {
                 warned_builder_error,
             })
             .with_callbacks(),
-            boa,
         );
 
         for item_id in item_ids {
@@ -271,13 +281,13 @@ impl LazyGridElement {
     /// Detect prop changes (axis + all sizing props + itemCount) by diffing
     /// freshly-read reactive values against cached ones, tearing down /
     /// resetting state as needed. Called at the top of `perform_layout`.
-    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx, boa: &mut Context) {
+    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx) {
         // Axis change: cached geometry is axis-specific, so reset.
         let new_axis = self
             .view
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(self.axis);
         if new_axis != self.axis {
             self.axis = new_axis;
@@ -290,7 +300,7 @@ impl LazyGridElement {
         // itemCount: always refresh the declared count (the authoritative
         // value for window math). A read failure keeps the previous declared
         // value rather than collapsing it to 0.
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        let new_count = read_val(cx, &self.view.item_count).unwrap_or(self.declared_count);
         self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
@@ -311,7 +321,7 @@ impl LazyGridElement {
     /// Mount cells in the visible range that aren't currently built, and
     /// unmount any built cells outside it. Mutates the tree via `cx`. Sorted
     /// `visible` is preserved.
-    pub fn remount(&mut self, cx: &mut dyn ViewCx, boa: &mut Context, viewport_main: f64) {
+    pub fn remount(&mut self, cx: &mut dyn ViewCx, viewport_main: f64) {
         if viewport_main <= 0.0 {
             return;
         }
@@ -351,25 +361,35 @@ impl LazyGridElement {
             self.visible.iter().map(|(i, _)| *i).collect();
         let builder = self.view.builder.clone();
         let node_id = self.node_id;
+        // The item builder is a JS function — realm-scoped (resolve specs),
+        // then the realm-free build phase. A realm-free instance has no JS
+        // builders; degrade with a warning.
+        let mut warned = std::mem::take(&mut self.warned_builder_error);
+        let built: Vec<(u64, Rc<dyn View>)> = match cx.realm() {
+            Some(boa) => (new_start..=new_end)
+                .filter(|index| !existing.contains(index))
+                .filter_map(|index| {
+                    build_item_spec(&builder, index, &mut warned, boa).map(|spec| (index, spec))
+                })
+                .collect(),
+            None => {
+                tracing::warn!("LazyGrid remount skipped: no JS realm (JS item builder)");
+                Vec::new()
+            }
+        };
+        self.warned_builder_error = warned;
         let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
-        for index in new_start..=new_end {
-            if existing.contains(&index) {
-                continue;
+        for (index, spec) in built {
+            let item_id = spec.build(cx, node_id.into());
+            let next_higher = self
+                .visible
+                .iter()
+                .find(|(i, _)| *i > index)
+                .map(|(_, id)| *id);
+            if let Some(ref_id) = next_higher {
+                cx.move_child_before(node_id, item_id, ref_id);
             }
-            if let Some(spec) =
-                build_item_spec(&builder, index, &mut self.warned_builder_error, boa)
-            {
-                let item_id = spec.build(cx, boa, node_id.into());
-                let next_higher = self
-                    .visible
-                    .iter()
-                    .find(|(i, _)| *i > index)
-                    .map(|(_, id)| *id);
-                if let Some(ref_id) = next_higher {
-                    cx.move_child_before(node_id, item_id, ref_id);
-                }
-                newly_mounted.push((index, item_id));
-            }
+            newly_mounted.push((index, item_id));
         }
         if !newly_mounted.is_empty() {
             self.visible.extend(newly_mounted);
