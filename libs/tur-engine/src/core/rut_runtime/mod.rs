@@ -41,6 +41,7 @@ use rut_vm::OpaqueRef;
 mod async_caps;
 mod collections;
 mod container;
+mod derive;
 mod gesture;
 mod realm;
 mod text;
@@ -204,6 +205,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
     host_funcs.extend(async_caps::decl_rows());
     // C7 — lifecycle + virtual apps.
     host_funcs.extend(virtual_app::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    // C8 — derived atoms + watch (the guarded flush-time VM call).
+    host_funcs.extend(derive::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     let consts = container::decl_consts();
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -275,9 +278,18 @@ fn install_tur_pkg(
         })?;
         Ok(())
     });
-    // stash the root — the engine applies it after `start` returns
+    // stash the root — the engine applies it after `start` returns. The
+    // C8 no-mount law: a face-driven call (a derive / item builder
+    // materializing mid-flush) may NOT re-mount — the trap is reported
+    // through the error rail and the flush continues.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "mount", (Opaque<RutView>,) -> (), move |vm: &mut rut_vm::interp::Vm, view: Opaque<RutView>| {
+        if h.face_busy.get() > 0 {
+            return Err(rut_vm::Trap::new(
+                rut_vm::TrapKind::Invalid,
+                "tur::mount inside a face call (derive / item builder) —                  mounting is a start-time or intent-drain-time op only",
+            ));
+        }
         let root = view.with(|v| v.0.clone())?;
         let _ = vm;
         *h.pending_root.borrow_mut() = Some(root);
@@ -612,6 +624,8 @@ fn install_tur_pkg(
     async_caps::install(&mut pkg, handles);
     // C7 — lifecycle + virtual apps.
     virtual_app::install(&mut pkg, handles);
+    // C8 — derived atoms + watch.
+    derive::install(&mut pkg, handles);
     // The opaque stash (the cross-entry hand-off rail).
     {
         let h = handles.clone();

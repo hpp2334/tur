@@ -1213,6 +1213,166 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
     assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
 }
 
+// ---------------------------------------------------------------------------
+// Phase C8 — derived atoms: the guarded sync VM call during flush + watch.
+// ---------------------------------------------------------------------------
+
+/// A derived atom (`entry fn d(v: f64) -> str`) bound to a Text; the dep
+/// is a counter atom driven by a button. The derive materializes inside
+/// the flush (the guarded face call). A second derived (`d2`) chains two
+/// deps. A watcher reports changes into a transcript atom.
+const DERIVED_RUT: &str = r#"
+use tur::{ el_button, el_column, el_text_bound, el_text_bound_d, el_build, el_child, mount, rs_derive, rs_derive2, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, rs_watch, rs_watch_start };
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    let other = rs_source_f64();
+    let d = rs_derive("d", count);
+    let d2 = rs_derive2("d2", count, other);
+
+    let hits = rs_source_f64();
+    let watch = rs_watch(count, "on_count", hits);
+    rs_watch_start(watch);
+
+    let col = el_column();
+    el_child(col, el_text_bound_d(d));
+    el_child(col, el_text_bound_d(d2));
+    el_child(col, el_text_bound(hits));
+    el_child(col, el_button(count, count, "ts_inc", "+1"));
+    mount(el_build(col));
+    return count;
+}
+
+// The derive bodies — synchronous VM calls during flush, through the
+// guarded face.
+entry fn d(v: f64) -> str {
+    return f"count={v as u64}";
+}
+
+entry fn d2(a: f64, b: f64) -> str {
+    return f"sum={a as u64 + b as u64}";
+}
+
+entry fn ts_inc(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}
+
+// The watch delivery: (report atom, watched atom, seq) — the fresh value
+// reads through the rows.
+entry fn on_count(report: u64, watched: u64, _n: f64) {
+    let v = rs_get_f64(watched);
+    rs_set_str(report, f"changed:{v as u64}");
+}
+"#;
+
+/// The no-mount guard: a derive whose body tries `tur::mount` TRAPS (the
+/// face raises `face_busy`), the trap reports through the error rail, the
+/// derived falls back to Nil — and the frame never wedges (the healthy
+/// derive beside it keeps materializing).
+const DERIVED_NO_MOUNT_RUT: &str = r#"
+use tur::{ el_button, el_column, el_text, el_text_bound_d, el_build, el_child, mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    let bad = rs_derive("bad", count);
+    let good = rs_derive("good", count);
+
+    let col = el_column();
+    el_child(col, el_text_bound_d(bad));
+    el_child(col, el_text_bound_d(good));
+    el_child(col, el_button(count, count, "ts_inc", "+1"));
+    mount(el_build(col));
+    return count;
+}
+
+// The hostile derive: tries to re-mount mid-flush — the no-mount guard
+// traps it.
+entry fn bad(v: f64) -> str {
+    let col = el_column();
+    el_child(col, el_text("hijack"));
+    mount(el_build(col));
+    return f"bad={v as u64}";
+}
+
+entry fn good(v: f64) -> str {
+    return f"good={v as u64}";
+}
+
+entry fn ts_inc(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}
+"#;
+
+#[test]
+fn rut_derive_mount_guard_traps_without_wedging() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(DERIVED_NO_MOUNT_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The hostile derive fell back to Nil (rendered empty); the healthy
+    // one beside it materialized.
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"good=0".to_string()),
+        "the healthy derive materialized: {texts:?}"
+    );
+    assert!(
+        !texts.contains(&"bad=0".to_string()) && !texts.contains(&"hijack".to_string()),
+        "the mount-in-derive trapped before rendering: {texts:?}"
+    );
+
+    // The frame is alive: a bump re-materializes the healthy derive and
+    // the trap fires again — no wedge, no parked VM.
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let button = app.dev_tool_get_element(column.children[2]).unwrap();
+    let (bx, by) = button.absolute;
+    let (bw, bh) = button.size;
+    app.click(bx + bw / 2.0, by + bh / 2.0);
+    app.wait_for_timeout(Duration::ZERO);
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"good=1".to_string()),
+        "the flush kept converging after the trap: {texts:?}"
+    );
+}
+
+#[test]
+fn rut_derived_atoms_watch_and_guards() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(DERIVED_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The derives materialized at mount (the guarded face calls during
+    // the build flush): count=0 / sum=0(+other=0).
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"count=0".to_string()) && texts.contains(&"sum=0".to_string()),
+        "both derives materialized at mount: {texts:?}"
+    );
+
+    // Bump the counter — the flush re-materializes BOTH derives through
+    // the guarded face and the watch delivery fires.
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let button = app.dev_tool_get_element(column.children[3]).unwrap();
+    let (bx, by) = button.absolute;
+    let (bw, bh) = button.size;
+    app.click(bx + bw / 2.0, by + bh / 2.0);
+    app.wait_for_timeout(Duration::ZERO);
+
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"count=1".to_string()) && texts.contains(&"sum=1".to_string()),
+        "both derives re-materialized after the dep write: {texts:?}"
+    );
+    assert!(
+        texts.contains(&"changed:1".to_string()),
+        "the watch delivery fired with the fresh value: {texts:?}"
+    );
+}
+
+
 /// The alpha atom's current value, read back through the bound opacity
 /// element's resolved paint value (layout mirrors the atom each frame).
 fn read_rut_f64(app: &TurTestApp) -> f64 {
