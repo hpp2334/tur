@@ -4679,6 +4679,7 @@ dependencies = [
  "rut-core",
  "rut-driver",
  "rut-parser",
+ "rut-std",
  "rut-vm",
  "thiserror 2.0.18",
  "tracing",
@@ -4695,6 +4696,8 @@ name = "tur-filepicker-capability"
 version = "0.1.0"
 dependencies = [
  "boa_engine",
+ "rut-core",
+ "rut-vm",
  "tracing",
  "tur-engine",
 ]
@@ -4758,6 +4761,8 @@ dependencies = [
  "boa_engine",
  "boa_gc",
  "futures",
+ "rut-core",
+ "rut-vm",
  "tracing",
  "tur-engine",
 ]

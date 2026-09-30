@@ -26,6 +26,7 @@ rut-core = { workspace = true }
 rut-parser = { workspace = true }
 rut-driver = { workspace = true }
 rut-vm = { workspace = true }
+rut-std = { workspace = true }
 vello_hybrid = { workspace = true }
 vello_common = { workspace = true }
 glifo = { workspace = true }

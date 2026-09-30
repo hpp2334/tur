@@ -35,36 +35,35 @@ pub fn install(
     cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>,
     manager: Rc<std::cell::RefCell<crate::manager::AnimationManager>>,
 ) {
-    cx.decl.extend(
-        vec![
-            ("el_opacity", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
-            ("el_opacity_bound", vec![TY_U64, TY_OPAQUE], TY_OPAQUE),
-            (
-                "el_transform",
-                vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
-                TY_OPAQUE,
-            ),
-            (
-                "anim_ctrl",
-                vec![TY_U64, TY_F64, TY_STR, TY_U64, TY_STR, TY_STR],
-                TY_OPAQUE,
-            ),
-            ("anim_forward", vec![TY_OPAQUE], TY_NIL),
-            ("anim_reverse", vec![TY_OPAQUE], TY_NIL),
-            ("anim_pause", vec![TY_OPAQUE], TY_NIL),
-            ("anim_resume", vec![TY_OPAQUE], TY_NIL),
-            ("anim_stop", vec![TY_OPAQUE], TY_NIL),
-            ("anim_seek", vec![TY_OPAQUE, TY_F64], TY_NIL),
-            ("anim_value", vec![TY_OPAQUE], TY_F64),
-            ("anim_status", vec![TY_OPAQUE], TY_STR),
-            ("anim_repeat", vec![TY_OPAQUE, TY_U64], TY_NIL),
-            ("tween_lerp", vec![TY_F64, TY_F64, TY_F64], TY_F64),
-            ("color_tween_lerp", vec![TY_U64, TY_U64, TY_F64], TY_U64),
-            ("curve_eval", vec![TY_STR, TY_F64], TY_F64),
-        ]
-        .into_iter()
-        .map(|(n, p, r)| (n.to_string(), p, r)),
-    );
+    let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
+        (n.to_string(), p, r, false)
+    };
+    cx.decl.extend(vec![
+        row("el_opacity", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row("el_opacity_bound", vec![TY_U64, TY_OPAQUE], TY_OPAQUE),
+        row(
+            "el_transform",
+            vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
+        row(
+            "anim_ctrl",
+            vec![TY_U64, TY_F64, TY_STR, TY_U64, TY_STR, TY_STR],
+            TY_OPAQUE,
+        ),
+        row("anim_forward", vec![TY_OPAQUE], TY_NIL),
+        row("anim_reverse", vec![TY_OPAQUE], TY_NIL),
+        row("anim_pause", vec![TY_OPAQUE], TY_NIL),
+        row("anim_resume", vec![TY_OPAQUE], TY_NIL),
+        row("anim_stop", vec![TY_OPAQUE], TY_NIL),
+        row("anim_seek", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        row("anim_value", vec![TY_OPAQUE], TY_F64),
+        row("anim_status", vec![TY_OPAQUE], TY_STR),
+        row("anim_repeat", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("tween_lerp", vec![TY_F64, TY_F64, TY_F64], TY_F64),
+        row("color_tween_lerp", vec![TY_U64, TY_U64, TY_F64], TY_U64),
+        row("curve_eval", vec![TY_STR, TY_F64], TY_F64),
+    ]);
 
     // The bodies need the per-instance handles — absent at the compile-time
     // decl probe.

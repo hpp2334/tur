@@ -30,6 +30,7 @@
 //!   `typeof request === "function"`.
 
 pub mod bridge;
+pub mod rut_rows;
 
 use std::future::Future;
 use std::pin::Pin;

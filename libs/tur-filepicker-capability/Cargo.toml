@@ -10,3 +10,5 @@ license.workspace = true
 tur-engine = { workspace = true }
 boa_engine = { workspace = true }
 tracing = { workspace = true }
+rut-core = { workspace = true }
+rut-vm = { workspace = true }

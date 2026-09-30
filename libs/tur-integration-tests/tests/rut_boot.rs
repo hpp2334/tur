@@ -1012,6 +1012,125 @@ fn rut_animation_controller_ticks_into_opacity() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Phase C6 — async capabilities: clipboard + net request/stream over
+// `pkg_async_fn!` + `Completer`, task-cancel wire-abort, bytes helpers.
+// ---------------------------------------------------------------------------
+
+/// A clipboard round-trip and an HTTP request, awaited in rut
+/// (`launch_future` + `await`; the pump's `run_ready` drives it).
+const ASYNC_RUT: &str = r#"
+use core::RunContext;
+use async_host::launch_future;
+use tur::{ clipboard_read, clipboard_write, decode_utf8, el_column, el_text_bound, el_build, el_child, mount, net_request, rs_set_str, rs_source_str };
+
+async fn work(cx: RunContext, label: u64) -> str {
+    rs_set_str(label, "launched");
+    await clipboard_write("from rut");
+    let clip = await clipboard_read();
+    rs_set_str(label, f"{rs_get_str(label)}-after-read:{clip}");
+    let body = await net_request("https://example.test/api", "GET");
+    let text = decode_utf8(body);
+    rs_set_str(label, f"{rs_get_str(label)}|{text}");
+    return "";
+}
+
+entry fn start() -> u64 {
+    let label = rs_source_str("");
+    launch_future(work(label));
+    let col = el_column();
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return label;
+}
+"#;
+
+#[test]
+fn rut_async_clipboard_and_net_request() {
+    let mut app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
+    app.set_clipboard_read("seeded");
+    app.set_http_response(tur_net_capability::HttpOutcome::Ok {
+        status: 200,
+        status_text: "OK".to_string(),
+        headers: Vec::new(),
+        body: b"hello from net".to_vec(),
+    });
+
+    app.load_rut_module(ASYNC_RUT).unwrap();
+    // Each await resumes on a later pump (the capability futures complete
+    // on the worker's task lane); poll until the final write lands.
+    let done = app.wait_for(|app| rut_bound_text(app).ends_with("|hello from net"));
+    assert!(done, "the awaits completed: {:?}", rut_bound_text(&app));
+    assert_eq!(
+        app.take_clipboard_write(),
+        Some("from rut".to_string()),
+        "the clipboard write crossed"
+    );
+}
+
+/// A streaming download into rut: each chunk crosses as an intent record
+/// into `on_chunk` (the chunk lengths append to the label); the task
+/// opaque's cancel row runs (idempotent after completion).
+const STREAM_RUT: &str = r#"
+use core::RunContext;
+use async_host::launch_future;
+use tur::{ clipboard_write, el_column, el_text_bound, el_build, el_child, mount, net_stream, st_put, st_take, task_cancel, rs_get_str, rs_set_str, rs_source_str };
+
+entry fn start() -> u64 {
+    let label = rs_source_str("");
+    let task = net_stream(label, "https://example.test/stream", "GET", "on_chunk");
+    // The task rides the stash (an async frame cannot carry opaque
+    // params); the launched cancel journey takes it back by key.
+    st_put(label, task);
+    launch_future(finish(label));
+    let col = el_column();
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return label;
+}
+
+async fn finish(cx: RunContext, label: u64) -> str {
+    // One beat (a quick capability await) so the drive is mid-flight,
+    // then wire-abort the stream: whatever chunks landed stay on the
+    // label; the rest never arrive.
+    rs_set_str(label, f"{rs_get_str(label)}|launched");
+    await clipboard_write("beat");
+    let task = st_take(label);
+    task_cancel(task);
+    rs_set_str(label, f"{rs_get_str(label)}|done");
+    return "";
+}
+
+entry fn on_chunk(label: u64, data: bytes) {
+    rs_set_str(label, f"{rs_get_str(label)}|{data.len() as u64}");
+}
+"#;
+
+#[test]
+fn rut_net_stream_chunks_cross_as_records() {
+    let mut app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
+    app.set_http_stream(200, vec![b"abc".to_vec(), b"de".to_vec()]);
+
+    app.load_rut_module(STREAM_RUT).unwrap();
+    let done = app.wait_for(|app| rut_bound_text(app).contains("|done"));
+    assert!(done, "the cancel journey ran: {:?}", rut_bound_text(&app));
+
+    // The transcript pins all three crossings: the launched journey's
+    // markers (run_ready phase) and both chunk records (intent-drain
+    // phase, in stream order). (The two phases append in drain order —
+    // intents drain after the flush — so the chunks may trail the done
+    // marker; each pair's internal order is what matters.)
+    let transcript = rut_bound_text(&app);
+    assert!(
+        transcript.contains("|launched") && transcript.contains("|done"),
+        "the launched cancel journey ran: {transcript}"
+    );
+    assert!(
+        transcript.contains("|3|2"),
+        "both chunks crossed as ordered intent records: {transcript}"
+    );
+}
+
 /// The alpha atom's current value, read back through the bound opacity
 /// element's resolved paint value (layout mirrors the atom each frame).
 fn read_rut_f64(app: &TurTestApp) -> f64 {

@@ -32,12 +32,13 @@ use crate::builtin_plugins::layout::{ContainerView, FlexView, FlexibleView, Posi
 use crate::builtin_plugins::text::TextView;
 use crate::core::layout::FlexFit;
 use crate::core::render::brush::{Brush, Color};
-use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
+use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64};
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
 use rut_vm::interp::{CallArgs, Ret, Vm};
 use rut_vm::OpaqueRef;
 
+mod async_caps;
 mod collections;
 mod container;
 mod gesture;
@@ -185,6 +186,9 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("rs_value_len", vec![TY_OPAQUE], TY_U64),
         row("rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
         row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
+        // the opaque stash (cross-entry hand-off)
+        row("st_put", vec![TY_U64, TY_OPAQUE], TY_NIL),
+        row("st_take", vec![TY_U64], TY_OPT_OPAQUE),
     ];
     // C1 — text input rows (realm-minted controllers).
     host_funcs.extend(text::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
@@ -194,6 +198,9 @@ pub fn tur_decl_module() -> rut_driver::Module {
     host_funcs.extend(container::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     // C4 — gestures, keyboard, focus (intent records on the drain).
     host_funcs.extend(gesture::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    // C6 — async capabilities (clipboard + bytes helpers; the async rows
+    // ride the driver's five-row family expansion).
+    host_funcs.extend(async_caps::decl_rows());
     let consts = container::decl_consts();
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -598,6 +605,20 @@ fn install_tur_pkg(
     container::install(&mut pkg, handles);
     // C4 — gestures + keyboard + focus.
     gesture::install(&mut pkg, handles);
+    // C6 — async capabilities.
+    async_caps::install(&mut pkg, handles);
+    // The opaque stash (the cross-entry hand-off rail).
+    {
+        let h = handles.clone();
+        rut_vm::pkg_fn!(pkg, "st_put", (u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, o: OpaqueRef| {
+            h.stash.borrow_mut().insert(key, o);
+            Ok(())
+        });
+        let h = handles.clone();
+        rut_vm::pkg_fn!(pkg, "st_take", (u64,) -> Option<OpaqueRef>, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
+            Ok(h.stash.borrow_mut().remove(&key))
+        });
+    }
     // Plugin extensions (tur-animation's C5 rows) — AFTER the engine rows,
     // so an extension may lean on them.
     let mut ext_decl = Vec::new();
@@ -639,6 +660,10 @@ pub struct RutHandles {
     pub pending_calls: std::cell::RefCell<Vec<Intent>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
+    /// The module-facing opaque stash — `st_put` / `st_take` let a module
+    /// hold host objects across entry calls (an async frame cannot carry
+    /// opaque params, so the stash is the hand-off rail).
+    pub stash: std::cell::RefCell<std::collections::HashMap<u64, OpaqueRef>>,
     /// The worker→host channel — runtime-error reports for face traps ride
     /// the same `RuntimeError` message the JS rail uses.
     pub host_tx: crate::core::app::HostTx,
@@ -647,6 +672,9 @@ pub struct RutHandles {
     /// The engine-wide mutation queue — animation `onTick` callbacks ride
     /// it (same dispatch path the JS controllers use).
     pub mutation_queue: Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
+    /// The instance context — capability lookups + worker-side spawns (the
+    /// async capability rows: clipboard / net / filepicker).
+    pub js_ctx: TurInstanceContext,
     /// The realm face (Phase C1): rows that must mint or inspect
     /// JS-class-backed state (a `TextEditingController`, an animation
     /// controller) borrow the realm through it. Detached until boot arms
@@ -687,6 +715,8 @@ pub enum Intent {
     /// A raw value payload (animation `onTick(eased)`, `watch(atom, cb)`
     /// change deliveries).
     Value { name: String, a: u64, value: crate::core::edgy::Value },
+    /// A bytes payload (net-stream chunks): `entry fn cb(id, data: bytes)`.
+    Bytes { name: String, a: u64, data: Vec<u8> },
 }
 
 /// The flush-time VM face — view factories / deriveds minted by rows reach
@@ -873,7 +903,7 @@ impl RutRuntime {
         // The decl surface: the engine rows plus every extension's rows
         // (plugin-owned — tur-animation's C5 rows), so the compile sees the
         // full surface the boot will bind.
-        let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId)> = Vec::new();
+        let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId, bool)> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur");
         for ext in exts {
@@ -887,13 +917,16 @@ impl RutRuntime {
         let module = {
             let mut m = tur_decl_module();
             if let ModuleBody::Host { host_funcs, consts, .. } = &mut m.body {
-                host_funcs.extend(ext_decl.into_iter().map(|(n, p, r)| (n, p, r, false)));
+                host_funcs.extend(ext_decl);
                 consts.extend(ext_consts);
             }
             m
         };
         let mut session = rut_driver::Session::new();
         rut_driver::mount_std_core(&mut session);
+        // The async weave (Future trait + the launch rows) — the C6 async
+        // capability rows `await` through it.
+        rut_driver::mount_std_async(&mut session);
         session
             .register_module("tur", module)
             .map_err(|e| format!("mount tur pkg: {e}"))?;
@@ -941,15 +974,21 @@ impl RutRuntime {
             pending_root: std::cell::RefCell::new(None),
             pending_calls: std::cell::RefCell::new(Vec::new()),
             click_seq: std::cell::Cell::new(0),
+            stash: std::cell::RefCell::new(std::collections::HashMap::new()),
             host_tx: js_ctx.host_tx.clone(),
             realm: realm.face,
             clock: realm.clock,
             mutation_queue: js_ctx.mutation_queue.clone(),
+            js_ctx: js_ctx.clone(),
             face,
             face_busy: std::cell::Cell::new(0),
         });
 
         let mut hosts = rut_vm::interp::HostRegistry::new();
+        // The async launcher set (`__launch` / `__abort` / `__sleep`) — the
+        // standard `mount_std_async` decls demand these bodies (the spike's
+        // wiring).
+        hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
         install_tur_pkg(&mut hosts, &ctx, &handles, &exts);
         hosts.verify_against(&ctx.flatten());
 
@@ -1045,9 +1084,21 @@ impl RutRuntime {
     }
 
     /// Drive ready rut tasks once (pump-level — never inside a flush).
+    /// A launched task's trap rides the runtime-error rail (the same
+    /// channel the face calls report through) — never a silent stall.
     pub fn run_ready(&mut self) {
         if let Err(t) = self.vm.borrow_mut().run_ready() {
-            tracing::error!("rut run_ready trap: {} — {}", t.name(), t.msg);
+            eprintln!("[rut-dbg] task trap: {} — {}", t.name(), t.msg);
+            let msg = format!("rut task trap: {} — {}", t.name(), t.msg);
+            let _ = self
+                .handles
+                .host_tx
+                .unbounded_send(HostMsg::RuntimeError {
+                    report: crate::core::app::runtime_error::RuntimeErrorReport {
+                        message: msg,
+                        stack: None,
+                    },
+                });
         }
     }
 
@@ -1088,6 +1139,7 @@ impl RutRuntime {
                 };
                 vm.call::<_, ()>(name, (*a, n))
             }
+            Intent::Bytes { name, a, data } => vm.call::<_, ()>(name, (*a, data.clone())),
         }
     }
 
@@ -1109,7 +1161,8 @@ fn intent_name(intent: &Intent) -> &str {
         Intent::Click { name, .. }
         | Intent::Key { name, .. }
         | Intent::Pointer { name, .. }
-        | Intent::Value { name, .. } => name,
+        | Intent::Value { name, .. }
+        | Intent::Bytes { name, .. } => name,
     }
 }
 
@@ -1126,8 +1179,9 @@ pub struct RutRealmInputs {
 /// rows + consts (compile side) and the body pkg + bridge handles (boot
 /// side).
 pub struct RutPkgCx<'a> {
-    /// The decl rows (name, params, ret) appended before compilation.
-    pub decl: &'a mut Vec<(String, Vec<TypeId>, TypeId)>,
+    /// The decl rows `(name, params, ret, is_async)` appended before
+    /// compilation (async rows ride the driver's family expansion).
+    pub decl: &'a mut Vec<(String, Vec<TypeId>, TypeId, bool)>,
     /// The decl consts appended before compilation.
     pub consts: &'a mut Vec<(String, TypeId, u64)>,
     /// The body pkg the installer registers its rows into.

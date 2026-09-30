@@ -663,12 +663,15 @@ impl TurTestApp {
         if let Some(http_impl) = http.clone() {
             builder = builder
                 .capability(move |_| Ok(Http::new(http_impl)))
-                .plugin(TurNetPlugin);
+                .plugin(TurNetPlugin)
+                // The rut rail's C6 rows ride with the capability.
+                .plugin(tur_net_capability::rut_rows::plugin::TurRutNetRows);
         }
         if let Some(filepicker_impl) = filepicker.clone() {
             builder = builder
                 .capability(move |_| Ok(FilePicker::new(filepicker_impl)))
-                .plugin(TurFilePickerPlugin);
+                .plugin(TurFilePickerPlugin)
+                .plugin(tur_filepicker_capability::rut_rows::plugin::TurRutFilePickerRows);
         }
         for p in extra_plugins {
             builder = builder.plugin_boxed(p);

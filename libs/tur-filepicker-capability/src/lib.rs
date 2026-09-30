@@ -30,6 +30,7 @@
 //!   loudly rather than silently doing nothing.
 
 pub mod bridge;
+pub mod rut_rows;
 
 use std::future::Future;
 use std::pin::Pin;
