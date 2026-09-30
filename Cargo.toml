@@ -17,6 +17,7 @@ members = [
     "libs/tur-native",
     "libs/tur-android",
     "libs/tur-integration-tests",
+    "libs/tur-rut-spike",
     "demo/compose/native",
     "demo/website/native",
 ]
@@ -45,6 +46,15 @@ tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
+
+# rut scripting language (github.com/hpp2334/rut) — Phase-0 spike pin.
+# Same nightly pin as this workspace (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+
 
 num-derive = "0.4"
 num-traits = "0.2"

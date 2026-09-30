@@ -1,0 +1,17 @@
+[package]
+name = "tur-rut-spike"
+description = "Phase-0 spike: the rut scripting engine alongside tur-engine (see .opencode/plan/boa-to-rut-migration.md)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+rut-core = { workspace = true }
+rut-parser = { workspace = true }
+rut-driver = { workspace = true }
+rut-vm = { workspace = true }
+rut-std = { workspace = true }
+
+[dev-dependencies]
+tur-integration-tests = { workspace = true }

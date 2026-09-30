@@ -1,0 +1,5 @@
+// The spike's host surface: two sync rows, one sink row, one async row.
+pub host fn add(a: i32, b: i32) -> i32;
+pub host fn greet(name: str) -> str;
+pub host fn record(line: str) -> nil;
+pub host async fn slow_echo(ms: u32, msg: str) -> str;
