@@ -568,3 +568,166 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(rut_editable_text(&app), "SEEDEDab!ok", "the IME commit landed");
 }
+
+// ---------------------------------------------------------------------------
+// Phase C2 — collections: Each over a list atom + LazyList, item builders
+// as named `entry fn`s invoked through the guarded flush-time VM face.
+// ---------------------------------------------------------------------------
+
+/// An Each bound to a list atom; a button pushes an item (the rebuild-all
+/// reconciliation runs during flush — the guarded face call), and the item
+/// builder entry authors each row.
+const EACH_RUT: &str = r#"
+use tur::{ el_button, el_column, el_build, el_child, el_text_styled, mount, rs_each, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+
+entry fn item_row(i: u64, item: str) -> opaque {
+    let col = el_column();
+    el_child(col, el_text_styled(f"{i}: {item}", 16.0, 0x222222FF));
+    return el_build(col);
+}
+
+entry fn start() -> u64 {
+    let list = rs_list_new();
+    rs_list_push(list, "alpha");
+    rs_list_push(list, "beta");
+    let atom = rs_source_value(list);
+
+    let col = el_column();
+    el_child(col, rs_each(atom, "item_row"));
+    el_child(col, el_button(atom, atom, "ts_push", "push"));
+    mount(el_build(col));
+    return atom;
+}
+
+entry fn ts_push(atom: u64, _b: u64, _n: f64) {
+    let fresh = rs_list_new();
+    rs_list_push(fresh, "alpha");
+    rs_list_push(fresh, "beta");
+    rs_list_push(fresh, "gamma");
+    rs_set_value(atom, fresh);
+}
+"#;
+
+/// Collect the text content of every `tur_paragraph` in the dev-tree
+/// snapshot (the item rows' rendered strings).
+fn all_texts(app: &TurTestApp) -> Vec<String> {
+    let mut out = Vec::new();
+    let root_id = app.dev_tool_element_tree().unwrap().children[0];
+    let mut stack = vec![root_id];
+    while let Some(id) = stack.pop() {
+        let Some(node) = app.dev_tool_get_element(id) else {
+            continue;
+        };
+        if node.name == "tur_paragraph" {
+            let eid = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+            let text = app
+                .with_element(eid, |e| {
+                    e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+                        .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default();
+            out.push(text);
+        }
+        for child in node.children {
+            stack.push(child);
+        }
+    }
+    out
+}
+
+#[test]
+fn rut_each_maps_a_list_atom_and_rebuilds_on_change() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(EACH_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The fragment hosted two authored rows via the entry builder.
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"0: alpha".to_string()) && texts.contains(&"1: beta".to_string()),
+        "the entry builder authored both initial rows: {texts:?}"
+    );
+
+    // Push → the atom changes → the flush rebuilds all items through the
+    // guarded face calls (never leaving the VM parked).
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let button = app.dev_tool_get_element(column.children[1]).unwrap();
+    let (bx, by) = button.absolute;
+    let (bw, bh) = button.size;
+    app.click(bx + bw / 2.0, by + bh / 2.0);
+    app.wait_for_timeout(Duration::ZERO);
+
+    let texts = all_texts(&app);
+    assert!(
+        texts.contains(&"2: gamma".to_string()),
+        "the rebuild mounted the third item via the guarded face call: {texts:?}"
+    );
+    assert_eq!(
+        texts.iter().filter(|t| t.as_str() == "0: alpha").count(),
+        1,
+        "rebuild-all reconciliation left exactly one instance per item"
+    );
+}
+
+/// A LazyList with 300 rut-authored rows (entry-builder face); wheeling
+/// mounts rows outside the initial build set — flush-time face calls on
+/// the remount path.
+const LAZY_RUT: &str = r#"
+use tur::{ el_column, el_expand, el_build, el_child, el_text_styled, mount, rs_lazy_list, rs_set_f64, rs_source_f64 };
+
+entry fn lazy_row(i: u64) -> opaque {
+    let col = el_column();
+    el_child(col, el_text_styled(f"row {i}", 16.0, 0x222222FF));
+    return el_build(col);
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 300.0);
+    let scroller = el_lazy_list("lazy_row", count, 20.0);
+    let root = el_column();
+    el_child(root, el_expand(1.0, scroller));
+    mount(el_build(root));
+    return count;
+}
+"#;
+
+#[test]
+fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(LAZY_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let lazy = app
+        .query_element(&["rut", "lazy"])
+        .expect("lazy list not found");
+    let lazy = tur_engine::core::element::ElementNodeId::new(lazy.as_u64());
+    let tree = app.element_tree();
+    let node = tree.get_element(lazy).unwrap();
+    let initial = node.children.len();
+    assert!(
+        initial > 0 && initial < 300,
+        "virtualized: mounted {initial} of 300 declared rows"
+    );
+
+    // Wheel down — the remount mounts newly-visible rows via face calls.
+    let n = app
+        .dev_tool_get_element(tur_engine::core::element::NodeId::from(lazy))
+        .unwrap();
+    let cx = n.absolute.0 + n.size.0 / 2.0;
+    let cy = n.absolute.1 + n.size.1 / 2.0;
+    app.wheel(0.0, 240.0, cx, cy);
+    app.wait_for_timeout(Duration::ZERO);
+
+    let tree = app.element_tree();
+    let node = tree.get_element(lazy).unwrap();
+    assert!(
+        node.children.iter().any(|&c| {
+            let el = app.dev_tool_get_element(c).unwrap();
+            el.absolute.1 < 0.0
+        }),
+        "rows scrolled past the viewport after the wheel"
+    );
+}

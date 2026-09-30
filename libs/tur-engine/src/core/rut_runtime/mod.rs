@@ -36,11 +36,19 @@ use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
 use rut_vm::interp::{CallArgs, Ret, Vm};
+use rut_vm::OpaqueRef;
 
+mod collections;
 mod realm;
 mod text;
 
 pub use realm::RutRealm;
+
+/// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
+/// opaques from `entry fn(index)` calls).
+pub fn opaque_to_view(handle: &OpaqueRef) -> Option<Rc<dyn View>> {
+    RutRuntime::view_of(handle)
+}
 
 /// The per-instance resource budget. Phase-1 defaults; tunable per embedder.
 pub fn default_limits() -> rut_vm::interp::Limits {
@@ -161,6 +169,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
     ];
     // C1 — text input rows (realm-minted controllers).
     host_funcs.extend(text::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    // C2 — collections rows (Each over list atoms, lazy containers).
+    host_funcs.extend(collections::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     rut_driver::Module {
         namespace: Some("tur".to_string()),
         body: ModuleBody::Host {
@@ -558,6 +568,8 @@ fn install_tur_pkg(
 
     // C1 — text input (realm-minted controllers, method rows).
     text::install(&mut pkg, handles);
+    // C2 — collections (Each + lazy containers).
+    collections::install(&mut pkg, handles);
 
     hosts.install_host_pkg(ctx, pkg);
 }
@@ -796,6 +808,13 @@ pub struct RutRuntime {
 }
 
 impl RutRuntime {
+    /// Convert an opaque handle minted by a rut row (`RutView`) back into
+    /// the materialized view — the item-builder face's crossing back from
+    /// an `entry fn(index) -> opaque`.
+    pub fn view_of(handle: &OpaqueRef) -> Option<Rc<dyn View>> {
+        let v = Opaque::<RutView>::from_handle(handle).ok()?;
+        v.with(|v| Some(v.0.clone())).ok()?
+    }
     /// Assemble a fresh session (core + the in-memory `tur` decl pkg) and
     /// compile `source` against it. Split from [`Self::boot`] so a
     /// syntactically-broken module fails BEFORE any teardown runs (the

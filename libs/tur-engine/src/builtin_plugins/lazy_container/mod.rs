@@ -16,6 +16,7 @@
 //! The scroll-position math (`ScrollPosition`) and the scroll-event payload
 //! (`ScrollEvent`) come from the sibling `scroll` plugin.
 
+pub mod item_builder;
 pub mod lazy_grid;
 pub mod lazy_list;
 
