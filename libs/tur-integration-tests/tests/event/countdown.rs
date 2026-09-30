@@ -33,24 +33,31 @@ fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
 }
 
 fn find_input_id(app: &TurTestApp) -> ElementNodeId {
+    // The `edit-input` query key lands on the Input's Container wrapper;
+    // walk the wrapper's subtree for the editable (the wrapper's inner
+    // nesting is an Input-implementation detail).
     let wrapper_id = app
         .query_element(&["edit-input"])
         .expect("edit-input not found");
     let wrapper_id = ElementNodeId::new(wrapper_id.as_u64());
     let tree = app.element_tree();
-    let wrapper = tree.get_element(wrapper_id).unwrap();
-    let inner = tree
-        .get_element(ElementNodeId::new(wrapper.children[0].as_u64()))
-        .unwrap();
-    assert_eq!(inner.kind().unwrap(), ElementKind::new("tur_container"));
-    let input_node = tree
-        .get_element(ElementNodeId::new(inner.children[0].as_u64()))
-        .unwrap();
-    assert_eq!(
-        input_node.kind().unwrap(),
-        ElementKind::new("tur_editable_text")
-    );
-    input_node.id
+    let mut stack: Vec<ElementNodeId> = tree
+        .get_element(wrapper_id)
+        .unwrap()
+        .children
+        .iter()
+        .map(|c| ElementNodeId::new(c.as_u64()))
+        .collect();
+    while let Some(id) = stack.pop() {
+        let node = tree.get_element(id).unwrap();
+        if node.kind() == Some(ElementKind::new("tur_editable_text")) {
+            return id;
+        }
+        for c in &node.children {
+            stack.push(ElementNodeId::new(c.as_u64()));
+        }
+    }
+    panic!("no tur_editable_text under edit-input");
 }
 
 fn focus_input(app: &mut TurTestApp, input_id: ElementNodeId) {

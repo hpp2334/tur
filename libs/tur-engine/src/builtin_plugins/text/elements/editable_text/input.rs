@@ -75,6 +75,27 @@ impl InputView {
     /// `TextEditingController` (+ optional `UndoController`), a static
     /// placeholder, and an explicit size — the rows the rut C1 gate
     /// drives. Everything else defaults (matching an un-styled JS `Input`).
+    /// Rut-rail constructor with option flags (bit 0 = multiline,
+    /// bit 1 = obscure) — the `el_input_opts` row's crossing.
+    pub(crate) fn new_rut_opts(
+        controller: JsObject,
+        undo_controller: Option<JsObject>,
+        placeholder: Option<String>,
+        width: Option<f64>,
+        height: Option<f64>,
+        multiline: bool,
+        obscure: bool,
+    ) -> Self {
+        let mut view = Self::new_rut(controller, undo_controller, placeholder, width, height);
+        if multiline {
+            view.multiline = Some(Val::Static(true));
+        }
+        if obscure {
+            view.obscure_text = Some(Val::Static(true));
+        }
+        view
+    }
+
     pub(crate) fn new_rut(
         controller: JsObject,
         undo_controller: Option<JsObject>,

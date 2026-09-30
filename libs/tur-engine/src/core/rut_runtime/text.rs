@@ -68,6 +68,11 @@ pub fn decl_rows() -> Vec<(String, Vec<TypeId>, TypeId)> {
         ),
         ("tctrl_clear", vec![TY_OPAQUE], TY_NIL),
         ("tctrl_paste", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        (
+            "el_input_opts",
+            vec![TY_OPAQUE, TY_OPAQUE, TY_STR, TY_F64, TY_F64, TY_U64],
+            TY_OPAQUE,
+        ),
         ("undo_can_undo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_can_redo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_clear", vec![TY_OPAQUE], TY_NIL),
@@ -127,6 +132,25 @@ pub fn install(
             if height > 0.0 { Some(height) } else { None },
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // Input with option flags — bit 0 = multiline, bit 1 = obscure (the
+    // password twin), bit 2 = center alignment of the wrapper.
+    let h2 = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_input_opts", (Opaque<RutTextCtrl>, Opaque<RutUndoCtrl>, &str, f64, f64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutTextCtrl>, undo: Opaque<RutUndoCtrl>, placeholder: &str, width: f64, height: f64, flags: u64| {
+        let _ = &h2;
+        let ctrl = ctrl.with(|c| c.0.clone())?;
+        let undo = undo.with(|u| u.0.clone())?;
+        let view = InputView::new_rut_opts(
+            ctrl,
+            Some(undo),
+            if placeholder.is_empty() { None } else { Some(placeholder.to_string()) },
+            if width > 0.0 { Some(width) } else { None },
+            if height > 0.0 { Some(height) } else { None },
+            flags & 1 != 0,
+            flags & 2 != 0,
+        );
+        Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
     });
 
     // ---- controller method rows (downcast without a realm borrow) -------

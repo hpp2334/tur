@@ -804,6 +804,9 @@ pub struct RutHandles {
     /// hold host objects across entry calls (an async frame cannot carry
     /// opaque params, so the stash is the hand-off rail).
     pub stash: std::cell::RefCell<std::collections::HashMap<u64, OpaqueRef>>,
+    /// The scalar stash (`stf_put` / `stf_take`) — atom ids and counts
+    /// cross entries and async frames as f64.
+    pub stash_num: std::cell::RefCell<std::collections::HashMap<u64, f64>>,
     /// The worker→host channel — runtime-error reports for face traps ride
     /// the same `RuntimeError` message the JS rail uses.
     pub host_tx: crate::core::app::HostTx,
@@ -1126,6 +1129,7 @@ impl RutRuntime {
             pending_calls: std::cell::RefCell::new(Vec::new()),
             click_seq: std::cell::Cell::new(0),
             stash: std::cell::RefCell::new(std::collections::HashMap::new()),
+            stash_num: std::cell::RefCell::new(std::collections::HashMap::new()),
             host_tx: js_ctx.host_tx.clone(),
             realm: realm.face,
             clock: realm.clock,
@@ -1235,9 +1239,18 @@ impl RutRuntime {
     }
 
     /// Drive ready rut tasks once (pump-level — never inside a flush).
-    /// A launched task's trap rides the runtime-error rail (the same
-    /// channel the face calls report through) — never a silent stall.
+    /// The VM's virtual clock syncs to the engine clock first, and due
+    /// sleep timers expire into the ready queue (`sleep` deadlines arm
+    /// against `set_now`). A launched task's trap rides the
+    /// runtime-error rail (the same channel the face calls report
+    /// through) — never a silent stall.
     pub fn run_ready(&mut self) {
+        {
+            let mut vm = self.vm.borrow_mut();
+            let now = self.handles.clock.now().millis_since_epoch();
+            vm.set_now(now);
+            let _ = vm.next_deadline();
+        }
         if let Err(t) = self.vm.borrow_mut().run_ready() {
             eprintln!("[rut-dbg] task trap: {} — {}", t.name(), t.msg);
             let msg = format!("rut task trap: {} — {}", t.name(), t.msg);

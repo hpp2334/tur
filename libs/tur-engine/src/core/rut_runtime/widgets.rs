@@ -59,6 +59,9 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("mem_new", vec![TY_F64], TY_OPAQUE),
         ("mem_get", vec![TY_OPAQUE], TY_F64),
         ("mem_set", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        ("str_parse_f64", vec![TY_STR], TY_F64),
+        ("stf_put", vec![TY_U64, TY_F64], TY_NIL),
+        ("stf_take", vec![TY_U64], TY_F64),
     ]
     .into_iter()
     .map(|(n, p, r)| (n.to_string(), p, r))
@@ -135,7 +138,7 @@ impl crate::core::view::View for KeyedView {
 }
 
 /// Install the corpus-row bodies.
-pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandles>) {
+pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles>) {
     // ---- flex surface -----------------------------------------------------
     rut_vm::pkg_fn!(pkg, "flex_main_align", (Opaque<ViewBuilder>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: u64| {
         with_flex(b, vm, |f| if let ViewBuilder::Flex { main_alignment, .. } = f {
@@ -266,6 +269,21 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandle
     rut_vm::pkg_fn!(pkg, "mem_set", (Opaque<RutCell>, f64) -> (), |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>, v: f64| {
         c.with_mut(_vm, |_vm, c: &mut RutCell| c.0.set(v))?;
         Ok(())
+    });
+    // str -> f64 parse (0 on failure) — the edit-field confirm path.
+    rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
+        Ok(s.trim().parse::<f64>().unwrap_or(0.0))
+    });
+    // Scalar stash slots (atom ids / counts cross entries and async frames
+    // as f64 — the opaque stash cannot hold raw numbers).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "stf_put", (u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, v: f64| {
+        h.stash_num.borrow_mut().insert(key, v);
+        Ok(())
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "stf_take", (u64,) -> f64, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
+        Ok(h.stash_num.borrow_mut().remove(&key).unwrap_or(0.0))
     });
 
     // ---- rich-text spans --------------------------------------------------

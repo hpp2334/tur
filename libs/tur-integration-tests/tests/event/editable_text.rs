@@ -140,7 +140,7 @@ fn cursor_preserved_after_rerender() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, input_id), 2);
 
-    app.eval_js("globalThis.__setCursorMidTick(1)");
+    app.call_rut_entry("set_cursor_mid_tick", 1, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
