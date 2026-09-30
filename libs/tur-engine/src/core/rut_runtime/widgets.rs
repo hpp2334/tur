@@ -20,6 +20,7 @@ use rut_vm::Opaque;
 
 use super::color_of;
 use super::{RutView, ViewBuilder};
+use crate::core::render::brush::Brush;
 
 /// Declare the corpus rows on the `tur` decl module.
 pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types::TypeId)> {
@@ -39,6 +40,11 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("el_text_new", vec![TY_STR], TY_OPAQUE),
         ("el_text_bound_new", vec![TY_U64], TY_OPAQUE),
         ("el_text_bound_d_new", vec![TY_U64], TY_OPAQUE),
+        ("el_expand_bound", vec![TY_U64, TY_OPAQUE], TY_OPAQUE),
+        ("box_width_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        ("box_color_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        ("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
+        ("el_lazy_list_h", vec![TY_STR, TY_U64, TY_F64], TY_OPAQUE),
         ("text_size", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("text_weight", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("text_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
@@ -94,6 +100,8 @@ pub fn decl_consts() -> Vec<(String, rut_core::types::TypeId, u64)> {
         c("SPAN_UNDERLINE", 2),
     ]
 }
+
+use crate::builtin_plugins::layout::FlexibleView;
 
 fn main_alignment_of(v: u64) -> MainAxisAlignment {
     MainAxisAlignment::from_u64(v).unwrap_or(MainAxisAlignment::Start)
@@ -284,6 +292,92 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "stf_take", (u64,) -> f64, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
         Ok(h.stash_num.borrow_mut().remove(&key).unwrap_or(0.0))
+    });
+
+    // Reactive-atom twins: flex weight, container width, and brush color
+    // bound to atoms (the JS derive-prop twins; a Nil brush value CLEARS
+    // the prop — the read fails the decode).
+    rut_vm::pkg_fn!(pkg, "el_expand_bound", (u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex_atom: u64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(FlexibleView::new_rut(
+            Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<f64>::from_id(crate::core::edgy::reactive::AtomId(flex_atom as u32)),
+            ))),
+            crate::core::layout::FlexFit::Tight,
+            child,
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "box_width_bound", (Opaque<ViewBuilder>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, w_atom: u64| {
+        b.with_mut(vm, |_vm, b| match b {
+            ViewBuilder::Box(box_) => {
+                box_.width = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                    crate::core::edgy::reactive::Source::<f64>::from_id(crate::core::edgy::reactive::AtomId(w_atom as u32)),
+                )));
+                Ok(())
+            }
+            _ => Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "box_width_bound on a non-box builder")),
+        })?
+    });
+    rut_vm::pkg_fn!(pkg, "box_color_bound", (Opaque<ViewBuilder>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, color_atom: u64| {
+        b.with_mut(vm, |_vm, b| match b {
+            ViewBuilder::Box(box_) => {
+                box_.color = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                    crate::core::edgy::reactive::Source::<Brush>::from_id(crate::core::edgy::reactive::AtomId(color_atom as u32)),
+                )));
+                Ok(())
+            }
+            _ => Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "box_color_bound on a non-box builder")),
+        })?
+    });
+    // Write a brush atom: nonzero packed color sets it, 0 clears (Nil —
+    // the decode fails and the prop resolves to absent). The set color
+    // wraps the engine's Color opaque (the `FromValue for Brush` decode),
+    // minted through the realm face on demand.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_brush", (u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, color: u64| {
+        let value = if color == 0 {
+            crate::core::edgy::Value::Nil
+        } else {
+            let packed = color;
+            let js = h
+                .realm
+                .with_realm(move |boa| {
+                    use boa_engine::JsValue;
+                    let c = super::color_of(packed);
+                    let opaque =
+                        crate::core::js_runtime::BoaOpaque::<crate::core::render::brush::ColorOpaque>::new(
+                            crate::core::render::brush::ColorOpaque(c),
+                            boa,
+                        );
+                    JsValue::from(opaque.object().clone())
+                })
+                .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_brush: {e}")))?;
+            crate::core::edgy::Value::opaque(&js)
+        };
+        h.store
+            .bridge()
+            .set_source(crate::core::edgy::reactive::Source::<crate::core::edgy::Value>::from_id(crate::core::edgy::reactive::AtomId(atom as u32)), value)
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_brush: {e}")))
+    });
+    // Horizontal lazy list (the JS `axis: Axis.Horizontal` twin).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_lazy_list_h", (&str, u64, f64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, cb: &str, count_atom: u64, item_extent: f64| {
+        let entry = crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder {
+            name: cb.to_string(),
+            face: h.face.clone(),
+            handles: h.clone(),
+        };
+        let view = crate::builtin_plugins::lazy_container::LazyListView::new_rut(
+            entry,
+            crate::core::view::Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
+            )),
+            Some(crate::core::layout::Axis::Horizontal),
+            Some(0),
+            if item_extent > 0.0 { Some(item_extent) } else { None },
+        );
+        Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
     });
 
     // ---- rich-text spans --------------------------------------------------

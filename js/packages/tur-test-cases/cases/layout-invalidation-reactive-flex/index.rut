@@ -1,0 +1,43 @@
+// layout-invalidation-reactive-flex: two reactive flex weights — the
+// `set_flex` probe flips them (a click would mark extra nodes dirty via
+// the gesture handler and mask the layout-invalidation behavior).
+use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_expand_bound, el_row, el_qkey, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+
+let K_A: u64 = 1;
+let K_B: u64 = 2;
+
+entry fn start() -> u64 {
+    let flex_a = rs_source_f64();
+    rs_set_f64(flex_a, 1.0);
+    let flex_b = rs_source_f64();
+    rs_set_f64(flex_b, 1.0);
+    stf_put(K_A, flex_a as f64);
+    stf_put(K_B, flex_b as f64);
+
+    let row = el_row();
+    let a = el_expand_bound(flex_a, qkey_box("a", 0xEF4444FFu64));
+    el_child(row, a);
+    let b = el_expand_bound(flex_b, qkey_box("b", 0x3B82F6FFu64));
+    el_child(row, b);
+    mount(el_build(row));
+    return flex_a;
+}
+
+fn qkey_box(key: str, color: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, 0.0);
+    box_color(b, color);
+    el_qkey(b, key);
+    return el_build(b);
+}
+
+// The `__setFlex(a, b)` seam: flip both weights (a crosses the u64 slot,
+// b the f64 slot).
+entry fn set_flex(a_new: u64, b_new: f64) {
+    let flex_a = stf_take(K_A) as u64;
+    let flex_b = stf_take(K_B) as u64;
+    rs_set_f64(flex_a, a_new as f64);
+    rs_set_f64(flex_b, b_new);
+    stf_put(K_A, flex_a as f64);
+    stf_put(K_B, flex_b as f64);
+}

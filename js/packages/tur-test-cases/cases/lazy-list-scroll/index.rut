@@ -1,0 +1,21 @@
+// lazy-list-scroll: a 100-row virtualized list (wheeling mounts rows
+// outside the initial build set).
+use tur::{ el_box_new, box_color, box_size, el_build, el_lazy_list, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+
+entry fn row(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 400.0, 50.0);
+    if (i % 2 == 0) {
+        box_color(b, 0x303030FF);
+    } else {
+        box_color(b, 0x1A1A1AFF);
+    }
+    return el_build(b);
+}
+
+entry fn start() {
+    let count = rs_source_f64();
+    rs_set_f64(count, 100.0);
+    let list = el_lazy_list("row", count, 50.0);
+    mount(el_vqkey(list, "lazy-list-scroll"));
+}

@@ -1,0 +1,19 @@
+// scroll-view-shrink-wrap: the viewport shrink-wraps to its content
+// (120x80) under the root's loose constraints (Flutter
+// _RenderSingleChildViewport parity).
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, el_scroll, el_vqkey, flex_cross_align, mount };
+
+entry fn start() {
+    let content = el_column();
+    flex_cross_align(content, CROSS_ALIGN_START);
+    el_child(content, sized(120.0, 40.0));
+    el_child(content, sized(60.0, 40.0));
+    let sv = el_scroll(true, el_build(content));
+    mount(el_vqkey(sv, "sv"));
+}
+
+fn sized(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}

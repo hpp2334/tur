@@ -1,0 +1,33 @@
+// scroll-view-nested: a vertical ScrollView inside a horizontal one. The
+// outer sits in a Row — `Expanded` supplies the bounded viewport (non-flex
+// flex children get unbounded main-axis constraints, Flutter parity).
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, el_expand, el_row, el_scroll, el_sizedbox, el_vqkey, flex_cross_align, mount };
+
+entry fn start() {
+    let row = el_row();
+    el_child(row, el_sizedbox(200.0, 0.0, el_build(el_box_new())));
+    let outer_content = el_column();
+    flex_cross_align(outer_content, CROSS_ALIGN_START);
+    el_child(outer_content, box_h(100.0));
+    let inner_wrapper = el_box_new();
+    box_size(inner_wrapper, 0.0, 200.0);
+    el_qkey(inner_wrapper, "inner-wrapper");
+    let inner_content = el_column();
+    flex_cross_align(inner_content, CROSS_ALIGN_STRETCH);
+    el_child(inner_content, box_h(200.0));
+    el_child(inner_content, box_h(200.0));
+    el_child(inner_content, box_h(200.0));
+    let inner = el_scroll(true, el_build(inner_content));
+    el_child(inner_wrapper, inner);
+    el_child(outer_content, el_build(inner_wrapper));
+    el_child(outer_content, box_h(400.0));
+    let outer = el_scroll(true, el_build(outer_content));
+    el_child(row, el_expand(1.0, el_vqkey(outer, "outer-scroll")));
+    mount(el_build(row));
+}
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}

@@ -1,0 +1,18 @@
+// scroll-view-basic: a vertical scroll viewport around a 3x200 column.
+use tur::{ CROSS_ALIGN_STRETCH, el_box_new, box_size, el_build, el_child, el_column, el_scroll, el_vqkey, flex_cross_align, mount };
+
+entry fn start() {
+    let content = el_column();
+    flex_cross_align(content, CROSS_ALIGN_STRETCH);
+    el_child(content, box_h(200.0));
+    el_child(content, box_h(200.0));
+    el_child(content, box_h(200.0));
+    let sv = el_scroll(true, el_build(content));
+    mount(el_vqkey(sv, "scroll-view"));
+}
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}

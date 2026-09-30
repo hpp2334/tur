@@ -58,6 +58,18 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
             TY_OPAQUE,
         ),
         (
+            "el_pi_empty",
+            vec![
+                TY_U64,    // id_a
+                TY_U64,    // id_b
+                TY_STR,    // on_click ("" = absent)
+                TY_STR,    // on_pointer_down ("" = absent)
+                TY_U64,    // behavior const
+                TY_STR,    // query key ("" = none)
+            ],
+            TY_OPAQUE,
+        ),
+        (
             "el_gesture2",
             vec![
                 TY_U64,    // id_a (the callback's first argument)
@@ -312,6 +324,30 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             on_context_menu: context_menu_mutation(&h, id, ctx),
             query_key: Some(vec!["rut".to_string(), "gesture".to_string()]),
             child: Some(child),
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // The childless pad (the JS `PointerInteract().build()` twin — the
+    // invisible hit-target widget).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_pi_empty", (u64, u64, &str, &str, u64, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id_a: u64, id_b: u64, click: &str, down: &str, behavior: u64, key: &str| {
+        let view = Rc::new(PointerInteractView {
+            behavior: Some(crate::core::view::Val::Static(match behavior {
+                1 => HitTestBehavior::Translucent,
+                _ => HitTestBehavior::Opaque,
+            })),
+            on_click: click_mutation(&h, id_a, id_b, click),
+            on_pointer_down: pointer_mutation(&h, id_a, down),
+            on_pointer_move: None,
+            on_pointer_up: None,
+            on_context_menu: None,
+            query_key: if key.is_empty() {
+                None
+            } else {
+                Some(vec![key.to_string()])
+            },
+            child: None,
         });
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });

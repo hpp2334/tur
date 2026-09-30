@@ -224,7 +224,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
             )),
             Some(crate::core::layout::Axis::Vertical),
-            Some(3),
+            Some(0),
             if item_extent > 0.0 { Some(item_extent) } else { None },
         );
         Ok(rut_vm::Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
@@ -245,7 +245,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
             )),
             Some(crate::core::layout::Axis::Vertical),
-            Some(3),
+            Some(0),
             max_cross,
             if aspect > 0.0 { Some(aspect) } else { None },
         );

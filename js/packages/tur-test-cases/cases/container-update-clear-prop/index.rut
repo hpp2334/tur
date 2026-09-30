@@ -1,0 +1,37 @@
+// container-update-clear-prop: the checkbox's color prop is bound to a
+// brush atom — toggling clears it (a Nil brush fails the decode and the
+// prop resolves to absent) while the border stays.
+use tur::{ BORDER_CENTER, box_border, box_color_bound, box_padding, box_radius, box_size, el_box_new, el_build, el_child, el_gesture, el_qkey, mount, rs_set_brush, rs_source_value, stf_put, stf_take };
+
+let K_CHECKED: u64 = 1;
+let K_COLOR: u64 = 2;
+
+entry fn start() -> u64 {
+    let checked = rs_source_value(rs_list_new());
+    let color = rs_source_value(rs_list_new());
+    stf_put(K_CHECKED, checked as f64);
+    stf_put(K_COLOR, color as f64);
+    rs_set_brush(color, 0x22C35EFFu64);
+
+    let outer = el_box_new();
+    box_size(outer, 200.0, 100.0);
+    box_padding(outer, 20.0);
+
+    let checkbox = el_box_new();
+    box_size(checkbox, 40.0, 40.0);
+    box_radius(checkbox, 8.0);
+    box_color_bound(checkbox, color);
+    box_border(checkbox, 0xE2E8F0FFu64, 2.0, BORDER_CENTER);
+    el_qkey(checkbox, "checkbox");
+    el_child(outer, el_gesture(checked, "b_toggle", "", "", "", "", el_build(checkbox)));
+
+    mount(el_build(outer));
+    return checked;
+}
+
+entry fn b_toggle(_a: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    // Uncheck: clear the color (the brush atom gets Nil).
+    let color = stf_take(K_COLOR) as u64;
+    rs_set_brush(color, 0);
+    stf_put(K_COLOR, color as f64);
+}

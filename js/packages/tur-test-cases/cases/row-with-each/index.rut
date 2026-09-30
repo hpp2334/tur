@@ -1,0 +1,26 @@
+// row-with-each: an Each inside a content-sized Row — the Row must not
+// inflate to the parent Column's height (the regression the test pins).
+use tur::{ CROSS_ALIGN_STRETCH, el_box_new, el_build, el_child, el_column, el_expand, el_row, el_sizedbox, el_text_new, rs_each, rs_list_new, rs_list_push, rs_source_value, flex_cross_align, mount, text_size };
+
+entry fn item(_i: u64, s: str) -> opaque {
+    let t = el_text_new(s);
+    text_size(t, 13.0);
+    return el_build(t);
+}
+
+entry fn start() {
+    let seg = rs_list_new();
+    rs_list_push(seg, "a");
+    rs_list_push(seg, "b");
+    let seg_atom = rs_source_value(seg);
+
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_STRETCH);
+    let row = el_row();
+    el_child(row, el_sizedbox(16.0, 16.0, el_build(el_box_new())));
+    el_child(row, rs_each(seg_atom, "item"));
+    el_child(col, el_build(row));
+    el_child(col, el_sizedbox(40.0, 10.0, el_build(el_box_new())));
+    el_child(col, el_expand(1.0, el_build(el_box_new())));
+    mount(el_build(col));
+}
