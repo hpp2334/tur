@@ -23,6 +23,7 @@ use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::Axis;
 use crate::core::view::{SharedViewCx, View, Val};
+use crate::builtin_plugins::gesture::PointerInteractView;
 use crate::builtin_plugins::layout::FlexView;
 use crate::builtin_plugins::text::TextView;
 use rut_core::types::{TypeId, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
@@ -80,6 +81,7 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_row", vec![], TY_OPAQUE),
         row("el_text", vec![TY_STR], TY_OPAQUE),
         row("el_text_bound", vec![TY_U64], TY_OPAQUE),
+        row("el_button", vec![TY_U64, TY_STR, TY_STR], TY_OPAQUE),
         row("el_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("el_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("mount", vec![TY_OPAQUE], TY_NIL),
@@ -222,6 +224,53 @@ fn install_tur_pkg(
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
 
+    // ---- callbacks (Phase 3): the intent-queue rail --------------------
+    //
+    // Element callbacks are edgy Rust mutations whose closures are
+    // boa-free: they push (name, id, payload) onto `pending_calls` and
+    // the PUMP drains them into `vm.call(name, (id, payload))` after
+    // flush. A callback may mount — `apply_root` runs in the same drain,
+    // with the pump's boa borrow. The click payload is a monotonic
+    // per-button count (full event payloads arrive with the gesture
+    // bridge later in the migration).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_button", (u64, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, cb: &str, label: &str| {
+        let h2 = h.clone();
+        let cb = cb.to_string();
+        let dirty = h.dirty.clone();
+        let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+            let n = h2.click_seq.get() + 1;
+            h2.click_seq.set(n);
+            h2.pending_calls.borrow_mut().push((cb.clone(), id, n as f64));
+            dirty.set(true);
+            Ok(JsValue::undefined())
+        });
+        let view = Rc::new(PointerInteractView {
+            behavior: None,
+            on_click: Some(crate::core::edgy::mutation::MutationHandle::<
+                crate::builtin_plugins::gesture::PointerInteractEvent,
+            >::new(mutation)),
+            on_pointer_down: None,
+            on_pointer_move: None,
+            on_pointer_up: None,
+            on_context_menu: None,
+            query_key: None,
+            child: Some(Rc::new(TextView {
+                text: Some(Val::Static(label.to_string())),
+                font_size: None,
+                font_weight: None,
+                color: None,
+                spans: None,
+                query_key: None,
+                on_selection_change: None,
+                selectable: false,
+                max_lines: None,
+                overflow: None,
+            })),
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
     hosts.install_host_pkg(ctx, pkg);
 }
 
@@ -233,12 +282,21 @@ pub struct RutHandles {
     /// The instance's reactive store — the SAME KV the JS realm and the
     /// element tree share; rut atoms are edgy atoms addressed by raw id.
     pub store: crate::core::edgy::reactive::Store,
+    /// The instance's app-dirty flag (rut callbacks raise it when they
+    /// stash work so an idle worker wakes).
+    pub dirty: Rc<std::cell::Cell<bool>>,
     /// The instance-owned tree handle (a cheap clone of the one the JS
     /// realm shares) — `apply_root` builds into it.
     pub element_tree: crate::core::elements::NodeTree,
     /// The root stashed by `tur::mount` during `start`, applied by the
     /// engine after the call returns (outside the VM, on the mount path).
     pub pending_root: std::cell::RefCell<Option<Rc<dyn View>>>,
+    /// Callback intents queued by element callbacks (the rut closure
+    /// closures are boa-free: they only push here). Drained at pump level
+    /// after flush — `(callback name, id, payload)`.
+    pub pending_calls: std::cell::RefCell<Vec<(String, u64, f64)>>,
+    /// Monotonic click counter stamped into click intents.
+    pub click_seq: std::cell::Cell<u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -298,8 +356,11 @@ impl RutRuntime {
 
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
+            dirty: js_ctx.dirty.clone(),
             element_tree: js_ctx.element_tree.clone(),
             pending_root: std::cell::RefCell::new(None),
+            pending_calls: std::cell::RefCell::new(Vec::new()),
+            click_seq: std::cell::Cell::new(0),
         });
 
         let mut hosts = rut_vm::interp::HostRegistry::new();
@@ -395,6 +456,25 @@ impl RutRuntime {
         if let Err(t) = self.vm.run_ready() {
             tracing::error!("rut run_ready trap: {} — {}", t.name(), t.msg);
         }
+    }
+
+    /// Drain the callback intents queued by element callbacks this frame
+    /// (pump-level, with the pump's boa borrow — a callback may mount).
+    /// Returns the number of callbacks drained.
+    pub fn drain_pending_calls(&mut self, boa: &mut Context) -> usize {
+        let calls: Vec<(String, u64, f64)> =
+            std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
+        for (name, a, b) in &calls {
+            if let Err(t) = self.vm.call::<_, ()>(name, (*a, *b)) {
+                tracing::error!("rut callback {name}: {} — {}", t.name(), t.msg);
+                continue;
+            }
+            // A callback may have stashed a new root (view swap on tap).
+            if let Err(e) = self.apply_root(boa) {
+                tracing::error!("rut callback {name} apply_root: {e}");
+            }
+        }
+        calls.len()
     }
 
     /// Best-effort `entry fn stop()` (the cleanup contract).

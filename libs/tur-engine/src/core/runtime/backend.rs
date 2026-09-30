@@ -397,7 +397,18 @@ impl WorkerBackend {
             rut.run_ready();
         }
         let mut boa = self.boa_context.borrow_mut();
-        self.internal.flush(&mut boa)
+        let mut outcome = self.internal.flush(&mut boa)?;
+        // Callback intents queued during the flush (rut element callbacks)
+        // drain here — pump level, boa borrowed by this scope only. Any
+        // atom writes they made are stale-but-unflushed, so a drained
+        // intent runs one convergence flush (the reactive fixed point
+        // re-renders in it).
+        if let Some(rut) = self.rut.borrow_mut().as_mut()
+            && rut.drain_pending_calls(&mut boa) > 0
+        {
+            outcome = self.internal.flush(&mut boa)?;
+        }
+        Ok(outcome)
     }
 
     fn push_app_event(&self, event: crate::core::app::AppEvent) {

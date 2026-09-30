@@ -127,6 +127,51 @@ fn rut_reactive_atom_rebinds_text() {
     }
 }
 
+/// The Phase-3 callback gate: `el_button` wires a PointerInteract whose
+/// click queues an intent; the pump drains it into `entry fn ts_click`,
+/// which mutates the bound atom — the full interactive loop, all rut.
+/// The button's `id` IS the atom id (the callback's first argument).
+const BUTTON_RUT: &str = r#"
+use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_source_str, rs_set_str };
+
+entry fn start() -> u64 {
+    let atom = rs_source_str("taps: 0");
+    let col = el_column();
+    el_child(col, el_text_bound(atom));
+    el_child(col, el_button(atom, "ts_click", "tap me"));
+    mount(el_build(col));
+    return atom;
+}
+
+entry fn ts_click(atom: u64, n: f64) {
+    rs_set_str(atom, f"taps: {n}");
+}
+"#;
+
+#[test]
+fn rut_button_click_mutates_bound_text() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BUTTON_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "taps: 0");
+
+    // The button is the second child of the column — locate by tree walk,
+    // then tap its center with real pointer events.
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let button = app.dev_tool_get_element(column.children[1]).unwrap();
+    let (bx, by) = button.absolute;
+    let (bw, bh) = button.size;
+    let cx = bx + bw / 2.0;
+    let cy = by + bh / 2.0;
+
+    for n in 1u64..=3 {
+        app.click(cx, cy);
+        app.wait_for_timeout(Duration::ZERO);
+        assert_eq!(rut_bound_text(&app), format!("taps: {n}"), "click {n} drove the rut callback");
+    }
+}
+
 #[test]
 fn rut_reload_runs_stop_and_replaces_root() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

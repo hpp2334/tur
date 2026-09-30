@@ -18,7 +18,7 @@ pub(in crate::builtin_plugins) mod pointer_region_tracker;
 // directly. After Phase H, this re-export goes away.
 pub use gesture_handler::GestureSubsystem;
 pub use mouse_region::{MouseRegionElement, MouseRegionView, PointerRegionEvent};
-pub use pointer_interact::{PointerInteractElement, PointerInteractView};
+pub use pointer_interact::{PointerInteractElement, PointerInteractEvent, PointerInteractView};
 pub use pointer_region_handler::PointerSubsystem;
 
 use crate::core::js_runtime::helpers::FnEntry;
