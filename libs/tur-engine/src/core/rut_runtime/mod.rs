@@ -15,10 +15,12 @@
 //! before the next load and at destroy; the engine owns root-tree teardown.
 
 use std::rc::Rc;
+use std::rc::Weak;
 
 use boa_engine::Context;
 
 use crate::core::app::root::RootView;
+use crate::core::app::HostMsg;
 use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
 use crate::core::edgy::value::Value;
 use crate::core::js_runtime::TurInstanceContext;
@@ -33,6 +35,12 @@ use crate::core::render::brush::{Brush, Color};
 use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
+use rut_vm::interp::{CallArgs, Ret, Vm};
+
+mod realm;
+mod text;
+
+pub use realm::RutRealm;
 
 /// The per-instance resource budget. Phase-1 defaults; tunable per embedder.
 pub fn default_limits() -> rut_vm::interp::Limits {
@@ -114,7 +122,7 @@ impl ViewFactory for PreBuilt {
 /// filesystem involved.
 pub fn tur_decl_module() -> rut_driver::Module {
     let row = |name: &str, params: Vec<TypeId>, ret: TypeId| (name.to_string(), params, ret, false);
-    let host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
+    let mut host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
         row("el_column", vec![], TY_OPAQUE),
         row("el_row", vec![], TY_OPAQUE),
         row("el_text", vec![TY_STR], TY_OPAQUE),
@@ -151,6 +159,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
         row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
     ];
+    // C1 — text input rows (realm-minted controllers).
+    host_funcs.extend(text::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     rut_driver::Module {
         namespace: Some("tur".to_string()),
         body: ModuleBody::Host {
@@ -323,7 +333,7 @@ fn install_tur_pkg(
         let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
             let n = h2.click_seq.get() + 1;
             h2.click_seq.set(n);
-            h2.pending_calls.borrow_mut().push((cb.clone(), id_a, id_b, n as f64));
+            h2.pending_calls.borrow_mut().push(Intent::Click { name: cb.clone(), a: id_a, b: id_b, seq: n as f64 });
             dirty.set(true);
             Ok(crate::core::edgy::Value::Nil)
         });
@@ -546,6 +556,9 @@ fn install_tur_pkg(
         Ok(item.unwrap_or_default())
     });
 
+    // C1 — text input (realm-minted controllers, method rows).
+    text::install(&mut pkg, handles);
+
     hosts.install_host_pkg(ctx, pkg);
 }
 
@@ -569,9 +582,199 @@ pub struct RutHandles {
     /// Callback intents queued by element callbacks (the rut closure
     /// closures are boa-free: they only push here). Drained at pump level
     /// after flush — `(callback name, id, payload)`.
-    pub pending_calls: std::cell::RefCell<Vec<(String, u64, u64, f64)>>,
+    pub pending_calls: std::cell::RefCell<Vec<Intent>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
+    /// The worker→host channel — runtime-error reports for face traps ride
+    /// the same `RuntimeError` message the JS rail uses.
+    pub host_tx: crate::core::app::HostTx,
+    /// The realm face (Phase C1): rows that must mint or inspect
+    /// JS-class-backed state (a `TextEditingController`, an animation
+    /// controller) borrow the realm through it. Detached until boot arms
+    /// it; a rut-only module that never calls a realm-demanding row keeps
+    /// the realm unallocated.
+    pub realm: crate::core::rut_runtime::RutRealm,
+    /// The flush-time VM face (Phase C2): view factories / deriveds minted
+    /// by rows reach the VM through it. Detached until boot installs the
+    /// VM; guards (depth, no-mount) live here.
+    pub face: Rc<VmFace>,
+    /// Above zero while a face-driven VM call is in flight — `tur::mount`
+    /// traps inside one (the C8 no-mount law: a derive/build that tries to
+    /// re-mount the tree can never wedge the frame).
+    pub face_busy: std::cell::Cell<u32>,
+}
+
+/// One queued callback intent — the payload the drain dispatches into an
+/// `entry fn`. The legacy click shape (`(name, a, b, seq)`) plus the
+/// Phase-C record payloads (keys, pointer positions, raw values) that the
+/// gesture / animation / watch rails queue.
+#[derive(Clone, Debug)]
+pub enum Intent {
+    /// `el_button`'s click: `(name, id_a, id_b, seq)` — the Phase-3 shape.
+    Click { name: String, a: u64, b: u64, seq: f64 },
+    /// A key event from `el_focusable`'s `onKeyDown` mutation.
+    Key { name: String, key: String, code: String, modifiers: u64, kind: u64 },
+    /// A pointer event from `el_gesture`'s down/move/up/context-menu
+    /// mutations: `(name, id, local_x, local_y, global_x, global_y, button)`.
+    Pointer {
+        name: String,
+        id: u64,
+        lx: f64,
+        ly: f64,
+        gx: f64,
+        gy: f64,
+        button: u64,
+    },
+    /// A raw value payload (animation `onTick(eased)`, `watch(atom, cb)`
+    /// change deliveries).
+    Value { name: String, a: u64, value: crate::core::edgy::Value },
+}
+
+/// The flush-time VM face — view factories / deriveds minted by rows reach
+/// the VM through a `Weak` to it, so a module swap (which drops the
+/// runtime) detaches every minted face instead of leaking stale frames.
+///
+/// Guards (the C8 decided law, applied to every face call):
+/// - **fuel-capped**: the VM's own budget drives the call; a face call that
+///   exhausts it is retried with bounded extra fuel, then bailed (reported,
+///   machine returned to idle).
+/// - **no-mount**: `face_busy` is raised for the call's duration; a row
+///   calling `tur::mount` inside traps (checked by the `mount` row).
+/// - **depth-limited**: nested face calls (a derive reading a derived)
+///   cap at [`VM_FACE_MAX_DEPTH`].
+/// - **traps never abort the flush**: reported through the runtime-error
+///   rail (worker→host `RuntimeError`), caller sees `Value::Nil`.
+pub struct VmFace {
+    vm: std::cell::RefCell<Weak<std::cell::RefCell<Vm>>>,
+}
+
+/// Nested face-call depth cap (a derive reading a derived reading a
+/// derived…). Deep chains are a module bug; the call is reported + Nil.
+pub const VM_FACE_MAX_DEPTH: u32 = 16;
+
+/// Per-attempt fuel handed to a face call (the derive law's "fuel-capped").
+pub const VM_FACE_FUEL: u64 = 200_000;
+/// Bounded retries before the bail-out (a hostile derive can't wedge the
+/// frame; an honest derive never comes close).
+pub const VM_FACE_MAX_FUEL_RETRIES: u32 = 3;
+/// Final drain budget: one last grant that drives a pathological call to
+/// completion so the machine returns to IDLE (never left parked mid-flush).
+pub const VM_FACE_DRAIN_FUEL: u64 = 2_000_000;
+
+impl VmFace {
+    pub(crate) fn new() -> Rc<Self> {
+        Rc::new(Self {
+            vm: std::cell::RefCell::new(Weak::new()),
+        })
+    }
+
+    /// Install the VM (boot path) — the face holds a `Weak`, so teardown
+    /// detaches every minted factory automatically.
+    pub(crate) fn install(&self, vm: &Rc<std::cell::RefCell<Vm>>) {
+        *self.vm.borrow_mut() = Rc::downgrade(vm);
+    }
+
+    /// Call an `entry fn` through the guards. `name` must be an export;
+    /// `args` the (single) crossing argument. Errors are REPORTED (error
+    /// rail) and returned — callers fall back to `Value::Nil`.
+    pub fn call<A: CallArgs, R: Ret>(
+        &self,
+        handles: &RutHandles,
+        name: &str,
+        args: A,
+    ) -> Result<R, rut_vm::Trap> {
+        let vm = self
+            .vm
+            .borrow()
+            .clone()
+            .upgrade()
+            .ok_or_else(|| {
+                rut_vm::Trap::new(
+                    rut_vm::TrapKind::Invalid,
+                    format!("face call `{name}`: the rut module is gone"),
+                )
+            })?;
+        let depth = handles.face_busy.get();
+        if depth >= VM_FACE_MAX_DEPTH {
+            report_runtime_error(
+                handles,
+                &format!("face call `{name}`: nested face depth {depth} exceeds the cap"),
+            );
+            return Err(rut_vm::Trap::new(
+                rut_vm::TrapKind::Invalid,
+                "face depth cap exceeded",
+            ));
+        }
+        handles.face_busy.set(depth + 1);
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut guard = vm.borrow_mut();
+            guard.add_fuel(VM_FACE_FUEL);
+            match guard.call::<_, R>(name, args) {
+                Ok(v) => Ok(v),
+                Err(t) if t.kind == rut_vm::TrapKind::OutOfFuel => {
+                    // Bounded retries, then one drain grant that always
+                    // returns the machine to idle (never parked mid-flush).
+                    let done;
+                    let mut retries = 0;
+                    loop {
+                        let grant = if retries < VM_FACE_MAX_FUEL_RETRIES {
+                            VM_FACE_FUEL
+                        } else {
+                            VM_FACE_DRAIN_FUEL
+                        };
+                        guard.add_fuel(grant);
+                        match guard.resume::<R>() {
+                            Ok(v) => {
+                                done = Ok(v);
+                                break;
+                            }
+                            Err(t2) if t2.kind == rut_vm::TrapKind::OutOfFuel
+                                && retries < VM_FACE_MAX_FUEL_RETRIES =>
+                            {
+                                retries += 1;
+                            }
+                            Err(t2) => {
+                                done = Err(t2);
+                                break;
+                            }
+                        }
+                    }
+                    if let Err(t) = &done {
+                        report_runtime_error(
+                            handles,
+                            &format!("face call `{name}`: out of fuel after bounded grants (total used {})", guard.fuel_used),
+                        );
+                        let _ = t;
+                    }
+                    done
+                }
+                Err(t) => {
+                    report_runtime_error(handles, &format!("face call `{name}`: {} — {}", t.name(), t.msg));
+                    Err(t)
+                }
+            }
+        }));
+        handles.face_busy.set(depth);
+        match out {
+            Ok(r) => r,
+            Err(_) => Err(rut_vm::Trap::new(
+                rut_vm::TrapKind::Panic,
+                format!("face call `{name}` panicked"),
+            )),
+        }
+    }
+}
+
+/// Report a face trap through the runtime-error rail (worker → host), the
+/// same channel JS runtime errors ride. Never aborts the caller.
+pub(crate) fn report_runtime_error(handles: &RutHandles, message: &str) {
+    tracing::error!("rut runtime error: {message}");
+    let _ = handles.host_tx.unbounded_send(HostMsg::RuntimeError {
+        report: crate::core::app::runtime_error::RuntimeErrorReport {
+            message: message.to_string(),
+            stack: None,
+        },
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -579,7 +782,10 @@ pub struct RutHandles {
 // ---------------------------------------------------------------------------
 
 pub struct RutRuntime {
-    pub vm: rut_vm::interp::Vm,
+    /// The VM, in a shared cell (see `boot`): the rut rail's own calls take
+    /// a transient borrow; view factories / deriveds reach it through the
+    /// face's `Weak`.
+    pub vm: Rc<std::cell::RefCell<Vm>>,
     handles: Rc<RutHandles>,
     /// The instance context (held for `apply_root` and future rails).
     js_ctx: TurInstanceContext,
@@ -623,12 +829,19 @@ impl RutRuntime {
     }
 
     /// Bind bodies, verify the join, boot the VM, and invoke `start`.
+    ///
+    /// `realm_slot` + `arm` wire the realm face: the slot is the engine's
+    /// shared realm storage, `arm` installs the realm constructor closure
+    /// (the worker backend's `arm_realm_face`). A module whose rows never
+    /// demand the realm never triggers construction.
     pub fn boot(
         source: &str,
         js_ctx: TurInstanceContext,
+        realm: RutRealmInputs,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) = Self::compile(source).map_err(crate::core::app::ModuleError::Parse)?;
 
+        let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
             dirty: js_ctx.dirty.clone(),
@@ -636,6 +849,10 @@ impl RutRuntime {
             pending_root: std::cell::RefCell::new(None),
             pending_calls: std::cell::RefCell::new(Vec::new()),
             click_seq: std::cell::Cell::new(0),
+            host_tx: js_ctx.host_tx.clone(),
+            realm: realm.face,
+            face,
+            face_busy: std::cell::Cell::new(0),
         });
 
         let mut hosts = rut_vm::interp::HostRegistry::new();
@@ -662,6 +879,11 @@ impl RutRuntime {
             hosts,
         )
         .map_err(|t| crate::core::app::ModuleError::Eval(format!("boot: {} — {}", t.name(), t.msg)))?;
+        // The VM lives in a shared cell: view factories / deriveds minted
+        // by rows reach it through the face's Weak (flush-time calls), so
+        // they never hold a borrow across the engine's own `&mut Vm` calls.
+        let vm = Rc::new(std::cell::RefCell::new(vm));
+        handles.face.install(&vm);
 
         let mut rt = RutRuntime {
             vm,
@@ -675,17 +897,16 @@ impl RutRuntime {
     }
 
     fn call_start(&mut self, returns_u64: bool) -> Result<(), crate::core::app::ModuleError> {
+        let mut vm = self.vm.borrow_mut();
         if returns_u64 {
-            let answer = self
-                .vm
+            let answer = vm
                 .call::<_, u64>("start", ())
                 .map_err(|t| {
                     crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
             self.start_answer = answer;
         } else {
-            self.vm
-                .call::<_, ()>("start", ())
+            vm.call::<_, ()>("start", ())
                 .map_err(|t| {
                     crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
@@ -698,6 +919,7 @@ impl RutRuntime {
     /// not mount (stash-and-apply is a `start`-time contract in Phase 2).
     pub fn call_entry(&mut self, name: &str, a: u64, b: f64) -> Result<(), crate::core::app::ModuleError> {
         self.vm
+            .borrow_mut()
             .call::<_, ()>(name, (a, b))
             .map(|_| ())
             .map_err(|t| crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg)))
@@ -730,7 +952,7 @@ impl RutRuntime {
 
     /// Drive ready rut tasks once (pump-level — never inside a flush).
     pub fn run_ready(&mut self) {
-        if let Err(t) = self.vm.run_ready() {
+        if let Err(t) = self.vm.borrow_mut().run_ready() {
             tracing::error!("rut run_ready trap: {} — {}", t.name(), t.msg);
         }
     }
@@ -741,26 +963,65 @@ impl RutRuntime {
     /// (the pump, which re-borrows for `apply_root` + the convergence
     /// flush). Returns the number of callbacks drained.
     pub fn drain_pending_calls(&mut self) -> usize {
-        let calls: Vec<(String, u64, u64, f64)> =
-            std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
-        for (name, a, b, c) in &calls {
-            if let Err(t) = self.vm.call::<_, ()>(name, (*a, *b, *c)) {
-                eprintln!("[rut-dbg] callback {name}({a},{b},{c}) TRAP: {} — {}", t.name(), t.msg);
-            } else {
-                eprintln!("[rut-dbg] callback {name}({a},{b},{c}) ok");
+        let calls: Vec<Intent> = std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
+        for intent in &calls {
+            let name = intent_name(intent);
+            let outcome = self.call_intent(intent);
+            match outcome {
+                Ok(()) => eprintln!("[rut-dbg] callback {name} ok"),
+                Err(t) => eprintln!("[rut-dbg] callback {name} TRAP: {} — {}", t.name(), t.msg),
             }
         }
         calls.len()
     }
 
+    /// Dispatch one intent into its `entry fn` (per-shape signatures).
+    fn call_intent(&mut self, intent: &Intent) -> Result<(), rut_vm::Trap> {
+        let mut vm = self.vm.borrow_mut();
+        match intent {
+            Intent::Click { name, a, b, seq } => vm.call::<_, ()>(name, (*a, *b, *seq)),
+            Intent::Key { name, key, code, modifiers, kind } => {
+                vm.call::<_, ()>(name, (key.as_str(), code.as_str(), *modifiers, *kind))
+            }
+            Intent::Pointer { name, id, lx, ly, gx, gy, button } => {
+                vm.call::<_, ()>(name, (*id, *lx, *ly, *gx, *gy, *button))
+            }
+            Intent::Value { name, a, value } => {
+                let n = match value {
+                    Value::Num(n) => *n,
+                    Value::Bool(b) => *b as u64 as f64,
+                    _ => 0.0,
+                };
+                vm.call::<_, ()>(name, (*a, n))
+            }
+        }
+    }
+
     /// Best-effort `entry fn stop()` (the cleanup contract).
     pub fn stop(&mut self) {
         if self.has_stop
-            && let Err(t) = self.vm.call::<_, ()>("stop", ())
+            && let Err(t) = self.vm.borrow_mut().call::<_, ()>("stop", ())
         {
             tracing::error!("rut module stop: {} — {}", t.name(), t.msg);
         }
         // Root teardown is engine-owned (teardown_current_module clears it).
         self.handles.pending_root.borrow_mut().take();
     }
+}
+
+/// The intent's entry-fn name (drain logging).
+fn intent_name(intent: &Intent) -> &str {
+    match intent {
+        Intent::Click { name, .. }
+        | Intent::Key { name, .. }
+        | Intent::Pointer { name, .. }
+        | Intent::Value { name, .. } => name,
+    }
+}
+
+/// The realm-face wiring `WorkerBackend::load_rut_module_inner` hands to
+/// [`RutRuntime::boot`] — an already-armed face (the shared slot + the
+/// realm constructor installed by the worker backend).
+pub struct RutRealmInputs {
+    pub face: RutRealm,
 }

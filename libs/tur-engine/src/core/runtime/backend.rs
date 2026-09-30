@@ -38,12 +38,13 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsObject, JsValue, Source};
 use futures::StreamExt;
 
-use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
+use crate::core::app::{FrameOutcome, ModuleError, TurAppContext, TurAppInternal, WorkerMsg};
 use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::js_runtime::module_loader::{TurModuleLoader, bound_native, build_native_module};
 use crate::core::plugin::{DeferredRegistration, PluginRegisterContext};
 use crate::core::render::{
@@ -68,14 +69,15 @@ use crate::error::TurError;
 /// `TurAppInternal::pending_render_batch`, where [`HostBackend`]'s
 /// `worker_loop` drains it and ships to main.
 pub(crate) struct WorkerBackend {
-    /// The JS realm, constructed lazily by [`Self::ensure_realm`] — `None`
-    /// for the instance's whole life when no JS module/script ever loads.
-    realm: RefCell<Option<Context>>,
-    /// The argument object handed to the loaded module's `start`:
-    /// `{ store }` — the instance store wrapped as a live `{get, set}` JS
-    /// object. Built at realm construction (it needs the realm); `None`
-    /// until then.
-    start_arg: RefCell<Option<JsObject>>,
+    /// The JS realm's shared slot — the `Option<Context>` storage PLUS the
+    /// realm-construction inputs (`start_arg`, the deferred registrations).
+    /// Shared with the rut rail's [`crate::core::rut_runtime::RutRealm`]
+    /// face (a rut row may demand the realm — e.g. minting a JS-class
+    /// controller), which is why the storage lives behind an `Rc`: one
+    /// home, two faces. Borrow discipline: the rut VM runs with the realm
+    /// borrow released, and the face's `with_realm` borrows are strictly
+    /// scoped to a single row call.
+    realm: Rc<RealmSlot>,
     /// The cleanup function returned by the currently-loaded module's
     /// `start()` (the module lifecycle contract). Runs (best-effort)
     /// before the next `load_module` evaluates and at destroy. Worker-side
@@ -99,13 +101,26 @@ pub(crate) struct WorkerBackend {
     /// The engine's host-thread hop — carried into the realm-construction
     /// register context (replay).
     host_exec: crate::core::plugin::HostExecutor,
-    /// Realm-bound plugin registrations recorded during the realm-free
-    /// build. Replayed — in plugin order — exactly once, at realm
-    /// construction.
-    deferred: RefCell<Vec<DeferredRegistration>>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
 }
+
+/// The shared realm storage (see [`WorkerBackend::realm`]).
+pub(crate) struct RealmSlot {
+    /// The boa realm, `None` for the instance's whole life when no JS
+    /// module/script — and no rut row demanding the realm — ever loads.
+    pub realm: RefCell<Option<Context>>,
+    /// The argument object handed to the loaded module's `start`:
+    /// `{ store }` — the instance store wrapped as a live `{get, set}` JS
+    /// object. Built at realm construction (it needs the realm); `None`
+    /// until then.
+    pub start_arg: RefCell<Option<JsObject>>,
+    /// Realm-bound plugin registrations recorded during the realm-free
+    /// build. Replayed — in plugin order — exactly once, at realm
+    /// construction.
+    pub deferred: RefCell<Vec<DeferredRegistration>>,
+}
+
 
 impl WorkerBackend {
     #[allow(clippy::too_many_arguments)]
@@ -119,15 +134,17 @@ impl WorkerBackend {
         deferred: Vec<DeferredRegistration>,
     ) -> Self {
         Self {
-            realm: RefCell::new(None),
-            start_arg: RefCell::new(None),
+            realm: Rc::new(RealmSlot {
+                realm: RefCell::new(None),
+                start_arg: RefCell::new(None),
+                deferred: RefCell::new(deferred),
+            }),
             pending_cleanup: RefCell::new(None),
             rut: RefCell::new(None),
             loader,
             clock,
             host_tx,
             host_exec,
-            deferred: RefCell::new(deferred),
             internal,
             executor,
         }
@@ -141,153 +158,19 @@ impl WorkerBackend {
     /// (modules / classes / globals / consts, in plugin order). Idempotent
     /// — a second call is a no-op.
     fn ensure_realm(&self) -> Result<(), TurError> {
-        if self.realm.borrow().is_some() {
-            return Ok(());
-        }
-        // Runtime-error reporter: reaches the boa Context two ways — as
-        // host-defined data (capture sites read it via
-        // `runtime_error::report(ctx, err)`) and via the promise-rejection
-        // host hook. One identity per instance, built from the shared
-        // worker→host sender.
-        let reporter =
-            crate::core::app::runtime_error::RuntimeErrorReporter::new(self.host_tx.clone());
-        let mut boa = Context::builder()
-            .clock(Rc::new(crate::core::runtime::ClockProxy(
-                self.clock.clone(),
-            )))
-            .job_executor(self.executor.clone())
-            .module_loader(self.loader.clone())
-            .host_hooks(Rc::new(
-                crate::core::app::runtime_error::PromiseRejectionHandler::new(reporter.clone()),
-            ))
-            .build()
-            .map_err(|e| TurError::Other(format!("failed to build boa context: {e}")))?;
-        boa.insert_data(reporter);
-
-        let opaque =
-            crate::core::js_runtime::BoaOpaque::new(self.internal.js_context.clone(), &mut boa);
-        let ctx_val: JsValue = opaque.object().clone().into();
-
-        // The instance store as a JS `{get, set}` object — the `store` handed
-        // to every module's `start({ store })`. The instance-owned tree is
-        // born-bound to this store at build, so a module that mounts
-        // `mount(view)` (no explicit store) builds against exactly the store
-        // it was handed; `mount(store, view)` swaps the binding (legacy
-        // shape).
-        let start_arg = {
-            let store_obj = crate::core::edgy::reactive::make_store_js_object(
-                &mut boa,
-                self.internal.js_context.store.clone(),
-            );
-            let obj = JsObject::with_object_proto(boa.intrinsics());
-            let _ = obj.create_data_property(
-                boa_engine::js_string!("store"),
-                JsValue::from(store_obj),
-                &mut boa,
-            );
-            obj
-        };
-        *self.start_arg.borrow_mut() = Some(start_arg);
-
-        let mut core_fns: Vec<crate::core::js_runtime::FnEntry> = Vec::new();
-        core_fns.extend(crate::core::edgy::bridge::fns());
-        core_fns.extend(crate::core::app::mount::fns());
-        let core_module =
-            build_native_module(&mut boa, opaque.object().clone().into(), &core_fns, &[]);
-        self.loader.register("tur:core", core_module);
-
-        let dt_obj = JsObject::with_object_proto(boa.intrinsics());
-        let et_fn = bound_native(
-            &mut boa,
-            ctx_val.clone(),
-            crate::core::dev::dev_tool::tur_dev_tool_element_tree,
-            0,
-            "elementTree",
-        );
-        let ge_fn = bound_native(
-            &mut boa,
-            ctx_val.clone(),
-            crate::core::dev::dev_tool::tur_dev_tool_get_element,
-            1,
-            "getElement",
-        );
-        let rs_fn = bound_native(
-            &mut boa,
-            ctx_val.clone(),
-            crate::core::dev::dev_tool::tur_dev_tool_reactive_stats,
-            0,
-            "reactiveStats",
-        );
-        let fs_fn = bound_native(
-            &mut boa,
-            ctx_val.clone(),
-            crate::core::dev::dev_tool::tur_dev_tool_frame_stats,
-            0,
-            "frameStats",
-        );
-        let hft_fn = bound_native(
-            &mut boa,
-            ctx_val.clone(),
-            crate::core::dev::dev_tool::tur_dev_tool_set_host_frame_timing,
-            1,
-            "setHostFrameTiming",
-        );
-        use boa_engine::property::Attribute;
-        let _ = dt_obj.create_data_property(
-            boa_engine::js_string!("elementTree"),
-            JsValue::from(et_fn),
-            &mut boa,
-        );
-        let _ = dt_obj.create_data_property(
-            boa_engine::js_string!("getElement"),
-            JsValue::from(ge_fn),
-            &mut boa,
-        );
-        let _ = dt_obj.create_data_property(
-            boa_engine::js_string!("reactiveStats"),
-            JsValue::from(rs_fn),
-            &mut boa,
-        );
-        let _ = dt_obj.create_data_property(
-            boa_engine::js_string!("frameStats"),
-            JsValue::from(fs_fn),
-            &mut boa,
-        );
-        let _ = dt_obj.create_data_property(
-            boa_engine::js_string!("setHostFrameTiming"),
-            JsValue::from(hft_fn),
-            &mut boa,
-        );
-        let _ = boa.register_global_property(
-            boa_engine::js_string!("turDevTool"),
-            dt_obj,
-            Attribute::all(),
-        );
-
-        // Replay the deferred realm-bound plugin registrations (JS modules,
-        // classes, globals, consts) — in plugin order, before any JS can
-        // load (a module load is the only path here).
-        {
-            let mut replay_cx = PluginRegisterContext {
-                boa: Some(&mut boa),
+        construct_realm(
+            &self.realm,
+            &RealmInputs {
                 loader: self.loader.clone(),
-                js_ctx_value: Some(ctx_val),
-                js_ctx: self.internal.js_context.clone(),
-                app: self.internal.app_context.clone(),
-                subsystems: Vec::new(),
-                plugin_state: std::collections::HashMap::new(),
-                deferred: Vec::new(),
-                event_bus: self.internal.event_bus.clone(),
+                clock: self.clock.clone(),
+                executor: self.executor.clone(),
+                host_tx: self.host_tx.clone(),
                 host_exec: self.host_exec.clone(),
-            };
-            for thunk in self.deferred.borrow_mut().drain(..) {
-                thunk(&mut replay_cx)?;
-            }
-        }
-
-        tracing::info!("JS realm constructed (deferred registrations replayed)");
-        *self.realm.borrow_mut() = Some(boa);
-        Ok(())
+                js_context: self.internal.js_context.clone(),
+                app_context: self.internal.app_context.clone(),
+                event_bus: self.internal.event_bus.clone(),
+            },
+        )
     }
 
     /// Test-only probe: whether the instance has allocated a JS realm. The
@@ -296,7 +179,7 @@ impl WorkerBackend {
     /// whole life. Surfaced via `TurApp::realm_allocated` (a plain bool —
     /// no boa type crosses the embedder boundary).
     pub(crate) fn realm_allocated(&self) -> bool {
-        self.realm.borrow().is_some()
+        self.realm.realm.borrow().is_some()
     }
 
     /// Read the latest cursor applied during the last flush (or `None` if
@@ -320,14 +203,14 @@ impl WorkerBackend {
     fn teardown_current_module(&self) {
         if let Some(cleanup) = self.pending_cleanup.borrow_mut().take() {
             // A pending cleanup implies a JS module loaded ⇒ the realm exists.
-            let mut realm = self.realm.borrow_mut();
+            let mut realm = self.realm.realm.borrow_mut();
             let boa = realm.as_mut().expect("module cleanup without a JS realm");
             if let Err(e) = cleanup.call(&boa_engine::JsValue::undefined(), &[], boa) {
                 tracing::error!("module cleanup error: {e}");
             }
             let _ = boa.run_jobs();
             drop(realm);
-            let mut realm = self.realm.borrow_mut();
+            let mut realm = self.realm.realm.borrow_mut();
             let _ = self
                 .executor
                 .drain(realm.as_mut().expect("module cleanup without a JS realm"));
@@ -347,7 +230,7 @@ impl WorkerBackend {
         // store). The next module mounts into the same instance-owned tree
         // (root-less until then). Realm rides through — Rust-closure hooks
         // and mutations run realm-free.
-        let mut realm = self.realm.borrow_mut();
+        let mut realm = self.realm.realm.borrow_mut();
         self.internal.drain_teardown_lifecycle(realm.as_mut());
     }
 
@@ -378,7 +261,13 @@ impl WorkerBackend {
         self.teardown_rut_module();
 
         let js = &self.internal.js_context;
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone())?;
+        // The realm-face wiring: arm a face against this backend (the shared
+        // slot + the realm constructor; cheap clones only) and hand it to the
+        // boot. A module whose rows never demand the realm never constructs.
+        let mut face = crate::core::rut_runtime::RutRealm::detached();
+        self.arm_realm_face(&mut face);
+        let inputs = crate::core::rut_runtime::RutRealmInputs { face };
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs)?;
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).
         rut.apply_root().map_err(ModuleError::Eval)?;
@@ -395,12 +284,13 @@ impl WorkerBackend {
                 "call_rut_entry: no rut module loaded".into(),
             ));
         };
-        let has_it = rut
-            .vm
-            .prog
-            .exports
-            .iter()
-            .any(|(n, _)| rut.vm.prog.interner.name(*n) == name);
+        let has_it = {
+            let vm = rut.vm.borrow();
+            vm.prog
+                .exports
+                .iter()
+                .any(|(n, _)| vm.prog.interner.name(*n) == name)
+        };
         if !has_it {
             return Ok(()); // no such entry — a no-op (event rails are optional)
         }
@@ -415,7 +305,7 @@ impl WorkerBackend {
 
         // Parse first, so a syntactically-broken reload doesn't destroy the
         // currently-running module's tree.
-        let mut realm = self.realm.borrow_mut();
+        let mut realm = self.realm.realm.borrow_mut();
         let boa = realm.as_mut().expect("realm ensured above");
         let module = boa_engine::Module::parse(
             Source::from_bytes(source).with_path(Path::new("entry.mjs")),
@@ -432,7 +322,7 @@ impl WorkerBackend {
         // any) + clear its leftover root tree before the new module runs.
         self.teardown_current_module();
 
-        let mut realm = self.realm.borrow_mut();
+        let mut realm = self.realm.realm.borrow_mut();
         let boa = realm.as_mut().expect("realm ensured above");
         let promise = module.load_link_evaluate(boa);
         if let Err(e) = boa.run_jobs() {
@@ -474,7 +364,7 @@ impl WorkerBackend {
             // store (a live `{get, set}` object; the tree is born-bound to
             // it). Legacy `start()` modules simply ignore the argument.
             let arg = JsValue::from(
-                self.start_arg
+                self.realm.start_arg
                     .borrow()
                     .clone()
                     .expect("start_arg built with the realm"),
@@ -494,7 +384,7 @@ impl WorkerBackend {
         *self.pending_cleanup.borrow_mut() = cleanup;
         if let Err(e) = self
             .executor
-            .drain(self.realm.borrow_mut().as_mut().expect("realm"))
+            .drain(self.realm.realm.borrow_mut().as_mut().expect("realm"))
         {
             tracing::error!("load_module drain error: {e}");
         }
@@ -561,7 +451,7 @@ impl WorkerBackend {
                     return;
                 }
                 let source_str: &str = &source;
-                let mut realm = self.realm.borrow_mut();
+                let mut realm = self.realm.realm.borrow_mut();
                 let boa = realm.as_mut().expect("realm ensured above");
                 let result = boa.eval(boa_engine::Source::from_bytes(source_str));
                 let display = match result {
@@ -578,7 +468,7 @@ impl WorkerBackend {
                 drop(realm);
                 let _ = self
                     .executor
-                    .drain(self.realm.borrow_mut().as_mut().expect("realm"));
+                    .drain(self.realm.realm.borrow_mut().as_mut().expect("realm"));
                 reply.send(display);
             }
             WorkerMsg::RealmAllocated { reply } => {
@@ -637,7 +527,7 @@ impl WorkerBackend {
             rut.run_ready();
         }
         let mut outcome = {
-            let mut realm = self.realm.borrow_mut();
+            let mut realm = self.realm.realm.borrow_mut();
             let mut boa = realm.as_mut();
             self.internal.flush(&mut boa)?
         };
@@ -654,7 +544,7 @@ impl WorkerBackend {
             if let Some(rut) = self.rut.borrow_mut().as_mut() {
                 rut.apply_root().map_err(TurError::Other)?; // a callback may re-mount
             }
-            let mut realm = self.realm.borrow_mut();
+            let mut realm = self.realm.realm.borrow_mut();
             let mut boa = realm.as_mut();
             outcome = self.internal.flush(&mut boa)?;
         }
@@ -731,6 +621,199 @@ impl WorkerBackend {
         let focus = self.internal.js_context.focus_manager.borrow();
         helper::focused_is_editable(&tree, &focus)
     }
+
+    /// Install the realm constructor closure on a rut [`RutRealm`](crate::core::rut_runtime::RutRealm)
+    /// face. Called once per boot; the closure captures cheap clones only
+    /// (no `WorkerBackend` back-reference, so no ownership cycle), and the
+    /// slot itself carries the storage it writes into.
+    pub(crate) fn arm_realm_face(&self, face: &mut crate::core::rut_runtime::RutRealm) {
+        let slot = self.realm.clone();
+        let inputs = Rc::new(RealmInputs {
+            loader: self.loader.clone(),
+            clock: self.clock.clone(),
+            executor: self.executor.clone(),
+            host_tx: self.host_tx.clone(),
+            host_exec: self.host_exec.clone(),
+            js_context: self.internal.js_context.clone(),
+            app_context: self.internal.app_context.clone(),
+            event_bus: self.internal.event_bus.clone(),
+        });
+        face.arm(
+            slot.clone(),
+            Rc::new(move || construct_realm(&slot, &inputs).map_err(|e| e.to_string())),
+        );
+    }
+}
+
+/// The realm-construction inputs, captured cheaply so both the
+/// [`WorkerBackend::ensure_realm`] path and the rut rail's realm face can
+/// drive the same constructor (see [`construct_realm`]).
+pub(crate) struct RealmInputs {
+    pub loader: Rc<TurModuleLoader>,
+    pub clock: std::sync::Arc<dyn boa_engine::context::time::Clock + Send + Sync>,
+    pub executor: Rc<TurJobExecutor>,
+    pub host_tx: HostTx,
+    pub host_exec: crate::core::plugin::HostExecutor,
+    pub js_context: TurInstanceContext,
+    pub app_context: Rc<RefCell<TurAppContext>>,
+    pub event_bus: Rc<EventBus>,
+}
+
+/// Construct the boa realm into `slot` if absent — the free-function form
+/// of [`WorkerBackend::ensure_realm`] so the rut rail's realm face can
+/// demand the realm from inside a rut row (the coexistence-era bridge for
+/// JS-class-backed controllers). Heavy half of the old eager build: the
+/// `Context` (clock + job executor + module loader + promise-rejection
+/// hook), the JS-side ctx opaque, the `start_arg` store object, the
+/// `tur:core` native module, the `turDevTool` global, and the REPLAY of
+/// every deferred plugin registration (modules / classes / globals /
+/// consts, in plugin order). Idempotent — a second call is a no-op.
+fn construct_realm(slot: &Rc<RealmSlot>, inputs: &RealmInputs) -> Result<(), TurError> {
+    if slot.realm.borrow().is_some() {
+        return Ok(());
+    }
+    // Runtime-error reporter: reaches the boa Context two ways — as
+    // host-defined data (capture sites read it via
+    // `runtime_error::report(ctx, err)`) and via the promise-rejection
+    // host hook. One identity per instance, built from the shared
+    // worker→host sender.
+    let reporter =
+        crate::core::app::runtime_error::RuntimeErrorReporter::new(inputs.host_tx.clone());
+    let mut boa = Context::builder()
+        .clock(Rc::new(crate::core::runtime::ClockProxy(inputs.clock.clone())))
+        .job_executor(inputs.executor.clone())
+        .module_loader(inputs.loader.clone())
+        .host_hooks(Rc::new(
+            crate::core::app::runtime_error::PromiseRejectionHandler::new(reporter.clone()),
+        ))
+        .build()
+        .map_err(|e| TurError::Other(format!("failed to build boa context: {e}")))?;
+    boa.insert_data(reporter);
+
+    let opaque =
+        crate::core::js_runtime::BoaOpaque::new(inputs.js_context.clone(), &mut boa);
+    let ctx_val: JsValue = opaque.object().clone().into();
+
+    // The instance store as a JS `{get, set}` object — the `store` handed
+    // to every module's `start({ store })`. The instance-owned tree is
+    // born-bound to this store at build, so a module that mounts
+    // `mount(view)` (no explicit store) builds against exactly the store
+    // it was handed; `mount(store, view)` swaps the binding (legacy
+    // shape).
+    let start_arg = {
+        let store_obj = crate::core::edgy::reactive::make_store_js_object(
+            &mut boa,
+            inputs.js_context.store.clone(),
+        );
+        let obj = JsObject::with_object_proto(boa.intrinsics());
+        let _ = obj.create_data_property(
+            boa_engine::js_string!("store"),
+            JsValue::from(store_obj),
+            &mut boa,
+        );
+        obj
+    };
+    *slot.start_arg.borrow_mut() = Some(start_arg);
+
+    let mut core_fns: Vec<crate::core::js_runtime::FnEntry> = Vec::new();
+    core_fns.extend(crate::core::edgy::bridge::fns());
+    core_fns.extend(crate::core::app::mount::fns());
+    let core_module =
+        build_native_module(&mut boa, opaque.object().clone().into(), &core_fns, &[]);
+    inputs.loader.register("tur:core", core_module);
+
+    let dt_obj = JsObject::with_object_proto(boa.intrinsics());
+    let et_fn = bound_native(
+        &mut boa,
+        ctx_val.clone(),
+        crate::core::dev::dev_tool::tur_dev_tool_element_tree,
+        0,
+        "elementTree",
+    );
+    let ge_fn = bound_native(
+        &mut boa,
+        ctx_val.clone(),
+        crate::core::dev::dev_tool::tur_dev_tool_get_element,
+        1,
+        "getElement",
+    );
+    let rs_fn = bound_native(
+        &mut boa,
+        ctx_val.clone(),
+        crate::core::dev::dev_tool::tur_dev_tool_reactive_stats,
+        0,
+        "reactiveStats",
+    );
+    let fs_fn = bound_native(
+        &mut boa,
+        ctx_val.clone(),
+        crate::core::dev::dev_tool::tur_dev_tool_frame_stats,
+        0,
+        "frameStats",
+    );
+    let hft_fn = bound_native(
+        &mut boa,
+        ctx_val.clone(),
+        crate::core::dev::dev_tool::tur_dev_tool_set_host_frame_timing,
+        1,
+        "setHostFrameTiming",
+    );
+    use boa_engine::property::Attribute;
+    let _ = dt_obj.create_data_property(
+        boa_engine::js_string!("elementTree"),
+        JsValue::from(et_fn),
+        &mut boa,
+    );
+    let _ = dt_obj.create_data_property(
+        boa_engine::js_string!("getElement"),
+        JsValue::from(ge_fn),
+        &mut boa,
+    );
+    let _ = dt_obj.create_data_property(
+        boa_engine::js_string!("reactiveStats"),
+        JsValue::from(rs_fn),
+        &mut boa,
+    );
+    let _ = dt_obj.create_data_property(
+        boa_engine::js_string!("frameStats"),
+        JsValue::from(fs_fn),
+        &mut boa,
+    );
+    let _ = dt_obj.create_data_property(
+        boa_engine::js_string!("setHostFrameTiming"),
+        JsValue::from(hft_fn),
+        &mut boa,
+    );
+    let _ = boa.register_global_property(
+        boa_engine::js_string!("turDevTool"),
+        dt_obj,
+        Attribute::all(),
+    );
+
+    // Replay the deferred realm-bound plugin registrations (JS modules,
+    // classes, globals, consts) — in plugin order, before any JS can
+    // load (a module load is the only path here).
+    {
+        let mut replay_cx = PluginRegisterContext {
+            boa: Some(&mut boa),
+            loader: inputs.loader.clone(),
+            js_ctx_value: Some(ctx_val),
+            js_ctx: inputs.js_context.clone(),
+            app: inputs.app_context.clone(),
+            subsystems: Vec::new(),
+            plugin_state: std::collections::HashMap::new(),
+            deferred: Vec::new(),
+            event_bus: inputs.event_bus.clone(),
+            host_exec: inputs.host_exec.clone(),
+        };
+        for thunk in slot.deferred.borrow_mut().drain(..) {
+            thunk(&mut replay_cx)?;
+        }
+    }
+
+    tracing::info!("JS realm constructed (deferred registrations replayed)");
+    *slot.realm.borrow_mut() = Some(boa);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

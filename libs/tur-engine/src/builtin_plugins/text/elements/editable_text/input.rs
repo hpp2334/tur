@@ -71,6 +71,38 @@ impl View for InputView {
 }
 
 impl InputView {
+    /// Rut-rail constructor (`core::rut_runtime`): a realm-minted
+    /// `TextEditingController` (+ optional `UndoController`), a static
+    /// placeholder, and an explicit size — the rows the rut C1 gate
+    /// drives. Everything else defaults (matching an un-styled JS `Input`).
+    pub(crate) fn new_rut(
+        controller: JsObject,
+        undo_controller: Option<JsObject>,
+        placeholder: Option<String>,
+        width: Option<f64>,
+        height: Option<f64>,
+    ) -> Self {
+        InputView {
+            width: width.map(Val::Static),
+            height: height.map(Val::Static),
+            controller: Some(controller),
+            controller_atom: None,
+            undo_controller,
+            placeholder: placeholder.map(Val::Static),
+            color: None,
+            placeholder_color: None,
+            cursor_color: None,
+            font_size: None,
+            font_family: None,
+            font_weight: None,
+            multiline: None,
+            obscure_text: None,
+            obscuring_character: None,
+            on_context_menu: None,
+            query_key: Some(vec!["rut".to_string(), "input".to_string()]),
+        }
+    }
+
     /// Build an `InputView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         let mut p = JsProps::new(props, ctx);

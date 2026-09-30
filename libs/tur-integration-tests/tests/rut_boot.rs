@@ -475,3 +475,96 @@ fn rut_reload_runs_stop_and_replaces_root() {
     let only = app.dev_tool_get_element(root.children[0]).unwrap();
     assert_eq!(only.name, "tur_paragraph", "the v2 module's single Text is the new root child");
 }
+
+// ---------------------------------------------------------------------------
+// Phase C1 — text input: realm-minted controllers, `el_input`, keyboard /
+// IME end to end, controller method rows, undo rows.
+// ---------------------------------------------------------------------------
+
+/// A rut-authored `Input` bound to a realm-minted `TextEditingController`
+/// (+ `UndoController`). `start` authors the whole journey: seed the
+/// controller, round-trip `tctrl_text` into the bound label, and check the
+/// undo rows. The interactive half (keyboard / IME into the focused
+/// editable) is driven by the test via the engine's own subsystems.
+const INPUT_RUT: &str = r#"
+use tur::{ el_button, el_column, el_input, el_text_bound, el_build, el_child, mount, tctrl_cursor, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_can_redo, undo_can_undo, undo_new, rs_set_str, rs_source_str };
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+
+    // Programmatic authoring: seed, select-all, paste over, read back.
+    tctrl_set_text(ctrl, "seed");
+    tctrl_select(ctrl, 0, 4);
+    tctrl_paste(ctrl, "SEEDED");
+    let label = rs_source_str(tctrl_text(ctrl));
+
+    let col = el_column();
+    el_child(col, el_input(ctrl, undo, "type here", 220.0, 32.0));
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return label;
+}
+"#;
+
+fn rut_editable_id(app: &TurTestApp) -> tur_engine::core::element::ElementNodeId {
+    // queryKey ["rut", "input"] lands on Input's Container wrapper; the
+    // editable is its first child.
+    let id = app
+        .query_element(&["rut", "input"])
+        .expect("rut input not found");
+    let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+    let tree = app.element_tree();
+    let container = tree.get_element(id).unwrap();
+    let child = container.children[0];
+    tur_engine::core::element::ElementNodeId::new(child.as_u64())
+}
+
+fn rut_editable_text(app: &TurTestApp) -> String {
+    let id = rut_editable_id(app);
+    app.with_element(id, |e| {
+        e.cast::<tur_engine::builtin_plugins::text::EditableTextElement>()
+            .map(|el| el.text())
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+#[test]
+fn rut_input_realm_controllers_keyboard_and_ime() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(INPUT_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The rows' programmatic journey rendered through the bound label:
+    // seed "seed" → select 0..4 → paste "SEEDED" over it → "SEEDED".
+    assert_eq!(rut_bound_text(&app), "SEEDED", "tctrl rows round-tripped through the label");
+    assert_eq!(rut_editable_text(&app), "SEEDED", "the Input renders the controller's value");
+
+    // Keyboard: click to focus, then type — the engine's KeyboardSubsystem
+    // mutates the SAME controller the rows minted.
+    let id = rut_editable_id(&app);
+    let bounds = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(bounds.0, bounds.1);
+    app.wait_for_timeout(Duration::ZERO);
+    for ch in ["a", "b", "!"] {
+        app.send_key(ch);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    assert_eq!(rut_editable_text(&app), "SEEDEDab!", "keystrokes landed in the rut-minted controller");
+
+    // IME: a full composition lifecycle — start, update, commit appends
+    // through the same element.
+    app.send_ime(tur_engine::core::platform::ImeEvent::CompositionStart);
+    app.wait_for_timeout(Duration::ZERO);
+    app.send_ime(tur_engine::core::platform::ImeEvent::CompositionUpdate {
+        text: "o".to_string(),
+        cursor: None,
+    });
+    app.wait_for_timeout(Duration::ZERO);
+    app.send_ime(tur_engine::core::platform::ImeEvent::CompositionEnd {
+        text: "ok".to_string(),
+    });
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_editable_text(&app), "SEEDEDab!ok", "the IME commit landed");
+}
