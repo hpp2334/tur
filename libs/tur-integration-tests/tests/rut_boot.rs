@@ -731,3 +731,74 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
         "rows scrolled past the viewport after the wheel"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase C3 — the Container full surface (border / radius / shadow /
+// alignment / size / clip via u64 flag consts) + SizedBox.
+// ---------------------------------------------------------------------------
+
+/// A styled box: explicit size, border, radius, shadow, clip, and a
+/// bottom-right aligned child — all authored through the builder rows with
+/// the exported flag consts. The align/size assertions read back through
+/// the tree geometry; a second box (SizedBox) pins the exact size.
+const CONTAINER_FULL_RUT: &str = r#"
+use tur::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, el_box_new, el_box, el_child, el_column, el_sizedbox, el_text, el_build, mount };
+
+entry fn start() {
+    let styled = el_box_new();
+    box_size(styled, 200.0, 120.0);
+    box_padding(styled, 8.0);
+    box_color(styled, 0x336699FF as u64);
+    box_border(styled, 0xFFCC00FFu64, 3.0, BORDER_CENTER);
+    box_radius(styled, 12.0);
+    box_shadow(styled, 0x00000066 as u64, 8.0, 2.0, 4.0);
+    box_clip(styled, CLIP_ANTI_ALIAS);
+    box_align(styled, ALIGN_BOTTOM_RIGHT);
+    el_child(styled, el_text("corner"));
+    let root = el_column();
+    el_child(root, el_build(styled));
+
+    // SizedBox: exactly 90 x 40 around its child.
+    el_child(root, el_sizedbox(90.0, 40.0, el_text("sized")));
+    // The legacy el_box row still works beside the builder.
+    el_child(root, el_box(0x88FF88FFu64, 4.0, el_text("legacy")));
+    mount(el_build(root));
+}
+"#;
+
+#[test]
+fn rut_container_full_surface_and_sizedbox() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(CONTAINER_FULL_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    assert_eq!(column.children.len(), 3, "styled box + sized box + legacy box");
+
+    // The styled box honored its explicit 200 x 120 size.
+    let styled = app.dev_tool_get_element(column.children[0]).unwrap();
+    assert!(
+        (styled.size.0 - 200.0).abs() < 0.6 && (styled.size.1 - 120.0).abs() < 0.6,
+        "explicit size applied: {:?}",
+        styled.size
+    );
+
+    // The aligned child sits in the box's bottom-right corner: its
+    // right/bottom edges are within the padding of the box's edges.
+    let child = app.dev_tool_get_element(styled.children[0]).unwrap();
+    let dx = (styled.absolute.0 + styled.size.0) - (child.absolute.0 + child.size.0);
+    let dy = (styled.absolute.1 + styled.size.1) - (child.absolute.1 + child.size.1);
+    assert!(
+        (dx - 8.0).abs() < 1.0 && (dy - 8.0).abs() < 1.0,
+        "bottom-right aligned within the 8px padding: dx={dx:.1} dy={dy:.1}"
+    );
+
+    // SizedBox is exactly 90 x 40.
+    let sized = app.dev_tool_get_element(column.children[1]).unwrap();
+    assert!(
+        (sized.size.0 - 90.0).abs() < 0.6 && (sized.size.1 - 40.0).abs() < 0.6,
+        "sized box exact: {:?}",
+        sized.size
+    );
+}

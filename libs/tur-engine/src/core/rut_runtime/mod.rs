@@ -39,6 +39,7 @@ use rut_vm::interp::{CallArgs, Ret, Vm};
 use rut_vm::OpaqueRef;
 
 mod collections;
+mod container;
 mod realm;
 mod text;
 
@@ -73,9 +74,13 @@ pub struct RutView(pub Rc<dyn View>);
 pub struct RutValue(pub Value);
 
 /// A builder under construction — materialized by `tur::el_build`.
-enum ViewBuilder {
+/// (Box-variant is boxed to keep the enum small; setters mutate through it.)
+pub(crate) enum ViewBuilder {
     Flex { axis: Axis, children: Vec<Rc<dyn View>> },
     Stack { children: Vec<Rc<dyn View>> },
+    /// The C3 full-surface container: setter rows mutate the spec in
+    /// place; `el_build` materializes it.
+    Box(Box<ContainerView>),
 }
 
 impl ViewBuilder {
@@ -95,6 +100,7 @@ impl ViewBuilder {
                 children,
                 query_key: None,
             }),
+            ViewBuilder::Box(spec) => Rc::new(*spec),
         }
     }
 }
@@ -171,11 +177,14 @@ pub fn tur_decl_module() -> rut_driver::Module {
     host_funcs.extend(text::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     // C2 — collections rows (Each over list atoms, lazy containers).
     host_funcs.extend(collections::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    // C3 — the container full surface + flag consts.
+    host_funcs.extend(container::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    let consts = container::decl_consts();
     rut_driver::Module {
         namespace: Some("tur".to_string()),
         body: ModuleBody::Host {
             host_funcs,
-            consts: Vec::new(),
+            consts,
             native_types: Vec::new(),
             native_traits: Vec::new(),
             native_fns: Vec::new(),
@@ -232,11 +241,10 @@ fn install_tur_pkg(
         let child_view = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, b| {
             match b {
-                // The only multi-child builders today; the match keeps
-                // future kinds honest.
                 ViewBuilder::Flex { children, .. } | ViewBuilder::Stack { children } => {
                     children.push(child_view);
                 }
+                ViewBuilder::Box(spec) => spec.children.push(child_view),
             }
         })?;
         Ok(())
@@ -570,6 +578,8 @@ fn install_tur_pkg(
     text::install(&mut pkg, handles);
     // C2 — collections (Each + lazy containers).
     collections::install(&mut pkg, handles);
+    // C3 — container full surface + SizedBox.
+    container::install(&mut pkg, handles);
 
     hosts.install_host_pkg(ctx, pkg);
 }
