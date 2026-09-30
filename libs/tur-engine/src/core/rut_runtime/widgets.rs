@@ -42,6 +42,7 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("el_text_bound_d_new", vec![TY_U64], TY_OPAQUE),
         ("el_expand_bound", vec![TY_U64, TY_OPAQUE], TY_OPAQUE),
         ("box_width_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        ("box_height_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         ("box_color_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         ("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
         ("el_lazy_list_h", vec![TY_STR, TY_U64, TY_F64], TY_OPAQUE),
@@ -317,6 +318,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles
                 Ok(())
             }
             _ => Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "box_width_bound on a non-box builder")),
+        })?
+    });
+    rut_vm::pkg_fn!(pkg, "box_height_bound", (Opaque<ViewBuilder>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, h_atom: u64| {
+        b.with_mut(vm, |_vm, b| match b {
+            ViewBuilder::Box(box_) => {
+                box_.height = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                    crate::core::edgy::reactive::Source::<f64>::from_id(crate::core::edgy::reactive::AtomId(h_atom as u32)),
+                )));
+                Ok(())
+            }
+            _ => Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "box_height_bound on a non-box builder")),
         })?
     });
     rut_vm::pkg_fn!(pkg, "box_color_bound", (Opaque<ViewBuilder>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, color_atom: u64| {

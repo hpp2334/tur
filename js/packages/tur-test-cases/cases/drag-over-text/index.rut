@@ -1,0 +1,56 @@
+// drag-over-text: a Positioned -> Transform -> PointerInteract -> Text
+// piece — a non-selectable Text must not steal touch drags from the
+// PointerInteract beneath. The down count renders into `down-count`.
+use tur::{ ALIGN_TOP_LEFT, el_box_new, box_size, el_build, el_child, el_gesture, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_text_new, el_transform, mount, mem_get, mem_new, mem_set, rs_set_str, rs_source_str, stack_align, st_put, st_take, stf_put, stf_take, text_size };
+
+let K_COUNT: u64 = 1;
+let K_PHASE: u64 = 2;
+
+entry fn start() -> u64 {
+    let count = rs_source_str("0");
+    st_put(K_COUNT, mem_new(0.0));
+    let phase = rs_source_str("");
+    stf_put(K_PHASE, phase as f64);
+
+    let stack = el_stack();
+    stack_align(stack, ALIGN_TOP_LEFT);
+    el_child(stack, el_sizedbox(400.0, 400.0, el_build(el_box_new())));
+
+    let label = el_text_new("drag me");
+    text_size(label, 14.0);
+    let piece = el_box_new();
+    box_size(piece, 80.0, 40.0);
+    el_qkey(piece, "drag-target");
+    el_child(piece, el_build(label));
+    let pad = el_gesture(count, "", "g_down", "g_move", "g_up", "", el_build(piece));
+    el_child(stack, el_transform(1.0, 0.0, 60.0, 50.0, pad));
+
+    let count_t = el_text_bound_new(count);
+    el_qkey(count_t, "down-count");
+    el_child(stack, el_build(count_t));
+    mount(el_build(stack));
+    return count;
+}
+
+entry fn g_down(count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let cell = st_take(K_COUNT);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_COUNT, cell);
+    rs_set_str(count, f"{n as u64}");
+    let phase = stf_take(K_PHASE) as u64;
+    rs_set_str(phase, "down");
+    stf_put(K_PHASE, phase as f64);
+}
+
+entry fn g_move(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let phase = stf_take(K_PHASE) as u64;
+    rs_set_str(phase, "move");
+    stf_put(K_PHASE, phase as f64);
+}
+
+entry fn g_up(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let phase = stf_take(K_PHASE) as u64;
+    rs_set_str(phase, "up");
+    stf_put(K_PHASE, phase as f64);
+}

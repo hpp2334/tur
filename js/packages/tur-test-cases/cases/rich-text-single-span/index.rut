@@ -1,0 +1,10 @@
+use tur::{ el_build, el_text_new, mount, span_add, spans_new, text_size, text_spans };
+
+entry fn start() {
+    let t = el_text_new("");
+    text_size(t, 14.0);
+    let spans = spans_new();
+    span_add(spans, "Hello World", 0.0, 0, 0.0, 0);
+    text_spans(t, spans);
+    mount(el_build(t));
+}

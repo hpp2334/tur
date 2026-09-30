@@ -1,0 +1,59 @@
+// drag-with-lift: the jigsaw piece mechanic — pointer-down drives a lift
+// animation (forward on down, reverse on up). The last gesture phase
+// renders into the `last-event` Text.
+use tur::{ anim_ctrl, anim_forward, anim_reverse, el_box_new, box_size, el_build, el_child, el_gesture, el_qkey, el_text_new, el_vqkey, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
+
+let K_PHASE: u64 = 1;
+let K_CTRL: u64 = 2;
+
+entry fn start() -> u64 {
+    let phase = rs_source_str("");
+    stf_put(K_PHASE, phase as f64);
+    let lift = rs_source_f64();
+    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
+    st_put(K_CTRL, ctrl);
+
+    let b = el_box_new();
+    box_size(b, 80.0, 40.0);
+    el_qkey(b, "lift-target");
+    el_child(b, el_build(el_text_new("piece")));
+    let pad = el_gesture(phase, "", "g_down", "g_move", "g_up", "", el_build(b));
+
+    let phase_t = el_vqkey(el_text_bound(phase), "last-event");
+    let root = el_column();
+    el_child(root, pad);
+    el_child(root, phase_t);
+    mount(el_build(root));
+    return phase;
+}
+
+entry fn a_tick(_atom: u64, _t: f64) {
+}
+
+entry fn a_end(_atom: u64, _v: f64) {
+}
+
+// The `__resetDrag` seam (the lift keeps settling; only the transcript clears).
+entry fn reset(_a: u64, _b: f64) {
+    let phase = stf_take(K_PHASE) as u64;
+    rs_set_str(phase, "");
+    stf_put(K_PHASE, phase as f64);
+}
+
+entry fn g_down(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let ctrl = st_take(K_CTRL);
+    anim_forward(ctrl);
+    st_put(K_CTRL, ctrl);
+    rs_set_str(phase, "down");
+}
+
+entry fn g_move(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    rs_set_str(phase, "move");
+}
+
+entry fn g_up(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let ctrl = st_take(K_CTRL);
+    anim_reverse(ctrl);
+    st_put(K_CTRL, ctrl);
+    rs_set_str(phase, "up");
+}

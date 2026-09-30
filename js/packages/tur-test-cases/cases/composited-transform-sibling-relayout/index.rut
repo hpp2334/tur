@@ -1,0 +1,41 @@
+// composited-transform-sibling-relayout: an unrelated sibling's reactive
+// height flip forces the common Stack to relayout — the follower must keep
+// painting at the tracked (100, 80).
+use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, box_size_bound, el_build, el_child, el_ct_follower, el_ct_target, ct_link_new, el_pi, el_positioned, el_qkey, el_sizedbox, el_stack, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+
+let K_TALL: u64 = 1;
+
+entry fn start() -> u64 {
+    let tall = rs_source_f64();
+    rs_set_f64(tall, 0.0);
+    stf_put(K_TALL, tall as f64);
+    let link = ct_link_new();
+    let stack = el_stack();
+    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
+    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
+    let target = el_ct_target(link, target_child);
+    el_child(stack, el_positioned(100.0, 80.0, target));
+    let red = el_box_new();
+    box_size(red, 20.0, 20.0);
+    box_color(red, 0xFF0000FF);
+    let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
+    el_child(stack, follower);
+
+    // The reactive sibling (non-positioned): height flips 10 -> 120.
+    let sib = el_box_new();
+    box_size(sib, 40.0, 0.0);
+    box_size_bound(sib, tall);
+    box_color(sib, 0x4F46E1FF);
+    el_child(stack, el_build(sib));
+
+    let btn = el_box_new();
+    box_size(btn, 60.0, 30.0);
+    box_color(btn, 0x16A34AFF);
+    el_child(stack, el_positioned(300.0, 540.0, el_pi(tall, tall, "b_tall", "", 0, "", el_build(btn))));
+    mount(el_build(stack));
+    return tall;
+}
+
+entry fn b_tall(tall: u64, _b: u64, _n: f64) {
+    rs_set_f64(tall, 120.0);
+}

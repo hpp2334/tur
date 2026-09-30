@@ -1,0 +1,20 @@
+// composited-transform-transform: the target sits under a paint-only
+// Transform translate (50, 10) at layout (20, 20) — the follower tracks the
+// PAINTED position (70, 30).
+use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_ct_follower, el_ct_target, ct_link_new, el_positioned, el_sizedbox, el_stack, el_transform, mount };
+
+entry fn start() {
+    let link = ct_link_new();
+    let stack = el_stack();
+    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
+    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
+    let target = el_ct_target(link, target_child);
+    let transformed = el_transform(1.0, 0.0, 50.0, 10.0, target);
+    el_child(stack, el_positioned(20.0, 20.0, transformed));
+    let red = el_box_new();
+    box_size(red, 20.0, 20.0);
+    box_color(red, 0xFF0000FF);
+    let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
+    el_child(stack, follower);
+    mount(el_build(stack));
+}

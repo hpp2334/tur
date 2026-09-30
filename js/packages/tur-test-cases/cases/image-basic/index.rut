@@ -1,0 +1,11 @@
+// image-basic: a synthetic 1x1-ish RGBA resource in a fixed-size Image.
+use tur::{ BOXFIT_FILL, el_box_new, box_size, el_build, el_child, el_image, img_res_solid, mount };
+
+entry fn start() {
+    let res = img_res_solid(1, 1, 0xFF6366F1u64);
+    let outer = el_box_new();
+    box_size(outer, 200.0, 100.0);
+    let img = el_image(res, 200.0, 100.0, BOXFIT_FILL);
+    el_child(outer, img);
+    mount(el_build(outer));
+}

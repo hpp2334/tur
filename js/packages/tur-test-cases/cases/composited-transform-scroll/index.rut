@@ -1,0 +1,27 @@
+// composited-transform-scroll: the target lives inside a scrollable
+// (content offset y=100); scrolling moves the target and the follower
+// tracks it.
+use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_column, el_ct_follower, el_ct_target, ct_link_new, el_positioned_full, el_qkey, el_sizedbox, el_stack, el_scroll, mount };
+
+entry fn start() {
+    let link = ct_link_new();
+    let stack = el_stack();
+    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
+
+    // The scrollable viewport (200x200) with 400px of content; the target
+    // sits at content y=100 (after a 100px spacer).
+    let content = el_column();
+    el_child(content, el_sizedbox(200.0, 100.0, el_build(el_box_new())));
+    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
+    let target = el_ct_target(link, target_child);
+    el_child(content, target);
+    let scroller = el_scroll(true, el_build(content));
+    el_child(stack, el_positioned_full(0.0, 0.0, 0.0, 0.0, 200.0, 200.0, scroller));
+
+    let red = el_box_new();
+    box_size(red, 20.0, 20.0);
+    box_color(red, 0xFF0000FF);
+    let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
+    el_child(stack, follower);
+    mount(el_build(stack));
+}

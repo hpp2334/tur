@@ -1,0 +1,90 @@
+// drag-redrag-multi: two tiles sharing one lift controller — the
+// multi-tile jigsaw repro. Per-tile event transcripts render into
+// `tile-events-0` / `tile-events-1`.
+use tur::{ ALIGN_TOP_LEFT, anim_ctrl, anim_forward, anim_reverse, el_box_new, box_color, box_size, el_build, el_child, el_column, el_gesture2, el_pi, el_positioned, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_text_new, mount, rs_get_str, rs_set_str, rs_source_f64, rs_source_str, stack_align, st_put, st_take, stf_put, stf_take };
+
+let K_CTRL: u64 = 1;
+let K_T0: u64 = 2;
+let K_T1: u64 = 3;
+
+entry fn start() -> u64 {
+    let lift = rs_source_f64();
+    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
+    st_put(K_CTRL, ctrl);
+
+    let t0 = rs_source_str("");
+    let t1 = rs_source_str("");
+    stf_put(K_T0, t0 as f64);
+    stf_put(K_T1, t1 as f64);
+
+    let stack = el_stack();
+    stack_align(stack, ALIGN_TOP_LEFT);
+    el_child(stack, el_sizedbox(300.0, 200.0, el_build(el_box_new())));
+
+    // Tile 0 at (10, 10); tile 1 at (150, 100). The tile index rides the
+    // gesture's second id slot (100 + index).
+    let b0 = el_box_new();
+    box_size(b0, 100.0, 60.0);
+    box_color(b0, 0x6366F1FFu64);
+    el_qkey(b0, "tile-0");
+    el_child(stack, el_positioned(10.0, 10.0, el_gesture2(0, 100, "g_down", "g_down", "g_move", "g_up", "", el_build(b0))));
+    let b1 = el_box_new();
+    box_size(b1, 100.0, 60.0);
+    box_color(b1, 0x6366F1FFu64);
+    el_qkey(b1, "tile-1");
+    el_child(stack, el_positioned(150.0, 100.0, el_gesture2(1, 101, "g_down", "g_down", "g_move", "g_up", "", el_build(b1))));
+
+    // Transcript readouts.
+    let t0t = el_text_bound_new(t0);
+    el_qkey(t0t, "tile-events-0");
+    el_child(stack, el_build(t0t));
+    let t1t = el_text_bound_new(t1);
+    el_qkey(t1t, "tile-events-1");
+    el_child(stack, el_build(t1t));
+
+    mount(el_build(stack));
+    return lift;
+}
+
+entry fn a_tick(_atom: u64, _t: f64) {
+}
+
+entry fn a_end(_atom: u64, _v: f64) {
+}
+
+// The `__resetDrag` seam.
+entry fn reset(_a: u64, _b: f64) {
+    let t0 = stf_take(K_T0) as u64;
+    let t1 = stf_take(K_T1) as u64;
+    rs_set_str(t0, "");
+    rs_set_str(t1, "");
+    stf_put(K_T0, t0 as f64);
+    stf_put(K_T1, t1 as f64);
+}
+
+fn say(idx: u64, line: str) {
+    // K_T0=2, K_T1=3 — the tile index selects the transcript slot. The
+    // transcript ACCUMULATES (the test checks down+move are present).
+    let key = K_T0 + idx;
+    let t = stf_take(key) as u64;
+    rs_set_str(t, f"{rs_get_str(t)} {line}");
+    stf_put(key, t as f64);
+}
+
+entry fn g_down(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let ctrl = st_take(K_CTRL);
+    anim_forward(ctrl);
+    st_put(K_CTRL, ctrl);
+    say(idx, "down");
+}
+
+entry fn g_move(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    say(idx, "move");
+}
+
+entry fn g_up(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let ctrl = st_take(K_CTRL);
+    anim_reverse(ctrl);
+    st_put(K_CTRL, ctrl);
+    say(idx, "up");
+}

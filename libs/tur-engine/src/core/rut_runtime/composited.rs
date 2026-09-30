@@ -28,6 +28,11 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("ct_link_new", vec![], TY_OPAQUE),
         ("el_ct_target", vec![TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
         (
+            "el_ct_follower_bound",
+            vec![TY_OPAQUE, TY_U64, TY_U64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
+        (
             "el_ct_follower",
             vec![TY_OPAQUE, TY_U64, TY_U64, TY_F64, TY_F64, TY_OPAQUE],
             TY_OPAQUE,
@@ -80,6 +85,32 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let view = Rc::new(FollowerView::new_rut(
             Some(link),
             Val::Static(anchor_of(ta)),
+            Val::Static(anchor_of(fa)),
+            target_offset,
+            false,
+            Some(child),
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // Reactive-anchor twin: the target anchor resolves from an atom (the
+    // atom holds the Alignment enum code; a button flips it).
+    rut_vm::pkg_fn!(pkg, "el_ct_follower_bound", (Opaque<RutLayerLink>, u64, u64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, link: Opaque<RutLayerLink>, ta_atom: u64, fa: u64, ox: f64, oy: f64, child: Opaque<RutView>| {
+        let link = link.with(|l| l.0.clone())?;
+        let child = child.with(|v| v.0.clone())?;
+        let target_offset = (ox != 0.0 || oy != 0.0).then(|| {
+            Val::Static(Value::map([
+                ("x", Value::Num(ox)),
+                ("y", Value::Num(oy)),
+            ]))
+        });
+        let view = Rc::new(FollowerView::new_rut(
+            Some(link),
+            Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<Alignment>::from_id(
+                    crate::core::edgy::reactive::AtomId(ta_atom as u32),
+                ),
+            )),
             Val::Static(anchor_of(fa)),
             target_offset,
             false,
