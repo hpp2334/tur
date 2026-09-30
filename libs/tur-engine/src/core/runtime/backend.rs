@@ -253,7 +253,8 @@ impl WorkerBackend {
     /// touches the JS realm, so loading rut on a fresh instance leaves the
     /// realm unallocated.
     fn load_rut_module_inner(&self, source: &str) -> Result<(), ModuleError> {
-        crate::core::rut_runtime::RutRuntime::parse_check(source)?;
+        let exts = self.internal.js_context.rut_pkg_exts.borrow().clone();
+        crate::core::rut_runtime::RutRuntime::parse_check(source, &exts)?;
 
         // Module lifecycle contract (both rails): run the previous module's
         // cleanup + clear its leftover root tree before the new module runs.
@@ -266,8 +267,12 @@ impl WorkerBackend {
         // boot. A module whose rows never demand the realm never constructs.
         let mut face = crate::core::rut_runtime::RutRealm::detached();
         self.arm_realm_face(&mut face);
-        let inputs = crate::core::rut_runtime::RutRealmInputs { face };
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs)?;
+        let inputs = crate::core::rut_runtime::RutRealmInputs {
+            face,
+            clock: self.internal.app_context.borrow().frame_env.clock(),
+        };
+        let mut rut =
+            crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).
         rut.apply_root().map_err(ModuleError::Eval)?;

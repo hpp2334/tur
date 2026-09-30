@@ -52,6 +52,18 @@ pub fn opaque_to_view(handle: &OpaqueRef) -> Option<Rc<dyn View>> {
     RutRuntime::view_of(handle)
 }
 
+/// Rebuild a source handle from a raw atom id — the rut rows' crossing
+/// (the ids ARE the atoms). Engine-pub so the pkg extensions (tur-animation's
+/// rut rows) can bind reactive props.
+pub fn source_of<T>(atom: u64) -> Source<T> {
+    Source::from_id(AtomId(atom as u32))
+}
+
+/// [`source_of`] as a `Readable`.
+pub fn readable_of<T>(atom: u64) -> Readable<T> {
+    Readable::Source(source_of(atom))
+}
+
 /// The per-instance resource budget. Phase-1 defaults; tunable per embedder.
 pub fn default_limits() -> rut_vm::interp::Limits {
     rut_vm::interp::Limits {
@@ -204,6 +216,7 @@ fn install_tur_pkg(
     hosts: &mut rut_vm::interp::HostRegistry,
     ctx: &rut_vm::interp::HostPkgContext,
     handles: &Rc<RutHandles>,
+    exts: &[RutPkgExt],
 ) {
     let mut pkg = rut_vm::interp::HostPkg::new("tur");
 
@@ -585,10 +598,21 @@ fn install_tur_pkg(
     container::install(&mut pkg, handles);
     // C4 — gestures + keyboard + focus.
     gesture::install(&mut pkg, handles);
+    // Plugin extensions (tur-animation's C5 rows) — AFTER the engine rows,
+    // so an extension may lean on them.
+    let mut ext_decl = Vec::new();
+    let mut ext_consts = Vec::new();
+    for ext in exts {
+        ext(&mut RutPkgCx {
+            decl: &mut ext_decl,
+            consts: &mut ext_consts,
+            pkg: &mut pkg,
+            handles: Some(handles),
+        });
+    }
 
     hosts.install_host_pkg(ctx, pkg);
 }
-
 // ---------------------------------------------------------------------------
 // RutHandles — per-instance bridge state shared with the row closures.
 // ---------------------------------------------------------------------------
@@ -618,6 +642,11 @@ pub struct RutHandles {
     /// The worker→host channel — runtime-error reports for face traps ride
     /// the same `RuntimeError` message the JS rail uses.
     pub host_tx: crate::core::app::HostTx,
+    /// The engine's shared clock — the animation rows' `now_ms` source.
+    pub clock: Rc<dyn boa_engine::context::time::Clock>,
+    /// The engine-wide mutation queue — animation `onTick` callbacks ride
+    /// it (same dispatch path the JS controllers use).
+    pub mutation_queue: Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
     /// The realm face (Phase C1): rows that must mint or inspect
     /// JS-class-backed state (a `TextEditingController`, an animation
     /// controller) borrow the realm through it. Detached until boot arms
@@ -839,11 +868,34 @@ impl RutRuntime {
     /// parse-first contract).
     fn compile(
         source: &str,
+        exts: &[RutPkgExt],
     ) -> Result<(Rc<rut_core::binary::Program>, rut_vm::interp::HostPkgContext), String> {
+        // The decl surface: the engine rows plus every extension's rows
+        // (plugin-owned — tur-animation's C5 rows), so the compile sees the
+        // full surface the boot will bind.
+        let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId)> = Vec::new();
+        let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
+        let mut probe = rut_vm::interp::HostPkg::new("tur");
+        for ext in exts {
+            ext(&mut RutPkgCx {
+                decl: &mut ext_decl,
+                consts: &mut ext_consts,
+                pkg: &mut probe,
+                handles: None,
+            });
+        }
+        let module = {
+            let mut m = tur_decl_module();
+            if let ModuleBody::Host { host_funcs, consts, .. } = &mut m.body {
+                host_funcs.extend(ext_decl.into_iter().map(|(n, p, r)| (n, p, r, false)));
+                consts.extend(ext_consts);
+            }
+            m
+        };
         let mut session = rut_driver::Session::new();
         rut_driver::mount_std_core(&mut session);
         session
-            .register_module("tur", tur_decl_module())
+            .register_module("tur", module)
             .map_err(|e| format!("mount tur pkg: {e}"))?;
 
         let out = rut_driver::compile_module_in(&mut session, source, rut_parser::Mode::Impl, "app");
@@ -859,8 +911,8 @@ impl RutRuntime {
 
     /// Parse + compile only (the parse-first half of the load contract) —
     /// a broken reload must fail before any teardown runs.
-    pub fn parse_check(source: &str) -> Result<(), crate::core::app::ModuleError> {
-        Self::compile(source)
+    pub fn parse_check(source: &str, exts: &[RutPkgExt]) -> Result<(), crate::core::app::ModuleError> {
+        Self::compile(source, exts)
             .map(|_| ())
             .map_err(crate::core::app::ModuleError::Parse)
     }
@@ -875,8 +927,10 @@ impl RutRuntime {
         source: &str,
         js_ctx: TurInstanceContext,
         realm: RutRealmInputs,
+        exts: Vec<RutPkgExt>,
     ) -> Result<Self, crate::core::app::ModuleError> {
-        let (prog, ctx) = Self::compile(source).map_err(crate::core::app::ModuleError::Parse)?;
+        let (prog, ctx) =
+            Self::compile(source, &exts).map_err(crate::core::app::ModuleError::Parse)?;
 
         let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
@@ -889,12 +943,14 @@ impl RutRuntime {
             click_seq: std::cell::Cell::new(0),
             host_tx: js_ctx.host_tx.clone(),
             realm: realm.face,
+            clock: realm.clock,
+            mutation_queue: js_ctx.mutation_queue.clone(),
             face,
             face_busy: std::cell::Cell::new(0),
         });
 
         let mut hosts = rut_vm::interp::HostRegistry::new();
-        install_tur_pkg(&mut hosts, &ctx, &handles);
+        install_tur_pkg(&mut hosts, &ctx, &handles, &exts);
         hosts.verify_against(&ctx.flatten());
 
         let export_of = |name: &str| {
@@ -1057,9 +1113,31 @@ fn intent_name(intent: &Intent) -> &str {
     }
 }
 
-/// The realm-face wiring `WorkerBackend::load_rut_module_inner` hands to
-/// [`RutRuntime::boot`] — an already-armed face (the shared slot + the
-/// realm constructor installed by the worker backend).
+/// The boot wiring `WorkerBackend::load_rut_module_inner` hands to
+/// [`RutRuntime::boot`] — an already-armed realm face plus the engine
+/// clock (the animation rows' `now_ms` source; the same `Clock` the
+/// animation subsystem ticks with).
 pub struct RutRealmInputs {
     pub face: RutRealm,
+    pub clock: std::rc::Rc<dyn boa_engine::context::time::Clock>,
 }
+
+/// The pkg-extension context an installer sees: the `tur` host pkg's decl
+/// rows + consts (compile side) and the body pkg + bridge handles (boot
+/// side).
+pub struct RutPkgCx<'a> {
+    /// The decl rows (name, params, ret) appended before compilation.
+    pub decl: &'a mut Vec<(String, Vec<TypeId>, TypeId)>,
+    /// The decl consts appended before compilation.
+    pub consts: &'a mut Vec<(String, TypeId, u64)>,
+    /// The body pkg the installer registers its rows into.
+    pub pkg: &'a mut rut_vm::interp::HostPkg,
+    /// The per-instance bridge handles — `None` at compile time (the decl
+    /// probe), `Some` at boot.
+    pub handles: Option<&'a Rc<RutHandles>>,
+}
+
+/// A rut pkg extension: plugin-owned rows for the `tur` host pkg (e.g.
+/// tur-animation's C5 rows). Plugins push one during `register`; both the
+/// compile (decl) and boot (bodies) phases drain them.
+pub type RutPkgExt = Rc<dyn Fn(&mut RutPkgCx<'_>)>;

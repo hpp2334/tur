@@ -22,6 +22,18 @@ pub struct OpacityView {
     pub(crate) child: Option<Rc<dyn View>>,
 }
 
+impl OpacityView {
+    /// Rut-rail constructor (the `tur-animation` rut rows): a static or
+    /// atom-bound opacity around one child.
+    pub fn new_rut(value: Option<Val<f32>>, child: Rc<dyn View>) -> Self {
+        OpacityView {
+            value,
+            query_key: Some(vec!["rut".to_string(), "opacity".to_string()]),
+            child: Some(child),
+        }
+    }
+}
+
 impl View for OpacityView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -46,6 +58,13 @@ impl View for OpacityView {
 pub struct OpacityElement {
     pub(crate) view: OpacityView,
     pub(crate) painting: OpacityPainting,
+}
+
+impl OpacityElement {
+    /// The resolved paint value (layout fills it; tests read it back).
+    pub fn painted_value(&self) -> f32 {
+        self.painting.value
+    }
 }
 
 /// Resolved paint prop (filled during layout). Paint reads it directly.
@@ -114,6 +133,30 @@ pub struct TransformView {
     pub(crate) alignment: Option<Val<Alignment>>,
     pub(crate) query_key: Option<Vec<String>>,
     pub(crate) child: Option<Rc<dyn View>>,
+}
+
+impl TransformView {
+    /// Rut-rail constructor (the `tur-animation` rut rows): static
+    /// scale / rotate / translate around one child.
+    pub fn new_rut(
+        scale: Option<Val<f64>>,
+        rotate: Option<Val<f64>>,
+        translate_x: Option<Val<f64>>,
+        translate_y: Option<Val<f64>>,
+        child: Rc<dyn View>,
+    ) -> Self {
+        TransformView {
+            scale,
+            scale_x: None,
+            scale_y: None,
+            rotate,
+            translate_x,
+            translate_y,
+            alignment: None,
+            query_key: Some(vec!["rut".to_string(), "transform".to_string()]),
+            child: Some(child),
+        }
+    }
 }
 
 impl View for TransformView {

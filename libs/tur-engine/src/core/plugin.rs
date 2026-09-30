@@ -438,6 +438,12 @@ impl<'a> PluginRegisterContext<'a> {
         self.app.borrow().frame_env.clock()
     }
 
+    /// The instance context — for plugin rails that hang per-instance
+    /// state off it (the rut pkg-extension push site).
+    pub fn instance(&self) -> &TurInstanceContext {
+        &self.js_ctx
+    }
+
     /// The build-time viewport (logical CSS pixels) — the size
     /// [`Screen`](crate::core::screen::Screen) carries when plugins
     /// register (no shell `Resize` can have arrived yet). `TurStdPlugin`

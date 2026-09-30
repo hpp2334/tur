@@ -79,6 +79,19 @@ impl Plugin for TurAnimationPlugin {
             manager: manager.clone(),
         }));
 
+        // The rut rail's C5 rows: pushed as a pkg extension so
+        // `RutRuntime::boot` installs them into the `tur` host pkg (decl +
+        // bodies) on both the compile and boot passes. The closure
+        // captures the shared manager — a Rust-held rut controller
+        // registers into the SAME registry the subsystem ticks.
+        {
+            let manager = manager.clone();
+            ctx.js_ctx()
+                .rut_pkg_exts
+                .borrow_mut()
+                .push(Rc::new(move |cx| crate::rut_rows::install(cx, manager.clone())));
+        }
+
         ctx.register_module(
             "tur:animation/native",
             vec![(
@@ -106,8 +119,10 @@ impl Plugin for TurAnimationPlugin {
 /// Per-instance plugin state: the shared animation manager, held by the
 /// subsystem and readable by the `createAnimationController` bridge fn
 /// through the instance ctx (the register-phase plugin-state channel).
-pub(crate) struct AnimationHostState {
-    manager: Rc<RefCell<AnimationManager>>,
+/// Public so the ENGINE's rut rows can reach the same manager (the rut
+/// animation rows register Rust-held controllers into it).
+pub struct AnimationHostState {
+    pub manager: Rc<RefCell<AnimationManager>>,
 }
 
 /// `createAnimationController(opts)` — a plain ctx-bound fn pointer (ctx at

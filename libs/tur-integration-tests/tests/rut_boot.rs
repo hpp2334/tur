@@ -939,3 +939,90 @@ fn rut_gesture_focus_key_payloads_realm_free() {
         "the key payload crossed as a record: {transcript}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase C5 — animation: the Rust-held controller opaque + the onTick entry
+// rail + Opacity/Transform rows + tween helpers.
+// ---------------------------------------------------------------------------
+
+/// A controller drives the alpha atom via onTick (the controller's id IS
+/// the atom); the atom drives an Opacity. The label records the tween /
+/// curve helper answers at start.
+const ANIM_RUT: &str = r#"
+use tur::{ anim_ctrl, anim_forward, curve_eval, el_column, el_opacity_bound, el_text, el_text_bound, el_build, el_child, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, tween_lerp, color_tween_lerp };
+
+entry fn start() -> u64 {
+    let label = rs_source_str("");
+    let alpha = rs_source_f64();
+
+    // The controller's id IS the alpha atom — onTick delivers it back.
+    let ctrl = anim_ctrl(alpha, 200.0, "linear", 0, "a_tick", "a_end");
+    anim_forward(ctrl);
+
+    // The helper rows answer at start (pure math).
+    let tw = tween_lerp(100.0, 200.0, 0.5) as u64;
+    let cv = curve_eval("linear", 0.25) as u64;
+    let cl = color_tween_lerp(0x000000FFu64, 0xFFFFFFFFu64, 0.5);
+    rs_set_str(label, f"tw{tw} cv{cv} cl{cl}");
+
+    let col = el_column();
+    el_child(col, el_opacity_bound(alpha, el_text("fade")));
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return alpha;
+}
+
+entry fn a_tick(atom: u64, t: f64) {
+    rs_set_f64(atom, t);
+}
+
+entry fn a_end(atom: u64, _v: f64) {
+    rs_set_f64(atom, 1.0);
+}
+"#;
+
+#[test]
+fn rut_animation_controller_ticks_into_opacity() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(ANIM_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The helper rows answered at start: tween_lerp(100,200,.5)=150,
+    // curve_eval("linear",.25)=0, color lerp mid = 0x808080FF.
+    assert_eq!(rut_bound_text(&app), "tw150 cv0 cl2155905279", "helper rows");
+
+    // The opacity element exists and wraps its child.
+    let op = app
+        .query_element(&["rut", "opacity"])
+        .expect("opacity element not found");
+
+    // Mid-animation: the eased tick drove the atom (~0.5 at 100ms linear).
+    app.wait_for_timeout(Duration::from_millis(100));
+    let a = read_rut_f64(&app);
+    assert!(
+        (a - 0.5).abs() < 0.35,
+        "the onTick rail drove the alpha atom: {a}"
+    );
+
+    // After the duration: onEnd fired (value pinned at 1.0).
+    app.wait_for_timeout(Duration::from_millis(200));
+    assert!(
+        (read_rut_f64(&app) - 1.0).abs() < 0.001,
+        "the animation completed"
+    );
+}
+
+/// The alpha atom's current value, read back through the bound opacity
+/// element's resolved paint value (layout mirrors the atom each frame).
+fn read_rut_f64(app: &TurTestApp) -> f64 {
+    let id = app
+        .query_element(&["rut", "opacity"])
+        .expect("opacity gone");
+    let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+    app.with_element(id, |e| {
+        e.cast::<tur_engine::builtin_plugins::effects::OpacityElement>()
+            .map(|el| el.painted_value() as f64)
+            .unwrap_or(0.0)
+    })
+    .unwrap_or(0.0)
+}

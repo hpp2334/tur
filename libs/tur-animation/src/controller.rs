@@ -135,8 +135,126 @@ impl AnimationController {
         )
     }
 
+    // ---- inherent control surface (the class methods + the rut rows) ----
+    //
+    // State transitions live here; the class methods add the clock read +
+    // the manager re-registration around them (the borrow must not nest).
+
+    /// Start playing forward from 0 at `now_ms`.
+    pub fn forward_at(&mut self, now_ms: u64) {
+        self.status = AnimationStatus::Forward;
+        self.start_time_ms = Some(now_ms);
+        self.current_iteration = 0;
+        self.value = 0.0;
+        self.value_at_start = 0.0;
+        self.paused_direction = None;
+        self.enqueue_tick(0.0);
+    }
+
+    /// Start playing in reverse from 1 at `now_ms`.
+    pub fn reverse_at(&mut self, now_ms: u64) {
+        self.status = AnimationStatus::Reverse;
+        self.start_time_ms = Some(now_ms);
+        self.current_iteration = 0;
+        self.value = 1.0;
+        self.value_at_start = 1.0;
+        self.paused_direction = None;
+        self.enqueue_tick(1.0);
+    }
+
+    /// Stop (value freezes; status `Stopped`).
+    pub fn stop_now(&mut self) {
+        self.status = AnimationStatus::Stopped;
+        self.start_time_ms = None;
+        self.paused_direction = None;
+    }
+
+    /// Pause at the current value (ticks once at `now_ms` first so `value`
+    /// reflects the pause moment).
+    pub fn pause_at(&mut self, now_ms: u64) {
+        if self.is_active() {
+            let _ = self.tick_compute(now_ms);
+            self.paused_direction = Some(self.status);
+            self.status = AnimationStatus::Paused;
+            self.start_time_ms = None;
+        }
+    }
+
+    /// Resume the paused direction from the current value at `now_ms`.
+    pub fn resume_at(&mut self, now_ms: u64) {
+        if self.status != AnimationStatus::Paused {
+            return;
+        }
+        let direction = self.paused_direction.unwrap_or(AnimationStatus::Forward);
+        self.status = direction;
+        self.value_at_start = self.value;
+        self.start_time_ms = Some(now_ms);
+        self.paused_direction = None;
+    }
+
+    /// Jump to `t` (clamped 0..1), re-basing the timeline when active.
+    pub fn seek_to(&mut self, t: f64, now_ms: u64) {
+        let t = t.clamp(0.0, 1.0);
+        self.value = t;
+        self.value_at_start = t;
+        if self.is_active() {
+            self.rebase_start_to_current_value(now_ms);
+        }
+        self.enqueue_tick(t);
+    }
+
+    /// Set the time multiplier, re-basing the timeline when active.
+    pub fn set_speed_to(&mut self, s: f64, now_ms: u64) {
+        if self.is_active() {
+            let _ = self.tick_compute(now_ms);
+            self.speed = s;
+            self.value_at_start = self.value;
+            self.start_time_ms = Some(now_ms);
+        } else {
+            self.speed = s;
+        }
+    }
+
+    /// Set the repeat mode (resets the iteration counter).
+    pub fn set_repeat_mode(&mut self, mode: RepeatMode) {
+        self.repeat_mode = mode;
+        self.current_iteration = 0;
+    }
+
+    /// Wire the `onTick` callback (the rut rail's intent mutation).
+    pub fn set_on_tick(&mut self, m: MutationHandle<AnimationTickEvent>) {
+        self.on_tick = Some(m);
+    }
+
+    /// Wire the `onEnd` callback (the rut rail's intent mutation).
+    pub fn set_on_end(&mut self, m: MutationHandle<AnimationEndEvent>) {
+        self.on_end = Some(m);
+    }
+
+    /// The current eased value (`0.0` before the first tick).
+    pub fn value(&self) -> f64 {
+        self.value
+    }
+
+    /// The status name (the JS getter's vocabulary).
+    pub fn status_name(&self) -> &'static str {
+        match self.status {
+            AnimationStatus::Stopped => "stopped",
+            AnimationStatus::Forward => "forward",
+            AnimationStatus::Reverse => "reverse",
+            AnimationStatus::Completed => "completed",
+            AnimationStatus::Paused => "paused",
+        }
+    }
+
     pub fn set_animation_manager(&mut self, mgr: Rc<RefCell<AnimationManager>>) {
         self.animation_manager = Some(mgr);
+    }
+
+    /// The manager handle, for control surfaces that re-register after a
+    /// state change (the rut rows; the borrow must not span the register).
+    pub fn manager_handle(&self) -> Option<Rc<RefCell<AnimationManager>>> {
+        self.animation_manager.clone()
     }
 
     /// Set the engine-wide mutation queue. Called once at construction by
@@ -342,14 +460,7 @@ impl Class for AnimationController {
             let ctrl = obj
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let s = match ctrl.status {
-                AnimationStatus::Stopped => "stopped",
-                AnimationStatus::Forward => "forward",
-                AnimationStatus::Reverse => "reverse",
-                AnimationStatus::Completed => "completed",
-                AnimationStatus::Paused => "paused",
-            };
-            Ok(JsValue::from(js_string!(s)))
+            Ok(JsValue::from(js_string!(ctrl.status_name())))
         });
 
         controller_getter!("duration", |this, _, _| {
@@ -383,19 +494,13 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.status = AnimationStatus::Forward;
-                ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
-                ctrl.current_iteration = 0;
-                ctrl.value = 0.0;
-                ctrl.value_at_start = 0.0;
-                ctrl.paused_direction = None;
-
-                // Enqueue (not fire) so the callback runs in the next flush,
-                // outside the active `RefMut` borrow on `ctrl`.
-                ctrl.enqueue_tick(0.0);
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.forward_at(now);
 
                 if let Some(mgr_rc) = &ctrl.animation_manager {
-                    mgr_rc.borrow_mut().register_controller(obj.clone());
+                    mgr_rc
+                        .borrow_mut()
+                        .register_controller(crate::manager::ControllerFace::Js(obj.clone()));
                 }
 
                 Ok(JsValue::undefined())
@@ -413,17 +518,13 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.status = AnimationStatus::Reverse;
-                ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
-                ctrl.current_iteration = 0;
-                ctrl.value = 1.0;
-                ctrl.value_at_start = 1.0;
-                ctrl.paused_direction = None;
-
-                ctrl.enqueue_tick(1.0);
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.reverse_at(now);
 
                 if let Some(mgr_rc) = &ctrl.animation_manager {
-                    mgr_rc.borrow_mut().register_controller(obj.clone());
+                    mgr_rc
+                        .borrow_mut()
+                        .register_controller(crate::manager::ControllerFace::Js(obj.clone()));
                 }
 
                 Ok(JsValue::undefined())
@@ -441,9 +542,7 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.status = AnimationStatus::Stopped;
-                ctrl.start_time_ms = None;
-                ctrl.paused_direction = None;
+                ctrl.stop_now();
 
                 Ok(JsValue::undefined())
             }),
@@ -460,19 +559,10 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                // Only pause if currently running. Capture the direction so
-                // `resume()` knows which way to continue.
-                if ctrl.is_active() {
-                    // Tick once with the current time so `value` reflects the
-                    // moment of pause before we freeze the start time. The
-                    // tick enqueues any callbacks on the mutation queue
-                    // (fired later, outside this borrow).
-                    let now = ctx.clock().now().millis_since_epoch();
-                    let _ = ctrl.tick_compute(now);
-                    ctrl.paused_direction = Some(ctrl.status);
-                    ctrl.status = AnimationStatus::Paused;
-                    ctrl.start_time_ms = None;
-                }
+                // Only pause if currently running; the direction is
+                // captured so `resume()` knows which way to continue.
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.pause_at(now);
 
                 Ok(JsValue::undefined())
             }),
@@ -489,17 +579,16 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                if ctrl.status != AnimationStatus::Paused {
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.resume_at(now);
+                if !ctrl.is_active() {
                     return Ok(JsValue::undefined());
                 }
-                let direction = ctrl.paused_direction.unwrap_or(AnimationStatus::Forward);
-                ctrl.status = direction;
-                ctrl.value_at_start = ctrl.value;
-                ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
-                ctrl.paused_direction = None;
 
                 if let Some(mgr_rc) = &ctrl.animation_manager {
-                    mgr_rc.borrow_mut().register_controller(obj.clone());
+                    mgr_rc
+                        .borrow_mut()
+                        .register_controller(crate::manager::ControllerFace::Js(obj.clone()));
                 }
 
                 Ok(JsValue::undefined())
@@ -520,18 +609,9 @@ impl Class for AnimationController {
                 let t = args
                     .get_or_undefined(0)
                     .as_number()
-                    .unwrap_or(0.0)
-                    .clamp(0.0, 1.0);
-                ctrl.value = t;
-                ctrl.value_at_start = t;
-
-                if ctrl.is_active() {
-                    // Re-base start_time so the next tick continues from t.
-                    let now = ctx.clock().now().millis_since_epoch();
-                    ctrl.rebase_start_to_current_value(now);
-                }
-
-                ctrl.enqueue_tick(t);
+                    .unwrap_or(0.0);
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.seek_to(t, now);
 
                 Ok(JsValue::undefined())
             }),
@@ -555,18 +635,8 @@ impl Class for AnimationController {
                     ));
                 }
 
-                if ctrl.is_active() {
-                    // Tick once at the old speed to align `value` (enqueues
-                    // any pending callbacks), then apply the new speed and
-                    // re-base the start time.
-                    let now = ctx.clock().now().millis_since_epoch();
-                    let _ = ctrl.tick_compute(now);
-                    ctrl.speed = s;
-                    ctrl.value_at_start = ctrl.value;
-                    ctrl.start_time_ms = Some(now);
-                } else {
-                    ctrl.speed = s;
-                }
+                let now = ctx.clock().now().millis_since_epoch();
+                ctrl.set_speed_to(s, now);
 
                 Ok(JsValue::undefined())
             }),
@@ -583,8 +653,8 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.repeat_mode = RepeatMode::from_js(args.get_or_undefined(0))?;
-                ctrl.current_iteration = 0;
+                let mode = RepeatMode::from_js(args.get_or_undefined(0))?;
+                ctrl.set_repeat_mode(mode);
 
                 Ok(JsValue::undefined())
             }),

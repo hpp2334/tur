@@ -155,6 +155,11 @@ pub struct TurInstanceContext {
     /// (`Arc<[WorkerPoolHandle]>` — each an `Arc` over plain data), no
     /// `boa_gc::Gc`/`GcRefCell`.
     pub(crate) worker_pools: Arc<[WorkerPoolHandle]>,
+    /// The rut pkg-extension installers — plugins that own rut rows for
+    /// the `tur` host pkg (tur-animation's C5 rows) push a closure here at
+    /// `register`; `RutRuntime::boot` drains it when building the pkg (see
+    /// `core::rut_runtime::RutPkgExt`).
+    pub rut_pkg_exts: Rc<RefCell<Vec<crate::core::rut_runtime::RutPkgExt>>>,
     /// Per-instance frame statistics — the render-performance probe (see
     /// [`FrameStats`](crate::core::app::frame_stats::FrameStats)). Always-on
     /// worker-side counters, surfaced via `turDevTool.frameStats()`.
@@ -208,6 +213,7 @@ impl TurInstanceContext {
             instance_data: Rc::new(RefCell::new(HashMap::new())),
             plugin_state: Rc::new(OnceCell::new()),
             worker_pools,
+            rut_pkg_exts: Rc::new(RefCell::new(Vec::new())),
             frame_stats,
         }
     }
