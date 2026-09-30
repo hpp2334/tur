@@ -1,0 +1,19 @@
+// column-overflow: three 300px children in a Min column — total 900px
+// overflows the 600px viewport. Children keep their natural height (not
+// squished to 0).
+use tur::{ MAIN_SIZE_MIN, el_box_new, box_size, el_build, el_child, el_column, flex_main_size, mount };
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let col = el_column();
+    flex_main_size(col, MAIN_SIZE_MIN);
+    el_child(col, box_h(300.0));
+    el_child(col, box_h(300.0));
+    el_child(col, box_h(300.0));
+    mount(el_build(col));
+}

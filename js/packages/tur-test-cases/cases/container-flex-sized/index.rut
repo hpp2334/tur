@@ -1,0 +1,22 @@
+// container-flex-sized: a Column of fixed-size colored "buttons" with
+// labeled children (the counter-family shapes).
+use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_column, el_qkey, el_text_new, text_size, mount };
+
+entry fn start() {
+    let col = el_column();
+    el_child(col, qkey_button("btn", "Btn"));
+    el_child(col, qkey_button("btn2", "Btn2"));
+    mount(el_build(col));
+}
+
+// A 100x44 colored pill with a centered 14px label.
+fn qkey_button(key: str, label: str) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 44.0);
+    box_color(b, 0x6366F1FFu64);
+    el_qkey(b, key);
+    let t = el_text_new(label);
+    text_size(t, 14.0);
+    el_child(b, el_build(t));
+    return el_build(b);
+}

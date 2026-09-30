@@ -1,0 +1,10 @@
+// positioned-basic: a positioned child anchored (10, 20) inside a Stack.
+use tur::{ el_box_new, box_size, el_build, el_child, el_positioned, el_stack, mount };
+
+entry fn start() {
+    let stack = el_stack();
+    let sb = el_box_new();
+    box_size(sb, 50.0, 50.0);
+    el_child(stack, el_positioned(10.0, 20.0, el_build(sb)));
+    mount(el_build(stack));
+}

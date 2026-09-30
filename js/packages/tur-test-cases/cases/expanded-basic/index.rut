@@ -1,0 +1,17 @@
+// expanded-basic: a fixed-height child plus an Expanded filling the
+// remaining main axis.
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, el_expand, flex_cross_align, mount };
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+    el_child(col, box_wh(0.0, 50.0));
+    el_child(col, el_expand(1.0, box_wh(0.0, 0.0)));
+    mount(el_build(col));
+}

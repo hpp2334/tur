@@ -1,0 +1,27 @@
+// flex-nested-sidebar: a 200px sidebar Column beside a content Column in
+// a Row (the classic two-pane shape).
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, el_row, flex_cross_align, mount };
+
+entry fn start() {
+    let row = el_row();
+    let sidebar = el_box_new();
+    box_size(sidebar, 200.0, 0.0);
+    let scol = el_column();
+    flex_cross_align(scol, CROSS_ALIGN_START);
+    el_child(scol, box_wh(0.0, 40.0));
+    el_child(sidebar, el_build(scol));
+    el_child(row, el_build(sidebar));
+    let content = el_box_new();
+    let ccol = el_column();
+    flex_cross_align(ccol, CROSS_ALIGN_START);
+    el_child(ccol, box_wh(0.0, 30.0));
+    el_child(content, el_build(ccol));
+    el_child(row, el_build(content));
+    mount(el_build(row));
+}
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}

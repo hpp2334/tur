@@ -1,0 +1,8 @@
+// text-wrapping: a long 14px line wraps within the width budget.
+use tur::{ el_build, el_text_new, text_size, mount };
+
+entry fn start() {
+    let t = el_text_new("Hello World this is a long text that should wrap");
+    text_size(t, 14.0);
+    mount(el_build(t));
+}

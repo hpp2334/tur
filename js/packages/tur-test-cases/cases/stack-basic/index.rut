@@ -1,0 +1,16 @@
+// stack-basic: two non-positioned children — the Stack sizes to the
+// largest one and paints them overlaid.
+use tur::{ el_box_new, box_size, el_build, el_child, el_stack, mount };
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let stack = el_stack();
+    el_child(stack, box_wh(100.0, 100.0));
+    el_child(stack, box_wh(200.0, 200.0));
+    mount(el_build(stack));
+}

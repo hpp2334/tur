@@ -21,6 +21,13 @@ pub struct FragmentView {
     query_key: Option<Vec<String>>,
 }
 
+impl FragmentView {
+    /// Rut-rail constructor (`core::rut_runtime`): a transparent group.
+    pub fn new_rut(children: Vec<Rc<dyn View>>) -> Self {
+        Self { children, query_key: None }
+    }
+}
+
 impl View for FragmentView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         // FragmentElement is truly transparent — no node is created. Children are

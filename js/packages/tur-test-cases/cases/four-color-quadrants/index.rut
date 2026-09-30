@@ -1,0 +1,19 @@
+// four-color-quadrants: a 2x2 grid of 100x100 colored quadrants (Stack +
+// positioned fills) — the vello render fixtures sample exact pixels.
+use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_positioned, el_stack, mount };
+
+fn quad(color: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, color);
+    return el_build(b);
+}
+
+entry fn start() {
+    let stack = el_stack();
+    el_child(stack, el_positioned(0.0, 0.0, quad(0xFF0000FFu64)));
+    el_child(stack, el_positioned(100.0, 0.0, quad(0x00FF00FFu64)));
+    el_child(stack, el_positioned(0.0, 100.0, quad(0x0000FFFFu64)));
+    el_child(stack, el_positioned(100.0, 100.0, quad(0xFFFF00FFu64)));
+    mount(el_build(stack));
+}

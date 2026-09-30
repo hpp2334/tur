@@ -1,0 +1,6 @@
+// sized-box-basic: an exactly-sized box wrapping a Text child.
+use tur::{ el_sizedbox, el_text, el_build, mount };
+
+entry fn start() {
+    mount(el_sizedbox(100.0, 50.0, el_text("Hi")));
+}

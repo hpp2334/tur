@@ -1,0 +1,16 @@
+// column-container-text-intrinsic: a padded, unsized Container in a Column
+// sizes from its Text child's intrinsic measurement.
+use tur::{ el_box_new, box_padding, el_build, el_child, el_column, el_qkey, el_text_new, text_size, mount };
+
+entry fn start() {
+    let col = el_column();
+    let b = el_box_new();
+    box_padding(b, 48.0);
+    el_qkey(b, "container");
+    let t = el_text_new("Empty State");
+    text_size(t, 24.0);
+    el_qkey(t, "text");
+    el_child(b, el_build(t));
+    el_child(col, el_build(b));
+    mount(el_build(col));
+}

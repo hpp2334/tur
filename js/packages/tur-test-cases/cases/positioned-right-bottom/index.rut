@@ -1,0 +1,20 @@
+// positioned-right-bottom: edge anchors resolve against the STACK's own
+// final size (200x300), not the incoming constraints (Flutter parity).
+use tur::{ el_box_new, box_size, el_build, el_child, el_positioned_edges, el_qkey, el_stack, mount };
+
+fn sized(w: f64, h: f64, key: str) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    if (key != "") {
+        el_qkey(b, key);
+    }
+    return el_build(b);
+}
+
+entry fn start() {
+    let stack = el_stack();
+    el_child(stack, sized(200.0, 300.0, ""));
+    el_child(stack, el_positioned_edges(0.0, 0.0, 8.0, 8.0, sized(60.0, 24.0, "rb-pill")));
+    el_child(stack, el_positioned_edges(10.0, 0.0, 10.0, 0.0, sized(0.0, 20.0, "lr-pair")));
+    mount(el_build(stack));
+}

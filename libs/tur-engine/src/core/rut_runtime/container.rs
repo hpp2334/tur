@@ -121,12 +121,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &std::rc::Rc<super::
         with_box(b, vm, |box_| box_.clip_behavior = Some(Val::Static(clip_of(c))))
     });
     // SizedBox: an exactly-sized wrapper (the JS `SizedBox(w, h)` twin — a
-    // Container with only width/height set).
+    // Container with only width/height set; 0 = unconstrained on that axis).
     rut_vm::pkg_fn!(pkg, "el_sizedbox", (f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, w: f64, h: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(ContainerView {
-            width: Some(Val::Static(w)),
-            height: Some(Val::Static(h)),
+            width: (w > 0.0).then(|| Val::Static(w)),
+            height: (h > 0.0).then(|| Val::Static(h)),
             children: vec![child],
             ..ContainerView::default()
         });

@@ -208,7 +208,13 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
         row("el_expand", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
         row("el_positioned", vec![TY_F64, TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row(
+            "el_positioned_edges",
+            vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
         row("condition", vec![TY_U64, TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
+        row("el_fragment2", vec![TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
         row("rs_source_bool", vec![TY_BOOL], TY_U64),
         row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
         row("rs_get_bool", vec![TY_U64], TY_BOOL),
@@ -506,7 +512,7 @@ fn install_tur_pkg(
         let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Tight, child));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
-    // a child anchored inside a Stack
+    // a child anchored inside a Stack (left/top)
     rut_vm::pkg_fn!(pkg, "el_positioned", (f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(PositionedView {
@@ -514,6 +520,21 @@ fn install_tur_pkg(
             top: Some(Val::Static(top)),
             right: None,
             bottom: None,
+            width: None,
+            height: None,
+            child,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // a child anchored inside a Stack by edges — 0 = absent per side; an
+    // opposing edge pair implies the extent (the JS Positioned twins).
+    rut_vm::pkg_fn!(pkg, "el_positioned_edges", (f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, right: f64, bottom: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(PositionedView {
+            left: (left != 0.0).then_some(Val::Static(left)),
+            top: (top != 0.0).then_some(Val::Static(top)),
+            right: (right != 0.0).then_some(Val::Static(right)),
+            bottom: (bottom != 0.0).then_some(Val::Static(bottom)),
             width: None,
             height: None,
             child,
@@ -571,6 +592,15 @@ fn install_tur_pkg(
         );
         view.initial_offset = Some(Val::Static(initial));
         Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
+    });
+
+    // layout-transparent group — children build directly under the parent
+    // (the JS Fragment twin; keeps test-navigated trees flat).
+    rut_vm::pkg_fn!(pkg, "el_fragment2", (Opaque<RutView>, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, a: Opaque<RutView>, b: Opaque<RutView>| {
+        let a = a.with(|v| v.0.clone())?;
+        let b = b.with(|v| v.0.clone())?;
+        let view = Rc::new(crate::builtin_plugins::control_flow::FragmentView::new_rut(vec![a, b]));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
 
     // bool atoms (the condition rail's driver)

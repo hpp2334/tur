@@ -1,0 +1,11 @@
+// column-cross-start: one 100x50 box, cross axis start-aligned.
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, flex_cross_align, mount };
+
+entry fn start() {
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+    let sb = el_box_new();
+    box_size(sb, 100.0, 50.0);
+    el_child(col, el_build(sb));
+    mount(el_build(col));
+}

@@ -1,0 +1,15 @@
+// scroll-container-text: a padded unsized Container sized from its Text
+// child inside a vertical ScrollView's content Column.
+use tur::{ el_box_new, box_padding, el_build, el_child, el_column, el_qkey, el_scroll, el_text_new, text_size, mount };
+
+entry fn start() {
+    let b = el_box_new();
+    box_padding(b, 48.0);
+    el_qkey(b, "container");
+    let t = el_text_new("Empty State");
+    text_size(t, 24.0);
+    el_child(b, el_build(t));
+    let col = el_column();
+    el_child(col, el_build(b));
+    mount(el_scroll(true, el_build(col)));
+}

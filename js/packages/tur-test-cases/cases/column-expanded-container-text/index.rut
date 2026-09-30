@@ -1,0 +1,15 @@
+// column-expanded-container-text: a padded unsized Container sized from
+// its Text child, wrapped in Expanded inside a max Column.
+use tur::{ el_box_new, box_padding, el_build, el_child, el_column, el_expand, el_qkey, el_text_new, text_size, mount };
+
+entry fn start() {
+    let col = el_column();
+    let b = el_box_new();
+    box_padding(b, 48.0);
+    el_qkey(b, "container");
+    let t = el_text_new("Empty State");
+    text_size(t, 24.0);
+    el_child(b, el_build(t));
+    el_child(col, el_expand(1.0, el_build(b)));
+    mount(el_build(col));
+}

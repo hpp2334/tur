@@ -1,0 +1,23 @@
+// column-nested: a Column inside a Column. Non-flex children receive
+// UNBOUNDED main-axis constraints, so the inner Column (default
+// MainAxisSize.max) must degenerate to content size (Flutter RenderFlex
+// parity).
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, flex_cross_align, mount };
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let outer = el_column();
+    flex_cross_align(outer, CROSS_ALIGN_START);
+    el_child(outer, box_h(50.0));
+    let inner = el_column();
+    flex_cross_align(inner, CROSS_ALIGN_START);
+    el_child(inner, box_h(30.0));
+    el_child(outer, el_build(inner));
+    el_child(outer, box_h(40.0));
+    mount(el_build(outer));
+}

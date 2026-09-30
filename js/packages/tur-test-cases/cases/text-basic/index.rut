@@ -1,0 +1,8 @@
+// text-basic: a single 14px Text as the root child.
+use tur::{ el_build, el_text_new, text_size, mount };
+
+entry fn start() {
+    let t = el_text_new("Hello");
+    text_size(t, 14.0);
+    mount(el_build(t));
+}

@@ -1,0 +1,13 @@
+// text-font-weight: weight 400 vs 700 at the same size — the bold run
+// measures wider.
+use tur::{ el_build, el_fragment2, el_text_new, text_size, text_weight, mount };
+
+entry fn start() {
+    let normal = el_text_new("Hello");
+    text_size(normal, 20.0);
+    text_weight(normal, 400.0);
+    let bold = el_text_new("Hello");
+    text_size(bold, 20.0);
+    text_weight(bold, 700.0);
+    mount(el_fragment2(el_build(normal), el_build(bold)));
+}

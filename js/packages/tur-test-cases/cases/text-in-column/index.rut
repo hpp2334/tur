@@ -1,0 +1,14 @@
+// text-in-column: two Texts stacked in a start-aligned Column.
+use tur::{ CROSS_ALIGN_START, el_build, el_child, el_column, el_text_new, text_size, flex_cross_align, mount };
+
+entry fn start() {
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+    let first = el_text_new("First");
+    text_size(first, 14.0);
+    let second = el_text_new("Second");
+    text_size(second, 14.0);
+    el_child(col, el_build(first));
+    el_child(col, el_build(second));
+    mount(el_build(col));
+}

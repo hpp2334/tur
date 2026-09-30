@@ -1,0 +1,17 @@
+// column-main-end: two fixed-height children pinned to the main-axis end.
+use tur::{ CROSS_ALIGN_START, MAIN_ALIGN_END, el_box_new, box_size, el_build, el_child, el_column, flex_cross_align, flex_main_align, mount };
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let col = el_column();
+    flex_main_align(col, MAIN_ALIGN_END);
+    flex_cross_align(col, CROSS_ALIGN_START);
+    el_child(col, box_h(50.0));
+    el_child(col, box_h(30.0));
+    mount(el_build(col));
+}

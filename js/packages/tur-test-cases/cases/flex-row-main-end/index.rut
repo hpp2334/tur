@@ -1,0 +1,17 @@
+// flex-row-main-end: two fixed-width children pinned to the main-axis end.
+use tur::{ CROSS_ALIGN_START, MAIN_ALIGN_END, el_box_new, box_size, el_build, el_child, el_row, flex_cross_align, flex_main_align, mount };
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let row = el_row();
+    flex_main_align(row, MAIN_ALIGN_END);
+    flex_cross_align(row, CROSS_ALIGN_START);
+    el_child(row, box_wh(50.0, 0.0));
+    el_child(row, box_wh(30.0, 0.0));
+    mount(el_build(row));
+}

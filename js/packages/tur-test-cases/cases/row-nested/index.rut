@@ -1,0 +1,22 @@
+// row-nested (Flutter parity): non-flex children of a flex receive unbounded
+// main-axis constraints, so the inner Row (default MainAxisSize.max) must
+// shrink-wrap to its content width instead of consuming the outer Row's
+// full width — leaving the following sibling visible.
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_row, flex_cross_align, mount };
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, w, h);
+    return el_build(b);
+}
+
+entry fn start() {
+    let outer = el_row();
+    flex_cross_align(outer, CROSS_ALIGN_START);
+    let inner = el_row();
+    el_child(inner, box_wh(20.0, 0.0));
+    el_child(inner, box_wh(30.0, 0.0));
+    el_child(outer, el_build(inner));
+    el_child(outer, box_wh(50.0, 10.0));
+    mount(el_build(outer));
+}
