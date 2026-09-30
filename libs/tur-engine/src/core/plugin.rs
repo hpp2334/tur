@@ -417,7 +417,7 @@ impl<'a> PluginRegisterContext<'a> {
     ///
     /// ```text
     /// let bridge = ctx.reactive();
-    /// let backing: Source<JsValue> = bridge.decl_source(initial);
+    /// let backing: Source<Value> = bridge.decl_source(initial);
     /// let engine_read = bridge.read_only();
     /// let handle = bridge.build_derive(move |_read, boa| {
     ///     Ok(engine_read.read(Readable::from(backing), boa))

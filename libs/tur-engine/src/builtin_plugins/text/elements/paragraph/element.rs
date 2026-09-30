@@ -50,6 +50,22 @@ impl FromJs for TextOverflow {
     }
 }
 
+impl crate::core::edgy::FromValue for TextOverflow {
+    fn from_value(v: &crate::core::edgy::Value) -> Result<Self, JsError> {
+        let s = v
+            .as_str()
+            .ok_or_else(|| type_error("a TextOverflow keyword string"))?;
+        match s {
+            "clip" => Ok(TextOverflow::Clip),
+            "ellipsis" => Ok(TextOverflow::Ellipsis),
+            "visible" => Ok(TextOverflow::Visible),
+            _ => Err(type_error(
+                "a recognized TextOverflow keyword (clip|ellipsis|visible)",
+            )),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // TextView — the user's declaration. Pure Rust, no JsValues.
 //

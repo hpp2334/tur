@@ -52,7 +52,7 @@ use crate::core::edgy::reactive::{Readable, Source};
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::plugin::{Plugin, PluginRegisterContext};
-use crate::core::screen::{ResizeSubsystem, viewport_size_value};
+use crate::core::screen::ResizeSubsystem;
 use crate::error::TurError;
 
 /// The standard widget library plugin. Registers the `tur:std`
@@ -89,15 +89,17 @@ impl Plugin for TurStdPlugin {
         // anything can read it and subsystem dispatch order stays:
         // resize → gesture → keyboard → ime → pointer_region.
         //
-        // The atom itself is realm-free (a declaration + a Rust derive
-        // closure). Its seed — a `{width, height}` JS object — needs the
-        // realm, so the seed write is deferred to realm construction: a
-        // rut-only instance holds the unmaterialized declaration, which
-        // nothing can read (JS reads are the only readers).
+        // The atom is realm-free end to end (a declaration + a Rust derive
+        // closure + a native `{width, height}` Map seed — the native-KV
+        // substrate holds the value without a realm).
         let bridge = ctx.reactive();
         let initial = ctx.viewport();
-        let backing: Source<boa_engine::JsValue> =
-            bridge.decl_source(boa_engine::JsValue::undefined());
+        let backing: Source<crate::core::edgy::Value> = bridge.decl_source(
+            crate::core::edgy::Value::map([
+                ("width", crate::core::edgy::Value::Num(initial.0)),
+                ("height", crate::core::edgy::Value::Num(initial.1)),
+            ]),
+        );
         let read_face = bridge.read_only();
         let viewport_size_handle =
             bridge.build_derive(move |_read, boa| Ok(read_face.read(Readable::from(backing), boa)));
@@ -156,21 +158,17 @@ impl Plugin for TurStdPlugin {
         crate::core::event_bus::install_event_bus_subsystem(ctx);
 
         // Realm-bound half — recorded for replay at realm construction (a
-        // rut-only instance never replays it): the seed write into the
-        // `viewportSize$` backing, the `console` global, the JS consts
-        // (brush enums, layout enums, `viewportSize$` handle, the eventBus
-        // object), and the `tur:std` module registration itself (its bound
-        // natives capture the JS-side ctx object).
+        // rut-only instance never replays it): the `console` global, the JS
+        // consts (brush enums, layout enums, `viewportSize$` handle, the
+        // eventBus object), and the `tur:std` module registration itself
+        // (its bound natives capture the JS-side ctx object).
+        //
+        // (The old deferred `viewportSize$` re-seed is gone: the seed now
+        // carries the true initial size as a native Map, and the resize
+        // subsystem's write rail is realm-free too — a pre-realm resize
+        // updates the backing directly, so there is no realm-time catch-up
+        // to replay.)
         ctx.defer(move |cx| {
-            // Seed the `viewportSize$` backing with the CURRENT screen size
-            // (a pre-realm resize updated the screen + the subsystem's dedup
-            // guard — the seed must agree with both).
-            let (w, h) = cx.app.borrow().screen.logical_size;
-            let bridge = cx.js_ctx().reactive();
-            if let Err(e) = bridge.set_source(backing, viewport_size_value(w, h, cx.boa_mut())) {
-                tracing::error!("viewportSize$ seed failed: {e}");
-            }
-
             let mut std_consts: Vec<ConstEntry> = Vec::new();
             let js_ctx_value = cx.js_ctx_value();
             std_consts.extend(crate::core::render::brush::bridge::consts(

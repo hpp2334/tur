@@ -744,8 +744,16 @@ impl TurAppInternal {
         }
         let mounted = self.js_context.element_tree.store();
         for inv in invs {
-            let args = match boa.as_deref_mut() {
-                Some(boa) => inv.args.to_js_args(boa),
+            // Event payloads are JS-shaped (`IntoJsArgs`); they cross into
+            // the native substrate here — the store's invoke rail speaks
+            // `Value` only (Js closures convert back around the call).
+            let args: Vec<crate::core::edgy::Value> = match boa.as_deref_mut() {
+                Some(boa) => inv
+                    .args
+                    .to_js_args(boa)
+                    .iter()
+                    .map(|jv| crate::core::edgy::Value::from_js(jv, boa))
+                    .collect(),
                 None => Vec::new(),
             };
             // A failed invocation (e.g. a watch loop rejected a write, or user

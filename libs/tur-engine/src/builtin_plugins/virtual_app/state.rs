@@ -110,6 +110,22 @@ impl crate::core::js_runtime::js_value::FromJs for VirtualControllerRef {
     }
 }
 
+impl crate::core::edgy::FromValue for VirtualControllerRef {
+    fn from_value(value: &crate::core::edgy::Value) -> Result<Self, boa_engine::JsError> {
+        let obj = value
+            .as_opaque()
+            .and_then(JsValue::as_object)
+            .ok_or_else(|| {
+                crate::core::js_runtime::js_value::type_error("a virtual app controller")
+            })?;
+        obj.downcast_ref::<JsVirtualController>()
+            .map(|c| VirtualControllerRef(c.0))
+            .ok_or_else(|| {
+                crate::core::js_runtime::js_value::type_error("a virtual app controller")
+            })
+    }
+}
+
 /// `JsData` payload of the JS controller object. The object also carries
 /// `status$` / `errorMsg$` / `destroy$` properties.
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -118,8 +134,8 @@ pub(crate) struct JsVirtualController(pub(crate) u64);
 
 /// One controller's worker-side record.
 pub(crate) struct ControllerRecord {
-    pub status: Source<JsValue>,
-    pub error_msg: Source<JsValue>,
+    pub status: Source<crate::core::edgy::Value>,
+    pub error_msg: Source<crate::core::edgy::Value>,
     pub keep_alive: bool,
     /// Resolved target pool (a `forWorkerPool` handle or the default
     /// `"virtual"` pool, resolved at controller creation).
@@ -204,8 +220,10 @@ impl VirtualState {
         on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
     ) -> u64 {
         let base = self.alloc_id();
-        let status = self.bridge.decl_source(JsValue::from(js_string!("idle")));
-        let error_msg = self.bridge.decl_source(JsValue::from(js_string!("")));
+        let status = self
+            .bridge
+            .decl_source(crate::core::edgy::Value::str("idle"));
+        let error_msg = self.bridge.decl_source(crate::core::edgy::Value::str(""));
         self.controllers.borrow_mut().insert(
             base,
             Rc::new(ControllerRecord {
@@ -309,10 +327,10 @@ impl VirtualState {
         };
         let _ = self
             .bridge
-            .set_source(record.status, JsValue::from(js_string!(status)));
+            .set_source(record.status, crate::core::edgy::Value::str(status));
         let _ = self
             .bridge
-            .set_source(record.error_msg, JsValue::from(js_string!(error)));
+            .set_source(record.error_msg, crate::core::edgy::Value::str(error));
     }
 
     /// Route a `Destroyed` confirmation for an incarnation token.

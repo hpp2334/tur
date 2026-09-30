@@ -8,6 +8,7 @@ use boa_engine::property::PropertyDescriptor;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 use boa_gc::{Finalize, Trace};
 
+use crate::core::edgy::value::Value;
 use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 
 mod store;
@@ -39,8 +40,8 @@ pub(crate) struct AtomId(pub(crate) u32);
 // JsValue marshaling.
 //
 // Reactive handles cross the JS<->Rust boundary as boa opaque objects whose
-// `JsData` payload *is* the handle itself (`Source<JsValue>` /
-// `Derived<JsValue>` / `Mutation`).  The concrete type distinguishes the atom
+// `JsData` payload *is* the handle itself (`Source<Value>` /
+// `Derived<Value>` / `Mutation`).  The concrete type distinguishes the atom
 // kind, so no separate kind tag is needed.  Wrap/unwrap goes through the
 // unified [`crate::core::js_runtime::js_value::FromJs`] / [`crate::core::js_runtime::js_value::IntoJs`]
 // traits; the private opaque wrappers are never named outside this module.
@@ -70,7 +71,7 @@ impl SubscriberId {
 // Typed atom handles — the Rust type system encodes the atom kind.
 //
 // `T` is a phantom type parameter: it exists only for compile-time type
-// safety.  The Store stores `JsValue` for all atoms; `T` is erased to
+// safety.  The Store stores `Value` for all atoms; `T` is erased to
 // `PhantomData<fn() -> T>` (covariant, no Send/Sync/'static overhead).
 //
 // A handle is a bare id addressing a seed in the shared registry; the
@@ -223,9 +224,9 @@ impl<T> std::fmt::Debug for Readable<T> {
     }
 }
 
-/// Untyped readable — carries a raw `JsValue` (e.g. a JS array or object)
-/// that is not decoded via [`FromJs`](crate::core::js_runtime::js_value::FromJs).
-pub type AnyReadable = Readable<JsValue>;
+/// Untyped readable — carries a raw native [`Value`] (e.g. a list or map
+/// atom) that is not decoded via [`FromValue`](crate::core::edgy::FromValue).
+pub type AnyReadable = Readable<Value>;
 
 impl<T> From<Source<T>> for Readable<T> {
     #[inline]
@@ -300,7 +301,9 @@ impl IntoJs for Mutation {
     }
 }
 
-impl FromJs for Source<JsValue> {
+/// JS → native decode of an atom handle (`Source<Value>` — the erased
+/// handle shape; the phantom marker is irrelevant to the opaque payload).
+impl FromJs for Source<Value> {
     fn from_js(value: &JsValue) -> Result<Self, JsError> {
         let obj = value
             .as_object()
@@ -313,7 +316,7 @@ impl FromJs for Source<JsValue> {
     }
 }
 
-impl FromJs for Derived<JsValue> {
+impl FromJs for Derived<Value> {
     fn from_js(value: &JsValue) -> Result<Self, JsError> {
         let obj = value.as_object().ok_or_else(|| {
             crate::core::js_runtime::js_value::type_error("a derived atom handle")
@@ -408,7 +411,8 @@ fn store_ctx_of(this: &JsValue) -> JsResult<(Rc<SharedReactive>, Rc<StoreKv>)> {
 fn tur_store_ctx_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let (shared, kv) = store_ctx_of(this)?;
     let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-    shared.read_by_id(readable.id(), &kv, Some(ctx))
+    // Native → JS at the boundary: the KV holds Values.
+    Ok(shared.read_by_id(readable.id(), &kv, Some(ctx))?.to_js(ctx))
 }
 
 fn tur_store_ctx_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -417,14 +421,22 @@ fn tur_store_ctx_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsR
     if let Ok(mutation) = Mutation::from_js(v) {
         // `invoke_mutation` builds the `{get,set}` JsObject internally
         // and prepends it for `Js`-variant closures; pass only the
-        // user args (no recursive ctx_obj construction here).
-        let user_args = args.get(1..).unwrap_or(&[]);
-        return shared.invoke_mutation_by_id(mutation.id(), &kv, user_args, Some(ctx));
+        // user args (no recursive ctx_obj construction here). Args
+        // cross JS → native at the boundary.
+        let user_args: Vec<Value> = args
+            .get(1..)
+            .unwrap_or(&[])
+            .iter()
+            .map(|arg| Value::from_js(arg, ctx))
+            .collect();
+        return shared
+            .invoke_mutation_by_id(mutation.id(), &kv, &user_args, Some(ctx))
+            .map(|result| result.to_js(ctx));
     }
     if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {
             AnyReadable::Source(_) => {
-                let value = args.get_or_undefined(1).clone();
+                let value = Value::from_js(args.get_or_undefined(1), ctx);
                 shared.write_by_id(readable.id(), &kv, value)?;
                 Ok(JsValue::undefined())
             }
@@ -513,22 +525,31 @@ fn store_of(this: &JsValue) -> JsResult<Store> {
 fn tur_store_get(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let store = store_of(this)?;
     let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
-    store
+    // Native → JS at the boundary: the KV holds Values.
+    Ok(store
         .shared()
-        .read_by_id(readable.id(), &store.kv_handle(), Some(ctx))
+        .read_by_id(readable.id(), &store.kv_handle(), Some(ctx))?
+        .to_js(ctx))
 }
 
 fn tur_store_set(this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let store = store_of(this)?;
     let v = args.get_or_undefined(0);
     if let Ok(mutation) = Mutation::from_js(v) {
-        let user_args = args.get(1..).unwrap_or(&[]);
-        return store.invoke_mutation(mutation, user_args, Some(ctx));
+        let user_args: Vec<Value> = args
+            .get(1..)
+            .unwrap_or(&[])
+            .iter()
+            .map(|arg| Value::from_js(arg, ctx))
+            .collect();
+        return store
+            .invoke_mutation(mutation, &user_args, Some(ctx))
+            .map(|result| result.to_js(ctx));
     }
     if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {
             AnyReadable::Source(_) => {
-                let value = args.get_or_undefined(1).clone();
+                let value = Value::from_js(args.get_or_undefined(1), ctx);
                 store
                     .shared()
                     .write_by_id(readable.id(), &store.kv_handle(), value)?;

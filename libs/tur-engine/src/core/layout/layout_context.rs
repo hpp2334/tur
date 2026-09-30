@@ -6,11 +6,12 @@ use crate::core::layout::{Constraints, Offset, Size};
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::value::FromValue;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{NodeTree, NodeTreeData};
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
-use crate::core::view::{FromJs, Val};
+use crate::core::view::Val;
 
 pub struct LayoutContext<'a, 'js> {
     pub tree: &'a mut NodeTreeData,
@@ -135,24 +136,28 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
     }
 
     /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom
-    /// is read through the read-only JS face. Subscription is **not**
+    /// is read through the read-only face as a native `Value` and decoded via
+    /// [`FromValue`] — no JS realm needed. Subscription is **not**
     /// established here — it is declared explicitly in the element's
     /// `subscribe` phase (see [`crate::core::layout::ElementSubscribe`]).
     ///
     /// Returns `None` if the prop is absent (`Option<Val<T>>::None`) or the
     /// atom value can't be decoded as `T`.
-    pub fn read_val<T: FromJs + Clone + 'static>(&mut self, val: &Val<T>) -> Option<T> {
+    pub fn read_val<T: FromValue + Clone + 'static>(&mut self, val: &Val<T>) -> Option<T> {
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let js = self.js.read(*readable);
-                T::from_js(&js).ok()
+                let value = self.js.read(*readable);
+                T::from_value(&value).ok()
             }
         }
     }
 
     /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
-    pub fn read_val_opt<T: FromJs + Clone + 'static>(&mut self, val: Option<&Val<T>>) -> Option<T> {
+    pub fn read_val_opt<T: FromValue + Clone + 'static>(
+        &mut self,
+        val: Option<&Val<T>>,
+    ) -> Option<T> {
         val.and_then(|v| self.read_val(v))
     }
 }

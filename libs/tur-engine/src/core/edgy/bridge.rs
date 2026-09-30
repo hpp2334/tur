@@ -5,6 +5,7 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsArgs, JsResult, JsValue, js_string};
 
 use crate::core::edgy::reactive::{AnyReadable, Derived, Mutation, Source};
+use crate::core::edgy::value::Value;
 use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 
@@ -47,15 +48,16 @@ fn require_callable(args: &[JsValue], idx: usize) -> JsResult<JsFunction> {
 
 fn tur_source(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
-    let value = args.get_or_undefined(1).clone();
-    let source: Source<JsValue> = js_ctx.store.bridge().decl_source(value);
+    // JS → native at the boundary: the seed holds a Value.
+    let value = crate::core::edgy::Value::from_js(args.get_or_undefined(1), context);
+    let source: Source<Value> = js_ctx.store.bridge().decl_source(value);
     Ok(source.into_js(context))
 }
 
 fn tur_derive(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let closure = require_callable(args, 1)?;
-    let derived: Derived<JsValue> = js_ctx.store.bridge().decl_derive(closure);
+    let derived: Derived<Value> = js_ctx.store.bridge().decl_derive(closure);
     Ok(derived.into_js(context))
 }
 

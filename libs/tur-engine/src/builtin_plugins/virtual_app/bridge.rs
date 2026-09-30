@@ -167,7 +167,7 @@ fn tur_create_virtual_app_controller(
     let state_for_destroy = state.clone();
     let destroy = state.bridge.build_mutate(move |_b, _args, _boa| {
         state_for_destroy.destroy(base);
-        Ok(JsValue::undefined())
+        Ok(crate::core::edgy::Value::Nil)
     });
 
     Ok(state.controller_js_object(base, destroy, ctx))

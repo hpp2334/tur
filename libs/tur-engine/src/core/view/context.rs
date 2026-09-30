@@ -44,8 +44,27 @@ impl<'a> SharedViewCx<'a> {
         self.mounted_store().read_only()
     }
 
-    /// Read an atom's current value as a raw `JsValue` (untracked).
+    /// Read an atom's current value as a raw `JsValue` (untracked). The KV
+    /// holds native `Value`s, so the `Value → JsValue` conversion happens
+    /// here for JS-shaped consumers (controller downcasts, JS thunks).
     pub fn read_atom_raw<T>(&mut self, readable: Readable<T>) -> JsValue {
+        let value = self.read_atom_value(readable);
+        match self.boa.as_deref_mut() {
+            Some(boa) => value.to_js(boa),
+            None => {
+                if !value.is_nil() {
+                    tracing::warn!(
+                        "read_atom_raw: atom value needs the JS realm to surface, but none exists"
+                    );
+                }
+                JsValue::undefined()
+            }
+        }
+    }
+
+    /// Read an atom's current value as a native [`Value`] (untracked) — the
+    /// realm-free decode path.
+    pub fn read_atom_value<T>(&mut self, readable: Readable<T>) -> crate::core::edgy::Value {
         let store = self.store_read_only();
         store.read(readable, self.boa.as_deref_mut())
     }
@@ -59,10 +78,11 @@ impl<'a> SharedViewCx<'a> {
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
-    /// atom is lazily read from the store (untracked).  Used during the effect
+    /// atom is lazily read from the store (untracked) as a native `Value` and
+    /// decoded via `FromValue` — no JS realm needed.  Used during the effect
     /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
     /// Declaration ids materialize into the mounted store.
-    pub fn read_val<T: crate::core::view::FromJs + Clone + 'static>(
+    pub fn read_val<T: crate::core::edgy::FromValue + Clone + 'static>(
         &mut self,
         val: &crate::core::view::Val<T>,
     ) -> Option<T> {
@@ -70,8 +90,8 @@ impl<'a> SharedViewCx<'a> {
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let js = self.read_atom_raw(*readable);
-                T::from_js(&js).ok()
+                let value = self.read_atom_value(*readable);
+                T::from_value(&value).ok()
             }
         }
     }

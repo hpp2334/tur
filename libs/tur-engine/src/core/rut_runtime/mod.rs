@@ -16,10 +16,11 @@
 
 use std::rc::Rc;
 
-use boa_engine::{Context, JsValue};
+use boa_engine::Context;
 
 use crate::core::app::root::RootView;
-use crate::core::edgy::reactive::{AtomId, Readable, Source};
+use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
+use crate::core::edgy::value::Value;
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::Axis;
 use crate::core::view::{SharedViewCx, View, ViewFactory, Val};
@@ -48,6 +49,12 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 
 /// A materialized view (`Rc<dyn View>`) sealed in an opaque box.
 pub struct RutView(pub Rc<dyn View>);
+
+/// A native edgy [`Value`] sealed in an opaque box — the rut rail's handle
+/// to structured atom values (lists / maps; the Phase-2-B5 round-trip
+/// surface; typed rut-side lists/records come with the next phase's
+/// breadth).
+pub struct RutValue(pub Value);
 
 /// A builder under construction — materialized by `tur::el_build`.
 enum ViewBuilder {
@@ -132,6 +139,17 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("rs_source_f64", vec![], TY_U64),
         row("rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
         row("rs_get_f64", vec![TY_U64], TY_F64),
+        // structured values (list/map atoms over the native-KV substrate)
+        row("rs_list_new", vec![], TY_OPAQUE),
+        row("rs_list_push", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("rs_map_new", vec![], TY_OPAQUE),
+        row("rs_map_set", vec![TY_OPAQUE, TY_STR, TY_STR], TY_NIL),
+        row("rs_source_value", vec![TY_OPAQUE], TY_U64),
+        row("rs_set_value", vec![TY_U64, TY_OPAQUE], TY_NIL),
+        row("rs_get_value", vec![TY_U64], TY_OPAQUE),
+        row("rs_value_len", vec![TY_OPAQUE], TY_U64),
+        row("rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
+        row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
     ];
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -212,20 +230,21 @@ fn install_tur_pkg(
         Ok(())
     });
 
-    // ---- reactive rails (Phase 2) --------------------------------------
+    // ---- reactive rails (Phase 2 — native-KV substrate) -----------------
     //
     // Atoms are the engine's edgy store (`core::edgy`) — the SAME KV the
     // JS realm and the element tree use — addressed by raw `AtomId` as
-    // u64. Writes cross; reads are served by the rut-side mirror (the
-    // wrapper atoms hold their current value), so no read path ever
-    // needs the boa context. The flush fixed-point (stale atoms → dirty
-    // subscribers → re-layout) is entirely the engine's existing
-    // machinery: a bound Text re-renders on `rs_set_*` with zero new
-    // engine code.
+    // u64. The KV holds native `Value`s, so every row below is
+    // realm-free: no JsValue is ever constructed. Writes cross; reads are
+    // served by the rut-side mirror (the wrapper atoms hold their current
+    // value), so no read path ever needs the boa context. The flush
+    // fixed-point (stale atoms → dirty subscribers → re-layout) is
+    // entirely the engine's existing machinery: a bound Text re-renders on
+    // `rs_set_*` with zero new engine code.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_source_str", (&str,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: &str| {
         let _ = vm;
-        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(boa_engine::js_string!(v)));
+        let s: Source<Value> = h.store.bridge().decl_source(Value::str(v));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
@@ -233,30 +252,30 @@ fn install_tur_pkg(
         let _ = vm;
         h.store
             .bridge()
-            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(boa_engine::js_string!(v)))
+            .set_source(Source::<Value>::from_id(AtomId(atom as u32)), Value::str(v))
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_str: {e}")))
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_source_f64", () -> u64, move |vm: &mut rut_vm::interp::Vm| {
         let _ = vm;
-        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(0.0f64));
+        let s: Source<Value> = h.store.bridge().decl_source(Value::Num(0.0));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_f64", (u64,) -> f64, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        match h.store.read_source_scalar(AtomId(atom as u32)) {
-            Some(crate::core::edgy::reactive::ScalarRead::Num(n)) => Ok(n),
+        match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
+            Some(ScalarRead::Num(n)) => Ok(n),
             _ => Ok(0.0),
         }
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        // Reads materialize a JsValue — borrow the realm (free outside
-        // flush iterations; see the pump's drain ordering).
-        match h.store.read_source_scalar(AtomId(atom as u32)) {
-            Some(crate::core::edgy::reactive::ScalarRead::Str(s)) => Ok(s),
+        // Boa-free: the KV holds native Values, so the read never touches
+        // the realm.
+        match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
+            Some(ScalarRead::Str(s)) => Ok(s),
             _ => Ok(String::new()),
         }
     });
@@ -265,7 +284,7 @@ fn install_tur_pkg(
         let _ = vm;
         h.store
             .bridge()
-            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(v))
+            .set_source(Source::<Value>::from_id(AtomId(atom as u32)), Value::Num(v))
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_f64: {e}")))
     });
     // a Text bound to a str atom — re-renders when the atom changes
@@ -306,7 +325,7 @@ fn install_tur_pkg(
             h2.click_seq.set(n);
             h2.pending_calls.borrow_mut().push((cb.clone(), id_a, id_b, n as f64));
             dirty.set(true);
-            Ok(JsValue::undefined())
+            Ok(crate::core::edgy::Value::Nil)
         });
         let view = Rc::new(PointerInteractView {
             behavior: None,
@@ -426,14 +445,14 @@ fn install_tur_pkg(
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_source_bool", (bool,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: bool| {
         let _ = vm;
-        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(v));
+        let s: Source<Value> = h.store.bridge().decl_source(Value::Bool(v));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_bool", (u64,) -> bool, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        match h.store.read_source_scalar(AtomId(atom as u32)) {
-            Some(crate::core::edgy::reactive::ScalarRead::Bool(b)) => Ok(b),
+        match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
+            Some(ScalarRead::Bool(b)) => Ok(b),
             _ => Ok(false),
         }
     });
@@ -442,8 +461,89 @@ fn install_tur_pkg(
         let _ = vm;
         h.store
             .bridge()
-            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(v))
+            .set_source(Source::<Value>::from_id(AtomId(atom as u32)), Value::Bool(v))
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_bool: {e}")))
+    });
+
+    // ---- structured values (Phase 2-B5) ---------------------------------
+    //
+    // List / map atoms over the native `Value` KV, addressed through
+    // opaque value handles (`RutValue`). This is the minimal round-trip
+    // proof the phase asks for — breadth (typed rut lists/maps, records,
+    // iteration) is the next phase. Build in-place on an opaque handle,
+    // then bind whole values to atoms:
+    //
+    //   let v = rs_list_new();  rs_list_push(v, "a");
+    //   let atom = rs_source_value(v);   rs_set_value(atom, rs_list_new());
+    //   let got = rs_get_value(atom);    rs_value_len(got)
+    rut_vm::pkg_fn!(pkg, "rs_list_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+        Ok(Opaque::alloc(vm, RutValue(Value::list(Vec::new())))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "rs_list_push", (Opaque<RutValue>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, item: &str| {
+        v.with_mut(vm, |_vm, v| {
+            let items = match &v.0 {
+                Value::List(items) => items.as_ref().clone(),
+                _ => Vec::new(),
+            };
+            v.0 = Value::list(items.into_iter().chain(std::iter::once(Value::str(item))));
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "rs_map_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+        Ok(Opaque::alloc(vm, RutValue(Value::map(Vec::<(Rc<str>, Value)>::new())))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "rs_map_set", (Opaque<RutValue>, &str, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str, item: &str| {
+        v.with_mut(vm, |_vm, v| {
+            let mut entries = match &v.0 {
+                Value::Map(entries) => entries.as_ref().clone(),
+                _ => std::collections::BTreeMap::new(),
+            };
+            entries.insert(std::rc::Rc::from(key), Value::str(item));
+            v.0 = Value::Map(std::rc::Rc::new(entries));
+        })?;
+        Ok(())
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_source_value", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
+        let value = v.with(|v| v.0.clone())?;
+        let s: Source<Value> = h.store.bridge().decl_source(value);
+        Ok(s.id().0 as u64)
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_value", (u64, Opaque<RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, v: Opaque<RutValue>| {
+        let value = v.with(|v| v.0.clone())?;
+        h.store
+            .bridge()
+            .set_source(Source::<Value>::from_id(AtomId(atom as u32)), value)
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_value: {e}")))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_get_value", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+        // Boa-free: the native KV serves the fresh slot without the realm.
+        let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
+        Ok(Opaque::alloc(vm, RutValue(value))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "rs_value_len", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
+        let len = v.with(|v| match &v.0 {
+            Value::List(items) => items.len() as u64,
+            Value::Map(entries) => entries.len() as u64,
+            _ => 0,
+        })?;
+        Ok(len)
+    });
+    rut_vm::pkg_fn!(pkg, "rs_value_item", (Opaque<RutValue>, u64) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, index: u64| {
+        let item = v.with(|v| match &v.0 {
+            Value::List(items) => items
+                .get(index as usize)
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            _ => None,
+        })?;
+        Ok(item.unwrap_or_default())
+    });
+    rut_vm::pkg_fn!(pkg, "rs_value_get", (Opaque<RutValue>, &str) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str| {
+        let item = v.with(|v| v.0.get(key).and_then(Value::as_str).map(str::to_string))?;
+        Ok(item.unwrap_or_default())
     });
 
     hosts.install_host_pkg(ctx, pkg);

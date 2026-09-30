@@ -3,24 +3,30 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
+use crate::core::edgy::value::{FromValue, Value};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{FromJs, JsViewFactory, Val, View, ViewCx, ViewFactory, read_val};
+use crate::core::view::{JsViewFactory, Val, View, ViewCx, ViewFactory, read_val};
 
 // ---------------------------------------------------------------------------
-// SwitchKey — a raw JS comparison key. Stores the original `JsValue` verbatim
-// so any JS value can be a case key. Equality is `JsValue`'s derived
-// `PartialEq` (`same_value_zero`), which matches JS `switch` semantics and
-// needs no boa `Context`.
+// SwitchKey — a raw comparison key. Stores the original value verbatim as a
+// native `Value` (opaque keys keep their JS handle identity) so any value can
+// be a case key. Equality is `Value`'s `PartialEq` (primitives by value,
+// opaque handles by identity — `same_value_zero` semantics), which matches
+// JS `switch` and needs no boa `Context`.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SwitchKey(pub JsValue);
+pub struct SwitchKey(pub Value);
 
-impl FromJs for SwitchKey {
-    fn from_js(v: &JsValue) -> Result<Self, boa_engine::JsError> {
+/// Native-KV decode: the key is held verbatim as a `Value` (opaque keys
+/// keep their handle identity; see `edgy::Value`). Comparison rides
+/// `Value`'s `PartialEq` (`same_value_zero` semantics — primitives by
+/// value, opaque handles by identity), which matches JS `switch`.
+impl FromValue for SwitchKey {
+    fn from_value(v: &Value) -> Result<Self, boa_engine::JsError> {
         Ok(SwitchKey(v.clone()))
     }
 }
@@ -236,7 +242,7 @@ fn prop_cases(
         let Some(f) = child_val.as_object().and_then(JsFunction::from_object) else {
             continue;
         };
-        out.push((SwitchKey(key_val), Rc::new(JsViewFactory(f))));
+        out.push((SwitchKey(Value::from_js(&key_val, ctx)), Rc::new(JsViewFactory(f))));
     }
     out
 }
@@ -247,7 +253,7 @@ impl SwitchView {
             let mut p = JsProps::new(props, ctx);
             (
                 p.val::<SwitchKey>("value")
-                    .unwrap_or_else(|| Val::Static(SwitchKey(JsValue::undefined()))),
+                    .unwrap_or_else(|| Val::Static(SwitchKey(Value::Nil))),
                 p.factory("fallback"),
                 p.query_key("queryKey"),
             )

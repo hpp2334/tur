@@ -55,3 +55,20 @@ impl crate::core::js_runtime::js_value::FromJs for ImageResourceRef {
         ))
     }
 }
+
+impl crate::core::edgy::FromValue for ImageResourceRef {
+    fn from_value(v: &crate::core::edgy::Value) -> Result<Self, JsError> {
+        if let Some(n) = v.as_num() {
+            return Ok(ImageResourceRef(n as u64));
+        }
+        if let Some(obj) = v.as_opaque().and_then(JsValue::as_object)
+            && let Some(handle) = obj.downcast_ref::<ImageResourceHandle>()
+        {
+            return Ok(ImageResourceRef(handle.0.as_u64()));
+        }
+        Err(type_error(
+            "an image resource id (number) or an ImageResourceHandle \
+             (from createImageResource / createSvgResource / imageResourceHandle)",
+        ))
+    }
+}

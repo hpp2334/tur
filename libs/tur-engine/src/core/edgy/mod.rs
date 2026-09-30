@@ -7,7 +7,10 @@
 pub mod bridge;
 pub mod mutation;
 pub mod reactive;
+pub mod value;
 pub(crate) mod watch;
+
+pub use value::{FromValue, Value};
 
 use crate::core::js_runtime::helpers::FnEntry;
 

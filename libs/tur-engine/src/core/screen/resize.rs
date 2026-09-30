@@ -1,6 +1,5 @@
-use boa_engine::{Context, JsObject, JsValue, js_string};
-
 use crate::core::edgy::reactive::{ReactiveBridgeStore, Source};
+use crate::core::edgy::value::Value;
 use crate::core::platform::PlatformEvent;
 use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -21,13 +20,13 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 pub struct ResizeSubsystem {
     /// The `viewportSize$` backing source (the public handle is a derive
     /// over this).
-    backing: Source<JsValue>,
+    backing: Source<Value>,
     /// The instance store's write rail.
     bridge: ReactiveBridgeStore,
     /// Last `(width, height)` pushed into `backing` — guards against
-    /// spurious stale marking (`set_source` compares `JsValue`s by object
-    /// identity, so a fresh `{w,h}` object would otherwise dirty on every
-    /// push).
+    /// spurious stale marking (each resize builds a fresh `Value::Map`, and
+    /// maps compare by reference identity, so without this guard every
+    /// resize would dirty the atom even at an unchanged size).
     last: (f64, f64),
 }
 
@@ -37,7 +36,7 @@ impl ResizeSubsystem {
     /// builder mints it from the real viewport), so a first resize to that
     /// same size dedups — the atom already holds the value.
     pub(crate) fn new(
-        backing: Source<JsValue>,
+        backing: Source<Value>,
         bridge: ReactiveBridgeStore,
         initial: (f64, f64),
     ) -> Self {
@@ -49,14 +48,14 @@ impl ResizeSubsystem {
     }
 }
 
-/// Build the `{width, height}` JS object (CSS pixels) — the value shape of
+/// Build the `{width, height}` native map (CSS pixels) — the value shape of
 /// the `viewportSize$` atom (its seed in the engine builder, its per-resize
-/// payload here).
-pub(crate) fn viewport_size_value(width: f64, height: f64, boa: &mut Context) -> JsValue {
-    let obj = JsObject::with_object_proto(boa.intrinsics());
-    let _ = obj.create_data_property(js_string!("width"), JsValue::from(width), boa);
-    let _ = obj.create_data_property(js_string!("height"), JsValue::from(height), boa);
-    obj.into()
+/// payload here). Realm-free: the native-KV substrate holds the value.
+pub(crate) fn viewport_size_value(width: f64, height: f64) -> Value {
+    Value::map([
+        ("width", Value::Num(width)),
+        ("height", Value::Num(height)),
+    ])
 }
 
 impl Subsystem for ResizeSubsystem {
@@ -83,25 +82,17 @@ impl Subsystem for ResizeSubsystem {
         // via `last`. Pre-mount the tree is simply rootless —
         // `mark_root_dirty` is a no-op then.
         //
-        // Realm-free when the instance has no JS realm: the atom's value
-        // shape is a `{width, height}` JS object, which needs the realm to
-        // materialize. A realm-free instance has no JS readers for the atom
-        // (rut atoms are addressed by raw id; nothing hands `viewportSize$`
-        // across), so the write skips with a warning and the screen state
-        // below still updates.
+        // Realm-free: the atom's value is a native map, so the write never
+        // touches the JS realm (a rut-only instance publishes resizes too).
         if size != self.last {
             self.last = size;
-            if let Some(boa) = cx.boa.as_deref_mut() {
-                let value = viewport_size_value(size.0, size.1, boa);
-                // A resize can never be a watch loop (it originates from the
-                // platform event queue, never inside a watcher callback
-                // delivery), so an error here would be an engine invariant
-                // violation — log, don't crash.
-                if let Err(e) = self.bridge.set_source(self.backing, value) {
-                    tracing::error!("viewportSize$ sync failed: {e}");
-                }
-            } else {
-                tracing::warn!("viewportSize$ resize skipped: no JS realm (rut-only instance)");
+            let value = viewport_size_value(size.0, size.1);
+            // A resize can never be a watch loop (it originates from the
+            // platform event queue, never inside a watcher callback
+            // delivery), so an error here would be an engine invariant
+            // violation — log, don't crash.
+            if let Err(e) = self.bridge.set_source(self.backing, value) {
+                tracing::error!("viewportSize$ sync failed: {e}");
             }
         }
         cx.element_tree.borrow_mut().mark_root_dirty();

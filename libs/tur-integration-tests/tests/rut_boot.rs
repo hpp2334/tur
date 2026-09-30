@@ -367,6 +367,92 @@ fn rut_scroll_view_with_styled_rows() {
     );
 }
 
+/// The Phase-2 (B5) structured-value gate: list / map atoms over the
+/// native-KV substrate, round-tripped through rut entries — a list atom of
+/// strings drives the bound Text via a rut-side string join, and a push
+/// reads the whole value back, rebuilds it, writes it, and re-joins. No JS
+/// realm anywhere: every row speaks native `Value`s.
+const LIST_MAP_RUT: &str = r#"
+use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_set_str, rs_source_str, rs_source_value, rs_value_get, rs_value_item, rs_value_len };
+
+// The string join: read the list atom back through rut entries
+// (len + item) and fold it into the bound label's str atom.
+fn join_into(items: u64, label: u64) {
+    let v = rs_get_value(items);
+    let n = rs_value_len(v);
+    let mut joined = "";
+    for (let i = 0; i < n as i32; i += 1) {
+        joined = f"{joined}|{rs_value_item(v, i as u64)}";
+    }
+    rs_set_str(label, joined);
+}
+
+entry fn start() -> u64 {
+    let list = rs_list_new();
+    rs_list_push(list, "alpha");
+    rs_list_push(list, "beta");
+    let items = rs_source_value(list);
+
+    let map = rs_map_new();
+    rs_map_set(map, "role", "demo");
+    let meta = rs_source_value(map);
+
+    let label = rs_source_str("");
+    join_into(items, label);
+    // The map round-trips through entries too: read a key back and append it.
+    let m = rs_get_value(meta);
+    let role = rs_value_get(m, "role");
+    let cur = rs_get_str(label);
+    rs_set_str(label, f"{cur} ({role})");
+
+    let col = el_column();
+    el_child(col, el_text_bound(label));
+    el_child(col, el_button(items, label, "ts_push", "push"));
+    mount(el_build(col));
+    return items;
+}
+
+entry fn ts_push(items: u64, label: u64, _n: f64) {
+    // Set/read round trip: read the atom's list back, rebuild the whole
+    // value with one more item, write it, re-join into the label.
+    let v = rs_get_value(items);
+    let n = rs_value_len(v);
+    let fresh = rs_list_new();
+    for (let i = 0; i < n as i32; i += 1) {
+        rs_list_push(fresh, rs_value_item(v, i as u64));
+    }
+    rs_list_push(fresh, "gamma");
+    rs_set_value(items, fresh);
+    join_into(items, label);
+}
+"#;
+
+#[test]
+fn rut_list_map_atoms_round_trip() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(LIST_MAP_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        rut_bound_text(&app),
+        "|alpha|beta (demo)",
+        "list join + map get render through the native-KV atoms"
+    );
+
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let button = app.dev_tool_get_element(column.children[1]).unwrap();
+    let (bx, by) = button.absolute;
+    let (bw, bh) = button.size;
+
+    app.click(bx + bw / 2.0, by + bh / 2.0);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        rut_bound_text(&app),
+        "|alpha|beta|gamma",
+        "the push rebuilt the list value and the join re-rendered the bound text"
+    );
+}
+
 #[test]
 fn rut_reload_runs_stop_and_replaces_root() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

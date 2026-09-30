@@ -16,6 +16,7 @@ use boa_engine::{Context, JsResult, JsValue, js_string};
 
 use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, mutation_from_js};
 use crate::core::edgy::reactive::AnyReadable;
+use crate::core::edgy::value::FromValue;
 use crate::core::js_runtime::js_value::{FromJs, type_error};
 use crate::core::view::{JsViewFactory, Val, View, ViewFactory, extract_view, val_from_js};
 
@@ -54,9 +55,9 @@ impl<'a> JsProps<'a> {
 
     /// Read a `Val<T>` prop (reactive-or-static). Returns `None` if the key is
     /// absent/null/undefined or the value can't be decoded.
-    pub fn val<T: FromJs + Clone + 'static>(&mut self, key: &str) -> Option<Val<T>> {
+    pub fn val<T: FromValue + Clone + 'static>(&mut self, key: &str) -> Option<Val<T>> {
         let v = self.obj.get(js_string!(key), self.ctx).ok()?;
-        val_from_js(&v)
+        val_from_js(&v, self.ctx)
     }
 
     /// Read a `Vec<String>` prop (e.g. `queryKey`). Returns `None` if absent or

@@ -5,11 +5,12 @@ use boa_engine::{Context, JsValue};
 
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::{ReactiveReadStore, Readable};
+use crate::core::edgy::value::FromValue;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{FromJs, Val};
+use crate::core::view::Val;
 
 // ---------------------------------------------------------------------------
 // ViewCx — the build capability a `View::build` impl needs to mount itself
@@ -99,22 +100,22 @@ pub trait ViewCx {
 // ---------------------------------------------------------------------------
 
 /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom is
-/// lazily read from the store (untracked). The realm borrow is taken from the
-/// context — fresh source slots (the realm-free rail's atoms) read without
-/// it; stale JS-authored deriveds degrade when absent.
-pub fn read_val<T: FromJs + Clone + 'static>(cx: &mut dyn ViewCx, val: &Val<T>) -> Option<T> {
+/// lazily read from the store (untracked) as a native `Value` and decoded via
+/// [`FromValue`] — no JS realm needed. The realm borrow is still taken from
+/// the context for the JS-facing helpers (`read_atom_raw`).
+pub fn read_val<T: FromValue + Clone + 'static>(cx: &mut dyn ViewCx, val: &Val<T>) -> Option<T> {
     match val {
         Val::Static(t) => Some(t.clone()),
         Val::Reactive(readable) => {
             let store = cx.store_read_only();
-            let js = store.read(*readable, cx.realm());
-            T::from_js(&js).ok()
+            let value = store.read(*readable, cx.realm());
+            T::from_value(&value).ok()
         }
     }
 }
 
 /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
-pub fn read_val_opt<T: FromJs + Clone + 'static>(
+pub fn read_val_opt<T: FromValue + Clone + 'static>(
     cx: &mut dyn ViewCx,
     val: Option<&Val<T>>,
 ) -> Option<T> {
@@ -122,10 +123,23 @@ pub fn read_val_opt<T: FromJs + Clone + 'static>(
 }
 
 /// Read an atom's current value as a raw `JsValue` (untracked), via the
-/// build context's reactive store.
+/// build context's reactive store. The KV holds native `Value`s, so the
+/// `Value → JsValue` conversion happens here, for the JS-shaped consumers
+/// (JS item builders, controller downcasts). Without a realm the conversion
+/// degrades to `undefined` with a warning — JS-authored atoms cannot exist
+/// on a realm-free instance.
 pub fn read_atom_raw<T>(cx: &mut dyn ViewCx, readable: Readable<T>) -> JsValue {
     let store = cx.store_read_only();
-    store.read(readable, cx.realm())
+    let value = store.read(readable, cx.realm());
+    match cx.realm() {
+        Some(boa) => value.to_js(boa),
+        None => {
+            if !value.is_nil() {
+                tracing::warn!("read_atom_raw: atom value needs the JS realm to surface, but none exists");
+            }
+            JsValue::undefined()
+        }
+    }
 }
 
 /// Borrow the shared handles a controller needs, from a `TurInstanceContext`.

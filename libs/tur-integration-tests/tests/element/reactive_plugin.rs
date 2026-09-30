@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use boa_engine::{JsArgs, JsValue};
+use tur_engine::core::edgy::Value;
 use tur_engine::core::edgy::reactive::{ReactiveBridgeStore, Readable, Source};
 use tur_engine::core::js_runtime::js_value::IntoJs;
 use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
@@ -28,7 +28,7 @@ impl Plugin for MintSourcePlugin {
         // The atom mint is realm-free; the JS handle + global are
         // realm-bound — deferred to realm construction.
         let bridge = ctx.reactive();
-        let s: Source<JsValue> = bridge.decl_source(JsValue::new(42.0));
+        let s: Source<Value> = bridge.decl_source(Value::Num(42.0));
         ctx.defer(move |cx| {
             let js_handle = s.into_js(cx.boa_mut());
             cx.register_global("rustSource", js_handle);
@@ -85,8 +85,8 @@ struct BuildDerivePlugin;
 impl Plugin for BuildDerivePlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let a: Source<JsValue> = bridge.decl_source(JsValue::new(10.0));
-        let b: Source<JsValue> = bridge.decl_source(JsValue::new(20.0));
+        let a: Source<Value> = bridge.decl_source(Value::Num(10.0));
+        let b: Source<Value> = bridge.decl_source(Value::Num(20.0));
 
         // Rust-native derive that reads both sources. Reads flow through the
         // same `ReactiveCore::read` path as JS closures, so auto-dependency
@@ -94,10 +94,10 @@ impl Plugin for BuildDerivePlugin {
         let sum = bridge.build_derive(move |read, mut boa| {
             let av = read
                 .read(Readable::from(a), boa.as_deref_mut())
-                .as_number()
+                .as_num()
                 .unwrap_or(0.0);
-            let bv = read.read(Readable::from(b), boa).as_number().unwrap_or(0.0);
-            Ok(JsValue::new(av + bv))
+            let bv = read.read(Readable::from(b), boa).as_num().unwrap_or(0.0);
+            Ok(Value::Num(av + bv))
         });
 
         // JS handles + globals are realm-bound — deferred to realm
@@ -116,7 +116,7 @@ impl Plugin for BuildDerivePlugin {
     }
 }
 
-/// `build_derive(|read, ctx| ...)` produces a `Derived<JsValue>` whose
+/// `build_derive(|read, ctx| ...)` produces a `Derived<Value>` whose
 /// recompute runs the Rust closure (no `{get, set}` JsObject round-trip).
 #[test]
 fn plugin_build_derive_recomputes_via_rust_closure() {
@@ -186,7 +186,7 @@ struct BuildMutatePlugin;
 impl Plugin for BuildMutatePlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let flag: Source<JsValue> = bridge.decl_source(JsValue::new(false));
+        let flag: Source<Value> = bridge.decl_source(Value::Bool(false));
 
         // The closure writes through the bridge face it RECEIVES (`b`), which
         // is bound to the invoking store — so reads/writes land in the same
@@ -194,12 +194,9 @@ impl Plugin for BuildMutatePlugin {
         // bridge instead would pin the engine store, and per-store
         // materialization means JS would never see the write.
         let toggle = bridge.build_mutate(move |b, _args, boa| {
-            let current = b
-                .read(Readable::from(flag), boa)
-                .as_boolean()
-                .unwrap_or(false);
-            b.set_source(flag, JsValue::new(!current))?;
-            Ok(JsValue::undefined())
+            let current = b.read(Readable::from(flag), boa).as_bool().unwrap_or(false);
+            b.set_source(flag, Value::Bool(!current))?;
+            Ok(Value::Nil)
         });
 
         // JS handles + globals are realm-bound — deferred to realm
@@ -257,15 +254,15 @@ struct BuildMutateWithArgsPlugin;
 impl Plugin for BuildMutateWithArgsPlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let sink: Source<JsValue> = bridge.decl_source(JsValue::undefined());
+        let sink: Source<Value> = bridge.decl_source(Value::Nil);
 
         // Write through the received face (the invoking store) — see
         // BuildMutatePlugin for why the register-time bridge must not be
         // captured.
         let write_msg = bridge.build_mutate(move |b, args, _boa| {
-            let arg = args.get_or_undefined(0).clone();
+            let arg = args.first().cloned().unwrap_or(Value::Nil);
             b.set_source(sink, arg)?;
-            Ok(JsValue::undefined())
+            Ok(Value::Nil)
         });
 
         // JS handles + globals are realm-bound — deferred to realm
@@ -309,7 +306,7 @@ fn plugin_build_mutate_receives_user_args_verbatim() {
 // ---------------------------------------------------------------------------
 
 struct CounterSubsystem {
-    source: Source<JsValue>,
+    source: Source<Value>,
     bridge: ReactiveBridgeStore,
     last_frame: u64,
     tick: u32,
@@ -332,7 +329,7 @@ impl Subsystem for CounterSubsystem {
         // (a derive whose closure reads the backing via the engine face),
         // exactly like `viewportSize$`.
         self.bridge
-            .set_source(self.source, JsValue::new(self.tick as f64))
+            .set_source(self.source, Value::Num(self.tick as f64))
             .ok();
     }
 }
@@ -341,7 +338,7 @@ struct SubsystemTickPlugin;
 impl Plugin for SubsystemTickPlugin {
     fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
         let bridge = ctx.reactive();
-        let counter: Source<JsValue> = bridge.decl_source(JsValue::new(0.0));
+        let counter: Source<Value> = bridge.decl_source(Value::Num(0.0));
         // The public handle: a derive reading the backing through the
         // ENGINE store's read face (captured), not the reading store's —
         // so every store of the instance resolves the same live value.
@@ -414,11 +411,11 @@ impl Plugin for SelfReadDerivePlugin {
         let bridge = ctx.reactive();
         // Chicken-and-egg: the closure needs its own handle, so we hand it a
         // cell filled immediately after `build_derive` returns.
-        let handle: Rc<RefCell<Option<Derived<JsValue>>>> = Rc::new(RefCell::new(None));
+        let handle: Rc<RefCell<Option<Derived<Value>>>> = Rc::new(RefCell::new(None));
         let handle_for_closure = handle.clone();
         let d = bridge.build_derive(move |read, boa| {
             let Some(d) = handle_for_closure.borrow().clone() else {
-                return Ok(JsValue::undefined());
+                return Ok(Value::Nil);
             };
             Ok(read.read(Readable::from(d), boa))
         });

@@ -10,9 +10,10 @@
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
-use boa_engine::{Context, JsResult, JsValue, js_string};
+use boa_engine::{Context, JsResult, JsValue};
 use vello_common::kurbo::{Affine, Point};
 
+use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::js_runtime::JsProps;
@@ -32,10 +33,9 @@ pub struct FollowerView {
     pub(super) target_anchor: Val<Alignment>,
     pub(super) follower_anchor: Val<Alignment>,
     /// `targetOffset` is a `{ x, y }` object (Flutter's `offset`), held as a
-    /// `Val<JsValue>` because the object can only be field-read WITH a `Context`
-    /// (`FromJs` is context-free by design). Resolved to an `Offset` during
-    /// layout and cached on the element for the subsystem to read.
-    pub(super) target_offset: Option<Val<JsValue>>,
+    /// `Val<Value>` — the native-KV substrate decodes it as a plain data
+    /// `Map`, so the field read at layout time is realm-free.
+    pub(super) target_offset: Option<Val<Value>>,
     pub(super) show_when_unlinked: bool,
     pub(super) child: Option<Rc<dyn View>>,
 }
@@ -146,33 +146,21 @@ impl ElementLayout for FollowerElement {
         cx: &mut LayoutContext,
     ) -> Size {
         // Resolve reactive props and cache for the subsystem. `targetOffset`
-        // is a `{ x, y }` object held as `Val<JsValue>` — decode it with the
-        // layout JS face (object field access needs a `Context`).
+        // is a `{ x, y }` map held as `Val<Value>` — field-read off the
+        // native map, no realm needed.
         self.resolved_target_anchor = cx
             .read_val(&self.view.target_anchor)
             .unwrap_or(Alignment::TopLeft);
         self.resolved_follower_anchor = cx
             .read_val(&self.view.follower_anchor)
             .unwrap_or(Alignment::TopLeft);
-        let offset_js: Option<JsValue> = self
+        let offset_value: Option<Value> = self
             .view
             .target_offset
             .as_ref()
             .and_then(|v| cx.read_val(v));
-        self.resolved_target_offset = match &offset_js {
-            // Field access needs the realm (JS-shaped value); a realm-free
-            // instance cannot hold this prop (it arrives from JS) — degrade.
-            Some(v) => match cx.js.realm_mut() {
-                Some(boa) => decode_offset(v, boa),
-                None => {
-                    tracing::warn!(
-                        "CompositedTransformFollower offset decode skipped: no JS realm"
-                    );
-                    Offset::ZERO
-                }
-            },
-            None => Offset::ZERO,
-        };
+        self.resolved_target_offset =
+            offset_value.as_ref().map(decode_offset).unwrap_or(Offset::ZERO);
 
         // The follower's own offset is assigned by the subsystem each flush
         // (it tracks the target); here we only size + place the child.
@@ -236,9 +224,9 @@ impl FollowerView {
         let show_when_unlinked = p.opt::<bool>("showWhenUnlinked").unwrap_or(true);
         let child = p.child("child");
         // `targetOffset` is a static `{ x, y }` object or a `Val` of one; held
-        // as a raw `Val<JsValue>` and field-decoded at layout time (see
+        // as a raw `Val<Value>` and field-decoded at layout time (see
         // `perform_layout` / `decode_offset`).
-        let target_offset = p.val::<JsValue>("targetOffset");
+        let target_offset = p.val::<Value>("targetOffset");
         Some(FollowerView {
             link: Some(link),
             target_anchor,
@@ -250,23 +238,11 @@ impl FollowerView {
     }
 }
 
-/// Decode a `{ x, y }` JS object into an `Offset`. Requires a `Context`
-/// (object field access), so this runs at layout time via the JS face rather
-/// than in the context-free `FromJs` path.
-fn decode_offset(v: &JsValue, ctx: &mut Context) -> Offset {
-    let Some(obj) = v.as_object() else {
-        return Offset::ZERO;
-    };
-    let x = obj
-        .get(js_string!("x"), ctx)
-        .ok()
-        .and_then(|n| n.as_number())
-        .unwrap_or(0.0);
-    let y = obj
-        .get(js_string!("y"), ctx)
-        .ok()
-        .and_then(|n| n.as_number())
-        .unwrap_or(0.0);
+/// Field-read a `{ x, y }` native map into an `Offset`. Realm-free: the
+/// prop rides the native-KV substrate as a `Value::Map`.
+fn decode_offset(v: &Value) -> Offset {
+    let x = v.get("x").and_then(Value::as_num).unwrap_or(0.0);
+    let y = v.get("y").and_then(Value::as_num).unwrap_or(0.0);
     Offset::new(x, y)
 }
 
