@@ -21,6 +21,11 @@ webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 [dependencies]
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
+# rut scripting engine (github.com/hpp2334/rut) — the boa replacement seam
+rut-core = { workspace = true }
+rut-parser = { workspace = true }
+rut-driver = { workspace = true }
+rut-vm = { workspace = true }
 vello_hybrid = { workspace = true }
 vello_common = { workspace = true }
 glifo = { workspace = true }

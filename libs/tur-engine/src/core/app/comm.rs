@@ -87,6 +87,15 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
+    /// Parse + compile + boot a **rut** module and invoke its `entry fn
+    /// start()` (the rut module lifecycle contract: `entry fn stop()` —
+    /// when present — runs before the next load and at destroy). Parallel
+    /// rail to [`WorkerMsg::LoadModule`] while the rut seam lands
+    /// (Phase 1 of the boa→rut migration); the JS rail stays the default.
+    LoadRutModule {
+        source: Arc<str>,
+        reply: ReplySender<Result<(), ModuleError>>,
+    },
     /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
     /// on the worker, converts the result to its display string, and replies.
     /// Production code uses `LoadModule`; this is for tests
@@ -295,6 +304,10 @@ impl fmt::Debug for WorkerMsg {
             Self::Wake => write!(f, "Wake"),
             Self::LoadModule { source, .. } => f
                 .debug_struct("LoadModule")
+                .field("source_len", &source.len())
+                .finish_non_exhaustive(),
+            Self::LoadRutModule { source, .. } => f
+                .debug_struct("LoadRutModule")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
             Self::EvalJs { source, .. } => f

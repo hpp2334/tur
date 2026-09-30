@@ -77,6 +77,9 @@ pub(crate) struct WorkerBackend {
     /// before the next `load_module` evaluates and at destroy. Worker-side
     /// only — a `JsFunction` is `!Send`, matching the rest of the state.
     pending_cleanup: RefCell<Option<JsFunction>>,
+    /// The rut runtime (Phase 1 of the boa→rut migration): `Some` while a
+    /// rut module is loaded. Worker-side only (`Vm` is `!Send`).
+    rut: RefCell<Option<crate::core::rut_runtime::RutRuntime>>,
 }
 
 impl WorkerBackend {
@@ -92,6 +95,7 @@ impl WorkerBackend {
             executor,
             start_arg: RefCell::new(start_arg),
             pending_cleanup: RefCell::new(None),
+            rut: RefCell::new(None),
         }
     }
 
@@ -141,6 +145,44 @@ impl WorkerBackend {
         // (root-less until then).
         self.internal
             .drain_teardown_lifecycle(&mut self.boa_context.borrow_mut());
+    }
+
+    /// The rut half of the module lifecycle: best-effort `entry fn stop()`.
+    /// (Root-tree teardown is shared — the auto-clear below covers both
+    /// rails.)
+    fn teardown_rut_module(&self) {
+        if let Some(rut) = self.rut.borrow_mut().as_mut() {
+            rut.stop();
+        }
+        *self.rut.borrow_mut() = None;
+    }
+
+    /// Parse + compile + boot a rut module and invoke its `entry fn start()`
+    /// (see [`crate::core::rut_runtime`]). The parse-first contract: a
+    /// broken module fails before any teardown runs.
+    fn load_rut_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+        crate::core::rut_runtime::RutRuntime::parse_check(source)?;
+
+        // Module lifecycle contract (both rails): run the previous module's
+        // cleanup + clear its leftover root tree before the new module runs.
+        self.teardown_current_module();
+        self.teardown_rut_module();
+
+        let js = &self.internal.js_context;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(
+            source,
+            js.element_tree.clone(),
+        )?;
+        // Apply the root the module's `start` stashed via `tur::mount` —
+        // outside the VM, with the caller's boa borrow (rut rows never race
+        // the flush's borrow).
+        let mut boa = self.boa_context.borrow_mut();
+        rut.apply_root(js.clone(), &mut boa)
+            .map_err(ModuleError::Eval)?;
+        drop(boa);
+        js.set_dirty();
+        *self.rut.borrow_mut() = Some(rut);
+        Ok(())
     }
 
     fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -252,6 +294,11 @@ impl WorkerBackend {
                 self.wake_if_dirty();
                 reply.send(res);
             }
+            WorkerMsg::LoadRutModule { source, reply } => {
+                let res = self.load_rut_module_inner(&source);
+                self.wake_if_dirty();
+                reply.send(res);
+            }
             WorkerMsg::EvalJs { source, reply } => {
                 // Test-only synchronous JS evaluation. Drains promise jobs
                 // + completions so `await`-free side effects settle before
@@ -306,8 +353,10 @@ impl WorkerBackend {
             }
             WorkerMsg::Destroy { reply } => {
                 // Module lifecycle contract: run the loaded module's
-                // cleanup (best-effort) before the worker tears down.
+                // cleanup (best-effort) before the worker tears down —
+                // both rails.
                 self.teardown_current_module();
+                self.teardown_rut_module();
                 reply.send(());
             }
         }
@@ -317,6 +366,12 @@ impl WorkerBackend {
         // `Wake` is a no-op above; flush is driven here so the outcome can
         // be returned to the worker_loop, which then ships any pending
         // render batch.
+        //
+        // The rut VM drains FIRST — outside the boa borrow (rut rows must
+        // never run while flush holds it; see `core::rut_runtime`).
+        if let Some(rut) = self.rut.borrow_mut().as_mut() {
+            rut.run_ready();
+        }
         let mut boa = self.boa_context.borrow_mut();
         self.internal.flush(&mut boa)
     }
@@ -951,6 +1006,18 @@ impl HostBackend {
         let source = source.into();
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
         self.rpc(|tx| WorkerMsg::LoadModule { source, reply: tx })
+            .await
+    }
+
+    /// Rut-rail module load (Phase 1 of the boa→rut migration) — the RPC
+    /// entry behind [`TurApp::load_rut_module`].
+    pub(crate) async fn load_rut_module(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+    ) -> Result<(), ModuleError> {
+        let source = source.into();
+        tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
+        self.rpc(|tx| WorkerMsg::LoadRutModule { source, reply: tx })
             .await
     }
 

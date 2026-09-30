@@ -159,6 +159,21 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
+    /// Rut-rail module load (Phase 1 of the boa→rut migration): compile +
+    /// boot `source` as a rut module and invoke its `entry fn start()`.
+    /// Parallel rail to [`Self::load_module`] while the migration lands —
+    /// see `core::rut_runtime`.
+    pub async fn load_rut_module(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module(source)
+            .await
+            .map_err(TurError::from)
+    }
+
     /// Synchronous JS expression evaluation. Dev-tool / test-only —
     /// production code uses [`Self::load_module`]. Useful for inspecting
     /// JS-side state via `globalThis.__x = ...`.

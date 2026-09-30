@@ -1387,6 +1387,12 @@ impl TurTestApp {
         block_on(self.inner.load_module(source))
     }
 
+    /// Rut-rail module load (Phase 1 of the boa→rut migration): compile +
+    /// boot a rut module and invoke its `entry fn start()`.
+    pub fn load_rut_module(&self, source: &str) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module(source))
+    }
+
     /// Structured dev-tool snapshot of the root node, or `None` if no root
     /// is mounted (pre-first-mount / post-teardown). Children are bare ids;
     /// iterate with `dev_tool_get_element`.
