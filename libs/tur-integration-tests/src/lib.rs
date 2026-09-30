@@ -782,6 +782,51 @@ impl TurTestApp {
         Ok(())
     }
 
+    /// Load the **rut** case `name` from the shared case corpus
+    /// (`js/packages/tur-test-cases/cases/<name>/index.rut`) through the
+    /// rut rail — the Phase-4 twin of [`Self::load_bundle`].
+    ///
+    /// The corpus's per-case contract (see the corpus README): the module
+    /// declares `entry fn start()` that authors + mounts its tree, plus
+    /// probe `entry fn`s the test drives via [`Self::call_rut_entry`]
+    /// (state reads ride dev-tool tree queries / bound atoms, never a JS
+    /// realm).
+    pub fn load_rut_bundle(&mut self, name: &str) -> Result<(), TurError> {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let workspace_root = Path::new(&manifest_dir)
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("failed to resolve workspace root");
+        let path = workspace_root
+            .join("js/packages/tur-test-cases/cases")
+            .join(name)
+            .join("index.rut");
+        let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
+        self.load_rut_module(&source)?;
+        // Same quiescence drive as `load_bundle`: settle the initial render
+        // before the test starts interacting.
+        self.wait_for_timeout(Duration::ZERO);
+        Ok(())
+    }
+
+    /// Read a Text node's rendered content by query key — the rut corpus's
+    /// standard state probe (the rut twin of the `eval_js` state pokes the
+    /// JS-era fixtures used). `None` when no element carries the key.
+    pub fn query_text(&self, key: &[&str]) -> Option<String> {
+        let id = self.query_element(key)?;
+        let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+        self.with_element(id, |e| {
+            e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+                .map(|c| {
+                    c.spans()
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                })
+        })
+        .flatten()
+    }
+
     /// Direct access to the underlying `TurApp` — lets a test register extra
     /// `__tur.*` / `__turHost.*` fns (e.g. a fake `__tur.request` backed by an
     /// in-process WebDAV server) before loading a bundle.
