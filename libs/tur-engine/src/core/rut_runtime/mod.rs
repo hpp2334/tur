@@ -40,6 +40,7 @@ use rut_vm::OpaqueRef;
 
 mod collections;
 mod container;
+mod gesture;
 mod realm;
 mod text;
 
@@ -179,6 +180,8 @@ pub fn tur_decl_module() -> rut_driver::Module {
     host_funcs.extend(collections::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     // C3 — the container full surface + flag consts.
     host_funcs.extend(container::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    // C4 — gestures, keyboard, focus (intent records on the drain).
+    host_funcs.extend(gesture::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     let consts = container::decl_consts();
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -580,6 +583,8 @@ fn install_tur_pkg(
     collections::install(&mut pkg, handles);
     // C3 — container full surface + SizedBox.
     container::install(&mut pkg, handles);
+    // C4 — gestures + keyboard + focus.
+    gesture::install(&mut pkg, handles);
 
     hosts.install_host_pkg(ctx, pkg);
 }
@@ -598,6 +603,9 @@ pub struct RutHandles {
     /// The instance-owned tree handle (a cheap clone of the one the JS
     /// realm shares) — `apply_root` builds into it.
     pub element_tree: crate::core::elements::NodeTree,
+    /// The instance's focus manager — the `focus_request` row targets it
+    /// (the FocusChange flush pushes the focus/blur mutations next frame).
+    pub focus_manager: Rc<std::cell::RefCell<crate::core::focus::FocusManager>>,
     /// The root stashed by `tur::mount` during `start`, applied by the
     /// engine after the call returns (outside the VM, on the mount path).
     pub pending_root: std::cell::RefCell<Option<Rc<dyn View>>>,
@@ -635,7 +643,7 @@ pub enum Intent {
     /// `el_button`'s click: `(name, id_a, id_b, seq)` — the Phase-3 shape.
     Click { name: String, a: u64, b: u64, seq: f64 },
     /// A key event from `el_focusable`'s `onKeyDown` mutation.
-    Key { name: String, key: String, code: String, modifiers: u64, kind: u64 },
+    Key { name: String, id: u64, key: String, code: String, modifiers: u64, kind: u64 },
     /// A pointer event from `el_gesture`'s down/move/up/context-menu
     /// mutations: `(name, id, local_x, local_y, global_x, global_y, button)`.
     Pointer {
@@ -875,6 +883,7 @@ impl RutRuntime {
             store: js_ctx.store.clone(),
             dirty: js_ctx.dirty.clone(),
             element_tree: js_ctx.element_tree.clone(),
+            focus_manager: js_ctx.focus_manager.clone(),
             pending_root: std::cell::RefCell::new(None),
             pending_calls: std::cell::RefCell::new(Vec::new()),
             click_seq: std::cell::Cell::new(0),
@@ -1009,8 +1018,8 @@ impl RutRuntime {
         let mut vm = self.vm.borrow_mut();
         match intent {
             Intent::Click { name, a, b, seq } => vm.call::<_, ()>(name, (*a, *b, *seq)),
-            Intent::Key { name, key, code, modifiers, kind } => {
-                vm.call::<_, ()>(name, (key.as_str(), code.as_str(), *modifiers, *kind))
+            Intent::Key { name, id, key, code, modifiers, kind } => {
+                vm.call::<_, ()>(name, (*id, key.as_str(), code.as_str(), *modifiers, *kind))
             }
             Intent::Pointer { name, id, lx, ly, gx, gy, button } => {
                 vm.call::<_, ()>(name, (*id, *lx, *ly, *gx, *gy, *button))

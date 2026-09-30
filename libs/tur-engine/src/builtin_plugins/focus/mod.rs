@@ -9,6 +9,8 @@
 
 pub(in crate::builtin_plugins) mod focusable;
 
+pub use focusable::FocusableView;
+
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;

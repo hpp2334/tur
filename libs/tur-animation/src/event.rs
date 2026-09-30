@@ -24,11 +24,28 @@ impl IntoJsArgs for AnimationTickEvent {
     }
 }
 
+impl tur_engine::core::edgy::mutation::MutationPayload for AnimationTickEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+
+    /// Native crossing (the rut rail): the eased progress — realm-free.
+    fn to_value_args(&self) -> Vec<tur_engine::core::edgy::Value> {
+        vec![tur_engine::core::edgy::Value::Num(self.0)]
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct AnimationEndEvent;
 
 impl IntoJsArgs for AnimationEndEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         Vec::new()
+    }
+}
+
+impl tur_engine::core::edgy::mutation::MutationPayload for AnimationEndEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
     }
 }

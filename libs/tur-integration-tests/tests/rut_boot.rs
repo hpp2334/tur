@@ -802,3 +802,140 @@ fn rut_container_full_surface_and_sizedbox() {
         sized.size
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase C4 — gestures + keyboard + focus: intent-record payloads on the
+// entry rail (pointer positions, key/mods), realm-free.
+// ---------------------------------------------------------------------------
+
+/// A gesture pad and a focusable box, both reporting through the intent
+/// rail. Both ids ARE the label atom (the callbacks' first argument), so
+/// every callback appends to the same transcript.
+const GESTURE_RUT: &str = r#"
+use tur::{ el_column, el_focusable, el_gesture, el_text, el_text_bound, el_build, el_child, focus_request, mount, rs_get_str, rs_set_str, rs_source_str };
+
+entry fn start() -> u64 {
+    let label = rs_source_str("");
+
+    let pad = el_gesture(label, "g_click", "g_down", "g_move", "g_up", "g_menu", el_text("pad"));
+    let foc = el_focusable(label, "f_key", "f_focus", "f_blur", el_text("focus me"));
+
+    let col = el_column();
+    el_child(col, pad);
+    el_child(col, foc);
+    el_child(col, el_text_bound(label));
+    mount(el_build(col));
+    return label;
+}
+
+fn say(label: u64, line: str) {
+    rs_set_str(label, f"{rs_get_str(label)}|{line}");
+}
+
+entry fn g_down(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+    say(id, f"down {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
+}
+
+entry fn g_move(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+    say(id, f"move {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
+}
+
+entry fn g_up(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+    say(id, f"up {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
+}
+
+entry fn g_click(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+    say(id, f"click {lx as u64},{ly as u64} b{btn}");
+}
+
+entry fn g_menu(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+    say(id, f"menu b{btn}");
+}
+
+entry fn f_key(id: u64, key: str, code: str, mods: u64, kind: u64) {
+    say(id, f"key {key}/{code} m{mods} k{kind}");
+}
+
+entry fn f_focus(id: u64, b: u64, _n: f64) {
+    say(id, "focused");
+}
+
+entry fn f_blur(id: u64, b: u64, _n: f64) {
+    say(id, "blurred");
+}
+
+// The test drives focus programmatically: `focus_request` targets tree
+// node ids, which only exist after mount — so the node id arrives through
+// the entry rail.
+entry fn do_focus(node: u64, _x: f64) {
+    focus_request(node);
+}
+"#;
+
+#[test]
+fn rut_gesture_focus_key_payloads_realm_free() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(GESTURE_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(!app.realm_allocated(), "the C4 journey stays realm-free");
+
+    let root = app.dev_tool_element_tree().unwrap();
+    let column = app.dev_tool_get_element(root.children[0]).unwrap();
+    let pad = app.dev_tool_get_element(column.children[0]).unwrap();
+    let foc = app.dev_tool_get_element(column.children[1]).unwrap();
+
+    // Full pointer sequence over the pad: down → move → up, plus the
+    // synthesized tap-click. Local coordinates equal global minus the
+    // pad's origin; each intent carries all four numbers.
+    let (px, py) = (pad.absolute.0 + 10.0, pad.absolute.1 + 6.0);
+    app.pointer_down(px, py);
+    app.pointer_move(px + 5.0, py + 3.0);
+    app.pointer_up(px + 5.0, py + 3.0);
+    app.wait_for_timeout(Duration::ZERO);
+
+    let transcript = rut_bound_text(&app);
+    // Local coords are pad-relative; globals differ by the pad's origin
+    // (the column centers it) — pin the locals, spot-check the global
+    // offset consistency on the down intent.
+    let pad_origin = (pad.absolute.0, pad.absolute.1);
+    assert!(
+        transcript.contains("|down 10,6 g")
+            && transcript.contains(&format!(
+                "|down 10,6 g{:.0},{:.0} b0",
+                pad_origin.0 + 10.0,
+                pad_origin.1 + 6.0
+            ))
+            && transcript.contains("|move 15,9 g")
+            && transcript.contains("|up 15,9 g")
+            && transcript.contains("|click 15,9 b0"),
+        "pointer intents carried the full position record: {transcript}"
+    );
+
+    // Right-click on the pad → the context-menu intent (button 2).
+    app.right_click(px + 4.0, py + 4.0);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(
+        rut_bound_text(&app).contains("|menu b2"),
+        "the context-menu intent fired: {}",
+        rut_bound_text(&app)
+    );
+
+    // Programmatic focus (the entry rail drives `focus_request` with the
+    // focusable's tree node id), then a shifted keydown: the key record
+    // crosses (id, key, code, mods, kind) realm-free.
+    let foc_node = column.children[1].as_u64();
+    app.call_rut_entry("do_focus", foc_node, 0.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(
+        rut_bound_text(&app).contains("|focused"),
+        "the focus intent fired: {}",
+        rut_bound_text(&app)
+    );
+    app.send_key_with_modifiers("A", true, false);
+    app.wait_for_timeout(Duration::ZERO);
+    let transcript = rut_bound_text(&app);
+    assert!(
+        transcript.contains("|key A/A m1 k0"),
+        "the key payload crossed as a record: {transcript}"
+    );
+}

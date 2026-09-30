@@ -80,6 +80,12 @@ impl From<RuntimeErrorReport> for RuntimeErrorArg {
     }
 }
 
+impl crate::core::edgy::mutation::MutationPayload for RuntimeErrorArg {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+}
+
 impl IntoJsArgs for RuntimeErrorArg {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         let value = JsError::from(JsNativeError::error().with_message(self.message.clone()))

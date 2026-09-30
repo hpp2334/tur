@@ -744,9 +744,12 @@ impl TurAppInternal {
         }
         let mounted = self.js_context.element_tree.store();
         for inv in invs {
-            // Event payloads are JS-shaped (`IntoJsArgs`); they cross into
-            // the native substrate here — the store's invoke rail speaks
-            // `Value` only (Js closures convert back around the call).
+            // Event payloads cross in both shapes: native (`Value`) args
+            // need no realm (the rut rail); JS-shaped payloads convert
+            // here (the store's invoke rail speaks `Value` only — Js
+            // closures convert back around the call). Without a realm a
+            // JS-shaped payload keeps the historical degradation (empty
+            // args — the JS closure cannot exist realm-free either).
             let args: Vec<crate::core::edgy::Value> = match boa.as_deref_mut() {
                 Some(boa) => inv
                     .args
@@ -754,7 +757,7 @@ impl TurAppInternal {
                     .iter()
                     .map(|jv| crate::core::edgy::Value::from_js(jv, boa))
                     .collect(),
-                None => Vec::new(),
+                None => inv.args.to_value_args(),
             };
             // A failed invocation (e.g. a watch loop rejected a write, or user
             // code threw) must not stall the flush — log and keep draining.

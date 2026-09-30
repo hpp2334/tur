@@ -200,6 +200,23 @@ pub struct PointerInteractEvent {
     pub global: Offset,
 }
 
+impl crate::core::edgy::mutation::MutationPayload for PointerInteractEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+
+    /// Native crossing (the rut rail): `[local.x, local.y, global.x,
+    /// global.y]` — realm-free.
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
+        vec![
+            crate::core::edgy::Value::Num(self.local.x),
+            crate::core::edgy::Value::Num(self.local.y),
+            crate::core::edgy::Value::Num(self.global.x),
+            crate::core::edgy::Value::Num(self.global.y),
+        ]
+    }
+}
+
 impl IntoJsArgs for PointerInteractEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;

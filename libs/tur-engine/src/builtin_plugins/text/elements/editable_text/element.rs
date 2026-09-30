@@ -868,6 +868,12 @@ pub struct ContextMenuEvent {
     global: crate::core::layout::Offset,
 }
 
+impl crate::core::edgy::mutation::MutationPayload for ContextMenuEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+}
+
 impl IntoJsArgs for ContextMenuEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;

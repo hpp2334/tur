@@ -29,6 +29,21 @@ impl ScrollEvent {
     }
 }
 
+impl crate::core::edgy::mutation::MutationPayload for ScrollEvent {
+    fn to_js_args(&self, ctx: &mut boa_engine::Context) -> Vec<boa_engine::JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+
+    /// Native crossing (the rut rail): the scalar metrics — realm-free.
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
+        vec![
+            crate::core::edgy::Value::Num(self.offset),
+            crate::core::edgy::Value::Num(self.max_extent),
+            crate::core::edgy::Value::Num(self.viewport_dimension),
+        ]
+    }
+}
+
 impl IntoJsArgs for ScrollEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         let proto = ctx.intrinsics().constructors().object().prototype();

@@ -530,6 +530,12 @@ pub struct VisibleRangeChangeEvent {
     pub(crate) end_index: u64,
 }
 
+impl crate::core::edgy::mutation::MutationPayload for VisibleRangeChangeEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+}
+
 impl IntoJsArgs for VisibleRangeChangeEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![

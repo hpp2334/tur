@@ -1,6 +1,6 @@
 use crate::core::app::AppEvent;
 use crate::core::app::AppEventQueue;
-use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
+use crate::core::edgy::mutation::{ MutationPayload, IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
 use crate::core::element::ElementNodeId;
 use std::cell::Cell;
 
@@ -46,7 +46,7 @@ impl<'a> ElementOnWheelContext<'a> {
         });
     }
 
-    pub fn push_event<E: IntoJsArgs>(&mut self, mutation: MutationHandle<E>, event: E) {
+    pub fn push_event<E: IntoJsArgs + MutationPayload>(&mut self, mutation: MutationHandle<E>, event: E) {
         self.mutation_queue.push(mutation, event);
     }
 }

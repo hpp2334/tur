@@ -52,6 +52,45 @@ pub struct KeyupEvent {
     pub modifiers: Modifiers,
 }
 
+
+impl crate::core::edgy::mutation::MutationPayload for KeydownEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+
+    /// Native crossing (the rut rail): `[key, code, mods, kind]` —
+    /// `mods` bit0 shift / bit1 ctrl / bit2 alt / bit3 meta, kind 0 = down.
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
+        vec![
+            crate::core::edgy::Value::str(self.key.as_str()),
+            crate::core::edgy::Value::str(self.code.as_str()),
+            crate::core::edgy::Value::Num(modifiers_bits(&self.modifiers) as f64),
+            crate::core::edgy::Value::Num(0.0),
+        ]
+    }
+}
+
+impl crate::core::edgy::mutation::MutationPayload for KeyupEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        IntoJsArgs::to_js_args(self, ctx)
+    }
+
+    /// Native crossing (the rut rail): `[key, code, mods, kind]`, kind 1 = up.
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
+        vec![
+            crate::core::edgy::Value::str(self.key.as_str()),
+            crate::core::edgy::Value::str(self.code.as_str()),
+            crate::core::edgy::Value::Num(modifiers_bits(&self.modifiers) as f64),
+            crate::core::edgy::Value::Num(1.0),
+        ]
+    }
+}
+
+/// The modifier bit-pack shared by the native key crossings.
+fn modifiers_bits(m: &Modifiers) -> u64 {
+    (m.shift as u64) | ((m.ctrl as u64) << 1) | ((m.alt as u64) << 2) | ((m.meta as u64) << 3)
+}
+
 impl IntoJsArgs for KeydownEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         build_key_event_object(&self.key, &self.code, &self.modifiers, ctx)
