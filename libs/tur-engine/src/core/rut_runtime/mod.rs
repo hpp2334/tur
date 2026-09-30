@@ -16,15 +16,16 @@
 
 use std::rc::Rc;
 
-use boa_engine::Context;
+use boa_engine::{Context, JsValue};
 
 use crate::core::app::root::RootView;
+use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::Axis;
 use crate::core::view::{SharedViewCx, View, Val};
 use crate::builtin_plugins::layout::FlexView;
 use crate::builtin_plugins::text::TextView;
-use rut_core::types::{TypeId, TY_NIL, TY_OPAQUE, TY_STR};
+use rut_core::types::{TypeId, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
 
@@ -78,9 +79,14 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_column", vec![], TY_OPAQUE),
         row("el_row", vec![], TY_OPAQUE),
         row("el_text", vec![TY_STR], TY_OPAQUE),
+        row("el_text_bound", vec![TY_U64], TY_OPAQUE),
         row("el_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("el_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("mount", vec![TY_OPAQUE], TY_NIL),
+        row("rs_source_str", vec![TY_STR], TY_U64),
+        row("rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
+        row("rs_source_f64", vec![], TY_U64),
+        row("rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
     ];
     rut_driver::Module {
         namespace: Some("tur".to_string()),
@@ -159,6 +165,63 @@ fn install_tur_pkg(
         Ok(())
     });
 
+    // ---- reactive rails (Phase 2) --------------------------------------
+    //
+    // Atoms are the engine's edgy store (`core::edgy`) — the SAME KV the
+    // JS realm and the element tree use — addressed by raw `AtomId` as
+    // u64. Writes cross; reads are served by the rut-side mirror (the
+    // wrapper atoms hold their current value), so no read path ever
+    // needs the boa context. The flush fixed-point (stale atoms → dirty
+    // subscribers → re-layout) is entirely the engine's existing
+    // machinery: a bound Text re-renders on `rs_set_*` with zero new
+    // engine code.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_source_str", (&str,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: &str| {
+        let _ = vm;
+        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(boa_engine::js_string!(v)));
+        Ok(s.id().0 as u64)
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_str", (u64, &str) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: &str| {
+        let _ = vm;
+        h.store
+            .bridge()
+            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(boa_engine::js_string!(v)))
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_str: {e}")))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_source_f64", () -> u64, move |vm: &mut rut_vm::interp::Vm| {
+        let _ = vm;
+        let s: Source<JsValue> = h.store.bridge().decl_source(JsValue::from(0.0f64));
+        Ok(s.id().0 as u64)
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_f64", (u64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: f64| {
+        let _ = vm;
+        h.store
+            .bridge()
+            .set_source(Source::<JsValue>::from_id(AtomId(atom as u32)), JsValue::from(boa_engine::js_string!(v)))
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_f64: {e}")))
+    });
+    // a Text bound to a str atom — re-renders when the atom changes
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_text_bound", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+        let _ = &h;
+        let view = Rc::new(TextView {
+            text: Some(Val::Reactive(Readable::Source(Source::<String>::from_id(AtomId(atom as u32))))),
+            font_size: None,
+            font_weight: None,
+            color: None,
+            spans: None,
+            query_key: Some(vec!["rut".to_string(), "text".to_string()]),
+            on_selection_change: None,
+            selectable: false,
+            max_lines: None,
+            overflow: None,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
     hosts.install_host_pkg(ctx, pkg);
 }
 
@@ -167,6 +230,9 @@ fn install_tur_pkg(
 // ---------------------------------------------------------------------------
 
 pub struct RutHandles {
+    /// The instance's reactive store — the SAME KV the JS realm and the
+    /// element tree share; rut atoms are edgy atoms addressed by raw id.
+    pub store: crate::core::edgy::reactive::Store,
     /// The instance-owned tree handle (a cheap clone of the one the JS
     /// realm shares) — `apply_root` builds into it.
     pub element_tree: crate::core::elements::NodeTree,
@@ -182,7 +248,12 @@ pub struct RutHandles {
 pub struct RutRuntime {
     pub vm: rut_vm::interp::Vm,
     handles: Rc<RutHandles>,
+    /// The instance context (held for `apply_root` and future rails).
+    js_ctx: TurInstanceContext,
     pub has_stop: bool,
+    /// `entry fn start()`'s answer when declared `-> u64` (the module's
+    /// handle back to the host — e.g. the id of its root atom), else 0.
+    pub start_answer: u64,
 }
 
 impl RutRuntime {
@@ -221,12 +292,13 @@ impl RutRuntime {
     /// Bind bodies, verify the join, boot the VM, and invoke `start`.
     pub fn boot(
         source: &str,
-        element_tree: crate::core::elements::NodeTree,
+        js_ctx: TurInstanceContext,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) = Self::compile(source).map_err(crate::core::app::ModuleError::Parse)?;
 
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
-            element_tree,
+            store: js_ctx.store.clone(),
+            element_tree: js_ctx.element_tree.clone(),
             pending_root: std::cell::RefCell::new(None),
         });
 
@@ -234,7 +306,19 @@ impl RutRuntime {
         install_tur_pkg(&mut hosts, &ctx, &handles);
         hosts.verify_against(&ctx.flatten());
 
-        let has_stop = prog.exports.iter().any(|(name, _)| prog.interner.name(*name) == "stop");
+        let export_of = |name: &str| {
+            prog.exports
+                .iter()
+                .find(|(n, _)| prog.interner.name(*n) == name)
+                .map(|(_, fid)| *fid as usize)
+        };
+        let has_stop = export_of("stop").is_some();
+        // `entry fn start() -> u64` hands the host a module answer (e.g.
+        // its root atom's id); a plain `start()` returns nil.
+        let start_returns_u64 = export_of("start")
+            .and_then(|fid| prog.funcs.get(fid))
+            .is_some_and(|f| f.ret == TY_U64);
+
         let vm = rut_vm::interp::Vm::new(
             prog,
             &default_limits(),
@@ -243,26 +327,50 @@ impl RutRuntime {
         )
         .map_err(|t| crate::core::app::ModuleError::Eval(format!("boot: {} — {}", t.name(), t.msg)))?;
 
-        let mut rt = RutRuntime { vm, handles, has_stop };
-        rt.call_start()?;
+        let mut rt = RutRuntime {
+            vm,
+            handles,
+            js_ctx: js_ctx.clone(),
+            has_stop,
+            start_answer: 0,
+        };
+        rt.call_start(start_returns_u64)?;
         Ok(rt)
     }
 
-    fn call_start(&mut self) -> Result<(), crate::core::app::ModuleError> {
+    fn call_start(&mut self, returns_u64: bool) -> Result<(), crate::core::app::ModuleError> {
+        if returns_u64 {
+            let answer = self
+                .vm
+                .call::<_, u64>("start", ())
+                .map_err(|t| {
+                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
+                })?;
+            self.start_answer = answer;
+        } else {
+            self.vm
+                .call::<_, ()>("start", ())
+                .map_err(|t| {
+                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
+                })?;
+        }
+        Ok(())
+    }
+
+    /// Call a named `entry fn(u64, f64)` — the engine→rut event rail
+    /// (input dispatch, embedder events). Runs OUTSIDE flush; rows must
+    /// not mount (stash-and-apply is a `start`-time contract in Phase 2).
+    pub fn call_entry(&mut self, name: &str, a: u64, b: f64) -> Result<(), crate::core::app::ModuleError> {
         self.vm
-            .call::<_, ()>("start", ())
+            .call::<_, ()>(name, (a, b))
             .map(|_| ())
-            .map_err(|t| crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg)))
+            .map_err(|t| crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg)))
     }
 
     /// Apply the root stashed by `tur::mount` into the instance tree —
     /// the engine-side twin of the JS `mount(view)` bridge. Runs with the
     /// caller's boa borrow (never inside the VM).
-    pub fn apply_root(
-        &mut self,
-        js_ctx: TurInstanceContext,
-        boa: &mut Context,
-    ) -> Result<(), String> {
+    pub fn apply_root(&mut self, boa: &mut Context) -> Result<(), String> {
         let Some(user_view) = self.handles.pending_root.borrow_mut().take() else {
             return Ok(());
         };
@@ -274,7 +382,7 @@ impl RutRuntime {
         }
 
         let root_view = RootView { child: user_view };
-        let mut cx = SharedViewCx::new(js_ctx);
+        let mut cx = SharedViewCx::new(self.js_ctx.clone());
         let temp_parent = cx.alloc_node();
         let root_id = root_view.build(&mut cx, boa, temp_parent);
         tree.borrow_mut()

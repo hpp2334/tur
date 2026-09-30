@@ -79,6 +79,54 @@ fn rut_module_mounts_a_tree() {
     );
 }
 
+/// The Phase-2 reactive gate: a str atom bound to a Text via
+/// `el_text_bound`; an engine→rut entry call mutates the atom; the
+/// existing reactive flush re-renders the Text.
+const COUNTER_RUT: &str = r#"
+use tur::{ el_column, el_text_bound, el_build, el_child, mount, rs_source_str, rs_set_str };
+
+entry fn start() -> u64 {
+    let atom = rs_source_str("Count: 0");
+    let col = el_column();
+    el_child(col, el_text_bound(atom));
+    mount(el_build(col));
+    return atom;
+}
+
+entry fn on_event(atom: u64, n: f64) {
+    rs_set_str(atom, f"Count: {n}");
+}
+"#;
+
+fn rut_bound_text(app: &TurTestApp) -> String {
+    let id = app.query_element(&["rut", "text"]).expect("bound text not found");
+    let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+    app.with_element(id, |e| {
+        e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+#[test]
+fn rut_reactive_atom_rebinds_text() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(COUNTER_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let atom = app.rut_start_answer();
+    assert!(atom != 0, "start returned its root atom's id");
+    assert_eq!(rut_bound_text(&app), "Count: 0", "initial binding renders");
+
+    // The engine→rut rail mutates the atom; the reactive flush re-renders.
+    for n in [1u64, 2, 7] {
+        app.call_rut_entry("on_event", atom, n as f64).unwrap();
+        app.wait_for_timeout(Duration::ZERO);
+        assert_eq!(rut_bound_text(&app), format!("Count: {n}"), "atom write drove re-render");
+    }
+}
+
 #[test]
 fn rut_reload_runs_stop_and_replaces_root() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

@@ -96,6 +96,20 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
+    /// Call a named `entry fn(u64, f64)` on the loaded rut module — the
+    /// engine→rut event rail (input dispatch, embedder events). A missing
+    /// entry is a successful no-op (event rails are optional).
+    CallRutEntry {
+        name: Arc<str>,
+        a: u64,
+        b: f64,
+        reply: ReplySender<Result<(), ModuleError>>,
+    },
+    /// Read the loaded rut module's `entry fn start() -> u64` answer
+    /// (0 when `start` returns nil or no rut module is loaded).
+    RutStartAnswer {
+        reply: ReplySender<u64>,
+    },
     /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
     /// on the worker, converts the result to its display string, and replies.
     /// Production code uses `LoadModule`; this is for tests
@@ -310,6 +324,13 @@ impl fmt::Debug for WorkerMsg {
                 .debug_struct("LoadRutModule")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
+            Self::CallRutEntry { name, a, b, .. } => f
+                .debug_struct("CallRutEntry")
+                .field("name", &name.as_ref())
+                .field("a", a)
+                .field("b", b)
+                .finish_non_exhaustive(),
+            Self::RutStartAnswer { .. } => f.write_str("RutStartAnswer"),
             Self::EvalJs { source, .. } => f
                 .debug_struct("EvalJs")
                 .field("source_len", &source.len())

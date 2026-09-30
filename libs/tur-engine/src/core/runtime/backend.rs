@@ -169,20 +169,35 @@ impl WorkerBackend {
         self.teardown_rut_module();
 
         let js = &self.internal.js_context;
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(
-            source,
-            js.element_tree.clone(),
-        )?;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone())?;
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, with the caller's boa borrow (rut rows never race
         // the flush's borrow).
         let mut boa = self.boa_context.borrow_mut();
-        rut.apply_root(js.clone(), &mut boa)
+        rut.apply_root(&mut boa)
             .map_err(ModuleError::Eval)?;
         drop(boa);
         js.set_dirty();
         *self.rut.borrow_mut() = Some(rut);
         Ok(())
+    }
+
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)`.
+    fn call_rut_entry_inner(&self, name: &str, a: u64, b: f64) -> Result<(), ModuleError> {
+        let mut rut_guard = self.rut.borrow_mut();
+        let Some(rut) = rut_guard.as_mut() else {
+            return Err(ModuleError::Eval("call_rut_entry: no rut module loaded".into()));
+        };
+        let has_it = rut
+            .vm
+            .prog
+            .exports
+            .iter()
+            .any(|(n, _)| rut.vm.prog.interner.name(*n) == name);
+        if !has_it {
+            return Ok(()); // no such entry — a no-op (event rails are optional)
+        }
+        rut.call_entry(name, a, b)
     }
 
     fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -298,6 +313,15 @@ impl WorkerBackend {
                 let res = self.load_rut_module_inner(&source);
                 self.wake_if_dirty();
                 reply.send(res);
+            }
+            WorkerMsg::CallRutEntry { name, a, b, reply } => {
+                let res = self.call_rut_entry_inner(&name, a, b);
+                self.wake_if_dirty();
+                reply.send(res);
+            }
+            WorkerMsg::RutStartAnswer { reply } => {
+                let answer = self.rut.borrow().as_ref().map(|r| r.start_answer).unwrap_or(0);
+                reply.send(answer);
             }
             WorkerMsg::EvalJs { source, reply } => {
                 // Test-only synchronous JS evaluation. Drains promise jobs
@@ -1019,6 +1043,19 @@ impl HostBackend {
         tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
         self.rpc(|tx| WorkerMsg::LoadRutModule { source, reply: tx })
             .await
+    }
+
+    /// Engine→rut event rail — the RPC entry behind
+    /// [`TurApp::call_rut_entry`].
+    pub(crate) async fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), ModuleError> {
+        let name = std::sync::Arc::from(name);
+        self.rpc(|tx| WorkerMsg::CallRutEntry { name, a, b, reply: tx })
+            .await
+    }
+
+    /// The loaded rut module's `entry fn start() -> u64` answer.
+    pub(crate) async fn rut_start_answer(&self) -> u64 {
+        self.rpc(|tx| WorkerMsg::RutStartAnswer { reply: tx }).await
     }
 
     /// Synchronous JS expression evaluation. Dev-tool / test-only —

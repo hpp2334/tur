@@ -33,7 +33,7 @@ pub use store::{
 /// backing the engine writes through the tree's current store (see
 /// [`SharedReactive`] docs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct AtomId(u32);
+pub(crate) struct AtomId(pub(crate) u32);
 
 // ---------------------------------------------------------------------------
 // JsValue marshaling.
@@ -92,22 +92,22 @@ pub struct Derived<T>(AtomId, PhantomData<fn() -> T>);
 
 impl<T> Source<T> {
     #[inline]
-    fn id(&self) -> AtomId {
+    pub(crate) fn id(&self) -> AtomId {
         self.0
     }
 
-    fn from_id(id: AtomId) -> Self {
+    pub(crate) fn from_id(id: AtomId) -> Self {
         Source(id, PhantomData)
     }
 }
 
 impl<T> Derived<T> {
     #[inline]
-    fn id(&self) -> AtomId {
+    pub(crate) fn id(&self) -> AtomId {
         self.0
     }
 
-    fn from_id(id: AtomId) -> Self {
+    pub(crate) fn from_id(id: AtomId) -> Self {
         Derived(id, PhantomData)
     }
 }

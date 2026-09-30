@@ -174,6 +174,22 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
+    /// loaded rut module. A missing entry is a successful no-op.
+    pub async fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .call_rut_entry(name, a, b)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
+    /// `start` returns nil or no rut module is loaded).
+    pub async fn rut_start_answer(&self) -> u64 {
+        self.host.backend().rut_start_answer().await
+    }
+
     /// Synchronous JS expression evaluation. Dev-tool / test-only —
     /// production code uses [`Self::load_module`]. Useful for inspecting
     /// JS-side state via `globalThis.__x = ...`.

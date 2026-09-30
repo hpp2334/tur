@@ -1393,6 +1393,18 @@ impl TurTestApp {
         block_on(self.inner.load_rut_module(source))
     }
 
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
+    /// loaded rut module. A missing entry is a successful no-op.
+    pub fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {
+        block_on(self.inner.call_rut_entry(name, a, b))
+    }
+
+    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
+    /// `start` returns nil or no rut module is loaded).
+    pub fn rut_start_answer(&self) -> u64 {
+        block_on(self.inner.rut_start_answer())
+    }
+
     /// Structured dev-tool snapshot of the root node, or `None` if no root
     /// is mounted (pre-first-mount / post-teardown). Children are bare ids;
     /// iterate with `dev_tool_get_element`.
