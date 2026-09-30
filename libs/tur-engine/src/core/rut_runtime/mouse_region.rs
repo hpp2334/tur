@@ -203,8 +203,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles
     });
 }
 
-/// Build the enter/exit mutation: pushes a Value intent drained into the
-/// named `entry fn(id, seq)`.
+/// Build the enter/exit mutation: pushes a Click-shaped intent (the
+/// `(report, id, seq)` drain shape) into the named `entry fn(a, b, n)`.
 fn region_mutation(
     handles: &Rc<super::RutHandles>,
     id: u64,
@@ -220,10 +220,11 @@ fn region_mutation(
         h.click_seq.set(n);
         h.pending_calls
             .borrow_mut()
-            .push(Intent::Value {
+            .push(Intent::Click {
                 name: cb.clone(),
                 a: id,
-                value: crate::core::edgy::Value::Num(n as f64),
+                b: id,
+                seq: n as f64,
             });
         h.dirty.set(true);
         Ok(crate::core::edgy::Value::Nil)

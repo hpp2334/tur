@@ -125,8 +125,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &std::rc::Rc<super::
     rut_vm::pkg_fn!(pkg, "el_sizedbox", (f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, w: f64, h: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(ContainerView {
-            width: (w > 0.0).then(|| Val::Static(w)),
-            height: (h > 0.0).then(|| Val::Static(h)),
+            width: (w > 0.0).then_some(Val::Static(w)),
+            height: (h > 0.0).then_some(Val::Static(h)),
             children: vec![child],
             ..ContainerView::default()
         });

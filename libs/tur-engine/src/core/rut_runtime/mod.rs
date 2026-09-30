@@ -215,6 +215,11 @@ pub fn tur_decl_module() -> rut_driver::Module {
         ),
         row("condition", vec![TY_U64, TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
         row("el_fragment2", vec![TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
+        row(
+            "el_positioned_full",
+            vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
         row("rs_source_bool", vec![TY_BOOL], TY_U64),
         row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
         row("rs_get_bool", vec![TY_U64], TY_BOOL),
@@ -602,6 +607,21 @@ fn install_tur_pkg(
         let view = Rc::new(crate::builtin_plugins::control_flow::FragmentView::new_rut(vec![a, b]));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
+    // Positioned with all six anchors — 0 = absent for the edges, and an
+    // explicit width/height when nonzero (the JS Positioned twins).
+    rut_vm::pkg_fn!(pkg, "el_positioned_full", (f64, f64, f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, right: f64, bottom: f64, w: f64, h: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(PositionedView {
+            left: (left != 0.0).then_some(Val::Static(left)),
+            top: (top != 0.0).then_some(Val::Static(top)),
+            right: (right != 0.0).then_some(Val::Static(right)),
+            bottom: (bottom != 0.0).then_some(Val::Static(bottom)),
+            width: (w != 0.0).then_some(Val::Static(w)),
+            height: (h != 0.0).then_some(Val::Static(h)),
+            child,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
 
     // bool atoms (the condition rail's driver)
     let h = handles.clone();
@@ -826,6 +846,17 @@ pub enum Intent {
     Pointer {
         name: String,
         id: u64,
+        lx: f64,
+        ly: f64,
+        gx: f64,
+        gy: f64,
+        button: u64,
+    },
+    /// The two-id pointer variant (`el_gesture2`): `(name, id_a, id_b, positions…)`.
+    Pointer2 {
+        name: String,
+        a: u64,
+        b: u64,
         lx: f64,
         ly: f64,
         gx: f64,
@@ -1251,6 +1282,9 @@ impl RutRuntime {
             Intent::Pointer { name, id, lx, ly, gx, gy, button } => {
                 vm.call::<_, ()>(name, (*id, *lx, *ly, *gx, *gy, *button))
             }
+            Intent::Pointer2 { name, a, b, lx, ly, gx, gy, button } => {
+                vm.call::<_, ()>(name, (*a, *b, *lx, *ly, *gx, *gy, *button))
+            }
             Intent::Value { name, a, value } => {
                 let n = match value {
                     Value::Num(n) => *n,
@@ -1281,6 +1315,7 @@ fn intent_name(intent: &Intent) -> &str {
         Intent::Click { name, .. }
         | Intent::Key { name, .. }
         | Intent::Pointer { name, .. }
+        | Intent::Pointer2 { name, .. }
         | Intent::Value { name, .. }
         | Intent::Bytes { name, .. } => name,
     }

@@ -1,0 +1,89 @@
+// drag-delta-tracking: a drag pad computing deltaFromStart/deltaFromLast
+// (the VDivider pattern). Scratch numbers ride stashed mem cells; the
+// transcript atom renders "dsx,dsy,dlx,dly" for the test to parse.
+use tur::{ el_box_new, box_color, box_size, el_build, el_gesture, el_qkey, el_text_bound_new, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take };
+
+let K_SX: u64 = 2;
+let K_SY: u64 = 3;
+let K_LX: u64 = 4;
+let K_LY: u64 = 5;
+
+entry fn start() -> u64 {
+    let info = rs_source_str("0,0,0,0");
+    st_put(K_SX, mem_new(0.0));
+    st_put(K_SY, mem_new(0.0));
+    st_put(K_LX, mem_new(0.0));
+    st_put(K_LY, mem_new(0.0));
+
+    let b = el_box_new();
+    box_size(b, 200.0, 200.0);
+    box_color(b, 0x6366F1FF);
+    el_qkey(b, "drag-target");
+    let info_t = el_text_bound_new(info);
+    el_qkey(info_t, "drag-info");
+    el_child(b, el_build(info_t));
+
+    let pad = el_gesture(info, "", "g_down", "g_move", "g_up", "", el_build(b));
+    mount(pad);
+    return info;
+}
+
+// From-start + from-last deltas, read BEFORE the last-point update.
+fn emit(id: u64, gx: f64, gy: f64) {
+    let sx = st_take(K_SX);
+    let sy = st_take(K_SY);
+    let lx = st_take(K_LX);
+    let ly = st_take(K_LY);
+    let dsx = gx - mem_get(sx);
+    let dsy = gy - mem_get(sy);
+    let dlx = gx - mem_get(lx);
+    let dly = gy - mem_get(ly);
+    rs_set_str(id, f"{dsx},{dsy},{dlx},{dly}");
+    st_put(K_SX, sx);
+    st_put(K_SY, sy);
+    st_put(K_LX, lx);
+    st_put(K_LY, ly);
+}
+
+entry fn g_down(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    let sx = st_take(K_SX);
+    let sy = st_take(K_SY);
+    mem_set(sx, gx);
+    mem_set(sy, gy);
+    st_put(K_SX, sx);
+    st_put(K_SY, sy);
+    move_last(gx, gy);
+    emit(id, gx, gy);
+}
+
+entry fn g_move(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    emit(id, gx, gy);
+    move_last(gx, gy);
+}
+
+// The test's explicit reset probe (the `__resetDrag` seam): clear the
+// drag tracking so post-release hover-moves produce no deltas.
+entry fn reset(id: u64, _b: f64) {
+    let sx = st_take(K_SX);
+    let sy = st_take(K_SY);
+    let lx = st_take(K_LX);
+    let ly = st_take(K_LY);
+    mem_set(sx, 0.0);
+    mem_set(sy, 0.0);
+    mem_set(lx, 0.0);
+    mem_set(ly, 0.0);
+    st_put(K_SX, sx);
+    st_put(K_SY, sy);
+    st_put(K_LX, lx);
+    st_put(K_LY, ly);
+    rs_set_str(id, "0,0,0,0");
+}
+
+fn move_last(gx: f64, gy: f64) {
+    let lx = st_take(K_LX);
+    let ly = st_take(K_LY);
+    mem_set(lx, gx);
+    mem_set(ly, gy);
+    st_put(K_LX, lx);
+    st_put(K_LY, ly);
+}

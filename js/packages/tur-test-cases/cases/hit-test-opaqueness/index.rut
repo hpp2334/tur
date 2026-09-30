@@ -1,0 +1,53 @@
+// hit-test-opaqueness: the absorption matrix — a colored Container
+// absorbs; a decoration-less Container passes through; an opaque
+// PointerInteract catches invisible hits; a translucent MouseRegion joins
+// the path without blocking. The beneath-target's down count renders into
+// the `beneath-downs` Text (the test parses it).
+use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, el_box_new, box_color, box_size, el_build, el_child, el_gesture, el_mouse_region, el_pi, el_positioned_full, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_vqkey, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, stack_align, st_put, st_take };
+
+let K_COUNT: u64 = 7;
+
+entry fn start() -> u64 {
+    let downs = rs_source_str("0");
+    st_put(K_COUNT, mem_new(0.0));
+
+    let stack = el_stack();
+    stack_align(stack, ALIGN_TOP_LEFT);
+
+    // The opaque gesture target beneath (fills the 400x600 stack).
+    let target = el_box_new();
+    box_size(target, 400.0, 600.0);
+    let downs_t = el_text_bound_new(downs);
+    el_qkey(downs_t, "beneath-downs");
+    el_child(target, el_build(downs_t));
+    el_child(stack, el_gesture(downs, "", "g_down", "", "", "", el_build(target)));
+
+    // A decoration-less full-size Container — transparent.
+    let plain = el_box_new();
+    box_size(plain, 400.0, 600.0);
+    el_qkey(plain, "plain");
+    el_child(stack, el_build(plain));
+
+    // A painted red 200x200 surface at the top-left — absorbs.
+    let red = el_box_new();
+    box_size(red, 200.0, 200.0);
+    box_color(red, 0xEF4444FFu64);
+    el_qkey(red, "red");
+    el_child(stack, el_build(red));
+
+    // A translucent MouseRegion over the right half (x 200..400).
+    let region_child = el_vqkey(el_sizedbox(200.0, 600.0, el_build(el_box_new())), "region");
+    let region = el_mouse_region(downs, "", "", CURSOR_AUTO, 1, region_child);
+    el_child(stack, el_positioned_full(200.0, 0.0, 0.0, 0.0, 200.0, 600.0, region));
+
+    mount(el_build(stack));
+    return downs;
+}
+
+entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let cell = st_take(K_COUNT);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_COUNT, cell);
+    rs_set_str(downs, f"{n as u64}");
+}

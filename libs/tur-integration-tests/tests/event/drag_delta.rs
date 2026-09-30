@@ -1,9 +1,10 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
-/// Parse "dsx,dsy,dlx,dly" from the fixture's `__getDragInfo()` into a tuple.
+/// Parse "dsx,dsy,dlx,dly" from the fixture's bound transcript atom into a
+/// tuple (the rut corpus renders the deltas into the `drag-info` Text).
 fn drag_info(app: &mut TurTestApp) -> (f64, f64, f64, f64) {
-    let s = app.eval_js("globalThis.__getDragInfo()");
+    let s = app.query_text(&["drag-info"]).unwrap_or_default();
     let parts: Vec<f64> = s
         .split(',')
         .map(|p| p.trim().parse().unwrap_or(9999.0))
@@ -73,7 +74,8 @@ fn drag_delta_from_start_and_from_last_are_correct() {
     // Release — drag cleared; a subsequent hover-move must not produce deltas.
     app.pointer_up(cx + 25.0, cy + 5.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    app.eval_js("globalThis.__resetDrag()");
+    let info = app.rut_start_answer();
+    app.call_rut_entry("reset", info, 0.0).unwrap();
     app.pointer_move(cx + 40.0, cy + 40.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);

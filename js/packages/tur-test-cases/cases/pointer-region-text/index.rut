@@ -1,0 +1,29 @@
+// pointer-region-text: a MouseRegion whose enter/exit writes the bound
+// label inside a padded, centered surface.
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_AUTO, el_box_new, box_align, box_color, box_size, el_build, el_child, el_column, el_mouse_region, el_qkey, el_text_bound_new, flex_cross_align, mount, rs_set_str, rs_source_str };
+
+entry fn start() -> u64 {
+    let state = rs_source_str("idle");
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+
+    let b = el_box_new();
+    box_size(b, 100.0, 50.0);
+    box_color(b, 0xCCCCCCFFu64);
+    box_align(b, ALIGN_CENTER);
+    let t = el_text_bound_new(state);
+    el_qkey(t, "region-text");
+    el_child(b, el_build(t));
+
+    el_child(col, el_mouse_region(state, "mr_enter", "mr_exit", CURSOR_AUTO, 0, el_build(b)));
+    mount(el_build(col));
+    return state;
+}
+
+entry fn mr_enter(state: u64, _b: u64, _n: f64) {
+    rs_set_str(state, "entered");
+}
+
+entry fn mr_exit(state: u64, _b: u64, _n: f64) {
+    rs_set_str(state, "exited");
+}

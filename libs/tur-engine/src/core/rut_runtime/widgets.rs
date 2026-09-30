@@ -19,7 +19,7 @@ use crate::core::view::Val;
 use rut_vm::Opaque;
 
 use super::color_of;
-use super::ViewBuilder;
+use super::{RutView, ViewBuilder};
 
 /// Declare the corpus rows on the `tur` decl module.
 pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types::TypeId)> {
@@ -34,9 +34,11 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("stack_fit", vec![TY_OPAQUE, TY_U64], TY_NIL),
         // generic query key
         ("el_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        ("el_vqkey", vec![TY_OPAQUE, TY_STR], TY_OPAQUE),
         // text style builder
         ("el_text_new", vec![TY_STR], TY_OPAQUE),
         ("el_text_bound_new", vec![TY_U64], TY_OPAQUE),
+        ("el_text_bound_d_new", vec![TY_U64], TY_OPAQUE),
         ("text_size", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("text_weight", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("text_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
@@ -53,6 +55,10 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
             TY_NIL,
         ),
         ("text_spans", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        // stateful cells
+        ("mem_new", vec![TY_F64], TY_OPAQUE),
+        ("mem_get", vec![TY_OPAQUE], TY_F64),
+        ("mem_set", vec![TY_OPAQUE, TY_F64], TY_NIL),
     ]
     .into_iter()
     .map(|(n, p, r)| (n.to_string(), p, r))
@@ -102,8 +108,31 @@ fn stack_fit_of(v: u64) -> StackFit {
     StackFit::from_u64(v).unwrap_or(StackFit::Loose)
 }
 
+/// A mutable f64 cell — the stateful-entry scratch crossing (the stash
+/// holds opaques only).
+pub(crate) struct RutCell(pub std::cell::Cell<f64>);
+
 /// A rich-text span list under construction.
 pub(crate) struct RutSpans(pub Vec<SpanData>);
+
+/// A materialized view wrapped with a query-key override (applied after
+/// the inner build, so rows with hardcoded keys can be re-keyed).
+pub(crate) struct KeyedView {
+    pub inner: Rc<dyn crate::core::view::View>,
+    pub key: Vec<String>,
+}
+
+impl crate::core::view::View for KeyedView {
+    fn build(
+        &self,
+        cx: &mut dyn crate::core::view::ViewCx,
+        parent: crate::core::element::NodeId,
+    ) -> crate::core::element::NodeId {
+        let id = self.inner.build(cx, parent);
+        cx.set_query_key(crate::core::element::ElementNodeId::new(id.as_u64()), self.key.clone());
+        id
+    }
+}
 
 /// Install the corpus-row bodies.
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandles>) {
@@ -149,6 +178,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandle
         let key = key.split('/').map(str::to_string).collect::<Vec<_>>();
         b.with_mut(vm, |_vm, b| b.set_query_key(key.clone()))
     });
+    // Post-build query-key override: wraps a materialized view and re-keys
+    // its node after the inner build (the `queryKey` prop twin for rows
+    // that hardcode their key, e.g. the Input / lazy / scroll views).
+    rut_vm::pkg_fn!(pkg, "el_vqkey", (Opaque<RutView>, &str) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, v: Opaque<RutView>, key: &str| {
+        let inner = v.with(|v| v.0.clone())?;
+        let view = Rc::new(KeyedView {
+            inner,
+            key: key.split('/').map(str::to_string).collect(),
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
 
     // ---- text style builder ----------------------------------------------
     let empty_text = || TextView {
@@ -177,6 +217,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandle
         )));
         Ok(Opaque::alloc(vm, ViewBuilder::Text(Box::new(tv)))?.handle().clone())
     });
+    // Bound to a DERIVED str atom (the builder variant of `el_text_bound_d`
+    // — style rows + query keys apply).
+    rut_vm::pkg_fn!(pkg, "el_text_bound_d_new", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, derived: u64| {
+        let mut tv = empty_text();
+        tv.text = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Derived(
+            crate::core::edgy::reactive::Derived::<String>::from_id(
+                crate::core::edgy::reactive::AtomId(derived as u32),
+            ),
+        )));
+        Ok(Opaque::alloc(vm, ViewBuilder::Text(Box::new(tv)))?.handle().clone())
+    });
     rut_vm::pkg_fn!(pkg, "text_size", (Opaque<ViewBuilder>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: f64| {
         with_text(b, vm, |t| t.font_size = Some(Val::Static(v)))
     });
@@ -200,6 +251,21 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<super::RutHandle
     });
     rut_vm::pkg_fn!(pkg, "text_selectable", (Opaque<ViewBuilder>, bool) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: bool| {
         with_text(b, vm, |t| t.selectable = v)
+    });
+
+    // ---- stateful cells ---------------------------------------------------
+    // The opaque stash holds OPQUES only, so stateful entries keep their
+    // scratch numbers in f64 cells (`mem_*`) — minted at start, stashed,
+    // read/written in the intent entries.
+    rut_vm::pkg_fn!(pkg, "mem_new", (f64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, v: f64| {
+        Ok(Opaque::alloc(vm, RutCell(std::cell::Cell::new(v)))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "mem_get", (Opaque<RutCell>,) -> f64, |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>| {
+        c.with(|c| c.0.get())
+    });
+    rut_vm::pkg_fn!(pkg, "mem_set", (Opaque<RutCell>, f64) -> (), |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>, v: f64| {
+        c.with_mut(_vm, |_vm, c: &mut RutCell| c.0.set(v))?;
+        Ok(())
     });
 
     // ---- rich-text spans --------------------------------------------------

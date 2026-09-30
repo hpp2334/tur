@@ -1,0 +1,76 @@
+// pointer-interact-nested: nested gesture pads — the opaque inner blocks
+// the outer, the translucent inner lets both fire. The result labels are
+// derived atoms over the two counter pairs (the C8 derive rail).
+use tur::{ CROSS_ALIGN_START, MAIN_SIZE_MIN, el_box_new, box_size, el_build, el_child, el_column, el_pi, el_qkey, el_row, el_text_bound_d_new, flex_cross_align, flex_main_size, mount, rs_derive2, rs_get_f64, rs_set_f64, rs_source_f64 };
+
+entry fn start() -> u64 {
+    let outer_o = rs_source_f64();
+    let inner_o = rs_source_f64();
+    let outer_t = rs_source_f64();
+    let inner_t = rs_source_f64();
+    let d_o = rs_derive2("fmt_o", outer_o, inner_o);
+    let d_t = rs_derive2("fmt_t", outer_t, inner_t);
+
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+    flex_main_size(col, MAIN_SIZE_MIN);
+
+    // Opaque pair: the inner (opaque) absorbs the click.
+    let outer_box = el_box_new();
+    box_size(outer_box, 80.0, 40.0);
+    el_qkey(outer_box, "outer-opaque");
+    let inner_row = el_row();
+    let inner_box = el_box_new();
+    box_size(inner_box, 60.0, 30.0);
+    el_qkey(inner_box, "inner-opaque");
+    el_child(inner_row, el_pi(inner_o, inner_o, "ts_inner_o", "", 0, "", el_build(inner_box)));
+    el_child(outer_box, el_build(inner_row));
+    el_child(col, el_pi(outer_o, outer_o, "ts_outer_o", "", 0, "", el_build(outer_box)));
+
+    // Translucent pair: the inner joins the path; the outer fires too.
+    let outer_t_box = el_box_new();
+    box_size(outer_t_box, 80.0, 40.0);
+    el_qkey(outer_t_box, "outer-translucent");
+    let t_row = el_row();
+    let inner_t_box = el_box_new();
+    box_size(inner_t_box, 60.0, 30.0);
+    el_qkey(inner_t_box, "inner-translucent");
+    el_child(t_row, el_pi(inner_t, inner_t, "ts_inner_t", "", 1, "", el_build(inner_t_box)));
+    el_child(outer_t_box, el_build(t_row));
+    el_child(col, el_pi(outer_t, outer_t, "ts_outer_t", "", 0, "", el_build(outer_t_box)));
+
+    let ro = el_text_bound_d_new(d_o);
+    el_qkey(ro, "result-opaque");
+    el_child(col, el_build(ro));
+    let rt = el_text_bound_d_new(d_t);
+    el_qkey(rt, "result-translucent");
+    el_child(col, el_build(rt));
+
+    mount(el_build(col));
+    return outer_o;
+}
+
+// The derive bodies — synchronous VM calls during flush.
+entry fn fmt_o(a: f64, b: f64) -> str {
+    return f"opaque:{a as u64}/{b as u64}";
+}
+
+entry fn fmt_t(a: f64, b: f64) -> str {
+    return f"translucent:{a as u64}/{b as u64}";
+}
+
+entry fn ts_outer_o(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}
+
+entry fn ts_inner_o(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}
+
+entry fn ts_outer_t(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}
+
+entry fn ts_inner_t(count: u64, _b: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+}

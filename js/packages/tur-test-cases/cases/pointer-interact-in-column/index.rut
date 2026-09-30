@@ -1,0 +1,15 @@
+// pointer-interact-in-column: two gesture pads stacked in a column.
+use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_column, el_pi, flex_cross_align, mount, rs_source_f64 };
+
+entry fn start() {
+    let pad = rs_source_f64();
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_START);
+    let a = el_box_new();
+    box_size(a, 80.0, 40.0);
+    let b = el_box_new();
+    box_size(b, 60.0, 30.0);
+    el_child(col, el_pi(pad, pad, "", "", 0, "", el_build(a)));
+    el_child(col, el_pi(pad, pad, "", "", 0, "", el_build(b)));
+    mount(el_build(col));
+}

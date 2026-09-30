@@ -32,9 +32,36 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
     use rut_core::types::*;
     vec![
         (
+            "el_pi",
+            vec![
+                TY_U64,    // id_a (the callback's first argument)
+                TY_U64,    // id_b (the callback's second argument)
+                TY_STR,    // on_click ("" = absent)
+                TY_STR,    // on_pointer_down ("" = absent)
+                TY_U64,    // behavior const (0 opaque / 1 translucent)
+                TY_STR,    // query key ("" = none)
+                TY_OPAQUE, // child
+            ],
+            TY_OPAQUE,
+        ),
+        (
             "el_gesture",
             vec![
                 TY_U64,    // id (the callback's first argument)
+                TY_STR,    // on_click ("" = absent)
+                TY_STR,    // on_pointer_down
+                TY_STR,    // on_pointer_move
+                TY_STR,    // on_pointer_up
+                TY_STR,    // on_context_menu
+                TY_OPAQUE, // child
+            ],
+            TY_OPAQUE,
+        ),
+        (
+            "el_gesture2",
+            vec![
+                TY_U64,    // id_a (the callback's first argument)
+                TY_U64,    // id_b (the callback's second argument)
                 TY_STR,    // on_click ("" = absent)
                 TY_STR,    // on_pointer_down
                 TY_STR,    // on_pointer_move
@@ -94,6 +121,32 @@ fn pointer_mutation(
             gy,
             button: 0,
         });
+        dirty.set(true);
+        Ok(Value::Nil)
+    });
+    Some(MutationHandle::new(mutation))
+}
+
+/// Queue a click intent (the `el_button` shape): `(name, id_a, id_b, seq)`.
+fn click_mutation(
+    handles: &Rc<RutHandles>,
+    id_a: u64,
+    id_b: u64,
+    cb: &str,
+) -> Option<MutationHandle<crate::builtin_plugins::gesture::PointerInteractEvent>> {
+    let name = cb.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let name = name.to_string();
+    let h = handles.clone();
+    let dirty = handles.dirty.clone();
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+        let n = h.click_seq.get() + 1;
+        h.click_seq.set(n);
+        h.pending_calls
+            .borrow_mut()
+            .push(Intent::Click { name: name.clone(), a: id_a, b: id_b, seq: n as f64 });
         dirty.set(true);
         Ok(Value::Nil)
     });
@@ -220,6 +273,33 @@ fn blur_mutation(
 
 /// Install the C4 bodies.
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
+    // A plain gesture pad with click + pointer-down intents, an explicit
+    // hit-test behavior const (0 = Opaque default, 1 = Translucent) and a
+    // query key ("" = none) — the corpus's general PointerInteract row.
+    // Both ids cross to the entry (the `el_button` (id_a, id_b) shape).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_pi", (u64, u64, &str, &str, u64, &str, Opaque<RutView>) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id_a: u64, id_b: u64, click: &str, down: &str, behavior: u64, key: &str, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(PointerInteractView {
+            behavior: Some(crate::core::view::Val::Static(match behavior {
+                1 => HitTestBehavior::Translucent,
+                _ => HitTestBehavior::Opaque,
+            })),
+            on_click: click_mutation(&h, id_a, id_b, click),
+            on_pointer_down: pointer_mutation(&h, id_a, down),
+            on_pointer_move: None,
+            on_pointer_up: None,
+            on_context_menu: None,
+            query_key: if key.is_empty() {
+                None
+            } else {
+                Some(vec![key.to_string()])
+            },
+            child: Some(child),
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "el_gesture", (u64, &str, &str, &str, &str, &str, Opaque<RutView>) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, click: &str, down: &str, mv: &str, up: &str, ctx: &str, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
@@ -230,6 +310,54 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             on_pointer_move: pointer_mutation(&h, id, mv),
             on_pointer_up: pointer_mutation(&h, id, up),
             on_context_menu: context_menu_mutation(&h, id, ctx),
+            query_key: Some(vec!["rut".to_string(), "gesture".to_string()]),
+            child: Some(child),
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // Two-id gesture pad: both ids cross the intent (stateful pads keep
+    // their display atoms in the entry args).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_gesture2", (u64, u64, &str, &str, &str, &str, &str, Opaque<RutView>) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, a: u64, b: u64, click: &str, down: &str, mv: &str, up: &str, ctx: &str, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let h2 = h.clone();
+        let mk_pointer2 = |name: &str, kind: u8| {
+            let name = name.trim();
+            if name.is_empty() {
+                return None;
+            }
+            let name = name.to_string();
+            let h3 = h2.clone();
+            let dirty = h2.dirty.clone();
+            let mutation = h2.store.bridge().build_mutate(move |_bridge, args, _boa| {
+                let nums = |i: usize| match args.get(i) {
+                    Some(Value::Num(n)) => *n,
+                    _ => 0.0,
+                };
+                h3.pending_calls.borrow_mut().push(Intent::Pointer2 {
+                    name: name.clone(),
+                    a,
+                    b,
+                    lx: nums(0),
+                    ly: nums(1),
+                    gx: nums(2),
+                    gy: nums(3),
+                    button: kind as u64,
+                });
+                dirty.set(true);
+                Ok(Value::Nil)
+            });
+            Some(MutationHandle::new(mutation))
+        };
+        let click = pointer_mutation(&h, a, click);
+        let view = Rc::new(PointerInteractView {
+            behavior: Some(crate::core::view::Val::Static(HitTestBehavior::Opaque)),
+            on_click: click,
+            on_pointer_down: mk_pointer2(down, 0),
+            on_pointer_move: mk_pointer2(mv, 0),
+            on_pointer_up: mk_pointer2(up, 0),
+            on_context_menu: context_menu_mutation(&h, a, ctx),
             query_key: Some(vec!["rut".to_string(), "gesture".to_string()]),
             child: Some(child),
         });

@@ -1,0 +1,73 @@
+// hit-through-overlay: the floating-pill pattern — a full-size invisible
+// overlay must not steal pointer/wheel input from the scrollable beneath;
+// the opaque anchored pill still consumes clicks. The counters render into
+// bound Texts (`beneath-downs` / `pill-clicks`).
+use tur::{ CROSS_ALIGN_STRETCH, el_box_new, box_size, el_build, el_child, el_column, el_pi, el_positioned_edges, el_qkey, el_scroll, el_stack, el_text_bound_new, el_vqkey, flex_cross_align, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, st_put, st_take };
+
+let K_DOWNS: u64 = 7;
+let K_CLICKS: u64 = 8;
+
+entry fn start() -> u64 {
+    let downs = rs_source_str("0");
+    let clicks = rs_source_str("0");
+    st_put(K_DOWNS, mem_new(0.0));
+    st_put(K_CLICKS, mem_new(0.0));
+
+    let stack = el_stack();
+
+    // The scrollable beneath, wrapped in a gesture target so pointer
+    // events reaching THROUGH the overlay are observable.
+    let content = el_column();
+    flex_cross_align(content, CROSS_ALIGN_STRETCH);
+    el_child(content, box_h(300.0));
+    el_child(content, box_h(300.0));
+    el_child(content, box_h(300.0));
+    let scroller = el_vqkey(el_scroll(true, el_build(content)), "sv");
+    el_child(stack, el_pi(downs, downs, "", "g_down", 0, "", scroller));
+
+    // The invisible full-size overlay: no decoration, no gesture.
+    let overlay = el_box_new();
+    box_size(overlay, 400.0, 600.0);
+    el_qkey(overlay, "overlay");
+    el_child(stack, el_build(overlay));
+
+    // The floating pill, anchored bottom-right.
+    let pill_box = el_box_new();
+    box_size(pill_box, 64.0, 28.0);
+    el_qkey(pill_box, "pill");
+    let pill = el_pi(clicks, clicks, "pill_click", "", 0, "", el_build(pill_box));
+    el_child(stack, el_positioned_edges(0.0, 0.0, 8.0, 8.0, pill));
+
+    // Counter readouts (the test parses these).
+    let downs_t = el_text_bound_new(downs);
+    el_qkey(downs_t, "beneath-downs");
+    el_child(stack, el_build(downs_t));
+    let clicks_t = el_text_bound_new(clicks);
+    el_qkey(clicks_t, "pill-clicks");
+    el_child(stack, el_build(clicks_t));
+
+    mount(el_build(stack));
+    return downs;
+}
+
+entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let cell = st_take(K_DOWNS);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_DOWNS, cell);
+    rs_set_str(downs, f"{n as u64}");
+}
+
+entry fn pill_click(clicks: u64, _b: u64, _n: f64) {
+    let cell = st_take(K_CLICKS);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_CLICKS, cell);
+    rs_set_str(clicks, f"{n as u64}");
+}
+
+fn box_h(h: f64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, h);
+    return el_build(b);
+}
