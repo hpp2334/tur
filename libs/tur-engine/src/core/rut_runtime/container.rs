@@ -68,7 +68,7 @@ pub fn decl_consts() -> Vec<(String, rut_core::types::TypeId, u64)> {
     ]
 }
 
-fn alignment_of(v: u64) -> Alignment {
+pub(crate) fn alignment_of(v: u64) -> Alignment {
     Alignment::from_u64(v).unwrap_or(Alignment::Center)
 }
 

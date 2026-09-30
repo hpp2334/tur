@@ -25,6 +25,7 @@ use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
 use crate::core::edgy::value::Value;
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::Axis;
+use crate::core::layout::{Alignment, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, StackFit};
 use crate::core::view::{SharedViewCx, View, ViewFactory, Val};
 use crate::builtin_plugins::control_flow::ConditionView;
 use crate::builtin_plugins::gesture::PointerInteractView;
@@ -40,12 +41,16 @@ use rut_vm::OpaqueRef;
 
 mod async_caps;
 mod collections;
+mod composited;
 mod container;
 mod derive;
 mod gesture;
+mod image_row;
+mod mouse_region;
 mod realm;
 mod text;
 mod virtual_app;
+mod widgets;
 
 pub use realm::RutRealm;
 
@@ -92,31 +97,69 @@ pub struct RutValue(pub Value);
 /// A builder under construction — materialized by `tur::el_build`.
 /// (Box-variant is boxed to keep the enum small; setters mutate through it.)
 pub(crate) enum ViewBuilder {
-    Flex { axis: Axis, children: Vec<Rc<dyn View>> },
-    Stack { children: Vec<Rc<dyn View>> },
+    Flex {
+        axis: Axis,
+        children: Vec<Rc<dyn View>>,
+        main_alignment: Option<MainAxisAlignment>,
+        cross_alignment: Option<CrossAxisAlignment>,
+        main_axis_size: Option<MainAxisSize>,
+        query_key: Option<Vec<String>>,
+    },
+    Stack {
+        children: Vec<Rc<dyn View>>,
+        alignment: Option<Alignment>,
+        fit: Option<StackFit>,
+        query_key: Option<Vec<String>>,
+    },
     /// The C3 full-surface container: setter rows mutate the spec in
     /// place; `el_build` materializes it.
     Box(Box<ContainerView>),
+    /// The Phase-4 text builder: a `TextView` under construction (style
+    /// setter rows mutate it; `el_build` materializes it).
+    Text(Box<TextView>),
 }
 
 impl ViewBuilder {
     fn materialize(self) -> Rc<dyn View> {
         match self {
-            ViewBuilder::Flex { axis, children } => Rc::new(FlexView {
+            ViewBuilder::Flex {
+                axis,
+                children,
+                main_alignment,
+                cross_alignment,
+                main_axis_size,
+                query_key,
+            } => Rc::new(FlexView {
                 direction: Some(axis),
-                main_alignment: None,
-                cross_alignment: None,
-                main_axis_size: None,
+                main_alignment: main_alignment.map(Val::Static),
+                cross_alignment: cross_alignment.map(Val::Static),
+                main_axis_size: main_axis_size.map(Val::Static),
                 children,
-                query_key: None,
+                query_key,
             }),
-            ViewBuilder::Stack { children } => Rc::new(StackView {
-                fit: None,
-                alignment: None,
+            ViewBuilder::Stack {
                 children,
-                query_key: None,
+                alignment,
+                fit,
+                query_key,
+            } => Rc::new(StackView {
+                fit: fit.map(Val::Static),
+                alignment: alignment.map(Val::Static),
+                children,
+                query_key,
             }),
             ViewBuilder::Box(spec) => Rc::new(*spec),
+            ViewBuilder::Text(tv) => Rc::new(*tv),
+        }
+    }
+
+    /// Attach a query key to any builder variant (the `el_qkey` row).
+    fn set_query_key(&mut self, key: Vec<String>) {
+        match self {
+            ViewBuilder::Flex { query_key, .. }
+            | ViewBuilder::Stack { query_key, .. } => *query_key = Some(key),
+            ViewBuilder::Box(box_) => box_.query_key = Some(key),
+            ViewBuilder::Text(tv) => tv.query_key = Some(key),
         }
     }
 }
@@ -159,6 +202,7 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_text_bound", vec![TY_U64], TY_OPAQUE),
         row("el_text_styled", vec![TY_STR, TY_F64, TY_U64], TY_OPAQUE),
         row("el_scroll", vec![TY_BOOL, TY_OPAQUE], TY_OPAQUE),
+        row("el_scroll_at", vec![TY_F64, TY_BOOL, TY_OPAQUE], TY_OPAQUE),
         row("el_button", vec![TY_U64, TY_U64, TY_STR, TY_STR], TY_OPAQUE),
         row("el_stack", vec![], TY_OPAQUE),
         row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
@@ -207,7 +251,16 @@ pub fn tur_decl_module() -> rut_driver::Module {
     host_funcs.extend(virtual_app::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     // C8 — derived atoms + watch (the guarded flush-time VM call).
     host_funcs.extend(derive::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    let consts = container::decl_consts();
+    // Phase 4 — the corpus surface: builder breadth (flex/stack/text/qkey,
+    // spans), MouseRegion, composited transforms, images.
+    host_funcs.extend(widgets::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    host_funcs.extend(mouse_region::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    host_funcs.extend(composited::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    host_funcs.extend(image_row::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
+    let mut consts = container::decl_consts();
+    consts.extend(widgets::decl_consts());
+    consts.extend(mouse_region::decl_consts());
+    consts.extend(image_row::decl_consts());
     rut_driver::Module {
         namespace: Some("tur".to_string()),
         body: ModuleBody::Host {
@@ -235,10 +288,10 @@ fn install_tur_pkg(
 
     // mint a flex builder
     rut_vm::pkg_fn!(pkg, "el_column", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new() })?.handle().clone())
+        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None })?.handle().clone())
     });
     rut_vm::pkg_fn!(pkg, "el_row", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Horizontal, children: Vec::new() })?.handle().clone())
+        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Horizontal, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None })?.handle().clone())
     });
     // static text
     rut_vm::pkg_fn!(pkg, "el_text", (&str,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, content: &str| {
@@ -260,7 +313,7 @@ fn install_tur_pkg(
     rut_vm::pkg_fn!(pkg, "el_build", (Opaque<ViewBuilder>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>| {
         // `with` lends the payload — swap out a dummy to consume the builder
         let built = b.with_mut(vm, |_vm, b| {
-            let dummy = ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new() };
+            let dummy = ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None };
             std::mem::replace(b, dummy).materialize()
         })?;
         Ok(Opaque::alloc(vm, RutView(built))?.handle().clone())
@@ -270,10 +323,12 @@ fn install_tur_pkg(
         let child_view = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, b| {
             match b {
-                ViewBuilder::Flex { children, .. } | ViewBuilder::Stack { children } => {
+                ViewBuilder::Flex { children, .. } | ViewBuilder::Stack { children, .. } => {
                     children.push(child_view);
                 }
                 ViewBuilder::Box(spec) => spec.children.push(child_view),
+                // A Text builder takes no children.
+                ViewBuilder::Text(_) => {}
             }
         })?;
         Ok(())
@@ -421,7 +476,7 @@ fn install_tur_pkg(
 
     // stack builder — same el_child/el_build flow as flex
     rut_vm::pkg_fn!(pkg, "el_stack", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Stack { children: Vec::new() })?.handle().clone())
+        Ok(Opaque::alloc(vm, ViewBuilder::Stack { children: Vec::new(), alignment: None, fit: None, query_key: None })?.handle().clone())
     });
     // a painted box: color + padding around one child
     rut_vm::pkg_fn!(pkg, "el_box", (u64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, color: u64, padding: f64, child: Opaque<RutView>| {
@@ -505,6 +560,17 @@ fn install_tur_pkg(
             child,
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // scroll viewport with a one-shot initial offset (the JS controller's
+    // `initialOffset` twin — applied after the first content layout).
+    rut_vm::pkg_fn!(pkg, "el_scroll_at", (f64, bool, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, initial: f64, vertical: bool, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let mut view = crate::builtin_plugins::scroll::ScrollViewView::new_rut(
+            Some(Val::Static(if vertical { Axis::Vertical } else { Axis::Horizontal })),
+            child,
+        );
+        view.initial_offset = Some(Val::Static(initial));
+        Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
     });
 
     // bool atoms (the condition rail's driver)
@@ -626,6 +692,11 @@ fn install_tur_pkg(
     virtual_app::install(&mut pkg, handles);
     // C8 — derived atoms + watch.
     derive::install(&mut pkg, handles);
+    // Phase 4 — the corpus surface.
+    widgets::install(&mut pkg, handles);
+    mouse_region::install(&mut pkg, handles);
+    composited::install(&mut pkg, handles);
+    image_row::install(&mut pkg, handles);
     // The opaque stash (the cross-entry hand-off rail).
     {
         let h = handles.clone();

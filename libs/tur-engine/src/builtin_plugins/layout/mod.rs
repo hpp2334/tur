@@ -9,7 +9,7 @@
 //! - `Table` (shared-column data table: fixed/flex column widths, reactive
 //!   rows via a builder, optional header, stripes + dividers).
 
-pub(in crate::builtin_plugins) mod composited_transform;
+pub mod composited_transform;
 pub(in crate::builtin_plugins) mod container;
 pub mod enums;
 pub(in crate::builtin_plugins) mod flex;
@@ -32,6 +32,10 @@ pub(crate) use grid::{compute_grid_metrics, cross_offset};
 pub use positioned::{PositionedElement, PositionedView};
 pub use stack::{StackElement, StackView};
 pub use table::{TableElement, TableView};
+pub use composited_transform::follower::FollowerView;
+pub use composited_transform::link::{CompositedLinkState, LayerLink};
+pub use composited_transform::target::TargetView;
+pub use composited_transform::LayerLinkRegistry;
 
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;

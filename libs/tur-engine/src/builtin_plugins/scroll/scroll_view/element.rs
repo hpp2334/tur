@@ -32,6 +32,9 @@ pub struct ScrollViewView {
     pub(crate) color: Option<Val<Brush>>,
     /// JS `ScrollController` opaque — parsed eagerly (not reactive).
     pub(crate) controller: Option<JsObject>,
+    /// Rut rail: a static initial pixel offset applied once after the
+    /// first content layout (the JS `ScrollController.initialOffset` twin).
+    pub(crate) initial_offset: Option<Val<f64>>,
     pub(crate) query_key: Option<Vec<String>>,
     pub(crate) child: Rc<dyn View>,
 }
@@ -47,6 +50,10 @@ impl View for ScrollViewView {
             .unwrap_or(Axis::Vertical);
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let pending_view_initial = self
+            .initial_offset
+            .as_ref()
+            .and_then(|v| read_val(cx, v));
         cx.insert_node(
             id,
             AnyElement::with_wheel(ScrollViewElement {
@@ -54,6 +61,7 @@ impl View for ScrollViewView {
                 axis,
                 position: ScrollPosition::new(),
                 painting: ScrollViewPainting::default(),
+                pending_view_initial,
             })
             .with_callbacks(),
         );
@@ -92,6 +100,9 @@ pub struct ScrollViewElement {
     pub(crate) axis: Axis,
     pub(crate) position: ScrollPosition,
     pub(crate) painting: ScrollViewPainting,
+    /// The rut rail's one-shot initial offset (resolved from the view's
+    /// `initial_offset` val at build; consumed by the first layout).
+    pub(crate) pending_view_initial: Option<f64>,
 }
 
 impl ScrollViewElement {
@@ -135,18 +146,20 @@ impl ScrollViewElement {
     }
 
     pub fn apply_pending_initial_offset(&mut self) {
-        let Some(ref ctrl_obj) = self.view.controller else {
-            return;
-        };
-        let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
-            return;
-        };
-        let Some(initial) = ctrl.pending_initial_offset.take() else {
-            return;
-        };
-        let clamped = initial.clamp(0.0, self.position.max_scroll_extent());
-        self.position.correct_pixels(clamped);
-        ctrl.offset = clamped;
+        if let Some(ref ctrl_obj) = self.view.controller {
+            let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
+                return;
+            };
+            let Some(initial) = ctrl.pending_initial_offset.take() else {
+                return;
+            };
+            let clamped = initial.clamp(0.0, self.position.max_scroll_extent());
+            self.position.correct_pixels(clamped);
+            ctrl.offset = clamped;
+        } else if let Some(initial) = self.pending_view_initial.take() {
+            let clamped = initial.clamp(0.0, self.position.max_scroll_extent());
+            self.position.correct_pixels(clamped);
+        }
     }
 
     /// Fire the controller's `onScroll` mutation for a layout-driven pixels
@@ -273,6 +286,7 @@ impl ScrollViewView {
             padding: None,
             color: None,
             controller: None,
+            initial_offset: None,
             query_key: None,
             child,
         }
@@ -289,6 +303,7 @@ impl ScrollViewView {
             padding: p.val::<f64>("padding"),
             color: p.val::<Brush>("color"),
             controller,
+            initial_offset: p.val::<f64>("initialOffset"),
             query_key: p.query_key("queryKey"),
             child,
         })

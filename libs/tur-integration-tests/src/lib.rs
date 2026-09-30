@@ -767,6 +767,14 @@ impl TurTestApp {
             .parent()
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
+        let cases_dir = workspace_root.join("js/packages/tur-test-cases/cases");
+        // Rut-first: a ported case (`<name>/index.rut`) loads through the
+        // rut rail; the legacy JS dist path remains as the fallback while
+        // the corpus port (Phase 4 D2) is in flight.
+        let rut_path = cases_dir.join(name).join("index.rut");
+        if rut_path.exists() {
+            return self.load_rut_bundle(name);
+        }
         let path = workspace_root
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));

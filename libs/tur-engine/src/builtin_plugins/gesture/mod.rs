@@ -8,7 +8,7 @@
 //!   pointer moves; cursor resolution still happens in the paint pass.
 
 pub(in crate::builtin_plugins) mod gesture_handler;
-pub(in crate::builtin_plugins) mod mouse_region;
+pub mod mouse_region;
 pub(in crate::builtin_plugins) mod pointer_interact;
 pub(in crate::builtin_plugins) mod pointer_region_handler;
 pub(in crate::builtin_plugins) mod pointer_region_tracker;

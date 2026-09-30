@@ -40,6 +40,29 @@ pub struct FollowerView {
     pub(super) child: Option<Rc<dyn View>>,
 }
 
+impl FollowerView {
+    /// Rut-rail constructor (`core::rut_runtime`): explicit anchors +
+    /// `targetOffset` (`{x, y}` native map) + child.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_rut(
+        link: Option<Rc<CompositedLinkState>>,
+        target_anchor: Val<Alignment>,
+        follower_anchor: Val<Alignment>,
+        target_offset: Option<Val<Value>>,
+        show_when_unlinked: bool,
+        child: Option<Rc<dyn View>>,
+    ) -> Self {
+        Self {
+            link,
+            target_anchor,
+            follower_anchor,
+            target_offset,
+            show_when_unlinked,
+            child,
+        }
+    }
+}
+
 impl View for FollowerView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());

@@ -25,10 +25,10 @@
 //! means hit-testing works through the normal offset accumulation — the
 //! follower and its descendants are hit-tested where they are painted.
 
-mod follower;
-mod link;
+pub mod follower;
+pub mod link;
 mod subsystem;
-mod target;
+pub mod target;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -45,7 +45,7 @@ use subsystem::CompositedTransformSubsystem;
 /// `createLayerLink` bridge fn through the instance ctx (`args[0]`), so the
 /// fn is a plain ctx-bound `FnEntry` pointer (no closures). O(active links)
 /// per flush.
-pub(crate) struct LayerLinkRegistry(pub Rc<RefCell<Vec<Rc<CompositedLinkState>>>>);
+pub struct LayerLinkRegistry(pub Rc<RefCell<Vec<Rc<CompositedLinkState>>>>);
 
 /// Install the composited-transform elements + the link factory + the
 /// tracking subsystem.

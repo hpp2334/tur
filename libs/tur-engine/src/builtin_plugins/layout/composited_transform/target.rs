@@ -24,6 +24,13 @@ pub struct TargetView {
     pub(super) child: Option<Rc<dyn View>>,
 }
 
+impl TargetView {
+    /// Rut-rail constructor (`core::rut_runtime`): link + child.
+    pub fn new_rut(link: Option<Rc<CompositedLinkState>>, child: Option<Rc<dyn View>>) -> Self {
+        Self { link, child }
+    }
+}
+
 impl View for TargetView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
