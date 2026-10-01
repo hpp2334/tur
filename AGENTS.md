@@ -265,10 +265,11 @@ Android build + device debugging live in the **`android-dev` skill** at
   names + ids, never closures (`PointerInteract().on_tap("ts_click", count)`).
   Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
   `Text().text("literal")`, `Container().color_bound(atom)`,
-  `Expanded().flex_bound(atom)`. Flags are u64 consts re-exported through the
-  kit (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` / `MAIN_ALIGN_*` /
-  `MAIN_SIZE_*` / `FIT_*`). The kit hides row churn from call sites; the rows
-  are the boundary.
+  `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur` pkg,
+  imported from `tur` alongside `mount` (`ALIGN_*` / `CLIP_*` / `BORDER_*` /
+  `CROSS_ALIGN_*` / `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*`); the kit
+  documents the full const inventory in its header. The kit hides row churn
+  from call sites; the rows are the boundary.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
