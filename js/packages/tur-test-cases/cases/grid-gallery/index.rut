@@ -1,0 +1,25 @@
+// grid-gallery: a header + scrollable tile grid (the hover-cursor demo
+// surface).
+use tur::{ CURSOR_POINTER, CROSS_ALIGN_CENTER, el_box_new, box_color, box_size, el_build, el_child, el_column, el_expand, el_mouse_region, el_sizedbox, el_text_new, flex_cross_align, mount, text_size };
+
+entry fn tile(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, 0x1E293BFF);
+    let label = el_text_new(f"tile {i}");
+    text_size(label, 12.0);
+    el_child(b, el_build(label));
+    return el_mouse_region(i, "", "", CURSOR_POINTER, 0, el_build(b));
+}
+
+entry fn start() {
+    let col = el_column();
+    flex_cross_align(col, CROSS_ALIGN_CENTER);
+    let row = el_row();
+    el_child(row, tile(0));
+    el_child(row, tile(1));
+    el_child(row, tile(2));
+    el_child(col, el_sizedbox(400.0, 40.0, el_build(el_box_new())));
+    el_child(col, row);
+    mount(el_expand(1.0, el_build(col)));
+}

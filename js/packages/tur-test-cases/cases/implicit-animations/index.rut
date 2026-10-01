@@ -1,0 +1,43 @@
+// implicit-animations: animated style channels driven by one shared
+// controller (the Animated* twin) — the toggle flips the target and
+// restarts the controller (the ImplicitlyAnimatedWidget retarget).
+use tur::{ anim_ctrl, anim_forward, anim_reverse, el_box_new, box_color, box_size, el_build, el_child, el_column, el_pi, el_qkey, el_text_new, mount, rs_get_bool, rs_set_bool, rs_source_bool, stf_put, stf_take };
+
+let K_CTRL: u64 = 1;
+let K_EXPANDED: u64 = 2;
+
+entry fn start() -> u64 {
+    let expanded = rs_source_bool(false);
+    stf_put(K_EXPANDED, expanded as f64);
+    let progress = rs_source_f64();
+    let ctrl = anim_ctrl(progress, 300.0, "easeInOut", 0, "a_tick", "a_end");
+    st_put(K_CTRL, ctrl);
+
+    let col = el_column();
+    let box_b = el_box_new();
+    box_size(box_b, 100.0, 40.0);
+    box_color(box_b, 0x6366F1FFu64);
+    el_qkey(box_b, "animated-box");
+    el_child(col, el_pi(expanded, expanded, "b_toggle", "", 0, "", el_build(box_b)));
+    el_child(col, el_build(el_text_new("toggle me")));
+    mount(el_build(col));
+    return expanded;
+}
+
+entry fn a_tick(_atom: u64, _t: f64) {
+}
+
+entry fn a_end(_atom: u64, _v: f64) {
+}
+
+entry fn b_toggle(expanded: u64, _b: u64, _n: f64) {
+    rs_set_bool(expanded, !rs_get_bool(expanded));
+    // Retarget: reverse or forward the shared controller.
+    let ctrl = st_take(K_CTRL);
+    if (rs_get_bool(expanded)) {
+        anim_forward(ctrl);
+    } else {
+        anim_reverse(ctrl);
+    }
+    st_put(K_CTRL, ctrl);
+}

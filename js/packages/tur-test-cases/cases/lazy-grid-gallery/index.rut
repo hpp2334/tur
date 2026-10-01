@@ -1,0 +1,29 @@
+// lazy-grid-gallery: a header row above a virtualized gallery grid in a
+// column.
+use tur::{ CROSS_ALIGN_CENTER, el_box_new, box_color, box_size, el_build, el_child, el_column, el_expand, el_lazy_grid, el_text_new, flex_cross_align, mount, rs_set_f64, rs_source_f64, text_size };
+
+entry fn cell(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 0.0, 0.0);
+    box_color(b, 0x1E293BFF);
+    let label = el_text_new(f"tile {i}");
+    text_size(label, 12.0);
+    el_child(b, el_build(label));
+    return el_build(b);
+}
+
+entry fn start() {
+    let count = rs_source_f64();
+    rs_set_f64(count, 120.0);
+    let col = el_column();
+    let header = el_box_new();
+    box_size(header, 0.0, 40.0);
+    box_color(header, 0x0F172AFF);
+    let title = el_text_new("Gallery");
+    text_size(title, 16.0);
+    el_child(header, el_build(title));
+    el_child(col, header);
+    let grid = el_lazy_grid("cell", count, 150.0, 1.0);
+    el_child(col, el_expand(1.0, grid));
+    mount(el_build(col));
+}

@@ -1,0 +1,22 @@
+// lazy-list-var-sizes: an unmeasured (var-extent) LazyList — rows report
+// their own heights (deterministic per-index sizes).
+use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_lazy_list, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64, text_size };
+
+entry fn row(i: u64) -> opaque {
+    let h = 30.0 + (i * 37) % 120;
+    let b = el_box_new();
+    box_size(b, 400.0, h);
+    box_color(b, 0x0B1220FF);
+    let label = el_text_new(f"#{i} h={h as u64}");
+    text_size(label, 11.0);
+    el_child(b, el_build(label));
+    return el_build(b);
+}
+
+entry fn start() {
+    let count = rs_source_f64();
+    rs_set_f64(count, 500.0);
+    // itemExtent 0 = unmeasured (var sizes).
+    let list = el_lazy_list("row", count, 0.0);
+    mount(el_vqkey(list, "lazy-list-var-sizes"));
+}

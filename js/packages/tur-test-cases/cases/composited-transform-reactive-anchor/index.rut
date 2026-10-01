@@ -14,13 +14,13 @@ entry fn start() -> u64 {
     el_child(stack, el_positioned(100.0, 80.0, target));
     let red = el_box_new();
     box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FF);
+    box_color(red, 0xFF0000FFu64);
     let follower = el_ct_follower_bound(link, anchor, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
     el_child(stack, follower);
 
     let btn = el_box_new();
     box_size(btn, 60.0, 30.0);
-    box_color(btn, 0x4F46E1FF);
+    box_color(btn, 0x4F46E1FFu64);
     el_child(stack, el_positioned(20.0, 540.0, el_pi(anchor, anchor, "b_flip", "", 0, "", el_build(btn))));
     mount(el_build(stack));
     return anchor;

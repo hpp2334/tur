@@ -13,7 +13,7 @@ entry fn start() {
     el_child(stack, el_positioned(20.0, 20.0, transformed));
     let red = el_box_new();
     box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FF);
+    box_color(red, 0xFF0000FFu64);
     let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
     el_child(stack, follower);
     mount(el_build(stack));

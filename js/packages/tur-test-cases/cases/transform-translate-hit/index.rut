@@ -1,13 +1,11 @@
 // transform-translate-hit: a box laid out at (0,0) painted at (100,80)
 // via a paint-only Transform translate — clickable at the PAINTED center.
-// The click entry mounts the red box (the Condition twin: a re-mount).
-use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_pi, el_qkey, el_sizedbox, el_stack, el_transform, mount, rs_set_bool, rs_source_bool, stack_align };
-
-let K_HIT: u64 = 1;
+// The click flips the hit atom; the Condition mounts the red confirmation
+// box (the branch swap adds one container node).
+use tur::{ ALIGN_TOP_LEFT, condition, el_box_new, box_color, box_size, el_build, el_child, el_pi, el_qkey, el_sizedbox, el_stack, el_text_new, el_transform, mount, rs_source_bool, stack_align };
 
 entry fn start() {
     let hit = rs_source_bool(false);
-    st_put(K_HIT, hit);
 
     let stack = el_stack();
     stack_align(stack, ALIGN_TOP_LEFT);
@@ -15,27 +13,21 @@ entry fn start() {
 
     let indigo = el_box_new();
     box_size(indigo, 40.0, 40.0);
-    box_color(indigo, 0x4F46E1FF);
+    box_color(indigo, 0x4F46E1FFu64);
     let pi = el_pi(hit, hit, "b_hit", "", 0, "", el_build(indigo));
     el_child(stack, el_transform(1.0, 0.0, 100.0, 80.0, pi));
+
+    // The confirmation box appears when the click registers (the else
+    // branch is a Text — not a container — so the container count grows
+    // by exactly one when the red box mounts).
+    let red = el_box_new();
+    box_size(red, 40.0, 40.0);
+    box_color(red, 0xFF0000FFu64);
+    el_child(stack, condition(hit, el_build(red), el_build(el_text_new(""))));
+
     mount(el_build(stack));
 }
 
-// The click mounts the red confirmation box (a fresh root — the tree
-// keeps the indigo box and adds the red one beside it).
-entry fn b_hit(hit: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+entry fn b_hit(hit: u64, _b: u64, _n: f64) {
     rs_set_bool(hit, true);
-
-    let stack = el_stack();
-    stack_align(stack, ALIGN_TOP_LEFT);
-    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
-    let indigo = el_box_new();
-    box_size(indigo, 40.0, 40.0);
-    box_color(indigo, 0x4F46E1FF);
-    el_child(stack, el_transform(1.0, 0.0, 100.0, 80.0, el_pi(hit, hit, "b_hit", "", 0, "", el_build(indigo))));
-    let red = el_box_new();
-    box_size(red, 40.0, 40.0);
-    box_color(red, 0xFF0000FF);
-    el_child(stack, red);
-    mount(el_build(stack));
 }

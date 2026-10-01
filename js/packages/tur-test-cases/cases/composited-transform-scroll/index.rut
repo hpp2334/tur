@@ -15,12 +15,13 @@ entry fn start() {
     let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
     let target = el_ct_target(link, target_child);
     el_child(content, target);
+    el_child(content, el_sizedbox(200.0, 300.0, el_build(el_box_new())));
     let scroller = el_scroll(true, el_build(content));
     el_child(stack, el_positioned_full(0.0, 0.0, 0.0, 0.0, 200.0, 200.0, scroller));
 
     let red = el_box_new();
     box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FF);
+    box_color(red, 0xFF0000FFu64);
     let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
     el_child(stack, follower);
     mount(el_build(stack));

@@ -1,0 +1,20 @@
+// condition-basic: a Condition whose then-branch renders (pre-built
+// branches swapped by the engine — no rut during flush).
+use tur::{ condition, el_box_new, box_color, box_size, el_build, el_qkey, el_text_new, mount, rs_source_bool };
+
+entry fn start() {
+    let when = rs_source_bool(true);
+    let then_box = el_box_new();
+    box_size(then_box, 200.0, 100.0);
+    box_color(then_box, 0x303030FF);
+    el_qkey(then_box, "then-branch");
+    el_child(then_box, el_build(el_text_new("then-branch")));
+    let else_box = el_box_new();
+    box_size(else_box, 200.0, 100.0);
+    box_color(else_box, 0x501A1AFF);
+    el_qkey(else_box, "else-branch");
+    el_child(else_box, el_build(el_text_new("else-branch")));
+    let c = condition(when, el_build(then_box), el_build(else_box));
+    el_qkey(c, "condition-basic");
+    mount(c);
+}

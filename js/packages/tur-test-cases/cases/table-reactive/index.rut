@@ -1,0 +1,52 @@
+// table-reactive: the table twin with a reactive row set — a button adds
+// a planet through an Each over the rows atom.
+use tur::{ el_box_new, box_color, box_padding, box_size, el_build, el_child, el_column, el_pi, el_row, el_sizedbox, el_text_new, mount, rs_each, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value, text_size };
+
+entry fn row(_i: u64, name: str) -> opaque {
+    let r = el_row();
+    let c = el_box_new();
+    box_size(c, 150.0, 0.0);
+    box_padding(c, 8.0);
+    let t = el_text_new(name);
+    text_size(t, 14.0);
+    el_child(c, el_build(t));
+    el_child(r, c);
+    return el_build(r);
+}
+
+entry fn start() -> u64 {
+    let rows = rs_list_new();
+    rs_list_push(rows, "Mercury");
+    rs_list_push(rows, "Venus");
+    let rows_atom = rs_source_value(rows);
+
+    let col = el_column();
+    let head = el_box_new();
+    box_size(head, 0.0, 32.0);
+    box_color(head, 0x1E293BFF);
+    let ht = el_text_new("PLANET");
+    text_size(ht, 12.0);
+    el_child(head, el_build(ht));
+    el_child(col, head);
+    el_child(col, rs_each(rows_atom, "row"));
+    el_child(col, el_pi(rows_atom, rows_atom, "b_add", "", 0, "", el_build(el_text_new("add row"))));
+    let frame = el_box_new();
+    box_color(frame, 0x0B1220FF);
+    el_child(frame, el_build(col));
+    mount(el_sizedbox(400.0, 240.0, el_build(frame)));
+    return rows_atom;
+}
+
+entry fn b_add(rows: u64, _b: u64, _n: f64) {
+    // Read-modify-write: rebuild the list with one more row.
+    let cur = rs_get_value(rows);
+    let n = rs_value_len(cur);
+    let fresh = rs_list_new();
+    let mut i = 0;
+    while (i < n as i32) {
+        rs_list_push(fresh, rs_value_item(cur, i as u64));
+        i += 1;
+    }
+    rs_list_push(fresh, f"Planet {n as u64}");
+    rs_set_value(rows, fresh);
+}

@@ -1,0 +1,21 @@
+// grid-aspect: aspect-ratio tiles in a grid row (square tiles via equal
+// width/height).
+use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_row, el_sizedbox, el_text_new, mount, text_size };
+
+entry fn tile(label: str, color: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, color);
+    let t = el_text_new(label);
+    text_size(t, 14.0);
+    el_child(b, el_build(t));
+    return el_build(b);
+}
+
+entry fn start() {
+    let row = el_row();
+    el_child(row, tile("A", 0xEF4444FFu64));
+    el_child(row, tile("B", 0x22C55EFFu64));
+    el_child(row, tile("C", 0x3B82F6FFu64));
+    mount(el_sizedbox(400.0, 200.0, el_build(row)));
+}
