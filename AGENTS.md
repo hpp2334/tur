@@ -214,11 +214,15 @@ README for the fixture conventions), confirm red, then make it green.
 ```sh
 cd demo/website/native && wasm-pack build --target web
 cd demo/website && pnpm build      # bundles + copies the wasm
-cd demo/website && pnpm dev        # → https://localhost:8080/ (self-signed)
+cd demo/website && pnpm dev        # → http://localhost:8080/
+cd demo/website && pnpm dev:tunnel # → https://local-tur.hpp2334.com (cloudflared `tur-local`)
 ```
 
 The dev server sets COOP/COEP headers (required by the multithreaded wasm
 backend — `SharedArrayBuffer` + workers; COEP must be `require-corp`).
+`dev:tunnel` serves the playground over a public custom domain via the
+`cloudflared.yml` next to the config (one-time `cloudflared tunnel login` /
+`create` / `route dns` setup — see that file's header).
 
 ### JS
 
@@ -264,8 +268,8 @@ Unchanged (see `tur-engine::core::render`): `render_commands` + `present` +
 ## Debugging the playground (main agent + operator)
 
 Start the dev server (`cd demo/website && pnpm dev` →
-https://localhost:8080/, self-signed — open with `agent-browser open
-https://localhost:8080/ --ignore-https-errors`), drive the canvas via
+http://localhost:8080/ — open with `agent-browser open
+http://localhost:8080/`), drive the canvas via
 `agent-browser mouse/eval/press` + `turDevTool.elementTree()` (JSON — the
 shapes are unchanged), verify colors by sampling pixels, and shut the server
 down afterwards (`lsof -ti:8080 | xargs kill`, `rm -rf .agent-browser`).

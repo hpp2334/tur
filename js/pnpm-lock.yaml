@@ -41,45 +41,6 @@ importers:
         specifier: ^10.0.3
         version: 10.0.3
 
-  packages/tur-animation:
-    dependencies:
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../tur-core
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/tur-clipboard:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-core: {}
-
-  packages/tur-filepicker:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-net:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-std:
-    dependencies:
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../tur-core
-
   packages/tur-test-cases: {}
 
 packages:

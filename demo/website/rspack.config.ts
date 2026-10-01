@@ -100,7 +100,6 @@ export default defineConfig({
     devServer: {
         hot: false,
         liveReload: false,
-        server: process.env.TUR_TUNNEL ? undefined : "https",
         port: 8080,
         host: "0.0.0.0",
         allowedHosts: "all",
