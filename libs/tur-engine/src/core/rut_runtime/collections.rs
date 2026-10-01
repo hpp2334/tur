@@ -179,6 +179,13 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
             vec![TY_STR, TY_U64, TY_F64],
             TY_OPAQUE,
         ),
+        // The overscan twin (the JS `LazyList({ overscan })` crossing) —
+        // default overscan is 0; the corpus pins explicitly-set windows.
+        (
+            "el_lazy_list_overscan",
+            vec![TY_STR, TY_U64, TY_F64, TY_U64],
+            TY_OPAQUE,
+        ),
         (
             "el_lazy_grid",
             vec![TY_STR, TY_U64, TY_F64, TY_F64],
@@ -242,6 +249,28 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             )),
             Some(crate::core::layout::Axis::Vertical),
             Some(0),
+            if item_extent > 0.0 { Some(item_extent) } else { None },
+        );
+        Ok(rut_vm::Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
+    });
+
+    // LazyList with an explicit overscan — the `el_lazy_list` twin with the
+    // JS `overscan` prop crossing (same shape otherwise).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_lazy_list_overscan", (&str, u64, f64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, cb: &str, count_atom: u64, item_extent: f64, overscan: u64| {
+        let _ = vm;
+        let entry = RutEntryBuilder {
+            name: cb.to_string(),
+            face: h.face.clone(),
+            handles: h.clone(),
+        };
+        let view = crate::builtin_plugins::lazy_container::LazyListView::new_rut(
+            entry,
+            crate::core::view::Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
+            )),
+            Some(crate::core::layout::Axis::Vertical),
+            Some(overscan),
             if item_extent > 0.0 { Some(item_extent) } else { None },
         );
         Ok(rut_vm::Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())

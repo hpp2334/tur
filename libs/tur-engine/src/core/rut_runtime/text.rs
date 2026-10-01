@@ -82,6 +82,16 @@ pub fn decl_rows() -> Vec<(String, Vec<TypeId>, TypeId)> {
         ("input_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
         ("input_placeholder_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
         ("input_font_size", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        // the password twin's surface: the obscure toggle + the configurable
+        // obscuring character (the JS `obscureText` / `obscuringCharacter`).
+        ("input_obscure", vec![TY_OPAQUE, TY_BOOL], TY_NIL),
+        ("input_obscure_char", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        // the multiline toggle on the builder surface (the JS
+        // `multiline: true` twin — `el_input_opts` bit 0 is the view-form).
+        ("input_multiline", vec![TY_OPAQUE, TY_BOOL], TY_NIL),
+        // the font family (the JS `Input().fontFamily(...)` twin — the code
+        // editor pins `"monospace"` so caret math sees uniform glyphs).
+        ("input_font_family", vec![TY_OPAQUE, TY_STR], TY_NIL),
         ("undo_can_undo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_can_redo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_clear", vec![TY_OPAQUE], TY_NIL),
@@ -152,14 +162,21 @@ pub fn install(
         )))?.handle().clone())
     });
     // An input builder pre-bound to a controller (+ size + font size) —
-    // the editor-shaped constructor (the huge-document fixture).
+    // the editor-shaped constructor (the huge-document fixture). 0 = absent
+    // for every optional dim (the `el_input` row's semantics).
     rut_vm::pkg_fn!(pkg, "el_input_ctrl", (Opaque<RutTextCtrl>, f64, f64, f64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutTextCtrl>, w: f64, h: f64, font: f64| {
         let shared = ctrl.with(|c| c.0.clone())?;
         let mut spec = crate::builtin_plugins::text::InputView::empty_rut();
         spec.set_controller(shared);
-        spec.set_width(w);
-        spec.set_height(h);
-        spec.set_font_size(font);
+        if w > 0.0 {
+            spec.set_width(w);
+        }
+        if h > 0.0 {
+            spec.set_height(h);
+        }
+        if font > 0.0 {
+            spec.set_font_size(font);
+        }
         Ok(Opaque::alloc(vm, super::ViewBuilder::Input(Box::new(spec)))?.handle().clone())
     });
     rut_vm::pkg_fn!(pkg, "input_size", (Opaque<super::ViewBuilder>, f64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, w: f64, h: f64| {
@@ -201,6 +218,48 @@ pub fn install(
         b.with_mut(vm, |_vm, b| {
             if let super::ViewBuilder::Input(spec) = &mut *b {
                 spec.set_font_size(v);
+            }
+        })?;
+        Ok(())
+    });
+    // input_obscure(builder, on) — the password toggle (the JS
+    // `obscureText: true` twin).
+    rut_vm::pkg_fn!(pkg, "input_obscure", (Opaque<super::ViewBuilder>, bool) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, on: bool| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_obscure(on);
+            }
+        })?;
+        Ok(())
+    });
+    // input_obscure_char(builder, ch) — the configurable obscuring
+    // character (the JS `obscuringCharacter: '*'` twin; a multi-char str
+    // takes its first char, matching the engine's per-char mask).
+    rut_vm::pkg_fn!(pkg, "input_obscure_char", (Opaque<super::ViewBuilder>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, ch: &str| {
+        let ch = ch.chars().next().unwrap_or('\u{2022}').to_string();
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_obscuring_character_str(ch);
+            }
+        })?;
+        Ok(())
+    });
+    // input_font_family(builder, family) — the JS `fontFamily(...)` twin
+    // (parley generic families: "monospace" / "serif" / sans-serif default).
+    rut_vm::pkg_fn!(pkg, "input_font_family", (Opaque<super::ViewBuilder>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, family: &str| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_font_family_str(family.to_string());
+            }
+        })?;
+        Ok(())
+    });
+    // input_multiline(builder, on) — the JS `multiline: true` twin (the
+    // builder-form of `el_input_opts` bit 0).
+    rut_vm::pkg_fn!(pkg, "input_multiline", (Opaque<super::ViewBuilder>, bool) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, on: bool| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_multiline(on);
             }
         })?;
         Ok(())

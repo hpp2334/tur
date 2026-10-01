@@ -115,6 +115,18 @@ impl InputView {
     pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
         self.query_key = Some(key);
     }
+    pub(crate) fn set_obscure(&mut self, v: bool) {
+        self.obscure_text = Some(Val::Static(v));
+    }
+    pub(crate) fn set_multiline(&mut self, v: bool) {
+        self.multiline = Some(Val::Static(v));
+    }
+    pub(crate) fn set_obscuring_character_str(&mut self, v: String) {
+        self.obscuring_character = Some(Val::Static(v));
+    }
+    pub(crate) fn set_font_family_str(&mut self, v: String) {
+        self.font_family = Some(Val::Static(v));
+    }
 
     /// Rut-rail constructor (`core::rut_runtime`): shared controllers, a
     /// static placeholder, and an explicit size — the rows the rut C1 gate
