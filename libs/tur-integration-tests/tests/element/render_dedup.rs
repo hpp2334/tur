@@ -86,9 +86,9 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur::{{ box_color_bound, box_size, el_box_new, el_build, mount, rs_set_brush, rs_source_value }};
+use tur::{ box_color_bound, box_size, el_box_new, el_build, mount, rs_set_brush, rs_source_value };
 
-entry fn start() -> u64 {{
+entry fn start() -> u64 {
     let color = rs_source_value(rs_list_new());
     rs_set_brush(color, 0xFF0000FFu64);
 
@@ -97,17 +97,17 @@ entry fn start() -> u64 {{
     box_color_bound(b, color);
     mount(el_build(b));
     return color;
-}}
+}
 
-entry fn do_set(color: u64, v: f64) {{
+entry fn do_set(color: u64, v: f64) {
     // 0 clears the brush (Nil — the prop resolves absent); the container
     // repaints unpainted (the batch differs either way).
-    if (v == 0.0) {{
+    if (v == 0.0) {
         rs_set_brush(color, 0);
-    }} else {{
+    } else {
         rs_set_brush(color, 0x00FF00FFu64);
-    }}
-}}
+    }
+}
 "#,
     )
     .expect("mount");
@@ -183,3 +183,4 @@ entry fn start() {
         "freshly attached renderer must apply the identical batch ({after_initial} → {after_attach})"
     );
 }
+

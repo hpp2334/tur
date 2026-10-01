@@ -18,13 +18,17 @@ use tur_integration_tests::TurTestApp;
 
 /// Long highlighted document: 400 monospace lines, one span per line (the
 /// token granularity of syntax highlighting, minus per-token splitting to
-/// keep the fixture small — the memo contract is length-independent).
+/// keep the fixture small — the memo contract is length-independent). The
+/// editor width rides a bound atom (the rut `Input` shrink-wraps, so —
+/// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
+/// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
 use tur::{
-    el_build, el_input_ctrl, el_qkey, el_scroll, mount, tctrl_new, tctrl_push_span,
+    box_width_bound, el_box_new, el_build, el_child, el_input_ctrl, el_qkey, el_scroll,
+    el_vqkey, mount, rs_set_f64, rs_source_f64, tctrl_new, tctrl_push_span,
 };
 
-entry fn start() {
+entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let mut i = 0;
     while (i < 400) {
@@ -32,11 +36,22 @@ entry fn start() {
         i += 1;
     }
 
-    let input = el_input_ctrl(ctrl, 100000.0, 10000.0, 14.0);
+    let width = rs_source_f64();
+    rs_set_f64(width, 400.0);
+
+    let input = el_input_ctrl(ctrl, 0.0, 10000.0, 14.0);
     el_qkey(input, "ed");
-    let scroller = el_scroll(true, el_build(input));
-    el_qkey(scroller, "scroll");
-    mount(el_build(scroller));
+    let wrap = el_box_new();
+    box_width_bound(wrap, width);
+    el_child(wrap, el_build(input));
+    let scroller = el_scroll(true, el_build(wrap));
+    let scroller = el_vqkey(scroller, "scroll");
+    mount(scroller);
+    return width;
+}
+
+entry fn set_width(width: u64, v: f64) {
+    rs_set_f64(width, v);
 }
 "##;
 
@@ -159,9 +174,12 @@ fn width_change_invalidates_memo() {
     focus_at_start(&mut app, id);
 
     let before = shape_count(&app, id);
+    let width_atom = app.rut_start_answer();
 
-    // Narrower viewport → narrower max_width constraint → new memo key.
-    app.resize(320.0, 300.0);
+    // Narrower constraint → narrower max_width → new memo key. (The bound
+    // wrapper's width drives the editable's constraint — the same contract
+    // the JS twin pinned through a window resize.)
+    app.call_rut_entry("set_width", width_atom, 320.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         shape_count(&app, id),
@@ -169,8 +187,8 @@ fn width_change_invalidates_memo() {
         "constraint change must invalidate the layout memo"
     );
 
-    // Same width again → another (different) key → reshape again.
-    app.resize(400.0, 300.0);
+    // Back to the original width → another (different) key → reshape again.
+    app.call_rut_entry("set_width", width_atom, 400.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(shape_count(&app, id), before + 2);
 }
@@ -201,3 +219,4 @@ fn scrolling_does_not_reshape() {
         bounds_after.top
     );
 }
+

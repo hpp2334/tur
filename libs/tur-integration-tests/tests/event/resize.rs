@@ -6,15 +6,15 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-use tur::{ el_build, el_child, el_column, el_input, el_qkey, el_vqkey, mount, tctrl_new, undo_new };
+use tur::{ box_color, el_box_new, el_build, el_child, el_column, el_expand, el_vqkey, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 200.0, 30.0);
-    el_qkey(input, "input");
+    let fill_builder = el_box_new();
+    box_color(fill_builder, 0x404040FFu64);
+    let fill = el_expand(1.0, el_build(fill_builder));
+    let fill = el_vqkey(fill, "fill");
     let col = el_column();
-    el_child(col, input);
+    el_child(col, fill);
     mount(el_build(col));
 }
 "#;

@@ -9,7 +9,7 @@ use tur_integration_tests::TurTestApp;
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
 use tur::{
-    el_build, el_qkey, el_switch, el_text, mount, rs_set_str, rs_source_str, switch_case,
+    el_build, el_switch, el_text, el_vqkey, mount, rs_set_str, rs_source_str, switch_case,
     switch_fallback,
 };
 
@@ -17,9 +17,9 @@ entry fn start() -> u64 {
     let key = rs_source_str("a");
 
     let sw = el_switch(key);
-    switch_case(sw, "a", el_qkey(el_text("AAA"), "case_a"));
-    switch_case(sw, "b", el_qkey(el_text("BBB"), "case_b"));
-    switch_fallback(sw, el_qkey(el_text("FALL"), "case_fallback"));
+    switch_case(sw, "a", el_vqkey(el_text("AAA"), "case_a"));
+    switch_case(sw, "b", el_vqkey(el_text("BBB"), "case_b"));
+    switch_fallback(sw, el_vqkey(el_text("FALL"), "case_fallback"));
     mount(el_build(sw));
     return key;
 }
@@ -113,31 +113,40 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 }
 
 /// A switch bound to a DERIVED atom (`rs_derive` over the source): the swap
-/// rides the subscriber graph when the dep flips.
+/// rides the subscriber graph when the dep flips. `rs_derive` crosses its
+/// dep as f64 (`entry fn d(dep: f64) -> str`), so the source is a numeric
+/// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
 use tur::{
-    el_build, el_qkey, el_switch, el_text, el_text_bound_d, mount, rs_derive, rs_set_str,
-    rs_source_str, switch_case, switch_fallback,
+    el_build, el_switch, el_switch_d, el_text, el_vqkey, mount, rs_derive, rs_set_f64,
+    rs_source_f64, switch_case, switch_fallback,
 };
 
-entry fn d(v: str) -> str {
-    return v;
+entry fn d(v: f64) -> str {
+    if (v == 1.0) {
+        return "b";
+    }
+    if (v == 2.0) {
+        return "zzz";
+    }
+    return "a";
 }
 
 entry fn start() -> u64 {
-    let key = rs_source_str("a");
+    let key = rs_source_f64();
+    rs_set_f64(key, 0.0);
     let derived = rs_derive("d", key);
 
     let sw = el_switch_d(derived);
-    switch_case(sw, "a", el_qkey(el_text("AAA"), "d_case_a"));
-    switch_case(sw, "b", el_qkey(el_text("BBB"), "d_case_b"));
-    switch_fallback(sw, el_qkey(el_text("FALL"), "d_case_fallback"));
+    switch_case(sw, "a", el_vqkey(el_text("AAA"), "d_case_a"));
+    switch_case(sw, "b", el_vqkey(el_text("BBB"), "d_case_b"));
+    switch_fallback(sw, el_vqkey(el_text("FALL"), "d_case_fallback"));
     mount(el_build(sw));
     return key;
 }
 
 entry fn set_key(key: u64, _b: f64) {
-    rs_set_str(key, "b");
+    rs_set_f64(key, 1.0);
 }
 "#;
 

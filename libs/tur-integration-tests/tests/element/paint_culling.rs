@@ -42,29 +42,29 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.load_rut_module(
         r#"
-use tur::{{
-    box_color, box_size, el_box_new, el_build, el_child, el_column, el_qkey, el_scroll, mount,
-}};
+use tur::{
+    box_color, box_size, el_box_new, el_build, el_child, el_column, el_qkey, el_scroll, el_vqkey,
+    mount,
+};
 
-entry fn item(i: u64) -> opaque {{
+entry fn item(i: u64) -> opaque {
     let b = el_box_new();
     box_size(b, 10.0, 100.0);
     box_color(b, 0xFF0000FFu64);
     el_qkey(b, f"item/{i}");
     return el_build(b);
-}}
+}
 
-entry fn start() {{
+entry fn start() {
     let col = el_column();
-    let mut i = 0;
-    while (i < 6) {{
+    let mut i: u64 = 0;
+    while (i < 6) {
         el_child(col, item(i));
         i += 1;
-    }}
+    }
     let scroller = el_scroll(true, el_build(col));
-    el_qkey(scroller, "scroll");
-    mount(el_build(scroller));
-}}
+    mount(el_vqkey(scroller, "scroll"));
+}
 "#,
     )
     .expect("mount");

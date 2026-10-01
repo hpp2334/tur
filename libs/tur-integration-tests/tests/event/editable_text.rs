@@ -538,14 +538,16 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
 
 entry fn start() {
     let ctrl = tctrl_new();
+    tctrl_push_span(ctrl, "hello");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
-    mount(keyed);
+    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
+    input_font_family(input, "monospace");
+    el_qkey(input, "editor");
+    mount(el_build(input));
 }
 "#;
 
@@ -553,26 +555,34 @@ entry fn start() {
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
 
 entry fn start() {
     let ctrl = tctrl_new();
+    tctrl_push_span(ctrl, "import");
+    tctrl_push_span(ctrl, " {");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
-    mount(keyed);
+    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
+    input_font_family(input, "monospace");
+    el_qkey(input, "editor");
+    mount(el_build(input));
 }
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, input_multiline, mount, tctrl_new, tctrl_push_span, undo_new };
 
 entry fn start() {
     let ctrl = tctrl_new();
+    tctrl_push_span(ctrl, "abc\n");
+    tctrl_push_span(ctrl, "def\n");
+    tctrl_push_span(ctrl, "ghi");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
-    mount(keyed);
+    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
+    input_multiline(input, true);
+    input_font_family(input, "monospace");
+    el_qkey(input, "editor");
+    mount(el_build(input));
 }
 "#;
 
@@ -741,7 +751,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -751,9 +761,10 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
-    mount(keyed);
+    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
+    input_font_family(input, "monospace");
+    el_qkey(input, "editor");
+    mount(el_build(input));
 }
 "#;
 
@@ -799,6 +810,10 @@ use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo
 
 entry fn start() {
     let ctrl = tctrl_new();
+    // A zero-length span (the playground's `buildHighlightSpans` can emit
+    // these from adjacent/zero-width lexer tokens) followed by the content.
+    tctrl_push_span(ctrl, "");
+    tctrl_push_span(ctrl, "abcd");
     let undo = undo_new();
     let input = el_input(ctrl, undo, "", 300.0, 100.0);
     let keyed = el_vqkey(input, "editor");
@@ -829,19 +844,20 @@ fn empty_colored_span_does_not_panic() {
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ el_build, el_child, el_column, el_input_ctrl, el_qkey, el_scroll, input_font_family, input_multiline, mount, tctrl_new, tctrl_push_span, undo_new };
 
 entry fn start() {
     let ctrl = tctrl_new();
-    let mut i = 0;
-    while (i < 6) {
-        tctrl_push_span(ctrl, f"line {i} of the seeded document\n");
-        i += 1;
-    }
+    tctrl_push_span(ctrl, "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
-    mount(keyed);
+    let input = el_input_ctrl(ctrl, 0.0, 0.0, 14.0);
+    input_multiline(input, true);
+    input_font_family(input, "monospace");
+    el_qkey(input, "scrolled-input");
+    let col = el_column();
+    el_child(col, el_build(input));
+    let scroller = el_scroll(true, el_build(col));
+    mount(scroller);
 }
 "#;
 
@@ -930,19 +946,17 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input_opts, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{
-    content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
-}]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .multiline(true)
-    .fontFamily("monospace")
-    .fontSize(16)
-    .queryKey(["softwrap-input"])
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
+    let undo = undo_new();
+    // flags bit 0 = multiline.
+    let input = el_input_opts(ctrl, undo, "", 0.0, 0.0, 1);
+    let keyed = el_vqkey(input, "softwrap-input");
+    mount(keyed);
+}
 "#;
 
 #[test]
@@ -1056,20 +1070,18 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // scrolling), so a "single-line" field with long content renders multiple
 // VISUAL lines. Reported bug: clicking a lower visual line placed the caret
 // on visual line 0 because the non-multiline hit-test path dropped the y
-// coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus `multiline: true`.
+// coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
 const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{
-    content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
-}]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontFamily("monospace")
-    .fontSize(16)
-    .queryKey(["softwrap-single-input"])
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 0.0, 0.0);
+    let keyed = el_vqkey(input, "softwrap-single-input");
+    mount(keyed);
+}
 "#;
 
 #[test]

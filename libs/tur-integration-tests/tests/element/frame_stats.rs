@@ -71,8 +71,8 @@ entry fn start() {
     let col = el_column();
     let b = el_box_new();
     box_size(b, 100.0, 50.0);
-    el_child(col, b);
-    el_child(col, el_text_new("hello"));
+    el_child(col, el_build(b));
+    el_child(col, el_build(el_text_new("hello")));
     mount(el_build(col));
 }
 "#,

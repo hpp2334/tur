@@ -1135,7 +1135,7 @@ fn rut_net_stream_chunks_cross_as_records() {
 // rut-authored `VirtualAppView` hosting a full child instance.
 // ---------------------------------------------------------------------------
 
-/// A rut parent hosting a JS child through the virtual-app rows. The
+/// A rut parent hosting a rut child through the virtual-app rows. The
 /// controller rides the opaque stash (the poll entry reads it back); the
 /// child's lifecycle flips the status rail the rows read natively.
 const VAPP_RUT: &str = r#"
@@ -1145,7 +1145,7 @@ let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
-    let src = va_source("import { Text, mount } from 'tur:std';\nexport function start() {\nmount(Text({ text: 'child here' }).build());\n}");
+    let src = va_source("use tur::{ el_text, mount };\nentry fn start() {\nmount(el_text(\"child here\"));\n}");
     let ctrl = va_controller(src);
     st_put(CTRL_KEY, ctrl);
 

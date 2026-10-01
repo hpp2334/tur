@@ -16,9 +16,7 @@ use tur_integration_tests::TurTestApp;
 
 /// 4000 lines ≈ 168 KiB of text — well past the 65 535-byte wrap.
 const HUGE_EDITOR: &str = r##"
-import { mount, ScrollView, Input } from "tur:std";
-
-use tur::{ el_build, el_input_ctrl, el_qkey, el_scroll, mount, tctrl_new, tctrl_push_span };
+use tur::{ el_build, el_input_ctrl, el_qkey, el_scroll, el_vqkey, mount, tctrl_new, tctrl_push_span };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -31,8 +29,8 @@ entry fn start() {
     let input = el_input_ctrl(ctrl, 100000.0, 4000.0, 14.0);
     el_qkey(input, "ed");
     let scroller = el_scroll(true, el_build(input));
-    el_qkey(scroller, "scroll");
-    mount(el_build(scroller));
+    let scroller = el_vqkey(scroller, "scroll");
+    mount(scroller);
 }
 "##;
 

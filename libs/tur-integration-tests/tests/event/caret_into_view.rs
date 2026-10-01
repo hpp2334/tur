@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
 use tur::{
-    el_build, el_child, el_column, el_input, el_qkey, el_scroll, el_vqkey, mount, tctrl_new,
+    el_build, el_child, el_column, el_input_opts, el_scroll, el_vqkey, mount, tctrl_new,
     tctrl_push_span, undo_new,
 };
 
@@ -20,13 +20,18 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 100000.0, 30.0);
-    el_qkey(input, "editor");
+    // Multiline (flags bit 0), auto height — the editable lays out at its
+    // content height (~30 lines) so the ScrollView has overflow to scroll.
+    // The width spans the window (the JS twin's stretched-column geometry):
+    // a ScrollView shrink-wraps its cross axis, so without it the whole
+    // scroller would hug the longest line and the top-left click misses it.
+    let input = el_input_opts(ctrl, undo, "", 300.0, 0.0, 1);
+    let input = el_vqkey(input, "editor");
     let col = el_column();
     el_child(col, input);
     let scroller = el_scroll(true, el_build(col));
-    el_qkey(scroller, "scroll");
-    mount(el_build(scroller));
+    let scroller = el_vqkey(scroller, "scroll");
+    mount(scroller);
 }
 "#;
 
@@ -92,3 +97,4 @@ fn caret_into_view_scrolls_to_caret() {
         "viewport should be near the top after returning the caret to line 0 (got {after_up})",
     );
 }
+

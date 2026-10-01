@@ -341,7 +341,7 @@ entry fn start() {
     text_size(txt, 14.0);
     text_max_lines(txt, 1);
     text_ellipsis(txt);
-    el_child(b, txt);
+    el_child(b, el_build(txt));
     mount(el_build(b));
 }
 "#;

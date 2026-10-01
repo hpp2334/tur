@@ -27,7 +27,7 @@ entry fn start() {
     el_qkey(stretch_row, "stretch-row");
     flex_cross_align(stretch_row, CROSS_ALIGN_STRETCH);
     el_child(stretch_row, el_sizedbox(50.0, 0.0, el_build(el_box_new())));
-    el_child(col, stretch_row);
+    el_child(col, el_build(stretch_row));
 
     // Expanded inside a Column with unbounded height: the flex child lays
     // out as inflexible (natural size), never a zero slot and never
@@ -37,7 +37,7 @@ entry fn start() {
     let sized = el_box_new();
     box_size(sized, 10.0, 50.0);
     el_child(flex_col, el_expand(1.0, el_build(sized)));
-    el_child(col, flex_col);
+    el_child(col, el_build(flex_col));
 
     mount(el_build(col));
 }

@@ -332,10 +332,10 @@ fn context_menu_paste_then_undo_restores_text() {
     app.send_key("ArrowRight");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // "Paste" XY: the engine's Cmd+V path with a pre-canned clipboard read
-    // (the menu action's keyboard mirror).
-    app.set_clipboard_read("XY");
-    app.send_key_with_modifiers_full("v", false, false, true);
+    // "Paste" XY: the embedder rail (the hidden-textarea `paste` event the
+    // browser fires for Cmd+V / the menu action — the engine's keyboard path
+    // only marks the key handled; the text crosses as a platform paste).
+    app.push_paste_event("XY");
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "aXYb", "paste should insert at cursor");
 
