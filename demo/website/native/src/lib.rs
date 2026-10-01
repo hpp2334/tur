@@ -4,8 +4,10 @@
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
 //! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and adds the
-//! playground-only [`tur_playground_plugin::TurPlaygroundPlugin`] (swc TS
-//! compiler). JS imports `TurWebsiteApp` from the generated `tur_website.js`.
+//! playground's rut compile service ([`playground_rut::TurRutPlaygroundPlugin`],
+//! the retired swc plugin's replacement). JS imports `TurWebsiteApp` from the
+//! generated `tur_website.js` and boots the playground via
+//! `loadAndRunRutModule(playgroundSource())`.
 //!
 //! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
 //! (the app's own cdylib that adds the demo plugin set).
@@ -14,8 +16,18 @@
 // empty (but compiling) cdylib.
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
+mod playground_rut;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+use playground_rut::TurRutPlaygroundPlugin;
+
+#[cfg(target_arch = "wasm32")]
+pub const PLAYGROUND_RUT: &str = include_str!("../../../playground-view/playground.rut");
+#[cfg(target_arch = "wasm32")]
+pub const CASES_GEN_RUT: &str = include_str!("../../../playground-view/cases_gen.rut");
 
 /// One-time wasm init (panic hook + tracing). Called automatically on module
 /// instantiation via the `#[wasm_bindgen(start)]` attribute.
@@ -80,9 +92,11 @@ impl TurWebsiteApp {
                 }
                 None => None,
             };
-            // Build the shared runtime once with the demo plugin.
+            // Build the shared runtime once with the playground's rut
+            // compile-service extension (the swc plugin is retired — the
+            // editor compiles rut via `pg_compile`).
             let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
-                configure: Box::new(|b| b.plugin(tur_playground_plugin::TurPlaygroundPlugin)),
+                configure: Box::new(|b| b.plugin(TurRutPlaygroundPlugin)),
                 worker_pools: Vec::new(),
             })?;
             // Spawn an isolated DOM-wired instance from it.
@@ -129,6 +143,14 @@ impl TurWebsiteApp {
             app.load_and_run_rut_module(&source).await?;
             Ok(JsValue::undefined())
         })
+    }
+
+    /// The playground's rut source (the handwritten module + the generated
+    /// case registry), concatenated into one loadable module. The site
+    /// shell feeds this to `loadAndRunRutModule`.
+    #[wasm_bindgen(js_name = playgroundSource)]
+    pub fn playground_source(&self) -> String {
+        format!("{PLAYGROUND_RUT}\n{CASES_GEN_RUT}")
     }
 
     /// Return a host-side dev-tool handle. Methods eval the in-engine
@@ -189,3 +211,5 @@ impl TurDevTool {
             .eval_js_promise(format!("turDevTool.setHostFrameTiming({enabled})"))
     }
 }
+
+// (the playground compile service lives in `playground_rut`)

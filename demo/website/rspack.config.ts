@@ -9,7 +9,6 @@ import * as rspack from "@rspack/core";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const wasmDir = resolve(__dirname, "native");
 const wasmPkgDir = join(wasmDir, "pkg");
-const implDir = resolve(__dirname, "../playground-view");
 
 /** Build the tur WASM (boa + vello + swc) and copy the pkg assets to dist. */
 class WasmBuildPlugin implements RspackPluginInstance {
@@ -94,73 +93,6 @@ class WasmBuildPlugin implements RspackPluginInstance {
     }
 }
 
-/** Build the playground-view bundle and emit impl.js. */
-class ImplBundlePlugin implements RspackPluginInstance {
-    /** Timestamp (ms) of the last successful `pnpm build` of playground-view. */
-    private lastBuilt = 0;
-    apply(compiler: Compiler): void {
-        // playground-view is emitted as a pre-built asset (dist/impl.js), so
-        // its source is NOT part of the website's module graph — rspack's
-        // watcher won't see edits there unless we explicitly register the
-        // directory as a context dependency (done in `afterCompile` below).
-        // Without that, regenerating case sources (gen-cases →
-        // src/cases/generated.ts) never reached the running dev server,
-        // requiring a manual restart.
-        const implSrcDir = join(implDir, "src");
-        const generatedCases = join(implSrcDir, "cases", "generated.ts");
-
-        const needsRebuild = (): boolean => {
-            try {
-                return statSync(generatedCases).mtimeMs > this.lastBuilt;
-            } catch {
-                return true;
-            }
-        };
-        const buildImpl = () => {
-            compiler
-                .getInfrastructureLogger("ImplBundlePlugin")
-                .info("Building playground-view...");
-            execSync("pnpm build", { cwd: implDir, stdio: "inherit" });
-            this.lastBuilt = Date.now();
-        };
-
-        compiler.hooks.beforeRun.tapPromise("ImplBundlePlugin", async () =>
-            buildImpl(),
-        );
-        compiler.hooks.watchRun.tapPromise("ImplBundlePlugin", async () => {
-            // `modifiedFiles` is the set of paths that triggered this watch
-            // run. Only rebuild impl when something under playground-view/src
-            // changed (e.g. a regenerated case manifest); otherwise skip so
-            // unrelated website edits don't pay the `pnpm build` cost. Fall
-            // back to an mtime check when modifiedFiles is unavailable.
-            const changed = (
-                compiler as unknown as { modifiedFiles?: Set<string> }
-            ).modifiedFiles;
-            const touched = changed
-                ? [...changed].some((f) => f.startsWith(implSrcDir))
-                : needsRebuild();
-            if (touched) buildImpl();
-        });
-        compiler.hooks.afterCompile.tap("ImplBundlePlugin", (compilation) => {
-            // Watch playground-view/src so edits there (incl. regenerated case
-            // sources) trigger watchRun + an impl rebuild.
-            compilation.contextDependencies.add(implSrcDir);
-        });
-        compiler.hooks.emit.tapPromise(
-            "ImplBundlePlugin",
-            async (compilation) => {
-                const logger = compilation.getLogger("ImplBundlePlugin");
-                const content = readFileSync(join(implDir, "dist", "impl.js"));
-                compilation.emitAsset(
-                    "impl.js",
-                    new compiler.webpack.sources.RawSource(content),
-                );
-                logger.info("Emitted impl.js");
-            },
-        );
-    }
-}
-
 export default defineConfig({
     optimization: {
         minimize: false,
@@ -226,7 +158,6 @@ export default defineConfig({
     plugins: [
         new rspack.HtmlRspackPlugin({ template: "./index.html" }),
         new WasmBuildPlugin(),
-        new ImplBundlePlugin(),
         new rspack.CopyRspackPlugin({ patterns: [{ from: "public" }] }),
     ],
 });

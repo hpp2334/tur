@@ -1079,8 +1079,15 @@ impl RutRuntime {
         let mut session = rut_driver::Session::new();
         rut_driver::mount_std_core(&mut session);
         // The async weave (Future trait + the launch rows) — the C6 async
-        // capability rows `await` through it.
-        rut_driver::mount_std_async(&mut session);
+        // capability rows `await` through it. On wasm the weave's mount
+        // reads the toolchain tree from disk (rut-driver's
+        // `mount_std_async` canonicalizes a checkout path) — unavailable,
+        // so the weave is native-only for now: non-async rut modules load
+        // on the web, async ones fail the compile with unknown-module
+        // diagnostics.
+        if !cfg!(target_arch = "wasm32") {
+            rut_driver::mount_std_async(&mut session);
+        }
         session
             .register_module("tur", module)
             .map_err(|e| format!("mount tur pkg: {e}"))?;
@@ -1142,8 +1149,10 @@ impl RutRuntime {
         let mut hosts = rut_vm::interp::HostRegistry::new();
         // The async launcher set (`__launch` / `__abort` / `__sleep`) — the
         // standard `mount_std_async` decls demand these bodies (the spike's
-        // wiring).
-        hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
+        // wiring). Native-only, symmetric with the decl mount above.
+        if !cfg!(target_arch = "wasm32") {
+            hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
+        }
         install_tur_pkg(&mut hosts, &ctx, &handles, &exts);
         hosts.verify_against(&ctx.flatten());
 

@@ -12,7 +12,10 @@ crate-type = ["cdylib"]
 [dependencies]
 tur-wasm = { workspace = true }
 tur-engine = { workspace = true, features = ["webgl"] }
-tur-playground-plugin = { workspace = true }
+rut-driver = { workspace = true }
+rut-parser = { workspace = true }
+rut-vm = { workspace = true }
+rut-core = { workspace = true }
 boa_engine = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
