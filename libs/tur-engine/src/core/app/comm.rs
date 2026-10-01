@@ -238,6 +238,17 @@ pub enum HostMsg {
     /// `turDevTool.setHostFrameTiming(...)` bridge; `HostBackend` applies it
     /// to its local gate.
     FrameTimingEnabled(bool),
+    /// A dev-tool snapshot reply, shipped worker → host so the JSON is
+    /// resolved on the MAIN thread (wasm only — see `worker_loop`'s
+    /// intercept). A oneshot waker fired on the worker thread can never
+    /// re-poll a main-thread `wasm_bindgen_futures` task (thread-local
+    /// task queues), so the reply must ride this drained channel:
+    /// `HostBackend::apply_msg` runs on main, and firing the oneshot
+    /// there wakes the awaiting task on the thread that spawned it.
+    DevToolReply {
+        reply: ReplySender<String>,
+        json: String,
+    },
 }
 
 /// A deduped shell-layer request shipped worker → host inside
@@ -360,6 +371,7 @@ impl fmt::Debug for HostMsg {
             Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
             Self::Destroyed => write!(f, "Destroyed"),
             Self::FrameTimingEnabled(on) => f.debug_tuple("FrameTimingEnabled").field(on).finish(),
+            Self::DevToolReply { .. } => f.write_str("DevToolReply"),
         }
     }
 }

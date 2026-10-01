@@ -69,9 +69,16 @@ pub(crate) struct WorkerBackend {
     #[allow(dead_code)]
     clock: std::sync::Arc<dyn Clock>,
     /// Worker→host sender clone — the rut trap/fuel reporter ships runtime
-    /// errors to main through it.
-    #[allow(dead_code)]
+    /// errors to main through it, and the dev-tool RPC bridge ships
+    /// `HostMsg::DevToolReply` through it when the reply transport is
+    /// host-drain (see `rpc_via_host_drain`).
     host_tx: HostTx,
+    /// RPC replies resolve on the awaiting (host) thread instead of via a
+    /// oneshot waker fired here on the worker — required by executors
+    /// whose task queues are thread-local (`wasm_bindgen_futures`).
+    /// Resolved once at construction from
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](crate::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread).
+    rpc_via_host_drain: bool,
     pub(crate) internal: TurAppInternal,
 }
 
@@ -82,11 +89,13 @@ impl WorkerBackend {
         clock: std::sync::Arc<dyn Clock>,
         host_tx: HostTx,
         _host_exec: crate::core::plugin::HostExecutor,
+        rpc_via_host_drain: bool,
     ) -> Self {
         Self {
             rut: RefCell::new(None),
             clock,
             host_tx,
+            rpc_via_host_drain,
             internal,
         }
     }
@@ -222,24 +231,17 @@ impl WorkerBackend {
                 runner(&tree, &focus);
             }
             WorkerMsg::DevTool { req, reply } => {
-                let instance = &self.internal.instance;
-                let out = match req {
-                    crate::core::app::DevToolRequest::ElementTree => {
-                        let tree = instance.element_tree.borrow();
-                        crate::core::dev::element_tree_json(&tree)
-                    }
-                    crate::core::app::DevToolRequest::GetElement(id) => {
-                        let tree = instance.element_tree.borrow();
-                        crate::core::dev::get_element_json(
-                            &tree,
-                            crate::core::element::NodeId::new(id),
-                        )
-                    }
-                    crate::core::app::DevToolRequest::FrameStats => {
-                        crate::core::dev::frame_stats_json(&instance.frame_stats)
-                    }
-                };
-                reply.send(out);
+                let json = self.dev_tool_json(req);
+                if self.rpc_via_host_drain {
+                    // The awaiting task lives on the host thread and its
+                    // executor can't be woken from here — ride the drained
+                    // host channel; `apply_msg` fires the reply on main.
+                    let _ = self
+                        .host_tx
+                        .unbounded_send(HostMsg::DevToolReply { reply, json });
+                } else {
+                    reply.send(json);
+                }
             }
             WorkerMsg::FrameTimingEnabled { enabled } => {
                 self.internal
@@ -266,6 +268,29 @@ impl WorkerBackend {
                 // cleanup (best-effort) before the worker tears down.
                 self.teardown_rut_module();
                 reply.send(());
+            }
+        }
+    }
+
+    /// Serialize a dev-tool snapshot request against the live instance
+    /// state (see `core::dev`). Shared by the worker's direct-reply path
+    /// (native — the waker fires cross-thread and native executors
+    /// re-poll) and the wasm bridge (`worker_loop` ships the JSON to main
+    /// as [`HostMsg::DevToolReply`]; `apply_msg` resolves it there, on
+    /// the thread the awaiting task was spawned on).
+    pub(crate) fn dev_tool_json(&self, req: crate::core::app::DevToolRequest) -> String {
+        let instance = &self.internal.instance;
+        match req {
+            crate::core::app::DevToolRequest::ElementTree => {
+                let tree = instance.element_tree.borrow();
+                crate::core::dev::element_tree_json(&tree)
+            }
+            crate::core::app::DevToolRequest::GetElement(id) => {
+                let tree = instance.element_tree.borrow();
+                crate::core::dev::get_element_json(&tree, crate::core::element::NodeId::new(id))
+            }
+            crate::core::app::DevToolRequest::FrameStats => {
+                crate::core::dev::frame_stats_json(&instance.frame_stats)
             }
         }
     }
@@ -872,6 +897,13 @@ impl HostBackend {
             HostMsg::Destroyed => MsgOutcome::Closed,
             HostMsg::FrameTimingEnabled(on) => {
                 self.frame_timing_enabled.set(on);
+                MsgOutcome::Continue
+            }
+            HostMsg::DevToolReply { reply, json } => {
+                // Resolve on MAIN — the whole point of the bridge (see the
+                // variant doc): the awaiting dev-tool task is a main-thread
+                // `wasm_bindgen_futures` task, so its waker must fire here.
+                reply.send(json);
                 MsgOutcome::Continue
             }
             // Virtual-app controls are routed by `TurAppLooper` — the drain

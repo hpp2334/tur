@@ -668,6 +668,11 @@ pub(crate) fn build_worker_backend(
     instance_data_definer: Option<InstanceDataDefiner>,
     worker_pools: std::sync::Arc<[WorkerPoolHandle]>,
 ) -> Result<WorkerBackend, TurError> {
+    // Resolve the RPC reply transport once, from the executor seam (see
+    // `WorkerExecutor::wakes_host_tasks_cross_thread`): executors that
+    // can't re-poll host tasks from a worker-side waker (wasm) get
+    // replies routed through the drained host channel.
+    let rpc_via_host_drain = !worker_ctx.wakes_host_tasks_cross_thread();
     let mut internal = TurAppInternal::new(
         font_context,
         font_loader,
@@ -720,7 +725,13 @@ pub(crate) fn build_worker_backend(
     internal.subsystems = RefCell::new(parts.subsystems);
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
-    Ok(WorkerBackend::new(internal, clock, host_tx, host_exec))
+    Ok(WorkerBackend::new(
+        internal,
+        clock,
+        host_tx,
+        host_exec,
+        rpc_via_host_drain,
+    ))
 }
 
 pub struct TurRuntimeBuilder {

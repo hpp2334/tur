@@ -425,6 +425,7 @@ impl TurTestApp {
             None,
             TestSchedulerDriver::new(),
             dpr,
+            false,
         )
     }
 
@@ -457,6 +458,7 @@ impl TurTestApp {
             Some(shell),
             driver,
             1.0,
+            false,
         )
     }
 
@@ -504,6 +506,30 @@ impl TurTestApp {
         Self::build(width, height, None, None, extra_plugins, None, None)
     }
 
+    /// Construct with the RPC reply transport forced to **host-drain**
+    /// (the wasm browser path — see
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](tur_engine::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread)):
+    /// worker RPC replies ride `HostMsg` and are resolved by the looper's
+    /// drain on the awaiting thread. Pins the transport that makes
+    /// `turDevTool.elementTree()` resolve in browsers. Dev-tool probes on
+    /// such an app must use the LocalSet-driving harness methods
+    /// (`dev_tool_element_tree_json` / `pump`), never a bare
+    /// `futures::executor::block_on` (the reply needs the looper polled).
+    pub fn new_with_host_drain_rpc(width: f64, height: f64) -> Result<Self, TurError> {
+        Self::build_with_driver(
+            width,
+            height,
+            None,
+            None,
+            Vec::new(),
+            None,
+            None,
+            TestSchedulerDriver::new(),
+            1.0,
+            true,
+        )
+    }
+
     /// Construct with a custom [`Renderer`] (instead of the default
     /// `NoopRenderer`), keeping every other harness ergonomic (load / wheel /
     /// render / element_tree). Used by tests that need to inspect the actual
@@ -536,6 +562,7 @@ impl TurTestApp {
             shell,
             TestSchedulerDriver::new(),
             1.0,
+            false,
         )
     }
 
@@ -553,16 +580,26 @@ impl TurTestApp {
         shell: Option<Box<dyn tur_engine::Shell>>,
         driver: Rc<TestSchedulerDriver>,
         dpr: f64,
+        rpc_via_host_drain: bool,
     ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         // Default pool: effectively uncapped → every harness app gets its
         // own dedicated lane thread (the historical threading).
         let worker_pool = WorkerPoolHandle::new("test", usize::MAX);
+        let spawner: std::rc::Rc<dyn tur_engine::core::scheduler::WorkerSpawner> =
+            if rpc_via_host_drain {
+                // The wasm browser path, forced natively: RPC replies ride
+                // the drained host channel instead of a cross-thread
+                // oneshot waker (see ViaHostDrainExecutor).
+                driver.worker_spawner_via_host_drain()
+            } else {
+                driver.worker_spawner()
+            };
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
-            .worker_spawner(driver.worker_spawner())
+            .worker_spawner(spawner)
             .host_loop(driver.host_loop())
             .worker_pool(worker_pool.clone())
             .capability({
@@ -1352,9 +1389,27 @@ impl TurTestApp {
     }
 
     /// JSON frame-stats snapshot (the `devToolFrameStats` RPC) — the
-    /// render-performance probe's raw JSON.
+    /// render-performance probe's raw JSON. Driven through the LocalSet
+    /// (see `dev_tool_element_tree_json`) so it works under BOTH RPC
+    /// transports.
     pub fn dev_tool_frame_stats(&self) -> String {
-        block_on(self.inner.dev_tool_frame_stats())
+        self.driver.block_on(self.inner.dev_tool_frame_stats())
+    }
+
+    /// JSON root-tree snapshot via the RPC surface (`turDevTool
+    /// .elementTree()`'s engine twin) — the String transport, exactly as
+    /// the browser sees it. Driven through the LocalSet (the looper must
+    /// be polled for the host-drain RPC transport), so it works under
+    /// BOTH transports.
+    pub fn dev_tool_element_tree_json(&self) -> String {
+        self.driver.block_on(self.inner.dev_tool_element_tree())
+    }
+
+    /// JSON snapshot of one node by id (`turDevTool.getElement()`'s
+    /// engine twin) — children arrive as bare `{id}` handles in
+    /// `element_tree_json`, so fetch the child to inspect its content.
+    pub fn dev_tool_get_element_json(&self, id: u64) -> String {
+        self.driver.block_on(self.inner.dev_tool_get_element(id))
     }
 
     /// Toggle host-side render-commit timing collection (mirrored worker +

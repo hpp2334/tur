@@ -216,21 +216,24 @@ impl TurApp {
     /// in `frameStats().lastHost`. Off by default (zero per-frame overhead).
     pub fn set_host_frame_timing(&self, enabled: bool) {
         self.host.backend().set_frame_timing_enabled(enabled);
-        let _ = self
-            .host
+        // Through the waking send path (see `TurApp::dev_tool`): a bare
+        // `unbounded_send` strands the message on executors without
+        // cross-thread wakes until unrelated traffic arrives.
+        self.host
             .backend()
-            .worker_tx()
-            .unbounded_send(core::app::WorkerMsg::FrameTimingEnabled { enabled });
+            .send_worker_msg(core::app::WorkerMsg::FrameTimingEnabled { enabled });
     }
 
     async fn dev_tool(&self, req: core::app::DevToolRequest) -> String {
-        let (tx, rx) = core::app::Reply::<String>::pair();
-        let _ = self
-            .host
+        // Through the backend's disciplined RPC path (send + worker kick):
+        // on executors without cross-thread wakes (wasm) a bare
+        // `unbounded_send` leaves the request sitting in the worker's
+        // channel until unrelated traffic arrives — the kick is what
+        // rouses the parked worker loop.
+        self.host
             .backend()
-            .worker_tx()
-            .unbounded_send(core::app::WorkerMsg::DevTool { req, reply: tx });
-        rx.rx.await.unwrap_or_default()
+            .rpc(|reply| core::app::WorkerMsg::DevTool { req, reply })
+            .await
     }
 
     /// Count of image resources retained on the host side (pixel `Blob`s).

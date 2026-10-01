@@ -50,6 +50,10 @@ fn performance_now() -> Option<f64> {
 
 struct WasmState {
     app: Rc<TurApp>,
+    /// The shell's vsync source (same instance the engine subscribed at
+    /// construction) — retained so RPC bridges can nudge the looper (see
+    /// [`crate::scheduler::WasmVsyncSource::nudge`]).
+    vsync: Rc<crate::scheduler::WasmVsyncSource>,
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
@@ -524,10 +528,11 @@ impl WasmApp {
         // TextInputState, so a shell installed after build() could miss
         // it; the engine likewise takes the vsync source once, here.
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
+        let vsync = crate::scheduler::WasmVsyncSource::new();
         let wasm_shell = WasmShell {
             canvas: canvas.clone(),
             state_weak: state_weak.clone(),
-            vsync: Some(crate::scheduler::WasmVsyncSource::new()),
+            vsync: Some(vsync.clone()),
         };
         let (app, looper) = runtime
             .runtime
@@ -1049,6 +1054,7 @@ impl WasmApp {
 
         let wasm_state = WasmState {
             app,
+            vsync,
             _canvas: canvas,
             textarea,
             is_composing: Cell::new(false),
@@ -1124,15 +1130,15 @@ impl WasmApp {
     /// `wasm_bindgen_futures::future_to_promise` — the JS caller `await`s
     /// the returned `Promise`.
     pub fn element_tree(&self) -> js_sys::Promise {
-        let app = {
+        let (app, vsync) = {
             let guard = self.state.borrow();
             match guard.as_ref() {
-                Some(s) => s.app.clone(),
+                Some(s) => (s.app.clone(), s.vsync.clone()),
                 None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
             }
         };
         wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.dev_tool_element_tree().await;
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_element_tree()).await;
             Ok(JsValue::from_str(&s))
         })
     }
@@ -1143,15 +1149,15 @@ impl WasmApp {
     /// (`turDevTool.frameStats()`):
     /// `{ flushes, paintedFrames, totals, last, lastHost, hostTimingEnabled }`.
     pub fn frame_stats(&self) -> js_sys::Promise {
-        let app = {
+        let (app, vsync) = {
             let guard = self.state.borrow();
             match guard.as_ref() {
-                Some(s) => s.app.clone(),
+                Some(s) => (s.app.clone(), s.vsync.clone()),
                 None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
             }
         };
         wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.dev_tool_frame_stats().await;
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_frame_stats()).await;
             Ok(JsValue::from_str(&s))
         })
     }
@@ -1173,16 +1179,53 @@ impl WasmApp {
     /// Internal: the dev-tool element snapshot transport (the JSON snapshot
     /// methods above).
     pub fn get_element(&self, id: u32) -> js_sys::Promise {
-        let app = {
+        let (app, vsync) = {
             let guard = self.state.borrow();
             match guard.as_ref() {
-                Some(s) => s.app.clone(),
+                Some(s) => (s.app.clone(), s.vsync.clone()),
                 None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
             }
         };
         wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.dev_tool_get_element(id as u64).await;
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_get_element(id as u64)).await;
             Ok(JsValue::from_str(&s))
         })
+    }
+}
+
+/// Await a worker RPC reply, nudging the main-thread looper so the reply
+/// (shipped as a `HostMsg` under the host-drain transport — see
+/// `WorkerExecutor::wakes_host_tasks_cross_thread`) is drained even on a
+/// quiescent page, where rAF is disarmed and the looper parks on
+/// `select(vsync, host_rx)` with a waker that can't fire cross-thread.
+/// The nudges ride `setTimeout` (0 ms + 60 ms): main-thread events, so
+/// the looper re-polls after the reply has had time to land.
+async fn rpc_with_looper_nudge<F: std::future::Future<Output = String>>(
+    vsync: &Rc<crate::scheduler::WasmVsyncSource>,
+    fut: F,
+) -> String {
+    schedule_looper_nudges(vsync);
+    fut.await
+}
+
+/// Fire two deferred vsync nudges (setTimeout 0 + 60 ms). Dev-tool probes
+/// are rare, so the per-nudge `Closure` leak is bounded and harmless.
+fn schedule_looper_nudges(vsync: &Rc<crate::scheduler::WasmVsyncSource>) {
+    use wasm_bindgen::JsCast;
+    for delay_ms in [0, 60] {
+        let vsync = vsync.clone();
+        let cb = wasm_bindgen::closure::Closure::<dyn Fn()>::new(move || vsync.nudge());
+        let scheduled = web_sys::window()
+            .and_then(|w| {
+                w.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    delay_ms,
+                )
+                .ok()
+            })
+            .is_some();
+        if scheduled {
+            cb.forget();
+        }
     }
 }
