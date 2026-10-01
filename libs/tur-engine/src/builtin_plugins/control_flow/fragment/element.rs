@@ -22,6 +22,11 @@ impl FragmentView {
     pub fn new_rut(children: Vec<Rc<dyn View>>) -> Self {
         Self { children, query_key: None }
     }
+
+    /// Append one child (the `frag_child` row).
+    pub(crate) fn push_child(&mut self, child: Rc<dyn View>) {
+        self.children.push(child);
+    }
 }
 
 impl View for FragmentView {

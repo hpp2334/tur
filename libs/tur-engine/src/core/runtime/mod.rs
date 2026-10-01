@@ -682,8 +682,8 @@ pub(crate) fn build_worker_backend(
     // Seed the worker-side screen state with the build-time viewport. The
     // `viewportSize$` engine atom — backing source, public derive handle,
     // and the `ResizeSubsystem` that publishes it — is minted and owned by
-    // `TurStdPlugin` (the canonical plugin-facing engine-atom recipe, see
-    // `builtin_plugins/std.rs`), seeded via `PluginRegisterContext::viewport()`.
+    // the standard plugin (the canonical plugin-facing engine-atom recipe,
+    // see the std plugin), seeded via `PluginRegisterContext::viewport()`.
     internal.app_context.borrow_mut().screen.logical_size = viewport;
 
     // Replay the build-time `instance_data` definer (from

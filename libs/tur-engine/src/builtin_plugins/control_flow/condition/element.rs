@@ -161,6 +161,11 @@ impl FragmentKind for ConditionFragment {
 // ---------------------------------------------------------------------------
 
 impl ConditionView {
+    /// Re-key the condition fragment (the `cond_qkey` row).
+    pub(crate) fn set_query_key(&mut self, key: Option<Vec<String>>) {
+        self.query_key = key;
+    }
+
     /// Rut-rail constructor: a bool-atom condition with both branches
     /// pre-built (the factory clones them — no scripting invocation during
     /// flush).

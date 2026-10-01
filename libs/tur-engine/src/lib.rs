@@ -1,5 +1,6 @@
 pub mod builtin_plugins;
 pub mod core;
+pub mod kit;
 pub mod renderer;
 
 pub mod error;

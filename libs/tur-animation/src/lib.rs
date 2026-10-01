@@ -16,6 +16,7 @@
 
 pub mod controller;
 pub mod curve;
+pub mod kit;
 pub mod event;
 pub mod flush_hook;
 pub mod manager;

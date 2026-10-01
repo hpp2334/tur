@@ -112,6 +112,9 @@ impl InputView {
     pub(crate) fn set_controller(&mut self, c: Rc<RefCell<TextEditingController>>) {
         self.controller = Some(c);
     }
+    pub(crate) fn set_undo(&mut self, u: Rc<RefCell<UndoController>>) {
+        self.undo_controller = Some(u);
+    }
     pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
         self.query_key = Some(key);
     }
@@ -128,54 +131,4 @@ impl InputView {
         self.font_family = Some(Val::Static(v));
     }
 
-    /// Rut-rail constructor (`core::rut_runtime`): shared controllers, a
-    /// static placeholder, and an explicit size — the rows the rut C1 gate
-    /// drives. Everything else defaults (matching an un-styled `Input`).
-    pub(crate) fn new_rut(
-        controller: Rc<RefCell<TextEditingController>>,
-        undo_controller: Option<Rc<RefCell<UndoController>>>,
-        placeholder: Option<String>,
-        width: Option<f64>,
-        height: Option<f64>,
-    ) -> Self {
-        InputView {
-            width: width.map(Val::Static),
-            height: height.map(Val::Static),
-            controller: Some(controller),
-            undo_controller,
-            placeholder: placeholder.map(Val::Static),
-            color: None,
-            placeholder_color: None,
-            cursor_color: None,
-            font_size: None,
-            font_family: None,
-            font_weight: None,
-            multiline: None,
-            obscure_text: None,
-            obscuring_character: None,
-            on_context_menu: None,
-            query_key: Some(vec!["rut".to_string(), "input".to_string()]),
-        }
-    }
-
-    /// Rut-rail constructor with option flags (bit 0 = multiline,
-    /// bit 1 = obscure) — the `el_input_opts` row's crossing.
-    pub(crate) fn new_rut_opts(
-        controller: Rc<RefCell<TextEditingController>>,
-        undo_controller: Option<Rc<RefCell<UndoController>>>,
-        placeholder: Option<String>,
-        width: Option<f64>,
-        height: Option<f64>,
-        multiline: bool,
-        obscure: bool,
-    ) -> Self {
-        let mut view = Self::new_rut(controller, undo_controller, placeholder, width, height);
-        if multiline {
-            view.multiline = Some(Val::Static(true));
-        }
-        if obscure {
-            view.obscure_text = Some(Val::Static(true));
-        }
-        view
-    }
 }

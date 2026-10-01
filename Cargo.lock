@@ -3285,6 +3285,7 @@ name = "tur-animation"
 version = "0.1.0"
 dependencies = [
  "rut-core",
+ "rut-driver",
  "rut-vm",
  "tracing",
  "tur-engine",
@@ -3489,8 +3490,6 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "rut-core",
- "rut-driver",
- "rut-parser",
  "rut-vm",
  "tracing",
  "tracing-wasm",

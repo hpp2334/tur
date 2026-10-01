@@ -1,18 +1,27 @@
-//! The rut runtime seam — the boa replacement's Phase-1 vertical slice.
+//! The rut runtime seam — the engine's script-rail mechanism.
 //!
 //! Architecture: **rut drives, the engine applies.** A loaded rut module's
-//! `start()` builds a tree of *pure-Rust view data* through host rows
-//! (element builders materialize `Rc<dyn View>` values directly — no boa,
-//! no `JsValue` anywhere in the rut-built tree) and stashes the root via
-//! `tur::mount`. The engine applies the stashed root into the instance's
-//! `ElementTree` right after `start` returns, on the same code path the JS
-//! `mount(view)` bridge uses. The rut VM itself is driven by the embedder's
-//! pump (`run_ready()` before each flush — never inside a flush iteration,
-//! so rut rows never race the flush's boa borrow).
+//! `start()` builds a tree of *pure-Rust view data* through host rows and
+//! stashes the root via `tur::mount`. The engine applies the stashed root
+//! into the instance's `ElementTree` right after `start` returns, on the
+//! same code path the JS `mount(view)` bridge used. The rut VM itself is
+//! driven by the embedder's pump (`run_ready()` before each flush — never
+//! inside a flush iteration).
 //!
 //! Module lifecycle contract (mirrors the JS contract): `entry fn start()`
 //! is invoked after boot; `entry fn stop()` — if present — runs (best-effort)
 //! before the next load and at destroy; the engine owns root-tree teardown.
+//!
+//! ## Layering law
+//!
+//! This module is MECHANISM ONLY: the `RutView` crossing, the
+//! [`RutHandles`] bridge state, the `tur` host pkg's store / stash / mount
+//! rows, the entry rails ([`Intent`] + the drain), and the pkg-extension
+//! seam ([`RutPkgExt`]). It contains ZERO element concepts — every element
+//! family's spec + rows live in the builtin plugin that owns its view type
+//! (pushed via `PluginRegisterContext::push_rut_ext`, the
+//! [`tur-animation`](https://docs.rs) installer pattern), and the authored
+//! builder surface (the kit) lives outside `core/` entirely.
 
 use std::rc::Rc;
 use std::rc::Weak;
@@ -22,15 +31,8 @@ use crate::core::app::HostMsg;
 use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
 use crate::core::edgy::value::Value;
 use crate::core::instance::InstanceContext;
-use crate::core::layout::Axis;
-use crate::core::layout::{Alignment, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, StackFit};
-use crate::core::view::{SharedViewCx, View, ViewFactory, Val};
-use crate::builtin_plugins::control_flow::ConditionView;
-use crate::builtin_plugins::gesture::PointerInteractView;
-use crate::builtin_plugins::layout::{ContainerView, FlexView, FlexibleView, PositionedView, StackView};
-use crate::builtin_plugins::text::TextView;
-use crate::core::layout::FlexFit;
-use crate::core::render::brush::{Brush, Color};
+use crate::core::render::brush::Color;
+use crate::core::view::{SharedViewCx, View};
 use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64};
 use rut_driver::ModuleBody;
 use rut_vm::Opaque;
@@ -38,16 +40,7 @@ use rut_vm::interp::{CallArgs, Ret, Vm};
 use rut_vm::OpaqueRef;
 
 mod async_caps;
-mod collections;
-mod composited;
-mod container;
 mod derive;
-mod gesture;
-mod image_row;
-mod mouse_region;
-mod text;
-mod virtual_app;
-mod widgets;
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
 /// opaques from `entry fn(index)` calls).
@@ -56,7 +49,7 @@ pub fn opaque_to_view(handle: &OpaqueRef) -> Option<Rc<dyn View>> {
 }
 
 /// Rebuild a source handle from a raw atom id — the rut rows' crossing
-/// (the ids ARE the atoms). Engine-pub so the pkg extensions (tur-animation's
+/// (the ids ARE the atoms). Engine-pub so the pkg extensions (plugin-owned
 /// rut rows) can bind reactive props.
 pub fn source_of<T>(atom: u64) -> Source<T> {
     Source::from_id(AtomId(atom as u32))
@@ -66,6 +59,28 @@ pub fn source_of<T>(atom: u64) -> Source<T> {
 pub fn readable_of<T>(atom: u64) -> Readable<T> {
     Readable::Source(source_of(atom))
 }
+
+/// `0xRRGGBBAA` packed color → engine `Color` (the packed-color crossing
+/// every styled row family shares).
+pub fn color_of(packed: u64) -> Color {
+    Color::rgba(
+        ((packed >> 24) & 0xFF) as u8,
+        ((packed >> 16) & 0xFF) as u8,
+        ((packed >> 8) & 0xFF) as u8,
+        (packed & 0xFF) as u8,
+    )
+}
+
+/// A materialized view (`Rc<dyn View>`) sealed in an opaque box.
+pub struct RutView(pub Rc<dyn View>);
+
+/// A native edgy [`Value`] sealed in an opaque box — the rut rail's handle
+/// to structured atom values (lists / maps).
+pub struct RutValue(pub Value);
+
+/// A mutable f64 cell — the stateful-entry scratch crossing (the stash
+/// holds opaques only, so numbers cross in cells).
+pub struct RutCell(pub std::cell::Cell<f64>);
 
 /// The per-instance resource budget. Phase-1 defaults; tunable per embedder.
 pub fn default_limits() -> rut_vm::interp::Limits {
@@ -77,172 +92,33 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 }
 
 // ---------------------------------------------------------------------------
-// View payloads — the opaque boxes rut rows mint and pass.
-// ---------------------------------------------------------------------------
-
-/// A materialized view (`Rc<dyn View>`) sealed in an opaque box.
-pub struct RutView(pub Rc<dyn View>);
-
-/// A native edgy [`Value`] sealed in an opaque box — the rut rail's handle
-/// to structured atom values (lists / maps; the Phase-2-B5 round-trip
-/// surface; typed rut-side lists/records come with the next phase's
-/// breadth).
-pub struct RutValue(pub Value);
-
-/// A builder under construction — materialized by `tur::el_build`.
-/// (Box-variant is boxed to keep the enum small; setters mutate through it.)
-pub(crate) enum ViewBuilder {
-    Flex {
-        axis: Axis,
-        children: Vec<Rc<dyn View>>,
-        main_alignment: Option<MainAxisAlignment>,
-        cross_alignment: Option<CrossAxisAlignment>,
-        main_axis_size: Option<MainAxisSize>,
-        query_key: Option<Vec<String>>,
-    },
-    Stack {
-        children: Vec<Rc<dyn View>>,
-        alignment: Option<Alignment>,
-        fit: Option<StackFit>,
-        query_key: Option<Vec<String>>,
-    },
-    /// The C3 full-surface container: setter rows mutate the spec in
-    /// place; `el_build` materializes it.
-    Box(Box<ContainerView>),
-    /// The Phase-4 text builder: a `TextView` under construction (style
-    /// setter rows mutate it; `el_build` materializes it).
-    Text(Box<TextView>),
-    /// The C1 input builder: an `InputView` under construction (style
-    /// setter rows mutate it; `el_build` materializes it).
-    Input(Box<crate::builtin_plugins::text::InputView>),
-    /// The Grid builder: a `GridView` under construction (setter rows
-    /// mutate it; `el_build` materializes it).
-    Grid(Box<crate::builtin_plugins::layout::GridView>),
-    /// The Switch builder: a `SwitchView` under construction (case rows
-    /// append; `el_build` materializes it).
-    Switch(Box<crate::builtin_plugins::control_flow::SwitchView>),
-}
-
-impl ViewBuilder {
-    fn materialize(self) -> Rc<dyn View> {
-        match self {
-            ViewBuilder::Flex {
-                axis,
-                children,
-                main_alignment,
-                cross_alignment,
-                main_axis_size,
-                query_key,
-            } => Rc::new(FlexView {
-                direction: Some(axis),
-                main_alignment: main_alignment.map(Val::Static),
-                cross_alignment: cross_alignment.map(Val::Static),
-                main_axis_size: main_axis_size.map(Val::Static),
-                children,
-                query_key,
-            }),
-            ViewBuilder::Stack {
-                children,
-                alignment,
-                fit,
-                query_key,
-            } => Rc::new(StackView {
-                fit: fit.map(Val::Static),
-                alignment: alignment.map(Val::Static),
-                children,
-                query_key,
-            }),
-            ViewBuilder::Box(spec) => Rc::new(*spec),
-            ViewBuilder::Text(tv) => Rc::new(*tv),
-            ViewBuilder::Input(spec) => Rc::new(*spec),
-            ViewBuilder::Grid(spec) => Rc::new(*spec),
-            ViewBuilder::Switch(spec) => Rc::new(*spec),
-        }
-    }
-
-    /// Attach a query key to any builder variant (the `el_qkey` row).
-    fn set_query_key(&mut self, key: Vec<String>) {
-        match self {
-            ViewBuilder::Flex { query_key, .. }
-            | ViewBuilder::Stack { query_key, .. } => *query_key = Some(key),
-            ViewBuilder::Box(box_) => box_.query_key = Some(key),
-            ViewBuilder::Text(tv) => tv.query_key = Some(key),
-            ViewBuilder::Input(spec) => spec.set_query_key(key),
-            ViewBuilder::Grid(spec) => spec.query_key = Some(key),
-            ViewBuilder::Switch(spec) => spec.set_query_key(key),
-        }
-    }
-}
-
-/// `0xRRGGBBAA` packed color → engine `Color`.
-fn color_of(packed: u64) -> Color {
-    Color::rgba(
-        ((packed >> 24) & 0xFF) as u8,
-        ((packed >> 16) & 0xFF) as u8,
-        ((packed >> 8) & 0xFF) as u8,
-        (packed & 0xFF) as u8,
-    )
-}
-
-/// A pre-built branch for `tur::condition` — `create` clones the Rc, so a
-/// branch swap needs NO rut invocation during flush (the factory is pure
-/// Rust; the subtree was authored at `start` time).
-struct PreBuilt(Rc<dyn View>);
-
-impl ViewFactory for PreBuilt {
-    fn create(&self) -> Option<Rc<dyn View>> {
-        Some(self.0.clone())
-    }
-}
-
-// ---------------------------------------------------------------------------
 // The `tur` host package — decl rows (mounted in-memory as a Module) +
 // bodies (a HostPkg installed into the per-instance HostRegistry).
+//
+// MECHANISM ONLY: mount + the C8 no-mount trap, the `rs_*` store rows,
+// and the stash / scratch rails. Element rows live in the plugins that own
+// their view types and arrive through the [`RutPkgExt`] seam.
 // ---------------------------------------------------------------------------
 
-/// The in-memory `tur` host-pkg Module (the DECL side): the surface rut
-/// code compiles against. Mounted via `Session::register_module` — no
-/// filesystem involved.
+/// The in-memory `tur` host-pkg Module (the DECL side): the mechanism
+/// surface rut code compiles against. Mounted via `Session::register_module`
+/// — no filesystem involved. Plugin families extend it through their
+/// pushed [`RutPkgExt`]s (decl rows + consts).
 pub fn tur_decl_module() -> rut_driver::Module {
     let row = |name: &str, params: Vec<TypeId>, ret: TypeId| (name.to_string(), params, ret, false);
-    let mut host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
-        row("el_column", vec![], TY_OPAQUE),
-        row("el_row", vec![], TY_OPAQUE),
-        row("el_text", vec![TY_STR], TY_OPAQUE),
-        row("el_text_bound", vec![TY_U64], TY_OPAQUE),
-        row("el_text_styled", vec![TY_STR, TY_F64, TY_U64], TY_OPAQUE),
-        row("el_scroll", vec![TY_BOOL, TY_OPAQUE], TY_OPAQUE),
-        row("el_scroll_at", vec![TY_F64, TY_BOOL, TY_OPAQUE], TY_OPAQUE),
-        row("el_button", vec![TY_U64, TY_U64, TY_STR, TY_STR], TY_OPAQUE),
-        row("el_stack", vec![], TY_OPAQUE),
-        row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
-        row("el_expand", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
-        row("el_flex", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
-        row("el_positioned", vec![TY_F64, TY_F64, TY_OPAQUE], TY_OPAQUE),
-        row(
-            "el_positioned_edges",
-            vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
-            TY_OPAQUE,
-        ),
-        row("condition", vec![TY_U64, TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
-        row("el_fragment2", vec![TY_OPAQUE, TY_OPAQUE], TY_OPAQUE),
-        row(
-            "el_positioned_full",
-            vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
-            TY_OPAQUE,
-        ),
-        row("rs_source_bool", vec![TY_BOOL], TY_U64),
-        row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
-        row("rs_get_bool", vec![TY_U64], TY_BOOL),
-        row("el_build", vec![TY_OPAQUE], TY_OPAQUE),
-        row("el_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+    let host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
+        // stash the root — the engine applies it after `start` returns
         row("mount", vec![TY_OPAQUE], TY_NIL),
+        // reactive rails: str / f64 / bool scalars over the native KV
         row("rs_source_str", vec![TY_STR], TY_U64),
         row("rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
         row("rs_get_str", vec![TY_U64], TY_STR),
         row("rs_source_f64", vec![], TY_U64),
         row("rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
         row("rs_get_f64", vec![TY_U64], TY_F64),
+        row("rs_source_bool", vec![TY_BOOL], TY_U64),
+        row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
+        row("rs_get_bool", vec![TY_U64], TY_BOOL),
         // structured values (list/map atoms over the native-KV substrate)
         row("rs_list_new", vec![], TY_OPAQUE),
         row("rs_list_push", vec![TY_OPAQUE, TY_STR], TY_NIL),
@@ -254,40 +130,35 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("rs_value_len", vec![TY_OPAQUE], TY_U64),
         row("rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
         row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
+        // brush atoms (nonzero packed color sets, 0 clears)
+        row("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
+        // C8 — derived atoms + watch (the guarded flush-time VM call)
+        row("rs_derive", vec![TY_STR, TY_U64], TY_U64),
+        row("rs_derive2", vec![TY_STR, TY_U64, TY_U64], TY_U64),
+        row("rs_watch", vec![TY_U64, TY_STR, TY_U64], TY_OPAQUE),
+        row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
+        row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
         // the opaque stash (cross-entry hand-off)
         row("st_put", vec![TY_U64, TY_OPAQUE], TY_NIL),
         row("st_take", vec![TY_U64], TY_OPT_OPAQUE),
+        // the scalar stash + scratch cells (atom ids / counts cross entries
+        // and async frames as f64 — the opaque stash cannot hold numbers)
+        row("stf_put", vec![TY_U64, TY_F64], TY_NIL),
+        row("stf_take", vec![TY_U64], TY_F64),
+        row("mem_new", vec![TY_F64], TY_OPAQUE),
+        row("mem_get", vec![TY_OPAQUE], TY_F64),
+        row("mem_set", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        row("str_parse_f64", vec![TY_STR], TY_F64),
     ];
-    // C1 — text input rows (realm-minted controllers).
-    host_funcs.extend(text::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    // C2 — collections rows (Each over list atoms, lazy containers).
-    host_funcs.extend(collections::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    // C3 — the container full surface + flag consts.
-    host_funcs.extend(container::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    // C4 — gestures, keyboard, focus (intent records on the drain).
-    host_funcs.extend(gesture::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
     // C6 — async capabilities (clipboard + bytes helpers; the async rows
     // ride the driver's five-row family expansion).
-    host_funcs.extend(async_caps::decl_rows());
-    // C7 — lifecycle + virtual apps.
-    host_funcs.extend(virtual_app::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    // C8 — derived atoms + watch (the guarded flush-time VM call).
-    host_funcs.extend(derive::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    // Phase 4 — the corpus surface: builder breadth (flex/stack/text/qkey,
-    // spans), MouseRegion, composited transforms, images.
-    host_funcs.extend(widgets::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    host_funcs.extend(mouse_region::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    host_funcs.extend(composited::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    host_funcs.extend(image_row::decl_rows().into_iter().map(|(n, p, r)| (n, p, r, false)));
-    let mut consts = container::decl_consts();
-    consts.extend(widgets::decl_consts());
-    consts.extend(mouse_region::decl_consts());
-    consts.extend(image_row::decl_consts());
+    let mut funcs = host_funcs;
+    funcs.extend(async_caps::decl_rows());
     rut_driver::Module {
         namespace: Some("tur".to_string()),
         body: ModuleBody::Host {
-            host_funcs,
-            consts,
+            host_funcs: funcs,
+            consts: Vec::new(),
             native_types: Vec::new(),
             native_traits: Vec::new(),
             native_fns: Vec::new(),
@@ -298,8 +169,7 @@ pub fn tur_decl_module() -> rut_driver::Module {
 }
 
 /// The bodies. `handles` is the per-instance bridge state the rows close
-/// over (the pending root stash; the dispatch registry + reactive rails
-/// arrive in later phases).
+/// over (the pending root stash; the dispatch registry + reactive rails).
 fn install_tur_pkg(
     hosts: &mut rut_vm::interp::HostRegistry,
     ctx: &rut_vm::interp::HostPkgContext,
@@ -308,60 +178,11 @@ fn install_tur_pkg(
 ) {
     let mut pkg = rut_vm::interp::HostPkg::new("tur");
 
-    // mint a flex builder
-    rut_vm::pkg_fn!(pkg, "el_column", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None })?.handle().clone())
-    });
-    rut_vm::pkg_fn!(pkg, "el_row", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Flex { axis: Axis::Horizontal, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None })?.handle().clone())
-    });
-    // static text
-    rut_vm::pkg_fn!(pkg, "el_text", (&str,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, content: &str| {
-        let view = Rc::new(TextView {
-            text: Some(Val::Static(content.to_string())),
-            font_size: None,
-            font_weight: None,
-            color: None,
-            spans: None,
-            query_key: None,
-            on_selection_change: None,
-            selectable: false,
-            max_lines: None,
-            overflow: None,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // builder -> materialized view
-    rut_vm::pkg_fn!(pkg, "el_build", (Opaque<ViewBuilder>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>| {
-        // `with` lends the payload — swap out a dummy to consume the builder
-        let built = b.with_mut(vm, |_vm, b| {
-            let dummy = ViewBuilder::Flex { axis: Axis::Vertical, children: Vec::new(), main_alignment: None, cross_alignment: None, main_axis_size: None, query_key: None };
-            std::mem::replace(b, dummy).materialize()
-        })?;
-        Ok(Opaque::alloc(vm, RutView(built))?.handle().clone())
-    });
-    // attach a materialized child to a flex builder
-    rut_vm::pkg_fn!(pkg, "el_child", (Opaque<ViewBuilder>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, child: Opaque<RutView>| {
-        let child_view = child.with(|v| v.0.clone())?;
-        b.with_mut(vm, |_vm, b| {
-            match b {
-                ViewBuilder::Flex { children, .. } | ViewBuilder::Stack { children, .. } => {
-                    children.push(child_view);
-                }
-                ViewBuilder::Box(spec) => spec.children.push(child_view),
-                ViewBuilder::Grid(spec) => spec.children.push(child_view),
-                // Switch / Text / Input builders take no children here.
-                ViewBuilder::Switch(_)
-                | ViewBuilder::Text(_)
-                | ViewBuilder::Input(_) => {}
-            }
-        })?;
-        Ok(())
-    });
-    // stash the root — the engine applies it after `start` returns. The
-    // C8 no-mount law: a face-driven call (a derive / item builder
-    // materializing mid-flush) may NOT re-mount — the trap is reported
-    // through the error rail and the flush continues.
+    // ---- mount + the C8 no-mount law ------------------------------------
+    //
+    // A face-driven call (a derive / item builder materializing mid-flush)
+    // may NOT re-mount — the trap is reported through the error rail and
+    // the flush continues.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "mount", (Opaque<RutView>,) -> (), move |vm: &mut rut_vm::interp::Vm, view: Opaque<RutView>| {
         if h.face_busy.get() > 0 {
@@ -376,17 +197,16 @@ fn install_tur_pkg(
         Ok(())
     });
 
-    // ---- reactive rails (Phase 2 — native-KV substrate) -----------------
+    // ---- reactive rails (the native-KV substrate) ------------------------
     //
     // Atoms are the engine's edgy store (`core::edgy`) — the SAME KV the
-    // JS realm and the element tree use — addressed by raw `AtomId` as
-    // u64. The KV holds native `Value`s, so every row below is
-    // realm-free: no JsValue is ever constructed. Writes cross; reads are
-    // served by the rut-side mirror (the wrapper atoms hold their current
-    // value), so no read path ever needs the boa context. The flush
-    // fixed-point (stale atoms → dirty subscribers → re-layout) is
-    // entirely the engine's existing machinery: a bound Text re-renders on
-    // `rs_set_*` with zero new engine code.
+    // element tree uses — addressed by raw `AtomId` as u64. The KV holds
+    // native `Value`s, so every row below is realm-free. Writes cross;
+    // reads are served by the rut-side mirror (the wrapper atoms hold
+    // their current value). The flush fixed-point (stale atoms → dirty
+    // subscribers → re-layout) is entirely the engine's existing
+    // machinery: a bound Text re-renders on `rs_set_*` with zero new
+    // engine code.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_source_str", (&str,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: &str| {
         let _ = vm;
@@ -418,8 +238,6 @@ fn install_tur_pkg(
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
-        // Boa-free: the KV holds native Values, so the read never touches
-        // the realm.
         match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
             Some(ScalarRead::Str(s)) => Ok(s),
             _ => Ok(String::new()),
@@ -433,217 +251,6 @@ fn install_tur_pkg(
             .set_source(Source::<Value>::from_id(AtomId(atom as u32)), Value::Num(v))
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_f64: {e}")))
     });
-    // a Text bound to a str atom — re-renders when the atom changes
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "el_text_bound", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
-        let _ = &h;
-        let view = Rc::new(TextView {
-            text: Some(Val::Reactive(Readable::Source(Source::<String>::from_id(AtomId(atom as u32))))),
-            font_size: None,
-            font_weight: None,
-            color: None,
-            spans: None,
-            query_key: Some(vec!["rut".to_string(), "text".to_string()]),
-            on_selection_change: None,
-            selectable: false,
-            max_lines: None,
-            overflow: None,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-
-    // ---- callbacks (Phase 3): the intent-queue rail --------------------
-    //
-    // Element callbacks are edgy Rust mutations whose closures are
-    // boa-free: they push (name, id, payload) onto `pending_calls` and
-    // the PUMP drains them into `vm.call(name, (id, payload))` after
-    // flush. A callback may mount — `apply_root` runs in the same drain,
-    // with the pump's boa borrow. The click payload is a monotonic
-    // per-button count (full event payloads arrive with the gesture
-    // bridge later in the migration).
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "el_button", (u64, u64, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id_a: u64, id_b: u64, cb: &str, label: &str| {
-        let h2 = h.clone();
-        let cb = cb.to_string();
-        let dirty = h.dirty.clone();
-        let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
-            let n = h2.click_seq.get() + 1;
-            h2.click_seq.set(n);
-            h2.pending_calls.borrow_mut().push(Intent::Click { name: cb.clone(), a: id_a, b: id_b, seq: n as f64 });
-            dirty.set(true);
-            Ok(crate::core::edgy::Value::Nil)
-        });
-        let view = Rc::new(PointerInteractView {
-            behavior: None,
-            on_click: Some(crate::core::edgy::mutation::MutationHandle::<
-                crate::builtin_plugins::gesture::PointerInteractEvent,
-            >::new(mutation)),
-            on_pointer_down: None,
-            on_pointer_move: None,
-            on_pointer_up: None,
-            on_context_menu: None,
-            query_key: None,
-            child: Some(Rc::new(TextView {
-                text: Some(Val::Static(label.to_string())),
-                font_size: None,
-                font_weight: None,
-                color: None,
-                spans: None,
-                query_key: None,
-                on_selection_change: None,
-                selectable: false,
-                max_lines: None,
-                overflow: None,
-            })),
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-
-    // stack builder — same el_child/el_build flow as flex
-    rut_vm::pkg_fn!(pkg, "el_stack", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
-        Ok(Opaque::alloc(vm, ViewBuilder::Stack { children: Vec::new(), alignment: None, fit: None, query_key: None })?.handle().clone())
-    });
-    // a painted box: color + padding around one child
-    rut_vm::pkg_fn!(pkg, "el_box", (u64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, color: u64, padding: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(ContainerView {
-            width: None,
-            height: None,
-            padding: Some(Val::Static(padding)),
-            color: Some(Val::Static(Brush::SolidColor(color_of(color)))),
-            border_color: None,
-            border_width: None,
-            border_radius: None,
-            border_position: None,
-            clip_behavior: None,
-            shadow_color: None,
-            shadow_blur: None,
-            alignment: None,
-            shadow_offset: None,
-            query_key: None,
-            children: vec![child],
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // a flex item that fills its slot (Expanded)
-    rut_vm::pkg_fn!(pkg, "el_expand", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Tight, child));
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // a flex item that caps at its slot (Flexible — FlexFit.loose: the
-    // child shrink-wraps below the slot)
-    rut_vm::pkg_fn!(pkg, "el_flex", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Loose, child));
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // a child anchored inside a Stack (left/top)
-    rut_vm::pkg_fn!(pkg, "el_positioned", (f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(PositionedView {
-            left: Some(Val::Static(left)),
-            top: Some(Val::Static(top)),
-            right: None,
-            bottom: None,
-            width: None,
-            height: None,
-            child,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // a child anchored inside a Stack by edges — 0 = absent per side; an
-    // opposing edge pair implies the extent (the JS Positioned twins).
-    rut_vm::pkg_fn!(pkg, "el_positioned_edges", (f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, right: f64, bottom: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(PositionedView {
-            left: (left != 0.0).then_some(Val::Static(left)),
-            top: (top != 0.0).then_some(Val::Static(top)),
-            right: (right != 0.0).then_some(Val::Static(right)),
-            bottom: (bottom != 0.0).then_some(Val::Static(bottom)),
-            width: None,
-            height: None,
-            child,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // conditional: both branches authored at start time; the swap is pure
-    // engine (the factory clones a pre-built Rc — no rut during flush).
-    rut_vm::pkg_fn!(pkg, "condition", (u64, Opaque<RutView>, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, when: u64, then_v: Opaque<RutView>, else_v: Opaque<RutView>| {
-        let then_v = then_v.with(|v| v.0.clone())?;
-        let else_v = else_v.with(|v| v.0.clone())?;
-        let view = Rc::new(ConditionView::new_rut(
-            Val::Reactive(crate::core::edgy::reactive::Readable::Source(
-                crate::core::edgy::reactive::Source::<bool>::from_id(AtomId(when as u32)),
-            )),
-            Rc::new(PreBuilt(then_v)),
-            Rc::new(PreBuilt(else_v)),
-        ));
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-
-    // styled text: explicit font size + packed color (every real UI styles)
-    rut_vm::pkg_fn!(pkg, "el_text_styled", (&str, f64, u64) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, content: &str, size: f64, color: u64| {
-        let view = Rc::new(TextView {
-            text: Some(Val::Static(content.to_string())),
-            font_size: Some(Val::Static(size)),
-            font_weight: None,
-            color: Some(Val::Static(color_of(color))),
-            spans: None,
-            query_key: None,
-            on_selection_change: None,
-            selectable: false,
-            max_lines: None,
-            overflow: None,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // a scroll viewport (wheel-driven; controller support comes with the
-    // controller rows)
-    rut_vm::pkg_fn!(pkg, "el_scroll", (bool, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, vertical: bool, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(crate::builtin_plugins::scroll::ScrollViewView::new_rut(
-            Some(Val::Static(if vertical { Axis::Vertical } else { Axis::Horizontal })),
-            child,
-        ));
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // scroll viewport with a one-shot initial offset (the JS controller's
-    // `initialOffset` twin — applied after the first content layout).
-    rut_vm::pkg_fn!(pkg, "el_scroll_at", (f64, bool, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, initial: f64, vertical: bool, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let mut view = crate::builtin_plugins::scroll::ScrollViewView::new_rut(
-            Some(Val::Static(if vertical { Axis::Vertical } else { Axis::Horizontal })),
-            child,
-        );
-        view.initial_offset = Some(Val::Static(initial));
-        Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
-    });
-
-    // layout-transparent group — children build directly under the parent
-    // (the JS Fragment twin; keeps test-navigated trees flat).
-    rut_vm::pkg_fn!(pkg, "el_fragment2", (Opaque<RutView>, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, a: Opaque<RutView>, b: Opaque<RutView>| {
-        let a = a.with(|v| v.0.clone())?;
-        let b = b.with(|v| v.0.clone())?;
-        let view = Rc::new(crate::builtin_plugins::control_flow::FragmentView::new_rut(vec![a, b]));
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-    // Positioned with all six anchors — 0 = absent for the edges, and an
-    // explicit width/height when nonzero (the JS Positioned twins).
-    rut_vm::pkg_fn!(pkg, "el_positioned_full", (f64, f64, f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, left: f64, top: f64, right: f64, bottom: f64, w: f64, h: f64, child: Opaque<RutView>| {
-        let child = child.with(|v| v.0.clone())?;
-        let view = Rc::new(PositionedView {
-            left: (left != 0.0).then_some(Val::Static(left)),
-            top: (top != 0.0).then_some(Val::Static(top)),
-            right: (right != 0.0).then_some(Val::Static(right)),
-            bottom: (bottom != 0.0).then_some(Val::Static(bottom)),
-            width: (w != 0.0).then_some(Val::Static(w)),
-            height: (h != 0.0).then_some(Val::Static(h)),
-            child,
-        });
-        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
-    });
-
     // bool atoms (the condition rail's driver)
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_source_bool", (bool,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: bool| {
@@ -668,13 +275,11 @@ fn install_tur_pkg(
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_bool: {e}")))
     });
 
-    // ---- structured values (Phase 2-B5) ---------------------------------
+    // ---- structured values ------------------------------------------------
     //
     // List / map atoms over the native `Value` KV, addressed through
-    // opaque value handles (`RutValue`). This is the minimal round-trip
-    // proof the phase asks for — breadth (typed rut lists/maps, records,
-    // iteration) is the next phase. Build in-place on an opaque handle,
-    // then bind whole values to atoms:
+    // opaque value handles (`RutValue`). Build in-place on an opaque
+    // handle, then bind whole values to atoms:
     //
     //   let v = rs_list_new();  rs_list_push(v, "a");
     //   let atom = rs_source_value(v);   rs_set_value(atom, rs_list_new());
@@ -722,7 +327,6 @@ fn install_tur_pkg(
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_get_value", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
-        // Boa-free: the native KV serves the fresh slot without the realm.
         let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
         Ok(Opaque::alloc(vm, RutValue(value))?.handle().clone())
     });
@@ -749,26 +353,24 @@ fn install_tur_pkg(
         Ok(item.unwrap_or_default())
     });
 
-    // C1 — text input (realm-minted controllers, method rows).
-    text::install(&mut pkg, handles);
-    // C2 — collections (Each + lazy containers).
-    collections::install(&mut pkg, handles);
-    // C3 — container full surface + SizedBox.
-    container::install(&mut pkg, handles);
-    // C4 — gestures + keyboard + focus.
-    gesture::install(&mut pkg, handles);
-    // C6 — async capabilities.
-    async_caps::install(&mut pkg, handles);
-    // C7 — lifecycle + virtual apps.
-    virtual_app::install(&mut pkg, handles);
-    // C8 — derived atoms + watch.
-    derive::install(&mut pkg, handles);
-    // Phase 4 — the corpus surface.
-    widgets::install(&mut pkg, handles);
-    mouse_region::install(&mut pkg, handles);
-    composited::install(&mut pkg, handles);
-    image_row::install(&mut pkg, handles);
-    // The opaque stash (the cross-entry hand-off rail).
+    // Brush atoms: nonzero packed color sets it, 0 clears (Nil — the decode
+    // fails and the prop resolves to absent). The set color wraps the
+    // engine's Color opaque (the `FromValue for Brush` decode).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_set_brush", (u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, color: u64| {
+        let value = if color == 0 {
+            crate::core::edgy::Value::Nil
+        } else {
+            let c = color_of(color);
+            crate::core::edgy::Value::opaque(Rc::new(c) as Rc<dyn std::any::Any>)
+        };
+        h.store
+            .bridge()
+            .set_source(crate::core::edgy::reactive::Source::<crate::core::edgy::Value>::from_id(crate::core::edgy::reactive::AtomId(atom as u32)), value)
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_brush: {e}")))
+    });
+
+    // ---- the opaque + scalar stashes (cross-entry hand-off rails) --------
     {
         let h = handles.clone();
         rut_vm::pkg_fn!(pkg, "st_put", (u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, o: OpaqueRef| {
@@ -780,16 +382,54 @@ fn install_tur_pkg(
             Ok(h.stash.borrow_mut().remove(&key))
         });
     }
-    // Plugin extensions (tur-animation's C5 rows) — AFTER the engine rows,
-    // so an extension may lean on them.
+    {
+        let h = handles.clone();
+        rut_vm::pkg_fn!(pkg, "stf_put", (u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, v: f64| {
+            h.stash_num.borrow_mut().insert(key, v);
+            Ok(())
+        });
+        let h = handles.clone();
+        rut_vm::pkg_fn!(pkg, "stf_take", (u64,) -> f64, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
+            Ok(h.stash_num.borrow_mut().remove(&key).unwrap_or(0.0))
+        });
+    }
+
+    // ---- scratch cells + parse helper --------------------------------------
+    // The opaque stash holds OPQUES only, so stateful entries keep their
+    // scratch numbers in f64 cells (`mem_*`) — minted at start, stashed,
+    // read/written in the intent entries.
+    rut_vm::pkg_fn!(pkg, "mem_new", (f64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, v: f64| {
+        Ok(Opaque::alloc(vm, RutCell(std::cell::Cell::new(v)))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "mem_get", (Opaque<RutCell>,) -> f64, |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>| {
+        c.with(|c| c.0.get())
+    });
+    rut_vm::pkg_fn!(pkg, "mem_set", (Opaque<RutCell>, f64) -> (), |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>, v: f64| {
+        c.with_mut(_vm, |_vm, c: &mut RutCell| c.0.set(v))?;
+        Ok(())
+    });
+    // str -> f64 parse (0 on failure) — the edit-field confirm path.
+    rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
+        Ok(s.trim().parse::<f64>().unwrap_or(0.0))
+    });
+
+    // C6 — async capabilities (clipboard + the bytes helpers).
+    async_caps::install(&mut pkg, handles);
+    // C8 — derived atoms + watch (the guarded flush-time VM call).
+    derive::install(&mut pkg, handles);
+
+    // Plugin extensions (the element families + capability crates) — AFTER
+    // the engine rows, so an extension may lean on them.
     let mut ext_decl = Vec::new();
     let mut ext_consts = Vec::new();
+    let mut ext_preludes = Vec::new();
     for ext in exts {
         ext(&mut RutPkgCx {
             decl: &mut ext_decl,
             consts: &mut ext_consts,
             pkg: &mut pkg,
             handles: Some(handles),
+            preludes: &mut ext_preludes,
         });
     }
 
@@ -800,14 +440,13 @@ fn install_tur_pkg(
 // ---------------------------------------------------------------------------
 
 pub struct RutHandles {
-    /// The instance's reactive store — the SAME KV the JS realm and the
-    /// element tree share; rut atoms are edgy atoms addressed by raw id.
+    /// The instance's reactive store — the SAME KV the element tree
+    /// shares; rut atoms are edgy atoms addressed by raw id.
     pub store: crate::core::edgy::reactive::Store,
     /// The instance's app-dirty flag (rut callbacks raise it when they
     /// stash work so an idle worker wakes).
     pub dirty: Rc<std::cell::Cell<bool>>,
-    /// The instance-owned tree handle (a cheap clone of the one the JS
-    /// realm shares) — `apply_root` builds into it.
+    /// The instance-owned tree handle — `apply_root` builds into it.
     pub element_tree: crate::core::elements::NodeTree,
     /// The instance's focus manager — the `focus_request` row targets it
     /// (the FocusChange flush pushes the focus/blur mutations next frame).
@@ -815,9 +454,9 @@ pub struct RutHandles {
     /// The root stashed by `tur::mount` during `start`, applied by the
     /// engine after the call returns (outside the VM, on the mount path).
     pub pending_root: std::cell::RefCell<Option<Rc<dyn View>>>,
-    /// Callback intents queued by element callbacks (the rut closure
-    /// closures are boa-free: they only push here). Drained at pump level
-    /// after flush — `(callback name, id, payload)`.
+    /// Callback intents queued by element callbacks (the row closures are
+    /// realm-free: they only push here). Drained at pump level after
+    /// flush — `(callback name, id, payload)`.
     pub pending_calls: std::cell::RefCell<Vec<Intent>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
@@ -829,12 +468,12 @@ pub struct RutHandles {
     /// cross entries and async frames as f64.
     pub stash_num: std::cell::RefCell<std::collections::HashMap<u64, f64>>,
     /// The worker→host channel — runtime-error reports for face traps ride
-    /// the same `RuntimeError` message the JS rail uses.
+    /// the same `RuntimeError` message the JS rail used.
     pub host_tx: crate::core::app::HostTx,
     /// The engine's shared clock — the animation rows' `now_ms` source.
     pub clock: Rc<dyn crate::core::clock::Clock>,
     /// The engine-wide mutation queue — animation `onTick` callbacks ride
-    /// it (same dispatch path the JS controllers use).
+    /// it (same dispatch path the JS controllers used).
     pub mutation_queue: Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
     /// The instance context — capability lookups + worker-side spawns (the
     /// async capability rows: clipboard / net / filepicker).
@@ -851,15 +490,15 @@ pub struct RutHandles {
 
 /// One queued callback intent — the payload the drain dispatches into an
 /// `entry fn`. The legacy click shape (`(name, a, b, seq)`) plus the
-/// Phase-C record payloads (keys, pointer positions, raw values) that the
+/// record payloads (keys, pointer positions, raw values) that the
 /// gesture / animation / watch rails queue.
 #[derive(Clone, Debug)]
 pub enum Intent {
-    /// `el_button`'s click: `(name, id_a, id_b, seq)` — the Phase-3 shape.
+    /// The tap shape: `(name, id_a, id_b, seq)`.
     Click { name: String, a: u64, b: u64, seq: f64 },
-    /// A key event from `el_focusable`'s `onKeyDown` mutation.
+    /// A key event from the Focusable's `onKeyDown` mutation.
     Key { name: String, id: u64, key: String, code: String, modifiers: u64, kind: u64 },
-    /// A pointer event from `el_gesture`'s down/move/up/context-menu
+    /// A pointer event from the PointerInteract down/move/up/context-menu
     /// mutations: `(name, id, local_x, local_y, global_x, global_y, button)`.
     Pointer {
         name: String,
@@ -870,7 +509,8 @@ pub enum Intent {
         gy: f64,
         button: u64,
     },
-    /// The two-id pointer variant (`el_gesture2`): `(name, id_a, id_b, positions…)`.
+    /// The two-id pointer variant (the two-id gesture rail):
+    /// `(name, id_a, id_b, positions…)`.
     Pointer2 {
         name: String,
         a: u64,
@@ -1024,7 +664,7 @@ impl VmFace {
 }
 
 /// Report a face trap through the runtime-error rail (worker → host), the
-/// same channel JS runtime errors ride. Never aborts the caller.
+/// same channel JS runtime errors rode. Never aborts the caller.
 pub(crate) fn report_runtime_error(handles: &RutHandles, message: &str) {
     tracing::error!("rut runtime error: {message}");
     let _ = handles.host_tx.unbounded_send(HostMsg::RuntimeError {
@@ -1036,7 +676,7 @@ pub(crate) fn report_runtime_error(handles: &RutHandles, message: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// RutRuntime — one per instance, lives beside the JS realm on the worker.
+// RutRuntime — one per instance, lives on the worker.
 // ---------------------------------------------------------------------------
 
 pub struct RutRuntime {
@@ -1061,19 +701,22 @@ impl RutRuntime {
         let v = Opaque::<RutView>::from_handle(handle).ok()?;
         v.with(|v| Some(v.0.clone())).ok()?
     }
-    /// Assemble a fresh session (core + the in-memory `tur` decl pkg) and
-    /// compile `source` against it. Split from [`Self::boot`] so a
-    /// syntactically-broken module fails BEFORE any teardown runs (the
-    /// parse-first contract).
+    /// Assemble a fresh session (core + the in-memory `tur` decl pkg +
+    /// every extension's prelude modules) and compile `source` against it.
+    /// Split from [`Self::boot`] so a syntactically-broken module fails
+    /// BEFORE any teardown runs (the parse-first contract).
     fn compile(
         source: &str,
         exts: &[RutPkgExt],
     ) -> Result<(Rc<rut_core::binary::Program>, rut_vm::interp::HostPkgContext), String> {
         // The decl surface: the engine rows plus every extension's rows
-        // (plugin-owned — tur-animation's C5 rows), so the compile sees the
-        // full surface the boot will bind.
+        // (plugin-owned — the element families + capability crates), so
+        // the compile sees the full surface the boot will bind. Extensions
+        // also contribute prelude modules (the kit — the authored builder
+        // surface, owned by the standard bundle assembly, never by core).
         let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId, bool)> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
+        let mut preludes: Vec<(String, rut_driver::Module)> = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur");
         for ext in exts {
             ext(&mut RutPkgCx {
@@ -1081,6 +724,7 @@ impl RutRuntime {
                 consts: &mut ext_consts,
                 pkg: &mut probe,
                 handles: None,
+                preludes: &mut preludes,
             });
         }
         let module = {
@@ -1106,6 +750,13 @@ impl RutRuntime {
         session
             .register_module("tur", module)
             .map_err(|e| format!("mount tur pkg: {e}"))?;
+        // The preludes (the kit et al.) — registered after `tur`, whose
+        // rows they wrap.
+        for (spec, module) in preludes {
+            session
+                .register_module(&spec, module)
+                .map_err(|e| format!("mount prelude `{spec}`: {e}"))?;
+        }
 
         let out = rut_driver::compile_module_in(&mut session, source, rut_parser::Mode::Impl, "app");
         if !out.diags.is_empty() {
@@ -1235,7 +886,7 @@ impl RutRuntime {
     /// the engine-side twin of the JS `mount(view)` bridge. **Realm-free**:
     /// rut rows materialize pure-Rust `Rc<dyn View>` values and the tree
     /// build path is realm-optional, so a rut-only instance never touches
-    /// the JS realm here.
+    /// a script realm here.
     pub fn apply_root(&mut self) -> Result<(), String> {
         let Some(user_view) = self.handles.pending_root.borrow_mut().take() else {
             return Ok(());
@@ -1363,8 +1014,9 @@ pub struct RutRealmInputs {
 }
 
 /// The pkg-extension context an installer sees: the `tur` host pkg's decl
-/// rows + consts (compile side) and the body pkg + bridge handles (boot
-/// side).
+/// rows + consts (compile side), the body pkg + bridge handles (boot side),
+/// and the prelude modules (the kit et al.) registered before the app
+/// source compiles.
 pub struct RutPkgCx<'a> {
     /// The decl rows `(name, params, ret, is_async)` appended before
     /// compilation (async rows ride the driver's family expansion).
@@ -1376,9 +1028,15 @@ pub struct RutPkgCx<'a> {
     /// The per-instance bridge handles — `None` at compile time (the decl
     /// probe), `Some` at boot.
     pub handles: Option<&'a Rc<RutHandles>>,
+    /// Prelude rut modules `(spec, module)` registered into the compile
+    /// session before the app source compiles (the kit — the authored
+    /// builder surface). Core never fills this; the standard bundle
+    /// assembly does.
+    pub preludes: &'a mut Vec<(String, rut_driver::Module)>,
 }
 
 /// A rut pkg extension: plugin-owned rows for the `tur` host pkg (e.g.
-/// tur-animation's C5 rows). Plugins push one during `register`; both the
-/// compile (decl) and boot (bodies) phases drain them.
+/// tur-animation's C5 rows, each element family's spec + rows). Plugins
+/// push one during `register`; both the compile (decl) and boot (bodies)
+/// phases drain them.
 pub type RutPkgExt = Rc<dyn Fn(&mut RutPkgCx<'_>)>;

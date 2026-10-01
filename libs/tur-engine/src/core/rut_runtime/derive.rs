@@ -20,10 +20,8 @@
 
 use std::rc::Rc;
 
-use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
+use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::edgy::value::Value;
-use crate::core::view::View;
-use rut_core::types::{TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_vm::Opaque;
 
 use super::{Intent, RutHandles};
@@ -32,21 +30,6 @@ use super::{Intent, RutHandles};
 pub struct RutWatch {
     start: crate::core::edgy::reactive::Mutation,
     stop: crate::core::edgy::reactive::Mutation,
-}
-
-/// Declare the C8 rows on the `tur` decl module.
-pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types::TypeId)> {
-    vec![
-        ("rs_derive", vec![TY_STR, TY_U64], TY_U64),
-        ("rs_derive2", vec![TY_STR, TY_U64, TY_U64], TY_U64),
-        ("el_text_bound_d", vec![TY_U64], TY_OPAQUE),
-        ("rs_watch", vec![TY_U64, TY_STR, TY_U64], TY_OPAQUE),
-        ("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
-        ("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
-    ]
-    .into_iter()
-    .map(|(n, p, r)| (n.to_string(), p, r))
-    .collect()
 }
 
 /// Install the C8 bodies.
@@ -93,28 +76,6 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             }
         });
         Ok(derived.id().0 as u64)
-    });
-
-    // el_text_bound_d(derived_id) — a Text bound to a DERIVED atom (the
-    // str-carrying twin of `el_text_bound`).
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "el_text_bound_d", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, derived: u64| {
-        let _ = &h;
-        let view = Rc::new(crate::builtin_plugins::text::TextView {
-            text: Some(crate::core::view::Val::Reactive(Readable::Derived(
-                Derived::<String>::from_id(AtomId(derived as u32)),
-            ))),
-            font_size: None,
-            font_weight: None,
-            color: None,
-            spans: None,
-            query_key: Some(vec!["rut".to_string(), "text".to_string()]),
-            on_selection_change: None,
-            selectable: false,
-            max_lines: None,
-            overflow: None,
-        });
-        Ok(Opaque::alloc(vm, super::RutView(view as Rc<dyn View>))?.handle().clone())
     });
 
     // rs_watch(atom, cb, report) — the callback intent carries the report

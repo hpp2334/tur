@@ -586,8 +586,9 @@ impl ElementOnWheel for LazyListElement {
 // ---------------------------------------------------------------------------
 
 impl LazyListView {
-    /// Rut-rail constructor (`core::rut_runtime`): an entry-builder item
-    /// face (the guarded flush-time VM call) + static config.
+    /// Rut-rail constructor (the `lazy_*` rows): an entry-builder item
+    /// face (the guarded flush-time VM call) + static config + the query
+    /// key (the rows' `lazy_qkey` crossing).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_rut(
         entry: RutEntryBuilder,
@@ -595,6 +596,7 @@ impl LazyListView {
         axis: Option<Axis>,
         overscan: Option<u64>,
         item_extent: Option<f64>,
+        query_key: Option<Vec<String>>,
     ) -> Self {
         LazyListView {
             axis: axis.map(Val::Static),
@@ -602,7 +604,7 @@ impl LazyListView {
             overscan: overscan.map(Val::Static),
             item_extent: item_extent.map(Val::Static),
             builder: entry,
-            query_key: Some(vec!["rut".to_string(), "lazy".to_string()]),
+            query_key,
         }
     }
 }

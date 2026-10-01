@@ -17,6 +17,7 @@
 //! child unless `keepAlive`.
 
 pub(crate) mod element;
+pub(crate) mod rut_rows;
 mod handlers;
 pub(crate) mod state;
 
@@ -35,5 +36,7 @@ pub(crate) fn install_virtual_app(ctx: &mut PluginRegisterContext) -> Result<(),
     let state = Rc::new(VirtualState::new(instance.host_tx.clone(), ctx.reactive()));
     ctx.define_plugin_state::<VirtualState>(state.clone());
     ctx.register_subsystem(Box::new(handlers::VirtualAppSubsystem::new(state, instance)));
+    // The virtual-app family's `tur` rows (the kit wraps them).
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     Ok(())
 }

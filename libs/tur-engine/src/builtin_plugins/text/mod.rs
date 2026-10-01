@@ -25,6 +25,7 @@
 pub mod controller;
 pub mod elements;
 pub mod handlers;
+pub(crate) mod rut_rows;
 pub mod text_layout;
 
 pub use controller::{TextEditingController, UndoController};
@@ -48,5 +49,8 @@ use crate::core::plugin::PluginRegisterContext;
 pub fn install_text(ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
     ctx.register_subsystem(Box::new(handlers::ClipboardPasteSubsystem));
     ctx.register_subsystem(Box::new(handlers::CaretVisibilitySubsystem));
+    // The text families' `tur` rows (the kit wraps them): Text / Input /
+    // spans + the realm-free controllers.
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     Ok(())
 }

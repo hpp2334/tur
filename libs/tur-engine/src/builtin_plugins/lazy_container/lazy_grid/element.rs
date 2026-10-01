@@ -450,8 +450,9 @@ impl ElementOnWheel for LazyGridElement {
 // ---------------------------------------------------------------------------
 
 impl LazyGridView {
-    /// Rut-rail constructor (`core::rut_runtime`): an entry-builder item
-    /// face (the guarded flush-time VM call) + static config.
+    /// Rut-rail constructor (the `lazy_*` rows): an entry-builder item
+    /// face (the guarded flush-time VM call) + static config + the query
+    /// key (the rows' `lazy_qkey` crossing).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_rut(
         entry: RutEntryBuilder,
@@ -460,6 +461,7 @@ impl LazyGridView {
         overscan: Option<u64>,
         max_cross_axis_extent: f64,
         child_aspect_ratio: Option<f64>,
+        query_key: Option<Vec<String>>,
     ) -> Self {
         LazyGridView {
             axis: axis.map(Val::Static),
@@ -471,7 +473,7 @@ impl LazyGridView {
             cross_axis_spacing: None,
             main_axis_spacing: None,
             builder: entry,
-            query_key: Some(vec!["rut".to_string(), "lazy".to_string()]),
+            query_key,
         }
     }
 }

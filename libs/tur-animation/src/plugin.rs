@@ -57,7 +57,11 @@ impl Plugin for TurAnimationPlugin {
         // manager — a rut controller registers into the SAME registry the
         // subsystem ticks.
         ctx.push_rut_ext(Rc::new(move |cx| {
-            crate::rut_rows::install(cx, manager.clone())
+            crate::rut_rows::install(cx, manager.clone());
+            // The animation kit prelude — the authored Opacity / Transform
+            // wrappers over the rows above (same ownership law).
+            cx.preludes
+                .push(("tur_anim_kit".to_string(), crate::kit::tur_anim_kit_module()));
         }));
 
         Ok(())

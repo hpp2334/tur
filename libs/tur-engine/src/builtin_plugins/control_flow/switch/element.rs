@@ -211,6 +211,12 @@ impl SwitchView {
     pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
         self.query_key = Some(key);
     }
+
+    /// Re-bind the switch's reactive value (the rut rows' setter twin of
+    /// the constructor's `value` prop).
+    pub(crate) fn set_value(&mut self, value: Val<SwitchKey>) {
+        self.value = value;
+    }
 }
 
 impl ViewFactory for Prebuilt {

@@ -17,6 +17,14 @@
 pub mod item_builder;
 pub mod lazy_grid;
 pub mod lazy_list;
+pub(crate) mod rut_rows;
+
+/// Install the lazy-container families' `tur` host-pkg rows (the kit wraps
+/// them): LazyList / LazyGrid.
+pub fn install_lazy_container(ctx: &mut crate::core::plugin::PluginRegisterContext) -> Result<(), crate::error::TurError> {
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
+    Ok(())
+}
 
 pub use lazy_grid::{
     LazyGridController, LazyGridElement, LazyGridView,

@@ -27,6 +27,7 @@
 
 pub mod follower;
 pub mod link;
+pub(crate) mod rut_rows;
 mod subsystem;
 pub mod target;
 
@@ -55,6 +56,9 @@ pub fn install_composited_transform(ctx: &mut PluginRegisterContext) -> Result<(
     }));
 
     ctx.define_plugin_state(Rc::new(LayerLinkRegistry(links)));
+
+    // The composited families' `tur` rows (link / target / follower).
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_decl_ext));
 
     Ok(())
 }

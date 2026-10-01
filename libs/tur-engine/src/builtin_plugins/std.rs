@@ -82,17 +82,34 @@ impl Plugin for TurStdPlugin {
         // bundles (text, scroll) register their subsystems here too;
         // subsystem-bearing plugins (gesture, input) register theirs inside
         // their `install_xxx`.
+        crate::builtin_plugins::layout::install_layout(ctx)?;
+        crate::builtin_plugins::control_flow::install_control_flow(ctx)?;
+        crate::builtin_plugins::lazy_container::install_lazy_container(ctx)?;
+        crate::builtin_plugins::image::install_image(ctx)?;
+        crate::builtin_plugins::lifecycle::install_lifecycle(ctx)?;
         install_text(ctx)?;
         install_scroll(ctx)?;
         install_gesture(ctx)?;
         install_input(ctx)?;
         // CompositedTransformTarget/Follower + createLayerLink + tracking
-        // subsystem (the link registry rides the plugin-state channel).
+        // subsystem (the link registry rides the plugin-state channel) +
+        // its families' rows.
         install_composited_transform(ctx)?;
         // Virtual apps — the `VirtualAppSubsystem` (status/frame
         // consumption, layout-driven resize, input forwarding) + the shared
-        // per-instance `VirtualState` on the plugin-state channel.
+        // per-instance `VirtualState` on the plugin-state channel + its
+        // family's rows.
         virtual_app::install_virtual_app(ctx)?;
+
+        // The kit — the authored builder surface (a rut source module).
+        // Lives OUTSIDE core/ (the layering law): core never knows it; the
+        // standard bundle assembly registers it as a compile-session
+        // prelude so `use tur_kit::{…}` resolves in every module the
+        // standard plugin set compiles.
+        ctx.push_rut_ext(std::rc::Rc::new(|cx: &mut crate::core::rut_runtime::RutPkgCx<'_>| {
+            cx.preludes
+                .push(("tur_kit".to_string(), crate::kit::tur_kit_module()));
+        }));
 
         Ok(())
     }

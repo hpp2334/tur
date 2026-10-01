@@ -1,0 +1,55 @@
+// tur_anim_kit.rut — the animation family's kit wrappers (the authored
+// surface over the `tur` host pkg's animation rows: `el_opacity` /
+// `el_opacity_bound` / `el_transform`). Owned by the plugin that owns the
+// rows (the layering law applied to the kit itself): tur-animation
+// registers this prelude alongside its rows, so engine plugin sets without
+// animation never see (or need) these classes.
+use tur::{ el_opacity, el_opacity_bound, el_transform };
+
+class Opacity {
+  value: f64;
+  atom: u64;
+  kid: ?opaque;
+}
+
+impl Opacity {
+  pub fn new(value: f64) -> Self {
+    return Self { value: value, atom: 0, kid: nil };
+  }
+  // Bind the opacity to an f64 atom (the onTick rail's consumer).
+  pub fn bound(mut self, atom: u64) -> Self {
+    self.atom = atom;
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    self.kid = c;
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    if (self.atom != 0) {
+      return el_opacity_bound(self.atom, self.kid);
+    }
+    return el_opacity(self.value, self.kid);
+  }
+}
+
+class Transform {
+  scale: f64;
+  rotate: f64;
+  tx: f64;
+  ty: f64;
+  kid: ?opaque;
+}
+
+impl Transform {
+  pub fn new(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
+    return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, kid: nil };
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    self.kid = c;
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return el_transform(self.scale, self.rotate, self.tx, self.ty, self.kid);
+  }
+}
