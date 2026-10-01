@@ -3,7 +3,10 @@
 // PointerInteract catches invisible hits; a translucent MouseRegion joins
 // the path without blocking. The beneath-target's down count renders into
 // the `beneath-downs` Text (the test parses it).
-use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, el_box_new, box_color, box_size, el_build, el_child, el_gesture, el_mouse_region, el_pi, el_positioned_full, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_vqkey, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, stack_align, st_put, st_take };
+use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str,
+    st_put, st_take };
+use tur_kit::{ Container, MouseRegion, PointerInteract, Positioned, SizedBox, Stack, Text };
+
 
 let K_COUNT: u64 = 7;
 
@@ -11,36 +14,38 @@ entry fn start() -> u64 {
     let downs = rs_source_str("0");
     st_put(K_COUNT, mem_new(0.0));
 
-    let stack = el_stack();
-    stack_align(stack, ALIGN_TOP_LEFT);
+    let mut stack = Stack.new();
+    stack.alignment(ALIGN_TOP_LEFT);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
-    let target = el_box_new();
-    box_size(target, 400.0, 600.0);
-    let downs_t = el_text_bound_new(downs);
-    el_qkey(downs_t, "beneath-downs");
-    el_child(target, el_build(downs_t));
-    el_child(stack, el_gesture(downs, "", "g_down", "", "", "", el_build(target)));
+    let mut target = Container.new();
+    target.width_height(400.0, 600.0);
+    let mut downs_t = Text.new();
+
+    downs_t.text_bound(downs);
+    downs_t.query_key("beneath-downs");
+    target.child(downs_t.build());
+    stack.child(PointerInteract.new().id(downs).on_down("g_down").query_key("rut/gesture").child(target.build()).build());
 
     // A decoration-less full-size Container — transparent.
-    let plain = el_box_new();
-    box_size(plain, 400.0, 600.0);
-    el_qkey(plain, "plain");
-    el_child(stack, el_build(plain));
+    let mut plain = Container.new();
+    plain.width_height(400.0, 600.0);
+    plain.query_key("plain");
+    stack.child(plain.build());
 
     // A painted red 200x200 surface at the top-left — absorbs.
-    let red = el_box_new();
-    box_size(red, 200.0, 200.0);
-    box_color(red, 0xEF4444FFu64);
-    el_qkey(red, "red");
-    el_child(stack, el_build(red));
+    let mut red = Container.new();
+    red.width_height(200.0, 200.0);
+    red.color(0xEF4444FFu64);
+    red.query_key("red");
+    stack.child(red.build());
 
     // A translucent MouseRegion over the right half (x 200..400).
-    let region_child = el_vqkey(el_sizedbox(200.0, 600.0, el_build(el_box_new())), "region");
-    let region = el_mouse_region(downs, "", "", CURSOR_AUTO, 1, region_child);
-    el_child(stack, el_positioned_full(200.0, 0.0, 0.0, 0.0, 200.0, 600.0, region));
+    let region_child = SizedBox.new(200.0, 600.0).child(Container.new().build()).query_key("region").build();
+    let region = MouseRegion.new().cursor(CURSOR_AUTO).behavior(1).child(region_child).build();
+    stack.child(Positioned.new().left(200.0).width(200.0).height(600.0).child(region).build());
 
-    mount(el_build(stack));
+    mount(stack.build());
     return downs;
 }
 

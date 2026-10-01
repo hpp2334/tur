@@ -6,16 +6,18 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-use tur::{ box_color, el_box_new, el_build, el_child, el_column, el_expand, el_vqkey, mount };
+use tur::{ mount };
+use tur_kit::{ Column, Container, Expanded };
+
 
 entry fn start() {
-    let fill_builder = el_box_new();
-    box_color(fill_builder, 0x404040FFu64);
-    let fill = el_expand(1.0, el_build(fill_builder));
-    let fill = el_vqkey(fill, "fill");
-    let col = el_column();
-    el_child(col, fill);
-    mount(el_build(col));
+    let mut fill_builder = Container.new();
+    fill_builder.color(0x404040FFu64);
+    let mut fill = Expanded.new().flex(1.0).child(fill_builder.build()).query_key("fill").build();
+    let fill = fill;
+    let mut col = Column.new();
+    col.child(fill);
+    mount(col.build());
 }
 "#;
 

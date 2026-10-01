@@ -1,28 +1,30 @@
 // composited-transform-reactive-anchor: the target anchor resolves from an
 // atom; the button (20, 540) flips it to BottomRight — the follower
 // relocates to the target's bottom-right (160, 120).
-use tur::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_ct_follower_bound, el_ct_target, ct_link_new, el_pi, el_positioned, el_qkey, el_sizedbox, el_stack, mount, rs_set_f64, rs_source_f64 };
+use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, PointerInteract, Positioned, SizedBox, Stack };
+
 
 entry fn start() -> u64 {
     let anchor = rs_source_f64();
     rs_set_f64(anchor, 0.0);
     let link = ct_link_new();
-    let stack = el_stack();
-    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
-    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
-    let target = el_ct_target(link, target_child);
-    el_child(stack, el_positioned(100.0, 80.0, target));
-    let red = el_box_new();
-    box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FFu64);
-    let follower = el_ct_follower_bound(link, anchor, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
-    el_child(stack, follower);
+    let mut stack = Stack.new();
+    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
+    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
+    let target = CompositedTarget.new().link(link).child(target_child).build();
+    stack.child(Positioned.new().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.new();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.new().link(link).target_anchor_bound(anchor).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
 
-    let btn = el_box_new();
-    box_size(btn, 60.0, 30.0);
-    box_color(btn, 0x4F46E1FFu64);
-    el_child(stack, el_positioned(20.0, 540.0, el_pi(anchor, anchor, "b_flip", "", 0, "", el_build(btn))));
-    mount(el_build(stack));
+    let mut btn = Container.new();
+    btn.width_height(60.0, 30.0);
+    btn.color(0x4F46E1FFu64);
+    stack.child(Positioned.new().left(20.0).top(540.0).child(PointerInteract.new().ids(anchor, anchor).on_tap("b_flip").child(btn.build()).build()).build());
+    mount(stack.build());
     return anchor;
 }
 

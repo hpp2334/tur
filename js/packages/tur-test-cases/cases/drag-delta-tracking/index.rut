@@ -1,7 +1,9 @@
 // drag-delta-tracking: a drag pad computing deltaFromStart/deltaFromLast
 // (the VDivider pattern). Scratch numbers ride stashed mem cells; the
 // transcript atom renders "dsx,dsy,dlx,dly" for the test to parse.
-use tur::{ el_box_new, box_color, box_size, el_build, el_gesture, el_qkey, el_text_bound_new, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take };
+use tur::{ mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, st_put, st_take };
+use tur_kit::{ Container, PointerInteract, Text };
+
 
 let K_SX: u64 = 2;
 let K_SY: u64 = 3;
@@ -15,15 +17,17 @@ entry fn start() -> u64 {
     st_put(K_LX, mem_new(0.0));
     st_put(K_LY, mem_new(0.0));
 
-    let b = el_box_new();
-    box_size(b, 200.0, 200.0);
-    box_color(b, 0x6366F1FF);
-    el_qkey(b, "drag-target");
-    let info_t = el_text_bound_new(info);
-    el_qkey(info_t, "drag-info");
-    el_child(b, el_build(info_t));
+    let mut b = Container.new();
+    b.width_height(200.0, 200.0);
+    b.color(0x6366F1FF);
+    b.query_key("drag-target");
+    let mut info_t = Text.new();
 
-    let pad = el_gesture(info, "", "g_down", "g_move", "g_up", "", el_build(b));
+    info_t.text_bound(info);
+    info_t.query_key("drag-info");
+    b.child(info_t.build());
+
+    let pad = PointerInteract.new().id(info).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
     mount(pad);
     return info;
 }

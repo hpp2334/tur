@@ -65,13 +65,15 @@ fn text_input_requests_fire_on_editable_focus() {
     .unwrap();
     app.load_rut_module(
         r#"
-use tur::{ el_input, el_qkey, el_vqkey, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 200.0, 44.0);
-    mount(el_vqkey(input, "editor"));
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(200.0, 44.0).query_key("editor").build();
+    mount(input);
 }
 "#,
     )

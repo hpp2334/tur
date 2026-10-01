@@ -55,16 +55,18 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single Input at the top-left of the
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
-use tur::{ el_build, el_child, el_input, el_vqkey, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 200.0, 30.0);
-    let keyed = el_vqkey(input, "input");
-    let col = el_column();
-    el_child(col, keyed);
-    mount(el_build(col));
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("input").build();
+    let keyed = input;
+    let mut col = Column.new();
+    col.child(keyed);
+    mount(col.build());
 }
 "#;
 

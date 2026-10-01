@@ -13,13 +13,15 @@ fn with_element_panic_propagates_to_test_thread() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-        use tur::{ box_size, el_box_new, el_build, el_qkey, mount };
+        use tur::{ mount };
+use tur_kit::{ Container };
+
 
         entry fn start() {
-            let b = el_box_new();
-            box_size(b, 50.0, 50.0);
-            el_qkey(b, "c");
-            mount(el_build(b));
+            let mut b = Container.new();
+            b.width_height(50.0, 50.0);
+            b.query_key("c");
+            mount(b.build());
         }
         "#,
     )
@@ -52,14 +54,16 @@ fn with_element_panic_propagates_to_test_thread() {
 fn with_element_assert_failure_propagates() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"
-        use tur::{ box_size, el_box_new, el_build, el_qkey, mount };
+        r#"use tur::{ mount };
+use tur_kit::{ Container };
+
+
 
         entry fn start() {
-            let b = el_box_new();
-            box_size(b, 50.0, 50.0);
-            el_qkey(b, "c");
-            mount(el_build(b));
+            let mut b = Container.new();
+            b.width_height(50.0, 50.0);
+            b.query_key("c");
+            mount(b.build());
         }
         "#,
     )

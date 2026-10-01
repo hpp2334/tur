@@ -1,27 +1,31 @@
 // pointer-region-enter-exit-race: two regions sharing one hover atom —
 // moving A->B in a single event must land on "B" (exit-before-enter).
-use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_column, el_mouse_region, el_qkey, el_text_bound_new, mount, rs_set_str, rs_source_str };
+use tur::{ mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Container, MouseRegion, Text };
+
 
 entry fn start() -> u64 {
     let hover = rs_source_str("");
-    let col = el_column();
+    let mut col = Column.new();
 
-    let a = el_box_new();
-    box_size(a, 100.0, 50.0);
-    box_color(a, 0xEF4444FFu64);
-    el_qkey(a, "a");
-    el_child(col, el_mouse_region(hover, "a_enter", "a_exit", 0, 0, el_build(a)));
+    let mut a = Container.new();
+    a.width_height(100.0, 50.0);
+    a.color(0xEF4444FFu64);
+    a.query_key("a");
+    col.child(MouseRegion.new().on_enter("a_enter", hover).on_exit("a_exit", hover).cursor(0).behavior(0).child(a.build()).build());
 
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    box_color(b, 0x3B82F6FF);
-    el_qkey(b, "b");
-    el_child(col, el_mouse_region(hover, "b_enter", "b_exit", 0, 0, el_build(b)));
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    b.color(0x3B82F6FF);
+    b.query_key("b");
+    col.child(MouseRegion.new().on_enter("b_enter", hover).on_exit("b_exit", hover).cursor(0).behavior(0).child(b.build()).build());
 
-    let t = el_text_bound_new(hover);
-    el_qkey(t, "hover");
-    el_child(col, el_build(t));
-    mount(el_build(col));
+    let mut t = Text.new();
+
+    t.text_bound(hover);
+    t.query_key("hover");
+    col.child(t.build());
+    mount(col.build());
     return hover;
 }
 

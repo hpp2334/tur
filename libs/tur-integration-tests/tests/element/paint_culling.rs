@@ -42,28 +42,27 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.load_rut_module(
         r#"
-use tur::{
-    box_color, box_size, el_box_new, el_build, el_child, el_column, el_qkey, el_scroll, el_vqkey,
-    mount,
-};
+use tur::{ AXIS_VERTICAL, mount };
+use tur_kit::{ Column, Container, ScrollView };
+
 
 entry fn item(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 10.0, 100.0);
-    box_color(b, 0xFF0000FFu64);
-    el_qkey(b, f"item/{i}");
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(10.0, 100.0);
+    b.color(0xFF0000FFu64);
+    b.query_key(f"item/{i}");
+    return b.build();
 }
 
 entry fn start() {
-    let col = el_column();
+    let mut col = Column.new();
     let mut i: u64 = 0;
     while (i < 6) {
-        el_child(col, item(i));
+        col.child(item(i));
         i += 1;
     }
-    let scroller = el_scroll(true, el_build(col));
-    mount(el_vqkey(scroller, "scroll"));
+    let mut scroller = ScrollView.new().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    mount(scroller);
 }
 "#,
     )
@@ -188,14 +187,16 @@ fn no_clip_means_no_culling() {
 
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_box_new, el_build, el_qkey, mount };
+use tur::{ mount };
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, 0x0080FFFF);
-    el_qkey(b, "onscreen");
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(0x0080FFFF);
+    b.query_key("onscreen");
+    mount(b.build());
 }
 "#,
     )

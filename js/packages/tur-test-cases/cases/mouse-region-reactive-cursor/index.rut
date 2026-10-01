@@ -1,20 +1,26 @@
 // mouse-region-reactive-cursor: the cursor resolves from a str atom each
 // layout — flipping the atom re-resolves the cursor on hover.
-use tur::{ el_box_new, box_size, el_build, el_child, el_column, el_mouse_region, el_text_bound_new, mount, rs_set_str, rs_source_str };
+use tur::{ mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Container, MouseRegion, Text };
+
 
 entry fn start() -> u64 {
     let cursor = rs_source_str("pointer");
     let state = rs_source_str("");
-    let col = el_column();
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    let t = el_text_bound_new(state);
-    el_child(b, el_build(t));
-    el_child(col, el_mouse_region_bound(state, "mr_enter", "mr_exit", cursor, 0, el_build(b)));
-    let ct = el_text_bound_new(cursor);
-    el_qkey(ct, "cursor-atom");
-    el_child(col, el_build(ct));
-    mount(el_build(col));
+    let mut col = Column.new();
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    let mut t = Text.new();
+
+    t.text_bound(state);
+    b.child(t.build());
+    col.child(MouseRegion.new().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor_bound(cursor).behavior(0).child(b.build()).build());
+    let mut ct = Text.new();
+
+    ct.text_bound(cursor);
+    ct.query_key("cursor-atom");
+    col.child(ct.build());
+    mount(col.build());
     return cursor;
 }
 

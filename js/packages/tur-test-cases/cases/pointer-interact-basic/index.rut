@@ -1,9 +1,11 @@
 // pointer-interact-basic: an opaque gesture pad around a fixed-size box.
-use tur::{ el_box_new, box_size, el_build, el_pi, mount, rs_source_f64 };
+use tur::{ mount, rs_source_f64 };
+use tur_kit::{ Container, PointerInteract };
+
 
 entry fn start() {
     let pad = rs_source_f64();
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    mount(el_pi(pad, pad, "", "", 0, "", el_build(b)));
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    mount(PointerInteract.new().ids(pad, pad).child(b.build()).build());
 }

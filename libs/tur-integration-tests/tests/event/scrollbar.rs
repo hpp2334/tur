@@ -6,23 +6,22 @@ use tur_integration_tests::TurTestApp;
 /// `ScrollController` with an overlaid `Scrollbar`. The controller is exposed
 /// as `globalThis.__ctrl` so the test can drive `jumpTo` directly.
 const SCROLLBAR_BUNDLE: &str = r#"
-use tur::{
-    box_color, box_size, el_build, el_child, el_column, el_scroll, el_vqkey, mount, rs_set_f64,
-    rs_source_f64,
-};
+use tur::{ AXIS_VERTICAL, mount, rs_source_f64 };
+use tur_kit::{ Column, Container, ScrollView };
+
 
 entry fn start() -> u64 {
-    let content = el_column();
+    let mut content = Column.new();
     let mut i = 0;
     while (i < 12) {
-        let b = el_box_new();
-        box_size(b, 280.0, 50.0);
-        box_color(b, 0x4488CCFFu64);
-        el_child(content, el_build(b));
+        let mut b = Container.new();
+        b.width_height(280.0, 50.0);
+        b.color(0x4488CCFFu64);
+        content.child(b.build());
         i += 1;
     }
-    let scroller = el_scroll(true, el_build(content));
-    let scroller = el_vqkey(scroller, "scroll");
+    let mut scroller = ScrollView.new().axis(AXIS_VERTICAL).child(content.build()).query_key("scroll").build();
+    let scroller = scroller;
     mount(scroller);
     return rs_source_f64();
 }

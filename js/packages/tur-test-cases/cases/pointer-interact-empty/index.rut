@@ -1,8 +1,10 @@
 // pointer-interact-empty: a bare PointerInteract with no child — the
 // invisible hit-target widget (zero-sized, still absorbs at its point).
-use tur::{ el_pi_empty, mount, rs_source_f64 };
+use tur::{ mount, rs_source_f64 };
+use tur_kit::{ PointerInteract };
+
 
 entry fn start() {
     let pad = rs_source_f64();
-    mount(el_pi_empty(pad, pad, "", "", 0, ""));
+    mount(PointerInteract.new().ids(pad, pad).build());
 }

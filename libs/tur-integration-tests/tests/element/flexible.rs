@@ -5,7 +5,8 @@ use tur_integration_tests::TurTestApp;
 /// flex item wrapping a Text — the flex slot is therefore exactly 300.
 /// Returns the Text node id (root → row → flex item → text).
 /// `flex_item` is a rut row call producing the flex item's view: `el_flex`
-/// (Flexible — loose) or `el_expand` (Expanded — tight). `text` is the
+/// (via the kit): `"el_flex"` authors `Flexible` (loose) and `"el_expand"`
+/// authors `Expanded` (tight). `text` is the
 /// wrapped label (a styled text builder).
 fn setup_row_flex_item(flex_item: &str, text: &str, text_extra: &str) -> (TurTestApp, ElementNodeId, ElementNodeId) {
     setup_row_flex_item_ex(flex_item, text, text_extra)
@@ -19,30 +20,31 @@ fn setup_row_flex_item_ex(
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     let source = format!(
         r#"
-use tur::{{
-    box_size, el_box_new, el_build, el_child, el_flex, el_expand, el_qkey, el_row, el_text_new,
-    mount, text_max_lines, text_size, text_ellipsis,
-}};
+use tur::{{ mount }};
+use tur_kit::{{ Container, Expanded, Flexible, Row, Text }};
+
 
 entry fn start() {{
-    let row = el_row();
-    el_qkey(row, "row");
+    let mut row = Row.new();
+    row.query_key("row");
 
-    let fixed = el_box_new();
-    box_size(fixed, 100.0, 40.0);
+    let mut fixed = Container.new();
+    fixed.width_height(100.0, 40.0);
 
-    let txt = el_text_new({text});
-    text_size(txt, 14.0);
-{text_extra}    let slot = {flex_item}(1.0, el_build(txt));
+    let mut txt = Text.new();
 
-    el_child(row, el_build(fixed));
-    el_child(row, slot);
-    mount(el_build(row));
+    txt.text({text});
+    txt.font_size(14.0);
+{text_extra}    let slot = {item}.new().flex(1.0).child(txt.build()).build();
+
+    row.child(fixed.build());
+    row.child(slot);
+    mount(row.build());
 }}
 "#,
         text = text,
         text_extra = text_extra,
-        flex_item = flex_item,
+        item = if flex_item == "el_expand" { "Expanded" } else { "Flexible" },
     );
     app.load_rut_module(&source).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -81,7 +83,7 @@ fn flexible_loose_fit_ellipsizes_text_at_slot() {
     let (app, row_id, text_id) = setup_row_flex_item_ex(
         "el_flex",
             "\"A very long label that must ellipsize inside its slot\"",
-        "    text_max_lines(txt, 1);\n    text_ellipsis(txt);\n",
+        "    txt.max_lines(1);\n    txt.ellipsis();\n",
     );
 
     let rt = app.element_tree();
@@ -176,38 +178,41 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{
-    box_size, el_box_new, el_build, el_child, el_flex, el_qkey, el_row, el_sizedbox, el_text_new,
-    el_vqkey, flex_main_size, mount, text_max_lines, text_size, text_ellipsis,
-};
+use tur::{ mount };
+use tur_kit::{ Container, Flexible, Row, SizedBox, Text };
+
 
 entry fn start() {
-    let pill = el_row();
-    el_qkey(pill, "pill");
-    flex_main_size(pill, 1);
+    let mut pill = Row.new();
+    pill.query_key("pill");
+    pill.main_axis_size(1);
 
-    el_child(pill, el_sizedbox(14.0, 0.0, el_build(el_box_new())));
+    pill.child(SizedBox.new(14.0, 0.0).child(Container.new().build()).build());
 
-    let txt = el_text_new("Last Week Todos");
-    text_size(txt, 14.0);
-    text_max_lines(txt, 1);
-    text_ellipsis(txt);
-    let label = el_flex(1.0, el_build(txt));
-    let label = el_vqkey(label, "label");
-    el_child(pill, label);
+    let mut txt = Text.new();
 
-    el_child(pill, el_sizedbox(8.0, 0.0, el_build(el_box_new())));
+    txt.text("Last Week Todos");
+    txt.font_size(14.0);
+    txt.max_lines(1);
+    txt.ellipsis();
+    let mut label = Flexible.new().flex(1.0).child(txt.build()).query_key("label").build();
+    let label = label;
+    pill.child(label);
 
-    let caret = el_text_new("v");
-    text_size(caret, 14.0);
-    el_qkey(caret, "caret");
-    el_child(pill, el_build(caret));
+    pill.child(SizedBox.new(8.0, 0.0).child(Container.new().build()).build());
 
-    el_child(pill, el_sizedbox(14.0, 0.0, el_build(el_box_new())));
+    let mut caret = Text.new();
 
-    let row = el_row();
-    el_child(row, el_build(pill));
-    mount(el_build(row));
+    caret.text("v");
+    caret.font_size(14.0);
+    caret.query_key("caret");
+    pill.child(caret.build());
+
+    pill.child(SizedBox.new(14.0, 0.0).child(Container.new().build()).build());
+
+    let mut row = Row.new();
+    row.child(pill.build());
+    mount(row.build());
 }
 "#,
     )
@@ -286,43 +291,45 @@ entry fn start() {
 fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{
-    box_size, el_box_new, el_build, el_child, el_column, el_flex, el_qkey, el_row,
-    el_sizedbox, el_text_new, flex_main_size, mount, text_max_lines, text_size, text_ellipsis,
-};
+        r#"use tur::{ mount };
+use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
+
+use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
+
 
 entry fn long_label() -> opaque {
-    let txt = el_text_new("A very long label that must ellipsize inside its slot");
-    text_size(txt, 14.0);
-    text_max_lines(txt, 1);
-    text_ellipsis(txt);
-    return el_build(txt);
+    let mut txt = Text.new();
+
+    txt.text("A very long label that must ellipsize inside its slot");
+    txt.font_size(14.0);
+    txt.max_lines(1);
+    txt.ellipsis();
+    return txt.build();
 }
 
 entry fn start() {
-    let long_row = el_row();
-    el_qkey(long_row, "long-row");
-    flex_main_size(long_row, 1);
-    let fixed = el_box_new();
-    box_size(fixed, 100.0, 40.0);
-    el_child(long_row, el_build(fixed));
-    el_child(long_row, el_flex(1.0, long_label()));
-    el_child(long_row, el_sizedbox(20.0, 0.0, el_build(el_box_new())));
+    let mut long_row = Row.new();
+    long_row.query_key("long-row");
+    long_row.main_axis_size(1);
+    let mut fixed = Container.new();
+    fixed.width_height(100.0, 40.0);
+    long_row.child(fixed.build());
+    long_row.child(Flexible.new().flex(1.0).child(long_label()).build());
+    long_row.child(SizedBox.new(20.0, 0.0).child(Container.new().build()).build());
 
-    let short_row = el_row();
-    el_qkey(short_row, "short-row");
-    flex_main_size(short_row, 1);
-    let fixed2 = el_box_new();
-    box_size(fixed2, 100.0, 40.0);
-    el_child(short_row, el_build(fixed2));
-    el_child(short_row, el_flex(1.0, el_build(el_text_new("Hi"))));
-    el_child(short_row, el_sizedbox(20.0, 0.0, el_build(el_box_new())));
+    let mut short_row = Row.new();
+    short_row.query_key("short-row");
+    short_row.main_axis_size(1);
+    let mut fixed2 = Container.new();
+    fixed2.width_height(100.0, 40.0);
+    short_row.child(fixed2.build());
+    short_row.child(Flexible.new().flex(1.0).child(Text.new().text("Hi").build()).build());
+    short_row.child(SizedBox.new(20.0, 0.0).child(Container.new().build()).build());
 
-    let col = el_column();
-    el_child(col, el_build(long_row));
-    el_child(col, el_build(short_row));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(long_row.build());
+    col.child(short_row.build());
+    mount(col.build());
 }
 "#,
     )
@@ -379,28 +386,30 @@ entry fn start() {
 fn flexible_zero_remaining_slot_paints_within_budget() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{
-    box_size, el_box_new, el_build, el_child, el_flex, el_qkey, el_row, el_text_new, el_vqkey,
-    mount, text_max_lines, text_size, text_ellipsis,
-};
+        r#"use tur::{ mount };
+use tur_kit::{ Container, Flexible, Row, Text };
+
+use tur_kit::{ Container, Flexible, Row, Text };
+
 
 entry fn start() {
-    let row = el_row();
+    let mut row = Row.new();
 
-    let filler = el_box_new();
-    box_size(filler, 400.0, 40.0);
-    el_child(row, el_build(filler));
+    let mut filler = Container.new();
+    filler.width_height(400.0, 40.0);
+    row.child(filler.build());
 
-    let txt = el_text_new("A very long label that must not paint naturally here");
-    text_size(txt, 14.0);
-    text_max_lines(txt, 1);
-    text_ellipsis(txt);
-    let label = el_flex(1.0, el_build(txt));
-    let label = el_vqkey(label, "label");
-    el_child(row, label);
+    let mut txt = Text.new();
 
-    mount(el_build(row));
+    txt.text("A very long label that must not paint naturally here");
+    txt.font_size(14.0);
+    txt.max_lines(1);
+    txt.ellipsis();
+    let mut label = Flexible.new().flex(1.0).child(txt.build()).query_key("label").build();
+    let label = label;
+    row.child(label);
+
+    mount(row.build());
 }
 "#,
     )

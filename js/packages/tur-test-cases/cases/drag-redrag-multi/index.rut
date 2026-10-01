@@ -1,7 +1,10 @@
 // drag-redrag-multi: two tiles sharing one lift controller — the
 // multi-tile jigsaw repro. Per-tile event transcripts render into
 // `tile-events-0` / `tile-events-1`.
-use tur::{ ALIGN_TOP_LEFT, anim_ctrl, anim_forward, anim_reverse, el_box_new, box_color, box_size, el_build, el_child, el_column, el_gesture2, el_pi, el_positioned, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_text_new, mount, rs_get_str, rs_set_str, rs_source_f64, rs_source_str, stack_align, st_put, st_take, stf_put, stf_take };
+use tur::{ ALIGN_TOP_LEFT, anim_ctrl, anim_forward, anim_reverse, mount, rs_get_str, rs_set_str,
+    rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
+use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+
 
 let K_CTRL: u64 = 1;
 let K_T0: u64 = 2;
@@ -17,32 +20,36 @@ entry fn start() -> u64 {
     stf_put(K_T0, t0 as f64);
     stf_put(K_T1, t1 as f64);
 
-    let stack = el_stack();
-    stack_align(stack, ALIGN_TOP_LEFT);
-    el_child(stack, el_sizedbox(300.0, 200.0, el_build(el_box_new())));
+    let mut stack = Stack.new();
+    stack.alignment(ALIGN_TOP_LEFT);
+    stack.child(SizedBox.new(300.0, 200.0).child(Container.new().build()).build());
 
     // Tile 0 at (10, 10); tile 1 at (150, 100). The tile index rides the
     // gesture's second id slot (100 + index).
-    let b0 = el_box_new();
-    box_size(b0, 100.0, 60.0);
-    box_color(b0, 0x6366F1FFu64);
-    el_qkey(b0, "tile-0");
-    el_child(stack, el_positioned(10.0, 10.0, el_gesture2(0, 100, "g_down", "g_down", "g_move", "g_up", "", el_build(b0))));
-    let b1 = el_box_new();
-    box_size(b1, 100.0, 60.0);
-    box_color(b1, 0x6366F1FFu64);
-    el_qkey(b1, "tile-1");
-    el_child(stack, el_positioned(150.0, 100.0, el_gesture2(1, 101, "g_down", "g_down", "g_move", "g_up", "", el_build(b1))));
+    let mut b0 = Container.new();
+    b0.width_height(100.0, 60.0);
+    b0.color(0x6366F1FFu64);
+    b0.query_key("tile-0");
+    stack.child(Positioned.new().left(10.0).top(10.0).child(PointerInteract.new().ids(0, 100).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b0.build()).build()).build());
+    let mut b1 = Container.new();
+    b1.width_height(100.0, 60.0);
+    b1.color(0x6366F1FFu64);
+    b1.query_key("tile-1");
+    stack.child(Positioned.new().left(150.0).top(100.0).child(PointerInteract.new().ids(1, 101).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b1.build()).build()).build());
 
     // Transcript readouts.
-    let t0t = el_text_bound_new(t0);
-    el_qkey(t0t, "tile-events-0");
-    el_child(stack, el_build(t0t));
-    let t1t = el_text_bound_new(t1);
-    el_qkey(t1t, "tile-events-1");
-    el_child(stack, el_build(t1t));
+    let mut t0t = Text.new();
 
-    mount(el_build(stack));
+    t0t.text_bound(t0);
+    t0t.query_key("tile-events-0");
+    stack.child(t0t.build());
+    let mut t1t = Text.new();
+
+    t1t.text_bound(t1);
+    t1t.query_key("tile-events-1");
+    stack.child(t1t.build());
+
+    mount(stack.build());
     return lift;
 }
 

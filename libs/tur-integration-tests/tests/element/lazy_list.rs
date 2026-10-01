@@ -239,20 +239,22 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_build, el_child, el_lazy_list_overscan, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList, Text };
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 50.0, 50.0);
-    box_color(b, 0xC8C8C8FFu64);
-    el_child(b, el_build(el_text_new(f"Item {i}")));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(50.0, 50.0);
+    b.color(0xC8C8C8FFu64);
+    b.child(Text.new().text(f"Item {i}").build());
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    mount(el_lazy_list("row", count, 50.0));
+    mount(LazyList.new().item_builder("row").count(count).item_extent(50.0).build());
     return count;
 }
     "#,
@@ -316,22 +318,24 @@ entry fn start() -> u64 {
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{ box_color, box_size, el_build, el_child, el_lazy_list_overscan, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList, Text };
+
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 56.0, 56.0);
-    box_color(b, 0xC8C8C8FFu64);
-    el_child(b, el_build(el_text_new(f"Item {i}")));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(56.0, 56.0);
+    b.color(0xC8C8C8FFu64);
+    b.child(Text.new().text(f"Item {i}").build());
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    let lg = el_lazy_list_overscan("row", count, 56.0, 2);
-    let lg = el_vqkey(lg, "ll");
+    let mut lg = LazyList.new().item_builder("row").count(count).item_extent(56.0).overscan(2).query_key("ll").build();
+    let lg = lg;
     mount(lg);
     return count;
 }
@@ -788,21 +792,23 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{ box_size, el_build, el_child, el_lazy_list, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList, Text };
+
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 50.0, 50.0);
-    el_child(b, el_build(el_text_new(f"Item {i}")));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(50.0, 50.0);
+    b.child(Text.new().text(f"Item {i}").build());
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let lg = el_lazy_list("row", count, 50.0);
-    let lg = el_vqkey(lg, "ll");
+    let mut lg = LazyList.new().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
     mount(lg);
     return count;
 }
@@ -835,21 +841,23 @@ entry fn set_count(count: u64, n: f64) {
 fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{ box_size, el_build, el_child, el_lazy_list, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList, Text };
+
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 50.0, 50.0);
-    el_child(b, el_build(el_text_new(f"Item {i}")));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(50.0, 50.0);
+    b.child(Text.new().text(f"Item {i}").build());
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let lg = el_lazy_list("row", count, 50.0);
-    let lg = el_vqkey(lg, "ll");
+    let mut lg = LazyList.new().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
     mount(lg);
     return count;
 }
@@ -906,21 +914,23 @@ entry fn set_count(count: u64, n: f64) {
 fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{ box_size, el_build, el_child, el_lazy_list, el_text_new, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList, Text };
+
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 50.0, 50.0);
-    el_child(b, el_build(el_text_new(f"Item {i}")));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(50.0, 50.0);
+    b.child(Text.new().text(f"Item {i}").build());
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let lg = el_lazy_list("row", count, 50.0);
-    let lg = el_vqkey(lg, "ll");
+    let mut lg = LazyList.new().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
     mount(lg);
     return count;
 }

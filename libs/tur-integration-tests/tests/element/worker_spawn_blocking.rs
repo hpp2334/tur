@@ -159,10 +159,12 @@ fn blocking_work_does_not_stall_lane_cotenants() {
             .clone()
             .load_rut_module(
                 r#"
-use tur::{ el_text, mount };
+use tur::{ mount };
+use tur_kit::{ Text };
+
 
 entry fn start() {
-    mount(el_text("b"));
+    mount(Text.new().text("b").build());
 }
 
 entry fn ping(_a: u64, _b: f64) {

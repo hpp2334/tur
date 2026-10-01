@@ -332,17 +332,21 @@ fn text_max_lines_no_truncation_when_fits() {
 #[test]
 fn text_layout_is_dpr_invariant() {
     let fixture = r#"
-use tur::{ box_size, el_box_new, el_build, el_child, el_text_new, mount, text_max_lines, text_size, text_ellipsis };
+use tur::{ mount };
+use tur_kit::{ Container, Text };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 164.0, 40.0);
-    let txt = el_text_new("Last Week Todos");
-    text_size(txt, 14.0);
-    text_max_lines(txt, 1);
-    text_ellipsis(txt);
-    el_child(b, el_build(txt));
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(164.0, 40.0);
+    let mut txt = Text.new();
+
+    txt.text("Last Week Todos");
+    txt.font_size(14.0);
+    txt.max_lines(1);
+    txt.ellipsis();
+    b.child(txt.build());
+    mount(b.build());
 }
 "#;
 

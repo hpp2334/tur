@@ -22,12 +22,14 @@ use tur_native::NativeFontLoader;
 /// best-effort at destroy) registers an image resource — a synchronous
 /// host-visible effect (one `UploadImage` ship).
 const SOURCE: &str = r#"
-use tur::{ box_size, el_box_new, el_build, img_res_solid, mount };
+use tur::{ img_res_solid, mount };
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    mount(b.build());
 }
 
 entry fn stop() {

@@ -1,35 +1,37 @@
 // switch-demo: a toggle switch authored from the gesture + box rows (the
 // Switch widget's corpus twin).
-use tur::{ ALIGN_CENTER_LEFT, ALIGN_CENTER_RIGHT, condition, el_box_new, box_align, box_color, box_padding, box_radius, box_size, el_build, el_child, el_column, el_gesture, el_pi, el_qkey, el_sizedbox, el_sizedbox, mount, rs_get_bool, rs_set_bool, rs_source_bool, stf_put, stf_take };
+use tur::{ mount, rs_get_bool, rs_set_bool, rs_source_bool, stf_put, stf_take };
+use tur_kit::{ Column, Container, PointerInteract, SizedBox };
+
 
 let K_ON: u64 = 1;
 
 entry fn start() -> u64 {
     let on = rs_source_bool(true);
     stf_put(K_ON, on as f64);
-    let col = el_column();
-    let track = el_box_new();
-    box_size(track, 64.0, 32.0);
-    box_color(track, 0x22C55EFFu64);
-    box_radius(track, 16.0);
-    box_padding(track, 4.0);
-    el_qkey(track, "switch");
-    el_child(track, el_build(thumb(on)));
-    el_child(col, el_gesture(on, "b_toggle", "", "", "", "", el_build(track)));
-    mount(el_sizedbox(400.0, 200.0, el_build(col)));
+    let mut col = Column.new();
+    let mut track = Container.new();
+    track.width_height(64.0, 32.0);
+    track.color(0x22C55EFFu64);
+    track.radius(16.0);
+    track.padding(4.0);
+    track.query_key("switch");
+    track.child(thumb(on));
+    col.child(PointerInteract.new().id(on).on_click("b_toggle").query_key("rut/gesture").child(track.build()).build());
+    mount(SizedBox.new(400.0, 200.0).child(col.build()).build());
     return on;
 }
 
 fn thumb(on: u64) -> opaque {
-    let knob = el_box_new();
-    box_size(knob, 24.0, 24.0);
-    box_color(knob, 0xFFFFFFFFu64);
-    box_radius(knob, 12.0);
-    let side = el_box_new();
-    box_size(side, 32.0, 24.0);
-    box_align(side, thumb_align());
-    el_child(side, el_build(knob));
-    return el_build(side);
+    let mut knob = Container.new();
+    knob.width_height(24.0, 24.0);
+    knob.color(0xFFFFFFFFu64);
+    knob.radius(12.0);
+    let mut side = Container.new();
+    side.width_height(32.0, 24.0);
+    side.alignment(thumb_align());
+    side.child(knob.build());
+    return side.build();
 }
 
 fn thumb_align() -> u64 {

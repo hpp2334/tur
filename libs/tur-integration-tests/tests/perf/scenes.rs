@@ -92,10 +92,9 @@ pub fn static_tree(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{
-    box_color, box_size, el_build, el_child, el_column, el_row, el_text_bound_d, mount, rs_derive,
-    rs_get_f64, rs_set_f64, rs_source_f64,
-};
+use tur::{ mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, Container, Row };
+
 
 entry fn label(v: f64) -> str {
     return f"t={v as u64}";
@@ -104,25 +103,25 @@ entry fn label(v: f64) -> str {
 entry fn start() -> u64 {
     let tick = rs_source_f64();
 
-    let root = el_column();
+    let mut root = Column.new();
     let mut i = 0;
     while (i < 12) {
-        let row = el_row();
+        let mut row = Row.new();
         let mut j = 0;
         while (j < 12) {
-            let b = el_box_new();
-            box_size(b, 30.0, 30.0);
-            box_color(b, 0x208040FFu64);
-            el_child(row, b);
+            let mut b = Container.new();
+            b.width_height(30.0, 30.0);
+            b.color(0x208040FFu64);
+            row.child(b.build());
             j += 1;
         }
-        el_child(root, row);
+        root.child(row.build());
         i += 1;
     }
 
     let d = rs_derive("label", tick);
-    el_child(root, el_text_bound_d(d));
-    mount(el_build(root));
+    root.child(el_text_bound_d(d));
+    mount(root.build());
     return tick;
 }
 
@@ -142,25 +141,24 @@ pub fn scrolled_list(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{
-    box_color, box_size, el_build, el_child, el_column, el_expand, el_scroll, el_scroll_at,
-    mount,
-};
+use tur::{ AXIS_VERTICAL, mount };
+use tur_kit::{ Column, Container, Expanded, ScrollView };
+
 
 entry fn start() {
-    let content = el_column();
+    let mut content = Column.new();
     let mut i = 0;
     while (i < 200) {
-        let b = el_box_new();
-        box_size(b, 10.0, 40.0);
-        box_color(b, 0x204080FFu64);
-        el_child(content, b);
+        let mut b = Container.new();
+        b.width_height(10.0, 40.0);
+        b.color(0x204080FFu64);
+        content.child(b.build());
         i += 1;
     }
-    let scroller = el_scroll_at(0.0, true, el_build(content));
-    let root = el_column();
-    el_child(root, el_expand(1.0, scroller));
-    mount(el_build(root));
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).initial_offset(0.0).child(content.build()).build();
+    let mut root = Column.new();
+    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    mount(root.build());
 }
 "##,
     )
@@ -210,21 +208,21 @@ pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{
-    anim_ctrl, anim_forward, box_color, box_size, el_build, el_child, el_column, el_opacity_bound,
-    el_row, mount, rs_set_f64, rs_source_f64,
-};
+use tur::{ anim_ctrl, anim_forward, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, Container };
+use tur_anim_kit::{ Opacity };
+
 
 entry fn start() -> u64 {
     let alpha = rs_source_f64();
 
-    let col = el_column();
+    let mut col = Column.new();
     let mut i = 0;
     while (i < 50) {
-        let b = el_box_new();
-        box_size(b, 40.0, 40.0);
-        box_color(b, 0x3060C0FFu64);
-        el_child(col, b);
+        let mut b = Container.new();
+        b.width_height(40.0, 40.0);
+        b.color(0x3060C0FFu64);
+        col.child(b.build());
         i += 1;
     }
 
@@ -232,7 +230,7 @@ entry fn start() -> u64 {
     // into the bound opacity atom — every frame differs.
     let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, "a_tick", "a_end");
     anim_forward(ctrl);
-    mount(el_opacity_bound(alpha, el_build(col)));
+    mount(Opacity.new(0.0).bound(alpha).child(col.build()).build());
     return alpha;
 }
 
@@ -284,9 +282,9 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{
-    el_build, el_input_ctrl, el_qkey, el_scroll, el_scroll_at, mount, tctrl_new, tctrl_push_span,
-};
+use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span };
+use tur_kit::{ Input, ScrollView };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -296,11 +294,11 @@ entry fn start() {
         i += 1;
     }
 
-    let input = el_input_ctrl(ctrl, 100000.0, 10000.0, 14.0);
-    el_qkey(input, "ed");
-    let scroller = el_scroll_at(0.0, true, el_build(input));
-    el_qkey(scroller, "scroll");
-    mount(el_build(scroller));
+    let input = Input.new().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
+    input.query_key("ed");
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).initial_offset(0.0).child(input).build();
+    scroller.query_key("scroll");
+    mount(scroller);
 }
 "##,
     )

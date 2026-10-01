@@ -1,20 +1,22 @@
 // composited-transform-follower-anchor: explicit follower anchor — the
 // follower's BOTTOM_RIGHT lands on the target's top-left (the anchor
 // math the subsystem solves).
-use tur::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_LEFT, ALIGN_TOP_RIGHT, el_box_new, box_color, box_size, el_build, el_child, el_ct_follower, el_ct_target, ct_link_new, el_positioned, el_sizedbox, el_stack, mount };
+use tur::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_RIGHT, ct_link_new, mount };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack };
+
 
 entry fn start() {
     let link = ct_link_new();
-    let stack = el_stack();
-    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
-    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
-    let target = el_ct_target(link, target_child);
-    el_child(stack, el_positioned(100.0, 80.0, target));
-    let red = el_box_new();
-    box_size(red, 60.0, 40.0);
-    box_color(red, 0x2563EBFFu64);
-    box_color(red, 0xFF0000FFu64);
-    let follower = el_ct_follower(link, ALIGN_BOTTOM_RIGHT, ALIGN_TOP_RIGHT, 0.0, 0.0, el_build(red));
-    el_child(stack, follower);
-    mount(el_build(stack));
+    let mut stack = Stack.new();
+    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
+    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
+    let target = CompositedTarget.new().link(link).child(target_child).build();
+    stack.child(Positioned.new().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.new();
+    red.width_height(60.0, 40.0);
+    red.color(0x2563EBFFu64);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.new().link(link).target_anchor(ALIGN_BOTTOM_RIGHT).follower_anchor(ALIGN_TOP_RIGHT).child(red.build()).build();
+    stack.child(follower);
+    mount(stack.build());
 }

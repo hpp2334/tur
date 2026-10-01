@@ -1,7 +1,10 @@
 // drag-with-lift: the jigsaw piece mechanic — pointer-down drives a lift
 // animation (forward on down, reverse on up). The last gesture phase
 // renders into the `last-event` Text.
-use tur::{ anim_ctrl, anim_forward, anim_reverse, el_box_new, box_size, el_build, el_child, el_gesture, el_qkey, el_text_new, el_vqkey, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
+use tur::{ anim_ctrl, anim_forward, anim_reverse, mount, rs_set_str, rs_source_f64, rs_source_str,
+    st_put, st_take, stf_put, stf_take };
+use tur_kit::{ Column, Container, PointerInteract, Text };
+
 
 let K_PHASE: u64 = 1;
 let K_CTRL: u64 = 2;
@@ -13,17 +16,17 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
     st_put(K_CTRL, ctrl);
 
-    let b = el_box_new();
-    box_size(b, 80.0, 40.0);
-    el_qkey(b, "lift-target");
-    el_child(b, el_build(el_text_new("piece")));
-    let pad = el_gesture(phase, "", "g_down", "g_move", "g_up", "", el_build(b));
+    let mut b = Container.new();
+    b.width_height(80.0, 40.0);
+    b.query_key("lift-target");
+    b.child(Text.new().text("piece").build());
+    let pad = PointerInteract.new().id(phase).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
 
-    let phase_t = el_vqkey(el_text_bound(phase), "last-event");
-    let root = el_column();
-    el_child(root, pad);
-    el_child(root, phase_t);
-    mount(el_build(root));
+    let phase_t = Text.new().text_bound(phase).query_key("last-event").build();
+    let mut root = Column.new();
+    root.child(pad);
+    root.child(phase_t);
+    mount(root.build());
     return phase;
 }
 

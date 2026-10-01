@@ -1,7 +1,10 @@
 // implicit-animations: animated style channels driven by one shared
 // controller (the Animated* twin) — the toggle flips the target and
 // restarts the controller (the ImplicitlyAnimatedWidget retarget).
-use tur::{ anim_ctrl, anim_forward, anim_reverse, el_box_new, box_color, box_size, el_build, el_child, el_column, el_pi, el_qkey, el_text_new, mount, rs_get_bool, rs_set_bool, rs_source_bool, stf_put, stf_take };
+use tur::{ anim_ctrl, anim_forward, anim_reverse, mount, rs_get_bool, rs_set_bool, rs_source_bool,
+    rs_source_f64, st_put, st_take, stf_put };
+use tur_kit::{ Column, Container, PointerInteract, Text };
+
 
 let K_CTRL: u64 = 1;
 let K_EXPANDED: u64 = 2;
@@ -13,14 +16,14 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(progress, 300.0, "easeInOut", 0, "a_tick", "a_end");
     st_put(K_CTRL, ctrl);
 
-    let col = el_column();
-    let box_b = el_box_new();
-    box_size(box_b, 100.0, 40.0);
-    box_color(box_b, 0x6366F1FFu64);
-    el_qkey(box_b, "animated-box");
-    el_child(col, el_pi(expanded, expanded, "b_toggle", "", 0, "", el_build(box_b)));
-    el_child(col, el_build(el_text_new("toggle me")));
-    mount(el_build(col));
+    let mut col = Column.new();
+    let mut box_b = Container.new();
+    box_b.width_height(100.0, 40.0);
+    box_b.color(0x6366F1FFu64);
+    box_b.query_key("animated-box");
+    col.child(PointerInteract.new().ids(expanded, expanded).on_tap("b_toggle").child(box_b.build()).build());
+    col.child(Text.new().text("toggle me").build());
+    mount(col.build());
     return expanded;
 }
 

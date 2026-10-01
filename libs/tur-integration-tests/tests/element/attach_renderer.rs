@@ -26,13 +26,15 @@ use tur_native::NativeFontLoader;
 /// the remaining flex space) so a resize dirties it and flushes ship real
 /// render batches.
 const SOURCE: &str = r##"
-use tur::{ box_color, box_size, el_box_new, el_build, mount };
+use tur::{ mount };
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 40.0, 40.0);
-    box_color(b, 0x336699FFu64);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(40.0, 40.0);
+    b.color(0x336699FFu64);
+    mount(b.build());
 }
 "##;
 

@@ -1,17 +1,21 @@
 // container-border: explicit size + padding + color + inside border +
 // radius around a Text.
-use tur::{ BORDER_INSIDE, el_box_new, box_border, box_color, box_padding, box_radius, box_size, el_build, el_child, el_text_new, text_size, mount, el_qkey };
+use tur::{ BORDER_INSIDE, mount };
+use tur_kit::{ Container, Text };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 200.0, 200.0);
-    box_padding(b, 16.0);
-    box_color(b, 0xFFFFFFFFu64);
-    box_border(b, 0x000000FFu64, 2.0, BORDER_INSIDE);
-    box_radius(b, 8.0);
-    let label = el_text_new("Border");
-    text_size(label, 16.0);
-    el_child(b, el_build(label));
-    el_qkey(b, "border-container");
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(200.0, 200.0);
+    b.padding(16.0);
+    b.color(0xFFFFFFFFu64);
+    b.border(0x000000FFu64, 2.0, BORDER_INSIDE);
+    b.radius(8.0);
+    let mut label = Text.new();
+
+    label.text("Border");
+    label.font_size(16.0);
+    b.child(label.build());
+    b.query_key("border-container");
+    mount(b.build());
 }

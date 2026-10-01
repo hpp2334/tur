@@ -65,15 +65,17 @@ fn stat_present(app: &TurTestApp, key: &str) -> bool {
 fn mount(app: &TurTestApp) {
     app.load_rut_module(
         r#"
-use tur::{ box_size, el_box_new, el_build, el_child, el_column, el_text_new, mount };
+use tur::{ mount };
+use tur_kit::{ Column, Container, Text };
+
 
 entry fn start() {
-    let col = el_column();
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    el_child(col, el_build(b));
-    el_child(col, el_build(el_text_new("hello")));
-    mount(el_build(col));
+    let mut col = Column.new();
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    col.child(b.build());
+    col.child(Text.new().text("hello").build());
+    mount(col.build());
 }
 "#,
     )
@@ -131,14 +133,17 @@ fn host_frame_timing_is_opt_in() {
     // a new root → paint).
     app.set_host_frame_timing(true);
     app.load_rut_module(
-        r#"
-use tur::{ box_color, box_size, el_box_new, el_build, mount };
+        r#"use tur::{ mount };
+use tur_kit::{ Container };
+
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 100.0, 10.0);
-    box_color(b, 0xFF0000FFu64);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 10.0);
+    b.color(0xFF0000FFu64);
+    mount(b.build());
 }
 "#,
     )

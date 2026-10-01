@@ -1,19 +1,21 @@
 // password-input: an obscure-toggle input — typing renders bullets and a
 // reveal button flips the obscure flag (a rebuild).
-use tur::{ el_box_new, el_build, el_child, el_column, el_input, el_pi, el_qkey, el_text_new, el_vqkey, mount, rs_get_bool, rs_set_bool, rs_source_bool, tctrl_new, undo_new };
+use tur::{ mount, rs_get_bool, rs_set_bool, rs_source_bool, tctrl_new, undo_new };
+use tur_kit::{ Column, Container, Input, PointerInteract, Text };
+
 
 entry fn start() -> u64 {
     let obscure = rs_source_bool(true);
     let ctrl = tctrl_new();
     let undo = undo_new();
 
-    let col = el_column();
-    let input = el_input_opts(ctrl, undo, "password", 220.0, 32.0, 2);
-    el_child(col, el_vqkey(input, "password-input"));
-    el_child(col, el_pi(obscure, obscure, "b_toggle", "", 0, "", el_build(el_text_new("reveal"))));
-    let root = el_box_new();
-    el_child(root, el_build(col));
-    mount(root);
+    let mut col = Column.new();
+    let mut input = Input.new().controller(ctrl).undo(undo).placeholder("password").width_height(220.0, 32.0).obscure(true).query_key("password-input").build();
+    col.child(input);
+    col.child(PointerInteract.new().ids(obscure, obscure).on_tap("b_toggle").child(Text.new().text("reveal").build()).build());
+    let mut root = Container.new();
+    root.child(col.build());
+    mount(root.build());
     return obscure;
 }
 

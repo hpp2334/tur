@@ -23,10 +23,9 @@ use tur_integration_tests::TurTestApp;
 /// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
-use tur::{
-    box_width_bound, el_box_new, el_build, el_child, el_input_ctrl, el_qkey, el_scroll,
-    el_vqkey, mount, rs_set_f64, rs_source_f64, tctrl_new, tctrl_push_span,
-};
+use tur::{ AXIS_VERTICAL, mount, rs_set_f64, rs_source_f64, tctrl_new, tctrl_push_span };
+use tur_kit::{ Container, Input, ScrollView };
+
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -39,13 +38,9 @@ entry fn start() -> u64 {
     let width = rs_source_f64();
     rs_set_f64(width, 400.0);
 
-    let input = el_input_ctrl(ctrl, 0.0, 10000.0, 14.0);
-    el_qkey(input, "ed");
-    let wrap = el_box_new();
-    box_width_bound(wrap, width);
-    el_child(wrap, el_build(input));
-    let scroller = el_scroll(true, el_build(wrap));
-    let scroller = el_vqkey(scroller, "scroll");
+    let input = Input.new().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
+    let wrap = Container.new().width_bound(width).child(input).build();
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(wrap).query_key("scroll").build();
     mount(scroller);
     return width;
 }

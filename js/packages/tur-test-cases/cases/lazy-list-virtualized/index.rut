@@ -1,19 +1,23 @@
 // lazy-list-virtualized: a 2000-row list — only the visible window mounts.
-use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_expand, el_lazy_list, el_text_new, mount, rs_set_f64, rs_source_f64, text_size };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyList, Text };
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 400.0, 40.0);
-    box_color(b, 0x0F172AFF);
-    let label = el_text_new(f"row {i}");
-    text_size(label, 12.0);
-    el_child(b, el_build(label));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(400.0, 40.0);
+    b.color(0x0F172AFF);
+    let mut label = Text.new();
+
+    label.text(f"row {i}");
+    label.font_size(12.0);
+    b.child(label.build());
+    return b.build();
 }
 
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 2000.0);
-    let list = el_lazy_list("row", count, 40.0);
-    mount(el_expand(1.0, list));
+    let list = LazyList.new().item_builder("row").count(count).item_extent(40.0).build();
+    mount(Expanded.new().flex(1.0).child(list).build());
 }

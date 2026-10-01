@@ -1,11 +1,15 @@
-use tur::{ el_build, el_text_new, mount, span_add, spans_new, text_size, text_spans };
+use tur::{ mount };
+use tur_kit::{ Spans, Text };
+
 
 entry fn start() {
-    let t = el_text_new("");
-    text_size(t, 20.0);
-    let spans = spans_new();
-    span_add(spans, "Inherited", 0.0, 0xFF0000FFu64, 0.0, 0);
-    span_add(spans, "Override", 10.0, 0x00FF00FFu64, 0.0, 0);
-    text_spans(t, spans);
-    mount(el_build(t));
+    let mut t = Text.new();
+
+    t.text("");
+    t.font_size(20.0);
+    let mut spans = Spans.new();
+    spans.add("Inherited", 0.0, 0xFF0000FFu64, 0.0, 0);
+    spans.add("Override", 10.0, 0x00FF00FFu64, 0.0, 0);
+    t.spans(spans);
+    mount(t.build());
 }

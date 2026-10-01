@@ -59,14 +59,16 @@ fn placeholder_default_is_default_text_color_mixed_50pct_alpha() {
     mount(
         &mut app,
         r#"
-use tur::{ el_build, el_input_new, input_font_size, input_placeholder, input_size, mount };
+use tur::{ mount };
+use tur_kit::{ Input };
+
 
 entry fn start() {
-    let input = el_input_new();
-    input_placeholder(input, "hint");
-    input_font_size(input, 20.0);
-    input_size(input, 300.0, 40.0);
-    mount(el_build(input));
+    let mut input = Input.new();
+    input.placeholder("hint");
+    input.font_size(20.0);
+    input.width_height(300.0, 40.0);
+    mount(input.build());
 }
 "#,
     );
@@ -94,15 +96,18 @@ fn placeholder_default_follows_explicit_text_color() {
     mount(
         &mut app,
         r#"
-use tur::{ el_build, el_input_new, input_color, input_font_size, input_placeholder, input_size, mount };
+use tur::{ mount };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
-    let input = el_input_new();
-    input_placeholder(input, "hint");
-    input_color(input, 0x143CDCFFu64);
-    input_font_size(input, 20.0);
-    input_size(input, 300.0, 40.0);
-    mount(el_build(input));
+    let mut input = Input.new();
+    input.placeholder("hint");
+    input.color(0x143CDCFFu64);
+    input.font_size(20.0);
+    input.width_height(300.0, 40.0);
+    mount(input.build());
 }
 "#,
     );
@@ -130,15 +135,18 @@ fn placeholder_default_multiplies_existing_alpha() {
     mount(
         &mut app,
         r#"
-use tur::{ el_build, el_input_new, input_color, input_font_size, input_placeholder, input_size, mount };
+use tur::{ mount };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
-    let input = el_input_new();
-    input_placeholder(input, "hint");
-    input_color(input, 0x000000C8u64);
-    input_font_size(input, 20.0);
-    input_size(input, 300.0, 40.0);
-    mount(el_build(input));
+    let mut input = Input.new();
+    input.placeholder("hint");
+    input.color(0x000000C8u64);
+    input.font_size(20.0);
+    input.width_height(300.0, 40.0);
+    mount(input.build());
 }
 "#,
     );
@@ -165,19 +173,17 @@ fn explicit_placeholder_color_wins() {
     mount(
         &mut app,
         r#"
-use tur::{
-    el_build, el_input_new, input_color, input_font_size, input_placeholder,
-    input_placeholder_color, input_size, mount,
-};
+use tur::{ mount };
+use tur_kit::{ Input };
 
 entry fn start() {
-    let input = el_input_new();
-    input_placeholder(input, "hint");
-    input_color(input, 0x143CDCFFu64);
-    input_placeholder_color(input, 0x008000FFu64);
-    input_font_size(input, 20.0);
-    input_size(input, 300.0, 40.0);
-    mount(el_build(input));
+    let mut input = Input.new();
+    input.placeholder("hint");
+    input.color(0x143CDCFFu64);
+    input.placeholder_color(0x008000FFu64);
+    input.font_size(20.0);
+    input.width_height(300.0, 40.0);
+    mount(input.build());
 }
 "#,
     );

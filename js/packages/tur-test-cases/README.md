@@ -8,18 +8,22 @@ The case corpus drives three consumers:
 2. **The playground** — `demo/playground-view/scripts/gen-cases.cjs` embeds
    the case sources verbatim so the sidebar can list + open every case.
 3. **Rut-semantics documentation** — the cases are the reference examples
-   for authoring tur UIs in rut (see `libs/tur-engine/src/core/rut_runtime/`
-   for the row surface each example uses).
+   for authoring tur UIs in rut (see the `tur_kit` prelude —
+   `libs/tur-engine/src/kit/tur_kit.rut` — for the builder classes each
+   example uses, and each builtin plugin's `rut_rows.rs` for the row
+   surface underneath).
 
 ## The per-case contract (rut)
 
 Every case is a **single `index.rut` module** with:
 
 - **`entry fn start()`** — the ONLY mount point. It authors the tree
-  through the `tur` host rows (`el_column`, `el_text`, `el_box`, …) and
-  hands the root to the engine with `mount(el_build(root))`. `start` may
-  return `-> u64` (the host records the answer — conventionally the id of
-  the module's root state atom — readable via `TurTestApp::rut_start_answer`).
+  through the **kit** builder classes (`use tur_kit::{ Column, Text, … };`
+  — chainable, one method per prop, `.child(c)` / `.children([…])`
+  appending, `.build()` the only terminal) and hands the root to the engine
+  with `mount(root.build())`. `start` may return `-> u64` (the host records
+  the answer — conventionally the id of the module's root state atom —
+  readable via `TurTestApp::rut_start_answer`).
 - **probe `entry fn`s** — named entries the *test* drives via
   `app.call_rut_entry(name, a, b)` (the engine→rut event rail: the same
   shape element callbacks receive). Element callbacks
@@ -38,7 +42,7 @@ Every case is a **single `index.rut` module** with:
 - **Naming**: the directory name is the case name (`kebab-case`), e.g.
   `cases/counter/index.rut` loads as `"counter"`.
 - **Query keys**: give every element a test needs to find a query key via
-  the builder's `el_qkey(builder, "key")` row; tests locate it with
+  the builder's `.query_key("key")` method; tests locate it with
   `app.query_element(&["key"])`.
 - **Callbacks**: `entry fn` names are conventionally prefixed by their
   role (`ts_` for test-seam actions, `g_` gesture, `f_` focus, `a_`
@@ -55,17 +59,33 @@ Every case is a **single `index.rut` module** with:
 ### Example
 
 ```rut
-use tur::{ el_button, el_column, el_qkey, el_text_bound, el_build, el_child,
-           mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
+use tur_kit::{ Column, Container, PointerInteract, Text };
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     let label = rs_source_str("Count: 0");
-    let col = el_column();
-    el_child(col, el_qkey(el_text_bound_new(label), "count"));
-    el_child(col, el_button(count, label, "ts_inc", "+1"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.query_key("col");
+    col.child(Text.new().text_bound(label).query_key("count").build());
+    col.child(button(count, label, "ts_inc", "+1"));
+    mount(col.build());
     return count;
+}
+
+// A pill button: a PointerInteract pad (the tap delivers `(a, b, seq)`)
+// wrapping a styled label — the el_button composite, authored from families.
+fn button(count: u64, label: u64, cb: str, text: str) -> opaque {
+    return PointerInteract.new()
+        .ids(count, label)
+        .on_tap(cb)
+        .child(
+            Container.new()
+                .color(0x6366F1FFu64)
+                .child(Text.new().text(text).build())
+                .build(),
+        )
+        .build();
 }
 
 entry fn ts_inc(count: u64, label: u64, _n: f64) {

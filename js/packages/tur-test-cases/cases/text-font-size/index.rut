@@ -1,11 +1,17 @@
 // text-font-size: a Fragment of 14px and 28px Texts — the root's children
 // stay flat (the fragment is layout-transparent).
-use tur::{ el_build, el_fragment2, el_text_new, text_size, mount };
+use tur::{ mount };
+use tur_kit::{ Fragment, Text };
+
 
 entry fn start() {
-    let small = el_text_new("Hello");
-    text_size(small, 14.0);
-    let large = el_text_new("Hello");
-    text_size(large, 28.0);
-    mount(el_fragment2(el_build(small), el_build(large)));
+    let mut small = Text.new();
+
+    small.text("Hello");
+    small.font_size(14.0);
+    let mut large = Text.new();
+
+    large.text("Hello");
+    large.font_size(28.0);
+    mount(Fragment.new().children([small.build(), large.build()]).build());
 }

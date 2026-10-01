@@ -7,10 +7,9 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-use tur::{
-    el_build, el_child, el_column, el_input_opts, el_scroll, el_vqkey, mount, tctrl_new,
-    tctrl_push_span, undo_new,
-};
+use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Column, Input, ScrollView };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -25,12 +24,12 @@ entry fn start() {
     // The width spans the window (the JS twin's stretched-column geometry):
     // a ScrollView shrink-wraps its cross axis, so without it the whole
     // scroller would hug the longest line and the top-left click misses it.
-    let input = el_input_opts(ctrl, undo, "", 300.0, 0.0, 1);
-    let input = el_vqkey(input, "editor");
-    let col = el_column();
-    el_child(col, input);
-    let scroller = el_scroll(true, el_build(col));
-    let scroller = el_vqkey(scroller, "scroll");
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let input = input;
+    let mut col = Column.new();
+    col.child(input);
+    let mut scroller = ScrollView.new().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    let scroller = scroller;
     mount(scroller);
 }
 "#;

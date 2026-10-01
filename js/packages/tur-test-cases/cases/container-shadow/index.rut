@@ -1,15 +1,19 @@
 // container-shadow: an elevated card — size + color + radius + shadow —
 // around a Text.
-use tur::{ el_box_new, box_color, box_padding, box_radius, box_shadow, box_size, el_build, el_child, el_text_new, text_size, mount };
+use tur::{ mount };
+use tur_kit::{ Container, Text };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 200.0, 200.0);
-    box_color(b, 0xFFFFFFFFu64);
-    box_radius(b, 8.0);
-    box_shadow(b, 0x00000050u64, 12.0, 4.0, 4.0);
-    let label = el_text_new("Shadow");
-    text_size(label, 16.0);
-    el_child(b, el_build(label));
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(200.0, 200.0);
+    b.color(0xFFFFFFFFu64);
+    b.radius(8.0);
+    b.shadow(0x00000050u64, 12.0, 4.0, 4.0);
+    let mut label = Text.new();
+
+    label.text("Shadow");
+    label.font_size(16.0);
+    b.child(label.build());
+    mount(b.build());
 }

@@ -538,39 +538,41 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "hello");
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
-    input_font_family(input, "monospace");
-    el_qkey(input, "editor");
-    mount(el_build(input));
+    let input = Input.new().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    mount(input);
 }
 "#;
 
 // Mirrors the playground code editor: syntax-highlighted spans with different
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
-const CLICK_SPANS_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SPANS_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "import");
     tctrl_push_span(ctrl, " {");
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
-    input_font_family(input, "monospace");
-    el_qkey(input, "editor");
-    mount(el_build(input));
+    let input = Input.new().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    mount(input);
 }
 "#;
 
-const CLICK_MULTI_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, input_multiline, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_MULTI_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -578,11 +580,8 @@ entry fn start() {
     tctrl_push_span(ctrl, "def\n");
     tctrl_push_span(ctrl, "ghi");
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
-    input_multiline(input, true);
-    input_font_family(input, "monospace");
-    el_qkey(input, "editor");
-    mount(el_build(input));
+    let input = Input.new().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
+    mount(input);
 }
 "#;
 
@@ -750,8 +749,10 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // Four adjacent spans with DIFFERENT colors → parley emits 4 glyph runs on one
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
-const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_ctrl, el_qkey, input_font_family, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -761,10 +762,8 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 300.0, 100.0, 14.0);
-    input_font_family(input, "monospace");
-    el_qkey(input, "editor");
-    mount(el_build(input));
+    let input = Input.new().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    mount(input);
 }
 "#;
 
@@ -805,8 +804,10 @@ fn click_in_later_run_places_caret_correctly() {
 // Regression for the "click todolist state.ts → panic" bug: an empty style
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
-const EMPTY_SPAN_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+const EMPTY_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -815,8 +816,8 @@ entry fn start() {
     tctrl_push_span(ctrl, "");
     tctrl_push_span(ctrl, "abcd");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 300.0, 100.0);
-    let keyed = el_vqkey(input, "editor");
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
+    let keyed = input;
     mount(keyed);
 }
 "#;
@@ -843,20 +844,19 @@ fn empty_colored_span_does_not_panic() {
 // viewport_height). With a 100px viewport and 16px lines, ~12 lines (=192px)
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
-const CLICK_SCROLLED_BUNDLE: &str = r#"
-use tur::{ el_build, el_child, el_column, el_input_ctrl, el_qkey, el_scroll, input_font_family, input_multiline, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SCROLLED_BUNDLE: &str = r#"use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Column, Input, ScrollView };
+
+
+use tur_kit::{ Column, Input, ScrollView };
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 0.0, 0.0, 14.0);
-    input_multiline(input, true);
-    input_font_family(input, "monospace");
-    el_qkey(input, "scrolled-input");
-    let col = el_column();
-    el_child(col, el_build(input));
-    let scroller = el_scroll(true, el_build(col));
+    let input = Input.new().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
+    let col = Column.new().child(input).build();
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(col).build();
     mount(scroller);
 }
 "#;
@@ -945,16 +945,18 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // only wraps at break opportunities, so the text MUST contain spaces (a bare
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
-const CLICK_SOFTWRAP_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_opts, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
     // flags bit 0 = multiline.
-    let input = el_input_opts(ctrl, undo, "", 0.0, 0.0, 1);
-    let keyed = el_vqkey(input, "softwrap-input");
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
+    let keyed = input;
     mount(keyed);
 }
 "#;
@@ -1071,15 +1073,17 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // VISUAL lines. Reported bug: clicking a lower visual line placed the caret
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
-const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"
-use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Input };
+
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 0.0, 0.0);
-    let keyed = el_vqkey(input, "softwrap-single-input");
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
+    let keyed = input;
     mount(keyed);
 }
 "#;

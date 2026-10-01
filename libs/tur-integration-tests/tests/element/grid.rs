@@ -9,44 +9,43 @@ fn setup_grid(width: f64, height: f64, grid_opts: &GridOpts, count: usize) -> (T
     let mut app = TurTestApp::new(width, height).unwrap();
     app.load_rut_module(&format!(
         r#"
-use tur::{{
-    box_color, box_size, el_build, el_child, el_grid, el_qkey, grid_aspect, grid_main_extent,
-    grid_max_cross, grid_spacing, mount,
-}};
+use tur::{{ mount }};
+use tur_kit::{{ Container, Grid }};
+
 
 entry fn tile() -> opaque {{
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    box_color(b, 0xC8C8C8FFu64);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    b.color(0xC8C8C8FFu64);
+    return b.build();
 }}
 
 entry fn start() {{
-    let g = el_grid();
-    el_qkey(g, "g");
-    grid_max_cross(g, {max_cross});
+    let mut g = Grid.new();
+    g.query_key("g");
+    g.max_cross({max_cross});
 {aspect}{extent}{spacing}    let mut i = 0;
     while (i < {count}) {{
-        el_child(g, tile());
+        g.child(tile());
         i += 1;
     }}
-    mount(el_build(g));
+    mount(g.build());
 }}
 "#,
         max_cross = grid_opts.max_cross,
         aspect = grid_opts
             .aspect
-            .map(|a| format!("    grid_aspect(g, {a});
+            .map(|a| format!("    g.aspect({a});
 "))
             .unwrap_or_default(),
         extent = grid_opts
             .main_extent
-            .map(|e| format!("    grid_main_extent(g, {e});
+            .map(|e| format!("    g.main_extent({e});
 "))
             .unwrap_or_default(),
         spacing = grid_opts
             .spacing
-            .map(|(c, m)| format!("    grid_spacing(g, {c}, {m});
+            .map(|(c, m)| format!("    g.spacing({c}, {m});
 "))
             .unwrap_or_default(),
         count = count,

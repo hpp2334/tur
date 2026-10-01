@@ -1,15 +1,17 @@
 // column-stretch-container-text: Column(crossAlignment: Stretch) around a
 // padded unsized Container + Text — full-width colored strip.
-use tur::{ CROSS_ALIGN_STRETCH, el_box_new, box_color, box_padding, el_build, el_child, el_column, el_qkey, el_text_new, flex_cross_align, mount };
+use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, Text };
+
 
 entry fn start() {
-    let col = el_column();
-    flex_cross_align(col, CROSS_ALIGN_STRETCH);
-    let b = el_box_new();
-    box_color(b, 0xFF0000FFu64);
-    box_padding(b, 20.0);
-    el_qkey(b, "container");
-    el_child(b, el_build(el_text_new("Empty State")));
-    el_child(col, el_build(b));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.cross_alignment(CROSS_ALIGN_STRETCH);
+    let mut b = Container.new();
+    b.color(0xFF0000FFu64);
+    b.padding(20.0);
+    b.query_key("container");
+    b.child(Text.new().text("Empty State").build());
+    col.child(b.build());
+    mount(col.build());
 }

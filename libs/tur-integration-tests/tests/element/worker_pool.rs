@@ -313,11 +313,13 @@ entry fn busy(_a: u64, _b: f64) {
     // return after it finished.
     futures::executor::block_on(ui_app.load_rut_module(
         r#"
-use tur::{ el_text_bound, mount, rs_source_str };
+use tur::{ mount, rs_source_str };
+use tur_kit::{ Text };
+
 
 entry fn start() {
     let atom = rs_source_str("42");
-    let txt = el_text_bound(atom);
+    let txt = Text.new().text_bound(atom).build();
     mount(txt);
 }
 "#,

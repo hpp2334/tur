@@ -13,33 +13,32 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{
-    box_size, el_box_new, el_build, el_child, el_column, el_expand, el_qkey, el_row, el_sizedbox,
-    flex_cross_align, mount, CROSS_ALIGN_STRETCH,
-};
+use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, Expanded, Row, SizedBox };
+
 
 entry fn start() {
-    let col = el_column();
+    let mut col = Column.new();
 
     // Stretch Row under an unbounded cross axis (non-flex child of a
     // Column): Stretch degrades to loose cross.
-    let stretch_row = el_row();
-    el_qkey(stretch_row, "stretch-row");
-    flex_cross_align(stretch_row, CROSS_ALIGN_STRETCH);
-    el_child(stretch_row, el_sizedbox(50.0, 0.0, el_build(el_box_new())));
-    el_child(col, el_build(stretch_row));
+    let mut stretch_row = Row.new();
+    stretch_row.query_key("stretch-row");
+    stretch_row.cross_alignment(CROSS_ALIGN_STRETCH);
+    stretch_row.child(SizedBox.new(50.0, 0.0).child(Container.new().build()).build());
+    col.child(stretch_row.build());
 
     // Expanded inside a Column with unbounded height: the flex child lays
     // out as inflexible (natural size), never a zero slot and never
     // infinity.
-    let flex_col = el_column();
-    el_qkey(flex_col, "flex-col");
-    let sized = el_box_new();
-    box_size(sized, 10.0, 50.0);
-    el_child(flex_col, el_expand(1.0, el_build(sized)));
-    el_child(col, el_build(flex_col));
+    let mut flex_col = Column.new();
+    flex_col.query_key("flex-col");
+    let mut sized = Container.new();
+    sized.width_height(10.0, 50.0);
+    flex_col.child(Expanded.new().flex(1.0).child(sized.build()).build());
+    col.child(flex_col.build());
 
-    mount(el_build(col));
+    mount(col.build());
 }
 "#,
     )

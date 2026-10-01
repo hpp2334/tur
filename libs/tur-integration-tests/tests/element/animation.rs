@@ -43,12 +43,11 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
-use tur::{
-    anim_ctrl, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek,
-    anim_speed, anim_status, anim_stop, anim_value, box_size, box_width_bound, el_box_new,
-    el_build, el_child, el_qkey, el_text_bound, mount, rs_set_f64, rs_source_f64, rs_source_str,
-    st_put, st_take,
-};
+use tur::{ anim_ctrl, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek,
+    anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_f64, rs_set_str,
+    rs_source_f64, rs_source_str, st_put, st_take };
+use tur_kit::{ Column, Container, Text };
+
 
 let CTRL: u64 = 7;
 
@@ -57,18 +56,18 @@ entry fn start() -> u64 {
     let width = rs_source_f64();
     rs_set_f64(width, 100.0);
 
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    box_width_bound(b, width);
-    el_qkey(b, "box");
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    b.width_bound(width);
+    b.query_key("box");
 
     let ctrl = anim_ctrl(width, 200.0, "linear", 0, "a_tick", "a_end");
     st_put(CTRL, ctrl);
 
-    let col = el_column();
-    el_child(col, el_build(b));
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(b.build());
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 

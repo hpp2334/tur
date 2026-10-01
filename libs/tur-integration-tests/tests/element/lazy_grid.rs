@@ -8,21 +8,23 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyGrid };
+
 
 entry fn cell(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, 0xC8C8C8FFu64);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(0xC8C8C8FFu64);
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    let lg = el_lazy_grid("cell", count, 100.0, 1.0);
-    let lg = el_vqkey(lg, "lg");
-    let root = el_expand(1.0, lg);
+    let mut lg = LazyGrid.new().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded.new().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }
@@ -148,22 +150,24 @@ fn lazy_grid_scroll_shifts_visible_window() {
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"
-use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyGrid };
+
+
 
 entry fn cell(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, 0xC8C8C8FFu64);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(0xC8C8C8FFu64);
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 100.0);
-    let lg = el_lazy_grid("cell", count, 100.0, 1.0);
-    let lg = el_vqkey(lg, "lg");
-    let root = el_expand(1.0, lg);
+    let mut lg = LazyGrid.new().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded.new().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }
@@ -269,21 +273,22 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid_h, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyGrid };
 
 entry fn cell(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, 0xB4B4DCFFu64);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(0xB4B4DCFFu64);
+    return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 1000.0);
-    let lg = el_lazy_grid_h("cell", count, 100.0, 1.0);
-    let lg = el_vqkey(lg, "lg");
-    let root = el_expand(1.0, lg);
+    let mut lg = LazyGrid.new().item_builder("cell").count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded.new().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }

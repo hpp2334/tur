@@ -9,7 +9,9 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur::{ decode_utf8, el_column, el_text_bound, el_build, el_child, encode_utf8, mount, rs_set_str, rs_source_str };
+use tur::{ decode_utf8, encode_utf8, mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Text };
+
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
@@ -19,9 +21,9 @@ entry fn start() -> u64 {
     let empty = decode_utf8(encode_utf8(""));
     rs_set_str(label, f"{ascii}|{unicode}|{empty}|");
 
-    let col = el_column();
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 "#;

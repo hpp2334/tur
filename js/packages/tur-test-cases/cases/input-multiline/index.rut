@@ -1,10 +1,12 @@
 // input-multiline: a multiline editable with an explicit size.
-use tur::{ el_box_new, el_build, el_child, el_input_opts, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Container, Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let outer = el_box_new();
-    el_child(outer, el_input_opts(ctrl, undo, "", 300.0, 400.0, 1));
-    mount(el_build(outer));
+    let mut outer = Container.new();
+    outer.child(Input.new().controller(ctrl).undo(undo).width_height(300.0, 400.0).multiline(true).build());
+    mount(outer.build());
 }

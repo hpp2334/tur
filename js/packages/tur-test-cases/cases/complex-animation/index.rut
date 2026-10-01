@@ -1,6 +1,9 @@
 // complex-animation: the showcase twin — a controller-driven animation
 // with explicit tween composition (opacity + translate on one target).
-use tur::{ anim_ctrl, anim_forward, anim_repeat, curve_eval, el_box_new, box_color, box_size, el_build, el_child, el_column, el_expand, el_opacity_bound, el_sizedbox, el_text_new, mount, rs_source_f64 };
+use tur::{ anim_ctrl, anim_forward, anim_repeat, mount, rs_source_f64 };
+use tur_kit::{ Column, Container, Expanded, SizedBox, Text };
+use tur_anim_kit::{ Opacity };
+
 
 entry fn start() -> u64 {
     let t = rs_source_f64();
@@ -8,14 +11,14 @@ entry fn start() -> u64 {
     anim_repeat(ctrl, 1000);
     anim_forward(ctrl);
 
-    let col = el_column();
-    el_child(col, el_sizedbox(400.0, 40.0, el_build(el_text_new("complex-animation: repeat + tween"))));
-    let target = el_box_new();
-    box_size(target, 60.0, 60.0);
-    box_color(target, 0x6366F1FFu64);
-    let opacity = el_opacity_bound(t, target);
-    el_child(col, el_expand(1.0, opacity));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(SizedBox.new(400.0, 40.0).child(Text.new().text("complex-animation: repeat + tween").build()).build());
+    let mut target = Container.new();
+    target.width_height(60.0, 60.0);
+    target.color(0x6366F1FFu64);
+    let opacity = Opacity.new(0.0).bound(t).child(target.build()).build();
+    col.child(Expanded.new().flex(1.0).child(opacity).build());
+    mount(col.build());
     return t;
 }
 

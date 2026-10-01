@@ -1,21 +1,25 @@
 // grid-aspect: aspect-ratio tiles in a grid row (square tiles via equal
 // width/height).
-use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_row, el_sizedbox, el_text_new, mount, text_size };
+use tur::{ mount };
+use tur_kit::{ Container, Row, SizedBox, Text };
+
 
 entry fn tile(label: str, color: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, color);
-    let t = el_text_new(label);
-    text_size(t, 14.0);
-    el_child(b, el_build(t));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(color);
+    let mut t = Text.new();
+
+    t.text(label);
+    t.font_size(14.0);
+    b.child(t.build());
+    return b.build();
 }
 
 entry fn start() {
-    let row = el_row();
-    el_child(row, tile("A", 0xEF4444FFu64));
-    el_child(row, tile("B", 0x22C55EFFu64));
-    el_child(row, tile("C", 0x3B82F6FFu64));
-    mount(el_sizedbox(400.0, 200.0, el_build(row)));
+    let mut row = Row.new();
+    row.child(tile("A", 0xEF4444FFu64));
+    row.child(tile("B", 0x22C55EFFu64));
+    row.child(tile("C", 0x3B82F6FFu64));
+    mount(SizedBox.new(400.0, 200.0).child(row.build()).build());
 }

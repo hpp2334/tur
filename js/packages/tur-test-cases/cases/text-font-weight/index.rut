@@ -1,13 +1,19 @@
 // text-font-weight: weight 400 vs 700 at the same size — the bold run
 // measures wider.
-use tur::{ el_build, el_fragment2, el_text_new, text_size, text_weight, mount };
+use tur::{ mount };
+use tur_kit::{ Fragment, Text };
+
 
 entry fn start() {
-    let normal = el_text_new("Hello");
-    text_size(normal, 20.0);
-    text_weight(normal, 400.0);
-    let bold = el_text_new("Hello");
-    text_size(bold, 20.0);
-    text_weight(bold, 700.0);
-    mount(el_fragment2(el_build(normal), el_build(bold)));
+    let mut normal = Text.new();
+
+    normal.text("Hello");
+    normal.font_size(20.0);
+    normal.font_weight(400.0);
+    let mut bold = Text.new();
+
+    bold.text("Hello");
+    bold.font_size(20.0);
+    bold.font_weight(700.0);
+    mount(Fragment.new().children([normal.build(), bold.build()]).build());
 }

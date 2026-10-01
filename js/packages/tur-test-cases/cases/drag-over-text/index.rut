@@ -1,7 +1,11 @@
 // drag-over-text: a Positioned -> Transform -> PointerInteract -> Text
 // piece — a non-selectable Text must not steal touch drags from the
 // PointerInteract beneath. The down count renders into `down-count`.
-use tur::{ ALIGN_TOP_LEFT, el_box_new, box_size, el_build, el_child, el_gesture, el_qkey, el_sizedbox, el_stack, el_text_bound_new, el_text_new, el_transform, mount, mem_get, mem_new, mem_set, rs_set_str, rs_source_str, stack_align, st_put, st_take, stf_put, stf_take, text_size };
+use tur::{ ALIGN_TOP_LEFT, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, st_put,
+    st_take, stf_put, stf_take };
+use tur_kit::{ Container, PointerInteract, SizedBox, Stack, Text };
+use tur_anim_kit::{ Transform };
+
 
 let K_COUNT: u64 = 1;
 let K_PHASE: u64 = 2;
@@ -12,23 +16,27 @@ entry fn start() -> u64 {
     let phase = rs_source_str("");
     stf_put(K_PHASE, phase as f64);
 
-    let stack = el_stack();
-    stack_align(stack, ALIGN_TOP_LEFT);
-    el_child(stack, el_sizedbox(400.0, 400.0, el_build(el_box_new())));
+    let mut stack = Stack.new();
+    stack.alignment(ALIGN_TOP_LEFT);
+    stack.child(SizedBox.new(400.0, 400.0).child(Container.new().build()).build());
 
-    let label = el_text_new("drag me");
-    text_size(label, 14.0);
-    let piece = el_box_new();
-    box_size(piece, 80.0, 40.0);
-    el_qkey(piece, "drag-target");
-    el_child(piece, el_build(label));
-    let pad = el_gesture(count, "", "g_down", "g_move", "g_up", "", el_build(piece));
-    el_child(stack, el_transform(1.0, 0.0, 60.0, 50.0, pad));
+    let mut label = Text.new();
 
-    let count_t = el_text_bound_new(count);
-    el_qkey(count_t, "down-count");
-    el_child(stack, el_build(count_t));
-    mount(el_build(stack));
+    label.text("drag me");
+    label.font_size(14.0);
+    let mut piece = Container.new();
+    piece.width_height(80.0, 40.0);
+    piece.query_key("drag-target");
+    piece.child(label.build());
+    let pad = PointerInteract.new().id(count).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(piece.build()).build();
+    stack.child(Transform.new(1.0, 0.0, 60.0, 50.0).child(pad).build());
+
+    let mut count_t = Text.new();
+
+    count_t.text_bound(count);
+    count_t.query_key("down-count");
+    stack.child(count_t.build());
+    mount(stack.build());
     return count;
 }
 

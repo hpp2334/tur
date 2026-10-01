@@ -7,17 +7,19 @@ use tur_integration_tests::TurTestApp;
 /// (`el_input_opts` flags bit 1). The `queryKey` lands on Input's Container
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-use tur::{ el_build, el_child, el_input_opts, el_vqkey, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
     // flags bit 0 = multiline, bit 1 = obscure.
-    let input = el_input_opts(ctrl, undo, "", 200.0, 30.0, 2);
-    let keyed = el_vqkey(input, "input");
-    let col = el_column();
-    el_child(col, keyed);
-    mount(el_build(col));
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
+    let keyed = input;
+    let mut col = Column.new();
+    col.child(keyed);
+    mount(col.build());
 }
 "#;
 
@@ -25,16 +27,14 @@ entry fn start() {
 /// `input_obscure` + `input_obscure_char` (the JS `obscureText: true` +
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-use tur::{ el_build, el_input_ctrl, el_qkey, input_obscure, input_obscure_char, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Input };
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = el_input_ctrl(ctrl, 200.0, 30.0, 0.0);
-    input_obscure(input, true);
-    input_obscure_char(input, "*");
-    el_qkey(input, "input");
-    mount(el_build(input));
+    let input = Input.new().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
+    mount(input);
 }
 "#;
 

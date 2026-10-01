@@ -1,16 +1,18 @@
 // row-basic: two fixed-width children laid out horizontally.
-use tur::{ CROSS_ALIGN_START, el_box_new, box_size, el_build, el_child, el_row, flex_cross_align, mount };
+use tur::{ CROSS_ALIGN_START, mount };
+use tur_kit::{ Container, Row };
+
 
 fn box_w(w: f64) -> opaque {
-    let b = el_box_new();
-    box_size(b, w, 0.0);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(w, 0.0);
+    return b.build();
 }
 
 entry fn start() {
-    let row = el_row();
-    flex_cross_align(row, CROSS_ALIGN_START);
-    el_child(row, box_w(50.0));
-    el_child(row, box_w(30.0));
-    mount(el_build(row));
+    let mut row = Row.new();
+    row.cross_alignment(CROSS_ALIGN_START);
+    row.child(box_w(50.0));
+    row.child(box_w(30.0));
+    mount(row.build());
 }

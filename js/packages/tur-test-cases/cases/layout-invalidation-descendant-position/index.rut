@@ -2,7 +2,9 @@
 // around an end-aligned Row holding a tracker box — the tracker's X must
 // track the width change through the intermediate Row (the divider-drag
 // position-gap repro). The `set_width` probe drives the change.
-use tur::{ MAIN_ALIGN_END, el_box_new, box_color, box_size, box_width_bound, el_build, el_child, el_qkey, el_row, flex_main_align, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur::{ MAIN_ALIGN_END, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur_kit::{ Container, Row };
+
 
 let K_WIDTH: u64 = 1;
 
@@ -11,17 +13,17 @@ entry fn start() -> u64 {
     rs_set_f64(width, 100.0);
     stf_put(K_WIDTH, width as f64);
 
-    let outer = el_box_new();
-    box_width_bound(outer, width);
-    let row = el_row();
-    flex_main_align(row, MAIN_ALIGN_END);
-    let tracker = el_box_new();
-    box_size(tracker, 20.0, 20.0);
-    box_color(tracker, 0x22C55EFFu64);
-    el_qkey(tracker, "tracker");
-    el_child(row, el_build(tracker));
-    el_child(outer, el_build(row));
-    mount(el_build(outer));
+    let mut outer = Container.new();
+    outer.width_bound(width);
+    let mut row = Row.new();
+    row.main_alignment(MAIN_ALIGN_END);
+    let mut tracker = Container.new();
+    tracker.width_height(20.0, 20.0);
+    tracker.color(0x22C55EFFu64);
+    tracker.query_key("tracker");
+    row.child(tracker.build());
+    outer.child(row.build());
+    mount(outer.build());
     return width;
 }
 

@@ -1,7 +1,9 @@
 // composited-transform-sibling-relayout: an unrelated sibling's reactive
 // height flip forces the common Stack to relayout — the follower must keep
 // painting at the tracked (100, 80).
-use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, box_height_bound, el_build, el_child, el_ct_follower, el_ct_target, ct_link_new, el_pi, el_positioned, el_qkey, el_sizedbox, el_stack, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount, rs_set_f64, rs_source_f64, stf_put };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, PointerInteract, Positioned, SizedBox, Stack };
+
 
 let K_TALL: u64 = 1;
 
@@ -10,28 +12,28 @@ entry fn start() -> u64 {
     rs_set_f64(tall, 0.0);
     stf_put(K_TALL, tall as f64);
     let link = ct_link_new();
-    let stack = el_stack();
-    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
-    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
-    let target = el_ct_target(link, target_child);
-    el_child(stack, el_positioned(100.0, 80.0, target));
-    let red = el_box_new();
-    box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FFu64);
-    let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
-    el_child(stack, follower);
+    let mut stack = Stack.new();
+    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
+    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
+    let target = CompositedTarget.new().link(link).child(target_child).build();
+    stack.child(Positioned.new().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.new();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.new().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
 
     // The reactive sibling (non-positioned): height flips 10 -> 120.
-    let sib = el_box_new();
-    box_size(sib, 40.0, 0.0);
-    box_color(sib, 0x4F46E1FFu64);
-    el_child(stack, el_build(sib));
+    let mut sib = Container.new();
+    sib.width_height(40.0, 0.0);
+    sib.color(0x4F46E1FFu64);
+    stack.child(sib.build());
 
-    let btn = el_box_new();
-    box_size(btn, 60.0, 30.0);
-    box_color(btn, 0x16A34AFFu64);
-    el_child(stack, el_positioned(300.0, 540.0, el_pi(tall, tall, "b_tall", "", 0, "", el_build(btn))));
-    mount(el_build(stack));
+    let mut btn = Container.new();
+    btn.width_height(60.0, 30.0);
+    btn.color(0x16A34AFFu64);
+    stack.child(Positioned.new().left(300.0).top(540.0).child(PointerInteract.new().ids(tall, tall).on_tap("b_tall").child(btn.build()).build()).build());
+    mount(stack.build());
     return tall;
 }
 

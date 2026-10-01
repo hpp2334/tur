@@ -1,20 +1,22 @@
 // condition-basic: a Condition whose then-branch renders (pre-built
 // branches swapped by the engine — no rut during flush).
-use tur::{ condition, el_box_new, box_color, box_size, el_build, el_qkey, el_text_new, mount, rs_source_bool };
+use tur::{ mount, rs_source_bool };
+use tur_kit::{ Condition, Container, Text };
+
 
 entry fn start() {
     let when = rs_source_bool(true);
-    let then_box = el_box_new();
-    box_size(then_box, 200.0, 100.0);
-    box_color(then_box, 0x303030FF);
-    el_qkey(then_box, "then-branch");
-    el_child(then_box, el_build(el_text_new("then-branch")));
-    let else_box = el_box_new();
-    box_size(else_box, 200.0, 100.0);
-    box_color(else_box, 0x501A1AFF);
-    el_qkey(else_box, "else-branch");
-    el_child(else_box, el_build(el_text_new("else-branch")));
-    let c = condition(when, el_build(then_box), el_build(else_box));
-    el_qkey(c, "condition-basic");
+    let mut then_box = Container.new();
+    then_box.width_height(200.0, 100.0);
+    then_box.color(0x303030FF);
+    then_box.query_key("then-branch");
+    then_box.child(Text.new().text("then-branch").build());
+    let mut else_box = Container.new();
+    else_box.width_height(200.0, 100.0);
+    else_box.color(0x501A1AFF);
+    else_box.query_key("else-branch");
+    else_box.child(Text.new().text("else-branch").build());
+    let c = Condition.new(when).then(then_box.build()).else_branch(else_box.build()).query_key("condition-basic").build();
+
     mount(c);
 }

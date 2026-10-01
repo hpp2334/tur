@@ -1,28 +1,30 @@
 // composited-transform-scroll: the target lives inside a scrollable
 // (content offset y=100); scrolling moves the target and the follower
 // tracks it.
-use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_column, el_ct_follower, el_ct_target, ct_link_new, el_positioned_full, el_qkey, el_sizedbox, el_stack, el_scroll, mount };
+use tur::{ ALIGN_TOP_LEFT, AXIS_VERTICAL, ct_link_new, mount };
+use tur_kit::{ Column, CompositedFollower, CompositedTarget, Container, Positioned, ScrollView, SizedBox, Stack };
+
 
 entry fn start() {
     let link = ct_link_new();
-    let stack = el_stack();
-    el_child(stack, el_sizedbox(400.0, 600.0, el_build(el_box_new())));
+    let mut stack = Stack.new();
+    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
 
     // The scrollable viewport (200x200) with 400px of content; the target
     // sits at content y=100 (after a 100px spacer).
-    let content = el_column();
-    el_child(content, el_sizedbox(200.0, 100.0, el_build(el_box_new())));
-    let target_child = el_sizedbox(60.0, 40.0, el_build(el_box_new()));
-    let target = el_ct_target(link, target_child);
-    el_child(content, target);
-    el_child(content, el_sizedbox(200.0, 300.0, el_build(el_box_new())));
-    let scroller = el_scroll(true, el_build(content));
-    el_child(stack, el_positioned_full(0.0, 0.0, 0.0, 0.0, 200.0, 200.0, scroller));
+    let mut content = Column.new();
+    content.child(SizedBox.new(200.0, 100.0).child(Container.new().build()).build());
+    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
+    let target = CompositedTarget.new().link(link).child(target_child).build();
+    content.child(target);
+    content.child(SizedBox.new(200.0, 300.0).child(Container.new().build()).build());
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(content.build()).build();
+    stack.child(Positioned.new().width(200.0).height(200.0).child(scroller).build());
 
-    let red = el_box_new();
-    box_size(red, 20.0, 20.0);
-    box_color(red, 0xFF0000FFu64);
-    let follower = el_ct_follower(link, ALIGN_TOP_LEFT, ALIGN_TOP_LEFT, 0.0, 0.0, el_build(red));
-    el_child(stack, follower);
-    mount(el_build(stack));
+    let mut red = Container.new();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.new().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
+    mount(stack.build());
 }

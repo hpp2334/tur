@@ -1,6 +1,8 @@
 // jigsaw-puzzle: the drag-a-tile board (the regression fixture family the
 // drag-with-lift / drag-redrag-multi tests pin, as a playable board).
-use tur::{ ALIGN_TOP_LEFT, el_box_new, box_color, box_size, el_build, el_child, el_gesture2, el_positioned, el_qkey, el_sizedbox, el_stack, el_text_new, mount, rs_set_f64, rs_source_f64, rs_source_str, stack_align, stf_put, stf_take };
+use tur::{ ALIGN_TOP_LEFT, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, stf_put, stf_take };
+use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+
 
 let K_X: u64 = 1;
 let K_Y: u64 = 2;
@@ -14,19 +16,21 @@ entry fn start() -> u64 {
     let piece = rs_source_str("A");
     stf_put(K_PIECE, piece as f64);
 
-    let stack = el_stack();
-    stack_align(stack, ALIGN_TOP_LEFT);
-    el_child(stack, el_sizedbox(300.0, 300.0, el_build(el_box_new())));
-    let b = el_box_new();
-    box_size(b, 80.0, 80.0);
-    box_color(b, 0x6366F1FFu64);
-    el_qkey(b, "piece");
-    let label = el_text_new("A");
-    el_child(b, el_build(label));
-    let pad = el_gesture2(piece, piece, "g_down", "g_down", "g_move", "g_up", "", el_build(b));
-    let pos = el_positioned(10.0, 10.0, pad);
-    el_child(stack, pos);
-    mount(el_build(stack));
+    let mut stack = Stack.new();
+    stack.alignment(ALIGN_TOP_LEFT);
+    stack.child(SizedBox.new(300.0, 300.0).child(Container.new().build()).build());
+    let mut b = Container.new();
+    b.width_height(80.0, 80.0);
+    b.color(0x6366F1FFu64);
+    b.query_key("piece");
+    let mut label = Text.new();
+
+    label.text("A");
+    b.child(label.build());
+    let pad = PointerInteract.new().ids(piece, piece).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pos = Positioned.new().left(10.0).top(10.0).child(pad).build();
+    stack.child(pos);
+    mount(stack.build());
     return piece;
 }
 

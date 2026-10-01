@@ -1,17 +1,22 @@
 // table-reactive: the table twin with a reactive row set — a button adds
 // a planet through an Each over the rows atom.
-use tur::{ el_box_new, box_color, box_padding, box_size, el_build, el_child, el_column, el_pi, el_row, el_sizedbox, el_text_new, mount, rs_each, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value, text_size };
+use tur::{ mount, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value,
+    rs_value_item, rs_value_len };
+use tur_kit::{ Column, Container, Each, PointerInteract, Row, SizedBox, Text };
+
 
 entry fn row(_i: u64, name: str) -> opaque {
-    let r = el_row();
-    let c = el_box_new();
-    box_size(c, 150.0, 0.0);
-    box_padding(c, 8.0);
-    let t = el_text_new(name);
-    text_size(t, 14.0);
-    el_child(c, el_build(t));
-    el_child(r, c);
-    return el_build(r);
+    let mut r = Row.new();
+    let mut c = Container.new();
+    c.width_height(150.0, 0.0);
+    c.padding(8.0);
+    let mut t = Text.new();
+
+    t.text(name);
+    t.font_size(14.0);
+    c.child(t.build());
+    r.child(c.build());
+    return r.build();
 }
 
 entry fn start() -> u64 {
@@ -20,20 +25,22 @@ entry fn start() -> u64 {
     rs_list_push(rows, "Venus");
     let rows_atom = rs_source_value(rows);
 
-    let col = el_column();
-    let head = el_box_new();
-    box_size(head, 0.0, 32.0);
-    box_color(head, 0x1E293BFF);
-    let ht = el_text_new("PLANET");
-    text_size(ht, 12.0);
-    el_child(head, el_build(ht));
-    el_child(col, head);
-    el_child(col, rs_each(rows_atom, "row"));
-    el_child(col, el_pi(rows_atom, rows_atom, "b_add", "", 0, "", el_build(el_text_new("add row"))));
-    let frame = el_box_new();
-    box_color(frame, 0x0B1220FF);
-    el_child(frame, el_build(col));
-    mount(el_sizedbox(400.0, 240.0, el_build(frame)));
+    let mut col = Column.new();
+    let mut head = Container.new();
+    head.width_height(0.0, 32.0);
+    head.color(0x1E293BFF);
+    let mut ht = Text.new();
+
+    ht.text("PLANET");
+    ht.font_size(12.0);
+    head.child(ht.build());
+    col.child(head.build());
+    col.child(Each.new(rows_atom).item_builder("row").build());
+    col.child(PointerInteract.new().ids(rows_atom, rows_atom).on_tap("b_add").child(Text.new().text("add row").build()).build());
+    let mut frame = Container.new();
+    frame.color(0x0B1220FF);
+    frame.child(col.build());
+    mount(SizedBox.new(400.0, 240.0).child(frame.build()).build());
     return rows_atom;
 }
 

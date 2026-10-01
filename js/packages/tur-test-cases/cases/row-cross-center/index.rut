@@ -1,21 +1,23 @@
 // row-cross-center: a 200x36 container centering a row of two boxes on
 // the cross axis.
-use tur::{ CROSS_ALIGN_CENTER, el_box_new, box_padding, box_size, el_build, el_child, el_row, flex_cross_align, mount };
+use tur::{ CROSS_ALIGN_CENTER, mount };
+use tur_kit::{ Container, Row };
+
 
 entry fn start() {
-    let outer = el_box_new();
-    box_size(outer, 200.0, 36.0);
-    box_padding(outer, 0.0);
-    let row = el_row();
-    flex_cross_align(row, CROSS_ALIGN_CENTER);
-    el_child(row, box_wh(20.0, 20.0));
-    el_child(row, box_wh(40.0, 10.0));
-    el_child(outer, el_build(row));
-    mount(el_build(outer));
+    let mut outer = Container.new();
+    outer.width_height(200.0, 36.0);
+    outer.padding(0.0);
+    let mut row = Row.new();
+    row.cross_alignment(CROSS_ALIGN_CENTER);
+    row.child(box_wh(20.0, 20.0));
+    row.child(box_wh(40.0, 10.0));
+    outer.child(row.build());
+    mount(outer.build());
 }
 
 fn box_wh(w: f64, h: f64) -> opaque {
-    let b = el_box_new();
-    box_size(b, w, h);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(w, h);
+    return b.build();
 }

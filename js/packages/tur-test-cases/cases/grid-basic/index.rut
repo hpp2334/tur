@@ -1,22 +1,24 @@
 // grid-basic: a small static grid of tiles (Row/Column composition).
-use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_column, el_row, el_sizedbox, mount };
+use tur::{ mount };
+use tur_kit::{ Column, Container, Row, SizedBox };
+
 
 entry fn tile(color: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 80.0, 80.0);
-    box_color(b, color);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(80.0, 80.0);
+    b.color(color);
+    return b.build();
 }
 
 entry fn start() {
-    let col = el_column();
-    let r0 = el_row();
-    el_child(r0, tile(0xEF4444FFu64));
-    el_child(r0, tile(0x22C55EFFu64));
-    let r1 = el_row();
-    el_child(r1, tile(0x3B82F6FFu64));
-    el_child(r1, tile(0xEAB308FFu64));
-    el_child(col, r0);
-    el_child(col, r1);
-    mount(el_sizedbox(200.0, 200.0, el_build(col)));
+    let mut col = Column.new();
+    let mut r0 = Row.new();
+    r0.child(tile(0xEF4444FFu64));
+    r0.child(tile(0x22C55EFFu64));
+    let mut r1 = Row.new();
+    r1.child(tile(0x3B82F6FFu64));
+    r1.child(tile(0xEAB308FFu64));
+    col.child(r0.build());
+    col.child(r1.build());
+    mount(SizedBox.new(200.0, 200.0).child(col.build()).build());
 }

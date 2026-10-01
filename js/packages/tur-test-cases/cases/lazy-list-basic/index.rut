@@ -1,20 +1,22 @@
 // lazy-list-basic: a 20-row virtualized vertical list (50px rows).
-use tur::{ el_box_new, box_color, box_size, el_build, el_child, el_lazy_list, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList };
+
 
 entry fn row(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 400.0, 50.0);
+    let mut b = Container.new();
+    b.width_height(400.0, 50.0);
     if (i % 2 == 0) {
-        box_color(b, 0x303030FF);
+        b.color(0x303030FF);
     } else {
-        box_color(b, 0x1A1A1AFF);
+        b.color(0x1A1A1AFF);
     }
-    return el_build(b);
+    return b.build();
 }
 
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let list = el_lazy_list("row", count, 50.0);
-    mount(el_vqkey(list, "lazy-list-basic"));
+    let mut list = LazyList.new().item_builder("row").count(count).item_extent(50.0).query_key("lazy-list-basic").build();
+    mount(list);
 }

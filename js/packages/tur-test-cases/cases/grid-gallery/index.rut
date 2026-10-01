@@ -1,25 +1,29 @@
 // grid-gallery: a header + scrollable tile grid (the hover-cursor demo
 // surface).
-use tur::{ CURSOR_POINTER, CROSS_ALIGN_CENTER, el_box_new, box_color, box_size, el_build, el_child, el_column, el_expand, el_mouse_region, el_sizedbox, el_text_new, flex_cross_align, mount, text_size };
+use tur::{ CROSS_ALIGN_CENTER, CURSOR_POINTER, mount };
+use tur_kit::{ Column, Container, Expanded, MouseRegion, Row, SizedBox, Text };
+
 
 entry fn tile(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 100.0, 100.0);
-    box_color(b, 0x1E293BFF);
-    let label = el_text_new(f"tile {i}");
-    text_size(label, 12.0);
-    el_child(b, el_build(label));
-    return el_mouse_region(i, "", "", CURSOR_POINTER, 0, el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 100.0);
+    b.color(0x1E293BFF);
+    let mut label = Text.new();
+
+    label.text(f"tile {i}");
+    label.font_size(12.0);
+    b.child(label.build());
+    return MouseRegion.new().cursor(CURSOR_POINTER).behavior(0).child(b.build()).build();
 }
 
 entry fn start() {
-    let col = el_column();
-    flex_cross_align(col, CROSS_ALIGN_CENTER);
-    let row = el_row();
-    el_child(row, tile(0));
-    el_child(row, tile(1));
-    el_child(row, tile(2));
-    el_child(col, el_sizedbox(400.0, 40.0, el_build(el_box_new())));
-    el_child(col, row);
-    mount(el_expand(1.0, el_build(col)));
+    let mut col = Column.new();
+    col.cross_alignment(CROSS_ALIGN_CENTER);
+    let mut row = Row.new();
+    row.child(tile(0));
+    row.child(tile(1));
+    row.child(tile(2));
+    col.child(SizedBox.new(400.0, 40.0).child(Container.new().build()).build());
+    col.child(row.build());
+    mount(Expanded.new().flex(1.0).child(col.build()).build());
 }

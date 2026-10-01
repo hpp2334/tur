@@ -75,12 +75,14 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 fn id_module(value: &str) -> String {
     format!(
         r#"
-use tur::{{ el_build, el_text_bound, el_vqkey, mount, rs_source_str }};
+use tur::{{ mount, rs_set_str, rs_source_str }};
+use tur_kit::{{ Text }};
+
 
 entry fn start() -> u64 {{
     let atom = rs_source_str("{value}");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "id"));
+    let mut txt = Text.new().text_bound(atom).query_key("id").build();
+    mount(txt);
     return atom;
 }}
 
@@ -157,12 +159,14 @@ fn instances_have_isolated_element_trees() {
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+use tur::{ mount, rs_source_str };
+use tur_kit::{ Text };
+
 
 entry fn start() {
     let atom = rs_source_str("only-in-A");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "a_only"));
+    let mut txt = Text.new().text_bound(atom).query_key("a_only").build();
+    mount(txt);
 }
 "#,
     ))
@@ -200,13 +204,15 @@ fn headless_instance_runs_rut_without_rendering() {
 
     // The module boots; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_rut_module(
-        r#"
-use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+        r#"use tur::{ mount, rs_source_str };
+use tur_kit::{ Text };
+
+
 
 entry fn start() {
     let atom = rs_source_str("42");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "val"));
+    let mut txt = Text.new().text_bound(atom).query_key("val").build();
+    mount(txt);
 }
 "#,
     ))
@@ -237,13 +243,15 @@ fn build_headless_runs_engine_on_worker() {
 
     // The module boots via the worker RPC path.
     futures::executor::block_on(app.load_rut_module(
-        r#"
-use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+        r#"use tur::{ mount, rs_source_str };
+use tur_kit::{ Text };
+
+
 
 entry fn start() {
     let atom = rs_source_str("7");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "val"));
+    let mut txt = Text.new().text_bound(atom).query_key("val").build();
+    mount(txt);
 }
 "#,
     ))
@@ -272,12 +280,13 @@ fn many_instances_share_one_runtime() {
             .expect("app");
         futures::executor::block_on(app.load_rut_module(format!(
             r#"
-use tur::{{ el_build, el_text_bound, el_vqkey, mount, rs_source_str }};
+use tur::{{ mount, rs_source_str }};
+use tur_kit::{{ Text }};
 
 entry fn start() {{
     let atom = rs_source_str("{i}");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "idx"));
+    let mut txt = Text.new().text_bound(atom).query_key("idx").build();
+    mount(txt);
 }}
 "#
         )))
@@ -478,13 +487,15 @@ fn platform_events_route_to_the_correct_instance() {
 
     // Mount a full-width box in each (the root sizes with the viewport).
     let module = r#"
-use tur::{ box_color, box_size, el_box_new, el_build, mount };
+use tur::{ mount };
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    box_color(b, 0x336699FFu64);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    b.color(0x336699FFu64);
+    mount(b.build());
 }
 "#;
     futures::executor::block_on(app_a.load_rut_module(module)).expect("load A");
@@ -535,12 +546,13 @@ fn reactive_stores_are_isolated_per_instance() {
     // "A2" — the write lands in A's own store.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+use tur::{ mount, rs_set_str, rs_source_str };
+use tur_kit::{ Text };
 
 entry fn start() -> u64 {
     let atom = rs_source_str("from-A");
-    let txt = el_text_bound(atom);
-    mount(el_vqkey(txt, "id"));
+    let mut txt = Text.new().text_bound(atom).query_key("id").build();
+    mount(txt);
     return atom;
 }
 

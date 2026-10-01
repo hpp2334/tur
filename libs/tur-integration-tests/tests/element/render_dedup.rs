@@ -41,13 +41,15 @@ fn identical_frames_render_once() {
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_box_new, el_build, mount };
+use tur::{ mount };
+use tur_kit::{ Container };
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    box_color(b, 0xFF0000FFu64);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    b.color(0xFF0000FFu64);
+    mount(b.build());
 }
 "#,
     )
@@ -86,16 +88,17 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur::{ box_color_bound, box_size, el_box_new, el_build, mount, rs_set_brush, rs_source_value };
+use tur::{ mount, rs_list_new, rs_set_brush, rs_source_value };
+use tur_kit::{ Container };
 
 entry fn start() -> u64 {
     let color = rs_source_value(rs_list_new());
     rs_set_brush(color, 0xFF0000FFu64);
 
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    box_color_bound(b, color);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    b.color_bound(color);
+    mount(b.build());
     return color;
 }
 
@@ -149,13 +152,17 @@ fn attach_resets_dedup() {
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
     app.load_rut_module(
         r#"
-use tur::{ box_color, box_size, el_box_new, el_build, mount };
+use tur::{ mount };
+use tur_kit::{ Container };
+use tur_kit::{ Container };
+
+
 
 entry fn start() {
-    let b = el_box_new();
-    box_size(b, 100.0, 50.0);
-    box_color(b, 0xFF0000FFu64);
-    mount(el_build(b));
+    let mut b = Container.new();
+    b.width_height(100.0, 50.0);
+    b.color(0xFF0000FFu64);
+    mount(b.build());
 }
 "#,
     )

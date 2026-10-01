@@ -1,55 +1,61 @@
 // table-basic: shared column geometry with a header row, stripes and
 // dividers (the Table widget's corpus twin, authored from flex rows).
-use tur::{ CROSS_ALIGN_CENTER, MAIN_ALIGN_SPACE_BETWEEN, el_box_new, box_color, box_padding, box_size, el_build, el_child, el_column, el_row, el_sizedbox, el_text_new, flex_cross_align, mount, text_size };
+use tur::{ mount };
+use tur_kit::{ Column, Container, Row, SizedBox, Text };
+
 
 fn header_cell(label: str, w: f64) -> opaque {
-    let b = el_box_new();
-    box_size(b, w, 0.0);
-    box_padding(b, 8.0);
-    let t = el_text_new(label);
-    text_size(t, 12.0);
-    el_child(b, el_build(t));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(w, 0.0);
+    b.padding(8.0);
+    let mut t = Text.new();
+
+    t.text(label);
+    t.font_size(12.0);
+    b.child(t.build());
+    return b.build();
 }
 
 fn cell(label: str, w: f64) -> opaque {
-    let b = el_box_new();
-    box_size(b, w, 0.0);
-    box_padding(b, 8.0);
-    let t = el_text_new(label);
-    text_size(t, 14.0);
-    el_child(b, el_build(t));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(w, 0.0);
+    b.padding(8.0);
+    let mut t = Text.new();
+
+    t.text(label);
+    t.font_size(14.0);
+    b.child(t.build());
+    return b.build();
 }
 
 fn header() -> opaque {
-    let r = el_row();
-    el_child(r, header_cell("PLANET", 150.0));
-    el_child(r, header_cell("NOTES", 100.0));
-    el_child(r, header_cell("DISTANCE", 100.0));
-    return el_build(r);
+    let mut r = Row.new();
+    r.child(header_cell("PLANET", 150.0));
+    r.child(header_cell("NOTES", 100.0));
+    r.child(header_cell("DISTANCE", 100.0));
+    return r.build();
 }
 
 fn planet(name: str, notes: str, distance: str) -> opaque {
-    let r = el_row();
-    el_child(r, cell(name, 150.0));
-    el_child(r, cell(notes, 100.0));
-    el_child(r, cell(distance, 100.0));
-    let wrapped = el_box_new();
-    box_size(wrapped, 0.0, 36.0);
-    el_child(wrapped, el_build(r));
-    return el_build(wrapped);
+    let mut r = Row.new();
+    r.child(cell(name, 150.0));
+    r.child(cell(notes, 100.0));
+    r.child(cell(distance, 100.0));
+    let mut wrapped = Container.new();
+    wrapped.width_height(0.0, 36.0);
+    wrapped.child(r.build());
+    return wrapped.build();
 }
 
 entry fn start() {
-    let table = el_column();
-    el_child(table, header());
-    el_child(table, planet("Mercury", "Smallest planet", "0.39 AU"));
-    el_child(table, planet("Venus", "Hottest surface", "0.72 AU"));
-    el_child(table, planet("Earth", "Home of life", "1.00 AU"));
-    el_child(table, planet("Mars", "The red planet", "1.52 AU"));
-    let frame = el_box_new();
-    box_color(frame, 0x0B1220FF);
-    el_child(frame, el_build(table));
-    mount(el_sizedbox(400.0, 240.0, el_build(frame)));
+    let mut table = Column.new();
+    table.child(header());
+    table.child(planet("Mercury", "Smallest planet", "0.39 AU"));
+    table.child(planet("Venus", "Hottest surface", "0.72 AU"));
+    table.child(planet("Earth", "Home of life", "1.00 AU"));
+    table.child(planet("Mars", "The red planet", "1.52 AU"));
+    let mut frame = Container.new();
+    frame.color(0x0B1220FF);
+    frame.child(table.build());
+    mount(SizedBox.new(400.0, 240.0).child(frame.build()).build());
 }

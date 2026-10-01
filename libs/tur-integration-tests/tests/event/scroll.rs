@@ -116,22 +116,21 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{
-    box_color, box_height_bound, box_size, el_box_new, el_build, el_child, el_scroll, el_vqkey,
-    mount, rs_set_f64, rs_source_f64,
-};
+use tur::{ AXIS_VERTICAL, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, ScrollView };
+
 
 entry fn start() -> u64 {
     let height = rs_source_f64();
     rs_set_f64(height, 900.0);
 
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    box_color(b, 0x204080FFu64);
-    box_height_bound(b, height);
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    b.color(0x204080FFu64);
+    b.height_bound(height);
 
-    let scroller = el_scroll(true, el_build(b));
-    let scroller = el_vqkey(scroller, "sv");
+    let mut scroller = ScrollView.new().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
+    let scroller = scroller;
     mount(scroller);
     return height;
 }

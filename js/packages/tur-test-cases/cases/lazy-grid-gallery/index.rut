@@ -1,29 +1,35 @@
 // lazy-grid-gallery: a header row above a virtualized gallery grid in a
 // column.
-use tur::{ CROSS_ALIGN_CENTER, el_box_new, box_color, box_size, el_build, el_child, el_column, el_expand, el_lazy_grid, el_text_new, flex_cross_align, mount, rs_set_f64, rs_source_f64, text_size };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, Container, Expanded, LazyGrid, Text };
+
 
 entry fn cell(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 0.0, 0.0);
-    box_color(b, 0x1E293BFF);
-    let label = el_text_new(f"tile {i}");
-    text_size(label, 12.0);
-    el_child(b, el_build(label));
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(0.0, 0.0);
+    b.color(0x1E293BFF);
+    let mut label = Text.new();
+
+    label.text(f"tile {i}");
+    label.font_size(12.0);
+    b.child(label.build());
+    return b.build();
 }
 
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 120.0);
-    let col = el_column();
-    let header = el_box_new();
-    box_size(header, 0.0, 40.0);
-    box_color(header, 0x0F172AFF);
-    let title = el_text_new("Gallery");
-    text_size(title, 16.0);
-    el_child(header, el_build(title));
-    el_child(col, header);
-    let grid = el_lazy_grid("cell", count, 150.0, 1.0);
-    el_child(col, el_expand(1.0, grid));
-    mount(el_build(col));
+    let mut col = Column.new();
+    let mut header = Container.new();
+    header.width_height(0.0, 40.0);
+    header.color(0x0F172AFF);
+    let mut title = Text.new();
+
+    title.text("Gallery");
+    title.font_size(16.0);
+    header.child(title.build());
+    col.child(header.build());
+    let grid = LazyGrid.new().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).build();
+    col.child(Expanded.new().flex(1.0).child(grid).build());
+    mount(col.build());
 }

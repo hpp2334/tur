@@ -1,20 +1,22 @@
 // lazy-list-row: a 50-item HORIZONTAL virtualized list (80px columns).
-use tur::{ el_box_new, box_color, box_size, el_build, el_lazy_list_h, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyList };
+
 
 entry fn item(i: u64) -> opaque {
-    let b = el_box_new();
-    box_size(b, 80.0, 300.0);
+    let mut b = Container.new();
+    b.width_height(80.0, 300.0);
     if (i % 2 == 0) {
-        box_color(b, 0x303030FF);
+        b.color(0x303030FF);
     } else {
-        box_color(b, 0x1A1A1AFF);
+        b.color(0x1A1A1AFF);
     }
-    return el_build(b);
+    return b.build();
 }
 
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 50.0);
-    let list = el_lazy_list_h("item", count, 80.0);
-    mount(el_vqkey(list, "lazy-list-row"));
+    let mut list = LazyList.new().item_builder("item").count(count).axis(AXIS_HORIZONTAL).item_extent(80.0).query_key("lazy-list-row").build();
+    mount(list);
 }

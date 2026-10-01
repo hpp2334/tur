@@ -3,16 +3,18 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-use tur::{ el_build, el_child, el_input, el_vqkey, mount, tctrl_new, undo_new };
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = el_input(ctrl, undo, "", 200.0, 30.0);
-    let keyed = el_vqkey(input, "input");
-    let col = el_column();
-    el_child(col, keyed);
-    mount(el_build(col));
+    let mut input = Input.new().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("input").build();
+    let keyed = input;
+    let mut col = Column.new();
+    col.child(keyed);
+    mount(col.build());
 }
 "#;
 

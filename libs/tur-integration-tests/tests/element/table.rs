@@ -25,37 +25,36 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
-use tur::{
-    box_color, box_size, col_fixed, col_flex, cols_new, el_build, el_child, el_table, el_vqkey,
-    mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value, stf_put, stf_take,
-};
+use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value, stf_put, stf_take };
+use tur_kit::{ Column, Container, Table, TableCols };
+
 
 let ROWS: u64 = 9;
 
 fn cell(key: str) -> opaque {
-    let b = el_box_new();
-    box_size(b, 10.0, 10.0);
-    box_color(b, 0xC8C8C8FFu64);
-    el_qkey(b, key);
-    return el_build(b);
+    let mut b = Container.new();
+    b.width_height(10.0, 10.0);
+    b.color(0xC8C8C8FFu64);
+    b.query_key(key);
+    return b.build();
 }
 
 entry fn header_row() -> opaque {
-    let col = el_column();
-    el_child(col, cell("h0"));
-    el_child(col, cell("h1"));
-    el_child(col, cell("h2"));
-    return el_build(col);
+    let mut col = Column.new();
+    col.child(cell("h0"));
+    col.child(cell("h1"));
+    col.child(cell("h2"));
+    return col.build();
 }
 
 // The row builder receives the row INDEX directly (the RutEntryBuilder
 // face calls it with the row's position).
 entry fn row_cell(i: u64) -> opaque {
-    let col = el_column();
-    el_child(col, cell(f"c0-{i}"));
-    el_child(col, cell(f"c1-{i}"));
-    el_child(col, cell(f"c2-{i}"));
-    return el_build(col);
+    let mut col = Column.new();
+    col.child(cell(f"c0-{i}"));
+    col.child(cell(f"c1-{i}"));
+    col.child(cell(f"c2-{i}"));
+    return col.build();
 }
 
 fn rows_of(n: u64) -> opaque {
@@ -72,13 +71,13 @@ entry fn start() {
     let rows = rs_source_value(rows_of({ROWS_PLACEHOLDER}));
     stf_put(ROWS, rows as f64);
 
-    let cols = cols_new();
-    col_fixed(cols, 100.0);
-    col_flex(cols, 1.0, 40.0);
-    col_flex(cols, 3.0, 0.0);
+    let mut cols = TableCols.new();
+    cols.fixed(100.0);
+    cols.flex(1.0, 40.0);
+    cols.flex(3.0, 0.0);
 
-    let t = el_table(rows, "row_cell", "header_row", cols);
-    mount(el_vqkey(t, "t"));
+    let mut t = Table.new().columns(cols).rows_atom(rows).row_builder("row_cell").header_builder("header_row").query_key("t").build();
+    mount(t);
 }
 
 entry fn set_rows(_a: u64, n: f64) {

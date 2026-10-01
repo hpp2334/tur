@@ -95,15 +95,17 @@ fn host_image_lays_out_at_natural_size() {
     // The host-minted id crosses to the module through the entry rail.
     app.load_rut_module(
         r#"
-use tur::{ BOXFIT_FILL, el_build, el_child, el_column, el_image, mount };
+use tur::{ BOXFIT_FILL, mount };
+use tur_kit::{ Column, Image };
+
 
 entry fn start() {
 }
 
 entry fn mount_host(host_id: u64, _b: f64) {
-    let col = el_column();
-    el_child(col, el_image(host_id, 4.0, 0.0, BOXFIT_FILL));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Image.new(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    mount(col.build());
 }
 "#,
     )
@@ -138,7 +140,8 @@ fn host_and_js_image_ids_coexist() {
 
     app.load_rut_module(
         r#"
-use tur::{ BOXFIT_FILL, el_build, el_child, el_column, el_image, img_res_solid, mount };
+use tur::{ BOXFIT_FILL, img_res_solid, mount };
+use tur_kit::{ Column, Image };
 
 entry fn start() {
 }
@@ -146,10 +149,10 @@ entry fn start() {
 // One worker-minted + one host-registered id, mounted side by side.
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
-    let col = el_column();
-    el_child(col, el_image(worker_id, 1.0, 0.0, BOXFIT_FILL));
-    el_child(col, el_image(host_id, 4.0, 0.0, BOXFIT_FILL));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Image.new(worker_id).width(1.0).fit(BOXFIT_FILL).build());
+    col.child(Image.new(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    mount(col.build());
 }
 "#,
     )
@@ -200,18 +203,20 @@ fn reattach_ensures_retained_images_before_first_frame() {
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
     app.load_rut_module(
-        r#"
-use tur::{ BOXFIT_FILL, el_build, el_child, el_column, el_image, img_res_solid, mount };
+        r#"use tur::{ BOXFIT_FILL, img_res_solid, mount };
+use tur_kit::{ Column, Image };
+
+
 
 entry fn start() {
 }
 
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
-    let col = el_column();
-    el_child(col, el_image(worker_id, 1.0, 0.0, BOXFIT_FILL));
-    el_child(col, el_image(host_id, 4.0, 0.0, BOXFIT_FILL));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Image.new(worker_id).width(1.0).fit(BOXFIT_FILL).build());
+    col.child(Image.new(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    mount(col.build());
 }
 "#,
     )
@@ -295,14 +300,17 @@ fn reattach_uploads_only_painted_images() {
         .collect();
 
     app.load_rut_module(
-        r#"
-use tur::{ BOXFIT_FILL, el_image, mount };
+        r#"use tur::{ BOXFIT_FILL, mount };
+use tur_kit::{ Image };
+
+use tur_kit::{ Image };
+
 
 entry fn start() {
 }
 
 entry fn mount_one(id: u64, _b: f64) {
-    mount(el_image(id, 4.0, 0.0, BOXFIT_FILL));
+    mount(Image.new(id).width(4.0).fit(BOXFIT_FILL).build());
 }
 "#,
     )

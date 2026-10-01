@@ -7,23 +7,29 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const HELLO_RUT: &str = r#"
-use tur::{ el_column, el_text, el_build, el_child, mount };
+use tur::{ mount };
+use tur_kit::{ Column, Text };
+
+use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() {
-    let col = el_column();
-    el_child(col, el_text("hello from rut"));
-    el_child(col, el_text("rut drives, the engine applies"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text("hello from rut").build());
+    col.child(Text.new().text("rut drives, the engine applies").build());
+    mount(col.build());
 }
 "#;
 
 /// The `entry fn stop` cleanup contract: stop runs on reload, and the new
 /// module's tree replaces the old one.
-const HELLO_RUT_V2: &str = r#"
-use tur::{ el_text, mount };
+const HELLO_RUT_V2: &str = r#"use tur::{ mount };
+use tur_kit::{ Text };
+
+use tur_kit::{ Text };
+
 
 entry fn start() {
-    mount(el_text("v2 root"));
+    mount(Text.new().text("v2 root").build());
 }
 
 entry fn stop() {
@@ -83,13 +89,15 @@ fn rut_module_mounts_a_tree() {
 /// `el_text_bound`; an engine→rut entry call mutates the atom; the
 /// existing reactive flush re-renders the Text.
 const COUNTER_RUT: &str = r#"
-use tur::{ el_column, el_text_bound, el_build, el_child, mount, rs_source_str, rs_set_str };
+use tur::{ mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Text };
+
 
 entry fn start() -> u64 {
     let atom = rs_source_str("Count: 0");
-    let col = el_column();
-    el_child(col, el_text_bound(atom));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(atom).query_key("rut/text").build());
+    mount(col.build());
     return atom;
 }
 
@@ -131,15 +139,20 @@ fn rut_reactive_atom_rebinds_text() {
 /// click queues an intent; the pump drains it into `entry fn ts_click`,
 /// which mutates the bound atom — the full interactive loop, all rut.
 /// The button's `id` IS the atom id (the callback's first argument).
-const BUTTON_RUT: &str = r#"
-use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_source_str, rs_set_str };
+const BUTTON_RUT: &str = r#"use tur::{ mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, PointerInteract, Text };
+
+use tur_kit::{ Column, PointerInteract, Text };
+
 
 entry fn start() -> u64 {
     let atom = rs_source_str("taps: 0");
-    let col = el_column();
-    el_child(col, el_text_bound(atom));
-    el_child(col, el_button(atom, atom, "ts_click", "tap me"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(atom).query_key("rut/text").build());
+    col.child(
+        PointerInteract.new().ids(atom, atom).on_tap("ts_click").child(Text.new().text("tap me").build()).build(),
+    );
+    mount(col.build());
     return atom;
 }
 
@@ -177,16 +190,21 @@ fn rut_button_click_mutates_bound_text() {
 /// callbacks), a bound reactive label, and cleanup — the rut twin of the
 /// JS counter case. Callbacks receive (count_atom, label_atom, seq).
 const COUNTER_APP_RUT: &str = r#"
-use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
+use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() -> u64 {
     let label = rs_source_str("Count: 0");
     let count = rs_source_f64();
-    let col = el_column();
-    el_child(col, el_text_bound(label));
-    el_child(col, el_button(count, label, "ts_inc", "+1"));
-    el_child(col, el_button(count, label, "ts_dec", "-1"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    col.child(
+        PointerInteract.new().ids(count, label).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+    );
+    col.child(
+        PointerInteract.new().ids(count, label).on_tap("ts_dec").child(Text.new().text("-1").build()).build(),
+    );
+    mount(col.build());
     return count;
 }
 
@@ -237,22 +255,27 @@ fn rut_counter_app_full_journey() {
 /// Stack+Positioned, and `condition` with pre-built branches toggled by a
 /// button — all authored in rut.
 const CONDITION_RUT: &str = r#"
-use tur::{ el_box, el_button, el_column, el_expand, el_positioned, el_stack, el_text, el_text_bound, el_build, el_child, condition, mount, rs_get_bool, rs_set_bool, rs_source_bool, rs_source_str };
+use tur::{ mount, rs_get_bool, rs_set_bool, rs_source_bool, rs_source_str };
+use tur_kit::{ Column, Condition, Container, Expanded, PointerInteract, Positioned, Stack, Text };
+
+use tur_kit::{ Column, PointerInteract, Condition, Container, Expanded, Positioned, Stack, Text };
 
 entry fn start() -> u64 {
     let on = rs_source_bool(true);
     let on_label = rs_source_str("ON");
     let off_label = rs_source_str("OFF");
-    let col = el_column();
-    el_child(col, el_box(0x336699FF, 8.0, el_text("boxed")));
-    el_child(col, el_expand(1.0, el_text("fills the column")));
-    el_child(col, condition(on, el_text_bound(on_label), el_text_bound(off_label)));
-    let overlay = el_stack();
-    el_child(overlay, el_text("base"));
-    el_child(overlay, el_positioned(4.0, 4.0, el_text("floating")));
-    el_child(col, el_build(overlay));
-    el_child(col, el_button(on, on, "ts_toggle", "toggle"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Container.new().color(0x336699FF).padding(8.0).child(Text.new().text("boxed").build()).build());
+    col.child(Expanded.new().flex(1.0).child(Text.new().text("fills the column").build()).build());
+    col.child(Condition.new(on).then(Text.new().text_bound(on_label).query_key("rut/text").build()).else_branch(Text.new().text_bound(off_label).query_key("rut/text").build()).build());
+    let mut overlay = Stack.new();
+    overlay.child(Text.new().text("base").build());
+    overlay.child(Positioned.new().left(4.0).top(4.0).child(Text.new().text("floating").build()).build());
+    col.child(overlay.build());
+    col.child(
+        PointerInteract.new().ids(on, on).on_tap("ts_toggle").child(Text.new().text("toggle").build()).build(),
+    );
+    mount(col.build());
     return on;
 }
 
@@ -316,19 +339,22 @@ fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f
 /// Scroll + styled-text gate: a scroll viewport wrapping tall styled
 /// content — the long-list pattern every real app needs.
 const SCROLL_RUT: &str = r#"
-use tur::{ el_column, el_expand, el_scroll, el_text_styled, el_build, el_child, mount, rs_source_f64 };
+use tur::{ AXIS_VERTICAL, mount, rs_source_f64 };
+use tur_kit::{ Column, Expanded, ScrollView, Text };
+
+use tur_kit::{ Column, PointerInteract, Expanded, ScrollView, Text };
 
 entry fn start() -> u64 {
-    let col = el_column();
+    let mut col = Column.new();
     let mut i = 0;
     while (i < 60) {
-        el_child(col, el_text_styled(f"row {i}", 16.0, 0x222222FF));
+        col.child(Text.new().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
         i += 1;
     }
-    let scroller = el_scroll(true, el_build(col));
-    let root = el_column();
-    el_child(root, el_expand(1.0, scroller));
-    mount(el_build(root));
+    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(col.build()).build();
+    let mut root = Column.new();
+    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    mount(root.build());
     return rs_source_f64();
 }
 "#;
@@ -373,7 +399,11 @@ fn rut_scroll_view_with_styled_rows() {
 /// reads the whole value back, rebuilds it, writes it, and re-joins. No JS
 /// realm anywhere: every row speaks native `Value`s.
 const LIST_MAP_RUT: &str = r#"
-use tur::{ el_button, el_column, el_text_bound, el_build, el_child, mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_set_str, rs_source_str, rs_source_value, rs_value_get, rs_value_item, rs_value_len };
+use tur::{ mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
+    rs_set_str, rs_set_value, rs_source_str, rs_source_value, rs_value_get, rs_value_item,
+    rs_value_len };
+use tur_kit::{ Column, Text };
+
 
 // The string join: read the list atom back through rut entries
 // (len + item) and fold it into the bound label's str atom.
@@ -405,10 +435,12 @@ entry fn start() -> u64 {
     let cur = rs_get_str(label);
     rs_set_str(label, f"{cur} ({role})");
 
-    let col = el_column();
-    el_child(col, el_text_bound(label));
-    el_child(col, el_button(items, label, "ts_push", "push"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    col.child(
+        PointerInteract.new().ids(items, label).on_tap("ts_push").child(Text.new().text("push").build()).build(),
+    );
+    mount(col.build());
     return items;
 }
 
@@ -487,7 +519,10 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// undo rows. The interactive half (keyboard / IME into the focused
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
-use tur::{ el_button, el_column, el_input, el_text_bound, el_build, el_child, mount, tctrl_cursor, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_can_redo, undo_can_undo, undo_new, rs_set_str, rs_source_str };
+use tur::{ mount, rs_source_str, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_new };
+use tur_kit::{ Column, Input, Text };
+
+use tur_kit::{ Column, PointerInteract, Input, Text };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -499,10 +534,10 @@ entry fn start() -> u64 {
     tctrl_paste(ctrl, "SEEDED");
     let label = rs_source_str(tctrl_text(ctrl));
 
-    let col = el_column();
-    el_child(col, el_input(ctrl, undo, "type here", 220.0, 32.0));
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Input.new().controller(ctrl).undo(undo).placeholder("type here").width_height(220.0, 32.0).query_key("rut/input").build());
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 "#;
@@ -578,12 +613,15 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 /// reconciliation runs during flush — the guarded face call), and the item
 /// builder entry authors each row.
 const EACH_RUT: &str = r#"
-use tur::{ el_button, el_column, el_build, el_child, el_text_styled, mount, rs_each, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+use tur_kit::{ Column, Each, PointerInteract, Text };
+
+use tur_kit::{ Column, PointerInteract, Each, Text };
 
 entry fn item_row(i: u64, item: str) -> opaque {
-    let col = el_column();
-    el_child(col, el_text_styled(f"{i}: {item}", 16.0, 0x222222FF));
-    return el_build(col);
+    let mut col = Column.new();
+    col.child(Text.new().text(f"{i}: {item}").font_size(16.0).color(0x222222FF).build());
+    return col.build();
 }
 
 entry fn start() -> u64 {
@@ -592,10 +630,12 @@ entry fn start() -> u64 {
     rs_list_push(list, "beta");
     let atom = rs_source_value(list);
 
-    let col = el_column();
-    el_child(col, rs_each(atom, "item_row"));
-    el_child(col, el_button(atom, atom, "ts_push", "push"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Each.new(atom).item_builder("item_row").build());
+    col.child(
+        PointerInteract.new().ids(atom, atom).on_tap("ts_push").child(Text.new().text("push").build()).build(),
+    );
+    mount(col.build());
     return atom;
 }
 
@@ -675,21 +715,24 @@ fn rut_each_maps_a_list_atom_and_rebuilds_on_change() {
 /// mounts rows outside the initial build set — flush-time face calls on
 /// the remount path.
 const LAZY_RUT: &str = r#"
-use tur::{ el_column, el_expand, el_build, el_child, el_text_styled, mount, rs_lazy_list, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, Expanded, LazyList, Text };
+
+use tur_kit::{ Column, PointerInteract, Expanded, LazyList, Text };
 
 entry fn lazy_row(i: u64) -> opaque {
-    let col = el_column();
-    el_child(col, el_text_styled(f"row {i}", 16.0, 0x222222FF));
-    return el_build(col);
+    let mut col = Column.new();
+    col.child(Text.new().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
+    return col.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 300.0);
-    let scroller = el_lazy_list("lazy_row", count, 20.0);
-    let root = el_column();
-    el_child(root, el_expand(1.0, scroller));
-    mount(el_build(root));
+    let scroller = LazyList.new().item_builder("lazy_row").count(count).item_extent(20.0).query_key("rut/lazy").build();
+    let mut root = Column.new();
+    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    mount(root.build());
     return count;
 }
 "#;
@@ -742,27 +785,30 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
 /// the exported flag consts. The align/size assertions read back through
 /// the tree geometry; a second box (SizedBox) pins the exact size.
 const CONTAINER_FULL_RUT: &str = r#"
-use tur::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, el_box_new, el_box, el_child, el_column, el_sizedbox, el_text, el_build, mount };
+use tur::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, mount };
+use tur_kit::{ Column, Container, SizedBox, Text };
+
+use tur_kit::{ Column, PointerInteract, Container, SizedBox, Text };
 
 entry fn start() {
-    let styled = el_box_new();
-    box_size(styled, 200.0, 120.0);
-    box_padding(styled, 8.0);
-    box_color(styled, 0x336699FF as u64);
-    box_border(styled, 0xFFCC00FFu64, 3.0, BORDER_CENTER);
-    box_radius(styled, 12.0);
-    box_shadow(styled, 0x00000066 as u64, 8.0, 2.0, 4.0);
-    box_clip(styled, CLIP_ANTI_ALIAS);
-    box_align(styled, ALIGN_BOTTOM_RIGHT);
-    el_child(styled, el_text("corner"));
-    let root = el_column();
-    el_child(root, el_build(styled));
+    let mut styled = Container.new();
+    styled.width_height(200.0, 120.0);
+    styled.padding(8.0);
+    styled.color(0x336699FF as u64);
+    styled.border(0xFFCC00FFu64, 3.0, BORDER_CENTER);
+    styled.radius(12.0);
+    styled.shadow(0x00000066 as u64, 8.0, 2.0, 4.0);
+    styled.clip(CLIP_ANTI_ALIAS);
+    styled.alignment(ALIGN_BOTTOM_RIGHT);
+    styled.child(Text.new().text("corner").build());
+    let mut root = Column.new();
+    root.child(styled.build());
 
     // SizedBox: exactly 90 x 40 around its child.
-    el_child(root, el_sizedbox(90.0, 40.0, el_text("sized")));
+    root.child(SizedBox.new(90.0, 40.0).child(Text.new().text("sized").build()).build());
     // The legacy el_box row still works beside the builder.
-    el_child(root, el_box(0x88FF88FFu64, 4.0, el_text("legacy")));
-    mount(el_build(root));
+    root.child(Container.new().color(0x88FF88FFu64).padding(4.0).child(Text.new().text("legacy").build()).build());
+    mount(root.build());
 }
 "#;
 
@@ -812,19 +858,21 @@ fn rut_container_full_surface_and_sizedbox() {
 /// rail. Both ids ARE the label atom (the callbacks' first argument), so
 /// every callback appends to the same transcript.
 const GESTURE_RUT: &str = r#"
-use tur::{ el_column, el_focusable, el_gesture, el_text, el_text_bound, el_build, el_child, focus_request, mount, rs_get_str, rs_set_str, rs_source_str };
+use tur::{ focus_request, mount, rs_get_str, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Focusable, PointerInteract, Text };
+
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
 
-    let pad = el_gesture(label, "g_click", "g_down", "g_move", "g_up", "g_menu", el_text("pad"));
-    let foc = el_focusable(label, "f_key", "f_focus", "f_blur", el_text("focus me"));
+    let pad = PointerInteract.new().id(label).on_click("g_click").on_down("g_down").on_move("g_move").on_up("g_up").on_context_menu("g_menu").query_key("rut/gesture").child(Text.new().text("pad").build()).build();
+    let foc = Focusable.new().on_key_down("f_key", label).on_focus("f_focus", label).on_blur("f_blur", label).child(Text.new().text("focus me").build()).build();
 
-    let col = el_column();
-    el_child(col, pad);
-    el_child(col, foc);
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(pad);
+    col.child(foc);
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 
@@ -948,7 +996,11 @@ fn rut_gesture_focus_key_payloads_realm_free() {
 /// the atom); the atom drives an Opacity. The label records the tween /
 /// curve helper answers at start.
 const ANIM_RUT: &str = r#"
-use tur::{ anim_ctrl, anim_forward, curve_eval, el_column, el_opacity_bound, el_text, el_text_bound, el_build, el_child, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, tween_lerp, color_tween_lerp };
+use tur::{ anim_ctrl, anim_forward, color_tween_lerp, curve_eval, mount, rs_set_f64, rs_set_str,
+    rs_source_f64, rs_source_str, tween_lerp };
+use tur_kit::{ Column, PointerInteract, Text };
+use tur_anim_kit::{ Opacity };
+
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
@@ -964,10 +1016,10 @@ entry fn start() -> u64 {
     let cl = color_tween_lerp(0x000000FFu64, 0xFFFFFFFFu64, 0.5);
     rs_set_str(label, f"tw{tw} cv{cv} cl{cl}");
 
-    let col = el_column();
-    el_child(col, el_opacity_bound(alpha, el_text("fade")));
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Opacity.new(0.0).bound(alpha).child(Text.new().text("fade").build()).build());
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return alpha;
 }
 
@@ -1021,7 +1073,9 @@ fn rut_animation_controller_ticks_into_opacity() {
 const ASYNC_RUT: &str = r#"
 use core::RunContext;
 use async_host::launch_future;
-use tur::{ clipboard_read, clipboard_write, decode_utf8, el_column, el_text_bound, el_build, el_child, mount, net_request, rs_set_str, rs_source_str };
+use tur::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, rs_get_str, rs_set_str,
+    rs_source_str };
+use tur_kit::{ Column, Text };
 
 async fn work(cx: RunContext, label: u64) -> str {
     rs_set_str(label, "launched");
@@ -1037,9 +1091,9 @@ async fn work(cx: RunContext, label: u64) -> str {
 entry fn start() -> u64 {
     let label = rs_source_str("");
     launch_future(work(label));
-    let col = el_column();
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 "#;
@@ -1057,8 +1111,19 @@ fn rut_async_clipboard_and_net_request() {
 
     app.load_rut_module(ASYNC_RUT).unwrap();
     // Each await resumes on a later pump (the capability futures complete
-    // on the worker's task lane); poll until the final write lands.
-    let done = app.wait_for(|app| rut_bound_text(app).ends_with("|hello from net"));
+    // on the worker's task lane); poll until the final write lands. The
+    // kit prelude compiles on the worker in real time, so poll on the real
+    // clock — the virtual-clock window would close under load.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let done = loop {
+        if rut_bound_text(&app).ends_with("|hello from net") {
+            break true;
+        }
+        if std::time::Instant::now() > deadline {
+            break false;
+        }
+        app.wait_for_timeout(Duration::from_millis(25));
+    };
     assert!(done, "the awaits completed: {:?}", rut_bound_text(&app));
     assert_eq!(
         app.take_clipboard_write(),
@@ -1073,7 +1138,10 @@ fn rut_async_clipboard_and_net_request() {
 const STREAM_RUT: &str = r#"
 use core::RunContext;
 use async_host::launch_future;
-use tur::{ clipboard_write, el_column, el_text_bound, el_build, el_child, mount, net_stream, st_put, st_take, task_cancel, rs_get_str, rs_set_str, rs_source_str };
+use tur::{ clipboard_write, mount, net_stream, rs_get_str, rs_set_str, rs_source_str, st_put, st_take,
+    task_cancel };
+use tur_kit::{ Column, Text };
+
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
@@ -1082,9 +1150,9 @@ entry fn start() -> u64 {
     // params); the launched cancel journey takes it back by key.
     st_put(label, task);
     launch_future(finish(label));
-    let col = el_column();
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 
@@ -1111,7 +1179,18 @@ fn rut_net_stream_chunks_cross_as_records() {
     app.set_http_stream(200, vec![b"abc".to_vec(), b"de".to_vec()]);
 
     app.load_rut_module(STREAM_RUT).unwrap();
-    let done = app.wait_for(|app| rut_bound_text(app).contains("|done"));
+    // The kit prelude compiles on the worker in real time — poll on the
+    // real clock (the virtual-clock window would close under load).
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let done = loop {
+        if rut_bound_text(&app).contains("|done") {
+            break true;
+        }
+        if std::time::Instant::now() > deadline {
+            break false;
+        }
+        app.wait_for_timeout(Duration::from_millis(25));
+    };
     assert!(done, "the cancel journey ran: {:?}", rut_bound_text(&app));
 
     // The transcript pins all three crossings: the launched journey's
@@ -1139,21 +1218,24 @@ fn rut_net_stream_chunks_cross_as_records() {
 /// controller rides the opaque stash (the poll entry reads it back); the
 /// child's lifecycle flips the status rail the rows read natively.
 const VAPP_RUT: &str = r#"
-use tur::{ el_column, el_lifecycle, el_text, el_text_bound, el_build, el_child, el_virtual_app, mount, rs_set_str, rs_source_str, st_put, st_take, va_controller, va_destroy, va_error, va_source, va_status };
+use tur::{ mount, rs_set_str, rs_source_str, st_put, st_take, va_controller, va_destroy, va_error,
+    va_source, va_status };
+use tur_kit::{ Column, PointerInteract, Lifecycle, Text, VirtualApp };
+
 
 let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
-    let src = va_source("use tur::{ el_text, mount };\nentry fn start() {\nmount(el_text(\"child here\"));\n}");
+    let src = va_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text.new().text(\"child here\").build());\n}");
     let ctrl = va_controller(src);
     st_put(CTRL_KEY, ctrl);
 
-    let col = el_column();
-    el_child(col, el_lifecycle("lc_mount", "lc_destroy", el_text("wrapped")));
-    el_child(col, el_virtual_app(ctrl, 200.0, 80.0));
-    el_child(col, el_text_bound(label));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Lifecycle.new().on_mount("lc_mount").before_destroy("lc_destroy").child(Text.new().text("wrapped").build()).build());
+    col.child(VirtualApp.new().controller(ctrl).width_height(200.0, 80.0).build());
+    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
     return label;
 }
 
@@ -1198,11 +1280,20 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
 
     let label_atom = app.rut_start_answer();
     // The child spawns: the status rail flips idle → spawning → running.
-    let running = app.wait_for(|app| {
+    // The child compiles the kit prelude on the virtual-pool worker (real
+    // time), so poll on the real clock until the load settles.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let running = loop {
         app.call_rut_entry("poll", label_atom, 0.0).unwrap();
-        let s = rut_bound_text(app);
-        s == "running" || s == "error"
-    });
+        let s = rut_bound_text(&app);
+        if s == "running" || s == "error" {
+            break true;
+        }
+        if std::time::Instant::now() > deadline {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
     assert!(running, "the child reached running: {:?}", rut_bound_text(&app));
     let _ = 0; // (error detail asserted below when non-running)
 
@@ -1221,7 +1312,10 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
 /// the flush (the guarded face call). A second derived (`d2`) chains two
 /// deps. A watcher reports changes into a transcript atom.
 const DERIVED_RUT: &str = r#"
-use tur::{ el_button, el_column, el_text_bound, el_text_bound_d, el_build, el_child, mount, rs_derive, rs_derive2, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, rs_watch, rs_watch_start };
+use tur::{ mount, rs_derive, rs_derive2, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_watch,
+    rs_watch_start };
+use tur_kit::{ Column, Text };
+
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
@@ -1233,12 +1327,14 @@ entry fn start() -> u64 {
     let watch = rs_watch(count, "on_count", hits);
     rs_watch_start(watch);
 
-    let col = el_column();
-    el_child(col, el_text_bound_d(d));
-    el_child(col, el_text_bound_d(d2));
-    el_child(col, el_text_bound(hits));
-    el_child(col, el_button(count, count, "ts_inc", "+1"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound_derived(d).query_key("rut/text").build());
+    col.child(Text.new().text_bound_derived(d2).query_key("rut/text").build());
+    col.child(Text.new().text_bound(hits).build());
+    col.child(
+        PointerInteract.new().ids(count, count).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+    );
+    mount(col.build());
     return count;
 }
 
@@ -1269,27 +1365,30 @@ entry fn on_count(report: u64, watched: u64, _n: f64) {
 /// derived falls back to Nil — and the frame never wedges (the healthy
 /// derive beside it keeps materializing).
 const DERIVED_NO_MOUNT_RUT: &str = r#"
-use tur::{ el_button, el_column, el_text, el_text_bound_d, el_build, el_child, mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     let bad = rs_derive("bad", count);
     let good = rs_derive("good", count);
 
-    let col = el_column();
-    el_child(col, el_text_bound_d(bad));
-    el_child(col, el_text_bound_d(good));
-    el_child(col, el_button(count, count, "ts_inc", "+1"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text_bound_derived(bad).query_key("rut/text").build());
+    col.child(Text.new().text_bound_derived(good).query_key("rut/text").build());
+    col.child(
+        PointerInteract.new().ids(count, count).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+    );
+    mount(col.build());
     return count;
 }
 
 // The hostile derive: tries to re-mount mid-flush — the no-mount guard
 // traps it.
 entry fn bad(v: f64) -> str {
-    let col = el_column();
-    el_child(col, el_text("hijack"));
-    mount(el_build(col));
+    let mut col = Column.new();
+    col.child(Text.new().text("hijack").build());
+    mount(col.build());
     return f"bad={v as u64}";
 }
 
