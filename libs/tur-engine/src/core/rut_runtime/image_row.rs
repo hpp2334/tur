@@ -62,7 +62,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "img_res_bytes", (&[u8],) -> u64, move |_vm: &mut rut_vm::interp::Vm, bytes: &[u8]| {
         let image = crate::builtin_plugins::image::decode::decode_image_bytes(bytes)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_bytes: decode failed (supported: PNG, JPEG)"))?;
-        Ok(h.js_ctx.register_image(image).as_u64())
+        Ok(h.inst.register_image(image).as_u64())
     });
 
     // A solid w×h RGBA resource (fixture-friendly synthetic image).
@@ -81,7 +81,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         }
         let image = ImageResource::from_rgba(&rgba, w as u32, hh as u32)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_solid: bad geometry"))?;
-        Ok(h.js_ctx.register_image(image).as_u64())
+        Ok(h.inst.register_image(image).as_u64())
     });
 
     // The image element: (resource_id, width, height, fit).

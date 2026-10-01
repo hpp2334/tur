@@ -43,13 +43,13 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "clipboard_read", () -> String, move || {
         let done = rut_vm::Completer::new();
-        let Some(clipboard) = h.js_ctx.capability().of::<Clipboard>() else {
+        let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
             done.complete(String::new());
             return done;
         };
         let clipboard = clipboard.backend().clone();
         let w = done.clone();
-        h.js_ctx.spawn_local(move |_aw| async move {
+        h.inst.spawn_local(move |_aw| async move {
             w.complete(clipboard.read_text().await);
         });
         done
@@ -60,14 +60,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "clipboard_write", (&str,) -> (), move |text: &str| {
         let done = rut_vm::Completer::<()>::new();
-        let Some(clipboard) = h.js_ctx.capability().of::<Clipboard>() else {
+        let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
             done.complete(());
             return done;
         };
         let clipboard = clipboard.backend().clone();
         let text = text.to_string();
         let w = done.clone();
-        h.js_ctx.spawn_local(move |_aw| async move {
+        h.inst.spawn_local(move |_aw| async move {
             clipboard.write_text(text).await;
             w.complete(());
         });

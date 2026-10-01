@@ -49,6 +49,17 @@ use crate::core::shell::{Cursor, TextInputState};
 /// monomorphic.
 pub type TreeRunner = Box<dyn FnOnce(&NodeTreeData, &FocusManager) + Send + 'static>;
 
+/// Which dev-tool snapshot the worker should serialize (see `core::dev`).
+#[derive(Debug, Clone, Copy)]
+pub enum DevToolRequest {
+    /// The root node's JSON snapshot.
+    ElementTree,
+    /// One node's JSON snapshot by raw id.
+    GetElement(u64),
+    /// The per-instance frame-stats JSON snapshot.
+    FrameStats,
+}
+
 /// host → worker channel sender. Unbounded — the host side pushes input
 /// (platform events, wake, RPC requests) and the worker drains them in
 /// arrival order.
@@ -76,22 +87,12 @@ pub enum WorkerMsg {
     /// emits [`HostMsg::RenderCommands`] (if it painted) and
     /// [`HostMsg::FrameOutcome`].
     Wake,
-    /// Parse + load + evaluate a JS module, then invoke its `start()`
-    /// export (the module lifecycle contract: `start` returns an optional
-    /// cleanup function that runs before the next load or at destroy).
-    /// Reply carries the parse/eval outcome. `Arc<str>` because module
-    /// sources can be large (the playground ships multi-KB compiled JS) —
-    /// `Arc` lets the message be duplicated cheaply if needed (e.g.
-    /// dev-tool logging).
-    LoadModule {
-        source: Arc<str>,
-        reply: ReplySender<Result<(), ModuleError>>,
-    },
     /// Parse + compile + boot a **rut** module and invoke its `entry fn
-    /// start()` (the rut module lifecycle contract: `entry fn stop()` —
-    /// when present — runs before the next load and at destroy). Parallel
-    /// rail to [`WorkerMsg::LoadModule`] while the rut seam lands
-    /// (Phase 1 of the boa→rut migration); the JS rail stays the default.
+    /// start()` (the module lifecycle contract: `entry fn stop()` — when
+    /// present — runs before the next load and at destroy). Reply carries
+    /// the parse/boot outcome. `Arc<str>` because module sources can be
+    /// large (the playground ships multi-KB bundles) — `Arc` lets the
+    /// message be duplicated cheaply if needed.
     LoadRutModule {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
@@ -110,14 +111,17 @@ pub enum WorkerMsg {
     RutStartAnswer {
         reply: ReplySender<u64>,
     },
-    /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
-    /// on the worker, converts the result to its display string, and replies.
-    /// Production code uses `LoadModule`; this is for tests
-    /// that read JS-side state via `globalThis.__x = ...`.
-    EvalJs {
-        source: Arc<str>,
+    /// Dev-tool snapshot request (the E3 rut-row surface): the worker
+    /// serializes the requested view of its live state to a JSON string
+    /// (see `core::dev`).
+    DevTool {
+        req: DevToolRequest,
         reply: ReplySender<String>,
     },
+    /// Frame-timing toggle (the host-side `setHostFrameTiming`): the worker
+    /// mirrors its `FrameStats.host_timing_enabled` flag so
+    /// `frameStats()` reports it and the flush records per-frame timings.
+    FrameTimingEnabled { enabled: bool },
     /// Test-only: run a closure against the worker's live `NodeTreeData`
     /// AND `FocusManager` — everything needed to reconstruct the former
     /// per-field focus/dev-tool queries (`focused_cursor_rect`,
@@ -129,11 +133,6 @@ pub enum WorkerMsg {
     /// .spans()`). The closure ships its result via a reply channel it
     /// captures, so the enum stays monomorphic.
     WithTree { runner: TreeRunner },
-    /// Event bus — embedder → JS bytes on `channel_id`. Worker pushes into the
-    /// `EventBus` `embedder_to_js` queue; `EmbedderBusSubsystem` drains it on the
-    /// next flush and delivers to JS `eventBus.on` callbacks registered on
-    /// `channel_id`.
-    EventBusToJs { channel_id: u64, payload: Vec<u8> },
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
@@ -144,8 +143,8 @@ pub enum WorkerMsg {
     /// ships the worker only the natural size so layout + paint can serve
     /// the id. Fire-and-forget with no Reply: the host side is already
     /// committed, and the shared FIFO worker channel guarantees this is
-    /// processed before any later message that could hand the id to JS
-    /// (`EventBusToJs`, `LoadModule`).
+    /// processed before any later message that could hand the id to module
+    /// code.`
     RegisterImageMetadata {
         id: crate::core::image_resource::ImageResourceId,
         size: crate::core::layout::Size,
@@ -153,12 +152,6 @@ pub enum WorkerMsg {
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
-    /// Test-only probe: whether the instance's JS realm exists. The
-    /// realm-existence observable for the realm-optional engine — a
-    /// rut-only instance (no JS module ever loaded) stays `false`.
-    /// Surfaced via `TurApp::realm_allocated` (a plain bool; no boa type
-    /// crosses the embedder boundary).
-    RealmAllocated { reply: ReplySender<bool> },
     /// Host-side render-commit timings, pushed back per painted frame when
     /// frame timing is enabled (`turDevTool.setHostFrameTiming(true)`).
     /// Fire-and-forget (no wake — a busy worker delivers it within the
@@ -220,11 +213,6 @@ pub enum HostMsg {
     /// to the embedder-supplied [`Shell`](crate::core::shell::Shell)
     /// inside `apply_msg`.
     Shell(ShellCommand),
-    /// Event bus — JS → embedder bytes on `channel_id`. Worker ships one
-    /// `HostMsg` per `eventBus.send` dispatch; `HostBackend` dispatches to
-    /// handlers registered on `channel_id` on the host-side
-    /// `EventBusHandle`.
-    EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
     /// Virtual-app control (spawn / resize / platform-event / destroy a
     /// hosted child instance) — routed by `TurAppLooper` (the drain point)
     /// straight to the instance's
@@ -233,9 +221,9 @@ pub enum HostMsg {
     /// flows back through `WorkerMsg::AppEvent(AppEvent::custom(...))`, so
     /// this is the only virtual-app message variant.
     VirtualControl(crate::core::virtual_app::VirtualControl),
-    /// A JS runtime error no caller could observe (a throwing handler /
-    /// view closure / microtask / async callback, or a promise rejection
-    /// with no handler at end of turn). Routed by `TurAppLooper` to the
+    /// A module runtime error no caller could observe (a trapping entry /
+    /// view closure / derive / async task, or fuel exhaustion). Routed by
+    /// `TurAppLooper` to the
     /// instance's [`VirtualHost`](crate::core::virtual_app::VirtualHost):
     /// an element-hosted child forwards it to its parent's worker
     /// (`VirtualErrorEvent` → the controller's `onRuntimeError$`); the
@@ -267,14 +255,14 @@ pub enum ShellCommand {
     RequestTextInput(TextInputState),
 }
 
-/// Error returned from module load / eval RPCs.
+/// Error returned from module load / entry-call RPCs.
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {
-    /// JS parse failure (syntax error, etc.).
-    #[error("JS parse error: {0}")]
+    /// Parse failure (syntax / compile diagnostics).
+    #[error("module parse error: {0}")]
     Parse(String),
-    /// JS evaluation failure (thrown error, etc.).
-    #[error("JS evaluation error: {0}")]
+    /// Boot / evaluation failure (a trapping `start`, a missing entry, …).
+    #[error("module evaluation error: {0}")]
     Eval(String),
     /// Worker task dropped before replying.
     #[error("worker gone")]
@@ -322,10 +310,6 @@ impl fmt::Debug for WorkerMsg {
         match self {
             Self::PlatformEvent(_) => f.debug_tuple("PlatformEvent").finish_non_exhaustive(),
             Self::Wake => write!(f, "Wake"),
-            Self::LoadModule { source, .. } => f
-                .debug_struct("LoadModule")
-                .field("source_len", &source.len())
-                .finish_non_exhaustive(),
             Self::LoadRutModule { source, .. } => f
                 .debug_struct("LoadRutModule")
                 .field("source_len", &source.len())
@@ -337,25 +321,17 @@ impl fmt::Debug for WorkerMsg {
                 .field("b", b)
                 .finish_non_exhaustive(),
             Self::RutStartAnswer { .. } => f.write_str("RutStartAnswer"),
-            Self::EvalJs { source, .. } => f
-                .debug_struct("EvalJs")
-                .field("source_len", &source.len())
-                .finish_non_exhaustive(),
-            Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
-            Self::EventBusToJs {
-                channel_id,
-                payload,
-            } => f
-                .debug_struct("EventBusToJs")
-                .field("channel_id", channel_id)
-                .field("len", &payload.len())
+            Self::DevTool { req, .. } => f.debug_struct("DevTool").field("req", req).finish(),
+            Self::FrameTimingEnabled { enabled } => f
+                .debug_struct("FrameTimingEnabled")
+                .field("enabled", enabled)
                 .finish(),
+            Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
             Self::RegisterImageMetadata { id, .. } => {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
             }
             Self::Destroy { .. } => write!(f, "Destroy"),
-            Self::RealmAllocated { .. } => write!(f, "RealmAllocated"),
             Self::FrameTiming {
                 frame_id,
                 apply_us,
@@ -380,14 +356,6 @@ impl fmt::Debug for HostMsg {
             Self::UploadImage { id, .. } => f.debug_tuple("UploadImage").field(id).finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
             Self::Shell(cmd) => f.debug_tuple("Shell").field(cmd).finish(),
-            Self::EventBusToEmbedder {
-                channel_id,
-                payload,
-            } => f
-                .debug_struct("EventBusToEmbedder")
-                .field("channel_id", channel_id)
-                .field("len", &payload.len())
-                .finish(),
             Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
             Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
             Self::Destroyed => write!(f, "Destroyed"),
@@ -428,13 +396,13 @@ mod tests {
     use super::*;
 
     /// `Arc<str>` is the canonical source carrier — verify it round-trips
-    /// through `WorkerMsg::LoadModule` without clone friction.
+    /// through `WorkerMsg::LoadRutModule` without clone friction.
     #[test]
     fn load_module_carries_arc_str() {
         let (tx, _rx) = Reply::<Result<(), ModuleError>>::pair();
-        let source: Arc<str> = Arc::from("export const x = 1;");
-        let msg = WorkerMsg::LoadModule { source, reply: tx };
-        assert!(matches!(msg, WorkerMsg::LoadModule { .. }));
+        let source: Arc<str> = Arc::from("entry fn start() {}");
+        let msg = WorkerMsg::LoadRutModule { source, reply: tx };
+        assert!(matches!(msg, WorkerMsg::LoadRutModule { .. }));
     }
 
     /// `ModuleError` Display strings are stable (used for diagnostics).
@@ -442,11 +410,11 @@ mod tests {
     fn module_error_display() {
         assert_eq!(
             ModuleError::Parse("syn".into()).to_string(),
-            "JS parse error: syn"
+            "module parse error: syn"
         );
         assert_eq!(
             ModuleError::Eval("run".into()).to_string(),
-            "JS evaluation error: run"
+            "module evaluation error: run"
         );
         assert_eq!(ModuleError::WorkerGone.to_string(), "worker gone");
     }

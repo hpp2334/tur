@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::{Val, View, ViewCx, ViewFactory, read_val};
 
@@ -107,9 +103,7 @@ impl ConditionFragment {
 
     /// Build the currently-mounted branch under `fragment_id`.
     fn build_branch(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
-        if let Some(factory) = self.current_factory()
-            && let Some(view) = factory.create(cx.realm())
-        {
+        if let Some(view) = self.current_factory().and_then(|f| f.create()) {
             return vec![view.build(cx, NodeId::from(fragment_id))];
         }
         Vec::new()
@@ -163,13 +157,13 @@ impl FragmentKind for ConditionFragment {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
+// Rut-rail constructor (`core::rut_runtime`).
 // ---------------------------------------------------------------------------
 
 impl ConditionView {
-    /// Rut-rail constructor (`core::rut_runtime`): a bool-atom condition
-    /// with both branches pre-built (the factory clones them — no scripting
-    /// invocation during flush).
+    /// Rut-rail constructor: a bool-atom condition with both branches
+    /// pre-built (the factory clones them — no scripting invocation during
+    /// flush).
     pub(crate) fn new_rut(
         condition: Val<bool>,
         then_child: Rc<dyn ViewFactory>,
@@ -180,20 +174,6 @@ impl ConditionView {
             then_child: Some(then_child),
             else_child: Some(else_child),
             query_key: None,
-        }
-    }
-
-    /// Build a `ConditionView` from a JS props object.
-    ///
-    /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
-    /// the JS `ConditionProps` interface). Both are thunks `() => Element`.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        ConditionView {
-            condition: p.val::<bool>("condition").unwrap_or(Val::Static(false)),
-            then_child: p.factory("child"),
-            else_child: p.factory("elseChild"),
-            query_key: p.query_key("queryKey"),
         }
     }
 }

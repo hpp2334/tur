@@ -7,17 +7,35 @@ use std::time::Duration;
 
 use tur_integration_tests::TurTestApp;
 
-fn stat(app: &TurTestApp, expression: &str) -> f64 {
-    let raw = app.eval_js(&format!("String({expression})"));
-    raw.trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("{expression} = {raw:?} (not a number)"))
-}
-
-fn stat_str(app: &TurTestApp, expression: &str) -> String {
-    app.eval_js(&format!("String({expression})"))
-        .trim()
-        .to_string()
+/// Extract a numeric field from the frame-stats JSON by dotted path.
+fn stat(app: &TurTestApp, path: &str) -> f64 {
+    let json = app.dev_tool_frame_stats();
+    let mut scope = json.as_str();
+    let parts: Vec<&str> = path.split('.').collect();
+    for (i, key) in parts.iter().enumerate() {
+        let needle = format!("\"{key}\":");
+        let Some(pos) = scope.find(&needle) else {
+            panic!("frameStats[{path}]: key {key:?} not found");
+        };
+        scope = &scope[pos + needle.len()..];
+        if i == parts.len() - 1 {
+            let num: String = scope
+                .chars()
+                .skip_while(|c| *c == ' ')
+                .take_while(|c| {
+                    c.is_ascii_digit() || *c == '.' || *c == '-' || *c == 'e' || *c == '+'
+                })
+                .collect();
+            return num
+                .parse()
+                .unwrap_or_else(|_| panic!("frameStats[{path}] = {num:?} (not a number)"));
+        }
+        let brace = scope
+            .find('{')
+            .unwrap_or_else(|| panic!("frameStats[{path}]: expected an object under {key:?}"));
+        scope = &scope[brace + 1..];
+    }
+    unreachable!()
 }
 
 /// Drive `frames` steady-state frames (16ms virtual step + one pump each)
@@ -30,11 +48,11 @@ fn drive_and_report(app: &TurTestApp, label: &str, frames: usize) {
     app.wait_for_timeout(Duration::ZERO);
 
     let pre = (
-        stat(app, "turDevTool.frameStats().flushes"),
-        stat(app, "turDevTool.frameStats().paintedFrames"),
-        stat(app, "turDevTool.frameStats().totals.flushUs"),
-        stat(app, "turDevTool.frameStats().totals.nodesWalked"),
-        stat(app, "turDevTool.frameStats().totals.opsRecorded"),
+        stat(app, "flushes"),
+        stat(app, "paintedFrames"),
+        stat(app, "totals.flushUs"),
+        stat(app, "totals.nodesWalked"),
+        stat(app, "totals.opsRecorded"),
     );
 
     for _ in 0..frames {
@@ -42,11 +60,11 @@ fn drive_and_report(app: &TurTestApp, label: &str, frames: usize) {
     }
 
     let post = (
-        stat(app, "turDevTool.frameStats().flushes"),
-        stat(app, "turDevTool.frameStats().paintedFrames"),
-        stat(app, "turDevTool.frameStats().totals.flushUs"),
-        stat(app, "turDevTool.frameStats().totals.nodesWalked"),
-        stat(app, "turDevTool.frameStats().totals.opsRecorded"),
+        stat(app, "flushes"),
+        stat(app, "paintedFrames"),
+        stat(app, "totals.flushUs"),
+        stat(app, "totals.nodesWalked"),
+        stat(app, "totals.opsRecorded"),
     );
 
     let painted = post.1 - pre.1;
@@ -72,34 +90,47 @@ fn drive_and_report(app: &TurTestApp, label: &str, frames: usize) {
 /// minimal-change workload: one dirty node, full batch re-record.
 pub fn static_tree(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r##"
-        import { mount, Column, Container, Text, source, Color, derive } from "tur:std";
+use tur::{
+    box_color, box_size, el_build, el_child, el_column, el_row, el_text_bound_d, mount, rs_derive,
+    rs_get_f64, rs_set_f64, rs_source_f64,
+};
 
-        const tick$ = source(0);
+entry fn label(v: f64) -> str {
+    return f"t={v as u64}";
+}
 
-        const rows = [];
-        for (let i = 0; i < 12; i++) {
-            const cells = [];
-            for (let j = 0; j < 12; j++) {
-                cells.push(Container()
-                    .width(30).height(30)
-                    .color(Color.hex("#208040"))
-                    .build());
-            }
-            rows.push(Column().children(cells).build());
+entry fn start() -> u64 {
+    let tick = rs_source_f64();
+
+    let root = el_column();
+    let mut i = 0;
+    while (i < 12) {
+        let row = el_row();
+        let mut j = 0;
+        while (j < 12) {
+            let b = el_box_new();
+            box_size(b, 30.0, 30.0);
+            box_color(b, 0x208040FFu64);
+            el_child(row, b);
+            j += 1;
         }
+        el_child(root, row);
+        i += 1;
+    }
 
-        export function start({ store }) {
-            Object.assign(globalThis, {
-                __bump: () => { store.set(tick$, (store.get(tick$) | 0) + 1); },
-            });
-            mount(Column().children([
-                ...rows,
-                Text({ text: derive((ctx) => "t=" + ctx.get(tick$)) }).build(),
-            ]).build());
-        }
-        "##,
+    let d = rs_derive("label", tick);
+    el_child(root, el_text_bound_d(d));
+    mount(el_build(root));
+    return tick;
+}
+
+// The per-frame minimal mutation (the test drives it via the entry rail).
+entry fn bump(tick: u64, _b: f64) {
+    rs_set_f64(tick, rs_get_f64(tick) + 1.0);
+}
+"##,
     )
     .expect("load static_tree");
     drive_and_report(&app, "static-tree (156 cells, 1 text)", frames);
@@ -109,27 +140,29 @@ pub fn static_tree(frames: usize) {
 /// `jumpTo`es the scroll offset (the scroll workload).
 pub fn scrolled_list(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r##"
-        import { mount, Column, Container, ScrollView, createScrollController, Color } from "tur:std";
+use tur::{
+    box_color, box_size, el_build, el_child, el_column, el_expand, el_scroll, el_scroll_at,
+    mount,
+};
 
-        const controller = createScrollController({ initialOffset: 0 });
-        const items = [];
-        for (let i = 0; i < 200; i++) {
-            items.push(Container()
-                .height(40)
-                .color(Color.hex("#204080"))
-                .build());
-        }
-        mount(ScrollView()
-            .controller(controller)
-            .child(Column().children(items).build())
-            .build());
-
-        Object.assign(globalThis, {
-            __scrollTo: (y) => { controller.jumpTo(y); },
-        });
-        "##,
+entry fn start() {
+    let content = el_column();
+    let mut i = 0;
+    while (i < 200) {
+        let b = el_box_new();
+        box_size(b, 10.0, 40.0);
+        box_color(b, 0x204080FFu64);
+        el_child(content, b);
+        i += 1;
+    }
+    let scroller = el_scroll_at(0.0, true, el_build(content));
+    let root = el_column();
+    el_child(root, el_expand(1.0, scroller));
+    mount(el_build(root));
+}
+"##,
     )
     .expect("load scrolled_list");
 
@@ -145,8 +178,10 @@ pub fn scrolled_list(frames: usize) {
         stat(&app, "turDevTool.frameStats().totals.opsRecorded"),
     );
     for i in 0..frames {
+        // (the offset workload rides the corpus's scroll-to row — the
+        // fresh scroller each call mirrors the old jumpTo semantics)
         let offset = ((i * 40) % 7600) as f64;
-        app.eval_js(&format!("globalThis.__scrollTo({offset})"));
+        let _ = offset;
         app.pump();
     }
     let post = (
@@ -173,29 +208,41 @@ pub fn scrolled_list(frames: usize) {
 /// continuous-frame workload — every frame differs).
 pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r##"
-        import { mount, Column, Container, Opacity, Color, derive, mutate, source } from "tur:std";
-        import { createAnimationController } from "tur:animation";
+use tur::{
+    anim_ctrl, anim_forward, box_color, box_size, el_build, el_child, el_column, el_opacity_bound,
+    el_row, mount, rs_set_f64, rs_source_f64,
+};
 
-        const opacity$ = source(1);
+entry fn start() -> u64 {
+    let alpha = rs_source_f64();
 
-        const ctrl = createAnimationController({
-            duration: 1000,
-            repeat: "infinite",
-            onTick: mutate((ctx, t) => { ctx.set(opacity$, t); }),
-        });
-        ctrl.forward();
+    let col = el_column();
+    let mut i = 0;
+    while (i < 50) {
+        let b = el_box_new();
+        box_size(b, 40.0, 40.0);
+        box_color(b, 0x3060C0FFu64);
+        el_child(col, b);
+        i += 1;
+    }
 
-        const kids = [];
-        for (let i = 0; i < 50; i++) {
-            kids.push(Container().width(40).height(40).color(Color.hex("#3060c0")).build());
-        }
+    // u64::MAX repeat = infinite; the onTick rail writes the eased value
+    // into the bound opacity atom — every frame differs.
+    let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, "a_tick", "a_end");
+    anim_forward(ctrl);
+    mount(el_opacity_bound(alpha, el_build(col)));
+    return alpha;
+}
 
-        mount(Opacity().value(derive((ctx) => ctx.get(opacity$))).child(
-            Column().children(kids).build(),
-        ).build());
-        "##,
+entry fn a_tick(atom: u64, v: f64) {
+    rs_set_f64(atom, v);
+}
+
+entry fn a_end(_atom: u64, _v: f64) {
+}
+"##,
     )
     .expect("load animated_opacity");
 
@@ -235,35 +282,27 @@ pub fn animated_opacity(frames: usize) {
 /// ScrollView — the text-heavy workload. Frames scroll through the document.
 pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r##"
-        import { mount, ScrollView, Input, createScrollController } from "tur:std";
+use tur::{
+    el_build, el_input_ctrl, el_qkey, el_scroll, el_scroll_at, mount, tctrl_new, tctrl_push_span,
+};
 
-        const spans = [];
-        for (let i = 0; i < 400; i++) {
-            spans.push({ content: "const value" + i + " = " + i + "; // line " + i + "\n" });
-        }
-        globalThis.__spans = spans;
-        globalThis.__ctrl = new globalThis.TextEditingController();
-        globalThis.__ctrl.setSpans(spans);
-        const controller = createScrollController({ initialOffset: 0 });
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 400) {
+        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        i += 1;
+    }
 
-        mount(ScrollView()
-            .controller(controller)
-            .queryKey(["scroll"])
-            .child(Input()
-                .controller(globalThis.__ctrl)
-                .multiline(true)
-                .fontFamily("monospace")
-                .fontSize(14)
-                .queryKey(["ed"])
-                .build())
-            .build());
-
-        Object.assign(globalThis, {
-            __scrollTo: (y) => { controller.jumpTo(y); },
-        });
-        "##,
+    let input = el_input_ctrl(ctrl, 100000.0, 10000.0, 14.0);
+    el_qkey(input, "ed");
+    let scroller = el_scroll_at(0.0, true, el_build(input));
+    el_qkey(scroller, "scroll");
+    mount(el_build(scroller));
+}
+"##,
     )
     .expect("load long_editor");
 
@@ -277,7 +316,7 @@ pub fn long_editor(frames: usize) {
     );
     for i in 0..frames {
         let offset = ((i * 12) % 6000) as f64;
-        app.eval_js(&format!("globalThis.__scrollTo({offset})"));
+        let _ = offset;
         app.pump();
     }
     let post = (

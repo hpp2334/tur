@@ -4,11 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::JsData;
-use boa_gc::{Finalize, Trace};
-
 use crate::core::app::HostTx;
-use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
@@ -17,9 +13,12 @@ use crate::core::focus::FocusManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
 use crate::core::scheduler::{WorkerContext, WorkerPoolHandle};
 
-#[derive(Clone, Trace, Finalize, JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct TurInstanceContext {
+/// The per-instance engine state shared by every face — the
+/// reactive store, the element tree, subsystems' flush inputs, capability
+/// lookups, per-instance data/plugin-state slots. Cheap-clonable (all
+/// fields are `Rc`/`Arc` handles); lives entirely on the worker thread.
+#[derive(Clone)]
+pub struct InstanceContext {
     /// The instance-owned element tree — created at build, born-bound to the
     /// instance store (the engine-created store handed to the module's
     /// `start({ store })`). `mount(store, view)` with an explicit store
@@ -44,9 +43,6 @@ pub struct TurInstanceContext {
     /// [`Self::wake_if_idle`] so any paint-worthy state change outside a
     /// flush re-arms an idle worker without main involvement.
     ///
-    /// Sound to keep out of boa's GC trace: pure Rust state
-    /// (`Arc<dyn Fn() + Send + Sync>`), no `boa_gc::Gc`/`GcRefCell`. The
-    /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this same
     /// trade-off for the other fields.
     pub(crate) wake_worker: Arc<dyn Fn() + Send + Sync>,
     /// Worker-side image state: the natural-size map plus the next-id
@@ -62,32 +58,13 @@ pub struct TurInstanceContext {
     /// image. FIFO is preserved across the shared channel (the bridge
     /// enqueues during flush; `worker_loop` enqueues after flush), so main
     /// always uploads an image before playing back the frame that uses it.
-    ///
-    /// Sound to keep out of boa's GC trace: it's pure Rust state
-    /// (`futures::channel::mpsc::UnboundedSender`), no `boa_gc::Gc`/
-    /// `GcRefCell`. The struct-level `#[boa_gc(unsafe_empty_trace)]` already
-    /// covers this same trade-off for the other fields.
     pub(crate) host_tx: HostTx,
     /// Worker-thread scheduler — bridges call `spawn_local(fut)` to drive
     /// async work (clipboard reads, http requests, sleep futures). Set by
     /// `build_worker_backend` from the worker_ctx passed by the runtime.
     ///
-    /// Sound to keep out of boa's GC trace: it's pure Rust state
-    /// Worker-thread scheduler view (`WorkerContext`, wrapping an
-    /// `Rc<dyn WorkerContextDriver>`), no `boa_gc::Gc`/`GcRefCell`. The
-    /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this
     /// same trade-off for the other fields.
     pub(crate) worker_ctx: WorkerContext,
-    /// Cheap-cloned completion handle — bridges call `push(closure)` from
-    /// inside spawned futures to settle JsPromises under `&mut Context` on
-    /// the next flush. Pushing fires `on_push`, which self-sends
-    /// `WorkerMsg::Wake` so the worker flushes promptly.
-    pub(crate) completion_handle: CompletionHandle,
-    /// Cheap-cloned handle to the flush-driven task queue — `sleep` +
-    /// `launch` push their driver futures here (instead of
-    /// `worker_ctx.spawn_local`) so `flush` polls them in lockstep with
-    /// completions / microtasks. See `core::async_::flush_tasks`.
-    pub(crate) flush_task_handle: crate::core::async_::FlushTaskHandle,
     /// Type-erased capability registry shared with the engine builder,
     /// plugin context, event handlers, and ctx-bound bridge fns. Plugins
     /// declare their hard dependencies via [`Plugin::requires`] so the engine
@@ -95,10 +72,6 @@ pub struct TurInstanceContext {
     /// `register` runs; lookups are deferred to call/dispatch time via
     /// [`TurInstanceContext::capability`].
     ///
-    /// Sound to keep out of boa's GC trace: the registry is pure Rust state
-    /// (a `HashMap<TypeId, Box<dyn Any>>` behind an `Rc<RefCell<…>>`), no
-    /// `boa_gc::Gc`/`GcRefCell`. The struct-level
-    /// `#[boa_gc(unsafe_empty_trace)]` already covers this same trade-off for
     /// the other fields.
     ///
     /// [`Plugin::requires`]: crate::core::plugin::Plugin::requires
@@ -124,7 +97,6 @@ pub struct TurInstanceContext {
     /// Mirrors the `capabilities` field's shape and soundness trade-off:
     /// pure Rust state behind an `Rc<RefCell<…>>`, shared across every
     /// cheap clone of `TurInstanceContext` (one per bridge call, per flush, etc.).
-    /// The struct-level `#[boa_gc(unsafe_empty_trace)]` already covers it.
     pub instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>,
     /// Worker-side per-instance **plugin state** — typed `Rc` slots defined
     /// at **register time** (via
@@ -151,9 +123,7 @@ pub struct TurInstanceContext {
     /// `WorkerPoolHandle` the embedder registered, so a virtual app spawned
     /// with it lands in exactly the pool Rust code would have assigned.
     ///
-    /// Sound to keep out of boa's GC trace: pure Rust state
     /// (`Arc<[WorkerPoolHandle]>` — each an `Arc` over plain data), no
-    /// `boa_gc::Gc`/`GcRefCell`.
     pub(crate) worker_pools: Arc<[WorkerPoolHandle]>,
     /// The rut pkg-extension installers — plugins that own rut rows for
     /// the `tur` host pkg (tur-animation's C5 rows) push a closure here at
@@ -164,14 +134,10 @@ pub struct TurInstanceContext {
     /// [`FrameStats`](crate::core::app::frame_stats::FrameStats)). Always-on
     /// worker-side counters, surfaced via `turDevTool.frameStats()`.
     ///
-    /// Sound to keep out of boa's GC trace: pure Rust state (`Rc` over
-    /// `Cell`/`RefCell` counters), no `boa_gc::Gc`/`GcRefCell`. Same
-    /// trade-off as the other fields with a struct-level
-    /// `#[boa_gc(unsafe_empty_trace)]`.
     pub frame_stats: Rc<crate::core::app::FrameStats>,
 }
 
-impl TurInstanceContext {
+impl InstanceContext {
     #[allow(clippy::too_many_arguments)]
     /// `capabilities` is the shared registry owned by the
     /// [`TurRuntime`](crate::TurRuntime) — every instance spawned from one
@@ -187,8 +153,6 @@ impl TurInstanceContext {
         host_tx: HostTx,
         store: Store,
         worker_ctx: WorkerContext,
-        completion_handle: CompletionHandle,
-        flush_task_handle: crate::core::async_::FlushTaskHandle,
         wake_worker: Arc<dyn Fn() + Send + Sync>,
         capabilities: Capabilities,
         worker_pools: Arc<[WorkerPoolHandle]>,
@@ -207,8 +171,6 @@ impl TurInstanceContext {
             host_tx,
             store,
             worker_ctx,
-            completion_handle,
-            flush_task_handle,
             capabilities,
             instance_data: Rc::new(RefCell::new(HashMap::new())),
             plugin_state: Rc::new(OnceCell::new()),
@@ -293,20 +255,6 @@ impl TurInstanceContext {
     /// (which hands the task an [`AsyncWorkerContext`]).
     pub(crate) fn worker_ctx(&self) -> &WorkerContext {
         &self.worker_ctx
-    }
-
-    /// Cheap-cloned completion handle. Bridge fns extract this via
-    /// `extract_js_ctx` and call `push(closure)` from inside spawned futures
-    /// to settle JsPromises under `&mut Context` on the next flush.
-    pub fn completion_handle(&self) -> CompletionHandle {
-        self.completion_handle.clone()
-    }
-
-    /// Cheap-cloned flush-task handle. `sleep` + `launch` extract this via
-    /// `extract_js_ctx` and call `spawn(fut)` to push engine-internal driver
-    /// futures onto the flush-driven queue.
-    pub fn flush_task_handle(&self) -> crate::core::async_::FlushTaskHandle {
-        self.flush_task_handle.clone()
     }
 
     /// Cheaply-cloned view over the capability registry. Bridge fns extract

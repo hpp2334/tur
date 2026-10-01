@@ -4,21 +4,47 @@ use tur_integration_tests::TurTestApp;
 /// Shared fixture: a 400-wide Row holding a fixed 100-wide Container and a
 /// flex item wrapping a Text — the flex slot is therefore exactly 300.
 /// Returns the Text node id (root → row → flex item → text).
-fn setup_row_flex_item(flex_item_js: &str) -> (TurTestApp, ElementNodeId, ElementNodeId) {
+/// `flex_item` is a rut row call producing the flex item's view: `el_flex`
+/// (Flexible — loose) or `el_expand` (Expanded — tight). `text` is the
+/// wrapped label (a styled text builder).
+fn setup_row_flex_item(flex_item: &str, text: &str, text_extra: &str) -> (TurTestApp, ElementNodeId, ElementNodeId) {
+    setup_row_flex_item_ex(flex_item, text, text_extra)
+}
+
+fn setup_row_flex_item_ex(
+    flex_item: &str,
+    text: &str,
+    text_extra: &str,
+) -> (TurTestApp, ElementNodeId, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     let source = format!(
         r#"
-        import {{ mount, Row, Container, Text, FlexFit, Expanded, Flexible }} from "tur:std";
-        mount(Row()
-            .queryKey(["row"])
-            .children([
-                Container().width(100).height(40).build(),
-                {flex_item_js},
-            ])
-            .build());
-        "#,
+use tur::{{
+    box_size, el_box_new, el_build, el_child, el_flex, el_expand, el_qkey, el_row, el_text_new,
+    mount, text_max_lines, text_size, text_ellipsis,
+}};
+
+entry fn start() {{
+    let row = el_row();
+    el_qkey(row, "row");
+
+    let fixed = el_box_new();
+    box_size(fixed, 100.0, 40.0);
+
+    let txt = el_text_new({text});
+    text_size(txt, 14.0);
+{text_extra}    let slot = {flex_item}(1.0, el_build(txt));
+
+    el_child(row, el_build(fixed));
+    el_child(row, slot);
+    mount(el_build(row));
+}}
+"#,
+        text = text,
+        text_extra = text_extra,
+        flex_item = flex_item,
     );
-    app.eval_module_source(&source).unwrap();
+    app.load_rut_module(&source).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (row_id, text_id) = {
@@ -52,16 +78,10 @@ fn setup_row_flex_item(flex_item_js: &str) -> (TurTestApp, ElementNodeId, Elemen
 /// both Flutter and tur, and cannot ellipsize at all).
 #[test]
 fn flexible_loose_fit_ellipsizes_text_at_slot() {
-    let (app, row_id, text_id) = setup_row_flex_item(
-        r#"Flexible({ flex: 1 })
-                .child(Text({
-                    text: "A very long label that must ellipsize inside its slot",
-                })
-                    .fontSize(14)
-                    .maxLines(1)
-                    .overflow("ellipsis")
-                    .build())
-                .build()"#,
+    let (app, row_id, text_id) = setup_row_flex_item_ex(
+        "el_flex",
+            "\"A very long label that must ellipsize inside its slot\"",
+        "    text_max_lines(txt, 1);\n    text_ellipsis(txt);\n",
     );
 
     let rt = app.element_tree();
@@ -90,11 +110,7 @@ fn flexible_loose_fit_ellipsizes_text_at_slot() {
 /// tightens to the slot).
 #[test]
 fn flexible_loose_fit_shrink_wraps_when_content_fits() {
-    let (app, row_id, text_id) = setup_row_flex_item(
-        r#"Flexible({ flex: 1 })
-                .child(Text({ text: "Hi" }).fontSize(14).build())
-                .build()"#,
-    );
+    let (app, row_id, text_id) = setup_row_flex_item("el_flex", "\"Hi\"", "");
 
     let rt = app.element_tree();
     let row = rt.get_element(row_id).unwrap();
@@ -111,11 +127,7 @@ fn flexible_loose_fit_shrink_wraps_when_content_fits() {
 /// even when its natural content is smaller.
 #[test]
 fn expanded_remains_tight_fill() {
-    let (app, _row_id, text_id) = setup_row_flex_item(
-        r#"Expanded({ flex: 1 })
-                .child(Text({ text: "Hi" }).fontSize(14).build())
-                .build()"#,
-    );
+    let (app, _row_id, text_id) = setup_row_flex_item("el_expand", "\"Hi\"", "");
 
     let rt = app.element_tree();
     let text = rt.get_element(text_id).unwrap();
@@ -129,12 +141,8 @@ fn expanded_remains_tight_fill() {
 /// `Flexible(fit: FlexFit.tight)` IS `Expanded`).
 #[test]
 fn flexible_fit_tight_behaves_like_expanded() {
-    let (app, _row_id, text_id) = setup_row_flex_item(
-        r#"Flexible({ flex: 1 })
-                .fit(FlexFit.Tight)
-                .child(Text({ text: "Hi" }).fontSize(14).build())
-                .build()"#,
-    );
+    // `el_expand` is Flexible with FlexFit.Tight (Expanded semantics).
+    let (app, _row_id, text_id) = setup_row_flex_item("el_expand", "\"Hi\"", "");
 
     let rt = app.element_tree();
     let text = rt.get_element(text_id).unwrap();
@@ -166,30 +174,42 @@ fn flexible_fit_tight_behaves_like_expanded() {
 #[test]
 fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import {
-            mount, Row, Flexible, Text, SizedBox, MainAxisSize,
-        } from "tur:std";
-        mount(Row()
-            .children([
-                Row().mainAxisSize(MainAxisSize.Min).queryKey(["pill"]).children([
-                    SizedBox().width(14).build(),
-                    Flexible({ flex: 1 })
-                        .queryKey(["label"])
-                        .child(Text({ text: "Last Week Todos" })
-                            .fontSize(14)
-                            .maxLines(1)
-                            .overflow("ellipsis")
-                            .build())
-                        .build(),
-                    SizedBox().width(8).build(),
-                    Text({ text: "v" }).fontSize(14).queryKey(["caret"]).build(),
-                    SizedBox().width(14).build(),
-                ]).build(),
-            ])
-            .build());
-        "#,
+use tur::{
+    box_size, el_box_new, el_build, el_child, el_flex, el_qkey, el_row, el_sizedbox, el_text_new,
+    el_vqkey, flex_main_size, mount, text_max_lines, text_size, text_ellipsis,
+};
+
+entry fn start() {
+    let pill = el_row();
+    el_qkey(pill, "pill");
+    flex_main_size(pill, 1);
+
+    el_child(pill, el_sizedbox(14.0, 0.0, el_build(el_box_new())));
+
+    let txt = el_text_new("Last Week Todos");
+    text_size(txt, 14.0);
+    text_max_lines(txt, 1);
+    text_ellipsis(txt);
+    let label = el_flex(1.0, el_build(txt));
+    let label = el_vqkey(label, "label");
+    el_child(pill, label);
+
+    el_child(pill, el_sizedbox(8.0, 0.0, el_build(el_box_new())));
+
+    let caret = el_text_new("v");
+    text_size(caret, 14.0);
+    el_qkey(caret, "caret");
+    el_child(pill, el_build(caret));
+
+    el_child(pill, el_sizedbox(14.0, 0.0, el_build(el_box_new())));
+
+    let row = el_row();
+    el_child(row, el_build(pill));
+    mount(el_build(row));
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -265,36 +285,46 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
 #[test]
 fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import {
-            mount, Column, Row, Container, Flexible, Text, SizedBox, MainAxisSize,
-        } from "tur:std";
-        mount(Column()
-            .children([
-                Row().mainAxisSize(MainAxisSize.Min).queryKey(["long-row"]).children([
-                    Container().width(100).height(40).build(),
-                    Flexible({ flex: 1 })
-                        .child(Text({
-                            text: "A very long label that must ellipsize inside its slot",
-                        })
-                            .fontSize(14)
-                            .maxLines(1)
-                            .overflow("ellipsis")
-                            .build())
-                        .build(),
-                    SizedBox().width(20).build(),
-                ]).build(),
-                Row().mainAxisSize(MainAxisSize.Min).queryKey(["short-row"]).children([
-                    Container().width(100).height(40).build(),
-                    Flexible({ flex: 1 })
-                        .child(Text({ text: "Hi" }).fontSize(14).build())
-                        .build(),
-                    SizedBox().width(20).build(),
-                ]).build(),
-            ])
-            .build());
-        "#,
+use tur::{
+    box_size, el_box_new, el_build, el_child, el_column, el_flex, el_qkey, el_row,
+    el_sizedbox, el_text_new, flex_main_size, mount, text_max_lines, text_size, text_ellipsis,
+};
+
+entry fn long_label() -> opaque {
+    let txt = el_text_new("A very long label that must ellipsize inside its slot");
+    text_size(txt, 14.0);
+    text_max_lines(txt, 1);
+    text_ellipsis(txt);
+    return el_build(txt);
+}
+
+entry fn start() {
+    let long_row = el_row();
+    el_qkey(long_row, "long-row");
+    flex_main_size(long_row, 1);
+    let fixed = el_box_new();
+    box_size(fixed, 100.0, 40.0);
+    el_child(long_row, el_build(fixed));
+    el_child(long_row, el_flex(1.0, long_label()));
+    el_child(long_row, el_sizedbox(20.0, 0.0, el_build(el_box_new())));
+
+    let short_row = el_row();
+    el_qkey(short_row, "short-row");
+    flex_main_size(short_row, 1);
+    let fixed2 = el_box_new();
+    box_size(fixed2, 100.0, 40.0);
+    el_child(short_row, el_build(fixed2));
+    el_child(short_row, el_flex(1.0, el_build(el_text_new("Hi"))));
+    el_child(short_row, el_sizedbox(20.0, 0.0, el_build(el_box_new())));
+
+    let col = el_column();
+    el_child(col, el_build(long_row));
+    el_child(col, el_build(short_row));
+    mount(el_build(col));
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -348,25 +378,31 @@ fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
 #[test]
 fn flexible_zero_remaining_slot_paints_within_budget() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Row, Container, Flexible, Text } from "tur:std";
-        mount(Row()
-            .children([
-                Container().width(400).height(40).build(),
-                Flexible({ flex: 1 })
-                    .queryKey(["label"])
-                    .child(Text({
-                        text: "A very long label that must not paint naturally here",
-                    })
-                        .fontSize(14)
-                        .maxLines(1)
-                        .overflow("ellipsis")
-                        .build())
-                    .build(),
-            ])
-            .build());
-        "#,
+use tur::{
+    box_size, el_box_new, el_build, el_child, el_flex, el_qkey, el_row, el_text_new, el_vqkey,
+    mount, text_max_lines, text_size, text_ellipsis,
+};
+
+entry fn start() {
+    let row = el_row();
+
+    let filler = el_box_new();
+    box_size(filler, 400.0, 40.0);
+    el_child(row, el_build(filler));
+
+    let txt = el_text_new("A very long label that must not paint naturally here");
+    text_size(txt, 14.0);
+    text_max_lines(txt, 1);
+    text_ellipsis(txt);
+    let label = el_flex(1.0, el_build(txt));
+    let label = el_vqkey(label, "label");
+    el_child(row, label);
+
+    mount(el_build(row));
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);

@@ -58,9 +58,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "rs_derive", (&str, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, name: &str, dep: u64| {
         let name = name.to_string();
         let h2 = h.clone();
-        let derived = h.store.bridge().build_derive(move |read, _boa| {
+        let derived = h.store.bridge().build_derive(move |read| {
             let v = read
-                .read(Readable::from(Source::<Value>::from_id(AtomId(dep as u32))), None)
+                .read(Readable::from(Source::<Value>::from_id(AtomId(dep as u32))))
                 .as_num()
                 .unwrap_or(0.0);
             match h2.face.call::<_, String>(&h2, &name, (v,)) {
@@ -78,13 +78,13 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "rs_derive2", (&str, u64, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, name: &str, da: u64, db: u64| {
         let name = name.to_string();
         let h2 = h.clone();
-        let derived = h.store.bridge().build_derive(move |read, _boa| {
+        let derived = h.store.bridge().build_derive(move |read| {
             let va = read
-                .read(Readable::from(Source::<Value>::from_id(AtomId(da as u32))), None)
+                .read(Readable::from(Source::<Value>::from_id(AtomId(da as u32))))
                 .as_num()
                 .unwrap_or(0.0);
             let vb = read
-                .read(Readable::from(Source::<Value>::from_id(AtomId(db as u32))), None)
+                .read(Readable::from(Source::<Value>::from_id(AtomId(db as u32))))
                 .as_num()
                 .unwrap_or(0.0);
             match h2.face.call::<_, String>(&h2, &name, (va, vb)) {
@@ -125,7 +125,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let name = cb.to_string();
         let h2 = h.clone();
         let dirty = h.dirty.clone();
-        let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+        let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
             h2.pending_calls.borrow_mut().push(Intent::Click {
                 name: name.clone(),
                 a: report,
@@ -149,7 +149,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let start = w.with(|w| w.start)?;
         h.store
             .bridge()
-            .invoke_mutation(start, &[], None)
+            .invoke_mutation(start, &[])
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_watch_start: {e}")))?;
         Ok(())
     });
@@ -158,7 +158,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let stop = w.with(|w| w.stop)?;
         h.store
             .bridge()
-            .invoke_mutation(stop, &[], None)
+            .invoke_mutation(stop, &[])
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_watch_stop: {e}")))?;
         Ok(())
     });

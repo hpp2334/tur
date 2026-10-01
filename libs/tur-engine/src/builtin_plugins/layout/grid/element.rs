@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Constraints, Size};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
@@ -123,27 +119,5 @@ impl ElementTrace for GridElement {
             p.push(("cellMain", TraceValue::Num(m.cell_main)));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl GridView {
-    /// Build a `GridView` from a JS props object. Returns `None` when the
-    /// required `maxCrossAxisExtent` prop is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let max_cross_axis_extent = p.val::<f64>("maxCrossAxisExtent")?;
-        Some(GridView {
-            max_cross_axis_extent,
-            child_aspect_ratio: p.val::<f64>("childAspectRatio"),
-            main_axis_extent: p.val::<f64>("mainAxisExtent"),
-            cross_axis_spacing: p.val::<f64>("crossAxisSpacing"),
-            main_axis_spacing: p.val::<f64>("mainAxisSpacing"),
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        })
     }
 }

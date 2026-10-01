@@ -1,8 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::Context;
-
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::{ReactiveReadStore, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
@@ -19,33 +17,26 @@ use crate::core::view::ViewCx;
 // `NodeTreeData` the layout pass already holds — no competing `Rc<RefCell>`
 // borrow — so build-during-layout is borrow-safe.
 //
-// The JS realm rides the context (`realm()`, `None` on realm-free instances).
-//
 // `node_tree` / `mutation_queue` / `dirty` are cloned handles so controllers
 // captured at build time (e.g. a ScrollView item) keep working at event time.
 // ---------------------------------------------------------------------------
 
-pub struct LayoutViewCx<'a, 'b> {
+pub struct LayoutViewCx<'a> {
     tree: &'a mut NodeTreeData,
-    /// The JS realm (layout-phase item builders — LazyList/Grid remount).
-    boa: Option<&'b mut Context>,
     node_tree: NodeTree,
     mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     dirty: Rc<Cell<bool>>,
 }
 
-impl<'a, 'b> LayoutViewCx<'a, 'b> {
-    #[allow(clippy::too_many_arguments, dead_code)]
+impl<'a> LayoutViewCx<'a> {
     pub fn new(
         tree: &'a mut NodeTreeData,
-        boa: Option<&'b mut Context>,
         node_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         dirty: Rc<Cell<bool>>,
     ) -> Self {
         LayoutViewCx {
             tree,
-            boa,
             node_tree,
             mutation_queue,
             dirty,
@@ -53,7 +44,7 @@ impl<'a, 'b> LayoutViewCx<'a, 'b> {
     }
 }
 
-impl ViewCx for LayoutViewCx<'_, '_> {
+impl ViewCx for LayoutViewCx<'_> {
     fn alloc_node(&mut self) -> NodeId {
         self.tree.alloc_id()
     }
@@ -61,10 +52,6 @@ impl ViewCx for LayoutViewCx<'_, '_> {
     fn insert_node(&mut self, id: ElementNodeId, element: AnyElement) {
         let node = ElementObject::new(id, element);
         self.tree.insert_element(node);
-    }
-
-    fn realm(&mut self) -> Option<&mut Context> {
-        self.boa.as_deref_mut()
     }
 
     fn insert_fragment(&mut self, host: FragmentHost) {

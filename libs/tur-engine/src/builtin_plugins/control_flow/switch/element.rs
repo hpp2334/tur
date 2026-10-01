@@ -1,21 +1,16 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
-
 use crate::core::edgy::value::{FromValue, Value};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{JsViewFactory, Val, View, ViewCx, ViewFactory, read_val};
+use crate::core::view::{Val, View, ViewCx, ViewFactory, read_val};
 
 // ---------------------------------------------------------------------------
 // SwitchKey — a raw comparison key. Stores the original value verbatim as a
-// native `Value` (opaque keys keep their JS handle identity) so any value can
+// native `Value` (opaque keys keep their handle identity) so any value can
 // be a case key. Equality is `Value`'s `PartialEq` (primitives by value,
-// opaque handles by identity — `same_value_zero` semantics), which matches
-// JS `switch` and needs no boa `Context`.
+// opaque handles by identity — `same_value_zero` semantics).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,7 +21,7 @@ pub struct SwitchKey(pub Value);
 /// `Value`'s `PartialEq` (`same_value_zero` semantics — primitives by
 /// value, opaque handles by identity), which matches JS `switch`.
 impl FromValue for SwitchKey {
-    fn from_value(v: &Value) -> Result<Self, boa_engine::JsError> {
+    fn from_value(v: &Value) -> Result<Self, String> {
         Ok(SwitchKey(v.clone()))
     }
 }
@@ -148,9 +143,7 @@ pub struct SwitchFragment {
 
 impl SwitchFragment {
     fn build_branch(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
-        if let Some(factory) = self.mounted.factory(&self.view)
-            && let Some(view) = factory.create(cx.realm())
-        {
+        if let Some(view) = self.mounted.factory(&self.view).and_then(|f| f.create()) {
             return vec![view.build(cx, NodeId::from(fragment_id))];
         }
         Vec::new()
@@ -199,70 +192,46 @@ impl FragmentKind for SwitchFragment {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — parse props into a spec.
+// Rut-rail constructor (`core::rut_runtime`).
 // ---------------------------------------------------------------------------
 
-/// Parse `cases` — a JS array of `{ key, child }` entries.
-fn prop_cases(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Vec<(SwitchKey, Rc<dyn ViewFactory>)> {
-    use boa_engine::js_string;
-    use boa_engine::object::builtins::{JsArray, JsFunction};
+/// A view factory over an already-built view (the rut rail's crossing —
+/// branches are pre-built opaques, no scripting invocation during flush).
+pub struct Prebuilt(pub Rc<dyn View>);
 
-    let v = match props.get(js_string!(key), ctx) {
-        Ok(v) if !v.is_undefined() && !v.is_null() => v,
-        _ => return Vec::new(),
-    };
-    let Some(obj) = v.as_object() else {
-        return Vec::new();
-    };
-    let Ok(arr) = JsArray::from_object(obj.clone()) else {
-        return Vec::new();
-    };
-    let Ok(len) = arr.length(ctx) else {
-        return Vec::new();
-    };
-
-    let mut out: Vec<(SwitchKey, Rc<dyn ViewFactory>)> = Vec::with_capacity(len as usize);
-    for i in 0..len as i64 {
-        let Ok(entry) = arr.at(i, ctx) else {
-            continue;
-        };
-        let Some(entry_obj) = entry.as_object() else {
-            continue;
-        };
-        let key_val = entry_obj
-            .get(js_string!("key"), ctx)
-            .unwrap_or(JsValue::undefined());
-        let child_val = entry_obj
-            .get(js_string!("child"), ctx)
-            .unwrap_or(JsValue::undefined());
-        let Some(f) = child_val.as_object().and_then(JsFunction::from_object) else {
-            continue;
-        };
-        out.push((SwitchKey(Value::from_js(&key_val, ctx)), Rc::new(JsViewFactory(f))));
+impl SwitchView {
+    /// Rut builder rows (`core::rut_runtime`): append a pre-built case
+    /// branch / install the fallback.
+    pub fn push_case(&mut self, key: SwitchKey, branch: Rc<dyn ViewFactory>) {
+        self.cases.push((key, branch));
     }
-    out
+    pub fn set_fallback(&mut self, branch: Rc<dyn ViewFactory>) {
+        self.fallback = Some(branch);
+    }
+    pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
+        self.query_key = Some(key);
+    }
+}
+
+impl ViewFactory for Prebuilt {
+    fn create(&self) -> Option<Rc<dyn View>> {
+        Some(self.0.clone())
+    }
 }
 
 impl SwitchView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let (value, fallback, query_key) = {
-            let mut p = JsProps::new(props, ctx);
-            (
-                p.val::<SwitchKey>("value")
-                    .unwrap_or_else(|| Val::Static(SwitchKey(Value::Nil))),
-                p.factory("fallback"),
-                p.query_key("queryKey"),
-            )
-        };
+    /// Rut-rail constructor: a switch-key atom with pre-built cases (the
+    /// factory clones them — no scripting invocation during flush).
+    pub fn new_rut(
+        value: Val<SwitchKey>,
+        cases: Vec<(SwitchKey, Rc<dyn ViewFactory>)>,
+        fallback: Option<Rc<dyn ViewFactory>>,
+    ) -> Self {
         SwitchView {
             value,
-            cases: prop_cases(props, "cases", ctx),
+            cases,
             fallback,
-            query_key,
+            query_key: None,
         }
     }
 }

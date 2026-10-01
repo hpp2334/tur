@@ -13,7 +13,6 @@
 //! Scroll math (`ScrollPosition`) + event payload (`ScrollEvent`) come from the
 //! sibling `scroll` plugin.
 
-pub mod bridge;
 pub mod controller;
 mod element;
 mod layout;

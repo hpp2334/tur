@@ -12,7 +12,6 @@ members = [
     "libs/tur-filepicker-capability",
     "libs/tur-filepicker-wasm",
     "libs/tur-filepicker-native",
-    "demo/tur-playground-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
     "libs/tur-android",
@@ -41,7 +40,6 @@ tur-net-native = { path = "libs/tur-net-native" }
 tur-filepicker-capability = { path = "libs/tur-filepicker-capability" }
 tur-filepicker-wasm = { path = "libs/tur-filepicker-wasm" }
 tur-filepicker-native = { path = "libs/tur-filepicker-native" }
-tur-playground-plugin = { path = "demo/tur-playground-plugin", default-features = false }
 tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
@@ -70,8 +68,6 @@ async-channel = "2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"
-boa_engine = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
-boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 resvg = "0.47"
 usvg = "0.47"

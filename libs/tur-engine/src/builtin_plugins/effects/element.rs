@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Alignment, ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -94,21 +90,6 @@ impl ElementTrace for OpacityElement {
             format!("opacity={v}")
         } else {
             String::new()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
-impl OpacityView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        OpacityView {
-            value: p.val::<f32>("value"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
         }
     }
 }
@@ -236,22 +217,5 @@ impl ElementTrace for TransformElement {
             parts.push(format!("rotate={v}"));
         }
         parts.join(" ")
-    }
-}
-
-impl TransformView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        TransformView {
-            scale: p.val::<f64>("scale"),
-            scale_x: p.val::<f64>("scaleX"),
-            scale_y: p.val::<f64>("scaleY"),
-            rotate: p.val::<f64>("rotate"),
-            translate_x: p.val::<f64>("translateX"),
-            translate_y: p.val::<f64>("translateY"),
-            alignment: p.val::<Alignment>("alignment"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
-        }
     }
 }

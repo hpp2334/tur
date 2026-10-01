@@ -18,7 +18,7 @@ use tur_engine::error::TurError;
 pub struct TurRutPlaygroundPlugin;
 
 impl Plugin for TurRutPlaygroundPlugin {
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         let ext: RutPkgExt = Rc::new(|cx: &mut RutPkgCx<'_>| install(cx));
         ctx.js_ctx().rut_pkg_exts.borrow_mut().push(ext);
         Ok(())

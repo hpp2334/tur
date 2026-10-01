@@ -1,25 +1,20 @@
 use std::rc::Rc;
 
-use crate::core::layout::{HitTestBehavior, Offset};
-use crate::core::shell::Cursor;
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
-
-use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
+use crate::core::edgy::mutation::{MutationHandle, MutationPayload};
+use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
-use crate::core::layout::SubscribeCx;
+use crate::core::layout::{HitTestBehavior, Offset, SubscribeCx};
+use crate::core::shell::Cursor;
 use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 // ---------------------------------------------------------------------------
-// MouseRegionView — the user's declaration. Pure Rust, no JsValues.
+// MouseRegionView — the user's declaration. Pure Rust.
 //
 // `cursor` is reactive (`Val<Cursor>`); it is resolved to a concrete `Cursor`
-// during layout (where the JS engine is available) and read by the pointer-
-// region handler at event time. `on_enter` / `on_exit` are mutation atoms
-// invoked by the pointer-region handler when this region enters or leaves
-// the hit-path.
+// during layout and read by the pointer-region handler at event time.
+// `on_enter` / `on_exit` are mutation atoms invoked by the pointer-region
+// handler when this region enters or leaves the hit-path.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -60,7 +55,7 @@ impl View for MouseRegionView {
 // ---------------------------------------------------------------------------
 // MouseRegionElement — the built element. Stores spec + eagerly-resolved
 // behavior (resolved at build) and the layout-resolved `cursor`. Both are
-// read by the pointer-region handler at event time, where no store/Context is
+// read by the pointer-region handler at event time, where no store is
 // available.
 // ---------------------------------------------------------------------------
 
@@ -110,25 +105,8 @@ impl ElementTrace for MouseRegionElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl MouseRegionView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        MouseRegionView {
-            behavior: p.val::<HitTestBehavior>("behavior"),
-            cursor: p.val::<Cursor>("cursor"),
-            on_enter: p.mutation::<PointerRegionEvent>("onEnter"),
-            on_exit: p.mutation::<PointerRegionEvent>("onExit"),
-            child: p.child("child"),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// PointerRegionEvent — JS callback argument for `onEnter` / `onExit`.
-// Serialises to a single JS object `{ local: {x, y}, global: {x, y} }`.
+// PointerRegionEvent — callback argument for `onEnter` / `onExit`.
+// Carries both local (element-relative) and global (canvas-relative) coords.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -137,27 +115,15 @@ pub struct PointerRegionEvent {
     pub global: Offset,
 }
 
-impl IntoJsArgs for PointerRegionEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        use boa_engine::js_string;
-        use boa_engine::object::JsObject;
-
-        fn make_point(ctx: &mut Context, x: f64, y: f64) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("x"), JsValue::from(x), ctx);
-            let _ = obj.create_data_property(js_string!("y"), JsValue::from(y), ctx);
-            obj
-        }
-        fn make_event(ctx: &mut Context, local: JsObject, global: JsObject) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("local"), JsValue::from(local), ctx);
-            let _ = obj.create_data_property(js_string!("global"), JsValue::from(global), ctx);
-            obj
-        }
-
-        let local = make_point(ctx, self.local.x, self.local.y);
-        let global = make_point(ctx, self.global.x, self.global.y);
-        let event = make_event(ctx, local, global);
-        vec![JsValue::from(event)]
+impl MutationPayload for PointerRegionEvent {
+    /// Native crossing (the rut rail): `[local.x, local.y, global.x,
+    /// global.y]` — realm-free.
+    fn to_value_args(&self) -> Vec<Value> {
+        vec![
+            Value::Num(self.local.x),
+            Value::Num(self.local.y),
+            Value::Num(self.global.x),
+            Value::Num(self.global.y),
+        ]
     }
 }

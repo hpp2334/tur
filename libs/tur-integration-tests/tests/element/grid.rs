@@ -3,25 +3,91 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Helper: load a Grid inline with the given props + child count, render, and
-/// return the Grid element's id.
-fn setup_grid(width: f64, height: f64, source: &str) -> (TurTestApp, ElementNodeId) {
+/// return the Grid element's id. The fixture authors `count` gray tiles
+/// through the `el_grid` builder rows.
+fn setup_grid(width: f64, height: f64, grid_opts: &GridOpts, count: usize) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
-    app.eval_module_source(source).unwrap();
+    app.load_rut_module(&format!(
+        r#"
+use tur::{{
+    box_color, box_size, el_build, el_child, el_grid, el_qkey, grid_aspect, grid_main_extent,
+    grid_max_cross, grid_spacing, mount,
+}};
+
+entry fn tile() -> opaque {{
+    let b = el_box_new();
+    box_size(b, 10.0, 10.0);
+    box_color(b, 0xC8C8C8FFu64);
+    return el_build(b);
+}}
+
+entry fn start() {{
+    let g = el_grid();
+    el_qkey(g, "g");
+    grid_max_cross(g, {max_cross});
+{aspect}{extent}{spacing}    let mut i = 0;
+    while (i < {count}) {{
+        el_child(g, tile());
+        i += 1;
+    }}
+    mount(el_build(g));
+}}
+"#,
+        max_cross = grid_opts.max_cross,
+        aspect = grid_opts
+            .aspect
+            .map(|a| format!("    grid_aspect(g, {a});
+"))
+            .unwrap_or_default(),
+        extent = grid_opts
+            .main_extent
+            .map(|e| format!("    grid_main_extent(g, {e});
+"))
+            .unwrap_or_default(),
+        spacing = grid_opts
+            .spacing
+            .map(|(c, m)| format!("    grid_spacing(g, {c}, {m});
+"))
+            .unwrap_or_default(),
+        count = count,
+    ))
+    .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["g"]).expect("queryKey 'g' not found");
     (app, ElementNodeId::new(id.as_u64()))
 }
 
-fn color_tile_source(count: usize, grid_opts: &str) -> String {
-    format!(
-        r#"import {{ mount, Grid, Container, createColor }} from "tur:std";
-        mount(Grid({{ queryKey: ["g"], {grid_opts} }})
-            .children(Array.from({{ length: {count} }}, () =>
-                Container({{ color: createColor(200, 200, 200, 255) }}).build(),
-            ))
-            .build());
-        "#,
-    )
+/// The `grid_opts` crossing: max_cross is required; aspect / (cross, main)
+/// spacing are optional.
+#[derive(Clone, Copy)]
+struct GridOpts {
+    max_cross: f64,
+    aspect: Option<f64>,
+    main_extent: Option<f64>,
+    spacing: Option<(f64, f64)>,
+}
+
+impl GridOpts {
+    fn new(max_cross: f64) -> Self {
+        GridOpts {
+            max_cross,
+            aspect: None,
+            main_extent: None,
+            spacing: None,
+        }
+    }
+    fn aspect(mut self, a: f64) -> Self {
+        self.aspect = Some(a);
+        self
+    }
+    fn main_extent(mut self, e: f64) -> Self {
+        self.main_extent = Some(e);
+        self
+    }
+    fn spacing(mut self, cross: f64, main: f64) -> Self {
+        self.spacing = Some((cross, main));
+        self
+    }
 }
 
 #[test]
@@ -29,7 +95,7 @@ fn grid_mounts_as_tur_grid() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(4, "maxCrossAxisExtent: 100,"),
+        &GridOpts::new(100.0), 4,
     );
     let _ = id;
     let tree = app.element_tree();
@@ -47,7 +113,7 @@ fn grid_column_count_derived_from_max_extent() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(8, "maxCrossAxisExtent: 100,"),
+        &GridOpts::new(100.0), 8,
     );
 
     let tree = app.element_tree();
@@ -85,7 +151,7 @@ fn grid_child_aspect_ratio_scales_main_axis() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(4, "maxCrossAxisExtent: 100, childAspectRatio: 2,"),
+        &GridOpts::new(100.0).aspect(2.0), 4,
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -105,10 +171,7 @@ fn grid_main_axis_extent_overrides_aspect() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(
-            4,
-            "maxCrossAxisExtent: 100, childAspectRatio: 2, mainAxisExtent: 80,",
-        ),
+        &GridOpts::new(100.0).aspect(2.0).main_extent(80.0), 4,
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -128,10 +191,7 @@ fn grid_spacing_advances_positions() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(
-            8,
-            "maxCrossAxisExtent: 100, crossAxisSpacing: 10, mainAxisSpacing: 10,",
-        ),
+        &GridOpts::new(100.0).spacing(10.0, 10.0), 8,
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -161,7 +221,7 @@ fn grid_fewer_children_than_columns() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(2, "maxCrossAxisExtent: 100,"),
+        &GridOpts::new(100.0), 2,
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -179,7 +239,7 @@ fn grid_element_records_metrics() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &color_tile_source(8, "maxCrossAxisExtent: 100,"),
+        &GridOpts::new(100.0), 8,
     );
     app.with_element(id, |e| {
         let g = e.cast::<GridElement>().unwrap();

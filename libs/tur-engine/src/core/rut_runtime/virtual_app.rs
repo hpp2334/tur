@@ -18,7 +18,7 @@ use crate::builtin_plugins::virtual_app::element::VirtualAppView;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::value::Value;
 use crate::core::view::Val;
-use rut_core::types::{TY_F64, TY_NIL, TY_OPAQUE, TY_STR};
+use rut_core::types::{TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_vm::Opaque;
 
 use super::{Intent, RutHandles, RutView};
@@ -48,6 +48,14 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("va_destroy", vec![TY_OPAQUE], TY_NIL),
         ("va_status", vec![TY_OPAQUE], TY_STR),
         ("va_error", vec![TY_OPAQUE], TY_STR),
+        ("va_bind_atom", vec![TY_OPAQUE], TY_U64),
+        ("va_app_set", vec![TY_U64, TY_OPAQUE], TY_NIL),
+        ("va_app_clear", vec![TY_U64], TY_NIL),
+        (
+            "el_virtual_app_bound",
+            vec![TY_U64, TY_F64, TY_F64],
+            TY_OPAQUE,
+        ),
     ]
     .into_iter()
     .map(|(n, p, r)| (n.to_string(), p, r))
@@ -57,7 +65,7 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
 /// The shared `VirtualState` (the register-phase plugin state).
 fn state(handles: &RutHandles) -> Result<Rc<VirtualState>, rut_vm::Trap> {
     handles
-        .js_ctx
+        .inst
         .plugin_state::<VirtualState>()
         .ok_or_else(|| {
             rut_vm::Trap::new(
@@ -77,7 +85,7 @@ fn lifecycle_mutation(handles: &Rc<RutHandles>, id: u64, cb: &str) -> Option<Mut
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
             name: name.clone(),
             a: id,
@@ -126,7 +134,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .resolve_source(source_id)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "va_controller: unknown source"))?;
         let pool = h
-            .js_ctx
+            .inst
             .find_worker_pool(crate::core::virtual_app::DEFAULT_POOL)
             .ok_or_else(|| {
                 rut_vm::Trap::new(
@@ -150,6 +158,75 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             background: None,
             width: if w > 0.0 { Some(Val::Static(w)) } else { None },
             height: if hh > 0.0 { Some(Val::Static(hh)) } else { None },
+            query_key: Some(vec!["rut".to_string(), "vapp".to_string()]),
+            fallback: None,
+            error_view: None,
+        });
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+
+    // va_bind_atom(ctrl) -> atom — mint a source atom seeded with the
+    // controller ref (the reactive `app$` crossing: Nil clears the binding,
+    // a fresh controller re-binds).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_bind_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+        let base = ctrl.with(|c| c.0)?;
+        let value = crate::core::edgy::Value::opaque(std::rc::Rc::new(
+            crate::builtin_plugins::virtual_app::state::VirtualControllerRef(base),
+        ) as std::rc::Rc<dyn std::any::Any>);
+        let atom = h
+            .store
+            .bridge()
+            .decl_source::<crate::core::edgy::Value>(value)
+            .id()
+            .0 as u64;
+        Ok(atom)
+    });
+    // va_app_set(atom, ctrl) / va_app_clear(atom) — bind / unbind.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_app_set", (u64, Opaque<RutController>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, ctrl: Opaque<RutController>| {
+        let base = ctrl.with(|c| c.0)?;
+        let value = crate::core::edgy::Value::opaque(std::rc::Rc::new(
+            crate::builtin_plugins::virtual_app::state::VirtualControllerRef(base),
+        ) as std::rc::Rc<dyn std::any::Any>);
+        h.store
+            .bridge()
+            .set_source(
+                crate::core::edgy::reactive::Source::<crate::core::edgy::Value>::from_id(
+                    crate::core::edgy::reactive::AtomId(atom as u32),
+                ),
+                value,
+            )
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("va_app_set: {e}")))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_app_clear", (u64,) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64| {
+        h.store
+            .bridge()
+            .set_source(
+                crate::core::edgy::reactive::Source::<crate::core::edgy::Value>::from_id(
+                    crate::core::edgy::reactive::AtomId(atom as u32),
+                ),
+                crate::core::edgy::Value::Nil,
+            )
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("va_app_clear: {e}")))
+    });
+    // el_virtual_app_bound(atom, w, h) — the host element with a reactive
+    // controller binding (unbind destroys unless keepAlive).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_virtual_app_bound", (u64, f64, f64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64, w: f64, hh: f64| {
+        let view = Rc::new(VirtualAppView {
+            state: state(&h)?,
+            app: Some(crate::core::view::Val::Reactive(
+                crate::core::edgy::reactive::Readable::Source(
+                    crate::core::edgy::reactive::Source::<
+                        crate::builtin_plugins::virtual_app::state::VirtualControllerRef,
+                    >::from_id(crate::core::edgy::reactive::AtomId(atom as u32)),
+                ),
+            )),
+            background: None,
+            width: if w > 0.0 { Some(crate::core::view::Val::Static(w)) } else { None },
+            height: if hh > 0.0 { Some(crate::core::view::Val::Static(hh)) } else { None },
             query_key: Some(vec!["rut".to_string(), "vapp".to_string()]),
             fallback: None,
             error_view: None,

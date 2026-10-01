@@ -3,7 +3,6 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::StdClock;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use minifb::{Window, WindowOptions};
@@ -202,7 +201,7 @@ impl TurVelloApp {
             .worker_spawner(driver.worker_spawner())
             .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
-            .clock(std::sync::Arc::new(StdClock::new()))
+            .clock(std::sync::Arc::new(tur_engine::core::clock::StdClock))
             .worker_pool(pool.clone())
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
@@ -260,10 +259,11 @@ impl TurVelloApp {
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
         let path = workspace_root
-            .join("js/packages/tur-test-cases/dist")
-            .join(format!("{name}.js"));
+            .join("js/packages/tur-test-cases/cases")
+            .join(name)
+            .join("index.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        futures::executor::block_on(self.inner.borrow().app.load_module(source.as_str()))
+        futures::executor::block_on(self.inner.borrow().app.load_rut_module(source.as_str()))
             .map_err(TurError::from)?;
         // Drive the module's initial render to quiescence.
         self.wait_for_timeout(Duration::ZERO);

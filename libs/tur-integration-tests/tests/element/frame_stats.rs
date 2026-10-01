@@ -3,8 +3,8 @@
 //!
 //! - painted frames record worker-side timings + counters (`last`),
 //! - host-side render-commit timings are **opt-in**
-//!   (`turDevTool.setHostFrameTiming(true)`) and land in a separate
-//!   `lastHost` slot (never merged into `last` — frames pipeline),
+//!   (`setHostFrameTiming(true)`) and land in a separate `lastHost` slot
+//!   (never merged into `last` — frames pipeline),
 //! - the toggle is mirrored on both sides (`hostTimingEnabled`),
 //! - flushes count every flush; painted frames count the subset that
 //!   produced a batch.
@@ -17,40 +17,71 @@
 
 use tur_integration_tests::TurTestApp;
 
-/// Read a numeric field off `turDevTool.frameStats()` via the test-only
-/// `eval_js` seam (the dev-tool object is the engine's public face).
-fn stat(app: &TurTestApp, field: &str) -> f64 {
-    let raw = app.eval_js(&format!("String(turDevTool.frameStats().{field})"));
-    raw.trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("frameStats().{field} = {raw:?} (not a number)"))
+/// Extract a numeric field from the frame-stats JSON by dotted path
+/// (`"paintedFrames"`, `"last.frame"`, `"lastHost.applyUs"`).
+fn stat(app: &TurTestApp, path: &str) -> f64 {
+    let json = app.dev_tool_frame_stats();
+    let mut scope = json.as_str();
+    let parts: Vec<&str> = path.split('.').collect();
+    for (i, key) in parts.iter().enumerate() {
+        let needle = format!("\"{key}\":");
+        let Some(pos) = scope.find(&needle) else {
+            panic!("frameStats[{path}]: key {key:?} not found in {scope:.120}");
+        };
+        scope = &scope[pos + needle.len()..];
+        let last = i == parts.len() - 1;
+        if last {
+            // The value starts here: a number (or `null`).
+            let num: String = scope
+                .chars()
+                .skip_while(|c| *c == ' ')
+                .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-' || *c == 'e' || *c == '+')
+                .collect();
+            return num
+                .parse()
+                .unwrap_or_else(|_| panic!("frameStats[{path}] = {num:?} (not a number)"));
+        }
+        // Descend into the object: find its opening brace.
+        let brace = scope.find('{').unwrap_or_else(|| {
+            panic!("frameStats[{path}]: expected an object under {key:?}");
+        });
+        scope = &scope[brace + 1..];
+    }
+    unreachable!()
 }
 
-/// Read a boolean-ish field as its JS display string (`"true"`/`"false"`/
-/// `"null"` come back from `String(...)`).
-fn stat_str(app: &TurTestApp, expression: &str) -> String {
-    app.eval_js(&format!("String({expression})"))
-        .trim()
-        .to_string()
+/// Whether a sub-object slot is `null` (absent) or populated.
+fn stat_present(app: &TurTestApp, key: &str) -> bool {
+    let json = app.dev_tool_frame_stats();
+    let needle = format!("\"{key}\":");
+    let Some(pos) = json.find(&needle) else {
+        return false;
+    };
+    !json[pos + needle.len()..].starts_with("null")
 }
 
-/// Mount a small static tree (a Container with a text-bearing child so the
+/// Mount a small static tree (a box with a text-bearing child so the
 /// record walk has real nodes + ops).
 fn mount(app: &TurTestApp) {
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Column, Container, Text } from "tur:std";
-        mount(Column().children([
-            Container().height(50).queryKey(["a"]).build(),
-            Text({ text: "hello" }).build(),
-        ]).build());
-        "#,
+use tur::{ box_size, el_box_new, el_build, el_child, el_column, el_text_new, mount };
+
+entry fn start() {
+    let col = el_column();
+    let b = el_box_new();
+    box_size(b, 100.0, 50.0);
+    el_child(col, b);
+    el_child(col, el_text_new("hello"));
+    mount(el_build(col));
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
-/// A painted frame records worker-side timings + counters; `last.frame_id`
+/// A painted frame records worker-side timings + counters; `last.frame`
 /// is a real flush epoch and the batch-size estimate is populated.
 #[test]
 fn painted_frame_records_worker_counters() {
@@ -65,9 +96,9 @@ fn painted_frame_records_worker_counters() {
         "flushes ({flushes}) must count painted frames too"
     );
 
-    // last.frame_id is a valid flush epoch (monotonic ≥ 1).
+    // last.frame is a valid flush epoch (monotonic ≥ 1).
     let last_frame = stat(&app, "last.frame");
-    assert!(last_frame >= 1.0, "last.frame_id = {last_frame}");
+    assert!(last_frame >= 1.0, "last.frame = {last_frame}");
 
     // The record walk entered at least the root + children.
     let nodes = stat(&app, "last.nodesWalked");
@@ -91,30 +122,35 @@ fn host_frame_timing_is_opt_in() {
     mount(&app);
 
     // Off by default — zero host timings collected.
-    assert_eq!(
-        stat_str(&app, "turDevTool.frameStats().lastHost"),
-        "null",
-        "lastHost must be null while disabled"
+    assert!(
+        !stat_present(&app, "lastHost"),
+        "lastHost must be absent while disabled"
     );
 
     // Enable + force a fresh painted frame (loading a second module mounts
     // a new root → paint).
-    app.eval_js("turDevTool.setHostFrameTiming(true)");
-    app.eval_module_source(
+    app.set_host_frame_timing(true);
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container().height(10).color(createColor(255, 0, 0, 255)).build());
-        "#,
+use tur::{ box_color, box_size, el_box_new, el_build, mount };
+
+entry fn start() {
+    let b = el_box_new();
+    box_size(b, 100.0, 10.0);
+    box_color(b, 0xFF0000FFu64);
+    mount(el_build(b));
+}
+"#,
     )
     .expect("remount");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    assert_eq!(
-        stat_str(&app, "turDevTool.frameStats().hostTimingEnabled"),
-        "true"
+    let json = app.dev_tool_frame_stats();
+    assert!(
+        json.contains("\"hostTimingEnabled\":true"),
+        "the toggle is mirrored into the snapshot: {json}"
     );
-    let host_present = stat_str(&app, "turDevTool.frameStats().lastHost !== null");
-    assert_eq!(host_present, "true", "expected a host frame timing");
+    assert!(stat_present(&app, "lastHost"), "expected a host frame timing");
     let host_frame = stat(&app, "lastHost.frame");
     assert!(host_frame >= 1.0, "lastHost.frame = {host_frame}");
     // Timings are non-negative (0µs possible for a sub-µs noop render).

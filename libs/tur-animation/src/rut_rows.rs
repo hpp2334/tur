@@ -20,7 +20,6 @@ use tur_engine::core::rut_runtime::{Intent, RutHandles, RutView, readable_of};
 
 use crate::controller::{AnimationController, RepeatMode};
 use crate::curve::Curve;
-use crate::manager::ControllerFace;
 use crate::tween::{NumTween, Tween};
 use crate::{event::AnimationEndEvent, event::AnimationTickEvent};
 
@@ -60,6 +59,7 @@ pub fn install(
         row("anim_value", vec![TY_OPAQUE], TY_F64),
         row("anim_status", vec![TY_OPAQUE], TY_STR),
         row("anim_repeat", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("anim_speed", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("tween_lerp", vec![TY_F64, TY_F64, TY_F64], TY_F64),
         row("color_tween_lerp", vec![TY_U64, TY_U64, TY_F64], TY_U64),
         row("curve_eval", vec![TY_STR, TY_F64], TY_F64),
@@ -78,7 +78,7 @@ pub fn install(
     let register_into = move |ctrl: &Rc<std::cell::RefCell<AnimationController>>| {
         manager_for_rows
             .borrow_mut()
-            .register_controller(ControllerFace::Rust(ctrl.clone()));
+            .register_controller(ctrl.clone());
     };
 
     // ---- effect rows -----------------------------------------------------
@@ -127,7 +127,7 @@ pub fn install(
             let name = name.to_string();
             let h2 = h.clone();
             let dirty = h.dirty.clone();
-            let mutation = h.store.bridge().build_mutate(move |_bridge, args, _boa| {
+            let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
                 let t = match args.first() {
                     Some(tur_engine::core::edgy::Value::Num(n)) => *n,
                     _ => 0.0,
@@ -155,7 +155,7 @@ pub fn install(
             let name = name.to_string();
             let h2 = h.clone();
             let dirty = h.dirty.clone();
-            let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+            let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
                 h2.pending_calls.borrow_mut().push(Intent::Value {
                     name: name.clone(),
                     a: id,
@@ -182,7 +182,7 @@ pub fn install(
     let h = handles.clone();
     let reg = register_into.clone();
     rut_vm::pkg_fn!(pkg, "anim_forward", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
-        let now = h.clock.now().millis_since_epoch();
+        let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().forward_at(now);
         reg(&rc);
@@ -191,7 +191,7 @@ pub fn install(
     let h = handles.clone();
     let reg = register_into.clone();
     rut_vm::pkg_fn!(pkg, "anim_reverse", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
-        let now = h.clock.now().millis_since_epoch();
+        let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().reverse_at(now);
         reg(&rc);
@@ -199,7 +199,7 @@ pub fn install(
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "anim_pause", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
-        let now = h.clock.now().millis_since_epoch();
+        let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().pause_at(now);
         Ok(())
@@ -207,7 +207,7 @@ pub fn install(
     let h = handles.clone();
     let reg = register_into.clone();
     rut_vm::pkg_fn!(pkg, "anim_resume", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
-        let now = h.clock.now().millis_since_epoch();
+        let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         let active = {
             let mut ctrl = rc.borrow_mut();
@@ -226,7 +226,7 @@ pub fn install(
     });
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "anim_seek", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, t: f64| {
-        let now = h.clock.now().millis_since_epoch();
+        let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().seek_to(t, now);
         Ok(())
@@ -240,6 +240,13 @@ pub fn install(
     rut_vm::pkg_fn!(pkg, "anim_repeat", (Opaque<RutAnimCtrl>, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, repeat: u64| {
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().set_repeat_mode(repeat_of(repeat));
+        Ok(())
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "anim_speed", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, speed: f64| {
+        let now = h.clock.now_millis() as u64;
+        let rc = c.with(|c| c.0.clone())?;
+        rc.borrow_mut().set_speed_to(speed, now);
         Ok(())
     });
 

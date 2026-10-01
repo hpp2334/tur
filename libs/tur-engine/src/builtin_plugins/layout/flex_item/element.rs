@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, FlexFit, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -92,7 +88,8 @@ impl ElementTrace for FlexibleElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
+// Constructor — the rut rail (`core::rut_runtime`) authors flex items with
+// a pre-built child.
 // ---------------------------------------------------------------------------
 
 impl FlexibleView {
@@ -100,27 +97,5 @@ impl FlexibleView {
     /// a pre-built child.
     pub(crate) fn new_rut(flex: Option<Val<f64>>, fit: FlexFit, child: Rc<dyn View>) -> Self {
         FlexibleView { flex, fit, query_key: None, child }
-    }
-
-    /// Build a `FlexibleView` from a JS props object. `default_fit` is the
-    /// constructor's fit (`Expanded` → `Tight`, `Flexible` → `Loose`); an
-    /// explicit `fit` prop (e.g. `Flexible().fit(FlexFit.Tight)`) overrides
-    /// it. Returns `None` when the required `child` prop is missing.
-    ///
-    /// `fit` is static-only (Flutter's `fit` is a constructor parameter, not
-    /// a reactive prop): a `Val::Reactive` fit is ignored in favor of
-    /// `default_fit`.
-    pub fn from_js(props: &JsObject, ctx: &mut Context, default_fit: FlexFit) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let child = p.child("child")?;
-        Some(FlexibleView {
-            flex: p.val::<f64>("flex"),
-            fit: p
-                .val::<FlexFit>("fit")
-                .and_then(|v| v.as_static().copied())
-                .unwrap_or(default_fit),
-            query_key: p.query_key("queryKey"),
-            child,
-        })
     }
 }

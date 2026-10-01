@@ -52,7 +52,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "ct_link_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let registry = h
-            .js_ctx
+            .inst
             .plugin_state::<LayerLinkRegistry>()
             .ok_or_else(|| {
                 rut_vm::Trap::new(

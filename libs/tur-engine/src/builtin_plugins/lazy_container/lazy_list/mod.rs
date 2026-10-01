@@ -1,5 +1,4 @@
-pub mod bridge;
-mod controller;
+pub mod controller;
 mod element;
 mod layout;
 mod render;

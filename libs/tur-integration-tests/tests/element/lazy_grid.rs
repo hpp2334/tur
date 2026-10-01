@@ -6,18 +6,27 @@ use tur_integration_tests::TurTestApp;
 /// maxCrossAxisExtent 100 → 4 columns of 100x100 cells, stride 100.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({ itemCount: 10000, maxCrossAxisExtent: 100 })
-    .axis(0)
-    .overscan(2)
-    .queryKey(["lg"])
-    .builder((i) => Container()
-     .color(createColor(200, 200, 200, 255))
-     .build())
-    .build());
-        "#,
+use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+
+entry fn cell(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, 0xC8C8C8FFu64);
+    return el_build(b);
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 10000.0);
+    let lg = el_lazy_grid("cell", count, 100.0, 1.0);
+    let lg = el_vqkey(lg, "lg");
+    let root = el_expand(1.0, lg);
+    mount(root);
+    return count;
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -138,27 +147,40 @@ fn lazy_grid_scroll_shifts_visible_window() {
 #[test]
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyGrid, Container, createColor, source } from "tur:std";
-        const count$ = source(100);
-        mount(LazyGrid({ itemCount: count$, maxCrossAxisExtent: 100 })
-            .axis(0)
-            .overscan(2)
-            .queryKey(["lg"])
-            .builder((i) => Container()
-                .color(createColor(200, 200, 200, 255))
-                .build())
-            .build());
-        globalThis.__setCount = (n) => store.set(count$, n);
-        "#,
+use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+
+entry fn cell(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, 0xC8C8C8FFu64);
+    return el_build(b);
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 100.0);
+    let lg = el_lazy_grid("cell", count, 100.0, 1.0);
+    let lg = el_vqkey(lg, "lg");
+    let root = el_expand(1.0, lg);
+    mount(root);
+    return count;
+}
+
+// The test drives count changes through the entry rail.
+entry fn set_count(count: u64, n: f64) {
+    rs_set_f64(count, n);
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
+    let count_atom = app.rut_start_answer();
     let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
 
     // Shrink 100 → 8 (2 rows of 4 columns).
-    app.eval_js("globalThis.__setCount(8)");
+    app.call_rut_entry("set_count", count_atom, 8.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -173,7 +195,7 @@ fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     // Grow back 8 → 100 (25 rows): the viewport window (6 visible rows × 4
     // columns + overscan) must re-mount, and the content extent must cover
     // all 25 rows again.
-    app.eval_js("globalThis.__setCount(100)");
+    app.call_rut_entry("set_count", count_atom, 100.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -245,18 +267,27 @@ fn lazy_grid_scroll_clamps_at_content_end() {
 #[test]
 fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({ itemCount: 1000, maxCrossAxisExtent: 100 })
-    .axis(1)
-    .overscan(1)
-    .queryKey(["lg"])
-    .builder((i) => Container()
-     .color(createColor(180, 180, 220, 255))
-     .build())
-    .build());
-        "#,
+use tur::{ box_color, box_size, el_build, el_expand, el_lazy_grid_h, el_vqkey, mount, rs_set_f64, rs_source_f64 };
+
+entry fn cell(i: u64) -> opaque {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, 0xB4B4DCFFu64);
+    return el_build(b);
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 1000.0);
+    let lg = el_lazy_grid_h("cell", count, 100.0, 1.0);
+    let lg = el_vqkey(lg, "lg");
+    let root = el_expand(1.0, lg);
+    mount(root);
+    return count;
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);

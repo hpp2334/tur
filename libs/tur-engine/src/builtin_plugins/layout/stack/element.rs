@@ -1,12 +1,9 @@
 use std::rc::Rc;
 
 use crate::core::layout::{Alignment, Size, StackFit};
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -94,22 +91,5 @@ impl ElementTrace for StackElement {
             p.push(("alignment", TraceValue::Str(format!("{v:?}"))));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl StackView {
-    /// Build a `StackView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        StackView {
-            fit: p.val::<StackFit>("fit"),
-            alignment: p.val::<Alignment>("alignment"),
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
     }
 }

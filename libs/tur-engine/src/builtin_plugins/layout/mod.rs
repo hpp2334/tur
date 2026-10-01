@@ -31,27 +31,8 @@ pub use grid::{GridElement, GridView};
 pub(crate) use grid::{compute_grid_metrics, cross_offset};
 pub use positioned::{PositionedElement, PositionedView};
 pub use stack::{StackElement, StackView};
-pub use table::{TableElement, TableView};
+pub use table::{TableColumnDef, TableElement, TableView};
 pub use composited_transform::follower::FollowerView;
 pub use composited_transform::link::{CompositedLinkState, LayerLink};
 pub use composited_transform::target::TargetView;
 pub use composited_transform::LayerLinkRegistry;
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Install the layout plugin (`Column` / `Row` / `Expanded` / `Stack` /
-/// `Positioned` / `Container` / `SizedBox`). Returns the JS factory fns to
-/// be merged into `tur:std` by the orchestrator.
-pub fn install_layout(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    let mut v: Vec<FnEntry> = Vec::new();
-    v.extend(container::bridge::fns());
-    v.extend(flex::bridge::fns());
-    v.extend(flex_item::bridge::fns());
-    v.extend(grid::bridge::fns());
-    v.extend(stack::bridge::fns());
-    v.extend(positioned::bridge::fns());
-    v.extend(table::bridge::fns());
-    Ok(v)
-}

@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::js_runtime::JsProps;
 use crate::core::view::{Lifecycle, View, ViewCx};
 
 // ---------------------------------------------------------------------------
@@ -57,18 +53,3 @@ impl crate::core::layout::ElementSubscribe for FragmentElement {}
 impl Lifecycle for FragmentElement {}
 
 impl ElementTrace for FragmentElement {}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl FragmentView {
-    /// Build a `FragmentView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FragmentView {
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
-    }
-}

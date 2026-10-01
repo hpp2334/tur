@@ -1,18 +1,15 @@
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsError, JsValue};
 use std::cell::Cell;
 use std::sync::Arc;
 
 use crate::builtin_plugins::text::controller::SelectionChangeEvent;
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 use crate::core::edgy::mutation::MutationHandle;
+use crate::core::edgy::value::{FromValue, type_error};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
     ElementTrace, TraceValue,
 };
-use crate::core::js_runtime::JsProps;
-use crate::core::js_runtime::js_value::{FromJs, type_error};
 use crate::core::layout::{Constraints, ElementSubscribe, SubscribeCx};
 use crate::core::platform::PointerDeviceKind;
 use crate::core::render::brush::Color;
@@ -34,24 +31,8 @@ pub enum TextOverflow {
     Visible,
 }
 
-impl FromJs for TextOverflow {
-    fn from_js(v: &JsValue) -> Result<Self, JsError> {
-        let s = v
-            .as_string()
-            .ok_or_else(|| type_error("a TextOverflow keyword string"))?;
-        match s.to_std_string_escaped().as_str() {
-            "clip" => Ok(TextOverflow::Clip),
-            "ellipsis" => Ok(TextOverflow::Ellipsis),
-            "visible" => Ok(TextOverflow::Visible),
-            _ => Err(type_error(
-                "a recognized TextOverflow keyword (clip|ellipsis|visible)",
-            )),
-        }
-    }
-}
-
-impl crate::core::edgy::FromValue for TextOverflow {
-    fn from_value(v: &crate::core::edgy::Value) -> Result<Self, JsError> {
+impl FromValue for TextOverflow {
+    fn from_value(v: &crate::core::edgy::Value) -> Result<Self, String> {
         let s = v
             .as_str()
             .ok_or_else(|| type_error("a TextOverflow keyword string"))?;
@@ -67,12 +48,10 @@ impl crate::core::edgy::FromValue for TextOverflow {
 }
 
 // ---------------------------------------------------------------------------
-// TextView — the user's declaration. Pure Rust, no JsValues.
+// TextView — the user's declaration. Pure Rust.
 //
 // `TextElement` is a leaf element (no children). The `text` and `font_size` props are
-// reactive (`Val<T>`); `spans` is parsed eagerly at factory time because each
-// span is a composite object (not a primitive the bridge can decode without a
-// boa `Context`).
+// reactive (`Val<T>`); `spans` is set eagerly at author time (not reactive).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -85,7 +64,7 @@ pub struct TextView {
     pub(crate) font_weight: Option<Val<f64>>,
     /// Default color applied to the anonymous span in the plain-text case.
     pub(crate) color: Option<Val<Color>>,
-    /// Parsed eagerly at factory time (not reactive).
+    /// Set eagerly at author time (not reactive).
     pub(crate) spans: Option<Vec<SpanData>>,
     pub(crate) query_key: Option<Vec<String>>,
     pub(crate) on_selection_change: Option<MutationHandle<SelectionChangeEvent>>,
@@ -316,55 +295,6 @@ impl ElementOnGesture for TextElement {
             ComposedGestureEvent::PointerTripleDown { .. } => {}
             ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-/// Extract the `spans` array — parsed eagerly into `Vec<SpanData>`.
-fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<SpanData>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    if v.is_null() || v.is_undefined() {
-        return None;
-    }
-    let parsed =
-        crate::builtin_plugins::text::elements::text_shared::span_data::extract_spans_from_js(
-            &v, ctx,
-        );
-    if parsed.is_empty() {
-        None
-    } else {
-        Some(parsed)
-    }
-}
-
-impl TextView {
-    /// Build a `TextView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let (on_selection_change, selectable) = {
-            let mut p = JsProps::new(props, ctx);
-            (
-                p.mutation::<SelectionChangeEvent>("onSelectionChange"),
-                p.opt::<bool>("selectable").unwrap_or(false),
-            )
-        };
-        let spans = prop_spans(props, "spans", ctx);
-        let mut p = JsProps::new(props, ctx);
-        TextView {
-            text: p.val::<String>("text"),
-            font_size: p.val::<f64>("fontSize"),
-            font_weight: p.val::<f64>("fontWeight"),
-            color: p.val::<Color>("color"),
-            spans,
-            query_key: p.query_key("queryKey"),
-            on_selection_change,
-            selectable,
-            max_lines: p.val::<u32>("maxLines"),
-            overflow: p.val::<TextOverflow>("overflow"),
         }
     }
 }

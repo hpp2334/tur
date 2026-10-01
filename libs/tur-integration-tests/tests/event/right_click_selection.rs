@@ -3,19 +3,17 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
-    const controller = createTextEditingController({});
-    mount(Container()
-    .children([
-            Input()
-                .controller(controller)
-                .fontSize(14)
-                .width(200)
-                .height(30)
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+use tur::{ el_build, el_child, el_input, el_vqkey, mount, tctrl_new, undo_new };
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 200.0, 30.0);
+    let keyed = el_vqkey(input, "input");
+    let col = el_column();
+    el_child(col, keyed);
+    mount(el_build(col));
+}
 "#;
 
 fn find_editable(app: &TurTestApp) -> ElementNodeId {
@@ -55,7 +53,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 #[test]
 fn right_click_inside_selection_preserves_selection() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(INPUT_BUNDLE).unwrap();
+    app.load_rut_module(INPUT_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);
@@ -115,7 +113,7 @@ fn right_click_inside_selection_preserves_selection() {
 #[test]
 fn right_click_outside_selection_moves_caret() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(INPUT_BUNDLE).unwrap();
+    app.load_rut_module(INPUT_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);
@@ -172,7 +170,7 @@ fn right_click_outside_selection_moves_caret() {
 #[test]
 fn left_click_inside_selection_collapses() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(INPUT_BUNDLE).unwrap();
+    app.load_rut_module(INPUT_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);

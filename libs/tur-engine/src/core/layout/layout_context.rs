@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::core::edgy::reactive::ReactiveReadJsContext;
+use crate::core::edgy::reactive::ReactiveReadStore;
 use crate::core::layout::{Constraints, Offset, Size};
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 
@@ -13,7 +13,7 @@ use crate::core::fonts::FontManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
 use crate::core::view::Val;
 
-pub struct LayoutContext<'a, 'js> {
+pub struct LayoutContext<'a> {
     pub tree: &'a mut NodeTreeData,
     node_id: ElementNodeId,
     font_manager: &'a mut FontManager,
@@ -27,15 +27,13 @@ pub struct LayoutContext<'a, 'js> {
     pub node_tree: NodeTree,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub dirty: Rc<Cell<bool>>,
-    /// Read-only JS engine face. Held so `read_val` can (lazily) recompute
-    /// stale derived atoms; this is the only JS access layout has, and the face
-    /// exposes **only** `read` — no `set` / mutation is reachable from layout.
-    /// `'js` is the lifetime of the borrowed JS `Context` (independent of the
-    /// tree/manager borrow `'a` so the face can be re-borrowed recursively).
-    pub js: &'a mut ReactiveReadJsContext<'js>,
+    /// Read-only reactive face. Held so `read_val` can (lazily) recompute
+    /// stale derived atoms; the face exposes **only** `read` — no `set` /
+    /// mutation is reachable from layout.
+    pub js: &'a mut ReactiveReadStore,
 }
 
-impl<'a, 'js> LayoutContext<'a, 'js> {
+impl<'a> LayoutContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         tree: &'a mut NodeTreeData,
@@ -46,7 +44,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
         node_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         dirty: Rc<Cell<bool>>,
-        js: &'a mut ReactiveReadJsContext<'js>,
+        js: &'a mut ReactiveReadStore,
     ) -> Self {
         LayoutContext {
             tree,

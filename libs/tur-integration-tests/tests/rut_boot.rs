@@ -877,7 +877,6 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(GESTURE_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert!(!app.realm_allocated(), "the C4 journey stays realm-free");
 
     let root = app.dev_tool_element_tree().unwrap();
     let column = app.dev_tool_get_element(root.children[0]).unwrap();

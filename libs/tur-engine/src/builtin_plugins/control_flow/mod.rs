@@ -8,24 +8,8 @@ pub(in crate::builtin_plugins) mod each;
 pub mod fragment;
 pub(in crate::builtin_plugins) mod switch;
 
-// The rut rail (`core::rut_runtime`) authors ConditionView branches.
+// The rut rail (`core::rut_runtime`) authors every view here.
 pub use condition::ConditionView;
+pub use each::{EachBuilder, EachView};
 pub use fragment::FragmentView;
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Install the control-flow plugin (`Condition` / `Switch` / `Each` /
-/// `Fragment`). Returns the JS factory fns to be merged into
-/// `tur:std` by the orchestrator (`TurStdPlugin`).
-pub fn install_control_flow(
-    _ctx: &mut PluginRegisterContext<'_>,
-) -> Result<Vec<FnEntry>, TurError> {
-    let mut v: Vec<FnEntry> = Vec::new();
-    v.extend(condition::bridge::fns());
-    v.extend(switch::bridge::fns());
-    v.extend(each::bridge::fns());
-    v.extend(fragment::bridge::fns());
-    Ok(v)
-}
+pub use switch::{Prebuilt, SwitchKey, SwitchView};

@@ -35,6 +35,15 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         ("stack_fit", vec![TY_OPAQUE, TY_U64], TY_NIL),
         // generic query key
         ("el_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        ("el_switch", vec![TY_U64], TY_OPAQUE),
+        ("el_switch_d", vec![TY_U64], TY_OPAQUE),
+        ("switch_case", vec![TY_OPAQUE, TY_STR, TY_OPAQUE], TY_NIL),
+        ("switch_fallback", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        ("el_grid", vec![], TY_OPAQUE),
+        ("grid_max_cross", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        ("grid_aspect", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        ("grid_spacing", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
+        ("grid_main_extent", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("el_vqkey", vec![TY_OPAQUE, TY_STR], TY_OPAQUE),
         // text style builder
         ("el_text_new", vec![TY_STR], TY_OPAQUE),
@@ -190,6 +199,96 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles
         let key = key.split('/').map(str::to_string).collect::<Vec<_>>();
         b.with_mut(vm, |_vm, b| b.set_query_key(key.clone()))
     });
+    // ---- the switch builder (case rows + el_build) -----------------------
+    rut_vm::pkg_fn!(pkg, "el_switch", (u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, value_atom: u64| {
+        let view = crate::builtin_plugins::control_flow::SwitchView::new_rut(
+            crate::core::view::Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(crate::core::edgy::reactive::AtomId(value_atom as u32)),
+            )),
+            Vec::new(),
+            None,
+        );
+        Ok(Opaque::alloc(vm, ViewBuilder::Switch(Box::new(view)))?.handle().clone())
+    });
+    // The derived-value twin: the switch reads a Derived<SwitchKey> atom.
+    rut_vm::pkg_fn!(pkg, "el_switch_d", (u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, value_atom: u64| {
+        let view = crate::builtin_plugins::control_flow::SwitchView::new_rut(
+            crate::core::view::Val::Reactive(crate::core::edgy::reactive::Readable::Derived(
+                crate::core::edgy::reactive::Derived::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(crate::core::edgy::reactive::AtomId(value_atom as u32)),
+            )),
+            Vec::new(),
+            None,
+        );
+        Ok(Opaque::alloc(vm, ViewBuilder::Switch(Box::new(view)))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "switch_case", (Opaque<ViewBuilder>, &str, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, key: &str, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let key = crate::builtin_plugins::control_flow::SwitchKey(crate::core::edgy::Value::str(key));
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Switch(s) = &mut *b {
+                s.push_case(key, Rc::new(crate::builtin_plugins::control_flow::Prebuilt(child)));
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "switch_fallback", (Opaque<ViewBuilder>, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Switch(s) = &mut *b {
+                s.set_fallback(Rc::new(crate::builtin_plugins::control_flow::Prebuilt(child)));
+            }
+        })?;
+        Ok(())
+    });
+
+    // ---- the grid builder (setter rows + el_build) ----------------------
+    rut_vm::pkg_fn!(pkg, "el_grid", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+        let spec = crate::builtin_plugins::layout::GridView {
+            max_cross_axis_extent: crate::core::view::Val::Static(100.0),
+            child_aspect_ratio: None,
+            main_axis_extent: None,
+            cross_axis_spacing: None,
+            main_axis_spacing: None,
+            children: Vec::new(),
+            query_key: None,
+        };
+        Ok(Opaque::alloc(vm, ViewBuilder::Grid(Box::new(spec)))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "grid_max_cross", (Opaque<ViewBuilder>, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Grid(spec) = &mut *b {
+                spec.max_cross_axis_extent = crate::core::view::Val::Static(v);
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "grid_aspect", (Opaque<ViewBuilder>, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Grid(spec) = &mut *b {
+                spec.child_aspect_ratio = Some(crate::core::view::Val::Static(v));
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "grid_spacing", (Opaque<ViewBuilder>, f64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, cross: f64, main: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Grid(spec) = &mut *b {
+                spec.cross_axis_spacing = Some(crate::core::view::Val::Static(cross));
+                spec.main_axis_spacing = Some(crate::core::view::Val::Static(main));
+            }
+        })?;
+        Ok(())
+    });
+
+    rut_vm::pkg_fn!(pkg, "grid_main_extent", (Opaque<ViewBuilder>, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<ViewBuilder>, v: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let ViewBuilder::Grid(spec) = &mut *b {
+                spec.main_axis_extent = Some(crate::core::view::Val::Static(v));
+            }
+        })?;
+        Ok(())
+    });
+
     // Post-build query-key override: wraps a materialized view and re-keys
     // its node after the inner build (the `queryKey` prop twin for rows
     // that hardcode their key, e.g. the Input / lazy / scroll views).
@@ -344,28 +443,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<super::RutHandles
     });
     // Write a brush atom: nonzero packed color sets it, 0 clears (Nil —
     // the decode fails and the prop resolves to absent). The set color
-    // wraps the engine's Color opaque (the `FromValue for Brush` decode),
-    // minted through the realm face on demand.
+    // wraps the engine's Color opaque (the `FromValue for Brush` decode).
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_set_brush", (u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, color: u64| {
         let value = if color == 0 {
             crate::core::edgy::Value::Nil
         } else {
-            let packed = color;
-            let js = h
-                .realm
-                .with_realm(move |boa| {
-                    use boa_engine::JsValue;
-                    let c = super::color_of(packed);
-                    let opaque =
-                        crate::core::js_runtime::BoaOpaque::<crate::core::render::brush::ColorOpaque>::new(
-                            crate::core::render::brush::ColorOpaque(c),
-                            boa,
-                        );
-                    JsValue::from(opaque.object().clone())
-                })
-                .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_brush: {e}")))?;
-            crate::core::edgy::Value::opaque(&js)
+            let c = super::color_of(color);
+            crate::core::edgy::Value::opaque(Rc::new(c) as Rc<dyn std::any::Any>)
         };
         h.store
             .bridge()

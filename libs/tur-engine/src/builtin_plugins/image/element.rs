@@ -1,19 +1,16 @@
 use std::rc::Rc;
 
 use crate::core::layout::BoxFit;
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 use super::handle::ImageResourceRef;
 
 // ---------------------------------------------------------------------------
-// ImageView — the user's declaration. Pure Rust, no JsValues.
+// ImageView — the user's declaration. Pure Rust.
 //
 // `resource_id`, `width`, `height`, and `fit` are reactive (`Val<T>`).
 // An optional `child` is supported (rendered behind/over the image — painted
@@ -54,9 +51,7 @@ impl View for ImageView {
 
 // ---------------------------------------------------------------------------
 // ImageElement — the built element. Layout and paint read `Val<T>` props on demand.
-// ---------------------------------------------------------------------------
-
-/// Resolved paint props (filled during layout). Paint reads these directly.
+// ---------------------------------------------------------------------------/// Resolved paint props (filled during layout). Paint reads these directly.
 #[derive(Default, Clone)]
 pub struct ImagePainting {
     pub(crate) resource_id: Option<u64>,
@@ -126,20 +121,7 @@ impl ElementTrace for ImageElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
+// `ImageView` is authored directly (struct literal) by the rut rows in
+// `core::rut_runtime::image_row` — the fields are `pub(crate)` and every
+// prop defaults through `Option`/`Val::Static`.
 // ---------------------------------------------------------------------------
-
-impl ImageView {
-    /// Build an `ImageView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        ImageView {
-            resource_id: p.val::<ImageResourceRef>("resourceId"),
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            fit: p.val::<BoxFit>("fit"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
-        }
-    }
-}

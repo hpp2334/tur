@@ -1,14 +1,7 @@
-use boa_engine::class::{Class, ClassBuilder};
-use boa_engine::js_string;
-use boa_engine::native_function::NativeFunction;
-use boa_engine::property::Attribute;
-use boa_engine::{Context, JsNativeError, JsResult, JsValue};
-use boa_gc::{Finalize, Trace};
-
 /// Snapshot of editable-text state used by `UndoController` for undo/redo.
 /// Captures plain text plus cursor/selection byte offsets — not spans,
-/// because spans are re-derived from text by the JS layer's `onInput`
-/// callback (e.g. via syntax-highlight re-tokenization) after a restore.
+/// because spans are re-derived from text by the input callback (e.g. via
+/// syntax-highlight re-tokenization) after a restore.
 #[derive(Clone, Debug, Default)]
 pub struct TextEditingValue {
     pub(crate) text: String,
@@ -31,13 +24,11 @@ impl TextEditingValue {
 }
 
 /// Flutter-style undo/redo history stack. Pairs with a
-/// `TextEditingController` (passed to `Input` via the `undoController`
-/// prop). The controller owns the *current* value; this object owns the
-/// *history*. Each call to `push` records a prior state (cleared on push,
-/// matching the standard "redo branch is abandoned when the user types
-/// again" convention).
-#[derive(Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
+/// `TextEditingController` (attached by `Input` at view-build time). The
+/// controller owns the *current* value; this object owns the *history*.
+/// Each call to `push` records a prior state (cleared on push, matching the
+/// standard "redo branch is abandoned when the user types again"
+/// convention).
 pub struct UndoController {
     undo_stack: Vec<TextEditingValue>,
     redo_stack: Vec<TextEditingValue>,
@@ -103,70 +94,3 @@ impl UndoController {
     }
 }
 
-impl Class for UndoController {
-    const NAME: &'static str = "UndoController";
-    const LENGTH: usize = 0;
-
-    fn data_constructor(
-        _new_target: &JsValue,
-        _args: &[JsValue],
-        _ctx: &mut Context,
-    ) -> JsResult<Self> {
-        Ok(Self::new())
-    }
-
-    fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
-        // canUndo / canRedo getters — cheap booleans for menu-item enabling.
-        let can_undo_getter = NativeFunction::from_fn_ptr(|this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<UndoController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(ctrl.can_undo()))
-        })
-        .to_js_function(class.context().realm());
-        class.accessor(
-            js_string!("canUndo"),
-            Some(can_undo_getter),
-            None,
-            Attribute::default(),
-        );
-
-        let can_redo_getter = NativeFunction::from_fn_ptr(|this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<UndoController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(ctrl.can_redo()))
-        })
-        .to_js_function(class.context().realm());
-        class.accessor(
-            js_string!("canRedo"),
-            Some(can_redo_getter),
-            None,
-            Attribute::default(),
-        );
-
-        // clear() — reset both stacks.
-        class.method(
-            js_string!("clear"),
-            0,
-            NativeFunction::from_fn_ptr(|this, _, _| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<UndoController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                ctrl.clear();
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        Ok(())
-    }
-}

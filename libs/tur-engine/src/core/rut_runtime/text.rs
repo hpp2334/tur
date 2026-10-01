@@ -1,23 +1,18 @@
-//! C1 — text-input rows: `Input` / editable-text over realm-minted
-//! controllers.
+//! C1 — text-input rows: `Input` / editable-text over shared controllers.
 //!
 //! The engine's `EditableTextElement` keeps its text state in a
-//! `TextEditingController` — a boa `JsData` payload reached through a
-//! `JsObject`. The rut rail must share that EXACT object (keyboard / IME /
-//! paste subsystems mutate it; the element renders it), so the rows mint
-//! the controllers through the [`RutRealm`] face and hand rut an opaque
-//! wrapper (`RutTextCtrl` / `RutUndo`). Method rows downcast through the
-//! `JsObject` — no realm borrow needed on the accessor path.
+//! `TextEditingController`. The rut rail must share that EXACT controller
+//! (keyboard / IME / paste subsystems mutate it; the element renders it),
+//! so the rows mint `Rc<RefCell<…>>` controllers and hand rut an opaque
+//! wrapper (`RutTextCtrl` / `RutUndoCtrl`). Method rows borrow through the
+//! `Rc` — no runtime borrow beyond the row call.
 //!
 //! IME / paste / caret-visibility are engine subsystems that act on the
 //! FOCUSED editable: once a rut `Input` exists and can take focus, they
 //! work unchanged (the gate drives `send_key` / `send_ime` end to end).
 
+use std::cell::RefCell;
 use std::rc::Rc;
-
-use boa_engine::class::Class;
-use boa_engine::JsValue;
-use boa_engine::object::JsObject;
 
 use crate::builtin_plugins::text::InputView;
 use crate::builtin_plugins::text::controller::{SpanData, TextEditingController, UndoController};
@@ -41,11 +36,11 @@ use super::RutView;
 #[allow(unused_imports)]
 use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 
-/// The opaque wrapper over a realm-minted `TextEditingController`.
-pub struct RutTextCtrl(pub JsObject);
+/// The opaque wrapper over a shared `TextEditingController`.
+pub struct RutTextCtrl(pub Rc<RefCell<TextEditingController>>);
 
-/// The opaque wrapper over a realm-minted `UndoController`.
-pub struct RutUndoCtrl(pub JsObject);
+/// The opaque wrapper over a shared `UndoController`.
+pub struct RutUndoCtrl(pub Rc<RefCell<UndoController>>);
 
 /// Declare the C1 rows on the `tur` decl module.
 pub fn decl_rows() -> Vec<(String, Vec<TypeId>, TypeId)> {
@@ -60,6 +55,9 @@ pub fn decl_rows() -> Vec<(String, Vec<TypeId>, TypeId)> {
         ),
         ("tctrl_text", vec![TY_OPAQUE], TY_STR),
         ("tctrl_set_text", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        ("tctrl_push_span", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        ("tctrl_delete_selection", vec![TY_OPAQUE], TY_NIL),
+        ("tctrl_insert_text", vec![TY_OPAQUE, TY_STR], TY_NIL),
         ("tctrl_cursor", vec![TY_OPAQUE], TY_U64),
         (
             "tctrl_select",
@@ -73,6 +71,17 @@ pub fn decl_rows() -> Vec<(String, Vec<TypeId>, TypeId)> {
             vec![TY_OPAQUE, TY_OPAQUE, TY_STR, TY_F64, TY_F64, TY_U64],
             TY_OPAQUE,
         ),
+        ("el_input_new", vec![], TY_OPAQUE),
+        (
+            "el_input_ctrl",
+            vec![TY_OPAQUE, TY_F64, TY_F64, TY_F64],
+            TY_OPAQUE,
+        ),
+        ("input_size", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
+        ("input_placeholder", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        ("input_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        ("input_placeholder_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        ("input_font_size", vec![TY_OPAQUE, TY_F64], TY_NIL),
         ("undo_can_undo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_can_redo", vec![TY_OPAQUE], TY_BOOL),
         ("undo_clear", vec![TY_OPAQUE], TY_NIL),
@@ -89,34 +98,17 @@ pub fn install(
     pkg: &mut rut_vm::interp::HostPkg,
     handles: &Rc<RutHandles>,
 ) {
-    // Mint a `TextEditingController` through the realm face. First demand
-    // constructs the realm (the same deferred-replay path a JS load runs).
-    let h = handles.clone();
+    // Mint a shared `TextEditingController` (plain Rust state — the
+    // keyboard / IME / paste subsystems and the element all reach the same
+    // Rc).
     rut_vm::pkg_fn!(pkg, "tctrl_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
-        let _ = vm;
-        let obj = h
-            .realm
-            .with_realm(|boa| {
-                let data = TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)?;
-                TextEditingController::from_data(data, boa)
-            })
-            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("tctrl_new: {e}")))?
-            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("tctrl_new: {e}")))?;
-        Ok(Opaque::alloc(vm, RutTextCtrl(obj))?.handle().clone())
+        let ctrl = Rc::new(RefCell::new(TextEditingController::new()));
+        Ok(Opaque::alloc(vm, RutTextCtrl(ctrl))?.handle().clone())
     });
 
-    let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "undo_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
-        let _ = vm;
-        let obj = h
-            .realm
-            .with_realm(|boa| {
-                let data = UndoController::data_constructor(&JsValue::undefined(), &[], boa)?;
-                UndoController::from_data(data, boa)
-            })
-            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("undo_new: {e}")))?
-            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("undo_new: {e}")))?;
-        Ok(Opaque::alloc(vm, RutUndoCtrl(obj))?.handle().clone())
+        let undo = Rc::new(RefCell::new(UndoController::new()));
+        Ok(Opaque::alloc(vm, RutUndoCtrl(undo))?.handle().clone())
     });
 
     // An `Input` bound to the realm-minted controllers (the undo slot rides
@@ -153,42 +145,118 @@ pub fn install(
         Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
     });
 
-    // ---- controller method rows (downcast without a realm borrow) -------
-    rut_vm::pkg_fn!(pkg, "tctrl_text", (Opaque<RutTextCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
-        c.with(|c| Ok(c
-            .0
-            .downcast_ref::<TextEditingController>()
-            .map(|t| t.text())
-            .unwrap_or_default()))?
+    // ---- the input builder (style setter rows + el_build) ---------------
+    rut_vm::pkg_fn!(pkg, "el_input_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+        Ok(Opaque::alloc(vm, super::ViewBuilder::Input(Box::new(
+            crate::builtin_plugins::text::InputView::empty_rut(),
+        )))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "tctrl_set_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
-        c.with_mut(vm, |_vm, c| {
-            if let Some(mut t) = c.0.downcast_mut::<TextEditingController>() {
-                t.set_spans(vec![plain_span(text)]);
+    // An input builder pre-bound to a controller (+ size + font size) —
+    // the editor-shaped constructor (the huge-document fixture).
+    rut_vm::pkg_fn!(pkg, "el_input_ctrl", (Opaque<RutTextCtrl>, f64, f64, f64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutTextCtrl>, w: f64, h: f64, font: f64| {
+        let shared = ctrl.with(|c| c.0.clone())?;
+        let mut spec = crate::builtin_plugins::text::InputView::empty_rut();
+        spec.set_controller(shared);
+        spec.set_width(w);
+        spec.set_height(h);
+        spec.set_font_size(font);
+        Ok(Opaque::alloc(vm, super::ViewBuilder::Input(Box::new(spec)))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "input_size", (Opaque<super::ViewBuilder>, f64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, w: f64, h: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_width(w);
+                spec.set_height(h);
             }
         })?;
         Ok(())
     });
+    rut_vm::pkg_fn!(pkg, "input_placeholder", (Opaque<super::ViewBuilder>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, text: &str| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_placeholder_str(text.to_string());
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "input_color", (Opaque<super::ViewBuilder>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, packed: u64| {
+        let c = super::color_of(packed);
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_color(c);
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "input_placeholder_color", (Opaque<super::ViewBuilder>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, packed: u64| {
+        let c = super::color_of(packed);
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_placeholder_color(c);
+            }
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "input_font_size", (Opaque<super::ViewBuilder>, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<super::ViewBuilder>, v: f64| {
+        b.with_mut(vm, |_vm, b| {
+            if let super::ViewBuilder::Input(spec) = &mut *b {
+                spec.set_font_size(v);
+            }
+        })?;
+        Ok(())
+    });
+
+    // ---- controller method rows (downcast without a realm borrow) -------
+    rut_vm::pkg_fn!(pkg, "tctrl_text", (Opaque<RutTextCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
+        c.with(|c| Ok(c.0.borrow().text()))?
+    });
+    rut_vm::pkg_fn!(pkg, "tctrl_set_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        c.with_mut(vm, |_vm, c| {
+            c.0.borrow_mut().set_spans(vec![plain_span(text)]);
+        })?;
+        Ok(())
+    });
+    // Delete the selection (or nothing at an empty caret) — the undo
+    // fixture's delete step.
+    rut_vm::pkg_fn!(pkg, "tctrl_delete_selection", (Opaque<RutTextCtrl>,) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
+        c.with_mut(vm, |_vm, c| {
+            c.0.borrow_mut().delete_selection();
+        })?;
+        Ok(())
+    });
+    // Insert text at the caret (no selection replace) — the undo fixture's
+    // typed-insert step.
+    rut_vm::pkg_fn!(pkg, "tctrl_insert_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        c.with_mut(vm, |_vm, c| {
+            let mut t = c.0.borrow_mut();
+            let pos = t.cursor_position();
+            t.insert_str_at(pos, text);
+            t.set_cursor_position(pos + text.len());
+        })?;
+        Ok(())
+    });
+
+    // Append one plain span (the huge-document fixture's authoring loop).
+    rut_vm::pkg_fn!(pkg, "tctrl_push_span", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        c.with_mut(vm, |_vm, c| {
+            let mut spans = c.0.borrow().spans().to_vec();
+            spans.push(plain_span(text));
+            c.0.borrow_mut().set_spans_preserve_cursor(spans);
+        })?;
+        Ok(())
+    });
     rut_vm::pkg_fn!(pkg, "tctrl_cursor", (Opaque<RutTextCtrl>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
-        c.with(|c| Ok(c
-            .0
-            .downcast_ref::<TextEditingController>()
-            .map(|t| t.cursor_position() as u64)
-            .unwrap_or(0)))?
+        c.with(|c| Ok(c.0.borrow().cursor_position() as u64))?
     });
     rut_vm::pkg_fn!(pkg, "tctrl_select", (Opaque<RutTextCtrl>, u64, u64) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, anchor: u64, end: u64| {
         c.with_mut(vm, |_vm, c| {
-            if let Some(mut t) = c.0.downcast_mut::<TextEditingController>() {
-                t.set_selection(anchor as usize, end as usize);
-            }
+            c.0.borrow_mut().set_selection(anchor as usize, end as usize);
         })?;
         Ok(())
     });
     rut_vm::pkg_fn!(pkg, "tctrl_clear", (Opaque<RutTextCtrl>,) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
         c.with_mut(vm, |_vm, c| {
-            if let Some(mut t) = c.0.downcast_mut::<TextEditingController>() {
-                t.clear();
-            }
+            c.0.borrow_mut().clear();
         })?;
         Ok(())
     });
@@ -196,34 +264,25 @@ pub fn install(
     // the same state change the engine's ClipboardPasteSubsystem applies.
     rut_vm::pkg_fn!(pkg, "tctrl_paste", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
         c.with_mut(vm, |_vm, c| {
-            if let Some(mut t) = c.0.downcast_mut::<TextEditingController>() {
-                t.delete_selection();
-                let pos = t.cursor_position();
-                t.insert_str_at(pos, text);
-                t.set_cursor_position(pos + text.len());
-            }
+            let mut t = c.0.borrow_mut();
+            t.delete_selection();
+            let pos = t.cursor_position();
+            t.insert_str_at(pos, text);
+            t.set_cursor_position(pos + text.len());
         })?;
         Ok(())
     });
 
     // ---- undo controller rows -------------------------------------------
     rut_vm::pkg_fn!(pkg, "undo_can_undo", (Opaque<RutUndoCtrl>,) -> bool, move |_vm: &mut rut_vm::interp::Vm, u: Opaque<RutUndoCtrl>| {
-        u.with(|u| Ok(u
-            .0
-            .downcast_ref::<UndoController>()
-            .is_some_and(|u| u.can_undo())))?
+        u.with(|u| Ok(u.0.borrow().can_undo()))?
     });
     rut_vm::pkg_fn!(pkg, "undo_can_redo", (Opaque<RutUndoCtrl>,) -> bool, move |_vm: &mut rut_vm::interp::Vm, u: Opaque<RutUndoCtrl>| {
-        u.with(|u| Ok(u
-            .0
-            .downcast_ref::<UndoController>()
-            .is_some_and(|u| u.can_redo())))?
+        u.with(|u| Ok(u.0.borrow().can_redo()))?
     });
     rut_vm::pkg_fn!(pkg, "undo_clear", (Opaque<RutUndoCtrl>,) -> (), move |vm: &mut rut_vm::interp::Vm, u: Opaque<RutUndoCtrl>| {
         u.with_mut(vm, |_vm, u| {
-            if let Some(mut u) = u.0.downcast_mut::<UndoController>() {
-                u.clear();
-            }
+            u.0.borrow_mut().clear();
         })?;
         Ok(())
     });

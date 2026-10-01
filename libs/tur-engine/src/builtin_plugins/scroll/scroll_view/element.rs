@@ -1,9 +1,8 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::core::layout::{Axis, Size};
 use crate::core::render::brush::Brush;
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::builtin_plugins::scroll::ScrollEvent;
 use crate::builtin_plugins::scroll::core::controller::ScrollController;
@@ -11,18 +10,17 @@ use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 use super::scroll_position::ScrollPosition;
 
 // ---------------------------------------------------------------------------
-// ScrollViewView — the user's declaration. Pure Rust, no JsValues.
+// ScrollViewView — the user's declaration. Pure Rust.
 //
 // `axis`, `padding`, and `color` are reactive (`Val<T>`).
-// `controller` is a JS `ScrollController` opaque — parsed eagerly at factory
-// time (not reactive).  `child` is required (the scrollable content).
+// `controller` is a shared `ScrollController` — bound eagerly at build time
+// (not reactive).  `child` is required (the scrollable content).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -30,10 +28,12 @@ pub struct ScrollViewView {
     pub(crate) axis: Option<Val<Axis>>,
     pub(crate) padding: Option<Val<f64>>,
     pub(crate) color: Option<Val<Brush>>,
-    /// JS `ScrollController` opaque — parsed eagerly (not reactive).
-    pub(crate) controller: Option<JsObject>,
+    /// Shared `ScrollController` — bound to this node at build time (not
+    /// reactive).
+    pub(crate) controller: Option<Rc<RefCell<ScrollController>>>,
     /// Rut rail: a static initial pixel offset applied once after the
-    /// first content layout (the JS `ScrollController.initialOffset` twin).
+    /// first content layout (the `ScrollController::pending_initial_offset`
+    /// twin).
     pub(crate) initial_offset: Option<Val<f64>>,
     pub(crate) query_key: Option<Vec<String>>,
     pub(crate) child: Rc<dyn View>,
@@ -68,11 +68,10 @@ impl View for ScrollViewView {
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
-        // Bind the controller to this node so `jumpTo` (and drag-driven
+        // Bind the controller to this node so `jump_to` (and drag-driven
         // `ScrollTo` events from a sibling Scrollbar) can locate this element.
-        if let Some(ctrl_obj) = &self.controller
-            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>()
-        {
+        if let Some(ctrl) = &self.controller {
+            let mut ctrl = ctrl.borrow_mut();
             ctrl.bound_node = Some(id);
             ctrl.element_tree = Some(cx.node_tree());
             ctrl.mutation_queue = Some(cx.mutation_queue());
@@ -129,12 +128,10 @@ impl ScrollViewElement {
     }
 
     pub fn update_controller_metrics(&mut self) {
-        let Some(ref ctrl_obj) = self.view.controller else {
+        let Some(ref ctrl) = self.view.controller else {
             return;
         };
-        let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
-            return;
-        };
+        let mut ctrl = ctrl.borrow_mut();
         let vp = self.position.viewport_size();
         let dim = match self.axis {
             Axis::Vertical => vp.height,
@@ -146,10 +143,8 @@ impl ScrollViewElement {
     }
 
     pub fn apply_pending_initial_offset(&mut self) {
-        if let Some(ref ctrl_obj) = self.view.controller {
-            let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
-                return;
-            };
+        if let Some(ref ctrl) = self.view.controller {
+            let mut ctrl = ctrl.borrow_mut();
             let Some(initial) = ctrl.pending_initial_offset.take() else {
                 return;
             };
@@ -172,14 +167,12 @@ impl ScrollViewElement {
     /// position.
     pub(super) fn notify_layout_driven_scroll(
         &self,
-        cx: &crate::core::layout::LayoutContext<'_, '_>,
+        cx: &crate::core::layout::LayoutContext<'_>,
     ) {
-        let Some(ref ctrl_obj) = self.view.controller else {
+        let Some(ref ctrl) = self.view.controller else {
             return;
         };
-        let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>() else {
-            return;
-        };
+        let ctrl = ctrl.borrow();
         let Some(on_scroll) = ctrl.on_scroll else {
             return;
         };
@@ -253,18 +246,18 @@ impl ElementOnWheel for ScrollViewElement {
 
         if (new_pixels - old_pixels).abs() > 0.001 {
             self.update_controller_metrics();
-            if let Some(ref ctrl_obj) = self.view.controller
-                && let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>()
-                && let Some(m) = ctrl.on_scroll
-            {
-                cx.push_event(
-                    m,
-                    ScrollEvent {
-                        offset: ctrl.offset,
-                        max_extent: ctrl.max_scroll_extent,
-                        viewport_dimension: ctrl.viewport_dimension,
-                    },
-                );
+            if let Some(ref ctrl) = self.view.controller {
+                let ctrl = ctrl.borrow();
+                if let Some(m) = ctrl.on_scroll {
+                    cx.push_event(
+                        m,
+                        ScrollEvent {
+                            offset: ctrl.offset,
+                            max_extent: ctrl.max_scroll_extent,
+                            viewport_dimension: ctrl.viewport_dimension,
+                        },
+                    );
+                }
             }
             cx.request_paint();
         }
@@ -290,22 +283,5 @@ impl ScrollViewView {
             query_key: None,
             child,
         }
-    }
-
-    /// Build a `ScrollViewView` from a JS props object. Returns `None` when
-    /// the required `child` prop is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let child = p.child("child")?;
-        let controller = p.raw_opt("controller").and_then(|v| v.as_object());
-        Some(ScrollViewView {
-            axis: p.val::<Axis>("axis"),
-            padding: p.val::<f64>("padding"),
-            color: p.val::<Brush>("color"),
-            controller,
-            initial_offset: p.val::<f64>("initialOffset"),
-            query_key: p.query_key("queryKey"),
-            child,
-        })
     }
 }

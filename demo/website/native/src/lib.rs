@@ -116,22 +116,6 @@ impl TurWebsiteApp {
         })
     }
 
-    /// Evaluate `js_source` as an ES module (supports real
-    /// `import { ... } from "tur:..."`, resolved by the engine's module
-    /// loader), then render. Used to load the playground-view bundle.
-    ///
-    /// Async: returns a Promise that resolves once the module finishes
-    /// loading + evaluating.
-    #[wasm_bindgen(js_name = loadAndRunModule)]
-    pub fn load_and_run_module(&self, js_source: &str) -> js_sys::Promise {
-        let app = self.app.clone();
-        let js_source = js_source.to_string();
-        wasm_bindgen_futures::future_to_promise(async move {
-            app.load_and_run_module(&js_source).await?;
-            Ok(JsValue::undefined())
-        })
-    }
-
     /// Compile + boot `source` as a **rut** module and render. The zero-JS
     /// load path (the engine's `load_rut_module` RPC) — the module exports
     /// `entry fn start()`.
@@ -163,10 +147,10 @@ impl TurWebsiteApp {
 }
 
 /// Host-side dev-tool handle, exposed via `TurWebsiteApp.dev_tool()`. Methods
-/// return Promises that resolve to JSON strings (the data originates inside
-/// the boa engine — a separate JS realm — and the underlying RPCs are now
-/// `async`, so JSON is the simplest cross-realm transport and the JS host
-/// `await`s each call).
+/// return Promises that resolve to JSON strings (the snapshots serialize the
+/// engine's Rust state on the worker — see `tur_engine::core::dev`; the
+/// underlying RPCs are `async`, so JSON is the simplest transport and the JS
+/// host `await`s each call).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurDevTool {
@@ -198,8 +182,7 @@ impl TurDevTool {
     /// populated only while frame timing is enabled.
     #[wasm_bindgen(js_name = frameStats)]
     pub fn frame_stats(&self) -> js_sys::Promise {
-        self.app
-            .eval_js_promise("JSON.stringify(turDevTool.frameStats())".to_string())
+        self.app.frame_stats()
     }
 
     /// Toggle host-side render-commit timing collection. While on, every
@@ -207,8 +190,7 @@ impl TurDevTool {
     /// `frameStats().lastHost`. Off by default (zero per-frame overhead).
     #[wasm_bindgen(js_name = setHostFrameTiming)]
     pub fn set_host_frame_timing(&self, enabled: bool) -> js_sys::Promise {
-        self.app
-            .eval_js_promise(format!("turDevTool.setHostFrameTiming({enabled})"))
+        self.app.set_host_frame_timing(enabled)
     }
 }
 

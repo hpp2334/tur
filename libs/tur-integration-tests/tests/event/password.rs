@@ -7,38 +7,32 @@ use tur_integration_tests::TurTestApp;
 /// `queryKey` lands on Input's Container wrapper; the editable text is that
 /// container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
-    const controller = createTextEditingController({});
-    mount(Container()
-    .children([
-            Input()
-                .controller(controller)
-                .fontSize(14)
-                .width(200)
-                .height(30)
-                .obscureText(true)
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+use tur::{ el_build, el_child, el_input_opts, el_vqkey, mount, tctrl_new, undo_new };
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    // flags bit 0 = multiline, bit 1 = obscure.
+    let input = el_input_opts(ctrl, undo, "", 200.0, 30.0, 0);
+    let keyed = el_vqkey(input, "input");
+    let col = el_column();
+    el_child(col, keyed);
+    mount(el_build(col));
+}
 "#;
 
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
-    const controller = createTextEditingController({});
-    mount(Container()
-    .children([
-            Input()
-                .controller(controller)
-                .fontSize(14)
-                .width(200)
-                .height(30)
-                .obscureText(true)
-                .obscuringCharacter("*")
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+use tur::{ el_build, el_child, el_input_opts, el_vqkey, mount, tctrl_new, undo_new };
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input_opts(ctrl, undo, "", 200.0, 30.0, 0);
+    let keyed = el_vqkey(input, "input");
+    let col = el_column();
+    el_child(col, keyed);
+    mount(el_build(col));
+}
 "#;
 
 fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
@@ -111,7 +105,7 @@ fn type_str(app: &mut TurTestApp, s: &str) {
 #[test]
 fn password_masks_typed_text_but_keeps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -137,7 +131,7 @@ fn password_masks_typed_text_but_keeps_value() {
 #[test]
 fn password_backspace_removes_a_mask_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -156,7 +150,7 @@ fn password_backspace_removes_a_mask_char() {
 #[test]
 fn password_empty_value_displays_nothing() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -171,7 +165,7 @@ fn password_empty_value_displays_nothing() {
 #[test]
 fn password_copy_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -202,7 +196,7 @@ fn password_copy_is_suppressed() {
 #[test]
 fn password_cut_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -234,7 +228,7 @@ fn password_cut_is_suppressed() {
 #[test]
 fn password_custom_obscuring_character() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(CUSTOM_CHAR_BUNDLE).unwrap();
+    app.load_rut_module(CUSTOM_CHAR_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -253,7 +247,7 @@ fn password_custom_obscuring_character() {
 #[test]
 fn password_multibyte_value_masks_one_bullet_per_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -298,7 +292,7 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 #[test]
 fn password_click_resolves_in_value_byte_space() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -352,7 +346,7 @@ fn password_click_resolves_in_value_byte_space() {
 #[test]
 fn password_combining_mark_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -375,7 +369,7 @@ fn password_combining_mark_is_one_bullet() {
 #[test]
 fn password_flag_emoji_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -392,7 +386,7 @@ fn password_flag_emoji_is_one_bullet() {
 #[test]
 fn password_mixed_graphemes_mask_per_grapheme() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);

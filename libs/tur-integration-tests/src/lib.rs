@@ -8,9 +8,6 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::Context;
-use boa_engine::NativeFunction;
-use boa_engine::context::time::Clock;
 use futures::StreamExt;
 use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
@@ -23,33 +20,29 @@ use tur_engine::core::element::{ElementNodeId, NodeId};
 /// worker threads (Phase 8 threaded mode). Tests are single-threaded but
 /// must satisfy the same bound — `Mutex` adds negligible overhead for the
 /// test's per-frame clock access.
-pub struct MutexFixedClock(pub std::sync::Mutex<boa_engine::context::time::FixedClock>);
+pub struct MutexFixedClock(pub std::sync::Mutex<f64>);
 
-impl boa_engine::context::time::Clock for MutexFixedClock {
-    fn now(&self) -> boa_engine::context::time::JsInstant {
-        self.0.lock().unwrap().now()
-    }
-    fn system_time_millis(&self) -> i64 {
-        self.0.lock().unwrap().system_time_millis()
+impl tur_engine::core::clock::Clock for MutexFixedClock {
+    fn now_millis(&self) -> f64 {
+        *self.0.lock().unwrap()
     }
 }
 
 impl MutexFixedClock {
     pub fn new(start_millis: u64) -> Self {
-        Self(std::sync::Mutex::new(
-            boa_engine::context::time::FixedClock::from_millis(start_millis),
-        ))
+        Self(std::sync::Mutex::new(start_millis as f64))
     }
     pub fn forward(&self, millis: u64) {
-        self.0.lock().unwrap().forward(millis);
+        *self.0.lock().unwrap() += millis as f64;
     }
 }
+use tur_engine::core::clock::Clock as _;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
-use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
+use tur_engine::core::plugin::Plugin;
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
@@ -66,91 +59,10 @@ use tur_net_capability::{
     TurNetPlugin,
 };
 
-/// A minimal [`Plugin`] that registers a single ctx-free host module at
-/// build time. Test-only convenience for the cases that previously used the
-/// runtime `TurApp::register_native_module` API (now removed) — lets a test
-/// inject `tur:<whatever>` exports through the plugin path.
-///
-/// **Phase 7**: holds builder closures (not pre-built `NativeFunction`s)
-/// because `NativeFunction` wraps a boa `TraceableClosure` (`!Send`). Each
-/// instance's `register()` calls the builder to produce a fresh
-/// `NativeFunction` against its own boa `Context`.
-pub struct NativeModulePlugin {
-    /// Module specifier to register (e.g. `"tur:test"`).
-    pub specifier: &'static str,
-    /// `(name, builder, length)` exports.
-    pub exports: Vec<NativeExport>,
-}
-
-/// One export of a [`NativeModulePlugin`]. The `builder` closure produces a
-/// fresh `NativeFunction` for each instance (called inside `register`).
-#[derive(Clone)]
-pub struct NativeExport {
-    pub name: String,
-    /// Fresh-`NativeFunction`-per-instance builder. `Send + Sync` so the
-    /// plugin config can cross threads; called inside `register` (or the
-    /// deferred realm-construction replay) per instance. Manually `Clone`
-    /// by re-boxing a shared-`&` call — closures aren't `Clone`.
-    pub builder: BuilderFn,
-    pub length: usize,
-}
-
-/// Shared builder closure type. `Arc` makes [`NativeExport`] `Clone` so the
-/// plugin's register can capture the export list into the deferred
-/// realm-construction thunk.
-pub type BuilderFn = std::sync::Arc<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>;
-
-impl Plugin for NativeModulePlugin {
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-        // Realm-bound: the exports' builders need the realm. Deferred to
-        // realm construction on a realm-free build. The export list is
-        // shared into the thunk via `Arc` (builders aren't `Clone`).
-        let exports: std::sync::Arc<Vec<NativeExport>> = std::sync::Arc::new(self.exports.clone());
-        let specifier = self.specifier;
-        ctx.defer(move |cx| {
-            let exports: Vec<(String, NativeFunction, usize)> = exports
-                .iter()
-                .map(|e| (e.name.clone(), (e.builder)(cx.boa_mut()), e.length))
-                .collect();
-            cx.register_native_module(specifier, exports);
-            Ok(())
-        });
-        Ok(())
-    }
-}
-
 /// Fixed per-frame time step (ms) used by [`TurTestApp::wait_frames`] and
 /// [`TurTestApp::wait_for`] — 60 fps. Animation/timer tests express elapsed
 /// time as a frame count rather than a wall duration.
 const FRAME_STEP_MS: u64 = 16;
-
-/// Legacy fixture adapter: if `source` doesn't already contain an `export`
-/// (inline fixtures never do; dist bundles and hand-written contract
-/// modules always do), hoist its import statements to the top and wrap the
-/// remaining statements in `export function start({ store }) { … }` so the
-/// source satisfies the module lifecycle contract without hand-editing
-/// every inline test bundle. The injected `{ store }` is the instance
-/// store; the fixture body's bare `store` references resolve to it.
-fn wrap_legacy_start(source: &str) -> String {
-    if source.contains("export") {
-        return source.to_string();
-    }
-    let mut imports = String::new();
-    let mut body = String::new();
-    let mut in_import = false;
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if in_import || trimmed.starts_with("import ") {
-            in_import = !trimmed.contains(" from ") && !trimmed.ends_with(';');
-            imports.push_str(line);
-            imports.push('\n');
-        } else {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    format!("{imports}export function start({{ store }}) {{\n{body}}}\n")
-}
 
 /// `Clipboard` impl for tests. Reads return a pre-canned value (set via
 /// [`Self::set_next_read`]); writes are appended to a log drainable via
@@ -762,32 +674,9 @@ impl TurTestApp {
     }
 
     pub fn load_bundle(&mut self, name: &str) -> Result<(), TurError> {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let workspace_root = Path::new(&manifest_dir)
-            .parent()
-            .and_then(|p| p.parent())
-            .expect("failed to resolve workspace root");
-        let cases_dir = workspace_root.join("js/packages/tur-test-cases/cases");
-        // Rut-first: a ported case (`<name>/index.rut`) loads through the
-        // rut rail; the legacy JS dist path remains as the fallback while
-        // the corpus port (Phase 4 D2) is in flight.
-        let rut_path = cases_dir.join(name).join("index.rut");
-        if rut_path.exists() {
-            return self.load_rut_bundle(name);
-        }
-        let path = workspace_root
-            .join("js/packages/tur-test-cases/dist")
-            .join(format!("{name}.js"));
-        let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        // Case dist files are ES modules that import `tur:*` (resolved by
-        // the engine's module loader) and satisfy the module lifecycle
-        // contract natively: their own `start({ store })` calls `mount(view)`
-        // against the engine-provided instance store.
-        block_on(self.inner.load_module(source.as_str()))?;
-        // Drive the module's initial render to quiescence (frozen clock)
-        // before the test starts interacting.
-        self.wait_for_timeout(Duration::ZERO);
-        Ok(())
+        // The corpus is rut sources only (the JS dist rail was deleted in
+        // Phase E) — this is an alias of [`Self::load_rut_bundle`].
+        self.load_rut_bundle(name)
     }
 
     /// Load the **rut** case `name` from the shared case corpus
@@ -846,14 +735,6 @@ impl TurTestApp {
     /// `EventBus::of(app)` that need `&TurApp`.
     pub fn app(&self) -> &TurApp {
         &self.inner
-    }
-
-    /// Whether the instance's JS realm exists. Test-only probe for the
-    /// realm-optional engine: a rut-only instance (no JS module/script ever
-    /// loaded) reports `false` for its whole life. The async RPC is driven
-    /// synchronously (test context).
-    pub fn realm_allocated(&self) -> bool {
-        block_on(self.inner.realm_allocated())
     }
 
     /// Drive the production loop forward by exactly one frame: fire one
@@ -1124,7 +1005,7 @@ impl TurTestApp {
     /// sequence is pushed fire-and-forget; a subsequent `wait_for` /
     /// `wait_for_timeout` drives it.
     pub fn touch_drag(&mut self, start: (f64, f64), end: (f64, f64), steps: usize) {
-        let time_ms = self.clock.now().millis_since_epoch();
+        let time_ms = self.clock.now_millis() as u64;
         self.inner
             .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(start.0, start.1),
@@ -1137,7 +1018,7 @@ impl TurTestApp {
             let t = i as f64 / steps as f64;
             let x = start.0 + (end.0 - start.0) * t;
             let y = start.1 + (end.1 - start.1) * t;
-            let time_ms = self.clock.now().millis_since_epoch();
+            let time_ms = self.clock.now_millis() as u64;
             self.inner
                 .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                     position: Offset::new(x, y),
@@ -1146,7 +1027,7 @@ impl TurTestApp {
                 }));
         }
         self.advance_clock(FRAME_STEP_MS);
-        let time_ms = self.clock.now().millis_since_epoch();
+        let time_ms = self.clock.now_millis() as u64;
         self.inner
             .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(end.0, end.1),
@@ -1440,34 +1321,6 @@ impl TurTestApp {
             .push_platform_event(tur_engine::platform_paste(text.to_string()));
     }
 
-    pub fn eval_js(&self, source: &str) -> String {
-        // RPC to the worker: it runs `ctx.eval(source)`, drains jobs, and
-        // replies with the display string. Synchronous from the test's POV
-        // (blocks on the worker's reply via `block_on`).
-        block_on(self.inner.eval_js(source))
-    }
-
-    /// Evaluate `source` as an ES module and invoke its `start()` export
-    /// (the module lifecycle contract) — supports real
-    /// `import { … } from "tur:std"` (or `tur-ext/demo-helper`/`tur:net`). Returns
-    /// nothing; read results back via [`eval_js`](Self::eval_js).
-    ///
-    /// Legacy fixture adapter: inline test bundles predate the lifecycle
-    /// contract, so a source that doesn't already export `start` is
-    /// auto-wrapped (imports hoisted, remaining statements moved into
-    /// `export function start() { … }`). Contract tests use
-    /// [`load_module_raw`](Self::load_module_raw) for the strict path.
-    pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
-        let wrapped = wrap_legacy_start(source);
-        block_on(self.inner.load_module(wrapped.as_str()))
-    }
-
-    /// Strict module-lifecycle path: loads `source` verbatim — it MUST
-    /// export `function start()` (missing/invalid `start` fails the load).
-    pub fn load_module_raw(&self, source: &str) -> Result<(), TurError> {
-        block_on(self.inner.load_module(source))
-    }
-
     /// Rut-rail module load (Phase 1 of the boa→rut migration): compile +
     /// boot a rut module and invoke its `entry fn start()`.
     pub fn load_rut_module(&self, source: &str) -> Result<(), TurError> {
@@ -1495,6 +1348,18 @@ impl TurTestApp {
                 .and_then(|root| tree.dev_tool_node(root.into()))
         })
         .flatten()
+    }
+
+    /// JSON frame-stats snapshot (the `devToolFrameStats` RPC) — the
+    /// render-performance probe's raw JSON.
+    pub fn dev_tool_frame_stats(&self) -> String {
+        block_on(self.inner.dev_tool_frame_stats())
+    }
+
+    /// Toggle host-side render-commit timing collection (mirrored worker +
+    /// host side — see `FrameStats::host_timing_enabled`).
+    pub fn set_host_frame_timing(&self, enabled: bool) {
+        self.inner.set_host_frame_timing(enabled);
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.

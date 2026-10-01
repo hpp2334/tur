@@ -1,17 +1,15 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-use boa_engine::object::builtins::{JsArray, JsFunction};
-use boa_engine::{JsString, JsValue};
-
+use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
 use crate::core::edgy::reactive::AnyReadable;
+use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::render::brush::Brush;
-use crate::core::view::{Lifecycle, Val, View, ViewCx, extract_view, read_atom_raw};
+use crate::core::rut_runtime::opaque_to_view;
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
+use rut_vm::OpaqueRef;
 
 // ---------------------------------------------------------------------------
 // TableColumnDef — one entry of the `columns` prop. Pure sizing data:
@@ -43,21 +41,25 @@ impl TableColumnDef {
 }
 
 // ---------------------------------------------------------------------------
-// TableView — the user's declaration. Pure Rust after parsing.
+// TableView — the user's declaration. Pure Rust.
 //
-// `columns` is static sizing data. `rows` is the reactive data atom.
-// `build` is a JS function `(item, index) => Element[]` invoked once per
-// row to produce that row's cells; `buildHeader` is a JS function
-// `() => Element[]` invoked ONCE at build time for the header cells.
-// The sizing/chrome props are optional reactives.
+// `columns` is static sizing data. `rows` is the reactive data atom. The
+// builders are rut entry fns invoked through the guarded flush-time VM face
+// (the lazy-container `ItemBuilder::Rut` mechanism): a rut entry returns
+// exactly one value, so the row builder is called once per CELL —
+// `entry fn(row: u64, col: u64) -> opaque` — and the host assembles each
+// row's cells column-wise; the optional header builder is
+// `entry fn(col: u64) -> opaque`, invoked ONCE per header column at build
+// time. A failed call degrades to the empty-cell placeholder. The
+// sizing/chrome props are optional reactives.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct TableView {
     pub(crate) columns: Vec<TableColumnDef>,
     pub(crate) rows: AnyReadable,
-    pub(crate) build: JsFunction,
-    pub(crate) build_header: Option<JsFunction>,
+    pub(crate) build: RutEntryBuilder,
+    pub(crate) build_header: Option<RutEntryBuilder>,
     pub(crate) header_extent: Option<Val<f64>>,
     pub(crate) row_extent: Option<Val<f64>>,
     pub(crate) row_spacing: Option<Val<f64>>,
@@ -67,58 +69,42 @@ pub struct TableView {
     pub(crate) query_key: Option<Vec<String>>,
 }
 
-/// Extract the cell specs from a JS value that the `build` / `buildHeader`
-/// fns returned (an array of view handles). Positional: index `i` maps to
-/// column `i`. `null` / `undefined` entries are placeholders (an empty cell
-/// box — the column advances but nothing is mounted); malformed entries are
-/// treated the same way.
-pub(super) fn specs_from_array(v: &JsValue, boa: &mut Context) -> Vec<Option<Rc<dyn View>>> {
-    let Some(arr) = v
-        .as_object()
-        .and_then(|o| JsArray::from_object(o.clone()).ok())
-    else {
-        return Vec::new();
-    };
-    let len = arr.length(boa).unwrap_or(0);
-    let mut out = Vec::with_capacity(len as usize);
-    for i in 0..len as i64 {
-        let spec = match arr.at(i, boa) {
-            Ok(el) if !el.is_null_or_undefined() => extract_view(&el),
-            _ => None,
-        };
-        out.push(spec);
-    }
-    out
-}
-
-/// Length of a JS value if it is an array (else 0).
-pub(super) fn array_len(v: &JsValue, boa: &mut Context) -> usize {
-    v.as_object()
-        .and_then(|o| JsArray::from_object(o.clone()).ok())
-        .and_then(|a| a.length(boa).ok())
-        .unwrap_or(0) as usize
-}
-
 /// One row's resolved cell specs — `None` placeholders skip their column.
 pub(super) type RowSpecs = Vec<Option<Rc<dyn View>>>;
 
-/// Invoke the row `build(item, index)` closure and resolve its cell specs
-/// (the JS phase — no tree access). Returns the raw spec list; null
-/// placeholders stay `None`.
-fn resolve_row_specs(view: &TableView, item: &JsValue, index: u64, boa: &mut Context) -> RowSpecs {
-    let Ok(result) = view.build.call(
-        &JsValue::undefined(),
-        &[item.clone(), JsValue::from(index as f64)],
-        boa,
-    ) else {
-        return Vec::new();
-    };
-    specs_from_array(&result, boa)
+/// Resolve one cell spec through a rut entry-builder (the guarded
+/// flush-time VM face). Failures degrade to `None` — the empty-cell
+/// placeholder, exactly like a throwing JS builder cell.
+fn resolve_cell<A>(entry: &RutEntryBuilder, args: A) -> Option<Rc<dyn View>>
+where
+    A: rut_vm::interp::CallArgs,
+{
+    let handle: Result<OpaqueRef, _> = entry.face.call(&entry.handles, &entry.name, args);
+    handle.ok().and_then(|h| opaque_to_view(&h))
 }
 
-/// Build resolved row specs into the tree under `parent` (the realm-free
-/// phase). Returns `(column, node)` pairs — null placeholders skip their
-/// column, and entries beyond the declared column count are ignored.
+/// Resolve one body row's cell specs — one guarded entry call per column
+/// (positional: the `(row, col)` call maps to column `col`).
+fn resolve_row_specs(view: &TableView, index: u64) -> RowSpecs {
+    (0..view.columns.len() as u64)
+        .map(|col| resolve_cell(&view.build, (index, col)))
+        .collect()
+}
+
+/// Resolve the header's cell specs (`entry fn(col) -> opaque`, once per
+/// column). Absent header → no specs.
+fn resolve_header_specs(view: &TableView) -> RowSpecs {
+    let Some(header) = view.build_header.as_ref() else {
+        return Vec::new();
+    };
+    (0..view.columns.len() as u64)
+        .map(|col| resolve_cell(header, (col,)))
+        .collect()
+}
+
+/// Build resolved row specs into the tree under `parent` (realm-free).
+/// Returns `(column, node)` pairs — `None` placeholders skip their column,
+/// and entries beyond the declared column count are ignored.
 fn build_row_cells(
     view: &TableView,
     specs: RowSpecs,
@@ -135,44 +121,23 @@ fn build_row_cells(
         .collect()
 }
 
-/// Read the current `rows` array from the store and materialize every row's
-/// cells under `parent`. Returns the per-row cell ids in array order. Two
-/// phases per row: resolve specs through the JS `build` closure (realm,
-/// taken from the build context), then build the resolved views into the
-/// tree (realm-free).
+/// Read the current `rows` list and materialize every row's cells under
+/// `parent`. Returns the per-row cell ids in array order. Each row's specs
+/// resolve through the guarded rut entry face (realm-free — the same rail
+/// the lazy containers build items with), then build into the tree.
 pub(super) fn build_all_rows(
     view: &TableView,
-    raw: &JsValue,
+    rows: &Value,
     cx: &mut dyn ViewCx,
     parent: NodeId,
 ) -> Vec<Vec<(usize, NodeId)>> {
-    let Some(arr) = raw
-        .as_object()
-        .and_then(|o| JsArray::from_object(o.clone()).ok())
-    else {
+    let Some(items) = rows.as_list() else {
         return Vec::new();
     };
-    // JS phase: resolve every row's cell specs while the realm is borrowed.
-    let resolved: Vec<Vec<Option<Rc<dyn View>>>> = match cx.realm() {
-        Some(boa) => {
-            let len = arr.length(boa).unwrap_or(0);
-            (0..len as i64)
-                .map(|i| match arr.at(i, boa) {
-                    Ok(item) => resolve_row_specs(view, &item, i as u64, boa),
-                    Err(_) => Vec::new(),
-                })
-                .collect()
-        }
-        None => {
-            tracing::warn!("Table build_all_rows skipped: no JS realm (JS row builder)");
-            Vec::new()
-        }
-    };
-
-    // Realm-free phase: build the resolved specs into the tree.
-    resolved
-        .into_iter()
-        .map(|specs| build_row_cells(view, specs, cx, parent))
+    items
+        .iter()
+        .enumerate()
+        .map(|(index, _)| build_row_cells(view, resolve_row_specs(view, index as u64), cx, parent))
         .collect()
 }
 
@@ -180,50 +145,20 @@ impl View for TableView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
-        // Current rows value (realm-free read — fresh source slots serve
-        // without the realm).
-        let raw = read_atom_raw(cx, self.rows);
+        // Current rows value (realm-free — the native KV serves without a
+        // realm).
+        let raw = cx.store_read_only().read(self.rows);
+        let rows_len = raw.as_list().map_or(0, <[Value]>::len);
 
-        // The header/row builders are JS functions — they can only exist on
-        // an instance with a realm (the props arrive from JS). Realm-scoped
-        // phase next (resolve specs through the JS builders), then the
-        // realm-free tree-build phase below.
-        let Some(boa) = cx.realm() else {
-            tracing::warn!("Table::build skipped: no JS realm (JS row builders)");
-            return id.into();
-        };
+        // Resolve specs eagerly (guarded rut face calls), then build the
+        // resolved views into the tree (realm-free). The header builder
+        // runs exactly once, here; reactive header *content* flows through
+        // `Val` props inside the returned cells.
+        let header_specs = resolve_header_specs(self);
+        let resolved_rows: Vec<RowSpecs> = (0..rows_len)
+            .map(|i| resolve_row_specs(self, i as u64))
+            .collect();
 
-        // Realm-scoped phase: header specs + body-row specs, resolved
-        // eagerly from the current array value while the realm is borrowed.
-        // `buildHeader` runs exactly once, here; reactive header *content*
-        // flows through `Val` props inside the returned cells.
-        let (header_specs, rows_len, resolved_rows): (RowSpecs, usize, Vec<RowSpecs>) = {
-            let header_specs: RowSpecs = self
-                .build_header
-                .as_ref()
-                .and_then(|f| f.call(&JsValue::undefined(), &[], boa).ok())
-                .map(|result| specs_from_array(&result, boa))
-                .unwrap_or_default();
-            let rows_len = array_len(&raw, boa);
-            let resolved_rows: Vec<RowSpecs> = match raw
-                .as_object()
-                .and_then(|o| JsArray::from_object(o.clone()).ok())
-            {
-                Some(arr) => {
-                    let len = arr.length(boa).unwrap_or(0);
-                    (0..len as i64)
-                        .map(|i| match arr.at(i, boa) {
-                            Ok(item) => resolve_row_specs(self, &item, i as u64, boa),
-                            Err(_) => Vec::new(),
-                        })
-                        .collect()
-                }
-                None => Vec::new(),
-            };
-            (header_specs, rows_len, resolved_rows)
-        };
-
-        // Realm-free phase: build the resolved specs into the tree.
         let header_cells: Vec<(usize, NodeId)> = header_specs
             .into_iter()
             .zip(0..)
@@ -299,18 +234,19 @@ pub(crate) struct TablePainting {
 pub struct TableElement {
     pub(crate) view: TableView,
     pub(crate) node_id: ElementNodeId,
-    /// Header cells as `(column, node)` pairs (empty when `buildHeader` is
-    /// absent). The column index skips null placeholders.
+    /// Header cells as `(column, node)` pairs (empty when the header
+    /// builder is absent). The column index skips `None` placeholders.
     pub(crate) header_cells: Vec<(usize, NodeId)>,
     /// Per-row cells as `(column, node)` pairs, in rows-array order.
     pub(crate) row_cells: Vec<Vec<(usize, NodeId)>>,
-    /// Identity of the rows-array value the current `row_cells` were built
-    /// from (`JsValue` equality — reference identity for arrays). Drives the
-    /// rebuild decision during layout. Note: mutating the same array object
-    /// in place (same identity, same length) is not observed — write a fresh
-    /// array, the `Each`-idiomatic `store.set(rows$, [...items, x])`.
-    pub(crate) rows_stamp: Option<JsValue>,
-    /// Length of the built rows array (guards same-object length changes).
+    /// Identity of the rows-list value the current `row_cells` were built
+    /// from (`Value` equality — list payloads compare by `Rc` reference
+    /// identity, like a fresh JS array). Drives the rebuild decision during
+    /// layout. Note: mutating the same list in place (same identity, same
+    /// length) is not observed — write a fresh list, the `Each`-idiomatic
+    /// `rs_set_value(rows$, …)`.
+    pub(crate) rows_stamp: Option<Value>,
+    /// Length of the built rows list (guards same-identity length changes).
     pub(crate) rows_len: usize,
     pub(crate) col_widths: Vec<f64>,
     pub(crate) row_heights: Vec<f64>,
@@ -365,64 +301,31 @@ impl ElementTrace for TableElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — parse props into a spec.
+// Constructor — the rut rail (`core::rut_runtime`).
 // ---------------------------------------------------------------------------
 
-/// Parse `columns` — a non-empty JS array of `{ width?, flex?, minWidth? }`
-/// entries. Returns `None` when missing / not an array / empty.
-fn prop_columns(props: &JsObject, ctx: &mut Context) -> Option<Vec<TableColumnDef>> {
-    let v = props.get(JsString::from("columns"), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()?;
-    if len == 0 {
-        return None;
-    }
-
-    fn prop_num(entry: &JsObject, name: &str, ctx: &mut Context) -> Option<f64> {
-        entry
-            .get(JsString::from(name), ctx)
-            .ok()?
-            .as_number()
-            .filter(|n| n.is_finite())
-    }
-
-    let mut out = Vec::with_capacity(len as usize);
-    for i in 0..len as i64 {
-        let Ok(entry) = arr.at(i, ctx) else {
-            continue;
-        };
-        let Some(entry_obj) = entry.as_object() else {
-            continue;
-        };
-        out.push(TableColumnDef {
-            width: prop_num(&entry_obj, "width", ctx).map(|w| w.max(0.0)),
-            flex: prop_num(&entry_obj, "flex", ctx).map(|f| f.max(0.0)),
-            min_width: prop_num(&entry_obj, "minWidth", ctx).map(|m| m.max(0.0)),
-        });
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
 impl TableView {
-    /// Build a `TableView` from a JS props object. Returns `None` when a
-    /// required prop is missing or malformed: a non-empty `columns` array,
-    /// the `rows` readable, and the `build` function.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let columns = prop_columns(props, ctx)?;
-        let mut p = JsProps::new(props, ctx);
-        Some(TableView {
+    /// Rut-rail constructor (`core::rut_runtime`): entry-builder row/header
+    /// faces + column geometry + the reactive rows atom. The optional
+    /// sizing/chrome props default (absent).
+    pub(crate) fn new_rut(
+        columns: Vec<TableColumnDef>,
+        rows: AnyReadable,
+        build: RutEntryBuilder,
+        build_header: Option<RutEntryBuilder>,
+    ) -> Self {
+        TableView {
             columns,
-            rows: p.readable("rows")?,
-            build: p.function("build")?,
-            build_header: p.function("buildHeader"),
-            header_extent: p.val::<f64>("headerExtent"),
-            row_extent: p.val::<f64>("rowExtent"),
-            row_spacing: p.val::<f64>("rowSpacing"),
-            stripe_color: p.val::<Brush>("stripeColor"),
-            divider_color: p.val::<Brush>("dividerColor"),
-            divider_thickness: p.val::<f64>("dividerThickness"),
-            query_key: p.query_key("queryKey"),
-        })
+            rows,
+            build,
+            build_header,
+            header_extent: None,
+            row_extent: None,
+            row_spacing: None,
+            stripe_color: None,
+            divider_color: None,
+            divider_thickness: None,
+            query_key: Some(vec!["rut".to_string(), "table".to_string()]),
+        }
     }
 }

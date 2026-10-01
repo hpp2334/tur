@@ -18,29 +18,28 @@ use tur_integration_tests::TurTestApp;
 const HUGE_EDITOR: &str = r##"
 import { mount, ScrollView, Input } from "tur:std";
 
-const spans = [];
-for (let i = 0; i < 4000; i++) {
-    spans.push({ content: "const value" + i + " = " + i + "; // line " + i + "\n" });
+use tur::{ el_build, el_input_ctrl, el_qkey, el_scroll, mount, tctrl_new, tctrl_push_span };
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 4000) {
+        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        i += 1;
+    }
+
+    let input = el_input_ctrl(ctrl, 100000.0, 4000.0, 14.0);
+    el_qkey(input, "ed");
+    let scroller = el_scroll(true, el_build(input));
+    el_qkey(scroller, "scroll");
+    mount(el_build(scroller));
 }
-globalThis.__spans = spans;
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans(spans);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Input()
-     .controller(globalThis.__ctrl)
-     .multiline(true)
-     .fontFamily("monospace")
-     .fontSize(14)
-     .queryKey(["ed"])
-     .build())
-    .build());
 "##;
 
 #[test]
 fn huge_document_layout_and_paint_does_not_panic() {
     let mut app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(HUGE_EDITOR)
+    app.load_rut_module(HUGE_EDITOR)
         .expect("load huge editor");
     app.wait_for_timeout(std::time::Duration::ZERO);
 

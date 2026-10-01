@@ -9,15 +9,11 @@
 
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsResult, JsValue};
 use vello_common::kurbo::{Affine, Point};
 
 use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::JsProps;
-use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Alignment, ComputedLayout, Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset,
     Size, SubscribeCx,
@@ -25,7 +21,7 @@ use crate::core::layout::{
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
-use super::link::{CompositedLinkState, extract_link_state};
+use super::link::CompositedLinkState;
 
 #[derive(Clone)]
 pub struct FollowerView {
@@ -234,33 +230,6 @@ impl ElementRender for FollowerElement {
     }
 }
 
-impl FollowerView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let link = extract_link_state(props, ctx)?;
-        let mut p = JsProps::new(props, ctx);
-        let target_anchor = p
-            .val::<Alignment>("targetAnchor")
-            .unwrap_or(Val::Static(Alignment::TopLeft));
-        let follower_anchor = p
-            .val::<Alignment>("followerAnchor")
-            .unwrap_or(Val::Static(Alignment::TopLeft));
-        let show_when_unlinked = p.opt::<bool>("showWhenUnlinked").unwrap_or(true);
-        let child = p.child("child");
-        // `targetOffset` is a static `{ x, y }` object or a `Val` of one; held
-        // as a raw `Val<Value>` and field-decoded at layout time (see
-        // `perform_layout` / `decode_offset`).
-        let target_offset = p.val::<Value>("targetOffset");
-        Some(FollowerView {
-            link: Some(link),
-            target_anchor,
-            follower_anchor,
-            target_offset,
-            show_when_unlinked,
-            child,
-        })
-    }
-}
-
 /// Field-read a `{ x, y }` native map into an `Offset`. Realm-free: the
 /// prop rides the native-KV substrate as a `Value::Map`.
 fn decode_offset(v: &Value) -> Offset {
@@ -268,52 +237,3 @@ fn decode_offset(v: &Value) -> Offset {
     let y = v.get("y").and_then(Value::as_num).unwrap_or(0.0);
     Offset::new(x, y)
 }
-
-pub(super) static TABLE: crate::core::js_runtime::builder::BuilderTable =
-    crate::core::js_runtime::builder::BuilderTable {
-        methods: &[
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "link",
-                crate::core::js_runtime::builder::setters::link,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "targetAnchor",
-                crate::core::js_runtime::builder::setters::targetAnchor,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "followerAnchor",
-                crate::core::js_runtime::builder::setters::followerAnchor,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "targetOffset",
-                crate::core::js_runtime::builder::setters::targetOffset,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "showWhenUnlinked",
-                crate::core::js_runtime::builder::setters::showWhenUnlinked,
-            ),
-        ],
-        child: true,
-        children: false,
-    };
-
-crate::core::js_runtime::builder::builder_factory!(tur_follower_factory, tur_follower, &TABLE);
-
-pub(super) fn tur_follower(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let _ = extract_js_ctx(args)?;
-    let props = require_props_object(args, 1, context)?;
-    let spec = FollowerView::from_js(&props, context).ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("CompositedTransformFollower requires a `link` (createLayerLink())"),
-        )
-    })?;
-    Ok(wrap_view(Rc::new(spec), context))
-}
-
-#[allow(dead_code)]
-const _ENSURE_PTR: Ptr = tur_follower as Ptr;

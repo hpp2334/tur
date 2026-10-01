@@ -1,22 +1,19 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell, Ref, RefMut};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::render::brush::Color;
-use boa_engine::class::Class;
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::builtin_plugins::text::controller::TextEditingController;
 use crate::builtin_plugins::text::controller::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
-    InputEvent, SelectionChangeEvent,
+    InputEvent, SelectionChangeEvent, UndoController,
 };
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 
-use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
-use crate::core::edgy::reactive::AnyReadable;
+use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
@@ -24,7 +21,6 @@ use crate::core::elements::{
     TraceValue,
 };
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Constraints, ElementSubscribe, SubscribeCx};
 use crate::core::platform::ImeEvent;
 use crate::core::platform::PointerDeviceKind;
@@ -32,7 +28,7 @@ use crate::core::platform::key_event::KeydownEvent;
 use crate::core::platform::key_event::{KeyEvent, KeyEventType};
 use crate::core::scheduler::TaskHandle;
 use crate::core::text::text_layout::TextLayoutData;
-use crate::core::view::{Lifecycle, SharedViewCx, Val, View, ViewCx, read_atom_raw};
+use crate::core::view::{Lifecycle, SharedViewCx, Val, View, ViewCx};
 
 /// Default text color (opaque black) shared by the layout (text fall-back)
 /// and render (cursor fall-back) modules.
@@ -82,23 +78,25 @@ impl LineNavInfo {
 }
 
 // ---------------------------------------------------------------------------
-// EditableTextView — the user's declaration. Pure Rust, no JsValues except
-// the opaque `controller` (a TextEditingController class instance).
+// EditableTextView — the user's declaration. Pure Rust.
 //
-// `controller` is parsed eagerly (not reactive). The text-style props
-// (`placeholder`, `color`, `placeholder_color`, `cursor_color`, `font_size`,
-// `multiline`) are reactive (`Val<T>`).
+// `controller` / `undo_controller` are shared plain-Rust controllers, bound
+// at author time (not reactive). The text-style props (`placeholder`,
+// `color`, `placeholder_color`, `cursor_color`, `font_size`, `multiline`)
+// are reactive (`Val<T>`).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct EditableTextView {
-    pub(crate) controller: Option<JsObject>,
-    pub(crate) controller_atom: Option<AnyReadable>,
+    /// Shared `TextEditingController`. `None` means "mint a default at
+    /// build time" (an uncontrolled input).
+    pub(crate) controller: Option<Rc<RefCell<TextEditingController>>>,
     /// Optional `UndoController` for Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z support.
     /// When `Some`, text-mutating keystrokes push a prior-state snapshot
     /// onto the undo stack, and `handle_key_event` intercepts `"z"` / `"y"`
-    /// with the appropriate modifiers.
-    pub(crate) undo_controller: Option<JsObject>,
+    /// with the appropriate modifiers. Attached to the controller at build
+    /// time (see `TextEditingController::maybe_push_undo`).
+    pub(crate) undo_controller: Option<Rc<RefCell<UndoController>>>,
     pub(crate) placeholder: Option<Val<String>>,
     pub(crate) color: Option<Val<Color>>,
     pub(crate) placeholder_color: Option<Val<Color>>,
@@ -125,47 +123,19 @@ impl View for EditableTextView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         let mut spec = self.clone();
 
-        if spec.controller.is_none()
-            && let Some(readable) = spec.controller_atom
-        {
-            let js_val = read_atom_raw(cx, readable);
-            if let Some(obj) = js_val.as_object()
-                && obj.downcast_ref::<TextEditingController>().is_some()
-            {
-                spec.controller = Some(obj.clone());
-            }
-        }
-
+        // An uncontrolled input (no injected controller) gets a default.
         if spec.controller.is_none() {
-            // A default controller object needs the realm. An Input without
-            // a controller cannot exist on a realm-free instance (the view
-            // arrives from JS), so degrade with a warning and skip.
-            match cx.realm() {
-                Some(boa) => {
-                    let data =
-                        TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
-                            .expect("failed to construct default TextEditingController");
-                    let obj = TextEditingController::from_data(data, boa)
-                        .expect("failed to wrap default TextEditingController");
-                    spec.controller = Some(obj.upcast().clone());
-                }
-                None => {
-                    tracing::warn!(
-                        "EditableText::build: no controller + no JS realm — element left controller-less"
-                    );
-                }
-            }
+            spec.controller = Some(Rc::new(RefCell::new(TextEditingController::new())));
         }
 
         // Attach the undo recorder to the controller so every text mutation
-        // (keyboard, IME, JS bridge, programmatic setSpans) records to the
-        // history stack uniformly — mirroring Flutter's `UndoHistory` listener
-        // model. See `TextEditingController::maybe_push_undo`.
-        if let Some(undo_obj) = spec.undo_controller.clone()
-            && let Some(ctrl_obj) = spec.controller.as_ref()
-            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>()
+        // (keyboard, IME, paste, programmatic set_spans) records to the
+        // history stack uniformly — mirroring Flutter's `UndoHistory`
+        // listener model. See `TextEditingController::maybe_push_undo`.
+        if let Some(undo) = spec.undo_controller.clone()
+            && let Some(ctrl) = spec.controller.as_ref()
         {
-            ctrl.set_undo_recorder(Some(undo_obj));
+            ctrl.borrow_mut().set_undo_recorder(Some(undo));
         }
 
         cx.insert_node(
@@ -303,33 +273,27 @@ impl Focusable for EditableTextElement {
 }
 
 impl EditableTextElement {
-    pub fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
+    pub fn controller(&self) -> Ref<'_, TextEditingController> {
+        Ref::map(
+            self.view
+                .controller
+                .as_ref()
+                .expect("controller is always present (built with a default)")
+                .borrow(),
+            |c| c,
+        )
+    }
+
+    pub fn controller_mut(&self) -> RefMut<'_, TextEditingController> {
         self.view
             .controller
             .as_ref()
-            .expect("controller is always present")
-            .downcast_ref::<TextEditingController>()
-            .expect("controller is always a valid TextEditingController")
+            .expect("controller is always present (built with a default)")
+            .borrow_mut()
     }
 
-    pub fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
-        self.view
-            .controller
-            .as_ref()
-            .expect("controller is always present")
-            .downcast_mut::<TextEditingController>()
-            .expect("controller is always a valid TextEditingController")
-    }
-
-    pub fn undo_controller_mut(
-        &self,
-    ) -> Option<
-        boa_engine::object::RefMut<'_, crate::builtin_plugins::text::controller::UndoController>,
-    > {
-        self.view
-            .undo_controller
-            .as_ref()?
-            .downcast_mut::<crate::builtin_plugins::text::controller::UndoController>()
+    pub fn undo_controller_mut(&self) -> Option<RefMut<'_, UndoController>> {
+        self.view.undo_controller.as_ref().map(|u| u.borrow_mut())
     }
 
     pub fn text(&self) -> String {
@@ -858,46 +822,18 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// ContextMenuEvent — JS callback argument for the right-click menu trigger.
+// ContextMenuEvent — callback argument for the right-click menu trigger.
 // Carries both local (element-relative) and global (canvas-relative) coords.
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct ContextMenuEvent {
     local: crate::core::layout::Offset,
     global: crate::core::layout::Offset,
 }
 
-impl crate::core::edgy::mutation::MutationPayload for ContextMenuEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        IntoJsArgs::to_js_args(self, ctx)
-    }
-}
-
-impl IntoJsArgs for ContextMenuEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        use boa_engine::js_string;
-        use boa_engine::object::JsObject;
-
-        fn make_point(ctx: &mut Context, x: f64, y: f64) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("x"), JsValue::from(x), ctx);
-            let _ = obj.create_data_property(js_string!("y"), JsValue::from(y), ctx);
-            obj
-        }
-        fn make_event(ctx: &mut Context, local: JsObject, global: JsObject) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("local"), JsValue::from(local), ctx);
-            let _ = obj.create_data_property(js_string!("global"), JsValue::from(global), ctx);
-            obj
-        }
-
-        let local = make_point(ctx, self.local.x, self.local.y);
-        let global = make_point(ctx, self.global.x, self.global.y);
-        let event = make_event(ctx, local, global);
-        vec![JsValue::from(event)]
-    }
-}
+impl crate::core::edgy::mutation::MutationPayload for ContextMenuEvent {}
 
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx) {
@@ -1248,36 +1184,6 @@ impl ElementOnIme for EditableTextElement {
                     cx.request_paint();
                 }
             }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory helpers — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl EditableTextView {
-    /// Build an `EditableTextView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        EditableTextView {
-            controller: p.opaque::<TextEditingController>("controller"),
-            controller_atom: p.readable("controller"),
-            undo_controller: p.opaque::<crate::builtin_plugins::text::controller::UndoController>(
-                "undoController",
-            ),
-            placeholder: p.val::<String>("placeholder"),
-            color: p.val::<Color>("color"),
-            placeholder_color: p.val::<Color>("placeholderColor"),
-            cursor_color: p.val::<Color>("cursorColor"),
-            font_size: p.val::<f64>("fontSize"),
-            font_family: p.val::<String>("fontFamily"),
-            font_weight: p.val::<f64>("fontWeight"),
-            multiline: p.val::<bool>("multiline"),
-            obscure_text: p.val::<bool>("obscureText"),
-            obscuring_character: p.val::<String>("obscuringCharacter"),
-            on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
-            query_key: p.query_key("queryKey"),
         }
     }
 }

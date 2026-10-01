@@ -1,9 +1,8 @@
-use boa_engine::{Context, JsValue};
-
-use tur_engine::core::edgy::mutation::IntoJsArgs;
+use tur_engine::core::edgy::Value;
+use tur_engine::core::edgy::mutation::MutationPayload;
 
 // ---------------------------------------------------------------------------
-// Animation callback payloads — JS callback arguments for onTick / onEnd.
+// Animation callback payloads — the onTick / onEnd callback arguments.
 //
 // `onTick(easedValue)` receives the eased progress in [0.0, 1.0].
 // `onEnd()` receives no payload.
@@ -11,41 +10,20 @@ use tur_engine::core::edgy::mutation::IntoJsArgs;
 // Both are dispatched via `PendingMutationInvocationQueue` (the same mechanism
 // used for keyboard/pointer/scroll events), so callbacks fire during the
 // engine's flush loop after all `RefMut` borrows are released. This lets the
-// callback safely read controller properties (`ctrl.status`, `ctrl.value`)
-// without triggering boa's `BorrowError`.
+// callback safely read controller state (`status`, `value`).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
 pub struct AnimationTickEvent(pub f64);
 
-impl IntoJsArgs for AnimationTickEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![JsValue::from(self.0)]
-    }
-}
-
-impl tur_engine::core::edgy::mutation::MutationPayload for AnimationTickEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        IntoJsArgs::to_js_args(self, ctx)
-    }
-
-    /// Native crossing (the rut rail): the eased progress — realm-free.
-    fn to_value_args(&self) -> Vec<tur_engine::core::edgy::Value> {
-        vec![tur_engine::core::edgy::Value::Num(self.0)]
+impl MutationPayload for AnimationTickEvent {
+    /// The eased progress.
+    fn to_value_args(&self) -> Vec<Value> {
+        vec![Value::Num(self.0)]
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct AnimationEndEvent;
 
-impl IntoJsArgs for AnimationEndEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        Vec::new()
-    }
-}
-
-impl tur_engine::core::edgy::mutation::MutationPayload for AnimationEndEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        IntoJsArgs::to_js_args(self, ctx)
-    }
-}
+impl MutationPayload for AnimationEndEvent {}

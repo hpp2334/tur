@@ -1,13 +1,11 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::context::time::Clock;
-
 use crate::core::app::TurAppContext;
 use crate::core::app::frame_stats::FrameTiming;
-use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
+use crate::core::clock::Clock;
 use crate::core::element::{FragmentNodeId, NodeId};
-use crate::core::js_runtime::TurInstanceContext;
+use crate::core::instance::InstanceContext;
 use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerContext;
 use crate::core::subsystem::Subsystem;
@@ -36,9 +34,8 @@ pub struct FrameOutcome {
 }
 
 pub struct TurAppInternal {
-    pub(crate) js_context: TurInstanceContext,
+    pub(crate) instance: InstanceContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
-    pub(crate) executor: Rc<TurJobExecutor>,
     /// Worker-thread scheduler. Bridges grab it via
     /// [`PluginRegisterContext::worker_ctx`] / [`SubsystemFlushContext::worker_ctx`]
     /// and call `spawn_local(fut)` to drive async work (clipboard reads,
@@ -46,24 +43,6 @@ pub struct TurAppInternal {
     /// platform-specific `Sleep(BoxFuture)`.
     #[allow(dead_code)]
     pub(crate) worker_ctx: WorkerContext,
-    /// Completion queue — closures pushed by spawned futures (e.g. promise
-    /// settle closures) are drained inside `flush()` under `&mut Context`.
-    /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
-    /// worker flushes promptly whenever a future completes.
-    pub(crate) completion_queue: Rc<CompletionQueue>,
-    /// Cheap-cloned handle on the completion queue, handed out to bridges
-    /// via [`PluginRegisterContext::completion_handle`] /
-    /// [`SubsystemFlushContext::completion_handle`].
-    #[allow(dead_code)]
-    pub(crate) completion_handle: CompletionHandle,
-    /// Flush-driven task queue for engine-internal async (`sleep`,
-    /// `launch`). Tasks pushed here are polled every fixed-point iteration
-    /// of `flush()` so a sleep whose deadline is reached by a clock
-    /// advance resolves *inside* the same flush (instead of lagging to the
-    /// next frame, which the single-pump-per-tick countdown tests never
-    /// observe). Real platform async (HTTP / clipboard / file-picker)
-    /// still uses `worker_ctx.spawn_local`.
-    pub(crate) flush_task_queue: Rc<FlushTaskQueue>,
     /// Plugin-registered flush subsystems — populated **once** by
     /// `build_worker_backend` (moved from the register-phase
     /// [`PluginRegisterContext`](crate::core::plugin::PluginRegisterContext)
@@ -81,18 +60,6 @@ pub struct TurAppInternal {
     /// Incremented once at the top of each `flush()` call; stable across the
     /// fixed-point iterations within that call.
     pub(crate) frame_id: Cell<u64>,
-    /// Always-installed event bus — bidirectional byte channel
-    /// between the Rust host and the JS realm. Created in
-    /// [`TurAppInternal::new`]; the host-side handle is retrieved via
-    /// [`crate::TurApp::event_bus`]. Plugins (specifically
-    /// `event_bus_consts`) read this via
-    /// [`crate::core::plugin::PluginRegisterContext::event_bus`] to register the
-    /// JS-side bridge (`eventBus.on`/`send`) and the
-    /// [`EmbedderBusSubsystem`] that drains the queues
-    /// each flush.
-    ///
-    /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
-    pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Worker → main render-command batch produced by the last `flush()`
     /// that painted. Drained by `HostBackend`'s `worker_loop` and shipped
     /// to main via `HostMsg::RenderCommands`. `None` if no paint happened
@@ -113,7 +80,7 @@ struct FlushGuard<'a>(&'a TurAppInternal);
 
 impl Drop for FlushGuard<'_> {
     fn drop(&mut self) {
-        self.0.js_context.end_flush();
+        self.0.instance.end_flush();
     }
 }
 
@@ -122,8 +89,7 @@ impl TurAppInternal {
     pub fn new(
         font_context: FontContext,
         font_loader: std::sync::Arc<dyn FontLoader>,
-        executor: Rc<TurJobExecutor>,
-        clock: std::sync::Arc<dyn Clock + Send + Sync>,
+        clock: std::sync::Arc<dyn Clock>,
         capabilities: crate::core::capability::Capabilities,
         worker_ctx: WorkerContext,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
@@ -141,13 +107,6 @@ impl TurAppInternal {
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
 
-        // Event bus — created early so `host_tx` can be set before any
-        // flush runs. The `EmbedderBusSubsystem` ships JS→host bytes to main
-        // via this sender; without it, host-side `on_bus_event` handlers
-        // never fire.
-        let event_bus = Rc::new(crate::core::event_bus::EventBus::new());
-        event_bus.set_host_tx(host_tx.clone());
-
         // Worker-side image state: metadata (sizes) + next-id counter,
         // bundled in one `ImageManager`. The pixel `Blob` ships to main
         // directly from the `createImageResource` bridge via the shared
@@ -155,28 +114,11 @@ impl TurAppInternal {
         // worker never retains pixels across a frame boundary.
         let image_manager = Rc::new(RefCell::new(ImageManager::new()));
 
-        // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
-        // `Rc<dyn Clock>` that `FrameEnv` expects (per-instance + worker-side
-        // only, never shared across threads). ClockProxy is a Sized adapter
-        // that delegates to the Arc.
+        // Adapt the shared `Arc<dyn Clock>` to the `Rc<dyn Clock>` that
+        // `FrameEnv` expects (per-instance + worker-side only, never shared
+        // across threads). ClockProxy is a Sized adapter that delegates to
+        // the Arc.
         let clock_rc: Rc<dyn Clock> = Rc::new(crate::core::runtime::ClockProxy(clock));
-
-        // Completion queue: closures pushed by spawned futures (e.g. promise
-        // settle closures) are drained inside `flush()` under `&mut Context`.
-        // The `on_push` callback self-sends `WorkerMsg::Wake` so the worker
-        // flushes promptly whenever a future completes — without it, an
-        // idle worker would never wake to drain a completion arriving
-        // between frames. The same `wake_worker` Arc is shared with the
-        // flush-driven task queue below (it doubles as the task waker,
-        // which sleep futures register with the test `VirtualClock`).
-        let completion_queue = Rc::new(CompletionQueue::new(wake_worker.clone()));
-        let completion_handle = completion_queue.handle();
-        // Flush-driven task queue: `sleep` + `launch` push their driver
-        // futures here (instead of `worker_ctx.spawn_local`) so `flush`
-        // polls them in lockstep with completions / microtasks — closing
-        // the cross-frame lag that otherwise breaks single-frame sleep
-        // semantics. See `async_::flush_tasks`.
-        let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker.clone()));
 
         let store = Store::new(dirty.clone());
         // The instance-owned tree: created at build, born-bound to the
@@ -191,7 +133,7 @@ impl TurAppInternal {
         // loop (writer) and the `turDevTool` bridge (reader).
         let frame_stats = Rc::new(crate::core::app::FrameStats::default());
 
-        let js_context = TurInstanceContext::new(
+        let instance = InstanceContext::new(
             element_tree.clone(),
             mutation_queue.clone(),
             focus_manager.clone(),
@@ -201,8 +143,6 @@ impl TurAppInternal {
             host_tx,
             store.clone(),
             worker_ctx.clone(),
-            completion_handle.clone(),
-            flush_task_queue.handle(),
             wake_worker.clone(),
             capabilities,
             worker_pools,
@@ -212,7 +152,7 @@ impl TurAppInternal {
         // Share the capability registry between the JS context (bridge fns)
         // and the app context (subsystems via SubsystemFlushContext). Both hold the
         // same `Rc<RefCell<HashMap>>` via the `Capabilities` view clone.
-        let capabilities = js_context.capability();
+        let capabilities = instance.capability();
 
         let app_context = TurAppContext::new(
             element_tree,
@@ -222,43 +162,30 @@ impl TurAppInternal {
             font_context,
             font_loader,
             worker_ctx.clone(),
-            completion_handle.clone(),
             capabilities,
             clock_rc,
         );
 
         Self {
-            js_context,
+            instance,
             app_context: Rc::new(RefCell::new(app_context)),
-            executor,
             worker_ctx,
-            completion_queue,
-            completion_handle,
-            flush_task_queue,
             subsystems: RefCell::new(Vec::new()),
             frame_id: Cell::new(0),
-            event_bus: event_bus.clone(),
             pending_render_batch: RefCell::new(None),
         }
     }
 
-    /// Run one flush. `boa` is the instance's JS realm — `None` on a
-    /// realm-free instance (a rut-only build never allocates one). Every
-    /// realm use site below is a match arm: JS-mutation invocation, JS
-    /// lifecycle hooks, JS event handlers, and JS-derived materialization
-    /// no-op (with a `tracing::warn!` where JS state could plausibly exist)
-    /// when the realm is absent; the Rust paths (subsystems, reactive flush,
-    /// layout, paint, Rust-closure mutations, `watch`) run realm-free.
-    pub fn flush(
-        &self,
-        boa: &mut Option<&mut boa_engine::Context>,
-    ) -> Result<FrameOutcome, TurError> {
+    /// Run one flush — the engine's fixed-point convergence loop: events →
+    /// pre-layout subsystems → reactive flush → layout → post-layout
+    /// subsystems → lifecycle → focus → mutations, until quiescence.
+    pub fn flush(&self) -> Result<FrameOutcome, TurError> {
         // Enter the flush window: mark in-flush (so out-of-flush self-wakes
         // raised by `request_paint` / `set_dirty` during this flush don't
         // emit redundant `Wake`s) and re-arm the wake coalescing gate for
         // any paint request raised mid-flush (it must emit a fresh wake for
         // the *next* pump). See `TurInstanceContext::begin_flush` / `end_flush`.
-        self.js_context.begin_flush();
+        self.instance.begin_flush();
         let _flush_guard = FlushGuard(self);
         let mut needs_paint = false;
         // Frame-stats probe: per-flush timing + counter accumulation (µs,
@@ -291,26 +218,7 @@ impl TurAppInternal {
         };
 
         loop {
-            // Drain completions produced by spawned futures since the last
-            // flush iteration. Completions settle JsPromises (e.g.
-            // clipboard read resolve) under `&mut Context`, enqueuing
-            // PromiseJobs that boa's microtask drain (below) picks up.
-            // Realm-free instances cannot have pending completions (only
-            // JS bridges push them) — skip when the realm is absent.
-            if let Some(boa) = boa.as_deref_mut() {
-                self.completion_queue.drain(boa);
-            }
-
-            // Poll engine-internal async tasks (`sleep`, `launch`) pushed
-            // to the flush-driven queue. Done BEFORE the rest of the
-            // iteration so a sleep that just resolved pushes its
-            // completion this same iteration (drained at the top of the
-            // NEXT iteration) and the launch driver resumes in lockstep.
-            // `tasks_completed > 0` keeps the fixed-point loop alive to
-            // drain those completions. See `async_::flush_tasks`.
-            let tasks_completed = self.flush_task_queue.poll_all();
-
-            let handled_events = self.flush_app_events(boa.as_deref_mut(), &signals);
+            let handled_events = self.flush_app_events(&signals);
 
             // Pre-layout subsystem flush — runs every fixed-point iteration,
             // in registration order, BEFORE the layout step. Each subsystem
@@ -331,11 +239,10 @@ impl TurAppInternal {
             // started from a callback advancing without waiting for the next
             // platform input.
             let subsystem_dirtied = {
-                let need_paint = self.js_context.need_paint.clone();
+                let need_paint = self.instance.need_paint.clone();
                 let mut ctx_guard = self.app_context.borrow_mut();
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
-                    boa: boa.as_deref_mut(),
                     element_tree: ctx.element_tree.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
@@ -344,7 +251,6 @@ impl TurAppInternal {
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     worker_ctx: &ctx.worker_ctx,
-                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -364,13 +270,13 @@ impl TurAppInternal {
             // `do_update(dirties)` to the mounted root. This may mutate
             // the ElementTree, which sets `dirty`/`need_paint` for the next
             // layout pass.
-            let reactive_changed = self.flush_reactive(boa.as_deref_mut(), frame_id);
+            let reactive_changed = self.flush_reactive(frame_id);
 
             // LazyList remount now happens *inside* `perform_layout` (it uses
             // the real viewport from constraints), so there is no separate
             // pre-layout remount pass here.
-            let dirty = self.js_context.dirty.take()
-                || self.js_context.need_paint.take()
+            let dirty = self.instance.dirty.take()
+                || self.instance.need_paint.take()
                 || reactive_changed
                 || subsystem_dirtied;
             if dirty {
@@ -378,9 +284,9 @@ impl TurAppInternal {
                 let layout_start = crate::core::app::frame_stats::clock_now_us(&*clock);
                 self.app_context
                     .borrow_mut()
-                    .layout(self.js_context.dirty.clone(), boa.as_deref_mut());
+                    .layout(self.instance.dirty.clone());
                 layout_us += crate::core::app::frame_stats::clock_now_us(&*clock) - layout_start;
-                dirty_layout_nodes += self.js_context.element_tree.take_layout_count();
+                dirty_layout_nodes += self.instance.element_tree.take_layout_count();
             }
             // Post-layout subsystem flush — runs every fixed-point iteration, in
             // registration order, AFTER the layout step, so subscribers read the
@@ -391,11 +297,10 @@ impl TurAppInternal {
             // zero/stale sizes on the first frame and only self-correct on the
             // next input event (see `follower_correct_on_first_frame_non_topleft_anchor`).
             {
-                let need_paint = self.js_context.need_paint.clone();
+                let need_paint = self.instance.need_paint.clone();
                 let mut ctx_guard = self.app_context.borrow_mut();
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
-                    boa: boa.as_deref_mut(),
                     element_tree: ctx.element_tree.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
@@ -404,7 +309,6 @@ impl TurAppInternal {
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     worker_ctx: &ctx.worker_ctx,
-                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -421,50 +325,18 @@ impl TurAppInternal {
             // Lifecycle hooks fire after layout: on_mounted for inserted
             // elements, before_destroy for removed elements. Pushed mutations
             // are drained right after.
-            self.run_lifecycle_hooks(boa.as_deref_mut());
+            self.run_lifecycle_hooks();
             {
-                let mut cx = crate::core::view::SharedViewCx::new(
-                    self.js_context.clone(),
-                    boa.as_deref_mut(),
-                );
+                let mut cx = crate::core::view::SharedViewCx::new(self.instance.clone());
                 cx.flush_focus_notifications();
             }
-            let handled_mutations = self.flush_pending_mutations(boa.as_deref_mut());
-            // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
-            // PromiseJobs fire `.then` callbacks which may call bridge fns
-            // that spawn more Rust futures via `worker_ctx.spawn_local`.
-            // Those futures' completions are drained at the top of the next
-            // iteration, keeping the fixed-point loop alive. Realm-free
-            // instances have no promise jobs — skip.
-            let jobs_run = match boa.as_deref_mut() {
-                Some(boa) => self.executor.drain(boa).unwrap_or(0),
-                None => 0,
-            };
-            let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
-            // Quiescence: no events, no mutations, no dirty state, no
-            // completions drained this iteration, no microtasks ran, and no
-            // flush-driven task completed (a completed task likely pushed a
-            // completion we need to drain next iteration).
-            if !handled_events
-                && !handled_mutations
-                && !new_dirty
-                && jobs_run == 0
-                && tasks_completed == 0
-            {
+            let handled_mutations = self.flush_pending_mutations();
+            let new_dirty = self.instance.dirty.get() || self.instance.need_paint.get();
+            // Quiescence: no events and no mutations drained this iteration,
+            // no dirty state.
+            if !handled_events && !handled_mutations && !new_dirty {
                 break;
             }
-        }
-
-        // End of turn: report promise rejections that still have no handler
-        // (a `.catch` / `await` attached within this flush retracted them
-        // from the pending set). See `runtime_error`. Realm-free instances
-        // have no promises — skip.
-        if let Some(boa) = boa.as_deref_mut()
-            && let Some(reporter) = boa
-                .get_data::<crate::core::app::runtime_error::RuntimeErrorReporter>()
-                .cloned()
-        {
-            reporter.report_pending_rejections(boa);
         }
 
         if needs_paint {
@@ -472,7 +344,7 @@ impl TurAppInternal {
             // applies it to its renderer (`HostBackend::render_batch`).
             let (batch, parts) = self.app_context.borrow_mut().build_render_batch();
             *self.pending_render_batch.borrow_mut() = Some((batch, frame_id));
-            self.js_context.frame_stats.record_painted(FrameTiming {
+            self.instance.frame_stats.record_painted(FrameTiming {
                 frame_id,
                 nodes_walked: parts.nodes_walked,
                 ops_recorded: parts.ops_recorded,
@@ -486,7 +358,7 @@ impl TurAppInternal {
                 batch_post_us: parts.post_us,
             });
         } else {
-            self.js_context.frame_stats.record_idle_flush();
+            self.instance.frame_stats.record_idle_flush();
         }
 
         // Decide how the caller should schedule the next frame.
@@ -516,8 +388,8 @@ impl TurAppInternal {
     /// dirtied, at most once per `frame_id`) are pushed onto the mutation
     /// queue, so `flush_pending_mutations` invokes them later this iteration
     /// — same rail, same frame, against the mounted store.
-    fn flush_reactive(&self, boa: Option<&mut boa_engine::Context>, frame_id: u64) -> bool {
-        let store = self.js_context.store.clone();
+    fn flush_reactive(&self, frame_id: u64) -> bool {
+        let store = self.instance.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {
             return false;
@@ -532,7 +404,7 @@ impl TurAppInternal {
         // them with the mounted store's ctx.
         let due_callbacks = store.watch_dispatch().due_callbacks(&dirties, frame_id);
         if !due_callbacks.is_empty() {
-            let mut queue = self.js_context.mutation_queue.borrow_mut();
+            let mut queue = self.instance.mutation_queue.borrow_mut();
             for callback in due_callbacks {
                 queue.push(
                     crate::core::edgy::mutation::MutationHandle::<()>::new(callback),
@@ -546,7 +418,7 @@ impl TurAppInternal {
         // Mark all dirty subscribers dirty. mark_dirty handles fragments by
         // skipping them and marking their real parent element.
         {
-            let mut tree = self.js_context.element_tree.borrow_mut();
+            let mut tree = self.instance.element_tree.borrow_mut();
             for sub_id in &dirty_subs {
                 tree.mark_dirty(NodeId::new(sub_id.as_u64()));
             }
@@ -555,7 +427,7 @@ impl TurAppInternal {
         // Split dirty subscribers into fragments so fragment rebuilds only
         // process dirty fragments (not a full scan).
         let dirty_frag_ids: Vec<FragmentNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
+            let tree = self.instance.element_tree.borrow();
             dirty_subs
                 .iter()
                 .filter(|s| tree.is_fragment(NodeId::new(s.as_u64())))
@@ -565,7 +437,7 @@ impl TurAppInternal {
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
         if !dirty_frag_ids.is_empty() {
-            self.rebuild_fragments(boa, &dirty_frag_ids);
+            self.rebuild_fragments(&dirty_frag_ids);
         }
 
         !dirty_subs.is_empty()
@@ -574,28 +446,26 @@ impl TurAppInternal {
     /// Fire element lifecycle hooks: `on_mounted` for newly-inserted elements
     /// and `before_destroy` for elements removed since the last pass.
     /// All hooks run after layout (so the mutation queue is drained by the
-    /// subsequent `flush_pending_mutations`). Realm-free: hooks are Rust
-    /// closures / mutation enqueues (the JS-authored hook callbacks cannot
-    /// exist without a realm); the realm rides the SharedViewCx.
-    fn run_lifecycle_hooks(&self, boa: Option<&mut boa_engine::Context>) {
-        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone(), boa);
+    /// subsequent `flush_pending_mutations`).
+    fn run_lifecycle_hooks(&self) {
+        let mut cx = crate::core::view::SharedViewCx::new(self.instance.clone());
 
         // on_mounted — freshly-inserted elements.
         let mounted_ids = self
-            .js_context
+            .instance
             .element_tree
             .borrow_mut()
             .take_pending_mounted();
         for id in mounted_ids {
             let mut element = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
+                let mut tree = self.instance.element_tree.borrow_mut();
                 tree.get_element_mut(id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
                 elem.run_on_mounted(&mut cx);
             }
             if let Some(elem) = element {
-                let mut tree = self.js_context.element_tree.borrow_mut();
+                let mut tree = self.instance.element_tree.borrow_mut();
                 if let Some(node) = tree.get_element_mut(id) {
                     node.element = Some(elem);
                 }
@@ -606,7 +476,7 @@ impl TurAppInternal {
         // is already detached from the tree (taken out during destroy), so we
         // just fire the hook and let it drop.
         let destroyed = self
-            .js_context
+            .instance
             .element_tree
             .borrow_mut()
             .take_pending_destroy();
@@ -619,16 +489,12 @@ impl TurAppInternal {
     /// whose subscribed atoms are dirty are processed — identified via the
     /// subscriber graph, not a full scan. Each fragment's `perform_update`
     /// resolves the current value and swaps the branch/items if changed.
-    fn rebuild_fragments(
-        &self,
-        boa: Option<&mut boa_engine::Context>,
-        dirty_frag_ids: &[FragmentNodeId],
-    ) {
-        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone(), boa);
+    fn rebuild_fragments(&self, dirty_frag_ids: &[FragmentNodeId]) {
+        let mut cx = crate::core::view::SharedViewCx::new(self.instance.clone());
 
         for fid in dirty_frag_ids {
             let mut kind = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
+                let mut tree = self.instance.element_tree.borrow_mut();
                 tree.get_fragment_mut(*fid).and_then(|h| h.kind.take())
             };
             let Some(ref mut k) = kind else { continue };
@@ -636,7 +502,7 @@ impl TurAppInternal {
             // Save old children + parent BEFORE rebuild (perform_update
             // auto-links new children to frag.children via append_child).
             let (old_children, parent) = {
-                let tree = self.js_context.element_tree.borrow();
+                let tree = self.instance.element_tree.borrow();
                 tree.get_fragment(*fid)
                     .map(|f| (f.children.clone(), f.parent))
                     .unwrap_or((Vec::new(), (*fid).into()))
@@ -647,7 +513,7 @@ impl TurAppInternal {
             if let Some(new) = new_children {
                 // frag.children now has old + new; replace with just new.
                 {
-                    let mut tree = self.js_context.element_tree.borrow_mut();
+                    let mut tree = self.instance.element_tree.borrow_mut();
                     if let Some(f) = tree.get_fragment_mut(*fid) {
                         f.children = new;
                     }
@@ -661,7 +527,7 @@ impl TurAppInternal {
 
             // Put kind back.
             if let Some(kind) = kind {
-                let mut tree = self.js_context.element_tree.borrow_mut();
+                let mut tree = self.instance.element_tree.borrow_mut();
                 if let Some(host) = tree.get_fragment_mut(*fid) {
                     host.kind = Some(kind);
                 }
@@ -669,11 +535,7 @@ impl TurAppInternal {
         }
     }
 
-    fn flush_app_events(
-        &self,
-        mut boa: Option<&mut boa_engine::Context>,
-        signals: &crate::core::subsystem::FlushSignals<'_>,
-    ) -> bool {
+    fn flush_app_events(&self, signals: &crate::core::subsystem::FlushSignals<'_>) -> bool {
         let (platform_events, app_events) = {
             let mut ctx = self.app_context.borrow_mut();
             (
@@ -685,11 +547,10 @@ impl TurAppInternal {
             return false;
         }
 
-        let need_paint = self.js_context.need_paint.clone();
+        let need_paint = self.instance.need_paint.clone();
         let mut subsystems = self.subsystems.borrow_mut();
         for event in &platform_events {
             self.app_context.borrow_mut().dispatch_platform_event(
-                boa.as_deref_mut(),
                 event,
                 &need_paint,
                 &mut subsystems,
@@ -699,7 +560,6 @@ impl TurAppInternal {
 
         for event in &app_events {
             self.app_context.borrow_mut().dispatch_app_event(
-                boa.as_deref_mut(),
                 event,
                 &need_paint,
                 &mut subsystems,
@@ -719,53 +579,28 @@ impl TurAppInternal {
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the
-    /// reactive store. The per-store `{get, set}` JsObject is built inside
-    /// [`crate::core::edgy::reactive::SharedReactive::invoke_mutation_by_id`]
-    /// only for `Js`-variant closures, so here we pass only the user args.
+    /// reactive store with the payload's native args (see
+    /// [`crate::core::edgy::mutation::MutationPayload::to_value_args`]).
     /// Invocations run against the **mounted** store (the tree's store), so
     /// atoms touched by the mutation's closure materialize there.
-    /// Drain the pending-mutation queue and invoke each mutation via the
-    /// reactive store. The per-store `{get, set}` JsObject is built inside
-    /// [`crate::core::edgy::reactive::SharedReactive::invoke_mutation_by_id`]
-    /// only for `Js`-variant closures, so here we pass only the user args.
-    /// Invocations run against the **mounted** store (the tree's store), so
-    /// atoms touched by the mutation's closure materialize there.
-    ///
-    /// Realm-free instances: only `MutateRust` closures can exist there (the
-    /// rut rail's element callbacks — realm-free by design), so invocation
-    /// proceeds with **empty args** (the event payloads are JS-shaped; the
-    /// realm-free callbacks read none — the rut click intent carries its
-    /// payload in closure captures). A `Js` closure reaching a realm-free
-    /// flush is an anomaly; `invoke_mutation_by_id` warns and skips it.
-    fn flush_pending_mutations(&self, mut boa: Option<&mut boa_engine::Context>) -> bool {
-        let invs = self.js_context.mutation_queue.borrow_mut().drain();
+    fn flush_pending_mutations(&self) -> bool {
+        let invs = self.instance.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {
             return false;
         }
-        let mounted = self.js_context.element_tree.store();
+        let mounted = self.instance.element_tree.store();
         for inv in invs {
-            // Event payloads cross in both shapes: native (`Value`) args
-            // need no realm (the rut rail); JS-shaped payloads convert
-            // here (the store's invoke rail speaks `Value` only — Js
-            // closures convert back around the call). Without a realm a
-            // JS-shaped payload keeps the historical degradation (empty
-            // args — the JS closure cannot exist realm-free either).
-            let args: Vec<crate::core::edgy::Value> = match boa.as_deref_mut() {
-                Some(boa) => inv
-                    .args
-                    .to_js_args(boa)
-                    .iter()
-                    .map(|jv| crate::core::edgy::Value::from_js(jv, boa))
-                    .collect(),
-                None => inv.args.to_value_args(),
-            };
-            // A failed invocation (e.g. a watch loop rejected a write, or user
-            // code threw) must not stall the flush — log and keep draining.
-            if let Err(e) = mounted.invoke_mutation(inv.mutation, &args, boa.as_deref_mut()) {
+            let args = inv.args.to_value_args();
+            // A failed invocation (e.g. a watch loop rejected a write, or
+            // user code trapped) must not stall the flush — log + report
+            // through the runtime-error rail and keep draining.
+            if let Err(e) = mounted.invoke_mutation(inv.mutation, &args) {
                 tracing::error!("mutation invocation failed: {e}");
-                if let Some(boa) = boa.as_deref_mut() {
-                    crate::core::app::runtime_error::report(boa, &e);
-                }
+                crate::core::app::runtime_error::send_report(
+                    &self.instance.host_tx,
+                    format!("mutation invocation failed: {e}"),
+                    None,
+                );
             }
         }
         true
@@ -776,8 +611,9 @@ impl TurAppInternal {
     /// `destroy_subtree`) and drain the mutations they queued — invoked
     /// against the still-bound mounted store. The caller drops the tree
     /// right after: it must not outlive its pending lifecycle work.
-    pub(crate) fn drain_teardown_lifecycle(&self, mut boa: Option<&mut boa_engine::Context>) {
-        self.run_lifecycle_hooks(boa.as_deref_mut());
-        self.flush_pending_mutations(boa);
+    #[allow(dead_code)] // (teardown seam — re-armed with the rut root-lifecycle gate)
+    pub(crate) fn drain_teardown_lifecycle(&self) {
+        self.run_lifecycle_hooks();
+        self.flush_pending_mutations();
     }
 }

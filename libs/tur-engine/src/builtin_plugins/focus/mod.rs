@@ -1,5 +1,5 @@
 //! Focus widget plugin:
-//! - `Focusable` element + `requestFocus` bridge fn.
+//! - `Focusable` element.
 //!
 //! Key-event dispatch and bubble-up live in the sibling `input` plugin
 //! (`crate::builtin_plugins::input::KeyboardSubsystem`); this plugin only
@@ -10,13 +10,3 @@
 pub(in crate::builtin_plugins) mod focusable;
 
 pub use focusable::FocusableView;
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Install the focus widget plugin (`Focusable` / `requestFocus`). Returns
-/// the JS factory fns to be merged into `tur:std` by the orchestrator.
-pub fn install_focus(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    Ok(focusable::bridge::fns())
-}

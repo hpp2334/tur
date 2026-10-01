@@ -1,18 +1,14 @@
 use std::rc::Rc;
 
 use crate::core::layout::Axis;
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
 
-use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::js_runtime::JsProps;
 use crate::core::view::{Val, View, ViewCx, read_val};
 
-use crate::builtin_plugins::lazy_container::item_builder::{ItemBuilder, RutEntryBuilder};
+use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
 use crate::builtin_plugins::lazy_container::lazy_list::controller::LazyListController;
 use crate::builtin_plugins::scroll::ScrollPosition;
 
@@ -27,8 +23,8 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 // LazyListView — the user's declaration.
 //
 // `axis`, `itemCount`, `overscan`, and `itemExtent` are reactive (`Val<T>`).
-// `builder` is a JS function `(index) => Element` captured at factory
-// time and stored as a `JsFunction`.
+// `builder` is a rut entry-builder `(index) -> opaque` resolved through the
+// guarded VM face.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -41,7 +37,7 @@ pub struct LazyListView {
     /// measure items off-screen to know the total content length. When
     /// absent, the average of measured children is used as a fallback.
     pub(crate) item_extent: Option<Val<f64>>,
-    pub(crate) builder: ItemBuilder,
+    pub(crate) builder: RutEntryBuilder,
     pub(crate) query_key: Option<Vec<String>>,
 }
 
@@ -66,20 +62,14 @@ impl View for LazyListView {
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
         // will adjust the mounted set to match the actual viewport. The
-        // item builder is a face (JS closure or a rut entry-builder) —
-        // resolve specs first, then the realm-free build phase. A
-        // realm-free build cannot reach the JS arm; degrade with a warning.
+        // item builder resolves specs first (the guarded VM face), then the
+        // build phase runs realm-free.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut warned_builder_error = false;
         let mut resolved: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in 0..initial_count {
-            let realm = cx.realm();
-            if let Some(spec) = builder.build(index, realm, &mut warned_builder_error) {
+            if let Some(spec) = builder.build(index) {
                 resolved.push((index, spec));
-            } else if matches!(builder, ItemBuilder::Js(_)) && !warned_builder_error {
-                tracing::warn!("LazyList::build skipped: no JS realm (JS item builder)");
-                break;
             }
         }
         let mut visible: Vec<(u64, NodeId)> = Vec::new();
@@ -107,7 +97,6 @@ impl View for LazyListView {
                 reported_start: 0,
                 reported_end: 0,
                 warned_unbounded: false,
-                warned_builder_error,
             })
             .with_callbacks(),
         );
@@ -181,9 +170,6 @@ pub struct LazyListElement {
     /// One-shot layout diagnostic: viewport collapsed under unbounded
     /// constraints.
     pub(crate) warned_unbounded: bool,
-    /// Set after the first item-builder exception is logged — a throwing
-    /// builder fires once per element, not per item per frame.
-    pub(crate) warned_builder_error: bool,
 }
 
 impl LazyListElement {
@@ -425,22 +411,15 @@ impl LazyListElement {
         let builder = self.view.builder.clone();
         let node_id = self.node_id;
         let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
-        // The item builder is a JS function — realm-scoped per item. A
-        // realm-free instance has no JS builders; degrade with a warning.
-        let mut warned = std::mem::take(&mut self.warned_builder_error);
         let mut built: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in new_start..=new_end {
             if existing.contains(&index) {
                 continue;
             }
-            let realm = cx.realm();
-            if let Some(spec) = builder.build(index, realm, &mut warned) {
+            if let Some(spec) = builder.build(index) {
                 built.push((index, spec));
-            } else if matches!(builder, ItemBuilder::Js(_)) && !warned {
-                tracing::warn!("LazyList remount skipped: no JS realm (JS item builder)");
             }
         }
-        self.warned_builder_error = warned;
         for (index, spec) in built {
             {
                 // Ensure the tree children vector stays ordered by logical
@@ -575,8 +554,8 @@ impl ElementTrace for LazyListElement {
 
 // ---------------------------------------------------------------------------
 // Wheel handling — scroll the viewport along the main axis and flag a
-// remount. The actual mount/unmount happens in the next flush pass (which
-// has Context access to call the JS builder).
+// remount. The actual mount/unmount happens in the next flush pass (whose
+// layout step calls the item builder through the guarded VM face).
 // ---------------------------------------------------------------------------
 
 impl ElementOnWheel for LazyListElement {
@@ -607,22 +586,6 @@ impl ElementOnWheel for LazyListElement {
 // ---------------------------------------------------------------------------
 
 impl LazyListView {
-    /// Build a `LazyListView` from a JS props object. Returns `None` when a
-    /// required prop (`itemCount`, `builder`) is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let item_count = p.val::<u64>("itemCount")?;
-        let builder = ItemBuilder::Js(p.function("builder")?);
-        Some(LazyListView {
-            axis: p.val::<Axis>("axis"),
-            item_count,
-            overscan: p.val::<u64>("overscan"),
-            item_extent: p.val::<f64>("itemExtent"),
-            builder,
-            query_key: p.query_key("queryKey"),
-        })
-    }
-
     /// Rut-rail constructor (`core::rut_runtime`): an entry-builder item
     /// face (the guarded flush-time VM call) + static config.
     #[allow(clippy::too_many_arguments)]
@@ -638,14 +601,14 @@ impl LazyListView {
             item_count,
             overscan: overscan.map(Val::Static),
             item_extent: item_extent.map(Val::Static),
-            builder: ItemBuilder::Rut(entry),
+            builder: entry,
             query_key: Some(vec!["rut".to_string(), "lazy".to_string()]),
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Visible-range event payload — JS callback arguments for
+// Visible-range event payload — callback arguments for
 // onVisibleRangeChange (LazyListController only).
 // ---------------------------------------------------------------------------
 
@@ -656,16 +619,11 @@ pub struct VisibleRangeChangeEvent {
 }
 
 impl crate::core::edgy::mutation::MutationPayload for VisibleRangeChangeEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        IntoJsArgs::to_js_args(self, ctx)
-    }
-}
-
-impl IntoJsArgs for VisibleRangeChangeEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
+    /// The visible window — `[startIndex, endIndex]` (inclusive).
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
         vec![
-            JsValue::from(self.start_index as f64),
-            JsValue::from(self.end_index as f64),
+            crate::core::edgy::Value::Num(self.start_index as f64),
+            crate::core::edgy::Value::Num(self.end_index as f64),
         ]
     }
 }

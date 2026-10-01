@@ -116,7 +116,7 @@ fn pointer_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
         // args[0] is the PointerInteractEvent payload (local.x, local.y,
         // global.x, global.y packed in order by the gesture bridge).
         let nums = |i: usize| match args.get(i) {
@@ -153,7 +153,7 @@ fn click_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         let n = h.click_seq.get() + 1;
         h.click_seq.set(n);
         h.pending_calls
@@ -178,7 +178,7 @@ fn context_menu_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Pointer {
             name: name.clone(),
             id,
@@ -209,7 +209,7 @@ fn key_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
         let arg_str = |i: usize| match args.get(i) {
             Some(Value::Str(s)) => s.to_string(),
             _ => String::new(),
@@ -245,7 +245,7 @@ fn focus_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
             name: name.clone(),
             a: id,
@@ -270,7 +270,7 @@ fn blur_mutation(
     let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
             name: name.clone(),
             a: id,
@@ -366,7 +366,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             let name = name.to_string();
             let h3 = h2.clone();
             let dirty = h2.dirty.clone();
-            let mutation = h2.store.bridge().build_mutate(move |_bridge, args, _boa| {
+            let mutation = h2.store.bridge().build_mutate(move |_bridge, args| {
                 let nums = |i: usize| match args.get(i) {
                     Some(Value::Num(n)) => *n,
                     _ => 0.0,

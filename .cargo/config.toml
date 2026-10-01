@@ -19,11 +19,11 @@ RUST_MIN_STACK = "8388608"
 # `wasm-pack build --target web --profile wasm-dev` to enable.
 #
 # Status: under this codegen the engine previously trapped with
-# "memory access out of bounds" during JS module evaluation
-# (`loadAndRunModule`) when using wasm-bindgen-rayon. The trap
-# appeared to be a boa_engine / engine-level incompatibility with
-# atomics-enabled LLVM codegen, NOT a configuration issue — the
-# configuration below matches the upstream README exactly. Default
+# "memory access out of bounds" during module evaluation when using
+# wasm-bindgen-rayon (observed with the retired JS scripting rail; the
+# atomics-enabled LLVM codegen combination was the trigger, not a
+# configuration issue — the configuration below matches the upstream
+# README exactly). Default
 # `wasm-pack build --target web --no-opt` produces a working
 # single-threaded wasm; threaded mode is opt-in via `--profile wasm-dev`.
 rustflags = [

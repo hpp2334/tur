@@ -25,6 +25,7 @@ use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
 use crate::core::rut_runtime::{RutHandles, VmFace};
 use crate::core::view::{View, ViewCx};
+use rut_vm::Opaque;
 use rut_vm::OpaqueRef;
 
 use super::RutView;
@@ -58,13 +59,16 @@ pub struct RutEachView {
     query_key: Option<Vec<String>>,
 }
 
+/// The column-def list opaque (`cols_new` / `col_fixed` / `col_flex`).
+pub(crate) struct RutCols(pub(crate) Vec<crate::builtin_plugins::layout::TableColumnDef>);
+
 impl RutEachView {
     /// Read the current `items` list from the store and build one child per
     /// entry under `fragment_id`. Items cross the entry boundary as strings
     /// (the C2 gate's shape; structured items ride the value rows).
     fn build_items(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
         let store = cx.store_read_only();
-        let value = store.read(self.items, None);
+        let value = store.read(self.items);
         let Value::List(items) = &value else {
             return Vec::new();
         };
@@ -146,7 +150,7 @@ impl FragmentKind for RutEachFragment {
         // subtrees are stateless widgets so rebuilding them is cheap. The
         // builder entries run through the guarded face — flush-safe.
         let store = cx.store_read_only();
-        let value = store.read(self.items, None);
+        let value = store.read(self.items);
         let Value::List(items) = &value else {
             return Some(Vec::new());
         };
@@ -178,6 +182,19 @@ pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types
         (
             "el_lazy_grid",
             vec![TY_STR, TY_U64, TY_F64, TY_F64],
+            TY_OPAQUE,
+        ),
+        (
+            "el_lazy_grid_h",
+            vec![TY_STR, TY_U64, TY_F64, TY_F64],
+            TY_OPAQUE,
+        ),
+        ("cols_new", vec![], TY_OPAQUE),
+        ("col_fixed", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        ("col_flex", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
+        (
+            "el_table",
+            vec![TY_U64, TY_STR, TY_STR, TY_OPAQUE],
             TY_OPAQUE,
         ),
     ]
@@ -245,6 +262,86 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
             )),
             Some(crate::core::layout::Axis::Vertical),
+            Some(0),
+            max_cross,
+            if aspect > 0.0 { Some(aspect) } else { None },
+        );
+        Ok(rut_vm::Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
+    });
+    // ---- table rows ------------------------------------------------------
+    // Column-def list opaque (the `columns` crossing).
+    rut_vm::pkg_fn!(pkg, "cols_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+        Ok(Opaque::alloc(vm, RutCols(Vec::new()))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "col_fixed", (Opaque<RutCols>, f64) -> (), |vm: &mut rut_vm::interp::Vm, c: Opaque<RutCols>, w: f64| {
+        c.with_mut(vm, |_vm, c| {
+            c.0.push(crate::builtin_plugins::layout::TableColumnDef {
+                width: Some(w),
+                flex: None,
+                min_width: None,
+            });
+        })?;
+        Ok(())
+    });
+    rut_vm::pkg_fn!(pkg, "col_flex", (Opaque<RutCols>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, c: Opaque<RutCols>, flex: f64, min: f64| {
+        c.with_mut(vm, |_vm, c| {
+            c.0.push(crate::builtin_plugins::layout::TableColumnDef {
+                width: None,
+                flex: Some(flex),
+                min_width: if min > 0.0 { Some(min) } else { None },
+            });
+        })?;
+        Ok(())
+    });
+    // el_table(rows_atom, row_fn, header_fn_or_, cols) -> view — the
+    // reactive-rows Table (empty header_fn name = no header).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "el_table", (u64, &str, &str, Opaque<RutCols>) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, rows_atom: u64, row_fn: &str, header_fn: &str, cols: Opaque<RutCols>| {
+        let _ = vm;
+        let columns = cols.with(|c| c.0.clone())?;
+        let build = RutEntryBuilder {
+            name: row_fn.to_string(),
+            face: h.face.clone(),
+            handles: h.clone(),
+        };
+        let build_header = if header_fn.is_empty() {
+            None
+        } else {
+            Some(RutEntryBuilder {
+                name: header_fn.to_string(),
+                face: h.face.clone(),
+                handles: h.clone(),
+            })
+        };
+        let view = crate::builtin_plugins::layout::TableView::new_rut(
+            columns,
+            crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<crate::core::edgy::Value>::from_id(
+                    crate::core::edgy::reactive::AtomId(rows_atom as u32),
+                ),
+            ),
+            build,
+            build_header,
+        );
+        Ok(Opaque::alloc(vm, RutView(Rc::new(view)))?.handle().clone())
+    });
+
+    // Horizontal lazy grid (the JS `axis: Axis.Horizontal` twin).
+    let h = handles.clone();
+    // (table rows above)
+    rut_vm::pkg_fn!(pkg, "el_lazy_grid_h", (&str, u64, f64, f64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, cb: &str, count_atom: u64, max_cross: f64, aspect: f64| {
+        let _ = vm;
+        let entry = RutEntryBuilder {
+            name: cb.to_string(),
+            face: h.face.clone(),
+            handles: h.clone(),
+        };
+        let view = crate::builtin_plugins::lazy_container::LazyGridView::new_rut(
+            entry,
+            crate::core::view::Val::Reactive(crate::core::edgy::reactive::Readable::Source(
+                crate::core::edgy::reactive::Source::<u64>::from_id(crate::core::edgy::reactive::AtomId(count_atom as u32)),
+            )),
+            Some(crate::core::layout::Axis::Horizontal),
             Some(0),
             max_cross,
             if aspect > 0.0 { Some(aspect) } else { None },

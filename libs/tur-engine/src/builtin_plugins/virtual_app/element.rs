@@ -7,12 +7,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Constraints, Geometry, Offset, Size};
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::brush::{Brush, Color};
@@ -22,24 +18,25 @@ use crate::core::view::{Lifecycle, Val, View, ViewCx};
 use super::state::{VirtualControllerRef, VirtualState};
 
 // ---------------------------------------------------------------------------
-// VirtualAppView — the user's declaration. Pure Rust, no JsValues.
+// VirtualAppView — the user's declaration. Pure Rust.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct VirtualAppView {
     pub(crate) state: Rc<VirtualState>,
-    /// Reactive controller binding (`Readable<VirtualAppController | null>`
-    /// on the JS side) — resolved untracked during layout like every other
-    /// `Val<T>` prop. Binding materializes the controller's child (lazy
-    /// declaration); unbinding (null / swap) destroys it unless `keepAlive`.
+    /// Reactive controller binding (`Readable<controller | null>` authored
+    /// through the reactive rail, or a static ref) — resolved untracked
+    /// during layout like every other `Val<T>` prop. Binding materializes
+    /// the controller's child (lazy declaration); unbinding (null / swap)
+    /// destroys it unless `keepAlive`.
     pub(crate) app: Option<Val<VirtualControllerRef>>,
     pub(crate) background: Option<Val<Color>>,
     pub(crate) width: Option<Val<f64>>,
     pub(crate) height: Option<Val<f64>>,
     pub(crate) query_key: Option<Vec<String>>,
-    /// Painted while the child isn't live (JS-side `fallback` view).
+    /// Painted while the child isn't live (the `fallback` view).
     pub(crate) fallback: Option<Rc<dyn View>>,
-    /// Painted on error (JS-side `errorView`).
+    /// Painted on error (the `errorView` view).
     pub(crate) error_view: Option<Rc<dyn View>>,
 }
 
@@ -65,23 +62,6 @@ impl View for VirtualAppView {
         }
         cx.link_child(parent, id.into());
         id.into()
-    }
-}
-
-impl VirtualAppView {
-    /// Build a `VirtualAppView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context, state: Rc<VirtualState>) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        VirtualAppView {
-            state,
-            app: p.val::<VirtualControllerRef>("app$"),
-            background: p.val::<Color>("background"),
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            query_key: p.query_key("queryKey"),
-            fallback: p.child("fallback"),
-            error_view: p.child("errorView"),
-        }
     }
 }
 

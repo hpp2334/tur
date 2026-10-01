@@ -215,7 +215,7 @@ fn region_mutation(
     }
     let h = handles.clone();
     let cb = name.to_string();
-    let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         let n = h.click_seq.get() + 1;
         h.click_seq.set(n);
         h.pending_calls

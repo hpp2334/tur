@@ -1,7 +1,8 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::core::layout::Size;
 use crate::core::render::brush::Brush;
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::builtin_plugins::scroll::core::controller::ScrollController;
 use crate::core::element::{ElementNodeId, NodeId};
@@ -9,7 +10,6 @@ use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
     ElementTrace, TraceValue,
 };
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -19,10 +19,9 @@ pub(crate) const MIN_THUMB: f64 = 24.0;
 pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 
 // ---------------------------------------------------------------------------
-// ScrollbarView — the user's declaration. Pure Rust except for the
-// opaque `controller` (a `ScrollController` class instance shared with a
-// `ScrollView`). `color`, `thumbRadius`, `trackColor` and `thickness` are
-// reactive (`Val<T>`).
+// ScrollbarView — the user's declaration. Pure Rust; `controller` is a
+// `ScrollController` shared with a `ScrollView`. `color`, `thumbRadius`,
+// `trackColor` and `thickness` are reactive (`Val<T>`).
 //
 // Vertical only (the editor use case). Horizontal support can be added later.
 // ---------------------------------------------------------------------------
@@ -31,7 +30,7 @@ pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 pub struct ScrollbarView {
     /// Shared `ScrollController` — provides offset/maxExtent/viewport and the
     /// bound scroll-view node id (for `ScrollTo` requests during drag).
-    pub(crate) controller: Option<JsObject>,
+    pub(crate) controller: Option<Rc<RefCell<ScrollController>>>,
     pub(crate) color: Option<Val<Brush>>,
     pub(crate) track_color: Option<Val<Brush>>,
     pub(crate) thumb_radius: Option<Val<f64>>,
@@ -67,6 +66,10 @@ pub struct ScrollbarElement {
     drag: Option<DragState>,
 }
 
+// ---------------------------------------------------------------------------
+// View + element.
+// ---------------------------------------------------------------------------
+
 impl View for ScrollbarView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -94,7 +97,7 @@ impl ScrollbarElement {
     /// bound to a scroll-view yet.
     pub(crate) fn metrics(&self) -> Option<(ElementNodeId, f64, f64, f64)> {
         let ctrl = self.view.controller.as_ref()?;
-        let ctrl = ctrl.downcast_ref::<ScrollController>()?;
+        let ctrl = ctrl.borrow();
         let node = ctrl.bound_node?;
         Some((
             node,
@@ -218,25 +221,3 @@ impl ElementOnGesture for ScrollbarElement {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Factory helpers — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl ScrollbarView {
-    /// Build a `ScrollbarView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        let controller = p
-            .raw_opt("controller")
-            .and_then(|v| v.as_object())
-            .filter(|obj| obj.downcast_ref::<ScrollController>().is_some());
-        ScrollbarView {
-            controller,
-            color: p.val::<Brush>("color"),
-            track_color: p.val::<Brush>("trackColor"),
-            thumb_radius: p.val::<f64>("thumbRadius"),
-            thickness: p.val::<f64>("thickness"),
-            query_key: p.query_key("queryKey"),
-        }
-    }
-}

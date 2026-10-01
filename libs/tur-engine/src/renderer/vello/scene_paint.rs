@@ -1,3 +1,5 @@
+#![allow(dead_code)] // shared by the wasm + native renderer backends
+
 //! Helpers shared by the wgpu and WebGL vello-hybrid backends.
 
 use std::collections::HashMap;

@@ -11,42 +11,37 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import {
-            mount,
-            Column,
-            CrossAxisAlignment,
-            Expanded,
-            Row,
-            SizedBox,
-        } from "tur:std";
+use tur::{
+    box_size, el_box_new, el_build, el_child, el_column, el_expand, el_qkey, el_row, el_sizedbox,
+    flex_cross_align, mount, CROSS_ALIGN_STRETCH,
+};
 
-        mount(Column()
-    .children([
-                // Stretch Row under an unbounded cross axis (non-flex child
-                // of a Column): Stretch degrades to loose cross.
-                Row()
-                    .crossAlignment(CrossAxisAlignment.Stretch)
-                    .queryKey(["stretch-row"])
-                    .children([SizedBox()
-    .width(50)
-    .build()])
-                    .build(),
-                // Expanded inside a Column with unbounded height: the flex
-                // child lays out as inflexible (natural size), never a
-                // zero slot and never infinity.
-                Column()
-                    .queryKey(["flex-col"])
-                    .children([Expanded()
-    .child(SizedBox()
-     .height(50)
-     .build())
-    .build()])
-                    .build(),
-            ])
-    .build());
-    "#,
+entry fn start() {
+    let col = el_column();
+
+    // Stretch Row under an unbounded cross axis (non-flex child of a
+    // Column): Stretch degrades to loose cross.
+    let stretch_row = el_row();
+    el_qkey(stretch_row, "stretch-row");
+    flex_cross_align(stretch_row, CROSS_ALIGN_STRETCH);
+    el_child(stretch_row, el_sizedbox(50.0, 0.0, el_build(el_box_new())));
+    el_child(col, stretch_row);
+
+    // Expanded inside a Column with unbounded height: the flex child lays
+    // out as inflexible (natural size), never a zero slot and never
+    // infinity.
+    let flex_col = el_column();
+    el_qkey(flex_col, "flex-col");
+    let sized = el_box_new();
+    box_size(sized, 10.0, 50.0);
+    el_child(flex_col, el_expand(1.0, el_build(sized)));
+    el_child(col, flex_col);
+
+    mount(el_build(col));
+}
+"#,
     )
     .unwrap();
 

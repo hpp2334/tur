@@ -4,19 +4,15 @@
 
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsResult, JsValue};
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset, Size,
 };
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::view::{Lifecycle, View, ViewCx};
 
-use super::link::{CompositedLinkState, extract_link_state};
+use super::link::CompositedLinkState;
 
 #[derive(Clone, Default)]
 pub struct TargetView {
@@ -94,44 +90,3 @@ impl ElementRender for TargetElement {
         }
     }
 }
-
-impl TargetView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let link = extract_link_state(props, ctx)?;
-        Some(TargetView {
-            link: Some(link),
-            child: crate::core::js_runtime::JsProps::new(props, ctx).child("child"),
-        })
-    }
-}
-
-pub(super) static TABLE: crate::core::js_runtime::builder::BuilderTable =
-    crate::core::js_runtime::builder::BuilderTable {
-        methods: &[crate::core::js_runtime::builder::BuilderMethod::new(
-            "link",
-            crate::core::js_runtime::builder::setters::link,
-        )],
-        child: true,
-        children: false,
-    };
-
-crate::core::js_runtime::builder::builder_factory!(tur_target_factory, tur_target, &TABLE);
-
-pub(super) fn tur_target(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let _ = extract_js_ctx(args)?;
-    let props = require_props_object(args, 1, context)?;
-    let spec = TargetView::from_js(&props, context).ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("CompositedTransformTarget requires a `link` (createLayerLink())"),
-        )
-    })?;
-    Ok(wrap_view(Rc::new(spec), context))
-}
-
-#[allow(dead_code)]
-const _ENSURE_PTR: Ptr = tur_target as Ptr;

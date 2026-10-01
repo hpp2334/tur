@@ -628,18 +628,16 @@ pub mod ops {
         })
     }
 
-    /// Evaluate the registered module source `source_handle` as an ES module
-    /// (resolved by the engine's `TurModuleLoader` — `tur:std`,
-    /// `tur:animation`, etc. must already be registered, which instance
-    /// creation does), then request a paint so the bundle renders on the
-    /// next frame.
+    /// Compile + boot the registered module source `source_handle` as a
+    /// **rut** module (`entry fn start()` — the module lifecycle contract),
+    /// then request a paint so the module's tree renders on the next frame.
     ///
     /// Posted to the tur-host thread (FIFO behind the instance build), so
     /// the calling thread returns immediately; a failed load logs to logcat
     /// instead of throwing. The registry's `Arc<str>` flows to the worker
     /// by refcount — no copy, no JNI string traffic. A source produced on
     /// the Rust side (e.g. an APK asset read via `AAssetManager`)
-    /// therefore reaches the JS realm without ever being serialized across
+    /// therefore reaches the rut VM without ever being serialized across
     /// the JNI boundary.
     pub fn load_module(env: &mut JNIEnv, handle: jlong, source_handle: jlong) {
         catch_void(env, "loadModule", |_env| {
@@ -663,13 +661,13 @@ pub mod ops {
                 match futures::executor::block_on(
                     instance
                         .app
-                        .load_module_source(&instance.module_sources, source_handle as u64),
+                        .load_rut_module_source(&instance.module_sources, source_handle as u64),
                 ) {
                     Ok(()) => {
-                        log::info!("loadModule: module evaluated OK");
+                        log::info!("loadModule: rut module booted OK");
                         log::info!("loadModule: paint requested");
                     }
-                    Err(e) => log::error!("loadModule: module load failed: {e}"),
+                    Err(e) => log::error!("loadModule: rut module load failed: {e}"),
                 }
             });
             if !posted {

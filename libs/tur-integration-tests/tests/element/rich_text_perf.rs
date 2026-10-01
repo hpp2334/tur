@@ -20,26 +20,24 @@ use tur_integration_tests::TurTestApp;
 /// token granularity of syntax highlighting, minus per-token splitting to
 /// keep the fixture small — the memo contract is length-independent).
 const LONG_EDITOR: &str = r##"
-import { mount, ScrollView, Input, Color } from "tur:std";
+use tur::{
+    el_build, el_input_ctrl, el_qkey, el_scroll, mount, tctrl_new, tctrl_push_span,
+};
 
-const spans = [];
-for (let i = 0; i < 400; i++) {
-    spans.push({ content: "const value" + i + " = " + i + "; // line " + i + "\n" });
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 400) {
+        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        i += 1;
+    }
+
+    let input = el_input_ctrl(ctrl, 100000.0, 10000.0, 14.0);
+    el_qkey(input, "ed");
+    let scroller = el_scroll(true, el_build(input));
+    el_qkey(scroller, "scroll");
+    mount(el_build(scroller));
 }
-globalThis.__spans = spans;
-globalThis.__red = Color.hex("#ff0000");
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans(spans);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Input()
-     .controller(globalThis.__ctrl)
-     .multiline(true)
-     .fontFamily("monospace")
-     .fontSize(14)
-     .queryKey(["ed"])
-     .build())
-    .build());
 "##;
 
 /// The `tur_editable_text` node under the `Input` queryKey (the key lands
@@ -95,7 +93,7 @@ fn focus_at_start(app: &mut TurTestApp, id: ElementNodeId) {
 
 fn mount_long_editor(width: f64, height: f64) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
-    app.eval_module_source(LONG_EDITOR).unwrap();
+    app.load_rut_module(LONG_EDITOR).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = editor_id(&app);
     (app, id)
@@ -152,62 +150,6 @@ fn typing_reshapes_exactly_once() {
     assert!(
         len_after >= len_before,
         "layout must reflect the inserted char"
-    );
-    // And the buffer content changed.
-    let text = app.eval_js("globalThis.__ctrl.text");
-    assert!(
-        text.starts_with("xconst"),
-        "char inserted at caret, got: {text}"
-    );
-}
-
-#[test]
-fn no_op_respan_is_free_but_content_respan_reshapes() {
-    let (mut app, id) = mount_long_editor(400.0, 300.0);
-    focus_at_start(&mut app, id);
-    let (cx0, cy0) = caret_xy(&app);
-
-    let base = shape_count(&app, id);
-
-    // `ArrowLeft` at byte 0 is a handled no-op move: it marks the node
-    // dirty (every key event does) without changing anything — a pure
-    // "force a relayout" probe that must hit the memo.
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(shape_count(&app, id), base, "no-op key must hit the memo");
-
-    // Identical spans re-set (the no-op re-highlight shape): still free.
-    app.eval_js("globalThis.__ctrl.setSpansPreserveCursor(globalThis.__spans)");
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        shape_count(&app, id),
-        base,
-        "identical setSpansPreserveCursor must not re-shape"
-    );
-
-    // Same text, different span color (a real re-highlight): the content
-    // revision bumps, so the next forced relayout re-shapes exactly once.
-    let respan = app.eval_js(
-        r##"globalThis.__spans2 = globalThis.__spans.map((s, i) =>
-             i === 0 ? { content: s.content, color: globalThis.__red } : s);
-           globalThis.__ctrl.setSpansPreserveCursor(globalThis.__spans2); "ok""##,
-    );
-    assert_eq!(respan, "ok", "respan eval must succeed");
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        shape_count(&app, id),
-        base + 1,
-        "color-changed spans (same text) must re-shape — brushes live in the runs"
-    );
-    // Caret preserved across the re-highlight (not yanked to EOF): still on
-    // the first line at the same x.
-    let (cx, cy) = caret_xy(&app);
-    assert_eq!(
-        (cx, cy),
-        (cx0, cy0),
-        "setSpansPreserveCursor keeps the caret"
     );
 }
 

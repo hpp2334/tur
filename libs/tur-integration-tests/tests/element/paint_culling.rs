@@ -40,25 +40,32 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 /// Mount a `ScrollView > Column > 6 Containers` (each 100px → 600px of content
 /// in a 300px-tall viewport) and return the 6 container node ids in order.
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, ScrollView, Column, Container, createColor, CrossAxisAlignment } from "tur:std";
-        const kids = [];
-        for (let i = 0; i < 6; i++) {
-            kids.push(Container()
-    .height(100)
-    .color(createColor(255, 0, 0, 255))
-    .queryKey(["item", i])
-    .build());
-        }
-        mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Column()
-     .crossAlignment(CrossAxisAlignment.Stretch)
-     .children(kids)
-     .build())
-    .build());
-    "#,
+use tur::{{
+    box_color, box_size, el_box_new, el_build, el_child, el_column, el_qkey, el_scroll, mount,
+}};
+
+entry fn item(i: u64) -> opaque {{
+    let b = el_box_new();
+    box_size(b, 10.0, 100.0);
+    box_color(b, 0xFF0000FFu64);
+    el_qkey(b, f"item/{i}");
+    return el_build(b);
+}}
+
+entry fn start() {{
+    let col = el_column();
+    let mut i = 0;
+    while (i < 6) {{
+        el_child(col, item(i));
+        i += 1;
+    }}
+    let scroller = el_scroll(true, el_build(col));
+    el_qkey(scroller, "scroll");
+    mount(el_build(scroller));
+}}
+"#,
     )
     .expect("mount");
 
@@ -179,16 +186,18 @@ fn no_clip_means_no_culling() {
     )
     .expect("app");
 
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container()
-    .width(100)
-    .height(100)
-    .color(createColor(0, 128, 255, 255))
-    .queryKey(["onscreen"])
-    .build());
-    "#,
+use tur::{ box_color, box_size, el_box_new, el_build, el_qkey, mount };
+
+entry fn start() {
+    let b = el_box_new();
+    box_size(b, 100.0, 100.0);
+    box_color(b, 0x0080FFFF);
+    el_qkey(b, "onscreen");
+    mount(el_build(b));
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);

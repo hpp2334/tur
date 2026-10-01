@@ -7,7 +7,7 @@ use crate::core::layout::{Constraints, Offset, Size};
 use parley::LayoutContext as ParleyLayoutContext;
 use vello_common::kurbo::{Affine, Point};
 
-use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Store, SubscriberId};
+use crate::core::edgy::reactive::{ReactiveReadStore, Store, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
@@ -27,7 +27,7 @@ pub struct NodeTreeData {
     next_id: u64,
     pub(crate) store: Store,
     /// Cached read-only reactive face; the layout driver wraps this in a
-    /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
+    /// [`ReactiveReadStore`] so layout can only
     /// read atoms, never `set` / mutate.
     pub(crate) read_face: ReactiveReadStore,
     /// Element ids inserted since the last lifecycle flush. Drained by the
@@ -483,14 +483,13 @@ impl NodeTreeData {
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
         >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
-        boa: Option<&mut boa_engine::Context>,
     ) -> Size {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return constraints.constrain(Size::ZERO),
         };
 
-        let mut js = ReactiveReadJsContext::new(self.read_face.clone(), boa);
+        let mut js = self.read_face.clone();
         self.layout(
             root_id,
             constraints,
@@ -505,7 +504,7 @@ impl NodeTreeData {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn layout<'a, 'js>(
+    pub fn layout<'a>(
         &'a mut self,
         id: ElementNodeId,
         constraints: &Constraints,
@@ -517,7 +516,7 @@ impl NodeTreeData {
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
         >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
-        js: &'a mut ReactiveReadJsContext<'js>,
+        js: &'a mut ReactiveReadStore,
     ) -> Size {
         let (is_dirty, constraints_changed) = self
             .elements
@@ -1325,7 +1324,6 @@ impl NodeTree {
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
         >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
-        boa: Option<&mut boa_engine::Context>,
     ) -> Size {
         self.data.borrow_mut().compute_layout(
             constraints,
@@ -1335,7 +1333,6 @@ impl NodeTree {
             node_tree,
             mutation_queue,
             dirty,
-            boa,
         )
     }
 

@@ -538,7 +538,7 @@ impl VirtualHost {
                 let tx = self.backend.worker_tx().clone();
                 let wake = self.backend.worker_wake_handle();
                 self.host_loop.spawn_local(Box::pin(async move {
-                    let detail = match app_for_load.load_module(source).await {
+                    let detail = match app_for_load.load_rut_module(source).await {
                         Ok(()) => None,
                         Err(e) => Some(e.to_string()),
                     };

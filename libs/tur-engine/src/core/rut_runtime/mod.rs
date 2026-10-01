@@ -17,13 +17,11 @@
 use std::rc::Rc;
 use std::rc::Weak;
 
-use boa_engine::Context;
-
 use crate::core::app::root::RootView;
 use crate::core::app::HostMsg;
 use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
 use crate::core::edgy::value::Value;
-use crate::core::js_runtime::TurInstanceContext;
+use crate::core::instance::InstanceContext;
 use crate::core::layout::Axis;
 use crate::core::layout::{Alignment, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, StackFit};
 use crate::core::view::{SharedViewCx, View, ViewFactory, Val};
@@ -47,12 +45,9 @@ mod derive;
 mod gesture;
 mod image_row;
 mod mouse_region;
-mod realm;
 mod text;
 mod virtual_app;
 mod widgets;
-
-pub use realm::RutRealm;
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
 /// opaques from `entry fn(index)` calls).
@@ -117,6 +112,15 @@ pub(crate) enum ViewBuilder {
     /// The Phase-4 text builder: a `TextView` under construction (style
     /// setter rows mutate it; `el_build` materializes it).
     Text(Box<TextView>),
+    /// The C1 input builder: an `InputView` under construction (style
+    /// setter rows mutate it; `el_build` materializes it).
+    Input(Box<crate::builtin_plugins::text::InputView>),
+    /// The Grid builder: a `GridView` under construction (setter rows
+    /// mutate it; `el_build` materializes it).
+    Grid(Box<crate::builtin_plugins::layout::GridView>),
+    /// The Switch builder: a `SwitchView` under construction (case rows
+    /// append; `el_build` materializes it).
+    Switch(Box<crate::builtin_plugins::control_flow::SwitchView>),
 }
 
 impl ViewBuilder {
@@ -150,6 +154,9 @@ impl ViewBuilder {
             }),
             ViewBuilder::Box(spec) => Rc::new(*spec),
             ViewBuilder::Text(tv) => Rc::new(*tv),
+            ViewBuilder::Input(spec) => Rc::new(*spec),
+            ViewBuilder::Grid(spec) => Rc::new(*spec),
+            ViewBuilder::Switch(spec) => Rc::new(*spec),
         }
     }
 
@@ -160,6 +167,9 @@ impl ViewBuilder {
             | ViewBuilder::Stack { query_key, .. } => *query_key = Some(key),
             ViewBuilder::Box(box_) => box_.query_key = Some(key),
             ViewBuilder::Text(tv) => tv.query_key = Some(key),
+            ViewBuilder::Input(spec) => spec.set_query_key(key),
+            ViewBuilder::Grid(spec) => spec.query_key = Some(key),
+            ViewBuilder::Switch(spec) => spec.set_query_key(key),
         }
     }
 }
@@ -180,7 +190,7 @@ fn color_of(packed: u64) -> Color {
 struct PreBuilt(Rc<dyn View>);
 
 impl ViewFactory for PreBuilt {
-    fn create(&self, _realm: Option<&mut Context>) -> Option<Rc<dyn View>> {
+    fn create(&self) -> Option<Rc<dyn View>> {
         Some(self.0.clone())
     }
 }
@@ -207,6 +217,7 @@ pub fn tur_decl_module() -> rut_driver::Module {
         row("el_stack", vec![], TY_OPAQUE),
         row("el_box", vec![TY_U64, TY_F64, TY_OPAQUE], TY_OPAQUE),
         row("el_expand", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
+        row("el_flex", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
         row("el_positioned", vec![TY_F64, TY_F64, TY_OPAQUE], TY_OPAQUE),
         row(
             "el_positioned_edges",
@@ -338,8 +349,11 @@ fn install_tur_pkg(
                     children.push(child_view);
                 }
                 ViewBuilder::Box(spec) => spec.children.push(child_view),
-                // A Text builder takes no children.
-                ViewBuilder::Text(_) => {}
+                ViewBuilder::Grid(spec) => spec.children.push(child_view),
+                // Switch / Text / Input builders take no children here.
+                ViewBuilder::Switch(_)
+                | ViewBuilder::Text(_)
+                | ViewBuilder::Input(_) => {}
             }
         })?;
         Ok(())
@@ -452,7 +466,7 @@ fn install_tur_pkg(
         let h2 = h.clone();
         let cb = cb.to_string();
         let dirty = h.dirty.clone();
-        let mutation = h.store.bridge().build_mutate(move |_bridge, _args, _boa| {
+        let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
             let n = h2.click_seq.get() + 1;
             h2.click_seq.set(n);
             h2.pending_calls.borrow_mut().push(Intent::Click { name: cb.clone(), a: id_a, b: id_b, seq: n as f64 });
@@ -515,6 +529,13 @@ fn install_tur_pkg(
     rut_vm::pkg_fn!(pkg, "el_expand", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Tight, child));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // a flex item that caps at its slot (Flexible — FlexFit.loose: the
+    // child shrink-wraps below the slot)
+    rut_vm::pkg_fn!(pkg, "el_flex", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, flex: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(FlexibleView::new_rut(Some(Val::Static(flex)), FlexFit::Loose, child));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
     // a child anchored inside a Stack (left/top)
@@ -811,20 +832,14 @@ pub struct RutHandles {
     /// the same `RuntimeError` message the JS rail uses.
     pub host_tx: crate::core::app::HostTx,
     /// The engine's shared clock — the animation rows' `now_ms` source.
-    pub clock: Rc<dyn boa_engine::context::time::Clock>,
+    pub clock: Rc<dyn crate::core::clock::Clock>,
     /// The engine-wide mutation queue — animation `onTick` callbacks ride
     /// it (same dispatch path the JS controllers use).
     pub mutation_queue: Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
     /// The instance context — capability lookups + worker-side spawns (the
     /// async capability rows: clipboard / net / filepicker).
-    pub js_ctx: TurInstanceContext,
-    /// The realm face (Phase C1): rows that must mint or inspect
-    /// JS-class-backed state (a `TextEditingController`, an animation
-    /// controller) borrow the realm through it. Detached until boot arms
-    /// it; a rut-only module that never calls a realm-demanding row keeps
-    /// the realm unallocated.
-    pub realm: crate::core::rut_runtime::RutRealm,
-    /// The flush-time VM face (Phase C2): view factories / deriveds minted
+    pub inst: InstanceContext,
+    /// The flush-time VM face: view factories / deriveds minted
     /// by rows reach the VM through it. Detached until boot installs the
     /// VM; guards (depth, no-mount) live here.
     pub face: Rc<VmFace>,
@@ -1031,7 +1046,7 @@ pub struct RutRuntime {
     pub vm: Rc<std::cell::RefCell<Vm>>,
     handles: Rc<RutHandles>,
     /// The instance context (held for `apply_root` and future rails).
-    js_ctx: TurInstanceContext,
+    js_ctx: InstanceContext,
     pub has_stop: bool,
     /// `entry fn start()`'s answer when declared `-> u64` (the module's
     /// handle back to the host — e.g. the id of its root atom), else 0.
@@ -1112,15 +1127,10 @@ impl RutRuntime {
     }
 
     /// Bind bodies, verify the join, boot the VM, and invoke `start`.
-    ///
-    /// `realm_slot` + `arm` wire the realm face: the slot is the engine's
-    /// shared realm storage, `arm` installs the realm constructor closure
-    /// (the worker backend's `arm_realm_face`). A module whose rows never
-    /// demand the realm never triggers construction.
     pub fn boot(
         source: &str,
-        js_ctx: TurInstanceContext,
-        realm: RutRealmInputs,
+        js_ctx: InstanceContext,
+        inputs: RutRealmInputs,
         exts: Vec<RutPkgExt>,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) =
@@ -1138,10 +1148,9 @@ impl RutRuntime {
             stash: std::cell::RefCell::new(std::collections::HashMap::new()),
             stash_num: std::cell::RefCell::new(std::collections::HashMap::new()),
             host_tx: js_ctx.host_tx.clone(),
-            realm: realm.face,
-            clock: realm.clock,
+            clock: inputs.clock,
             mutation_queue: js_ctx.mutation_queue.clone(),
-            js_ctx: js_ctx.clone(),
+            inst: js_ctx.clone(),
             face,
             face_busy: std::cell::Cell::new(0),
         });
@@ -1239,7 +1248,7 @@ impl RutRuntime {
         }
 
         let root_view = RootView { child: user_view };
-        let mut cx = SharedViewCx::new(self.js_ctx.clone(), None);
+        let mut cx = SharedViewCx::new(self.js_ctx.clone());
         let temp_parent = cx.alloc_node();
         let root_id = root_view.build(&mut cx, temp_parent);
         tree.borrow_mut()
@@ -1256,8 +1265,8 @@ impl RutRuntime {
     pub fn run_ready(&mut self) {
         {
             let mut vm = self.vm.borrow_mut();
-            let now = self.handles.clock.now().millis_since_epoch();
-            vm.set_now(now);
+            let now = self.handles.clock.now_millis();
+            vm.set_now(now as u64);
             let _ = vm.next_deadline();
         }
         if let Err(t) = self.vm.borrow_mut().run_ready() {
@@ -1276,10 +1285,9 @@ impl RutRuntime {
     }
 
     /// Drain the callback intents queued by element callbacks this frame.
-    /// Runs with the boa borrow RELEASED — rows may borrow the realm on
-    /// demand (`rs_get_*`). Re-mount stashing is applied by the caller
-    /// (the pump, which re-borrows for `apply_root` + the convergence
-    /// flush). Returns the number of callbacks drained.
+    /// Re-mount stashing is applied by the caller (the pump, which runs
+    /// `apply_root` + the convergence flush). Returns the number of
+    /// callbacks drained.
     pub fn drain_pending_calls(&mut self) -> usize {
         let calls: Vec<Intent> = std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
         for intent in &calls {
@@ -1344,12 +1352,10 @@ fn intent_name(intent: &Intent) -> &str {
 }
 
 /// The boot wiring `WorkerBackend::load_rut_module_inner` hands to
-/// [`RutRuntime::boot`] — an already-armed realm face plus the engine
-/// clock (the animation rows' `now_ms` source; the same `Clock` the
-/// animation subsystem ticks with).
+/// [`RutRuntime::boot`] — the engine clock (the rows' `now_ms` source; the
+/// same `Clock` the animation subsystem ticks with).
 pub struct RutRealmInputs {
-    pub face: RutRealm,
-    pub clock: std::rc::Rc<dyn boa_engine::context::time::Clock>,
+    pub clock: std::rc::Rc<dyn crate::core::clock::Clock>,
 }
 
 /// The pkg-extension context an installer sees: the `tur` host pkg's decl

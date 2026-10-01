@@ -1,20 +1,8 @@
-//! Lifecycle plugin — `lifecycleView(factory)` for wrapping a JS factory
-//! `() => { element, onMounted$?, beforeDestroy$? }` with mount/unmount
-//! callbacks.
+//! Lifecycle plugin — `LifecycleView` wraps a pre-built child with
+//! mount/unmount intent callbacks (the C7 rut rows' `el_lifecycle`).
 
-pub(in crate::builtin_plugins) mod bridge;
 pub(in crate::builtin_plugins) mod element;
 pub(in crate::builtin_plugins) mod layout;
 pub(in crate::builtin_plugins) mod render;
 
 pub(crate) use element::{LifecycleFactory, LifecycleView};
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Install the lifecycle plugin (`lifecycleView`). Returns the JS factory
-/// fns to be merged into `tur:std` by the orchestrator.
-pub fn install_lifecycle(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    Ok(bridge::fns())
-}

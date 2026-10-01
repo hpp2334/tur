@@ -1,31 +1,53 @@
+//! The `Switch` control-flow element over the `tur` host pkg's switch
+//! builder rows (`el_switch` + `switch_case` / `switch_fallback`): initial
+//! branch, keyed swap, fallback, same-key no-rebuild, and derived-value
+//! swaps through the subscriber graph.
+
 use tur_integration_tests::TurTestApp;
 
+/// A switch bound to a str atom with two cases + a fallback; `set_key`
+/// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
-import { source, Switch, Text, mount } from "tur:std";
+use tur::{
+    el_build, el_qkey, el_switch, el_text, mount, rs_set_str, rs_source_str, switch_case,
+    switch_fallback,
+};
 
-globalThis.__key = source("a");
-globalThis.__store = store;
-const root = Switch({ value: globalThis.__key })
-     .cases([
-        { key: "a", child: () => Text({ text: "AAA" })
-     .queryKey(["case_a"])
-     .build() },
-        { key: "b", child: () => Text({ text: "BBB" })
-     .queryKey(["case_b"])
-     .build() },
-    ])
-     .fallback(() => Text({ text: "FALL" })
-     .queryKey(["case_fallback"])
-     .build())
-     .build();
-mount(root);
+entry fn start() -> u64 {
+    let key = rs_source_str("a");
+
+    let sw = el_switch(key);
+    switch_case(sw, "a", el_qkey(el_text("AAA"), "case_a"));
+    switch_case(sw, "b", el_qkey(el_text("BBB"), "case_b"));
+    switch_fallback(sw, el_qkey(el_text("FALL"), "case_fallback"));
+    mount(el_build(sw));
+    return key;
+}
+
+entry fn set_key(key: u64, _b: f64) {
+    rs_set_str(key, "b");
+}
+
+entry fn set_key_raw(key: u64, _b: f64) {
+    rs_set_str(key, "zzz");
+}
+
+entry fn reemit(key: u64, _b: f64) {
+    rs_set_str(key, "a");
+}
 "#;
+
+fn mount_switch() -> (TurTestApp, u64) {
+    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    app.load_rut_module(RUNTIME).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let key = app.rut_start_answer();
+    (app, key)
+}
 
 #[test]
 fn switch_mounts_initial_branch() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(RUNTIME).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (app, _key) = mount_switch();
 
     // The "a" branch should be mounted; "b" and fallback should not.
     assert!(
@@ -44,15 +66,12 @@ fn switch_mounts_initial_branch() {
 
 #[test]
 fn switch_swaps_branch_on_value_change() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(RUNTIME).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (mut app, key) = mount_switch();
 
     assert!(app.query_element(&["case_a"]).is_some());
 
-    // Flip the value atom to "b" (module reload would tear down the tree,
-    // so mutate via the stashed bridge fn instead).
-    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "b");"#);
+    // Flip the value atom to "b".
+    app.call_rut_entry("set_key", key, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
@@ -67,12 +86,10 @@ fn switch_swaps_branch_on_value_change() {
 
 #[test]
 fn switch_uses_fallback_when_no_case_matches() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(RUNTIME).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (mut app, key) = mount_switch();
 
     // Value with no matching case → fallback branch.
-    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "zzz");"#);
+    app.call_rut_entry("set_key_raw", key, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(app.query_element(&["case_a"]).is_none());
@@ -85,54 +102,60 @@ fn switch_uses_fallback_when_no_case_matches() {
 
 #[test]
 fn switch_no_rebuild_when_value_re_emits_same_key() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(RUNTIME).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
+    let (mut app, key) = mount_switch();
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
-    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "a");"#);
+    app.call_rut_entry("reemit", key, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
 }
 
+/// A switch bound to a DERIVED atom (`rs_derive` over the source): the swap
+/// rides the subscriber graph when the dep flips.
 const DERIVED_RUNTIME: &str = r#"
-import { source, derive, Switch, Text, mount } from "tur:std";
+use tur::{
+    el_build, el_qkey, el_switch, el_text, el_text_bound_d, mount, rs_derive, rs_set_str,
+    rs_source_str, switch_case, switch_fallback,
+};
 
-globalThis.__key = source("a");
-globalThis.__store = store;
-globalThis.__derived = derive(() => store.get(globalThis.__key));
-const root = Switch({ value: globalThis.__derived })
-     .cases([
-        { key: "a", child: () => Text({ text: "AAA" })
-     .queryKey(["d_case_a"])
-     .build() },
-        { key: "b", child: () => Text({ text: "BBB" })
-     .queryKey(["d_case_b"])
-     .build() },
-    ])
-     .fallback(() => Text({ text: "FALL" })
-     .queryKey(["d_case_fallback"])
-     .build())
-     .build();
-mount(root);
+entry fn d(v: str) -> str {
+    return v;
+}
+
+entry fn start() -> u64 {
+    let key = rs_source_str("a");
+    let derived = rs_derive("d", key);
+
+    let sw = el_switch_d(derived);
+    switch_case(sw, "a", el_qkey(el_text("AAA"), "d_case_a"));
+    switch_case(sw, "b", el_qkey(el_text("BBB"), "d_case_b"));
+    switch_fallback(sw, el_qkey(el_text("FALL"), "d_case_fallback"));
+    mount(el_build(sw));
+    return key;
+}
+
+entry fn set_key(key: u64, _b: f64) {
+    rs_set_str(key, "b");
+}
 "#;
 
 #[test]
 fn switch_swaps_branch_on_derived_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(DERIVED_RUNTIME).unwrap();
+    app.load_rut_module(DERIVED_RUNTIME).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
+    let key = app.rut_start_answer();
 
     assert!(
         app.query_element(&["d_case_a"]).is_some(),
         "d_case_a should be mounted initially"
     );
 
-    // Flip the source atom — the derived should go stale and the Switch
-    // should swap via the subscriber graph (not a full-scan try_rebuild).
-    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "b");"#);
+    // Flip the source atom — the derived goes stale and the Switch swaps
+    // via the subscriber graph (not a full-scan try_rebuild).
+    app.call_rut_entry("set_key", key, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(

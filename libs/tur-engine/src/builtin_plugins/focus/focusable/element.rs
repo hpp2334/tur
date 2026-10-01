@@ -1,13 +1,9 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
-use crate::core::js_runtime::JsProps;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 use crate::core::view::{Lifecycle, View, ViewCx};
 
@@ -68,20 +64,3 @@ impl Lifecycle for FocusableElement {}
 impl ElementTrace for FocusableElement {}
 
 impl ElementOnFocus for FocusableElement {}
-
-// ---------------------------------------------------------------------------
-// Factory helpers
-// ---------------------------------------------------------------------------
-
-impl FocusableView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FocusableView {
-            on_key_down: p.mutation::<KeydownEvent>("onKeyDown"),
-            on_key_up: p.mutation::<KeyupEvent>("onKeyUp"),
-            on_focus: p.mutation::<FocusEvent>("onFocus"),
-            on_blur: p.mutation::<BlurEvent>("onBlur"),
-            child: p.child("child"),
-        }
-    }
-}

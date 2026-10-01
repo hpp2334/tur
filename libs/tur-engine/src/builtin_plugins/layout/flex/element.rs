@@ -3,12 +3,9 @@ use std::rc::Rc;
 use crate::core::layout::{
     Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Size,
 };
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -120,25 +117,5 @@ impl ElementTrace for FlexElement {
             p.push(("mainAxisSize", TraceValue::Str(format!("{v:?}"))));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl FlexView {
-    /// Build a `FlexView` from a JS props object. `direction` is supplied by
-    /// the factory (`Axis::Vertical` for Column, `Axis::Horizontal` for Row).
-    pub fn from_js(direction: Axis, props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FlexView {
-            direction: Some(direction),
-            main_alignment: p.val::<MainAxisAlignment>("mainAlignment"),
-            cross_alignment: p.val::<CrossAxisAlignment>("crossAlignment"),
-            main_axis_size: p.val::<MainAxisSize>("mainAxisSize"),
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
     }
 }

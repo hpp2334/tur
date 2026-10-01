@@ -1,7 +1,11 @@
 //! Multi-instance: one `TurRuntime` spawns multiple isolated `TurApp`
-//! instances. Verifies JS-realm isolation (each instance has independent
-//! global state), shared-runtime semantics (same fonts/clock/capabilities),
+//! instances. Verifies instance-state isolation (each instance has its own
+//! store + tree), shared-runtime semantics (same fonts/clock/capabilities),
 //! the plugin compile/register split, and independent event routing.
+//!
+//! State reads go through each instance's own element tree (a bound label's
+//! text) — one instance's atoms are unreachable from another's read face,
+//! which is the point.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -20,12 +24,30 @@ use tur_integration_tests::TestSchedulerDriver;
 use tur_integration_tests::{RawAppLooper, TestShell};
 use tur_native::NativeFontLoader;
 
-/// Eval a JS script on a `TurApp` and return the result as a string.
-/// Uses the engine's `eval_js` RPC (worker-thread JS evaluation).
-/// If the result is a string, returns its contents (no quotes);
-/// otherwise returns the display form.
-fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String> {
-    Ok(futures::executor::block_on(app.eval_js(source)))
+/// Read a keyed Text node's rendered content on a raw app (the rut corpus's
+/// standard state probe, via the instance's own tree face).
+fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
+    let key = key.to_string();
+    futures::executor::block_on(app.with_tree(move |tree, _focus| {
+        let id = tree.query_element(&[key.as_str()])?;
+        let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
+        let element = node.element.as_ref()?;
+        use tur_engine::builtin_plugins::text::TextElement;
+        element
+            .cast::<TextElement>()
+            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+    }))
+    .flatten()
+}
+
+/// The mounted root's laid-out width (the viewport probe).
+fn root_width(app: &Rc<tur_engine::TurApp>) -> Option<f64> {
+    futures::executor::block_on(app.with_tree(|tree, _focus| {
+        let root = tree.root_element_id()?;
+        let node = tree.get_element(root)?;
+        Some(node.computed_layout.size.width)
+    }))
+    .flatten()
 }
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
@@ -48,17 +70,29 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     (runtime, driver, pool)
 }
 
-const SET_ID_JS: &str = r#"
-    import { Text, mount } from "tur:std";
-    export function start({ store }) {
-        globalThis.__instanceId = "VALUE";
-        mount(Text({ text: "VALUE" })
-    .build());
-    }
-"#;
+/// A module that binds a keyed label to an atom seeded with `VALUE` —
+/// the per-instance state marker.
+fn id_module(value: &str) -> String {
+    format!(
+        r#"
+use tur::{{ el_build, el_text_bound, el_vqkey, mount, rs_source_str }};
+
+entry fn start() -> u64 {{
+    let atom = rs_source_str("{value}");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "id"));
+    return atom;
+}}
+
+entry fn set_value(atom: u64, _b: f64) {{
+    rs_set_str(atom, "A2");
+}}
+"#
+    )
+}
 
 #[test]
-fn instances_have_isolated_js_realms() {
+fn instances_have_isolated_state() {
     let (runtime, _driver, pool) = build_runtime();
     let (app_a, _looper_a) = runtime
         .app_builder()
@@ -74,21 +108,32 @@ fn instances_have_isolated_js_realms() {
         .expect("app B");
 
     // Load different state into each instance.
-    futures::executor::block_on(app_a.load_module(SET_ID_JS.replace("VALUE", "A").as_str()))
+    futures::executor::block_on(app_a.load_rut_module(id_module("A")))
         .expect("load A");
-    futures::executor::block_on(app_b.load_module(SET_ID_JS.replace("VALUE", "B").as_str()))
+    futures::executor::block_on(app_b.load_rut_module(id_module("B")))
         .expect("load B");
 
-    // Each instance reads back its OWN global — they must differ.
-    let id_a = eval_js(&app_a, "globalThis.__instanceId").expect("eval A");
-    let id_b = eval_js(&app_b, "globalThis.__instanceId").expect("eval B");
-    assert_eq!(id_a, "A", "instance A should have its own state");
-    assert_eq!(id_b, "B", "instance B should have its own state");
+    // Each instance reads back its OWN label — they must differ.
+    assert_eq!(
+        label_text(&app_a, "id"),
+        Some("A".to_string()),
+        "instance A should have its own state"
+    );
+    assert_eq!(
+        label_text(&app_b, "id"),
+        Some("B".to_string()),
+        "instance B should have its own state"
+    );
 
     // Mutating A must not affect B.
-    eval_js(&app_a, r#"globalThis.__instanceId = "A2""#).unwrap();
-    let id_b_after = eval_js(&app_b, "globalThis.__instanceId").unwrap();
-    assert_eq!(id_b_after, "B", "instance B unaffected by A's mutation");
+    let atom_a = futures::executor::block_on(app_a.rut_start_answer());
+    futures::executor::block_on(app_a.call_rut_entry("set_value", atom_a, 0.0))
+        .expect("mutate A");
+    assert_eq!(
+        label_text(&app_b, "id"),
+        Some("B".to_string()),
+        "instance B unaffected by A's mutation"
+    );
 }
 
 #[test]
@@ -110,15 +155,16 @@ fn instances_have_isolated_element_trees() {
     let looper_a = RawAppLooper::new(app_a.clone(), engine_looper_a, driver.clone());
 
     // Mount a tree only in A.
-    futures::executor::block_on(app_a.load_module(
+    futures::executor::block_on(app_a.load_rut_module(
         r#"
-            import { Text, mount } from "tur:std";
-            export function start({ store }) {
-                mount(Text({ text: "only-in-A" })
-    .queryKey(["a_only"])
-    .build());
-            }
-        "#,
+use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+
+entry fn start() {
+    let atom = rs_source_str("only-in-A");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "a_only"));
+}
+"#,
     ))
     .expect("load A");
     looper_a.wait_for_timeout(Duration::ZERO);
@@ -141,7 +187,7 @@ fn instances_have_isolated_element_trees() {
 }
 
 #[test]
-fn headless_instance_runs_js_without_rendering() {
+fn headless_instance_runs_rut_without_rendering() {
     let (runtime, driver, pool) = build_runtime();
     let (app, engine_looper) = runtime
         .app_builder()
@@ -152,30 +198,32 @@ fn headless_instance_runs_js_without_rendering() {
         .expect("headless");
     let looper = RawAppLooper::new(app.clone(), engine_looper, driver);
 
-    // JS executes; a frame runs without panic even with a zero viewport.
-    futures::executor::block_on(app.load_module(
+    // The module boots; a frame runs without panic even with a zero viewport.
+    futures::executor::block_on(app.load_rut_module(
         r#"
-        import { source } from "tur:std";
-        export function start({ store }) {
-            globalThis.__val = source(42);
-            const v = store.get(globalThis.__val);
-            globalThis.__readBack = v;
-        }
-    "#,
+use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+
+entry fn start() {
+    let atom = rs_source_str("42");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "val"));
+}
+"#,
     ))
     .expect("load");
     looper.wait_for_timeout(Duration::ZERO);
 
-    let val = eval_js(&app, "globalThis.__readBack").expect("eval");
-    assert_eq!(val, "42", "headless instance ran JS");
+    assert_eq!(
+        label_text(&app, "val"),
+        Some("42".to_string()),
+        "headless instance ran the rut module"
+    );
 }
 
 /// `TurAppBuilder::build_headless` is the dedicated headless entry point
-/// (no render target). Unlike the pre-threading inline headless path, it
-/// must run the engine on a worker — i.e. JS execution round-trips through
-/// the worker pipeline (load_module / pump / eval_js are all RPCs that
-/// cross main↔worker). This test pins both the API surface and that the
-/// worker is actually driving the instance.
+/// (no render target). The engine runs on a worker — module loads + entry
+/// calls are RPCs that cross main↔worker. This test pins both the API
+/// surface and that the worker is actually driving the instance.
 #[test]
 fn build_headless_runs_engine_on_worker() {
     let (runtime, driver, pool) = build_runtime();
@@ -187,27 +235,32 @@ fn build_headless_runs_engine_on_worker() {
         .expect("headless_app");
     let looper = RawAppLooper::new(app.clone(), engine_looper, driver);
 
-    // JS executes via the worker RPC path.
-    futures::executor::block_on(app.load_module(
+    // The module boots via the worker RPC path.
+    futures::executor::block_on(app.load_rut_module(
         r#"
-        import { source } from "tur:std";
-        export function start({ store }) {
-            globalThis.__val = source(7);
-            globalThis.__readBack = store.get(globalThis.__val);
-        }
-    "#,
+use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+
+entry fn start() {
+    let atom = rs_source_str("7");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "val"));
+}
+"#,
     ))
     .expect("load");
     looper.wait_for_timeout(Duration::ZERO);
 
-    let val = eval_js(&app, "globalThis.__readBack").expect("eval");
-    assert_eq!(val, "7", "build_headless ran JS on the worker");
+    assert_eq!(
+        label_text(&app, "val"),
+        Some("7".to_string()),
+        "build_headless ran the rut module on the worker"
+    );
 }
 
 #[test]
 fn many_instances_share_one_runtime() {
     // Smoke test: spawn several instances from one runtime to confirm no
-    // shared-state corruption (each gets its own boa Context + store).
+    // shared-state corruption (each gets its own store + tree).
     let (runtime, _driver, pool) = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
@@ -217,14 +270,26 @@ fn many_instances_share_one_runtime() {
             .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
             .build()
             .expect("app");
-        // No `start` ceremony needed for pure state — `eval_js` runs a
-        // classic script in the same realm.
-        eval_js(&app, &format!(r#"globalThis.__idx = {i};"#)).expect("load");
+        futures::executor::block_on(app.load_rut_module(format!(
+            r#"
+use tur::{{ el_build, el_text_bound, el_vqkey, mount, rs_source_str }};
+
+entry fn start() {{
+    let atom = rs_source_str("{i}");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "idx"));
+}}
+"#
+        )))
+        .expect("load");
         apps.push(app);
     }
     for (i, app) in apps.iter().enumerate() {
-        let idx = eval_js(app, "globalThis.__idx").expect("eval");
-        assert_eq!(idx, i.to_string(), "instance {i} should have its own __idx");
+        assert_eq!(
+            label_text(app, "idx"),
+            Some(i.to_string()),
+            "instance {i} should have its own state"
+        );
     }
 }
 
@@ -265,7 +330,7 @@ impl Plugin for CounterPlugin {
     }
     fn register(
         &self,
-        ctx: &mut PluginRegisterContext<'_>,
+        ctx: &mut PluginRegisterContext,
     ) -> Result<(), tur_engine::error::TurError> {
         self.register_count.fetch_add(1, Ordering::SeqCst);
         // Look up the shared capability (registered on the runtime builder) and
@@ -389,7 +454,7 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     );
 }
 
-// === Independent event routing + reactive isolation =======================
+// === Independent event routing + store isolation ==========================
 
 #[test]
 fn platform_events_route_to_the_correct_instance() {
@@ -411,6 +476,22 @@ fn platform_events_route_to_the_correct_instance() {
     let looper_a = RawAppLooper::new(app_a.clone(), engine_looper_a, driver.clone());
     let looper_b = RawAppLooper::new(app_b.clone(), engine_looper_b, driver);
 
+    // Mount a full-width box in each (the root sizes with the viewport).
+    let module = r#"
+use tur::{ box_color, box_size, el_box_new, el_build, mount };
+
+entry fn start() {
+    let b = el_box_new();
+    box_size(b, 10.0, 10.0);
+    box_color(b, 0x336699FFu64);
+    mount(el_build(b));
+}
+"#;
+    futures::executor::block_on(app_a.load_rut_module(module)).expect("load A");
+    futures::executor::block_on(app_b.load_rut_module(module)).expect("load B");
+    looper_a.wait_for_timeout(Duration::ZERO);
+    looper_b.wait_for_timeout(Duration::ZERO);
+
     // Push a Resize to A only.
     app_a.push_platform_event(ShellEvent::Resize {
         logical_width: 250,
@@ -420,33 +501,17 @@ fn platform_events_route_to_the_correct_instance() {
     looper_a.wait_for_timeout(Duration::ZERO);
     looper_b.wait_for_timeout(Duration::ZERO);
 
-    // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
-    // mode (no imports), so do the import in a module eval and stash the JSON
-    // on globalThis, then read it back with eval_js. The read goes through
-    // the instance store — engine environment atoms live in it.
-    let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
-        let _ = futures::executor::block_on(app.load_module(
-            r#"import { mount, view, Text, viewportSize$ } from "tur:std";
-
-               export function start({ store }) {
-                   mount(view(() => Text({ text: "x" })
-     .build()));
-                   globalThis.__vp = JSON.stringify(store.get(viewportSize$));
-               }"#,
-        ));
-        eval_js(app, "globalThis.__vp").unwrap_or_default()
-    };
-
-    let a_vp = read_vp(&app_a);
-    let b_vp = read_vp(&app_b);
-
+    // The container root fills the viewport: A relaid out to 250; B kept
+    // its own 100 — the resize routed to exactly one instance.
+    let a_w = root_width(&app_a).expect("A root");
+    let b_w = root_width(&app_b).expect("B root");
     assert!(
-        a_vp.contains("250"),
-        "instance A viewport resized to 250: {a_vp}"
+        (a_w - 250.0).abs() < 0.5,
+        "instance A viewport resized to 250: {a_w}"
     );
     assert!(
-        b_vp.contains("100") && !b_vp.contains("250"),
-        "instance B viewport unaffected by A's resize: {b_vp}"
+        (b_w - 100.0).abs() < 0.5,
+        "instance B viewport unaffected by A's resize: {b_w}"
     );
 }
 
@@ -466,39 +531,44 @@ fn reactive_stores_are_isolated_per_instance() {
         .build()
         .expect("B");
 
-    // Create a source in A and set a value. The instance store is stashed
-    // on globalThis so the read-back module below reads through the SAME
-    // store (the instance store persists across reloads — its KV keeps the
-    // materialized value).
-    futures::executor::block_on(app_a.load_module(
-        r#"import { source } from "tur:std";
-           export function start({ store }) {
-               globalThis.__store = store;
-               globalThis.__atom = source("from-A");
-               store.set(globalThis.__atom, "A2");
-           }"#,
+    // A's module writes its atom ("from-A") then flips the bound label to
+    // "A2" — the write lands in A's own store.
+    futures::executor::block_on(app_a.load_rut_module(
+        r#"
+use tur::{ el_build, el_text_bound, el_vqkey, mount, rs_source_str };
+
+entry fn start() -> u64 {
+    let atom = rs_source_str("from-A");
+    let txt = el_text_bound(atom);
+    mount(el_vqkey(txt, "id"));
+    return atom;
+}
+
+entry fn flip(atom: u64, _b: f64) {
+    rs_set_str(atom, "A2");
+}
+"#,
     ))
     .expect("setup A");
 
-    // B has no such atom — `globalThis.__atom` is undefined in B's realm.
-    let b_val = eval_js(
-        &app_b,
-        "typeof globalThis.__atom === 'undefined' ? 'none' : 'present'",
-    )
-    .expect("eval B");
-    assert_eq!(
-        b_val, "none",
-        "instance B should not see instance A's reactive atoms"
+    // B has no such module — no tree, no atoms.
+    let b_tree = futures::executor::block_on(app_b.with_tree(|tree, _focus| {
+        tree.root_element_id()
+            .and_then(|root| tree.dev_tool_node(root.into()))
+    }))
+    .flatten();
+    assert!(
+        b_tree.is_none(),
+        "instance B should not see instance A's reactive state"
     );
 
-    // A still has its own value. `import` needs module context, so eval as a
-    // module and stash on globalThis, then read back.
-    futures::executor::block_on(app_a.load_module(
-        r#"export function start() {
-               globalThis.__r = globalThis.__store.get(globalThis.__atom);
-           }"#,
-    ))
-    .expect("read A");
-    let a_val = eval_js(&app_a, "globalThis.__r").unwrap_or_default();
-    assert_eq!(a_val, "A2", "instance A retains its own reactive state");
+    // A retains its own value — flip it and read it back.
+    let atom_a = futures::executor::block_on(app_a.rut_start_answer());
+    futures::executor::block_on(app_a.call_rut_entry("flip", atom_a, 0.0))
+        .expect("flip");
+    assert_eq!(
+        label_text(&app_a, "id"),
+        Some("A2".to_string()),
+        "instance A retains its own reactive state"
+    );
 }

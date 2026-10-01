@@ -59,7 +59,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "net_request", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
         let done = rut_vm::Completer::<Vec<u8>>::new();
-        let Some(http) = h.js_ctx.capability().of::<Http>() else {
+        let Some(http) = h.inst.capability().of::<Http>() else {
             done.complete(Vec::new());
             return done;
         };
@@ -72,7 +72,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             stream_buffer_bytes: None,
         };
         let w = done.clone();
-        h.js_ctx.spawn_local(move |_aw| async move {
+        h.inst.spawn_local(move |_aw| async move {
             match http.request(opts).await {
                 HttpOutcome::Ok { body, .. } => w.complete(body),
                 HttpOutcome::Err(_) => w.complete(Vec::new()),
@@ -95,7 +95,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // task's `task_cancel` wire-aborts the download.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "net_stream", (u64, &str, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, url: &str, method: &str, cb: &str| {
-        let Some(http) = h.js_ctx.capability().of::<Http>() else {
+        let Some(http) = h.inst.capability().of::<Http>() else {
             return Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "no http capability"));
         };
         let http = http.backend().clone();
@@ -105,7 +105,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
         let h2 = h.clone();
         let (status2, error2) = (status.clone(), error.clone());
         let (url, method) = (url.to_string(), method.to_string());
-        let handle = h.js_ctx.spawn_local(move |_aw| async move {
+        let handle = h.inst.spawn_local(move |_aw| async move {
             let opts = RequestOpts {
                 url,
                 method,
@@ -172,16 +172,13 @@ pub mod plugin {
     impl tur_engine::core::plugin::Plugin for TurRutNetRows {
         fn register(
             &self,
-            ctx: &mut tur_engine::core::plugin::PluginRegisterContext<'_>,
+            ctx: &mut tur_engine::core::plugin::PluginRegisterContext,
         ) -> Result<(), tur_engine::error::TurError> {
-            if !ctx.js_ctx().capability().contains::<Http>() {
+            if !ctx.capability().contains::<Http>() {
                 tracing::info!("TurRutNetRows: no Http capability; skipping rut rows");
                 return Ok(());
             }
-            ctx.js_ctx()
-                .rut_pkg_exts
-                .borrow_mut()
-                .push(Rc::new(super::install));
+            ctx.push_rut_ext(Rc::new(super::install));
             Ok(())
         }
     }

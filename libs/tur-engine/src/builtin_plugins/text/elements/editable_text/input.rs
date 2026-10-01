@@ -1,17 +1,13 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::core::render::brush::Color;
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::builtin_plugins::layout::ContainerView;
-use crate::core::edgy::reactive::AnyReadable;
+use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
 use crate::core::element::NodeId;
-use crate::core::js_runtime::JsProps;
+use crate::core::render::brush::Color;
 use crate::core::view::{Val, View, ViewCx};
 
 use super::element::{ContextMenuEvent, EditableTextView};
-use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
 
 // ---------------------------------------------------------------------------
 // InputView — composes a ContainerElement (sizing/border wrapper) with a single
@@ -23,9 +19,8 @@ use crate::builtin_plugins::text::controller::{TextEditingController, UndoContro
 pub struct InputView {
     width: Option<Val<f64>>,
     height: Option<Val<f64>>,
-    controller: Option<JsObject>,
-    controller_atom: Option<AnyReadable>,
-    undo_controller: Option<JsObject>,
+    controller: Option<Rc<RefCell<TextEditingController>>>,
+    undo_controller: Option<Rc<RefCell<UndoController>>>,
     placeholder: Option<Val<String>>,
     color: Option<Val<Color>>,
     placeholder_color: Option<Val<Color>>,
@@ -44,7 +39,6 @@ impl View for InputView {
     fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let editable = Rc::new(EditableTextView {
             controller: self.controller.clone(),
-            controller_atom: self.controller_atom,
             undo_controller: self.undo_controller.clone(),
             placeholder: self.placeholder.clone(),
             color: self.color.clone(),
@@ -71,34 +65,63 @@ impl View for InputView {
 }
 
 impl InputView {
-    /// Rut-rail constructor (`core::rut_runtime`): a realm-minted
-    /// `TextEditingController` (+ optional `UndoController`), a static
-    /// placeholder, and an explicit size — the rows the rut C1 gate
-    /// drives. Everything else defaults (matching an un-styled JS `Input`).
-    /// Rut-rail constructor with option flags (bit 0 = multiline,
-    /// bit 1 = obscure) — the `el_input_opts` row's crossing.
-    pub(crate) fn new_rut_opts(
-        controller: JsObject,
-        undo_controller: Option<JsObject>,
-        placeholder: Option<String>,
-        width: Option<f64>,
-        height: Option<f64>,
-        multiline: bool,
-        obscure: bool,
-    ) -> Self {
-        let mut view = Self::new_rut(controller, undo_controller, placeholder, width, height);
-        if multiline {
-            view.multiline = Some(Val::Static(true));
+    /// An all-defaults builder (`core::rut_runtime`'s `el_input_new` row):
+    /// every prop unset; the setter rows mutate it in place and `el_build`
+    /// materializes it.
+    pub(crate) fn empty_rut() -> Self {
+        InputView {
+            width: None,
+            height: None,
+            controller: None,
+            undo_controller: None,
+            placeholder: None,
+            color: None,
+            placeholder_color: None,
+            cursor_color: None,
+            font_size: None,
+            font_family: None,
+            font_weight: None,
+            multiline: None,
+            obscure_text: None,
+            obscuring_character: None,
+            on_context_menu: None,
+            query_key: None,
         }
-        if obscure {
-            view.obscure_text = Some(Val::Static(true));
-        }
-        view
     }
 
+    // -- rut builder setters (`core::rut_runtime`'s input_* rows) ---------
+
+    pub(crate) fn set_width(&mut self, v: f64) {
+        self.width = Some(Val::Static(v));
+    }
+    pub(crate) fn set_height(&mut self, v: f64) {
+        self.height = Some(Val::Static(v));
+    }
+    pub(crate) fn set_placeholder_str(&mut self, v: String) {
+        self.placeholder = Some(Val::Static(v));
+    }
+    pub(crate) fn set_color(&mut self, v: crate::core::render::brush::Color) {
+        self.color = Some(Val::Static(v));
+    }
+    pub(crate) fn set_placeholder_color(&mut self, v: crate::core::render::brush::Color) {
+        self.placeholder_color = Some(Val::Static(v));
+    }
+    pub(crate) fn set_font_size(&mut self, v: f64) {
+        self.font_size = Some(Val::Static(v));
+    }
+    pub(crate) fn set_controller(&mut self, c: Rc<RefCell<TextEditingController>>) {
+        self.controller = Some(c);
+    }
+    pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
+        self.query_key = Some(key);
+    }
+
+    /// Rut-rail constructor (`core::rut_runtime`): shared controllers, a
+    /// static placeholder, and an explicit size — the rows the rut C1 gate
+    /// drives. Everything else defaults (matching an un-styled `Input`).
     pub(crate) fn new_rut(
-        controller: JsObject,
-        undo_controller: Option<JsObject>,
+        controller: Rc<RefCell<TextEditingController>>,
+        undo_controller: Option<Rc<RefCell<UndoController>>>,
         placeholder: Option<String>,
         width: Option<f64>,
         height: Option<f64>,
@@ -107,7 +130,6 @@ impl InputView {
             width: width.map(Val::Static),
             height: height.map(Val::Static),
             controller: Some(controller),
-            controller_atom: None,
             undo_controller,
             placeholder: placeholder.map(Val::Static),
             color: None,
@@ -124,27 +146,24 @@ impl InputView {
         }
     }
 
-    /// Build an `InputView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        InputView {
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            controller: p.opaque::<TextEditingController>("controller"),
-            controller_atom: p.readable("controller"),
-            undo_controller: p.opaque::<UndoController>("undoController"),
-            placeholder: p.val::<String>("placeholder"),
-            color: p.val::<Color>("color"),
-            placeholder_color: p.val::<Color>("placeholderColor"),
-            cursor_color: p.val::<Color>("cursorColor"),
-            font_size: p.val::<f64>("fontSize"),
-            font_family: p.val::<String>("fontFamily"),
-            font_weight: p.val::<f64>("fontWeight"),
-            multiline: p.val::<bool>("multiline"),
-            obscure_text: p.val::<bool>("obscureText"),
-            obscuring_character: p.val::<String>("obscuringCharacter"),
-            on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
-            query_key: p.query_key("queryKey"),
+    /// Rut-rail constructor with option flags (bit 0 = multiline,
+    /// bit 1 = obscure) — the `el_input_opts` row's crossing.
+    pub(crate) fn new_rut_opts(
+        controller: Rc<RefCell<TextEditingController>>,
+        undo_controller: Option<Rc<RefCell<UndoController>>>,
+        placeholder: Option<String>,
+        width: Option<f64>,
+        height: Option<f64>,
+        multiline: bool,
+        obscure: bool,
+    ) -> Self {
+        let mut view = Self::new_rut(controller, undo_controller, placeholder, width, height);
+        if multiline {
+            view.multiline = Some(Val::Static(true));
         }
+        if obscure {
+            view.obscure_text = Some(Val::Static(true));
+        }
+        view
     }
 }

@@ -1,26 +1,18 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::{Context, JsValue};
-
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
-use crate::core::edgy::reactive::{ReactiveReadStore, Readable};
+use crate::core::edgy::reactive::ReactiveReadStore;
 use crate::core::edgy::value::FromValue;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
-use crate::core::js_runtime::TurInstanceContext;
+use crate::core::instance::InstanceContext;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::Val;
 
 // ---------------------------------------------------------------------------
 // ViewCx — the build capability a `View::build` impl needs to mount itself
 // into the node tree.
-//
-// The JS realm is folded into the context (not a `build` parameter): a
-// rut-only instance never allocates a realm, so every realm-free build path
-// (all Rust-authored views) runs with `realm() == None`. JS-authored views
-// (JsView thunks, Each/LazyList item builders) degrade with a warning when
-// absent — they cannot exist on a realm-free instance anyway.
 //
 // `SharedViewCx` (the normal, non-layout build context) implements this via its
 // interior-mutability helpers. A layout-backed adapter (added in a later
@@ -30,8 +22,8 @@ use crate::core::view::Val;
 //
 // Object-safety: this trait is used as `&mut dyn ViewCx` (so that `View` stays
 // object-safe: `View::build` takes `&mut dyn ViewCx`, no generics). Generic
-// helpers that don't fit a vtable (`read_val<T>`, `read_atom_raw<T>`) live as
-// free functions below, taking `&mut dyn ViewCx` for the store handle + realm.
+// helpers that don't fit a vtable (`read_val<T>`) live as free functions
+// below, taking `&mut dyn ViewCx` for the store handle.
 // ---------------------------------------------------------------------------
 
 pub trait ViewCx {
@@ -39,14 +31,7 @@ pub trait ViewCx {
     fn alloc_node(&mut self) -> NodeId;
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
-    /// Realm-free: the node's JS-visible handle materializes lazily (on
-    /// first access from JS).
     fn insert_node(&mut self, id: ElementNodeId, element: AnyElement);
-
-    /// The JS realm, when the instance has one. `None` on a realm-free
-    /// instance (a rut-only build); JS-authored views/branches degrade with
-    /// a warning.
-    fn realm(&mut self) -> Option<&mut Context>;
 
     /// Insert a `FragmentHost` into the fragments map.
     fn insert_fragment(&mut self, host: FragmentHost);
@@ -101,14 +86,13 @@ pub trait ViewCx {
 
 /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom is
 /// lazily read from the store (untracked) as a native `Value` and decoded via
-/// [`FromValue`] — no JS realm needed. The realm borrow is still taken from
-/// the context for the JS-facing helpers (`read_atom_raw`).
+/// [`FromValue`].
 pub fn read_val<T: FromValue + Clone + 'static>(cx: &mut dyn ViewCx, val: &Val<T>) -> Option<T> {
     match val {
         Val::Static(t) => Some(t.clone()),
         Val::Reactive(readable) => {
             let store = cx.store_read_only();
-            let value = store.read(*readable, cx.realm());
+            let value = store.read(*readable);
             T::from_value(&value).ok()
         }
     }
@@ -122,29 +106,9 @@ pub fn read_val_opt<T: FromValue + Clone + 'static>(
     val.and_then(|v| read_val(cx, v))
 }
 
-/// Read an atom's current value as a raw `JsValue` (untracked), via the
-/// build context's reactive store. The KV holds native `Value`s, so the
-/// `Value → JsValue` conversion happens here, for the JS-shaped consumers
-/// (JS item builders, controller downcasts). Without a realm the conversion
-/// degrades to `undefined` with a warning — JS-authored atoms cannot exist
-/// on a realm-free instance.
-pub fn read_atom_raw<T>(cx: &mut dyn ViewCx, readable: Readable<T>) -> JsValue {
-    let store = cx.store_read_only();
-    let value = store.read(readable, cx.realm());
-    match cx.realm() {
-        Some(boa) => value.to_js(boa),
-        None => {
-            if !value.is_nil() {
-                tracing::warn!("read_atom_raw: atom value needs the JS realm to surface, but none exists");
-            }
-            JsValue::undefined()
-        }
-    }
-}
-
-/// Borrow the shared handles a controller needs, from a `TurInstanceContext`.
+/// Borrow the shared handles a controller needs, from an [`InstanceContext`].
 pub fn controller_handles(
-    js_ctx: &TurInstanceContext,
+    js_ctx: &InstanceContext,
 ) -> (
     NodeTree,
     Rc<RefCell<PendingMutationInvocationQueue>>,

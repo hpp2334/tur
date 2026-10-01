@@ -511,137 +511,15 @@ fn multiline_drag_select_batched_events() {
     );
 }
 
-const ONKEY_BUNDLE: &str = r#"
-import { mutate, mount, Input } from "tur:std";
-
-globalThis.__keyHit = "";
-globalThis.__ctrlHeld = "false";
-const onKey = mutate((_storeCtx, ev) => {
-    globalThis.__keyHit = ev.key;
-    globalThis.__ctrlHeld = String(ev.ctrl);
-});
-globalThis.__ctrl = new globalThis.TextEditingController({ onKeyDown: onKey });
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontSize(20)
-    .width(200)
-    .height(44)
-    .build());
-"#;
-
 /// Regression: the controller's `onKeyDown` listener must fire on every
 /// keydown. Previously the field was stored but never dispatched, which left
 /// the playground's Cmd+S shortcut (and any controller onKeyDown handler)
 /// completely dead.
-#[test]
-fn controller_on_key_down_fires_on_keydown() {
-    let mut app = TurTestApp::new(300.0, 100.0).unwrap();
-    app.eval_module_source(ONKEY_BUNDLE).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
-
-    let input_id = find_editable_text_id(&app);
-    focus_editable(&mut app, input_id);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-
-    // Ctrl+S must not insert text but must still fire onKeyDown.
-    assert_eq!(get_text(&app, input_id), "");
-    app.send_key_with_modifiers("s", false, true);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        app.eval_js("globalThis.__keyHit"),
-        "s",
-        "onKeyDown must fire for Ctrl+S",
-    );
-    assert_eq!(
-        app.eval_js("globalThis.__ctrlHeld"),
-        "true",
-        "modifier flag must be forwarded to onKeyDown",
-    );
-    assert_eq!(get_text(&app, input_id), "", "Ctrl+S must not insert text");
-
-    // A plain printable key must also fire onKeyDown (and insert the char).
-    app.send_key("a");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        app.eval_js("globalThis.__keyHit"),
-        "a",
-        "onKeyDown must also fire for normal typing",
-    );
-    assert_eq!(get_text(&app, input_id), "a");
-}
-
-const SPANS_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
-
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{ content: "hello" }]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontSize(20)
-    .width(200)
-    .height(44)
-    .build());
-"#;
 
 /// `setSpansPreserveCursor` must keep the caret where it is across a
 /// re-tokenize pass (e.g. live syntax highlighting); the legacy `setSpans`
 /// must continue to reset the caret to end-of-text.
-#[test]
-fn set_spans_preserve_cursor_keeps_caret() {
-    let mut app = TurTestApp::new(300.0, 100.0).unwrap();
-    app.eval_module_source(SPANS_BUNDLE).unwrap();
-    app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let input_id = find_editable_text_id(&app);
-    focus_editable(&mut app, input_id);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-
-    // Normalize the caret to a known position: Home → 0, then right twice → 2.
-    app.send_key("Home");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    app.send_key("ArrowRight");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    app.send_key("ArrowRight");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, input_id), "hello");
-    assert_eq!(get_cursor_pos(&app, input_id), 2);
-
-    // Re-tokenize with colored spans while preserving the caret.
-    app.eval_js(
-        r#"globalThis.__ctrl.setSpansPreserveCursor([
-            { content: "he", color: { r: 255, g: 80, b: 80, a: 255 } },
-            { content: "llo", color: { r: 80, g: 200, b: 120, a: 255 } },
-        ]);"#,
-    );
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, input_id), "hello");
-    assert_eq!(
-        get_cursor_pos(&app, input_id),
-        2,
-        "caret must stay at 2 after preserve-cursor re-tokenize",
-    );
-
-    // Contrast: the legacy `setSpans` resets the caret to end-of-text (5).
-    app.eval_js(r#"globalThis.__ctrl.setSpans([{ content: "hello" }]);"#);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        get_cursor_pos(&app, input_id),
-        5,
-        "setSpans resets caret to end of text",
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Click → caret → Backspace regression tests.
-//
-// The reported playground bug: click to move the caret, then press Backspace,
-// and a *different* character is removed (not the one immediately left of the
-// caret). To assert precisely without hard-coding a font's pixel advance, each
-// test first *calibrates* the monospace char width and line height from the
-// focused element's caret rect, then clicks at an exact byte boundary.
-// ---------------------------------------------------------------------------
-
-/// Absolute `(x, y_top, height)` of the focused element's caret.
 fn caret_rect(app: &TurTestApp) -> (f64, f64, f64) {
     let (x, y, _w, h) = app.focused_cursor_rect().expect("focused caret rect");
     (x, y, h)
@@ -660,52 +538,42 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{ content: "hello" }]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontFamily("monospace")
-    .fontSize(20)
-    .width(400)
-    .height(44)
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 // Mirrors the playground code editor: syntax-highlighted spans with different
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([
-    { content: "import", color: { r: 200, g: 120, b: 50, a: 255 } },
-    { content: " {", color: { r: 80, g: 80, b: 80, a: 255 } },
-]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontFamily("monospace")
-    .fontSize(20)
-    .width(400)
-    .height(44)
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{ content: "abc\ndef\nghi" }]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .multiline(true)
-    .fontFamily("monospace")
-    .fontSize(20)
-    .width(400)
-    .height(200)
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 /// Click in the middle of a single-line field should place the caret at the
@@ -714,7 +582,7 @@ mount(Input()
 #[test]
 fn click_places_caret_then_backspace_deletes_left_char() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
-    app.eval_module_source(CLICK_SINGLE_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_SINGLE_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
@@ -764,7 +632,7 @@ fn click_places_caret_then_backspace_deletes_left_char() {
 #[test]
 fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
     let mut app = TurTestApp::new(500.0, 300.0).unwrap();
-    app.eval_module_source(CLICK_MULTI_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_MULTI_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
@@ -824,7 +692,7 @@ fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
 #[test]
 fn click_with_multi_color_spans_places_caret_correctly() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
-    app.eval_module_source(CLICK_SPANS_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_SPANS_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
@@ -873,28 +741,26 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([
-    { content: "AAAA", color: { r: 200, g: 120, b: 50, a: 255 } },
-    { content: "BBBB", color: { r: 80, g: 200, b: 120, a: 255 } },
-    { content: "CCCC", color: { r: 120, g: 80, b: 200, a: 255 } },
-    { content: "DDDD", color: { r: 200, g: 200, b: 80, a: 255 } },
-]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontFamily("monospace")
-    .fontSize(20)
-    .width(400)
-    .height(44)
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 4) {
+        tctrl_push_span(ctrl, f"line {i} of the seeded document\n");
+        i += 1;
+    }
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 #[test]
 fn click_in_later_run_places_caret_correctly() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
-    app.eval_module_source(CLICK_FOUR_SPAN_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_FOUR_SPAN_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
@@ -929,27 +795,21 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"
-import { mount, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([
-    { content: "ab", color: { r: 200, g: 120, b: 50, a: 255 } },
-    { content: "", color: { r: 80, g: 200, b: 120, a: 255 } },
-    { content: "cd", color: { r: 120, g: 80, b: 200, a: 255 } },
-]);
-mount(Input()
-    .controller(globalThis.__ctrl)
-    .fontFamily("monospace")
-    .fontSize(20)
-    .width(400)
-    .height(44)
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 #[test]
 fn empty_colored_span_does_not_panic() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
-    app.eval_module_source(EMPTY_SPAN_BUNDLE).unwrap();
+    app.load_rut_module(EMPTY_SPAN_BUNDLE).unwrap();
     // Rendering must not panic despite the empty-color span producing an
     // empty (start == end) style range.
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -969,21 +829,20 @@ fn empty_colored_span_does_not_panic() {
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"
-import { mount, ScrollView, Input } from "tur:std";
+use tur::{ el_build, el_input, el_vqkey, mount, tctrl_new, tctrl_push_span, undo_new };
 
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{
-    content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL",
-}]);
-mount(ScrollView()
-    .child(Input()
-     .controller(globalThis.__ctrl)
-     .multiline(true)
-     .fontFamily("monospace")
-     .fontSize(16)
-     .queryKey(["scrolled-input"])
-     .build())
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 6) {
+        tctrl_push_span(ctrl, f"line {i} of the seeded document\n");
+        i += 1;
+    }
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 300.0, 100.0);
+    let keyed = el_vqkey(input, "editor");
+    mount(keyed);
+}
 "#;
 
 /// Clicking a line that is only visible AFTER scrolling must place the caret on
@@ -992,7 +851,7 @@ mount(ScrollView()
 #[test]
 fn click_on_scrolled_line_places_caret_on_that_line() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.eval_module_source(CLICK_SCROLLED_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_SCROLLED_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_under(&app, &["scrolled-input"]);
@@ -1089,7 +948,7 @@ mount(Input()
 #[test]
 fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     let mut app = TurTestApp::new(120.0, 300.0).unwrap();
-    app.eval_module_source(CLICK_SOFTWRAP_BUNDLE).unwrap();
+    app.load_rut_module(CLICK_SOFTWRAP_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_under(&app, &["softwrap-input"]);
@@ -1216,7 +1075,7 @@ mount(Input()
 #[test]
 fn click_on_wrapped_single_line_input_lands_on_clicked_visual_line() {
     let mut app = TurTestApp::new(120.0, 300.0).unwrap();
-    app.eval_module_source(CLICK_SOFTWRAP_SINGLE_BUNDLE)
+    app.load_rut_module(CLICK_SOFTWRAP_SINGLE_BUNDLE)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 

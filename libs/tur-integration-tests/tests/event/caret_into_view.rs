@@ -7,25 +7,27 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-import { mount, ScrollView, Input, Column, CrossAxisAlignment } from "tur:std";
+use tur::{
+    el_build, el_child, el_column, el_input, el_qkey, el_scroll, el_vqkey, mount, tctrl_new,
+    tctrl_push_span, undo_new,
+};
 
-const lines = [];
-for (let i = 0; i < 30; i++) lines.push("line " + i);
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Column()
-     .crossAlignment(CrossAxisAlignment.Stretch)
-     .children([Input()
-    .controller(globalThis.__ctrl)
-    .multiline(true)
-    .fontSize(14)
-    .fontFamily("monospace")
-    .queryKey(["editor"])
-    .build()])
-     .build())
-    .build());
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 30) {
+        tctrl_push_span(ctrl, f"line {i}\n");
+        i += 1;
+    }
+    let undo = undo_new();
+    let input = el_input(ctrl, undo, "", 100000.0, 30.0);
+    el_qkey(input, "editor");
+    let col = el_column();
+    el_child(col, input);
+    let scroller = el_scroll(true, el_build(col));
+    el_qkey(scroller, "scroll");
+    mount(el_build(scroller));
+}
 "#;
 
 fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
@@ -38,7 +40,7 @@ fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
 #[test]
 fn caret_into_view_scrolls_to_caret() {
     let mut app = TurTestApp::new(300.0, 200.0).unwrap();
-    app.eval_module_source(CARET_SCROLL_BUNDLE).unwrap();
+    app.load_rut_module(CARET_SCROLL_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();

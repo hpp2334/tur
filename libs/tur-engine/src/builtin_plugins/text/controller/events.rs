@@ -1,10 +1,11 @@
-use boa_engine::{Context, JsValue, js_string};
-
-use crate::core::edgy::mutation::IntoJsArgs;
+#![allow(dead_code)] // payload fields kept for editing-surface parity
+use crate::core::edgy::mutation::MutationPayload;
 
 // ---------------------------------------------------------------------------
-// Text-editing event payloads — JS callback arguments emitted via
-// TextEditingController (input, cursor, selection, composition).
+// Text-editing event payloads — callback arguments emitted via
+// TextEditingController (input, cursor, selection, composition). All plain
+// markers: the callbacks read their payload from closure captures, so every
+// payload crosses with empty args (the default `to_value_args`).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -37,44 +38,9 @@ pub struct CompositionEndEvent {
     pub(crate) text: String,
 }
 
-impl IntoJsArgs for InputEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![
-            JsValue::from(js_string!(self.value.as_str())),
-            JsValue::from(self.enter),
-        ]
-    }
-}
-
-impl IntoJsArgs for CursorChangeEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![JsValue::from(self.position as f64)]
-    }
-}
-
-impl IntoJsArgs for SelectionChangeEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![
-            JsValue::from(self.anchor as f64),
-            JsValue::from(self.end as f64),
-        ]
-    }
-}
-
-impl IntoJsArgs for CompositionStartEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        Vec::new()
-    }
-}
-
-impl IntoJsArgs for CompositionUpdateEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![JsValue::from(js_string!(self.text.as_str()))]
-    }
-}
-
-impl IntoJsArgs for CompositionEndEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        vec![JsValue::from(js_string!(self.text.as_str()))]
-    }
-}
+impl MutationPayload for InputEvent {}
+impl MutationPayload for CursorChangeEvent {}
+impl MutationPayload for SelectionChangeEvent {}
+impl MutationPayload for CompositionStartEvent {}
+impl MutationPayload for CompositionUpdateEvent {}
+impl MutationPayload for CompositionEndEvent {}

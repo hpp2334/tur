@@ -71,7 +71,6 @@ impl ElementLayout for LazyGridElement {
                 self.visible.clear();
                 let mut vcx = LayoutViewCx::new(
                     cx.tree,
-                    None,
                     cx.node_tree.clone(),
                     cx.mutation_queue.clone(),
                     cx.dirty.clone(),
@@ -121,7 +120,6 @@ impl ElementLayout for LazyGridElement {
         if viewport_main > 0.0 {
             let mut vcx = LayoutViewCx::new(
                 cx.tree,
-                cx.js.realm_mut(),
                 cx.node_tree.clone(),
                 cx.mutation_queue.clone(),
                 cx.dirty.clone(),

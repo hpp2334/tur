@@ -19,20 +19,18 @@
 //!   `tur-net-native`, `RecordingHttp` in `tur-integration-tests`)
 //!   implement [`HttpBackend`] and are registered via
 //!   `.capability(Http::new(backend))`.
-//! - The bridge closure (in [`bridge`]) parses JS opts into [`RequestOpts`],
-//!   spawns the future via the engine's executor, settles the task's
-//!   `JsPromise` via a completion closure on the next `flush`, and returns
-//!   the `Task` handle whose `cancel()` aborts the spawn / wire-aborts the
-//!   stream and rejects with a `CancelError`.
+//! - The `tur` host pkg rows (in [`rut_rows`], via the pkg-extension seam)
+//!   parse [`RequestOpts`] and drive the backend on the rut async weave;
+//!   a stream's cancel row wire-aborts the download.
 //! - [`TurNetPlugin`] does NOT declare a `requires` for [`Http`] — HTTP is
-//!   an optional capability. If absent, the plugin simply skips registering
-//!   `tur:net`, and JS code feature-detects via
-//!   `typeof request === "function"`.
+//!   an optional capability. If absent, the plugin simply skips pushing the
+//!   net rows, and rut modules calling them trap with the unknown-row
+//!   error.
 
-pub mod bridge;
 pub mod rut_rows;
 
 use std::future::Future;
+use std::rc::Rc;
 use std::pin::Pin;
 
 use futures::StreamExt;
@@ -197,20 +195,13 @@ impl tur_engine::core::capability::Capability for Http {}
 /// registered.
 ///
 /// One synthetic module: `tur:net` exports `request(opts): Task<Response>` +
-/// `requestStream(opts): Task<StreamResponse>` (the shared
-/// `{ promise, cancel() }` handle every async engine API returns — see
-/// [`tur_engine::core::async_::make_task`]). The stream body is a plain
-/// `AsyncIterableIterator<Uint8Array>`; aborting a stream is
-/// `task.cancel()`.
+/// The net plugin: pushes the `tur` host pkg's net rows (see
+/// [`rut_rows`]) when an [`Http`] backend is registered.
 ///
-/// If no backend is injected, the plugin is a no-op — the module stays
-/// unregistered, and JS code that imports from it fails at module load.
-/// Cases that may run in HTTP-less environments must guard accordingly (or
-/// be marked playground-only, like github-viewer).
-///
-/// The bridge fns are ctx-bound `Ptr`s that read their [`Http`] capability
-/// from `TurInstanceContext`'s capability registry at call time. This avoids
-/// `unsafe NativeFunction::from_closure` — see [`bridge`].
+/// If no backend is injected, the plugin is a no-op — the rows stay
+/// unregistered, and a rut module calling them traps with the unknown-row
+/// error. Modules that may run in HTTP-less environments must guard
+/// accordingly (or be marked playground-only, like github-viewer).
 pub struct TurNetPlugin;
 
 impl Default for TurNetPlugin {
@@ -220,14 +211,14 @@ impl Default for TurNetPlugin {
 }
 
 impl Plugin for TurNetPlugin {
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         // Optional capability: if no Http backend is registered, skip
-        // registering `tur:net`. JS code feature-detects.
+        // pushing the net rows.
         if !ctx.capability().contains::<Http>() {
-            tracing::info!("TurNetPlugin: no Http capability registered; skipping tur:net");
+            tracing::info!("TurNetPlugin: no Http capability registered; skipping the net rows");
             return Ok(());
         }
-        ctx.register_module("tur:net", bridge::fns(), vec![]);
+        ctx.push_rut_ext(Rc::new(crate::rut_rows::install));
         Ok(())
     }
 }

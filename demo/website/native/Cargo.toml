@@ -16,7 +16,6 @@ rut-driver = { workspace = true }
 rut-parser = { workspace = true }
 rut-vm = { workspace = true }
 rut-core = { workspace = true }
-boa_engine = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen-futures = { workspace = true }

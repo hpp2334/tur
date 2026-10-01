@@ -3,14 +3,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::context::time::Clock;
+use crate::core::clock::Clock;
 
 use crate::core::app::TurAppInternal;
-use crate::core::async_::TurJobExecutor;
 use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::fonts::{FontContext, FontLoader};
-use crate::core::js_runtime::TurModuleLoader;
-use crate::core::js_runtime::instance_context::InstanceDataCx;
+use crate::core::instance::InstanceDataCx;
 use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginRegisterContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::error::TurError;
@@ -29,21 +27,14 @@ pub(crate) use backend::WorkerBackend;
 // (which lives in `lib.rs`).
 pub(crate) use backend::MsgOutcome;
 
-/// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
-/// concrete (`Sized`) `C`, so it won't accept an already-erased
-/// `Arc<dyn Clock + Send + Sync>`. `ClockProxy` is a Sized adapter that
-/// delegates to the shared `Arc<dyn Clock + Send + Sync>` — giving every
-/// instance's boa `Context` and the runtime `FrameEnv` one shared time
-/// source. `Send + Sync` so the runtime can be shared across worker
-/// threads (Phase 8 threaded mode).
+/// Adapter from the shared `Arc<dyn Clock>` to the `Rc<dyn Clock>` the
+/// worker-side `FrameEnv` expects — giving the frame environment one shared
+/// time source with the host backend.
 #[derive(Clone)]
 pub(crate) struct ClockProxy(pub(crate) Arc<dyn Clock + Send + Sync>);
 impl Clock for ClockProxy {
-    fn now(&self) -> boa_engine::context::time::JsInstant {
-        self.0.now()
-    }
-    fn system_time_millis(&self) -> i64 {
-        self.0.system_time_millis()
+    fn now_millis(&self) -> f64 {
+        self.0.now_millis()
     }
 }
 
@@ -94,7 +85,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// - the capability registry (shared Clipboard/Http/FilePicker/Cursor
 ///   backends),
 /// - the registered plugins (their `register` takes `&self`, so the same
-///   plugin objects register into every instance's fresh boa `Context`).
+///   plugin objects register into every instance's fresh context).
 ///
 /// Spawn instances via [`TurRuntime::app_builder`] (rendering or headless).
 ///
@@ -108,7 +99,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// let ui = WorkerPoolHandle::new("ui", 4);
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
-///     .clock(std::sync::Arc::new(boa_engine::context::time::StdClock::new()))
+///     .clock(std::sync::Arc::new(tur_engine::core::clock::StdClock))
 ///     .worker_pool(ui.clone())
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
@@ -133,7 +124,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// # }
 /// ```
 pub struct TurRuntime {
-    clock: Arc<dyn Clock + Send + Sync>,
+    clock: Arc<dyn Clock>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
@@ -201,7 +192,7 @@ impl TurRuntime {
     /// incrementally, and calls `renderer.resize(...)` on viewport-change
     /// events only.
     ///
-    /// The instance gets its own boa `Context` (JS realm), element tree,
+    /// The instance gets its own script realm, element tree,
     /// reactive store, focus manager, event queues, subsystems, screen and
     /// shell — fully isolated from every other instance. Fonts, clock, and
     /// capability backends are shared from this runtime. Plugins are
@@ -656,7 +647,7 @@ impl<'rt> TurAppBuilder<'rt> {
 /// on the right thread (e.g. the threaded factory constructs them inside
 /// the closure so the `!Send` `Rc`s never cross threads).
 ///
-/// **Realm-free build**: no boa `Context` is constructed here. Plugins
+/// **Realm-free build**: no script realm exists. Plugins
 /// register their realm-free halves (subsystems, plugin state, atoms);
 /// realm-bound registrations (JS modules, classes, globals, consts) are
 /// recorded as deferred thunks and replayed by
@@ -664,7 +655,7 @@ impl<'rt> TurAppBuilder<'rt> {
 /// A rut-only instance never allocates a realm.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_worker_backend(
-    clock: Arc<dyn Clock + Send + Sync>,
+    clock: Arc<dyn Clock>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: crate::core::capability::Capabilities,
@@ -677,13 +668,9 @@ pub(crate) fn build_worker_backend(
     instance_data_definer: Option<InstanceDataDefiner>,
     worker_pools: std::sync::Arc<[WorkerPoolHandle]>,
 ) -> Result<WorkerBackend, TurError> {
-    let executor = Rc::new(TurJobExecutor::new());
-    let module_loader = TurModuleLoader::new();
-
     let mut internal = TurAppInternal::new(
         font_context,
         font_loader,
-        executor.clone(),
         clock.clone(),
         capabilities,
         worker_ctx,
@@ -704,64 +691,41 @@ pub(crate) fn build_worker_backend(
     // plugin `register`, so plugins see all defined slots as already
     // present (they can `update` / `data` / `with_data` but not define).
     if let Some(definer) = instance_data_definer {
-        let mut data_cx = InstanceDataCx::from_map(internal.js_context.instance_data.clone());
+        let mut data_cx = InstanceDataCx::from_map(internal.instance.instance_data.clone());
         definer(&mut data_cx);
     }
 
-    // One register-phase context for the whole plugin loop (today's
-    // per-plugin contexts were clones of the same handles; the only mutable
-    // state is the collectors, which must accumulate across plugins so
-    // registration order = plugin order is preserved verbatim).
-    // The context is consumed after the loop and its collected state
-    // becomes the instance's registries — the natural freeze: no handle
-    // into either survives the builder, so registration after build is
-    // structurally impossible.
-    //
-    // Realm-free: `boa` is `None` (and `js_ctx_value` with it) — plugins'
-    // realm-bound registrations land in the `deferred` collector and
-    // replay at realm construction.
+    // One register-phase context for the whole plugin loop (the only
+    // mutable state is the collectors, which must accumulate across plugins
+    // so registration order = plugin order is preserved verbatim). The
+    // context is consumed after the loop and its collected state becomes
+    // the instance's registries — the natural freeze: no handle into either
+    // survives the builder, so registration after build is structurally
+    // impossible.
     let mut register_cx = PluginRegisterContext {
-        boa: None,
-        loader: module_loader.clone(),
-        js_ctx_value: None,
-        js_ctx: internal.js_context.clone(),
+        js_ctx: internal.instance.clone(),
         app: internal.app_context.clone(),
         subsystems: Vec::new(),
         plugin_state: HashMap::new(),
-        deferred: Vec::new(),
-        event_bus: internal.event_bus.clone(),
         host_exec: host_exec.clone(),
     };
     for plugin in plugins {
         plugin.register(&mut register_cx)?;
     }
-    // Consume the register-phase collectors (subsystems + plugin state +
-    // deferred realm-bound registrations) — all installed once; runtime
-    // code can read the first two but there is no write path left in
-    // existence.
+    // Consume the register-phase collectors (subsystems + plugin state) —
+    // both installed once; runtime code can read them but there is no write
+    // path left in existence.
     let parts = register_cx.into_parts();
-    internal.js_context.install_plugin_state(parts.plugin_state);
+    internal.instance.install_plugin_state(parts.plugin_state);
     internal.subsystems = RefCell::new(parts.subsystems);
 
-    tracing::info!(
-        "WorkerBackend built realm-free ({} plugins, {} deferred realm registrations)",
-        plugins.len(),
-        parts.deferred.len()
-    );
-    Ok(WorkerBackend::new(
-        internal,
-        executor,
-        module_loader,
-        clock,
-        host_tx,
-        host_exec,
-        parts.deferred,
-    ))
+    tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
+    Ok(WorkerBackend::new(internal, clock, host_tx, host_exec))
 }
 
 pub struct TurRuntimeBuilder {
     font_loader: Option<Arc<dyn FontLoader>>,
-    clock: Option<Arc<dyn Clock + Send + Sync>>,
+    clock: Option<Arc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
     worker_spawner: Option<Rc<dyn crate::core::scheduler::WorkerSpawner>>,
@@ -804,8 +768,8 @@ impl TurRuntimeBuilder {
     /// Production passes a [`StdClock`] (real wall clock); tests pass a
     /// [`FixedClock`] they advance themselves frame-by-frame.
     ///
-    /// [`StdClock`]: boa_engine::context::time::StdClock
-    /// [`FixedClock`]: boa_engine::context::time::FixedClock
+    /// [`StdClock`]: crate::core::clock::StdClock
+    /// [`FixedClock`]: crate::core::clock::FixedClock
     pub fn clock(mut self, clock: Arc<dyn Clock + Send + Sync>) -> Self {
         self.clock = Some(clock);
         self
