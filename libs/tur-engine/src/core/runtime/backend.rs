@@ -161,7 +161,16 @@ impl WorkerBackend {
         if !has_it {
             return Ok(()); // no such entry — a no-op (event rails are optional)
         }
-        rut.call_entry(name, a, b)
+        rut.call_entry(name, a, b)?;
+        // A deferred-mount entry (`mount_host(id)`-style: a host-minted id
+        // crossing through the entry rail) stashes a root — apply it here,
+        // the same realm-free apply the post-`start` path runs. Mount is a
+        // start-time or entry-drain-time op (the mount row's face-busy
+        // guard rejects mid-flush mounts); `apply_root` no-ops when the
+        // entry stashed nothing.
+        rut.apply_root().map_err(ModuleError::Eval)?;
+        self.internal.instance.set_dirty();
+        Ok(())
     }
 
     /// Dispatch one [`WorkerMsg`]. RPC variants settle their own `Reply`;

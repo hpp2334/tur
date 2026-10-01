@@ -1243,7 +1243,11 @@ impl RutRuntime {
         let tree = self.handles.element_tree.clone();
 
         // One-root invariant: replace any existing root (same as JS mount).
-        if let Some(old) = tree.borrow().root_element_id() {
+        // The read drops its borrow BEFORE the destroy borrows mutably —
+        // an `if let` scrutinee temporary would hold the shared borrow
+        // across the body and panic the `borrow_mut` on every reload.
+        let old = tree.borrow().root_element_id();
+        if let Some(old) = old {
             tree.borrow_mut().destroy_subtree(old);
         }
 

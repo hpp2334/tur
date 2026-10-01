@@ -582,12 +582,12 @@ impl TurAppLooper {
                     //    flushes+records N+1 while main encodes N below.
                     host.backend().send_worker_msg(core::app::WorkerMsg::Wake);
                     // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins). Skip empty batches — an empty command
-                    //    list paints a blank frame (clears the surface), which
-                    //    is never desirable.
-                    if let Some((batch, viewport, frame_id)) =
-                        pending.take().filter(|(b, _, _)| !b.is_empty())
-                    {
+                    //    latest-wins). An EMPTY batch is a legitimate frame:
+                    //    a painted flush that recorded zero commands is how
+                    //    "the content went away" presents (clear to
+                    //    background). The frame fingerprint dedup below
+                    //    render_batch suppresses redundant repeats.
+                    if let Some((batch, viewport, frame_id)) = pending.take() {
                         host.backend().render_batch(&batch, viewport, frame_id);
                     }
                 }
@@ -626,16 +626,15 @@ impl TurAppLooper {
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 host.vsync().request_frame();
                                 false
-                            } else if let Some((batch, viewport, frame_id)) =
-                                pending.take().filter(|(b, _, _)| !b.is_empty())
-                            {
+                            } else if let Some((batch, viewport, frame_id)) = pending.take() {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
                                 // would stall with an un-rendered batch
                                 // (e.g. the initial frame, or a one-shot
-                                // paint request). Flush it now (empty
-                                // batches skipped — they'd paint blank) —
-                                // the next frame only starts on a new input.
+                                // paint request). Flush it now — an EMPTY
+                                // batch is a legitimate clear-to-background
+                                // frame (see the vsync arm above); the next
+                                // frame only starts on a new input.
                                 host.backend().render_batch(&batch, viewport, frame_id);
                                 false
                             } else {
