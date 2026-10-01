@@ -41,8 +41,9 @@ harness). A loaded module MUST export `entry fn start()`:
 
 Entry points follow the contract: the test corpus
 (`js/packages/tur-test-cases/cases` + the playground-local cases) authors
-`entry fn start()` that mounts its tree through the `tur` host pkg rows
-(`el_column` / `el_text_bound` / `mount` …), plus probe `entry fn`s the test
+`entry fn start()` that builds its tree through the **kit** (`use
+tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
+engine with `mount(root.build())`, plus probe `entry fn`s the test
 drives via `call_rut_entry`. The playground is a rut module
 (`playground.rut` + the generated `cases_gen.rut` registry, compiled by the
 `pg_compile` rut service); the website boots it via `loadAndRunRutModule`.
@@ -58,20 +59,25 @@ drives via `call_rut_entry`. The playground is a rut module
 │  (demo/website/native → tur-website).               │
 ├─────────────────────────────────────────────────────┤
 │  rut modules (playground.rut + the case corpus)     │
-│  authored against the `tur` host pkg rows —         │
-│  element builders materialize pure-Rust views.      │
+│  authored through the kit prelude (tur_kit — the    │
+│  builder classes); element builders materialize     │
+│  pure-Rust views.                                   │
 └──────────────────────┬──────────────────────────────┘
                        │ rut host-pkg rows (`tur::…`)
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-engine (unified engine crate)             │
 │  core/        engine infrastructure (no plugin deps)│
-│  rut_runtime/ the `tur` host pkg: decl rows (the    │
-│               compile-time surface) + bodies        │
-│               (per-instance HostPkg closures over   │
-│               RutHandles: store / tree / intents)   │
+│  rut_runtime/ the `tur` host pkg mechanism: RutView,│
+│               RutHandles, HostPkg wiring, mount,    │
+│               the rs_* store rows, entry rails      │
 │  builtin_plugins/ feature bundles — subsystems +    │
-│               pkg-row installers (text, scroll,     │
-│               gesture, image, virtual_app …)        │
+│               their OWN family rows + rut_rows.rs   │
+│               (text, scroll, gesture, image,        │
+│               virtual_app …); each element family's │
+│               spec struct + rows live here          │
+│  kit/         tur_kit.rut — the authored builder    │
+│               surface (one class per element over   │
+│               its family rows); outside core/       │
 │  renderer/vello WebGL2 + wgpu backends              │
 ├─────────────────────────────────────────────────────┤
 │  libs/tur-animation (standalone crate)              │
@@ -170,8 +176,9 @@ subagent. `elementTree()` shapes are unchanged from the JS era.
 ```
 libs/
   tur-engine/          # unified engine crate (core + builtin_plugins +
-                       #   renderer/vello + rut_runtime)
+                       #   kit/ + renderer/vello + rut_runtime)
   tur-animation/       # animation subsystem + `tur` pkg animation rows
+                       #   (+ kit.rut — the Opacity/Transform wrappers)
   tur-clipboard-*/     # capability + wasm/native/android backends
   tur-net-*/           # capability + wasm/native backends
   tur-filepicker-*/    # capability + wasm/native backends
@@ -246,6 +253,35 @@ Android build + device debugging live in the **`android-dev` skill** at
 - **Host-pkg rows are the ONLY script surface**: every `tur::…` call is a
   typed row — a `pkg_fn!`/`pkg_async_fn!` body + a `decl_rows` entry. The
   decl (compile-time) and body (runtime) signatures must agree exactly.
+- **The kit is THE element construction surface** (`libs/tur-engine/src/
+  kit/tur_kit.rut`, animation wrappers in `libs/tur-animation/src/kit.rut`):
+  one wrapper CLASS per element over its family's rows — chainable,
+  ONE METHOD PER PROP, names = the historical camelCase props in rut
+  snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
+  `obscure`, …). `.child(c)` / `.children([…])` append children; `.build()`
+  is the ONLY terminal and calls the FAMILY's build row (`Column.build()` →
+  `flex_build`, `Text.build()` → `text_build`). Required-prop validation
+  stays in the rows/View constructors. Callbacks keep the intent-queue law —
+  names + ids, never closures (`PointerInteract().on_tap("ts_click", count)`).
+  Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
+  `Text().text("literal")`, `Container().color_bound(atom)`,
+  `Expanded().flex_bound(atom)`. Flags are u64 consts re-exported through the
+  kit (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` / `MAIN_ALIGN_*` /
+  `MAIN_SIZE_*` / `FIT_*`). The kit hides row churn from call sites; the rows
+  are the boundary.
+- **The layering law**: `core/` owns MECHANISM, never elements. Zero
+  references to `builtin_plugins`, zero element/view names, no shared builder
+  contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
+  rows). Every element family is complete unto itself, owned by the plugin
+  that owns its view type: its spec struct, its constructor row, its setter
+  rows, its `*_child` row, its `*_qkey` row, and its own `*_build` terminal
+  (family-prefixed names: `flex_*`, `box_*`, `text_*`, `input_*`, `stack_*`,
+  `pos_*`, `scroll_*`, `lazy_*`, `each_*`, `cond_*`, `switch_*`, `pi_*`,
+  `mr_*`, `focus_*`, `img_*`, `va_*`, …) — each installed via its own
+  `rut_rows.rs` + `push_rut_ext` (the tur-animation installer pattern). The
+  kit lives OUTSIDE `core/` and is registered by the standard plugin set
+  (`TurStdPlugin` prelude), never by core. Pinned by
+  `libs/tur-integration-tests/tests/layering.rs`.
 - Module fixtures in tests: `load_rut_module` (inline) / `load_rut_bundle`
   (corpus); state probes are `entry fn`s (`call_rut_entry`), bound labels
   (query keys), dev-tool tree queries, or controller rows — never a script
