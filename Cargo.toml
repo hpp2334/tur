@@ -45,13 +45,18 @@ tur-android = { path = "libs/tur-android" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
-# rut scripting language (github.com/hpp2334/rut) — Phase-0 spike pin.
-# Same nightly pin as this workspace (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "7b88111413e15b97cb576b6e5478cd6854ecef57" }
+# rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
+# master (13eb863) on 2026-10-02. Same nightly pin as this workspace
+# (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff", default-features = false }
+# rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
+# not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
+# from a local path) and never uses the url-dep lane, so it stays off for
+# every target.
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
 
 
 num-derive = "0.4"

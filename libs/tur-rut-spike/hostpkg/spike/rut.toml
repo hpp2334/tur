@@ -1,3 +1,0 @@
-name = "spike"
-type = "host"
-entry.type = "./spike.d.rut"
