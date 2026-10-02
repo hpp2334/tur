@@ -3450,6 +3450,8 @@ name = "tur-playground"
 version = "0.1.0"
 dependencies = [
  "rut-core",
+ "rut-lexer",
+ "rut-parser",
  "rut-vm",
  "tur-engine",
 ]

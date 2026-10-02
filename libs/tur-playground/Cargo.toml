@@ -10,3 +10,5 @@ license.workspace = true
 tur-engine = { workspace = true }
 rut-vm = { workspace = true }
 rut-core = { workspace = true }
+rut-lexer = { workspace = true }
+rut-parser = { workspace = true }

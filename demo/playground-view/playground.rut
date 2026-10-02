@@ -11,6 +11,14 @@
 // `rs_watch`) whose deliveries settle the viewer's state Switch (the boa
 // viewer's FallbackView / RuntimeError shapes).
 //
+// Editor highlighting: `pg_highlight` tokenizes the source (rut-lexer,
+// Rust-side) and `pg_apply_highlight` writes the colored spans into the
+// editor controller — at case load + after a successful Run, matching the
+// boa buildHighlightSpans rail. NOT per keystroke (the recorded phase-D
+// decision): typed text inherits the caret span's color, so the
+// highlighting survives edits until the next re-highlight, and the
+// caret-preserving apply never yanks the caret.
+//
 // Toolbar: Run + Reset (reset restores the case's original source and
 // re-runs), the auto-run toggle (debounced recompile+respawn on edit —
 // the `input_on_input` intent restarts a 500 ms one-shot animation
@@ -34,12 +42,13 @@
 // fails the compile.
 use tur::{ ALIGN_CENTER, anim_ctrl, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN,
-    STACK_FIT_EXPAND, mount, pg_case_count, pg_case_name, pg_case_source, pg_compile,
-    pg_compile_diags, rs_derive, rs_get_bool, rs_get_str, rs_list_new, rs_list_push, rs_set_bool,
-    rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64, rs_source_str,
-    rs_source_value, rs_watch, rs_watch_start, rs_watch_stop, st_put, stf_put, stf_take, tctrl_new,
-    tctrl_set_text, tctrl_text, undo_new, va_app_atom, va_app_set, va_controller, va_create_source,
-    va_destroy, va_error, va_source_handle, va_status, va_status_atom };
+    STACK_FIT_EXPAND, mount, pg_apply_highlight, pg_case_count, pg_case_name, pg_case_source,
+    pg_compile, pg_compile_diags, pg_highlight, rs_derive, rs_get_bool, rs_get_str, rs_list_new,
+    rs_list_push, rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool,
+    rs_source_f64, rs_source_str, rs_source_value, rs_watch, rs_watch_start, rs_watch_stop,
+    st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, tctrl_text, undo_new, va_app_atom,
+    va_app_set, va_controller, va_create_source, va_destroy, va_error, va_source_handle,
+    va_status, va_status_atom };
 use tur_kit::{ Column, Condition, Container, Each, Expanded, Input, PointerInteract, Positioned, Row,
     ScrollView, SizedBox, Stack, Switch, Text, VirtualApp };
 
@@ -306,9 +315,11 @@ fn build_ui() {
     // edited pill + the debounced auto-run). Programmatic controller
     // writes (`tctrl_set_text` in case_tap / reset_case) do NOT fire it.
     // The editable fills the pane (a stretch column — no hardcoded width,
-    // so the hidden zero-width shell truly collapses it).
+    // so the hidden zero-width shell truly collapses it). Monospace 13 —
+    // the boa editor's face (uniform glyphs keep the caret math honest).
     let editor = Input.builder().controller(ctrl).undo(undo_new()).placeholder("select a case…")
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
+        .font_family("monospace").font_size(13.0)
         .width_height(0.0, 480.0)
         .multiline(true).on_input("on_edit", 0)
         .query_key("editor").build();
@@ -532,18 +543,31 @@ entry fn side_item(i: u64, name: str) -> opaque {
 
 entry fn case_tap(idx: u64, _b: u64, _n: f64) {
     let name = pg_case_name(idx);
-    // Select: load the source into the editor controller, then run it.
-    // The mounted Input refreshes on the write itself — `tctrl_set_text`
-    // marks the mounted editable dirty and requests a frame — so no
-    // re-mount is needed here (a mid-drain re-mount would wedge the
-    // frame's render).
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, pg_case_source(name));
-    st_put(K_CTRL, ctrl);
+    // Select: load the source into the editor controller (highlighted —
+    // the case-load rail), then run it. The mounted Input refreshes on the
+    // write itself — `tctrl_set_text` marks the mounted editable dirty and
+    // requests a frame — so no re-mount is needed here (a mid-drain
+    // re-mount would wedge the frame's render).
+    load_editor(pg_case_source(name));
     let selected = stf_take(K_SELECTED) as u64;
     rs_set_str(selected, f"{name}");
     stf_put(K_SELECTED, selected as f64);
     do_run();
+}
+
+// Load `text` into the editor controller and highlight it (the boa
+// `setSpans(buildHighlightSpans(...))` load rail). Highlighting runs at
+// case load + after a successful Run — NOT per keystroke (the recorded
+// phase-D decision): typed text inherits the caret span's color, so the
+// highlighting survives edits until the next re-highlight, and a
+// per-keystroke apply would churn the layout memo behind the caret for
+// every character. `pg_apply_highlight` keeps the caret, so the auto-run's
+// re-highlight never yanks it either.
+fn load_editor(text: str) {
+    let ctrl = st_take(K_CTRL);
+    tctrl_set_text(ctrl, text);
+    pg_apply_highlight(ctrl, pg_highlight(text));
+    st_put(K_CTRL, ctrl);
 }
 
 // The test rail's probe: select + run by sidebar index (the corpus
@@ -600,6 +624,13 @@ fn do_run() {
     va_app_set(app_atom, vctrl);
     stf_put(K_APP, app_atom as f64);
 
+    // A successful Run re-highlights the editor (the compiled source's
+    // colors land — the apply keeps the caret where the user left it; the
+    // text itself is already current, only the colors refresh).
+    let ectrl = st_take(K_CTRL);
+    pg_apply_highlight(ectrl, pg_highlight(src));
+    st_put(K_CTRL, ectrl);
+
     // The status rail: spawning (the watch deliveries settle it into
     // ready/error).
     set_state("spawning");
@@ -625,12 +656,11 @@ fn do_run() {
 }
 
 // Reset: restore the selected case's original source into the editor
-// controller (the mounted editable refreshes on the write) and re-run.
+// controller (highlighted — the same load rail as a selection; the mounted
+// editable refreshes on the write) and re-run.
 entry fn reset_case(_a: u64, _b: u64, _n: f64) {
     let name = rs_get_str(selected_atom());
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, pg_case_source(name));
-    st_put(K_CTRL, ctrl);
+    load_editor(pg_case_source(name));
     do_run();
 }
 

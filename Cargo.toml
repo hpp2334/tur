@@ -58,6 +58,9 @@ rut-driver = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f
 # every target.
 rut-vm = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
 rut-std = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
+# The playground's syntax highlighting tokenizes rut source directly (the
+# `pg_highlight` row) — the same lexer rev the parser rides.
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "13eb86376a2acc3f5f0d6b5d421f99fb108a2bff" }
 
 
 num-derive = "0.4"

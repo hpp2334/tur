@@ -418,6 +418,177 @@ fn playground_auto_run_off_keeps_the_case_running() {
     assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("auto-run on"));
 }
 
+// ---- Phase D: syntax highlighting ----------------------------------------------
+// The `pg_highlight` / `pg_apply_highlight` rows: the editor controller's
+// span tree carries the boa `code.*` palette, applied at case load + after
+// a successful Run (never per keystroke — the spans survive edits until the
+// next re-highlight).
+
+/// The code palette (packed `0xRRGGBBAA` — the kit color law): the boa
+/// `tokens.ts` `code.*` values the pg rows restate.
+const CODE_FG_PLAIN: u64 = 0x1F_25_30_FF; // ink.800 — code.fg
+const CODE_KEYWORD: u64 = 0x00_6E_58_FF; // teal.700
+const CODE_STRING: u64 = 0x3F_7D_3F_FF; // code.string
+const CODE_COMMENT: u64 = 0x8A_94_A3_FF; // ink.500
+
+/// The editor controller's spans as `(text, packed color)` pairs — the
+/// highlighting probe (the zero-width/empty-span law is asserted too: an
+/// empty-content span panics parley layout).
+fn editor_spans(app: &TurTestApp) -> Vec<(String, u64)> {
+    let id = editor_editable(app);
+    app.with_element(id, |e| {
+        e.cast::<EditableTextElement>()
+            .map(|el| {
+                let c = el.controller();
+                c.spans()
+                    .iter()
+                    .map(|s| {
+                        let c = s.color().expect("highlighted spans carry colors");
+                        (
+                            s.text.clone(),
+                            (c.r() as u64) << 24
+                                | (c.g() as u64) << 16
+                                | (c.b() as u64) << 8
+                                | (c.a() as u64),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+fn joined(spans: &[(String, u64)]) -> String {
+    spans.iter().map(|(t, _)| t.as_str()).collect()
+}
+
+/// A minimal fixture: one editor Input on a realm-minted controller; the
+/// `highlight` probe runs the case-load rail (`pg_highlight` +
+/// `pg_apply_highlight`) over a baked-in source — a keyword, an f-string
+/// with a hole, and a comment.
+const HIGHLIGHT_ROWS_MODULE: &str = r#"
+use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
+let K_CTRL: u64 = 2;
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    st_put(K_CTRL, ctrl);
+    let input = Input.builder().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
+        .multiline(true).query_key("editor").build();
+    mount(Column.builder().child(input).build());
+    return 0;
+}
+
+// The case-load rail over a known small source.
+entry fn highlight(_a: u64, _b: f64) {
+    let src = "entry fn start() {\n    let s = f\"x {s}\"; // t\n}\n";
+    let ctrl = st_take(K_CTRL);
+    pg_apply_highlight(ctrl, pg_highlight(src));
+    st_put(K_CTRL, ctrl);
+}
+"#;
+
+#[test]
+fn pg_highlight_rows_color_the_controller_spans() {
+    let app = TurTestApp::new_with_extra_plugins(
+        600.0,
+        400.0,
+        vec![Box::new(TurRutPlaygroundPlugin)],
+    )
+    .unwrap();
+    app.load_rut_module(HIGHLIGHT_ROWS_MODULE).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let _ = app.rut_start_answer();
+
+    app.call_rut_entry("highlight", 0, 0.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let spans = editor_spans(&app);
+    // The runs tile the source exactly — no zero-width span (the parley
+    // trap), no lost text.
+    assert_eq!(
+        joined(&spans),
+        "entry fn start() {\n    let s = f\"x {s}\"; // t\n}\n",
+        "the colored runs tile the source"
+    );
+    let has = |text: &str, color: u64| {
+        spans
+            .iter()
+            .any(|(t, c)| t == text && *c == color)
+    };
+    assert!(has("entry", CODE_KEYWORD), "the keyword: {spans:?}");
+    assert!(has("let", CODE_KEYWORD), "the keyword");
+    // The f-string: the prologue + tail color as the string, the hole's
+    // identifier overlays plain.
+    assert!(has("f\"x {", CODE_STRING), "the f-string prologue");
+    assert!(has("}\"", CODE_STRING), "the f-string tail");
+    assert!(has("s", CODE_FG_PLAIN), "the hole identifier stays plain");
+    assert!(has("// t", CODE_COMMENT), "the comment");
+}
+
+#[test]
+fn playground_highlights_on_load_and_the_spans_survive_editing() {
+    let mut app = playground_app();
+    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    assert!(wait_for_state(&app, "ready"));
+
+    // The case-load rail highlighted the editor: keyword, string and
+    // comment runs ride the controller's span tree.
+    let spans = editor_spans(&app);
+    let source = joined(&spans);
+    assert_eq!(source, case_source("counter"), "the runs tile the case source");
+    assert!(
+        spans.iter().any(|(t, c)| t == "entry" && *c == CODE_KEYWORD),
+        "the keyword run: {spans:?}"
+    );
+    assert!(spans.iter().any(|(t, c)| t == "let" && *c == CODE_KEYWORD));
+    assert!(
+        spans.iter().any(|(t, c)| t == "\"Count: 0\"" && *c == CODE_STRING),
+        "the string run"
+    );
+    assert!(spans.iter().any(|(_, c)| *c == CODE_COMMENT), "a comment run");
+
+    // Auto-run off: the only runs below are the explicit ones.
+    click_qk(&mut app, &["autorun"]);
+    app.wait_for_timeout(Duration::ZERO);
+
+    // A keystroke does NOT destroy the highlighting — the typed char lands
+    // in the caret's span and the colored tree survives until the next
+    // re-highlight (no per-keystroke apply, no collapse to one plain run).
+    focus_editor(&mut app);
+    app.send_key("x");
+    app.wait_for_timeout(Duration::ZERO);
+    let edited = editor_spans(&app);
+    assert_eq!(joined(&edited).len(), source.len() + 1, "the keystroke landed");
+    assert!(
+        edited.iter().any(|(_, c)| *c == CODE_KEYWORD),
+        "the keyword runs survived the keystroke"
+    );
+    assert!(
+        edited.iter().any(|(_, c)| *c == CODE_COMMENT),
+        "the comment runs survived the keystroke"
+    );
+    assert!(edited.len() > 4, "the span tree did not collapse: {edited:?}");
+
+    // Undo the keystroke (Backspace deletes left of the caret).
+    app.send_key("Backspace");
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(joined(&editor_spans(&app)), source, "the text is back");
+
+    // Run: the successful compile re-highlights the editor — the same
+    // colored tree over the original source.
+    click_qk(&mut app, &["run"]);
+    assert!(wait_for_state(&app, "ready"));
+    let rerun = editor_spans(&app);
+    assert_eq!(joined(&rerun), source, "the run restored the exact source");
+    assert!(rerun.iter().any(|(t, c)| t == "entry" && *c == CODE_KEYWORD));
+    assert!(rerun.iter().any(|(_, c)| *c == CODE_COMMENT));
+    assert!(rerun.iter().any(|(t, c)| t == "\"Count: 0\"" && *c == CODE_STRING));
+}
+
 // ---- Phase C: the `input_on_input` row (native pin) ----------------------------
 
 /// A minimal fixture: one Input on a realm controller wired through the

@@ -18,3 +18,25 @@ pub struct SpanData {
     pub(crate) font_size: Option<f64>,
     pub(crate) color: Option<Color>,
 }
+
+impl SpanData {
+    /// The span's pinned color, if any (the highlighting merge probe —
+    /// adjacent same-colored runs coalesce into one).
+    pub fn color(&self) -> Option<Color> {
+        self.color
+    }
+
+    /// A single-color text run — the syntax-highlighting payload shape.
+    /// Every style field except the color inherits the element's defaults
+    /// (the fields stay crate-private; styled runs are minted engine-side).
+    pub fn colored(text: impl Into<String>, color: Color) -> Self {
+        Self {
+            text: text.into(),
+            weight: None,
+            italic: false,
+            underline: false,
+            font_size: None,
+            color: Some(color),
+        }
+    }
+}

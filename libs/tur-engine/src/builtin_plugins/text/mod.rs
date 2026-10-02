@@ -29,8 +29,11 @@ pub(crate) mod rut_rows;
 pub mod text_layout;
 
 pub use controller::{TextEditingController, UndoController};
+// The controller/undo opaques cross pkg rows OUTSIDE the engine too (the
+// playground's `pg_apply_highlight` borrows the editor controller), so the
+// wrapper is re-exported past the crate-private rows module.
 pub use elements::{EditableTextElement, EditableTextView, InputView, TextElement, TextView};
-
+pub use rut_rows::{RutTextCtrl, RutUndoCtrl};
 
 use crate::error::TurError;
 
