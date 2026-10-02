@@ -349,6 +349,12 @@ impl TextEditingController {
         self.on_input
     }
 
+    /// Attach the input-intent mutation (the rut `input_on_input` row's
+    /// crossing). `None` detaches.
+    pub fn set_on_input(&mut self, m: Option<MutationHandle<InputEvent>>) {
+        self.on_input = m;
+    }
+
     pub fn on_cursor_change(&self) -> Option<MutationHandle<CursorChangeEvent>> {
         self.on_cursor_change
     }

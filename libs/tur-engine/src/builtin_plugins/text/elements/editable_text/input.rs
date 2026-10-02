@@ -115,6 +115,11 @@ impl InputView {
     pub(crate) fn set_controller(&mut self, c: Rc<RefCell<TextEditingController>>) {
         self.controller = Some(c);
     }
+    /// The shared controller, if one is bound (the `input_on_input` row
+    /// installs its intent mutation through this).
+    pub(crate) fn controller(&self) -> Option<Rc<RefCell<TextEditingController>>> {
+        self.controller.clone()
+    }
     pub(crate) fn set_undo(&mut self, u: Rc<RefCell<UndoController>>) {
         self.undo_controller = Some(u);
     }

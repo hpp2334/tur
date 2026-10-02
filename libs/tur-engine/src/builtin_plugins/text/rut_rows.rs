@@ -17,11 +17,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::builtin_plugins::text::controller::{SpanData, TextEditingController, UndoController};
+use crate::builtin_plugins::text::controller::{
+    InputEvent, SpanData, TextEditingController, UndoController,
+};
 use crate::builtin_plugins::text::elements::paragraph::TextOverflow;
 use crate::builtin_plugins::text::{InputView, TextView};
+use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
-use crate::core::rut_runtime::{RutHandles, RutView, color_of};
+use crate::core::edgy::value::Value;
+use crate::core::rut_runtime::{Intent, RutHandles, RutView, color_of};
 use crate::core::view::Val;
 
 use rut_vm::Opaque;
@@ -82,6 +86,10 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         // the font family (the JS `Input().fontFamily(...)` twin — the code
         // editor pins `"monospace"` so caret math sees uniform glyphs).
         ("input_font_family".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        // the on-input rail (the intent-queue law): `input_on_input(
+        // builder, name, id)` installs a mutation on the builder's shared
+        // controller; every user edit delivers `(name, id, 0, seq)`.
+        ("input_on_input".to_string(), vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL, false),
         ("input_qkey".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
         ("input_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
         // controllers (realm-minted, method rows)
@@ -126,6 +134,31 @@ fn plain_span(text: &str) -> SpanData {
         font_size: None,
         color: None,
     }
+}
+
+/// Build the on-input mutation: queues a click-shaped intent for `cb`
+/// (empty name = absent) — `entry fn cb(id: u64, b: u64, seq: f64)` with
+/// `b` reserved (0). The payload text never crosses: the handler reads the
+/// fresh text through `tctrl_text` (the intent-queue law — names + ids,
+/// never closures).
+fn input_mutation(handles: &Rc<RutHandles>, id: u64, cb: &str) -> Option<MutationHandle<InputEvent>> {
+    let name = cb.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let name = name.to_string();
+    let h = handles.clone();
+    let dirty = handles.dirty.clone();
+    let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
+        let n = h.click_seq.get() + 1;
+        h.click_seq.set(n);
+        h.pending_calls
+            .borrow_mut()
+            .push(Intent::Click { name: name.clone(), a: id, b: 0, seq: n as f64 });
+        dirty.set(true);
+        Ok(Value::Nil)
+    });
+    Some(MutationHandle::new(mutation))
 }
 
 /// Install the text-row bodies (the installer's boot half).
@@ -286,6 +319,20 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // (parley generic families: "monospace" / "serif" / sans-serif default).
     rut_vm::pkg_fn!(pkg, "input_font_family", (Opaque<InputView>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, family: &str| {
         b.with_mut(vm, |_vm, s| s.set_font_family_str(family.to_string()))
+    });
+    // input_on_input(builder, name, id) — install the on-input intent on
+    // the builder's shared controller (the element fires it on every user
+    // edit: keystroke / IME commit; programmatic `tctrl_set_text` does NOT
+    // fire it). A builder without `.controller` yet is a no-op — the kit
+    // chain binds `.controller(...)` first.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "input_on_input", (Opaque<InputView>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, cb: &str, id: u64| {
+        let m = input_mutation(&h, id, cb);
+        b.with_mut(vm, |_vm, s| {
+            if let Some(ctrl) = s.controller() {
+                ctrl.borrow_mut().set_on_input(m);
+            }
+        })
     });
     // input_multiline(builder, on) — the JS `multiline: true` twin.
     rut_vm::pkg_fn!(pkg, "input_multiline", (Opaque<InputView>, bool) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, on: bool| {

@@ -67,6 +67,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("box_padding", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("box_color", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_size", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
+        row("box_width", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        row("box_height", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("box_border", vec![TY_OPAQUE, TY_U64, TY_F64, TY_U64], TY_NIL),
         row("box_radius", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("box_shadow", vec![TY_OPAQUE, TY_U64, TY_F64, TY_F64, TY_F64], TY_NIL),
@@ -345,6 +347,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             s.width = if w > 0.0 { Some(Val::Static(w)) } else { None };
             s.height = if h > 0.0 { Some(Val::Static(h)) } else { None };
         })
+    });
+    // box_width / box_height — the single-axis setters. Unlike `box_size`'s
+    // builder idiom (0 = unset: `width_height(220, 0)` = fixed width,
+    // unconstrained height), these set the axis VERBATIM — 0 is a real
+    // zero (the hidden-pane shell: a zero-width container that stays
+    // mounted and clips its child away).
+    rut_vm::pkg_fn!(pkg, "box_width", (Opaque<ContainerView>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, v: f64| {
+        b.with_mut(vm, |_vm, s| s.width = Some(Val::Static(v)))
+    });
+    rut_vm::pkg_fn!(pkg, "box_height", (Opaque<ContainerView>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, v: f64| {
+        b.with_mut(vm, |_vm, s| s.height = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "box_border", (Opaque<ContainerView>, u64, f64, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, color: u64, width: f64, position: u64| {
         b.with_mut(vm, |_vm, s| {

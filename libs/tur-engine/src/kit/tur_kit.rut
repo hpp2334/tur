@@ -28,8 +28,9 @@
 // family's host-side spec) — no rut-side containers; the host spec
 // accumulates children through the `*_child` rows.
 use tur::{
-  box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_new,
-  box_height_bound, box_padding, box_qkey, box_radius, box_shadow, box_size, box_width_bound,
+  box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
+  box_height_bound, box_new, box_padding, box_qkey, box_radius, box_shadow, box_size, box_width,
+  box_width_bound,
   col_fixed, col_flex, cols_new, cond_build, cond_else, cond_new, cond_qkey, cond_then, ct_follower_build,
   ct_follower_child, ct_follower_follower_anchor, ct_follower_link, ct_follower_new,
   ct_follower_offset, ct_follower_target_anchor, ct_follower_target_anchor_bound, ct_link_new,
@@ -43,7 +44,8 @@ use tur::{
   img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_width,
   input_build, input_color, input_controller, input_cursor_color, input_font_family,
   input_font_size, input_multiline, input_new, input_obscure, input_obscure_char,
-  input_placeholder, input_placeholder_color, input_qkey, input_size, input_undo, lazy_axis,
+  input_on_input, input_placeholder, input_placeholder_color, input_qkey, input_size, input_undo,
+  lazy_axis,
   lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
   lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
   lazy_grid_qkey, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
@@ -294,11 +296,11 @@ impl Container {
     return Self { spec: box_new() };
   }
   pub fn width(mut self, v: f64) -> Self {
-    box_size(self.spec, v, 0.0);
+    box_width(self.spec, v);
     return self;
   }
   pub fn height(mut self, v: f64) -> Self {
-    box_size(self.spec, 0.0, v);
+    box_height(self.spec, v);
     return self;
   }
   pub fn width_height(mut self, w: f64, h: f64) -> Self {
@@ -522,6 +524,14 @@ impl Input {
   }
   pub fn font_family(mut self, v: str) -> Self {
     input_font_family(self.spec, v);
+    return self;
+  }
+  // The on-input rail (the intent-queue law): the named entry fn delivers
+  // `(id, 0, seq)` on every user edit; the handler reads the fresh text
+  // via `tctrl_text`. Bind `.controller(...)` first — the row installs
+  // through the builder's shared controller.
+  pub fn on_input(mut self, name: str, id: u64) -> Self {
+    input_on_input(self.spec, name, id);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
