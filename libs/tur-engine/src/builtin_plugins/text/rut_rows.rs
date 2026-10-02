@@ -71,6 +71,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         ("input_placeholder".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
         ("input_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
         ("input_placeholder_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
+        ("input_cursor_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
         ("input_font_size".to_string(), vec![TY_OPAQUE, TY_F64], TY_NIL, false),
         // the password twin's surface: the obscure toggle + the configurable
         // obscuring character (the JS `obscureText` / `obscuringCharacter`).
@@ -261,6 +262,10 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "input_placeholder_color", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, packed: u64| {
         let c = color_of(packed);
         b.with_mut(vm, |_vm, s| s.set_placeholder_color(c))
+    });
+    rut_vm::pkg_fn!(pkg, "input_cursor_color", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, packed: u64| {
+        let c = color_of(packed);
+        b.with_mut(vm, |_vm, s| s.set_cursor_color(c))
     });
     rut_vm::pkg_fn!(pkg, "input_font_size", (Opaque<InputView>, f64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, v: f64| {
         b.with_mut(vm, |_vm, s| s.set_font_size(v))

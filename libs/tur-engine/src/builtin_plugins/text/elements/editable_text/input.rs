@@ -106,6 +106,9 @@ impl InputView {
     pub(crate) fn set_placeholder_color(&mut self, v: crate::core::render::brush::Color) {
         self.placeholder_color = Some(Val::Static(v));
     }
+    pub(crate) fn set_cursor_color(&mut self, v: crate::core::render::brush::Color) {
+        self.cursor_color = Some(Val::Static(v));
+    }
     pub(crate) fn set_font_size(&mut self, v: f64) {
         self.font_size = Some(Val::Static(v));
     }

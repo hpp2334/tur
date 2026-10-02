@@ -13,6 +13,72 @@ use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount, pg_case_count, pg_case_nam
     st_take, stf_put, stf_take, tctrl_new, tctrl_set_text, tctrl_text, undo_new };
 use tur_kit::{ Column, Container, Each, Expanded, Input, PointerInteract, Row, ScrollView, Text };
 
+// ---- design tokens ---------------------------------------------------------
+//
+// The light theme from demo/playground-view/DESIGN-SYSTEM.md §1.1/§2 — the
+// single source of truth for visual decisions (the boa reference palette:
+// warm-tinted ink neutrals + the saturated teal signature + the coral
+// complement + AA-verified status colors).
+//
+// Every value is a u64 packed **0xRRGGBBAA** (opaque = `| 0xFF`) — the kit
+// header's color law, pinned natively by
+// `libs/tur-integration-tests/tests/element/color_packing_law.rs`. The
+// primitive palette (INK_* / TEAL_* / CORAL_* / STATUS_*) is the raw
+// material; the views below use only the semantic layer (BG_* / TEXT_* /
+// ACCENT_*), never a primitive directly. Module `let` initializers must be
+// literals in this build, so the semantic layer restates the primitive's
+// packed value (its origin is in the trailing comment) instead of aliasing.
+
+// primitives — ink (warm-tinted neutrals)
+let INK_50: u64 = 0xFBFCFDFFu64;
+let INK_100: u64 = 0xF4F6F9FFu64;
+let INK_150: u64 = 0xECEFF4FFu64;
+let INK_200: u64 = 0xE1E5ECFFu64;
+let INK_300: u64 = 0xD4D9E0FFu64;
+let INK_400: u64 = 0xB8C0CCFFu64;
+let INK_500: u64 = 0x8A94A3FFu64;
+let INK_600: u64 = 0x5E6878FFu64;
+let INK_700: u64 = 0x3A4250FFu64;
+let INK_800: u64 = 0x1F2530FFu64;
+let INK_900: u64 = 0x0A0E14FFu64;
+
+// primitives — teal (the saturated cyan-leaning signature)
+let TEAL_200: u64 = 0x7DF5D0FFu64;
+let TEAL_300: u64 = 0x00E8B8FFu64;
+let TEAL_400: u64 = 0x00C69AFFu64;
+let TEAL_500: u64 = 0x00A886FFu64;
+let TEAL_600: u64 = 0x008A6EFFu64;
+let TEAL_700: u64 = 0x006E58FFu64;
+let TEAL_800: u64 = 0x005440FFu64;
+
+// primitives — coral (the warm complement; used sparingly)
+let CORAL_300: u64 = 0xFFB3A3FFu64;
+let CORAL_400: u64 = 0xFF8A72FFu64;
+let CORAL_500: u64 = 0xE85D44FFu64;
+let CORAL_700: u64 = 0xB03A1FFFu64;
+
+// primitives — status (AA on ink.50; info reuses teal.700)
+let STATUS_SUCCESS: u64 = 0x00A06BFFu64;
+let STATUS_WARNING: u64 = 0xC47700FFu64;
+let STATUS_ERROR: u64 = 0xD63A2FFFu64;
+let STATUS_INFO: u64 = 0x006E58FFu64;
+
+// semantic layer — what the views use (origin primitives in the comments)
+let BG_APP: u64 = 0xFBFCFDFFu64; // ink.50
+let BG_PANEL: u64 = 0xF4F6F9FFu64; // ink.100
+let BG_ELEVATED: u64 = 0xECEFF4FFu64; // ink.150
+let BG_HOVER: u64 = 0xE1E5ECFFu64; // ink.200
+let BG_SELECTED: u64 = 0x7DF5D0FFu64; // teal.200
+let BG_CODE: u64 = 0xFBFCFDFFu64; // ink.50
+let TEXT_PRIMARY: u64 = 0x1F2530FFu64; // ink.800
+let TEXT_BODY: u64 = 0x3A4250FFu64; // ink.700
+let TEXT_SECONDARY: u64 = 0x5E6878FFu64; // ink.600
+let TEXT_TERTIARY: u64 = 0x8A94A3FFu64; // ink.500
+let TEXT_PLACEHOLDER: u64 = 0xB8C0CCFFu64; // ink.400
+let TEXT_CODE: u64 = 0x1F2530FFu64; // ink.800 (code.fg)
+let ACCENT_CURSOR: u64 = 0x00A886FFu64; // teal.500
+let ACCENT_PRIMARY: u64 = 0x00C69AFFu64; // teal.400
+
 
 let K_CTRL: u64 = 1;
 let K_SELECTED: u64 = 2;
@@ -50,31 +116,35 @@ fn build_ui() {
     let status = stf_take(K_STATUS) as u64;
 
     // ---- sidebar ------------------------------------------------------
-    let sidebar = Container.builder().width_height(220.0, 0.0).color(0x0F172AFFu64)
+    let sidebar = Container.builder().width_height(220.0, 0.0).color(BG_PANEL)
         .child(ScrollView.builder().axis(AXIS_VERTICAL)
             .child(Column.builder().child(Each.builder(names_atom).item_builder("side_item").build()).build())
             .build())
         .build();
 
     // ---- editor pane ----------------------------------------------------
-    let title = Text.builder().text("playground — rut").color(0xE2E8F0u64).font_size(14.0).build();
+    let title = Text.builder().text("playground — rut").color(TEXT_PRIMARY).font_size(14.0).build();
     let editor = Input.builder().controller(ctrl).undo(undo_new()).placeholder("select a case…")
-        .color(0xE2E8F0u64).placeholder_color(0x64748Bu64).width_height(1000.0, 480.0)
+        .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
+        .width_height(1000.0, 480.0)
         .multiline(true).query_key("editor").build();
-    let status_t = Text.builder().text_bound(status).color(0x94A3B8u64).query_key("status").build();
+    let status_t = Text.builder().text_bound(status).color(TEXT_SECONDARY).query_key("status").build();
 
     let pane = Column.builder().cross_alignment(CROSS_ALIGN_STRETCH)
-        .child(Container.builder().width_height(0.0, 44.0).color(0x1E293BFFu64).child(title).build())
+        .child(Container.builder().width_height(0.0, 44.0).color(BG_ELEVATED).child(title).build())
         .child(Expanded.builder().flex(1.0)
-            .child(Container.builder().color(0x0B1220FFu64).padding(12.0).child(editor).build())
+            .child(Container.builder().color(BG_CODE).padding(12.0).child(editor).build())
             .build())
-        .child(Container.builder().width_height(0.0, 32.0).color(0x020617FFu64).padding(8.0)
+        .child(Container.builder().width_height(0.0, 32.0).color(BG_ELEVATED).padding(8.0)
             .child(status_t).build())
         .build();
 
-    mount(Row.builder().child(sidebar)
-        .child(Expanded.builder().flex(1.0).child(pane).build())
-        .build());
+    let shell = Container.builder().color(BG_APP).child(
+        Row.builder().child(sidebar)
+            .child(Expanded.builder().flex(1.0).child(pane).build())
+            .build(),
+    ).build();
+    mount(shell);
     stf_put(K_NAMES, names_atom as f64);
     st_put(K_CTRL, ctrl);
     stf_put(K_STATUS, status as f64);
@@ -84,7 +154,7 @@ fn build_ui() {
 // the tap id (the intent's first argument).
 entry fn side_item(i: u64, name: str) -> opaque {
     let row = Container.builder().width_height(0.0, 32.0).padding(8.0)
-        .child(Text.builder().text(name).color(0xE2E8F0u64).font_size(13.0).build())
+        .child(Text.builder().text(name).color(TEXT_BODY).font_size(13.0).build())
         .build();
     return PointerInteract.builder().ids(i, i).on_tap("case_tap").child(row).build();
 }

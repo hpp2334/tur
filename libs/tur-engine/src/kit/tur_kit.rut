@@ -12,6 +12,13 @@
 // `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` / `BOXFIT_*` /
 // `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from `tur` directly.
 //
+// Color law: every `packed: u64` color prop (`color` / `color_bound` /
+// `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
+// packs **`0xRRGGBBAA`** — R in bits 31..24, A in bits 7..0. An OPAQUE
+// color is `0xRRGGBBFF`; passing a bare `0xRRGGBB` shifts the channels
+// (it decodes as a translucent `0x00'GG'BB'??` cyan-ish wash — the law is
+// pinned natively by `tests/element/color_packing_law.rs`).
+//
 // The kit lives OUTSIDE core/ (the layering law): core owns mechanism,
 // each plugin owns its spec + rows, and this module — registered as a
 // compile-session prelude by the standard bundle assembly — is the stable
@@ -34,10 +41,10 @@ use tur::{
   focus_on_focus, focus_on_key_down, frag_build, frag_child, frag_new, grid_aspect,
   grid_build, grid_child, grid_main_extent, grid_max_cross, grid_qkey, grid_spacing,
   img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_width,
-  input_build, input_color, input_controller, input_font_family, input_font_size,
-  input_multiline, input_new, input_obscure, input_obscure_char, input_placeholder,
-  input_placeholder_color, input_qkey, input_size, input_undo, lazy_axis, lazy_build,
-  lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
+  input_build, input_color, input_controller, input_cursor_color, input_font_family,
+  input_font_size, input_multiline, input_new, input_obscure, input_obscure_char,
+  input_placeholder, input_placeholder_color, input_qkey, input_size, input_undo, lazy_axis,
+  lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
   lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
   lazy_grid_qkey, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
   lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
@@ -490,6 +497,10 @@ impl Input {
   }
   pub fn placeholder_color(mut self, packed: u64) -> Self {
     input_placeholder_color(self.spec, packed);
+    return self;
+  }
+  pub fn cursor_color(mut self, packed: u64) -> Self {
+    input_cursor_color(self.spec, packed);
     return self;
   }
   pub fn font_size(mut self, v: f64) -> Self {

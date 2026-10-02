@@ -1,6 +1,7 @@
 mod animation;
 mod attach_renderer;
 mod capability;
+mod color_packing_law;
 mod column;
 mod composited_transform;
 mod container;
