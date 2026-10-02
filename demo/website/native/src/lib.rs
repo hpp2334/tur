@@ -3,8 +3,8 @@
 //! `tur-wasm` is a reusable embedder lib (it owns all the DOM wiring + engine
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
-//! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and adds the
-//! playground's rut compile service ([`playground_rut::TurRutPlaygroundPlugin`],
+//! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and wires the
+//! playground's rut compile service ([`tur_playground::TurRutPlaygroundPlugin`],
 //! the retired swc plugin's replacement). JS imports `TurWebsiteApp` from the
 //! generated `tur_website.js` and boots the playground via
 //! `loadAndRunRutModule(playgroundSource())`.
@@ -16,13 +16,11 @@
 // empty (but compiling) cdylib.
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
-mod playground_rut;
-
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use playground_rut::TurRutPlaygroundPlugin;
+use tur_playground::TurRutPlaygroundPlugin;
 
 #[cfg(target_arch = "wasm32")]
 pub const PLAYGROUND_RUT: &str = include_str!("../../../playground-view/playground.rut");
@@ -194,4 +192,4 @@ impl TurDevTool {
     }
 }
 
-// (the playground compile service lives in `playground_rut`)
+// (the playground compile service lives in the `tur-playground` crate)

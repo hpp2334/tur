@@ -58,8 +58,9 @@ use tur::{
   switch_value_source, table_build, table_columns, table_header_builder, table_new, table_qkey,
   table_row_builder, table_rows_atom, text_bind, text_bind_derived, text_build, text_clip,
   text_color, text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey,
-  text_selectable, text_size, text_spans, text_text, text_weight, va_bind, va_build,
-  va_controller, va_controller_set, va_new, va_qkey, va_size, va_source,
+  text_selectable, text_size, text_spans, text_text, text_weight, va_app_atom, va_bind, va_build,
+  va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
+  va_source_handle,
 };
 
 // ---- flex (Column / Row) ------------------------------------------------
@@ -1131,10 +1132,23 @@ pub fn image_resource_solid(w: u64, h: u64, packed: u64) -> u64 {
   return img_res_solid(w, h, packed);
 }
 
-// Register a child module source with the virtual-app subsystem — the
-// `createModuleSource` twin.
+// Register a string-authored child module source with the virtual-app
+// subsystem — the `createModuleSource` twin.
 pub fn virtual_app_source(src: str) -> opaque {
-  return va_source(src);
+  return va_create_source(src);
+}
+
+// Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
+// answers) into the source handle — Rust-defined sources enter the realm
+// as plain u64s.
+pub fn virtual_app_source_handle(id: u64) -> opaque {
+  return va_source_handle(id);
+}
+
+// Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
+// (`VirtualApp.bind(atom)` + `va_app_set` / `va_app_clear` swaps).
+pub fn virtual_app_atom() -> u64 {
+  return va_app_atom();
 }
 
 // Mint a virtual-app controller from a registered source — the

@@ -1218,8 +1218,8 @@ fn rut_net_stream_chunks_cross_as_records() {
 /// controller rides the opaque stash (the poll entry reads it back); the
 /// child's lifecycle flips the status rail the rows read natively.
 const VAPP_RUT: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str, st_put, st_take, va_controller, va_destroy, va_error,
-    va_source, va_status };
+use tur::{ mount, rs_set_str, rs_source_str, st_put, st_take, va_controller, va_create_source,
+    va_destroy, va_error, va_status };
 use tur_kit::{ Column, PointerInteract, Lifecycle, Text, VirtualApp };
 
 
@@ -1227,7 +1227,7 @@ let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
-    let src = va_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text.builder().text(\"child here\").build());\n}");
+    let src = va_create_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text.builder().text(\"child here\").build());\n}");
     let ctrl = va_controller(src);
     st_put(CTRL_KEY, ctrl);
 

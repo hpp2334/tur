@@ -102,15 +102,20 @@ pub(crate) struct ChildOutput {
     pub image_remap: HashMap<ImageResourceId, ImageResourceId>,
 }
 
-pub(crate) struct VirtualState {
-    pub host_tx: HostTx,
-    pub bridge: ReactiveBridgeStore,
+/// The shared per-instance virtual-app state (register-phase plugin state,
+/// read back through `InstanceContext::plugin_state::<VirtualState>()`).
+/// Public so embedder-side services (the playground's `pg_compile` row) can
+/// mint sources on the Rust side ([`VirtualState::create_source`]) — the
+/// rut realm then lifts the bare `u64` through `va_source_handle`.
+pub struct VirtualState {
+    pub(crate) host_tx: HostTx,
+    pub(crate) bridge: ReactiveBridgeStore,
     next_id: Cell<u64>,
     sources: RefCell<HashMap<u64, Arc<str>>>,
-    pub controllers: RefCell<HashMap<u64, Rc<ControllerRecord>>>,
+    pub(crate) controllers: RefCell<HashMap<u64, Rc<ControllerRecord>>>,
     /// incarnation token → controller base (for status-event routing).
     tokens: RefCell<HashMap<u64, u64>>,
-    pub outputs: RefCell<HashMap<u64, ChildOutput>>,
+    pub(crate) outputs: RefCell<HashMap<u64, ChildOutput>>,
 }
 
 impl VirtualState {
@@ -134,7 +139,7 @@ impl VirtualState {
 
     // ── module sources ────────────────────────────────────────────────
 
-    pub(crate) fn register_source(&self, source: Arc<str>) -> u64 {
+    pub fn create_source(&self, source: Arc<str>) -> u64 {
         let id = self.alloc_id();
         self.sources.borrow_mut().insert(id, source);
         id

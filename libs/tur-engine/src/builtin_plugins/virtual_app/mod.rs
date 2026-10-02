@@ -8,8 +8,8 @@
 //! pattern as `install_text` / `install_scroll`.
 //!
 //! Authors mint module sources / controllers through the rut rows in
-//! `core::rut_runtime::virtual_app` (`va_source` / `va_controller` /
-//! `va_destroy`); the shared per-instance `Rc<VirtualState>` rides the
+//! [`rut_rows`] (`va_create_source` / `va_source_handle` / `va_controller`
+//! / `va_destroy`); the shared per-instance `Rc<VirtualState>` rides the
 //! plugin-state channel.
 //!
 //! The controller is a **lazy declaration** — nothing runs until an element
@@ -19,9 +19,9 @@
 pub(crate) mod element;
 pub(crate) mod rut_rows;
 mod handlers;
-pub(crate) mod state;
+pub mod state;
 
-pub(crate) use state::VirtualState;
+pub use state::VirtualState;
 
 use std::rc::Rc;
 

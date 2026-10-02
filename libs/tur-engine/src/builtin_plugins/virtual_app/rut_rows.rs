@@ -1,13 +1,18 @@
 //! The virtual-app family's `tur` host-pkg rows (via the pkg-extension
-//! seam): the controller ops (`va_source` / `va_controller` / `va_destroy`
-//! / `va_status` / `va_error` / `va_bind_atom` / `va_app_set` /
-//! `va_app_clear`) and the VirtualApp element spec — the rut twin of
-//! `createModuleSource` / `createVirtualAppController` / `VirtualAppView`.
+//! seam): the controller ops (`va_create_source` / `va_source_handle` /
+//! `va_controller` / `va_destroy` / `va_status` / `va_error` /
+//! `va_app_atom` / `va_bind_atom` / `va_app_set` / `va_app_clear`) and the
+//! VirtualApp element spec — the rut twin of `createModuleSource` /
+//! `createVirtualAppController` / `VirtualAppView`.
 //!
-//! The child module source crosses as a STRING (the rut parent authors
-//! it); the spawned child is a full engine instance. Status rides the
-//! same reactive rail the JS controller exposes (`status$`); rut reads it
-//! via `va_status`.
+//! Sources cross as ids: `va_create_source` registers a STRING-authored
+//! source (the rut parent authors it); `va_source_handle` lifts a
+//! Rust-registered source id (e.g. minted by the playground's
+//! `pg_compile`) into the handle opaque — Rust-defined sources enter the
+//! rut realm as plain `u64`s (store values, intent args, entry params).
+//! The spawned child is a full engine instance. Status rides the same
+//! reactive rail the JS controller exposes (`status$`); rut reads it via
+//! `va_status`.
 
 use std::rc::Rc;
 
@@ -35,7 +40,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         (n.to_string(), p, r, false)
     };
     cx.decl.extend(vec![
-        row("va_source", vec![TY_STR], TY_OPAQUE),
+        row("va_create_source", vec![TY_STR], TY_OPAQUE),
+        row("va_source_handle", vec![TY_U64], TY_OPAQUE),
         row("va_controller", vec![TY_OPAQUE], TY_OPAQUE),
         row("va_new", vec![], TY_OPAQUE),
         row("va_controller_set", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
@@ -46,6 +52,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("va_destroy", vec![TY_OPAQUE], TY_NIL),
         row("va_status", vec![TY_OPAQUE], TY_STR),
         row("va_error", vec![TY_OPAQUE], TY_STR),
+        row("va_status_atom", vec![TY_OPAQUE], TY_U64),
+        row("va_app_atom", vec![], TY_U64),
         row("va_bind_atom", vec![TY_OPAQUE], TY_U64),
         row("va_app_set", vec![TY_U64, TY_OPAQUE], TY_NIL),
         row("va_app_clear", vec![TY_U64], TY_NIL),
@@ -89,10 +97,21 @@ fn controller_value(base: u64) -> Value {
 
 /// Install the virtual-app-row bodies (the installer's boot half).
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
-    // va_source(src) -> opaque — register the child module source.
+    // va_create_source(src) -> opaque — register a string-authored child
+    // module source (the `createModuleSource` twin).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_source", (&str,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: &str| {
-        let id = state(&h)?.register_source(std::sync::Arc::from(src.to_string()));
+    rut_vm::pkg_fn!(pkg, "va_create_source", (&str,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: &str| {
+        let id = state(&h)?.create_source(std::sync::Arc::from(src.to_string()));
+        Ok(Opaque::alloc(vm, RutSource(id))?.handle().clone())
+    });
+
+    // va_source_handle(id) -> opaque — lift a Rust-registered source id
+    // (e.g. the u64 `pg_compile` answers) into the source handle.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_source_handle", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64| {
+        state(&h)?
+            .resolve_source(id)
+            .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "va_source_handle: unknown source"))?;
         Ok(Opaque::alloc(vm, RutSource(id))?.handle().clone())
     });
 
@@ -165,6 +184,19 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
 
+    // va_app_atom() -> atom — mint an EMPTY (Nil) controller-ref source
+    // (the reactive `app$` crossing with nothing bound yet; the decode
+    // fails and the element stays unbound until a `va_app_set`).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_app_atom", () -> u64, move |_vm: &mut rut_vm::interp::Vm| {
+        let atom = h
+            .store
+            .bridge()
+            .decl_source::<crate::core::edgy::Value>(crate::core::edgy::Value::Nil)
+            .id()
+            .0 as u64;
+        Ok(atom)
+    });
     // va_bind_atom(ctrl) -> atom — mint a source atom seeded with the
     // controller ref (the reactive `app$` crossing: Nil clears the binding,
     // a fresh controller re-binds).
@@ -204,6 +236,19 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 crate::core::edgy::Value::Nil,
             )
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("va_app_clear: {e}")))
+    });
+
+    // va_status_atom(ctrl) -> atom — the controller's status rail as a
+    // reactive atom id (a watchable edgy source: `rs_watch` it and the
+    // idle→spawning→running/error transitions deliver as intents).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "va_status_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+        let base = ctrl.with(|c| c.0)?;
+        let st = state(&h)?;
+        let record = st
+            .record(base)
+            .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "va_status_atom: unknown controller"))?;
+        Ok(record.status.id().0 as u64)
     });
 
     // va_destroy(ctrl) — the destroy$ twin.

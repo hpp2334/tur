@@ -3400,6 +3400,7 @@ dependencies = [
  "tur-filepicker-capability",
  "tur-native",
  "tur-net-capability",
+ "tur-playground",
  "wgpu",
 ]
 
@@ -3445,6 +3446,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-playground"
+version = "0.1.0"
+dependencies = [
+ "rut-core",
+ "rut-vm",
+ "tur-engine",
+]
+
+[[package]]
 name = "tur-wasm"
 version = "0.1.0"
 dependencies = [
@@ -3476,6 +3486,7 @@ dependencies = [
  "tracing",
  "tracing-wasm",
  "tur-engine",
+ "tur-playground",
  "tur-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",

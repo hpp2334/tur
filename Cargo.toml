@@ -15,6 +15,7 @@ members = [
     "libs/tur-wasm",
     "libs/tur-native",
     "libs/tur-android",
+    "libs/tur-playground",
     "libs/tur-integration-tests",
     "demo/compose/native",
     "demo/website/native",
@@ -41,6 +42,7 @@ tur-filepicker-wasm = { path = "libs/tur-filepicker-wasm" }
 tur-filepicker-native = { path = "libs/tur-filepicker-native" }
 tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }
+tur-playground = { path = "libs/tur-playground" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
