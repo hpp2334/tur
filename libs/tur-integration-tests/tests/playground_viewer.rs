@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use tur_engine::builtin_plugins::text::elements::EditableTextElement;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::shell::Cursor;
 use tur_integration_tests::TurTestApp;
 use tur_playground::TurRutPlaygroundPlugin;
 
@@ -665,4 +666,147 @@ fn input_on_input_row_fires_the_edit_intent() {
         Some("edit:7"),
         "the on-input intent delivered the row's id"
     );
+}
+
+// ---- Phase E: sidebar polish + the divider -------------------------------------
+// The sidebar rows paint themselves from the selection/hover atoms (the
+// reserved 3px accent bar + the row background) and the divider drags the
+// sidebar width atom (clamped 240–720). Colors are sampled in the browser
+// pass; here the rails are pinned behaviorally (cursor, geometry, keys).
+
+#[test]
+fn playground_sidebar_rows_hover_with_the_pointer_cursor() {
+    let mut app = playground_app();
+
+    // Rows carry query keys (`row/<name>` — the selection paint targets;
+    // the qkey rows split on `/`, so the query is a two-segment path).
+    let row = app
+        .query_element(&["row", "clickable-text"])
+        .expect("the first row's query key");
+    let (cx, cy) = app
+        .get_element_absolute_bounds(ElementNodeId::new(row.as_u64()))
+        .unwrap()
+        .center();
+
+    // Hovering a row applies the region's pointer cursor (the MouseRegion
+    // rail the hover paint rides).
+    app.pointer_move(cx, cy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.take_current_cursor(),
+        Some(Cursor::Pointer),
+        "the row's hover cursor"
+    );
+
+    // Leaving resets to the default.
+    app.pointer_move(1100.0, 690.0);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.take_current_cursor(),
+        Some(Cursor::Default),
+        "the cursor resets off the rows"
+    );
+}
+
+#[test]
+fn playground_select_paints_the_selected_row() {
+    let app = playground_app();
+
+    // Select via the probe: the selection atom moves, the toolbar's case
+    // name follows, and the selected row's node is addressable.
+    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    assert!(wait_for_state(&app, "ready"));
+    assert_eq!(
+        app.query_text(&["case-name"]).as_deref(),
+        Some("counter"),
+        "the selection atom moved"
+    );
+    assert!(
+        app.query_element(&["row", "counter"]).is_some(),
+        "the selected row is addressable by its query key"
+    );
+
+    // Re-selecting another row keeps every rail consistent (the old row's
+    // paint drops — the brush sweep in `case_tap`).
+    app.call_rut_entry("select", case_index("column-basic"), 0.0).unwrap();
+    assert!(wait_for_state(&app, "ready"));
+    assert_eq!(app.query_text(&["case-name"]).as_deref(), Some("column-basic"));
+}
+
+#[test]
+fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
+    let mut app = playground_app();
+
+    // Boot width (the atom's seed): 240 — the clamp floor.
+    let w0 = qk_width(&app, &["sidebar"]).expect("the sidebar");
+    assert_eq!(w0, 240.0, "the seeded sidebar width");
+
+    // The divider sits right of the sidebar; its strip is 8px wide (and
+    // moves with the sidebar — re-locate it before every drag).
+    let divider_center = |app: &TurTestApp| -> (f64, f64) {
+        let divider = app.query_element(&["divider"]).expect("the divider");
+        let b = app
+            .get_element_absolute_bounds(ElementNodeId::new(divider.as_u64()))
+            .unwrap();
+        assert_eq!(b.right - b.left, 8.0, "the grab strip is 8px");
+        (b.left + 4.0, (b.top + b.bottom) / 2.0)
+    };
+    let (dx, dy) = divider_center(&app);
+    assert!(
+        app.take_current_cursor().is_none(),
+        "no cursor before hovering the divider"
+    );
+
+    // Hovering the strip shows the col-resize cursor (the MouseRegion).
+    app.pointer_move(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.take_current_cursor(),
+        Some(Cursor::ColResize),
+        "the divider's col-resize cursor"
+    );
+
+    // Drag right by 100: the sidebar widens, the editor pane shrinks.
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [40.0, 80.0, 100.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx + 100.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    let w1 = qk_width(&app, &["sidebar"]).expect("the sidebar");
+    assert!((w1 - 340.0).abs() < 2.0, "the drag moved the width 240→{w1}");
+
+    // Post-release moves over the strip must NOT resize (the drag flag
+    // gates `div_move`).
+    let (dx, dy) = divider_center(&app);
+    app.pointer_move(dx + 40.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    let w2 = qk_width(&app, &["sidebar"]).expect("the sidebar");
+    assert!((w2 - w1).abs() < 0.5, "a hover move after release is inert: {w1}→{w2}");
+
+    // Clamp high: a huge drag pins at 720.
+    let (dx, dy) = divider_center(&app);
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [100.0, 300.0, 700.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx + 700.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(qk_width(&app, &["sidebar"]), Some(720.0), "the upper clamp");
+
+    // Clamp low: a huge leftward drag pins at 240.
+    let (dx, dy) = divider_center(&app);
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [-300.0, -600.0, -1200.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx - 1200.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(qk_width(&app, &["sidebar"]), Some(240.0), "the lower clamp");
 }
