@@ -1,8 +1,8 @@
 # tur Playground — Design System
 
-**Status**: Normative · **Scope**: `@tur-ng/playground-view` (the playground shell — sidebar, editor, viewer, error chrome) · **Theme**: Light
+**Status**: Normative · **Scope**: `playground.rut` (the playground module — sidebar, editor, viewer, error chrome) · **Theme**: Light
 
-This document is the single source of truth for visual decisions in the tur playground. Every color, size, and view shape in `src/index.ts` and `src/compile.ts` must trace back to a token defined here. See [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) for how to apply these tokens.
+This document is the single source of truth for visual decisions in the tur playground. Every color, size, and view shape in `playground.rut` must trace back to a token defined here. See [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) for how to apply these tokens.
 
 ---
 
@@ -72,7 +72,7 @@ For status **fills** (badges, dots) use the same hex with `ink.900` text — all
 
 #### Code surface — `tur.code.*`
 
-Replaces the current One Dark palette in `compile.ts`. Tuned for the light theme: every token passes AA on `code.bg` for body-length reading.
+Replaces the legacy JS shell's One Dark palette (see the §10 audit). Tuned for the light theme: every token passes AA on `code.bg` for body-length reading.
 
 | Token | Hex | Token type |
 |---|---|---|
@@ -287,7 +287,7 @@ Driven by `layoutMode$: Source<"split" | "editor" | "viewer">`. The EditorAndVie
 
 ## 4. View catalog
 
-Each view below must be extracted into `src/views/` during phase 3 of the roadmap (§9). Specs are normative — any deviation needs design review.
+Each view below is a port target for `playground.rut` (roadmap §9). Specs are normative — any deviation needs design review.
 
 ### 4.1 `Shell`
 
@@ -634,7 +634,7 @@ Full-panel error state. Replaces the Viewer body when `status$ === "error"` (not
 
 ## 5. State matrix
 
-Every interactive view must define all five states. Hover/active require `PointerInteract` with `onPointerEnter`/`onPointerExit` (already in the API — see `PointerInteractProps` in `js/packages/tur-std/src/index.d.ts`). Focus requires future keyboard support; spec it now so it can drop in.
+Every interactive view must define all five states. Hover/active require `PointerInteract` with enter/exit callbacks (already in the API — hover rides `MouseRegion`'s `on_enter`/`on_exit` rows, press rides `PointerInteract`'s `on_down`/`on_up`). Focus requires future keyboard support; spec it now so it can drop in.
 
 | View | default | hover | active/pressed | focused | disabled |
 |---|---|---|---|---|---|
@@ -712,10 +712,10 @@ Never signal state with color alone. `<StatusBadge>` always pairs its colored do
 
 ## 8. Token implementation
 
-Tokens live in **`src/tokens.ts`**. The file is the only place `Color.hex(...)` is allowed outside of `compile.ts`.
+Tokens live in the token layer of `playground.rut` (the port lands in a later phase — sketched below in the legacy TS shape). The token layer is the only place `Color.hex(...)` is allowed outside the `code.*` syntax definitions.
 
 ```ts
-// src/tokens.ts
+// token layer (sketch — port target: playground.rut)
 import { Color } from "tur:std";
 
 // Primitive palette — do not import these from views.
@@ -784,12 +784,12 @@ Container({ color: Color.hex("#f4f6f9"), ... });
 Five phases. Each is independently shippable.
 
 ### Phase 1 — Token extraction (no UI change)
-- Create `src/tokens.ts` per §8.
-- Update `src/compile.ts` `KIND_HEX` to use `code.*` tokens.
+- Create the token layer per §8, inside `playground.rut`.
+- Port the `KIND_HEX` syntax palette to the `code.*` tokens.
 - No visual change yet. PR: "chore: extract design tokens".
 
 ### Phase 2 — Replace inline hexes (visual change, no refactor)
-- Walk `src/index.ts` against the table in §10, replacing each `Color.hex(...)` with the named token.
+- Walk `playground.rut` against the table in §10, replacing each legacy hex with the named token.
 - No layout or view-shape changes — pure rename.
 - PR: "refactor: replace inline hexes with design tokens".
 
@@ -815,7 +815,7 @@ Five phases. Each is independently shippable.
 
 ## 10. Migration table — every current inline hex
 
-Map of every `Color.hex("...")` in the current `src/index.ts` and `src/compile.ts` to its replacement token. Phase 2 of the roadmap.
+Map of every `Color.hex("...")` in the retired JS shell (`index.ts` / `compile.ts`) to its replacement token. Phase 2 of the roadmap — the port target is now `playground.rut`.
 
 | File:line | Current hex | Current role | New token | Hex |
 |---|---|---|---|---|

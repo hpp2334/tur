@@ -27,8 +27,6 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  ../demo/playground-view: {}
-
   ../demo/website:
     devDependencies:
       '@rspack/cli':

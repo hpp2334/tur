@@ -1,8 +1,0 @@
-{
-    "name": "@tur-ng/playground-view",
-    "version": "0.0.1",
-    "private": true,
-    "scripts": {
-        "build": "node scripts/gen-cases.cjs"
-    }
-}

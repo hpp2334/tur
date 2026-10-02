@@ -1,6 +1,5 @@
 packages:
   - "packages/*"
   - "../demo/website"
-  - "../demo/playground-view"
 allowBuilds:
-  core-js: set this to true or false
+  core-js: false

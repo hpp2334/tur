@@ -16,7 +16,6 @@ members = [
     "libs/tur-native",
     "libs/tur-android",
     "libs/tur-integration-tests",
-    "libs/tur-rut-spike",
     "demo/compose/native",
     "demo/website/native",
 ]
