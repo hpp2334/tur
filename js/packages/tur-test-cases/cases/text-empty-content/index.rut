@@ -4,5 +4,5 @@ use tur_kit::{ Text };
 
 
 entry fn start() {
-    mount(Text.new().text("").build());
+    mount(Text.builder().text("").build());
 }

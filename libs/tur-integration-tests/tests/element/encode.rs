@@ -21,8 +21,8 @@ entry fn start() -> u64 {
     let empty = decode_utf8(encode_utf8(""));
     rs_set_str(label, f"{ascii}|{unicode}|{empty}|");
 
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }

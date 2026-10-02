@@ -81,7 +81,7 @@ use tur_kit::{{ Text }};
 
 entry fn start() -> u64 {{
     let atom = rs_source_str("{value}");
-    let mut txt = Text.new().text_bound(atom).query_key("id").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("id").build();
     mount(txt);
     return atom;
 }}
@@ -165,7 +165,7 @@ use tur_kit::{ Text };
 
 entry fn start() {
     let atom = rs_source_str("only-in-A");
-    let mut txt = Text.new().text_bound(atom).query_key("a_only").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("a_only").build();
     mount(txt);
 }
 "#,
@@ -211,7 +211,7 @@ use tur_kit::{ Text };
 
 entry fn start() {
     let atom = rs_source_str("42");
-    let mut txt = Text.new().text_bound(atom).query_key("val").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -250,7 +250,7 @@ use tur_kit::{ Text };
 
 entry fn start() {
     let atom = rs_source_str("7");
-    let mut txt = Text.new().text_bound(atom).query_key("val").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -285,7 +285,7 @@ use tur_kit::{{ Text }};
 
 entry fn start() {{
     let atom = rs_source_str("{i}");
-    let mut txt = Text.new().text_bound(atom).query_key("idx").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("idx").build();
     mount(txt);
 }}
 "#
@@ -492,7 +492,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(10.0, 10.0);
     b.color(0x336699FFu64);
     mount(b.build());
@@ -551,7 +551,7 @@ use tur_kit::{ Text };
 
 entry fn start() -> u64 {
     let atom = rs_source_str("from-A");
-    let mut txt = Text.new().text_bound(atom).query_key("id").build();
+    let mut txt = Text.builder().text_bound(atom).query_key("id").build();
     mount(txt);
     return atom;
 }

@@ -137,6 +137,13 @@ impl View for EditableTextView {
         {
             ctrl.borrow_mut().set_undo_recorder(Some(undo));
         }
+        // Attach THIS node as the controller's mounted editable — the
+        // host-pkg mutating rows (`tctrl_set_text` & co) read it to mark
+        // the node dirty (the paste path's law), so a programmatic write
+        // repaints the mounted view.
+        if let Some(ctrl) = spec.controller.as_ref() {
+            ctrl.borrow_mut().attach_view(id.into());
+        }
 
         cx.insert_node(
             id,

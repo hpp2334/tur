@@ -319,7 +319,7 @@ use tur_kit::{ Text };
 
 entry fn start() {
     let atom = rs_source_str("42");
-    let txt = Text.new().text_bound(atom).build();
+    let txt = Text.builder().text_bound(atom).build();
     mount(txt);
 }
 "#,

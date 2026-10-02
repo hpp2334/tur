@@ -15,17 +15,17 @@ entry fn start() -> u64 {
     stf_put(K_COLOR, color as f64);
     rs_set_brush(color, 0x22C35EFFu64);
 
-    let mut outer = Container.new();
+    let mut outer = Container.builder();
     outer.width_height(200.0, 100.0);
     outer.padding(20.0);
 
-    let mut checkbox = Container.new();
+    let mut checkbox = Container.builder();
     checkbox.width_height(40.0, 40.0);
     checkbox.radius(8.0);
     checkbox.color_bound(color);
     checkbox.border(0xE2E8F0FFu64, 2.0, BORDER_CENTER);
     checkbox.query_key("checkbox");
-    outer.child(PointerInteract.new().id(checked).on_click("b_toggle").query_key("rut/gesture").child(checkbox.build()).build());
+    outer.child(PointerInteract.builder().id(checked).on_click("b_toggle").query_key("rut/gesture").child(checkbox.build()).build());
 
     mount(outer.build());
     return checked;

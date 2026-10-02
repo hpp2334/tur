@@ -4,9 +4,9 @@ use tur_kit::{ Container, Positioned, Stack };
 
 
 entry fn start() {
-    let mut stack = Stack.new();
-    let mut sb = Container.new();
+    let mut stack = Stack.builder();
+    let mut sb = Container.builder();
     sb.width_height(50.0, 50.0);
-    stack.child(Positioned.new().left(10.0).top(20.0).child(sb.build()).build());
+    stack.child(Positioned.builder().left(10.0).top(20.0).child(sb.build()).build());
     mount(stack.build());
 }

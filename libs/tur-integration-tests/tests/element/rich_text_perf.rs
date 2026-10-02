@@ -38,9 +38,9 @@ entry fn start() -> u64 {
     let width = rs_source_f64();
     rs_set_f64(width, 400.0);
 
-    let input = Input.new().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
-    let wrap = Container.new().width_bound(width).child(input).build();
-    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(wrap).query_key("scroll").build();
+    let input = Input.builder().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
+    let wrap = Container.builder().width_bound(width).child(input).build();
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(wrap).query_key("scroll").build();
     mount(scroller);
     return width;
 }

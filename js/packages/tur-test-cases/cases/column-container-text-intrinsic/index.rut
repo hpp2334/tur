@@ -5,11 +5,11 @@ use tur_kit::{ Column, Container, Text };
 
 
 entry fn start() {
-    let mut col = Column.new();
-    let mut b = Container.new();
+    let mut col = Column.builder();
+    let mut b = Container.builder();
     b.padding(48.0);
     b.query_key("container");
-    let mut t = Text.new();
+    let mut t = Text.builder();
 
     t.text("Empty State");
     t.font_size(24.0);

@@ -4,9 +4,9 @@ use tur_kit::{ Column, Container, Row };
 
 
 entry fn start() {
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.cross_alignment(CROSS_ALIGN_START);
-    let mut row = Row.new();
+    let mut row = Row.builder();
     row.cross_alignment(CROSS_ALIGN_CENTER);
     row.main_axis_size(MAIN_SIZE_MIN);
     row.child(box_wh(20.0, 20.0));
@@ -18,7 +18,7 @@ entry fn start() {
 }
 
 fn box_wh(w: f64, h: f64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(w, h);
     return b.build();
 }

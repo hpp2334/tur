@@ -13,7 +13,7 @@ use tur_kit::{ Container, Expanded, LazyGrid };
 
 
 entry fn cell(i: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 100.0);
     b.color(0xC8C8C8FFu64);
     return b.build();
@@ -22,9 +22,9 @@ entry fn cell(i: u64) -> opaque {
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    let mut lg = LazyGrid.new().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let mut lg = LazyGrid.builder().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded.new().flex(1.0).child(lg).build();
+    let root = Expanded.builder().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }
@@ -156,7 +156,7 @@ use tur_kit::{ Container, Expanded, LazyGrid };
 
 
 entry fn cell(i: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 100.0);
     b.color(0xC8C8C8FFu64);
     return b.build();
@@ -165,9 +165,9 @@ entry fn cell(i: u64) -> opaque {
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 100.0);
-    let mut lg = LazyGrid.new().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let mut lg = LazyGrid.builder().item_builder("cell").count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded.new().flex(1.0).child(lg).build();
+    let root = Expanded.builder().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }
@@ -277,7 +277,7 @@ use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid };
 
 entry fn cell(i: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 100.0);
     b.color(0xB4B4DCFFu64);
     return b.build();
@@ -286,9 +286,9 @@ entry fn cell(i: u64) -> opaque {
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 1000.0);
-    let mut lg = LazyGrid.new().item_builder("cell").count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let mut lg = LazyGrid.builder().item_builder("cell").count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded.new().flex(1.0).child(lg).build();
+    let root = Expanded.builder().flex(1.0).child(lg).build();
     mount(root);
     return count;
 }

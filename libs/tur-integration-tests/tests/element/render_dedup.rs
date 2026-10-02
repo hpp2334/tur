@@ -46,7 +46,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 50.0);
     b.color(0xFF0000FFu64);
     mount(b.build());
@@ -95,7 +95,7 @@ entry fn start() -> u64 {
     let color = rs_source_value(rs_list_new());
     rs_set_brush(color, 0xFF0000FFu64);
 
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 50.0);
     b.color_bound(color);
     mount(b.build());
@@ -159,7 +159,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 50.0);
     b.color(0xFF0000FFu64);
     mount(b.build());

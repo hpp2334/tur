@@ -5,10 +5,10 @@ use tur_kit::{ Container, Row, SizedBox, Text };
 
 
 entry fn tile(label: str, color: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 100.0);
     b.color(color);
-    let mut t = Text.new();
+    let mut t = Text.builder();
 
     t.text(label);
     t.font_size(14.0);
@@ -17,9 +17,9 @@ entry fn tile(label: str, color: u64) -> opaque {
 }
 
 entry fn start() {
-    let mut row = Row.new();
+    let mut row = Row.builder();
     row.child(tile("A", 0xEF4444FFu64));
     row.child(tile("B", 0x22C55EFFu64));
     row.child(tile("C", 0x3B82F6FFu64));
-    mount(SizedBox.new(400.0, 200.0).child(row.build()).build());
+    mount(SizedBox.builder(400.0, 200.0).child(row.build()).build());
 }

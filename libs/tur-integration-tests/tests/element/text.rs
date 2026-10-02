@@ -337,9 +337,9 @@ use tur_kit::{ Container, Text };
 
 
 entry fn start() {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(164.0, 40.0);
-    let mut txt = Text.new();
+    let mut txt = Text.builder();
 
     txt.text("Last Week Todos");
     txt.font_size(14.0);

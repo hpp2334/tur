@@ -5,13 +5,13 @@ use tur_kit::{ Column, Container, Text };
 
 
 entry fn start() {
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.cross_alignment(CROSS_ALIGN_STRETCH);
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.color(0xFF0000FFu64);
     b.padding(20.0);
     b.query_key("container");
-    b.child(Text.new().text("Empty State").build());
+    b.child(Text.builder().text("Empty State").build());
     col.child(b.build());
     mount(col.build());
 }

@@ -13,11 +13,11 @@ entry fn start() -> u64 {
     rs_set_f64(width, 100.0);
     stf_put(K_WIDTH, width as f64);
 
-    let mut outer = Container.new();
+    let mut outer = Container.builder();
     outer.width_bound(width);
-    let mut row = Row.new();
+    let mut row = Row.builder();
     row.main_alignment(MAIN_ALIGN_END);
-    let mut tracker = Container.new();
+    let mut tracker = Container.builder();
     tracker.width_height(20.0, 20.0);
     tracker.color(0x22C55EFFu64);
     tracker.query_key("tracker");

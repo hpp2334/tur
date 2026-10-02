@@ -128,7 +128,17 @@ fn plain_span(text: &str) -> SpanData {
 }
 
 /// Install the text-row bodies (the installer's boot half).
-pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<RutHandles>) {
+pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
+    // Own the handle up front — the `move` row closures below clone from
+    // the owned `Rc` (a captured reference would escape this body).
+    let handles: Rc<RutHandles> = handles.clone();
+    // NOTE for the controller-mutating rows below (`tctrl_set_text` & co):
+    // after the write they refresh the MOUNTED editable — mark its node
+    // dirty (the controller is an opaque `Rc` binding invisible to the
+    // reactive build dedup; without the mark a programmatic write never
+    // revisits the element) and request a frame so an idle worker re-arms.
+    // The paste path's law (`tree.mark_dirty(focused_id)`), reached from
+    // the rut side.
     // ---- text family ----------------------------------------------------
     rut_vm::pkg_fn!(pkg, "text_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, TextView {
@@ -299,39 +309,66 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "tctrl_text", (Opaque<RutTextCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
         c.with(|c| Ok(c.0.borrow().text()))?
     });
+    let set_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "tctrl_set_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        let handles = set_handles.clone();
         c.with_mut(vm, |_vm, c| {
-            c.0.borrow_mut().set_spans(vec![plain_span(text)]);
+            let mut ctrl = c.0.borrow_mut();
+            ctrl.set_spans(vec![plain_span(text)]);
+            if let Some(id) = ctrl.mounted_view() {
+                handles.element_tree.mark_dirty(id);
+            }
         })?;
+        (handles.request_frame)();
         Ok(())
     });
     // Delete the selection (or nothing at an empty caret) — the undo
     // fixture's delete step.
+    let del_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "tctrl_delete_selection", (Opaque<RutTextCtrl>,) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
+        let handles = del_handles.clone();
         c.with_mut(vm, |_vm, c| {
-            c.0.borrow_mut().delete_selection();
+            let mut ctrl = c.0.borrow_mut();
+            ctrl.delete_selection();
+            if let Some(id) = ctrl.mounted_view() {
+                handles.element_tree.mark_dirty(id);
+            }
         })?;
+        (handles.request_frame)();
         Ok(())
     });
     // Insert text at the caret (no selection replace) — the undo fixture's
     // typed-insert step.
+    let ins_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "tctrl_insert_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        let handles = ins_handles.clone();
         c.with_mut(vm, |_vm, c| {
-            let mut t = c.0.borrow_mut();
-            let pos = t.cursor_position();
-            t.insert_str_at(pos, text);
-            t.set_cursor_position(pos + text.len());
+            let mut ctrl = c.0.borrow_mut();
+            let pos = ctrl.cursor_position();
+            ctrl.insert_str_at(pos, text);
+            ctrl.set_cursor_position(pos + text.len());
+            if let Some(id) = ctrl.mounted_view() {
+                handles.element_tree.mark_dirty(id);
+            }
         })?;
+        (handles.request_frame)();
         Ok(())
     });
 
     // Append one plain span (the huge-document fixture's authoring loop).
+    let push_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "tctrl_push_span", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        let handles = push_handles.clone();
         c.with_mut(vm, |_vm, c| {
             let mut spans = c.0.borrow().spans().to_vec();
             spans.push(plain_span(text));
-            c.0.borrow_mut().set_spans_preserve_cursor(spans);
+            let mut ctrl = c.0.borrow_mut();
+            ctrl.set_spans_preserve_cursor(spans);
+            if let Some(id) = ctrl.mounted_view() {
+                handles.element_tree.mark_dirty(id);
+            }
         })?;
+        (handles.request_frame)();
         Ok(())
     });
     rut_vm::pkg_fn!(pkg, "tctrl_cursor", (Opaque<RutTextCtrl>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {

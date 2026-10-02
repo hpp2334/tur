@@ -15,6 +15,7 @@ pub use undo_controller::{TextEditingValue, UndoController};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::core::element::NodeId;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
@@ -61,6 +62,14 @@ pub struct TextEditingController {
     on_composition_start: Option<MutationHandle<CompositionStartEvent>>,
     on_composition_update: Option<MutationHandle<CompositionUpdateEvent>>,
     on_composition_end: Option<MutationHandle<CompositionEndEvent>>,
+    /// The editable node currently mounted with this controller — attached
+    /// at view build (same moment as the undo recorder). The host-pkg
+    /// mutating rows (`tctrl_set_text` & co) read it to mark the mounted
+    /// node dirty: the controller is an opaque `Rc` binding invisible to
+    /// the reactive build dedup, so without the mark a programmatic write
+    /// never revisits the element and the pixels stay frozen at the old
+    /// shape.
+    mounted: Option<NodeId>,
 }
 
 impl TextEditingController {
@@ -86,7 +95,21 @@ impl TextEditingController {
             on_composition_start: None,
             on_composition_update: None,
             on_composition_end: None,
+            mounted: None,
         }
+    }
+
+    /// Attach the editable node mounted with this controller. Called by
+    /// `EditableTextView::build` — the same moment the undo recorder
+    /// attaches. A controller shared across inputs keeps the LAST mount
+    /// (matching the undo-recorder law documented on the field).
+    pub fn attach_view(&mut self, id: NodeId) {
+        self.mounted = Some(id);
+    }
+
+    /// The editable node mounted with this controller, if any.
+    pub fn mounted_view(&self) -> Option<NodeId> {
+        self.mounted
     }
 
     /// Current content revision. Consumers pair this with the rendered

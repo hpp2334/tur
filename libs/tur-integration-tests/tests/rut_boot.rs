@@ -13,9 +13,9 @@ use tur_kit::{ Column, Text };
 use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() {
-    let mut col = Column.new();
-    col.child(Text.new().text("hello from rut").build());
-    col.child(Text.new().text("rut drives, the engine applies").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text("hello from rut").build());
+    col.child(Text.builder().text("rut drives, the engine applies").build());
     mount(col.build());
 }
 "#;
@@ -29,7 +29,7 @@ use tur_kit::{ Text };
 
 
 entry fn start() {
-    mount(Text.new().text("v2 root").build());
+    mount(Text.builder().text("v2 root").build());
 }
 
 entry fn stop() {
@@ -95,8 +95,8 @@ use tur_kit::{ Column, Text };
 
 entry fn start() -> u64 {
     let atom = rs_source_str("Count: 0");
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(atom).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(atom).query_key("rut/text").build());
     mount(col.build());
     return atom;
 }
@@ -147,10 +147,10 @@ use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() -> u64 {
     let atom = rs_source_str("taps: 0");
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(atom).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(atom).query_key("rut/text").build());
     col.child(
-        PointerInteract.new().ids(atom, atom).on_tap("ts_click").child(Text.new().text("tap me").build()).build(),
+        PointerInteract.builder().ids(atom, atom).on_tap("ts_click").child(Text.builder().text("tap me").build()).build(),
     );
     mount(col.build());
     return atom;
@@ -196,13 +196,13 @@ use tur_kit::{ Column, PointerInteract, Text };
 entry fn start() -> u64 {
     let label = rs_source_str("Count: 0");
     let count = rs_source_f64();
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     col.child(
-        PointerInteract.new().ids(count, label).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+        PointerInteract.builder().ids(count, label).on_tap("ts_inc").child(Text.builder().text("+1").build()).build(),
     );
     col.child(
-        PointerInteract.new().ids(count, label).on_tap("ts_dec").child(Text.new().text("-1").build()).build(),
+        PointerInteract.builder().ids(count, label).on_tap("ts_dec").child(Text.builder().text("-1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -264,16 +264,16 @@ entry fn start() -> u64 {
     let on = rs_source_bool(true);
     let on_label = rs_source_str("ON");
     let off_label = rs_source_str("OFF");
-    let mut col = Column.new();
-    col.child(Container.new().color(0x336699FF).padding(8.0).child(Text.new().text("boxed").build()).build());
-    col.child(Expanded.new().flex(1.0).child(Text.new().text("fills the column").build()).build());
-    col.child(Condition.new(on).then(Text.new().text_bound(on_label).query_key("rut/text").build()).else_branch(Text.new().text_bound(off_label).query_key("rut/text").build()).build());
-    let mut overlay = Stack.new();
-    overlay.child(Text.new().text("base").build());
-    overlay.child(Positioned.new().left(4.0).top(4.0).child(Text.new().text("floating").build()).build());
+    let mut col = Column.builder();
+    col.child(Container.builder().color(0x336699FF).padding(8.0).child(Text.builder().text("boxed").build()).build());
+    col.child(Expanded.builder().flex(1.0).child(Text.builder().text("fills the column").build()).build());
+    col.child(Condition.builder(on).then(Text.builder().text_bound(on_label).query_key("rut/text").build()).else_branch(Text.builder().text_bound(off_label).query_key("rut/text").build()).build());
+    let mut overlay = Stack.builder();
+    overlay.child(Text.builder().text("base").build());
+    overlay.child(Positioned.builder().left(4.0).top(4.0).child(Text.builder().text("floating").build()).build());
     col.child(overlay.build());
     col.child(
-        PointerInteract.new().ids(on, on).on_tap("ts_toggle").child(Text.new().text("toggle").build()).build(),
+        PointerInteract.builder().ids(on, on).on_tap("ts_toggle").child(Text.builder().text("toggle").build()).build(),
     );
     mount(col.build());
     return on;
@@ -345,15 +345,15 @@ use tur_kit::{ Column, Expanded, ScrollView, Text };
 use tur_kit::{ Column, PointerInteract, Expanded, ScrollView, Text };
 
 entry fn start() -> u64 {
-    let mut col = Column.new();
+    let mut col = Column.builder();
     let mut i = 0;
     while (i < 60) {
-        col.child(Text.new().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
+        col.child(Text.builder().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
         i += 1;
     }
-    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(col.build()).build();
-    let mut root = Column.new();
-    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).build();
+    let mut root = Column.builder();
+    root.child(Expanded.builder().flex(1.0).child(scroller).build());
     mount(root.build());
     return rs_source_f64();
 }
@@ -435,10 +435,10 @@ entry fn start() -> u64 {
     let cur = rs_get_str(label);
     rs_set_str(label, f"{cur} ({role})");
 
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     col.child(
-        PointerInteract.new().ids(items, label).on_tap("ts_push").child(Text.new().text("push").build()).build(),
+        PointerInteract.builder().ids(items, label).on_tap("ts_push").child(Text.builder().text("push").build()).build(),
     );
     mount(col.build());
     return items;
@@ -534,9 +534,9 @@ entry fn start() -> u64 {
     tctrl_paste(ctrl, "SEEDED");
     let label = rs_source_str(tctrl_text(ctrl));
 
-    let mut col = Column.new();
-    col.child(Input.new().controller(ctrl).undo(undo).placeholder("type here").width_height(220.0, 32.0).query_key("rut/input").build());
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Input.builder().controller(ctrl).undo(undo).placeholder("type here").width_height(220.0, 32.0).query_key("rut/input").build());
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
@@ -619,8 +619,8 @@ use tur_kit::{ Column, Each, PointerInteract, Text };
 use tur_kit::{ Column, PointerInteract, Each, Text };
 
 entry fn item_row(i: u64, item: str) -> opaque {
-    let mut col = Column.new();
-    col.child(Text.new().text(f"{i}: {item}").font_size(16.0).color(0x222222FF).build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text(f"{i}: {item}").font_size(16.0).color(0x222222FF).build());
     return col.build();
 }
 
@@ -630,10 +630,10 @@ entry fn start() -> u64 {
     rs_list_push(list, "beta");
     let atom = rs_source_value(list);
 
-    let mut col = Column.new();
-    col.child(Each.new(atom).item_builder("item_row").build());
+    let mut col = Column.builder();
+    col.child(Each.builder(atom).item_builder("item_row").build());
     col.child(
-        PointerInteract.new().ids(atom, atom).on_tap("ts_push").child(Text.new().text("push").build()).build(),
+        PointerInteract.builder().ids(atom, atom).on_tap("ts_push").child(Text.builder().text("push").build()).build(),
     );
     mount(col.build());
     return atom;
@@ -721,17 +721,17 @@ use tur_kit::{ Column, Expanded, LazyList, Text };
 use tur_kit::{ Column, PointerInteract, Expanded, LazyList, Text };
 
 entry fn lazy_row(i: u64) -> opaque {
-    let mut col = Column.new();
-    col.child(Text.new().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
     return col.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 300.0);
-    let scroller = LazyList.new().item_builder("lazy_row").count(count).item_extent(20.0).query_key("rut/lazy").build();
-    let mut root = Column.new();
-    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    let scroller = LazyList.builder().item_builder("lazy_row").count(count).item_extent(20.0).query_key("rut/lazy").build();
+    let mut root = Column.builder();
+    root.child(Expanded.builder().flex(1.0).child(scroller).build());
     mount(root.build());
     return count;
 }
@@ -791,7 +791,7 @@ use tur_kit::{ Column, Container, SizedBox, Text };
 use tur_kit::{ Column, PointerInteract, Container, SizedBox, Text };
 
 entry fn start() {
-    let mut styled = Container.new();
+    let mut styled = Container.builder();
     styled.width_height(200.0, 120.0);
     styled.padding(8.0);
     styled.color(0x336699FF as u64);
@@ -800,14 +800,14 @@ entry fn start() {
     styled.shadow(0x00000066 as u64, 8.0, 2.0, 4.0);
     styled.clip(CLIP_ANTI_ALIAS);
     styled.alignment(ALIGN_BOTTOM_RIGHT);
-    styled.child(Text.new().text("corner").build());
-    let mut root = Column.new();
+    styled.child(Text.builder().text("corner").build());
+    let mut root = Column.builder();
     root.child(styled.build());
 
     // SizedBox: exactly 90 x 40 around its child.
-    root.child(SizedBox.new(90.0, 40.0).child(Text.new().text("sized").build()).build());
+    root.child(SizedBox.builder(90.0, 40.0).child(Text.builder().text("sized").build()).build());
     // The legacy el_box row still works beside the builder.
-    root.child(Container.new().color(0x88FF88FFu64).padding(4.0).child(Text.new().text("legacy").build()).build());
+    root.child(Container.builder().color(0x88FF88FFu64).padding(4.0).child(Text.builder().text("legacy").build()).build());
     mount(root.build());
 }
 "#;
@@ -865,13 +865,13 @@ use tur_kit::{ Column, Focusable, PointerInteract, Text };
 entry fn start() -> u64 {
     let label = rs_source_str("");
 
-    let pad = PointerInteract.new().id(label).on_click("g_click").on_down("g_down").on_move("g_move").on_up("g_up").on_context_menu("g_menu").query_key("rut/gesture").child(Text.new().text("pad").build()).build();
-    let foc = Focusable.new().on_key_down("f_key", label).on_focus("f_focus", label).on_blur("f_blur", label).child(Text.new().text("focus me").build()).build();
+    let pad = PointerInteract.builder().id(label).on_click("g_click").on_down("g_down").on_move("g_move").on_up("g_up").on_context_menu("g_menu").query_key("rut/gesture").child(Text.builder().text("pad").build()).build();
+    let foc = Focusable.builder().on_key_down("f_key", label).on_focus("f_focus", label).on_blur("f_blur", label).child(Text.builder().text("focus me").build()).build();
 
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.child(pad);
     col.child(foc);
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
@@ -1016,9 +1016,9 @@ entry fn start() -> u64 {
     let cl = color_tween_lerp(0x000000FFu64, 0xFFFFFFFFu64, 0.5);
     rs_set_str(label, f"tw{tw} cv{cv} cl{cl}");
 
-    let mut col = Column.new();
-    col.child(Opacity.new(0.0).bound(alpha).child(Text.new().text("fade").build()).build());
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Opacity.builder(0.0).bound(alpha).child(Text.builder().text("fade").build()).build());
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return alpha;
 }
@@ -1091,8 +1091,8 @@ async fn work(cx: RunContext, label: u64) -> str {
 entry fn start() -> u64 {
     let label = rs_source_str("");
     launch_future(work(label));
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
@@ -1150,8 +1150,8 @@ entry fn start() -> u64 {
     // params); the launched cancel journey takes it back by key.
     st_put(label, task);
     launch_future(finish(label));
-    let mut col = Column.new();
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
@@ -1227,14 +1227,14 @@ let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
-    let src = va_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text.new().text(\"child here\").build());\n}");
+    let src = va_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text.builder().text(\"child here\").build());\n}");
     let ctrl = va_controller(src);
     st_put(CTRL_KEY, ctrl);
 
-    let mut col = Column.new();
-    col.child(Lifecycle.new().on_mount("lc_mount").before_destroy("lc_destroy").child(Text.new().text("wrapped").build()).build());
-    col.child(VirtualApp.new().controller(ctrl).width_height(200.0, 80.0).build());
-    col.child(Text.new().text_bound(label).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Lifecycle.builder().on_mount("lc_mount").before_destroy("lc_destroy").child(Text.builder().text("wrapped").build()).build());
+    col.child(VirtualApp.builder().controller(ctrl).width_height(200.0, 80.0).build());
+    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
@@ -1327,12 +1327,12 @@ entry fn start() -> u64 {
     let watch = rs_watch(count, "on_count", hits);
     rs_watch_start(watch);
 
-    let mut col = Column.new();
-    col.child(Text.new().text_bound_derived(d).query_key("rut/text").build());
-    col.child(Text.new().text_bound_derived(d2).query_key("rut/text").build());
-    col.child(Text.new().text_bound(hits).build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound_derived(d).query_key("rut/text").build());
+    col.child(Text.builder().text_bound_derived(d2).query_key("rut/text").build());
+    col.child(Text.builder().text_bound(hits).build());
     col.child(
-        PointerInteract.new().ids(count, count).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+        PointerInteract.builder().ids(count, count).on_tap("ts_inc").child(Text.builder().text("+1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -1373,11 +1373,11 @@ entry fn start() -> u64 {
     let bad = rs_derive("bad", count);
     let good = rs_derive("good", count);
 
-    let mut col = Column.new();
-    col.child(Text.new().text_bound_derived(bad).query_key("rut/text").build());
-    col.child(Text.new().text_bound_derived(good).query_key("rut/text").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text_bound_derived(bad).query_key("rut/text").build());
+    col.child(Text.builder().text_bound_derived(good).query_key("rut/text").build());
     col.child(
-        PointerInteract.new().ids(count, count).on_tap("ts_inc").child(Text.new().text("+1").build()).build(),
+        PointerInteract.builder().ids(count, count).on_tap("ts_inc").child(Text.builder().text("+1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -1386,8 +1386,8 @@ entry fn start() -> u64 {
 // The hostile derive: tries to re-mount mid-flush — the no-mount guard
 // traps it.
 entry fn bad(v: f64) -> str {
-    let mut col = Column.new();
-    col.child(Text.new().text("hijack").build());
+    let mut col = Column.builder();
+    col.child(Text.builder().text("hijack").build());
     mount(col.build());
     return f"bad={v as u64}";
 }

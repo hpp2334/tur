@@ -9,21 +9,21 @@ entry fn start() -> u64 {
     let anchor = rs_source_f64();
     rs_set_f64(anchor, 0.0);
     let link = ct_link_new();
-    let mut stack = Stack.new();
-    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
-    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
-    let target = CompositedTarget.new().link(link).child(target_child).build();
-    stack.child(Positioned.new().left(100.0).top(80.0).child(target).build());
-    let mut red = Container.new();
+    let mut stack = Stack.builder();
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
+    let target_child = SizedBox.builder(60.0, 40.0).child(Container.builder().build()).build();
+    let target = CompositedTarget.builder().link(link).child(target_child).build();
+    stack.child(Positioned.builder().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.builder();
     red.width_height(20.0, 20.0);
     red.color(0xFF0000FFu64);
-    let follower = CompositedFollower.new().link(link).target_anchor_bound(anchor).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    let follower = CompositedFollower.builder().link(link).target_anchor_bound(anchor).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
     stack.child(follower);
 
-    let mut btn = Container.new();
+    let mut btn = Container.builder();
     btn.width_height(60.0, 30.0);
     btn.color(0x4F46E1FFu64);
-    stack.child(Positioned.new().left(20.0).top(540.0).child(PointerInteract.new().ids(anchor, anchor).on_tap("b_flip").child(btn.build()).build()).build());
+    stack.child(Positioned.builder().left(20.0).top(540.0).child(PointerInteract.builder().ids(anchor, anchor).on_tap("b_flip").child(btn.build()).build()).build());
     mount(stack.build());
     return anchor;
 }

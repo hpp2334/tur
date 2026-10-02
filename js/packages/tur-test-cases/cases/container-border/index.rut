@@ -5,13 +5,13 @@ use tur_kit::{ Container, Text };
 
 
 entry fn start() {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(200.0, 200.0);
     b.padding(16.0);
     b.color(0xFFFFFFFFu64);
     b.border(0x000000FFu64, 2.0, BORDER_INSIDE);
     b.radius(8.0);
-    let mut label = Text.new();
+    let mut label = Text.builder();
 
     label.text("Border");
     label.font_size(16.0);

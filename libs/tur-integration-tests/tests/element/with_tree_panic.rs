@@ -18,7 +18,7 @@ use tur_kit::{ Container };
 
 
         entry fn start() {
-            let mut b = Container.new();
+            let mut b = Container.builder();
             b.width_height(50.0, 50.0);
             b.query_key("c");
             mount(b.build());
@@ -60,7 +60,7 @@ use tur_kit::{ Container };
 
 
         entry fn start() {
-            let mut b = Container.new();
+            let mut b = Container.builder();
             b.width_height(50.0, 50.0);
             b.query_key("c");
             mount(b.build());

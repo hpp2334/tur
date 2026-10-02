@@ -13,40 +13,40 @@ entry fn start() -> u64 {
     let d_o = rs_derive2("fmt_o", outer_o, inner_o);
     let d_t = rs_derive2("fmt_t", outer_t, inner_t);
 
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.cross_alignment(CROSS_ALIGN_START);
     col.main_axis_size(MAIN_SIZE_MIN);
 
     // Opaque pair: the inner (opaque) absorbs the click.
-    let mut outer_box = Container.new();
+    let mut outer_box = Container.builder();
     outer_box.width_height(80.0, 40.0);
     outer_box.query_key("outer-opaque");
-    let mut inner_row = Row.new();
-    let mut inner_box = Container.new();
+    let mut inner_row = Row.builder();
+    let mut inner_box = Container.builder();
     inner_box.width_height(60.0, 30.0);
     inner_box.query_key("inner-opaque");
-    inner_row.child(PointerInteract.new().ids(inner_o, inner_o).on_tap("ts_inner_o").child(inner_box.build()).build());
+    inner_row.child(PointerInteract.builder().ids(inner_o, inner_o).on_tap("ts_inner_o").child(inner_box.build()).build());
     outer_box.child(inner_row.build());
-    col.child(PointerInteract.new().ids(outer_o, outer_o).on_tap("ts_outer_o").child(outer_box.build()).build());
+    col.child(PointerInteract.builder().ids(outer_o, outer_o).on_tap("ts_outer_o").child(outer_box.build()).build());
 
     // Translucent pair: the inner joins the path; the outer fires too.
-    let mut outer_t_box = Container.new();
+    let mut outer_t_box = Container.builder();
     outer_t_box.width_height(80.0, 40.0);
     outer_t_box.query_key("outer-translucent");
-    let mut t_row = Row.new();
-    let mut inner_t_box = Container.new();
+    let mut t_row = Row.builder();
+    let mut inner_t_box = Container.builder();
     inner_t_box.width_height(60.0, 30.0);
     inner_t_box.query_key("inner-translucent");
-    t_row.child(PointerInteract.new().ids(inner_t, inner_t).on_tap("ts_inner_t").behavior(1).child(inner_t_box.build()).build());
+    t_row.child(PointerInteract.builder().ids(inner_t, inner_t).on_tap("ts_inner_t").behavior(1).child(inner_t_box.build()).build());
     outer_t_box.child(t_row.build());
-    col.child(PointerInteract.new().ids(outer_t, outer_t).on_tap("ts_outer_t").child(outer_t_box.build()).build());
+    col.child(PointerInteract.builder().ids(outer_t, outer_t).on_tap("ts_outer_t").child(outer_t_box.build()).build());
 
-    let mut ro = Text.new();
+    let mut ro = Text.builder();
 
     ro.text_bound_derived(d_o);
     ro.query_key("result-opaque");
     col.child(ro.build());
-    let mut rt = Text.new();
+    let mut rt = Text.builder();
 
     rt.text_bound_derived(d_t);
     rt.query_key("result-translucent");

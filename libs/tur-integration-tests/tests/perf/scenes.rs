@@ -103,13 +103,13 @@ entry fn label(v: f64) -> str {
 entry fn start() -> u64 {
     let tick = rs_source_f64();
 
-    let mut root = Column.new();
+    let mut root = Column.builder();
     let mut i = 0;
     while (i < 12) {
-        let mut row = Row.new();
+        let mut row = Row.builder();
         let mut j = 0;
         while (j < 12) {
-            let mut b = Container.new();
+            let mut b = Container.builder();
             b.width_height(30.0, 30.0);
             b.color(0x208040FFu64);
             row.child(b.build());
@@ -146,18 +146,18 @@ use tur_kit::{ Column, Container, Expanded, ScrollView };
 
 
 entry fn start() {
-    let mut content = Column.new();
+    let mut content = Column.builder();
     let mut i = 0;
     while (i < 200) {
-        let mut b = Container.new();
+        let mut b = Container.builder();
         b.width_height(10.0, 40.0);
         b.color(0x204080FFu64);
         content.child(b.build());
         i += 1;
     }
-    let scroller = ScrollView.new().axis(AXIS_VERTICAL).initial_offset(0.0).child(content.build()).build();
-    let mut root = Column.new();
-    root.child(Expanded.new().flex(1.0).child(scroller).build());
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).initial_offset(0.0).child(content.build()).build();
+    let mut root = Column.builder();
+    root.child(Expanded.builder().flex(1.0).child(scroller).build());
     mount(root.build());
 }
 "##,
@@ -216,10 +216,10 @@ use tur_anim_kit::{ Opacity };
 entry fn start() -> u64 {
     let alpha = rs_source_f64();
 
-    let mut col = Column.new();
+    let mut col = Column.builder();
     let mut i = 0;
     while (i < 50) {
-        let mut b = Container.new();
+        let mut b = Container.builder();
         b.width_height(40.0, 40.0);
         b.color(0x3060C0FFu64);
         col.child(b.build());
@@ -230,7 +230,7 @@ entry fn start() -> u64 {
     // into the bound opacity atom — every frame differs.
     let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, "a_tick", "a_end");
     anim_forward(ctrl);
-    mount(Opacity.new(0.0).bound(alpha).child(col.build()).build());
+    mount(Opacity.builder(0.0).bound(alpha).child(col.build()).build());
     return alpha;
 }
 
@@ -294,9 +294,9 @@ entry fn start() {
         i += 1;
     }
 
-    let input = Input.new().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
+    let input = Input.builder().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
     input.query_key("ed");
-    let scroller = ScrollView.new().axis(AXIS_VERTICAL).initial_offset(0.0).child(input).build();
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).initial_offset(0.0).child(input).build();
     scroller.query_key("scroll");
     mount(scroller);
 }

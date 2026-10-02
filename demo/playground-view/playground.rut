@@ -41,58 +41,40 @@ entry fn start() -> u64 {
     return names_atom;
 }
 
-// The whole tree, (re)built at start and after each selection (a fresh
-// Input mounts the controller's current text).
+// The whole tree, built at start. A fresh Input mounts per build; on
+// selection the controller write refreshes the mounted editable in place
+// (see `case_tap`).
 fn build_ui() {
     let names_atom = stf_take(K_NAMES) as u64;
     let ctrl = st_take(K_CTRL);
     let status = stf_take(K_STATUS) as u64;
-    let mut row = Row.new();
 
     // ---- sidebar ------------------------------------------------------
-    let mut sidebar = Container.new();
-    sidebar.width_height(220.0, 0.0);
-    sidebar.color(0x0F172AFFu64);
-    let mut sidebar_list = Column.new();
-    sidebar_list.child(Each.new(names_atom).item_builder("side_item").build());
-    let scroller = ScrollView.new().axis(AXIS_VERTICAL).child(sidebar_list.build()).build();
-    sidebar.child(scroller);
-    row.child(sidebar.build());
+    let sidebar = Container.builder().width_height(220.0, 0.0).color(0x0F172AFFu64)
+        .child(ScrollView.builder().axis(AXIS_VERTICAL)
+            .child(Column.builder().child(Each.builder(names_atom).item_builder("side_item").build()).build())
+            .build())
+        .build();
 
     // ---- editor pane ----------------------------------------------------
-    let mut pane = Column.new();
-    pane.cross_alignment(CROSS_ALIGN_STRETCH);
-    let mut toolbar = Container.new();
-    toolbar.width_height(0.0, 44.0);
-    toolbar.color(0x1E293BFFu64);
-    let mut title = Text.new();
+    let title = Text.builder().text("playground — rut").color(0xE2E8F0u64).font_size(14.0).build();
+    let editor = Input.builder().controller(ctrl).undo(undo_new()).placeholder("select a case…")
+        .color(0xE2E8F0u64).placeholder_color(0x64748Bu64).width_height(1000.0, 480.0)
+        .multiline(true).query_key("editor").build();
+    let status_t = Text.builder().text_bound(status).color(0x94A3B8u64).query_key("status").build();
 
-    title.text("playground — rut");
-    title.font_size(14.0);
-    toolbar.child(title.build());
-    pane.child(toolbar.build());
+    let pane = Column.builder().cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(Container.builder().width_height(0.0, 44.0).color(0x1E293BFFu64).child(title).build())
+        .child(Expanded.builder().flex(1.0)
+            .child(Container.builder().color(0x0B1220FFu64).padding(12.0).child(editor).build())
+            .build())
+        .child(Container.builder().width_height(0.0, 32.0).color(0x020617FFu64).padding(8.0)
+            .child(status_t).build())
+        .build();
 
-    let mut editor_wrap = Container.new();
-    editor_wrap.color(0x0B1220FFu64);
-    editor_wrap.padding(12.0);
-    let undo = undo_new();
-    let mut editor = Input.new().controller(ctrl).undo(undo).placeholder("select a case…").width_height(1000.0, 480.0).multiline(true).query_key("editor").build();
-    editor_wrap.child(editor);
-    pane.child(Expanded.new().flex(1.0).child(editor_wrap.build()).build());
-
-    let mut status_bar = Container.new();
-    status_bar.width_height(0.0, 32.0);
-    status_bar.color(0x020617FFu64);
-    status_bar.padding(8.0);
-    let mut status_t = Text.new();
-
-    status_t.text_bound(status);
-    status_t.query_key("status");
-    status_bar.child(status_t.build());
-    pane.child(status_bar.build());
-
-    row.child(Expanded.new().flex(1.0).child(pane.build()).build());
-    mount(row.build());
+    mount(Row.builder().child(sidebar)
+        .child(Expanded.builder().flex(1.0).child(pane).build())
+        .build());
     stf_put(K_NAMES, names_atom as f64);
     st_put(K_CTRL, ctrl);
     stf_put(K_STATUS, status as f64);
@@ -101,24 +83,19 @@ fn build_ui() {
 // A sidebar entry — tapping loads + compiles the case. The Each index IS
 // the tap id (the intent's first argument).
 entry fn side_item(i: u64, name: str) -> opaque {
-    let mut b = Container.new();
-    b.width_height(0.0, 32.0);
-    b.padding(8.0);
-    let mut t = Text.new();
-
-    t.text(name);
-    t.font_size(13.0);
-    b.child(t.build());
-    return PointerInteract.new().ids(i, i).on_tap("case_tap").child(b.build()).build();
+    let row = Container.builder().width_height(0.0, 32.0).padding(8.0)
+        .child(Text.builder().text(name).color(0xE2E8F0u64).font_size(13.0).build())
+        .build();
+    return PointerInteract.builder().ids(i, i).on_tap("case_tap").child(row).build();
 }
 
 entry fn case_tap(idx: u64, _b: u64, _n: f64) {
     let name = pg_case_name(idx);
     // Select: load the source into the editor controller, then compile.
-    // (The Input re-mounting on selection is a follow-up — the C1 rows do
-    // not yet refresh a mounted editable on programmatic controller writes,
-    // so the tree is NOT rebuilt here: a mid-drain re-mount wedges the
-    // frame's render.)
+    // The mounted Input refreshes on the write itself — `tctrl_set_text`
+    // marks the mounted editable dirty and requests a frame — so no
+    // re-mount is needed here (a mid-drain re-mount would wedge the
+    // frame's render).
     let ctrl = st_take(K_CTRL);
     tctrl_set_text(ctrl, pg_case_source(name));
     st_put(K_CTRL, ctrl);

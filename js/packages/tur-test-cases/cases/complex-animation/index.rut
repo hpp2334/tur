@@ -11,13 +11,13 @@ entry fn start() -> u64 {
     anim_repeat(ctrl, 1000);
     anim_forward(ctrl);
 
-    let mut col = Column.new();
-    col.child(SizedBox.new(400.0, 40.0).child(Text.new().text("complex-animation: repeat + tween").build()).build());
-    let mut target = Container.new();
+    let mut col = Column.builder();
+    col.child(SizedBox.builder(400.0, 40.0).child(Text.builder().text("complex-animation: repeat + tween").build()).build());
+    let mut target = Container.builder();
     target.width_height(60.0, 60.0);
     target.color(0x6366F1FFu64);
-    let opacity = Opacity.new(0.0).bound(t).child(target.build()).build();
-    col.child(Expanded.new().flex(1.0).child(opacity).build());
+    let opacity = Opacity.builder(0.0).bound(t).child(target.build()).build();
+    col.child(Expanded.builder().flex(1.0).child(opacity).build());
     mount(col.build());
     return t;
 }

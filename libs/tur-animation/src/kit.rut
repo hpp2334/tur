@@ -13,7 +13,7 @@ class Opacity {
 }
 
 impl Opacity {
-  pub fn new(value: f64) -> Self {
+  pub fn builder(value: f64) -> Self {
     return Self { value: value, atom: 0, kid: nil };
   }
   // Bind the opacity to an f64 atom (the onTick rail's consumer).
@@ -42,7 +42,7 @@ class Transform {
 }
 
 impl Transform {
-  pub fn new(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
+  pub fn builder(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
     return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, kid: nil };
   }
   pub fn child(mut self, c: opaque) -> Self {

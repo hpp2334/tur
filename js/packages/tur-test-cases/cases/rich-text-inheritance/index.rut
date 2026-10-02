@@ -3,11 +3,11 @@ use tur_kit::{ Spans, Text };
 
 
 entry fn start() {
-    let mut t = Text.new();
+    let mut t = Text.builder();
 
     t.text("");
     t.font_size(20.0);
-    let mut spans = Spans.new();
+    let mut spans = Spans.builder();
     spans.add("Inherited", 0.0, 0xFF0000FFu64, 0.0, 0);
     spans.add("Override", 10.0, 0x00FF00FFu64, 0.0, 0);
     t.spans(spans);

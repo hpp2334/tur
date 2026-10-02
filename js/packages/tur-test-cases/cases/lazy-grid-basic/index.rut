@@ -4,7 +4,7 @@ use tur_kit::{ Container, LazyGrid };
 
 
 entry fn cell(i: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(0.0, 0.0);
     if (i % 2 == 0) {
         b.color(0x303030FF);
@@ -17,6 +17,6 @@ entry fn cell(i: u64) -> opaque {
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 60.0);
-    let mut grid = LazyGrid.new().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).query_key("lazy-grid-basic").build();
+    let mut grid = LazyGrid.builder().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).query_key("lazy-grid-basic").build();
     mount(grid);
 }

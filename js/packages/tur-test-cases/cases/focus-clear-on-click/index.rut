@@ -11,14 +11,14 @@ entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
 
-    let mut col = Column.new();
-    let mut input = Input.new().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
+    let mut col = Column.builder();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
     col.child(input);
-    let mut t = Text.new();
+    let mut t = Text.builder();
 
     t.text_bound(label);
     t.query_key("button");
-    col.child(PointerInteract.new().ids(clicks, label).on_tap("b_click").child(t.build()).build());
+    col.child(PointerInteract.builder().ids(clicks, label).on_tap("b_click").child(t.build()).build());
     mount(col.build());
     return clicks;
 }

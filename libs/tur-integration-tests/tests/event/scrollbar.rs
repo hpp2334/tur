@@ -11,16 +11,16 @@ use tur_kit::{ Column, Container, ScrollView };
 
 
 entry fn start() -> u64 {
-    let mut content = Column.new();
+    let mut content = Column.builder();
     let mut i = 0;
     while (i < 12) {
-        let mut b = Container.new();
+        let mut b = Container.builder();
         b.width_height(280.0, 50.0);
         b.color(0x4488CCFFu64);
         content.child(b.build());
         i += 1;
     }
-    let mut scroller = ScrollView.new().axis(AXIS_VERTICAL).child(content.build()).query_key("scroll").build();
+    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
     return rs_source_f64();

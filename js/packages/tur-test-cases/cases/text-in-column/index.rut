@@ -4,13 +4,13 @@ use tur_kit::{ Column, Text };
 
 
 entry fn start() {
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.cross_alignment(CROSS_ALIGN_START);
-    let mut first = Text.new();
+    let mut first = Text.builder();
 
     first.text("First");
     first.font_size(14.0);
-    let mut second = Text.new();
+    let mut second = Text.builder();
 
     second.text("Second");
     second.font_size(14.0);

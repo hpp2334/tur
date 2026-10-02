@@ -5,16 +5,16 @@ use tur_kit::{ Column, Container, Row };
 
 
 entry fn start() {
-    let mut row = Row.new();
-    let mut sidebar = Container.new();
+    let mut row = Row.builder();
+    let mut sidebar = Container.builder();
     sidebar.width_height(200.0, 0.0);
-    let mut scol = Column.new();
+    let mut scol = Column.builder();
     scol.cross_alignment(CROSS_ALIGN_START);
     scol.child(box_wh(0.0, 40.0));
     sidebar.child(scol.build());
     row.child(sidebar.build());
-    let mut content = Container.new();
-    let mut ccol = Column.new();
+    let mut content = Container.builder();
+    let mut ccol = Column.builder();
     ccol.cross_alignment(CROSS_ALIGN_START);
     ccol.child(box_wh(0.0, 30.0));
     content.child(ccol.build());
@@ -23,7 +23,7 @@ entry fn start() {
 }
 
 fn box_wh(w: f64, h: f64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(w, h);
     return b.build();
 }

@@ -4,7 +4,7 @@ use tur_kit::{ Container, LazyList };
 
 
 entry fn item(i: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(80.0, 300.0);
     if (i % 2 == 0) {
         b.color(0x303030FF);
@@ -17,6 +17,6 @@ entry fn item(i: u64) -> opaque {
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 50.0);
-    let mut list = LazyList.new().item_builder("item").count(count).axis(AXIS_HORIZONTAL).item_extent(80.0).query_key("lazy-list-row").build();
+    let mut list = LazyList.builder().item_builder("item").count(count).axis(AXIS_HORIZONTAL).item_extent(80.0).query_key("lazy-list-row").build();
     mount(list);
 }

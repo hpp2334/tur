@@ -6,5 +6,5 @@ use tur_kit::{ PointerInteract };
 
 entry fn start() {
     let pad = rs_source_f64();
-    mount(PointerInteract.new().ids(pad, pad).build());
+    mount(PointerInteract.builder().ids(pad, pad).build());
 }

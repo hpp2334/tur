@@ -53,9 +53,9 @@ use tur_kit::{ Column, Input };
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input.new().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.child(keyed);
     mount(col.build());
 }
@@ -72,9 +72,9 @@ use tur_kit::{ Column, Input };
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input.new().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.child(keyed);
     mount(col.build());
 }

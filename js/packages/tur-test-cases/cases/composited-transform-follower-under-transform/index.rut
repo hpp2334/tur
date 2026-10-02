@@ -8,16 +8,16 @@ use tur_anim_kit::{ Transform };
 
 entry fn start() {
     let link = ct_link_new();
-    let mut stack = Stack.new();
-    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
-    let target_child = SizedBox.new(60.0, 40.0).child(Container.new().build()).build();
-    let target = CompositedTarget.new().link(link).child(target_child).build();
-    stack.child(Positioned.new().left(100.0).top(80.0).child(target).build());
-    let mut red = Container.new();
+    let mut stack = Stack.builder();
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
+    let target_child = SizedBox.builder(60.0, 40.0).child(Container.builder().build()).build();
+    let target = CompositedTarget.builder().link(link).child(target_child).build();
+    stack.child(Positioned.builder().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.builder();
     red.width_height(20.0, 20.0);
     red.color(0xFF0000FFu64);
-    let follower = CompositedFollower.new().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
-    let transformed = Transform.new(1.0, 0.0, 50.0, 30.0).child(follower).build();
+    let follower = CompositedFollower.builder().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    let transformed = Transform.builder(1.0, 0.0, 50.0, 30.0).child(follower).build();
     stack.child(transformed);
     mount(stack.build());
 }

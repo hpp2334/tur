@@ -10,23 +10,23 @@ use tur_anim_kit::{ Transform };
 entry fn start() {
     let hit = rs_source_bool(false);
 
-    let mut stack = Stack.new();
+    let mut stack = Stack.builder();
     stack.alignment(ALIGN_TOP_LEFT);
-    stack.child(SizedBox.new(400.0, 600.0).child(Container.new().build()).build());
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
 
-    let mut indigo = Container.new();
+    let mut indigo = Container.builder();
     indigo.width_height(40.0, 40.0);
     indigo.color(0x4F46E1FFu64);
-    let pi = PointerInteract.new().ids(hit, hit).on_tap("b_hit").child(indigo.build()).build();
-    stack.child(Transform.new(1.0, 0.0, 100.0, 80.0).child(pi).build());
+    let pi = PointerInteract.builder().ids(hit, hit).on_tap("b_hit").child(indigo.build()).build();
+    stack.child(Transform.builder(1.0, 0.0, 100.0, 80.0).child(pi).build());
 
     // The confirmation box appears when the click registers (the else
     // branch is a Text — not a container — so the container count grows
     // by exactly one when the red box mounts).
-    let mut red = Container.new();
+    let mut red = Container.builder();
     red.width_height(40.0, 40.0);
     red.color(0xFF0000FFu64);
-    stack.child(Condition.new(hit).then(red.build()).else_branch(Text.new().text("").build()).build());
+    stack.child(Condition.builder(hit).then(red.build()).else_branch(Text.builder().text("").build()).build());
 
     mount(stack.build());
 }

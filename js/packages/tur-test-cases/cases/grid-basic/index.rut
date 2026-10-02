@@ -4,21 +4,21 @@ use tur_kit::{ Column, Container, Row, SizedBox };
 
 
 entry fn tile(color: u64) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(80.0, 80.0);
     b.color(color);
     return b.build();
 }
 
 entry fn start() {
-    let mut col = Column.new();
-    let mut r0 = Row.new();
+    let mut col = Column.builder();
+    let mut r0 = Row.builder();
     r0.child(tile(0xEF4444FFu64));
     r0.child(tile(0x22C55EFFu64));
-    let mut r1 = Row.new();
+    let mut r1 = Row.builder();
     r1.child(tile(0x3B82F6FFu64));
     r1.child(tile(0xEAB308FFu64));
     col.child(r0.build());
     col.child(r1.build());
-    mount(SizedBox.new(200.0, 200.0).child(col.build()).build());
+    mount(SizedBox.builder(200.0, 200.0).child(col.build()).build());
 }

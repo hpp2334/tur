@@ -446,6 +446,12 @@ pub struct RutHandles {
     /// The instance's app-dirty flag (rut callbacks raise it when they
     /// stash work so an idle worker wakes).
     pub dirty: Rc<std::cell::Cell<bool>>,
+    /// The instance's frame self-drive — `InstanceContext::request_frame`
+    /// as a plain fn (rows live in plugin crates; they get the behavior
+    /// without the context type). A paint-worthy state change raised
+    /// outside a flush (a programmatic controller write) re-arms an idle
+    /// worker; during a flush it is the no-op the context documents.
+    pub request_frame: Rc<dyn Fn()>,
     /// The instance-owned tree handle — `apply_root` builds into it.
     pub element_tree: crate::core::elements::NodeTree,
     /// The instance's focus manager — the `focus_request` row targets it
@@ -791,6 +797,12 @@ impl RutRuntime {
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
             dirty: js_ctx.dirty.clone(),
+            // The frame self-drive: a clone of the worker context whose
+            // `request_frame` sets the paint flag + wakes an idle worker.
+            request_frame: {
+                let ctx = js_ctx.clone();
+                Rc::new(move || ctx.request_frame())
+            },
             element_tree: js_ctx.element_tree.clone(),
             focus_manager: js_ctx.focus_manager.clone(),
             pending_root: std::cell::RefCell::new(None),

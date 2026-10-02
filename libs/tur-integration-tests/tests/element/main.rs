@@ -33,6 +33,7 @@ mod table;
 mod text;
 mod text_huge_document;
 mod text_input;
+mod text_input_programmatic_refresh;
 mod transform;
 mod vsync_source;
 mod with_tree_panic;

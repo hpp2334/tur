@@ -5,7 +5,7 @@ use tur_kit::{ Column, Container, Text };
 
 
 entry fn start() {
-    let mut col = Column.new();
+    let mut col = Column.builder();
     col.child(qkey_button("btn", "Btn"));
     col.child(qkey_button("btn2", "Btn2"));
     mount(col.build());
@@ -13,11 +13,11 @@ entry fn start() {
 
 // A 100x44 colored pill with a centered 14px label.
 fn qkey_button(key: str, label: str) -> opaque {
-    let mut b = Container.new();
+    let mut b = Container.builder();
     b.width_height(100.0, 44.0);
     b.color(0x6366F1FFu64);
     b.query_key(key);
-    let mut t = Text.new();
+    let mut t = Text.builder();
 
     t.text(label);
     t.font_size(14.0);
