@@ -49,18 +49,18 @@ tur-wasm = { path = "libs/tur-wasm" }
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
 # master (13eb863) on 2026-10-02. Same nightly pin as this workspace
 # (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f", default-features = false }
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104" }
 # The playground's syntax highlighting tokenizes rut source directly (the
 # `pg_highlight` row) — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "9b9f63b424fb0e5e2ad9785d7e130fcee5bf350f" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "c1cb65a4e49387e769a25f2971ca9ac3ac72f104" }
 
 
 num-derive = "0.4"
