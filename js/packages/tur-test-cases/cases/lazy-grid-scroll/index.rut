@@ -1,0 +1,23 @@
+// lazy-grid-scroll: a 600-cell grid — wheeling mounts rows outside the
+// initial build set.
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, LazyGrid };
+
+
+entry fn cell(i: u64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(0.0, 0.0);
+    if (i % 2 == 0) {
+        b.color(0x303030FF);
+    } else {
+        b.color(0x1A1A1AFF);
+    }
+    return b.build();
+}
+
+entry fn start() {
+    let count = rs_source_f64();
+    rs_set_f64(count, 600.0);
+    let mut grid = LazyGrid.builder().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).query_key("lazy-grid-scroll").build();
+    mount(grid);
+}

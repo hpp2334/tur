@@ -1,9 +1,10 @@
 use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::edgy::value::Value;
 use crate::core::layout::{Constraints, Offset, Size};
 use crate::core::layout::{ElementLayout, LayoutContext, LayoutViewCx};
 use crate::core::view::ViewCx;
 
-use super::element::{TableElement, array_len, build_all_rows};
+use super::element::{TableElement, build_all_rows};
 use super::{column_x_offsets, resolve_column_widths};
 
 impl ElementLayout for TableElement {
@@ -14,32 +15,32 @@ impl ElementLayout for TableElement {
         cx: &mut LayoutContext,
     ) -> Size {
         // --- Reconcile rows: rebuild the row subtrees when the `rows`
-        // atom's array value changed (new array object or a length change —
-        // the Each rebuild-all semantic, executed during layout through a
-        // `LayoutViewCx` so newly built cells measure in this same pass).
-        // The build fn needs the JS `Context`, borrowed here from the
-        // layout's read-only JS face (disjoint from the tree borrow).
-        // Scoped so `cx.layout_child` can reborrow the tree below. ---
+        // atom's list value changed (a fresh list identity or a length
+        // change — the Each rebuild-all semantic, executed during layout
+        // through a `LayoutViewCx` so newly built cells measure in this
+        // same pass). Cell specs resolve through the guarded rut entry
+        // face (realm-free). The context is dropped before the measure
+        // phase so `cx.layout_child` can reborrow the tree below. ---
         {
-            let boa = cx.js.boa_mut();
             let mut vcx = LayoutViewCx::new(
                 cx.tree,
                 cx.node_tree.clone(),
                 cx.mutation_queue.clone(),
                 cx.dirty.clone(),
             );
-            let raw = crate::core::view::read_atom_raw(&vcx, self.view.rows, boa);
-            let len = array_len(&raw, boa);
-            let changed =
-                self.rows_stamp.as_ref().is_none_or(|prev| *prev != raw) || self.rows_len != len;
+            // Fresh rows value (realm-free — the native KV serves without
+            // a realm).
+            let raw = vcx.store_read_only().read(self.view.rows);
+            let len = raw.as_list().map_or(0, <[Value]>::len);
+            let changed = self.rows_stamp.as_ref().is_none_or(|prev| *prev != raw)
+                || self.rows_len != len;
             if changed {
                 for row in std::mem::take(&mut self.row_cells) {
                     for (_, cell) in row {
                         vcx.destroy_child(cell);
                     }
                 }
-                self.row_cells =
-                    build_all_rows(&self.view, &raw, boa, &mut vcx, NodeId::from(self.node_id));
+                self.row_cells = build_all_rows(&self.view, &raw, &mut vcx, NodeId::from(self.node_id));
                 self.rows_stamp = Some(raw);
                 self.rows_len = len;
             }

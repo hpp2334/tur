@@ -1,0 +1,50 @@
+// switch-demo: a toggle switch authored from the gesture + box rows (the
+// Switch widget's corpus twin).
+use tur::{ mount, rs_get_bool, rs_set_bool, rs_source_bool, stf_put, stf_take };
+use tur_kit::{ Column, Container, PointerInteract, SizedBox };
+
+
+let K_ON: u64 = 1;
+
+entry fn start() -> u64 {
+    let on = rs_source_bool(true);
+    stf_put(K_ON, on as f64);
+    let mut col = Column.builder();
+    let mut track = Container.builder();
+    track.width_height(64.0, 32.0);
+    track.color(0x22C55EFFu64);
+    track.radius(16.0);
+    track.padding(4.0);
+    track.query_key("switch");
+    track.child(thumb(on));
+    col.child(PointerInteract.builder().id(on).on_click("b_toggle").query_key("rut/gesture").child(track.build()).build());
+    mount(SizedBox.builder(400.0, 200.0).child(col.build()).build());
+    return on;
+}
+
+fn thumb(on: u64) -> opaque {
+    let mut knob = Container.builder();
+    knob.width_height(24.0, 24.0);
+    knob.color(0xFFFFFFFFu64);
+    knob.radius(12.0);
+    let mut side = Container.builder();
+    side.width_height(32.0, 24.0);
+    side.alignment(thumb_align());
+    side.child(knob.build());
+    return side.build();
+}
+
+fn thumb_align() -> u64 {
+    let on = stf_take(K_ON) as u64;
+    stf_put(K_ON, on as f64);
+    if (rs_get_bool(on)) {
+        return 5;
+    }
+    return 3;
+}
+
+entry fn b_toggle(_a: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let on = stf_take(K_ON) as u64;
+    rs_set_bool(on, !rs_get_bool(on));
+    stf_put(K_ON, on as f64);
+}

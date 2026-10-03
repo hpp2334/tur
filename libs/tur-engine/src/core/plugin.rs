@@ -2,33 +2,21 @@ use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context as TaskContext, Poll};
 
-use boa_engine::Context;
-use boa_engine::JsError;
-use boa_engine::JsValue;
-use boa_engine::Module;
-use boa_engine::NativeFunction;
-use boa_engine::Source;
-use boa_engine::class::Class;
-use boa_engine::context::time::Clock;
-use boa_engine::js_string;
-use boa_engine::property::Attribute;
-
 use crate::core::app::TurAppContext;
 use crate::core::capability::{Capabilities, CapabilityDecls};
+use crate::core::clock::Clock;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::fonts::FontContext;
-use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
-use crate::core::js_runtime::module_loader::{build_fn_module, build_native_module};
-use crate::core::js_runtime::{TurInstanceContext, TurModuleLoader};
+use crate::core::instance::InstanceContext;
 use crate::core::subsystem::Subsystem;
 use crate::error::TurError;
-/// A plugin that extends the engine with elements, bridge modules, subsystems,
-/// and/or platform capabilities.
+
+/// A plugin that extends the engine with subsystems, rut pkg rows, and/or
+/// platform capabilities.
 ///
 /// A plugin is registered on the [`TurRuntime`](crate::TurRuntime) once (via
 /// [`TurRuntimeBuilder::plugin`](crate::TurRuntimeBuilder::plugin)). The runtime
@@ -36,17 +24,16 @@ use crate::error::TurError;
 ///
 /// 1. [`compile`](Plugin::compile) — called **once** on the runtime after
 ///    capabilities are inserted and `requires` is validated. Use it for any
-///    one-time, instance-independent work: pre-validating JS module sources,
-///    caching descriptor tables, etc. Defaults to a no-op.
+///    one-time, instance-independent work (descriptor caching, validation).
+///    Defaults to a no-op.
 ///
 /// 2. [`register`](Plugin::register) — called **once per instance** (per
 ///    [`TurRuntime::app_builder`](crate::TurRuntime::app_builder) +
-///    [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build))
-///    into that instance's fresh boa `Context`. Because `register` takes
-///    `&self`, the **same** plugin object is reused across every instance —
-///    no factory needed. Stateful per-instance artifacts (subsystems,
-///    handles) are created fresh inside `register` and pushed into the
-///    per-instance [`PluginRegisterContext`].
+///    [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build)).
+///    Because `register` takes `&self`, the **same** plugin object is reused
+///    across every instance — no factory needed. Stateful per-instance
+///    artifacts (subsystems, handles) are created fresh inside `register`
+///    and pushed into the per-instance [`PluginRegisterContext`].
 ///
 /// Plugins declare hard-required capabilities via
 /// [`requires`](Plugin::requires); the runtime validates every declaration
@@ -54,12 +41,9 @@ use crate::error::TurError;
 /// runs, so a missing capability fails fast at runtime build with a clear error
 /// (naming the missing type and the fix) instead of midway through
 /// side-effecting registration.
-/// **Phase 7**: requires `Send + Sync` so plugin config can be shared across
+/// `Send + Sync` is required so plugin config can be shared across
 /// worker threads (the runtime hands the plugin vec to whichever worker
-/// spawns the instance). Production plugins are zero-field unit structs
-/// (trivially `Send + Sync`); test plugins that captured `Rc<RefCell<>>`
-/// state or pre-built `NativeFunction`s must migrate to `Arc<Mutex<>>` /
-/// builder closures.
+/// spawns the instance).
 pub trait Plugin: Send + Sync {
     /// Declare capabilities this plugin hard-requires. Called by the runtime
     /// builder BEFORE any plugin's `compile`/`register` runs. If a declared
@@ -74,25 +58,18 @@ pub trait Plugin: Send + Sync {
 
     /// One-time, runtime-level compilation. Called once after capabilities are
     /// inserted and `requires` is validated, before any instance is created.
-    /// Use it to pre-validate JS module sources, build descriptor tables, or
-    /// do any work that is identical across every instance. Defaults to a
-    /// no-op.
-    ///
-    /// Note: boa `Module`s are realm-bound (a `Module::parse` needs a
-    /// `&mut Context`), so cross-instance sharing of *parsed* modules is not
-    /// possible today — the actual parse still happens per instance in
-    /// [`register`](Self::register). `compile` is the seam for future
-    /// caching and for failing fast on bad module sources at runtime build
-    /// time.
+    /// Use it for caching / validation that is identical across every
+    /// instance. Defaults to a no-op.
     fn compile(&self, _cx: &mut CompileContext) -> Result<(), TurError> {
         Ok(())
     }
 
     /// Per-instance registration. Called once per
-    /// [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build)
-    /// into a fresh boa `Context`. Register modules, handlers, classes,
-    /// globals via `ctx.register_*()`.
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError>;
+    /// [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build).
+    /// Register subsystems, plugin state, and rut pkg rows via
+    /// `ctx.register_subsystem` / `ctx.define_plugin_state` /
+    /// `ctx.push_rut_ext`.
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError>;
 }
 
 /// Context passed to [`Plugin::compile`]. Provides read access to the
@@ -110,24 +87,20 @@ pub struct CompileContext<'a> {
 /// possible: this type is the only registration surface in existence, and it
 /// is gone.
 ///
-/// Exposes registration primitives for JS modules, boa classes, subsystems,
-/// and global properties. Each `register_*` method is self-contained: call them
-/// sequentially within `register.
-/// The consumed register-phase collectors, handed to the instance by the
-/// builder once the last plugin has registered (see
+/// Registration primitives: subsystems, per-instance plugin state, and rut
+/// pkg rows (the `tur` host-pkg extension seam). The consumed
+/// register-phase collectors are handed to the instance by the builder once
+/// the last plugin has registered (see
 /// [`PluginRegisterContext::into_parts`]): the flush-subsystem list and the
-/// plugin-state map. Installed once; no handle to either collector
-/// survives the builder.
+/// plugin-state map. Installed once; no handle to either collector survives
+/// the builder.
 pub(crate) struct RegisterParts {
     pub(crate) subsystems: Vec<Box<dyn Subsystem>>,
     pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
 }
 
-pub struct PluginRegisterContext<'a> {
-    pub(crate) boa: &'a mut Context,
-    pub(crate) loader: Rc<TurModuleLoader>,
-    pub js_ctx_value: JsValue,
-    pub(crate) js_ctx: TurInstanceContext,
+pub struct PluginRegisterContext {
+    pub(crate) js_ctx: InstanceContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
     /// Build-time collector for plugin-registered flush subsystems. Owned by
     /// this register-phase context and moved into the instance
@@ -141,84 +114,25 @@ pub struct PluginRegisterContext<'a> {
     /// pattern's twin. Owned by this register-phase context
     /// ([`define_plugin_state`](Self::define_plugin_state) fills it) and
     /// moved into the instance
-    /// ([`TurInstanceContext::install_plugin_state`]) by the builder after
+    /// ([`InstanceContext::install_plugin_state`]) by the builder after
     /// the last plugin registers. No runtime write path exists at all: the
     /// collector is consumed, not flagged.
     pub(crate) plugin_state: HashMap<TypeId, Rc<dyn Any>>,
-    /// Always-installed event bus — shared with
-    /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
-    /// (specifically `install_event_bus`) read this to wire up the JS bridge
-    /// (`eventBus.on`/`send`) and the [`EmbedderBusSubsystem`] against the same
-    /// handle that [`TurApp::event_bus`](crate::TurApp::event_bus) returns to
-    /// embedders.
-    ///
-    /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
-    pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// The engine's [`HostExecutor`] — a `Send + Sync + Clone`
     /// handle for hopping work onto the engine's host thread (for OS APIs
     /// that require it, e.g. macOS `NSPasteboard` via `arboard`). Set by
-    /// the engine when the `PluginRegisterContext` is constructed; plugins obtain a
-    /// clone via [`to_host_executor`](PluginRegisterContext::to_host_executor). Capabilities that
-    /// need host-thread access receive their own clone at construction via
-    /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder)'s
+    /// the engine when the `PluginRegisterContext` is constructed; plugins
+    /// obtain a clone via
+    /// [`to_host_executor`](PluginRegisterContext::to_host_executor).
+    /// Capabilities that need host-thread access receive their own clone at
+    /// construction via [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder)'s
     /// closure form.
     pub(crate) host_exec: HostExecutor,
 }
 
-impl<'a> PluginRegisterContext<'a> {
-    /// Register a ctx-bound native module: bridge fns that receive
-    /// `TurInstanceContext` as their first argument (`args[0]`, user args
-    /// from `args[1]`). Used for `tur:std` and similar.
-    ///
-    /// Plugins provide **fn pointers only** — per-instance state rides the
-    /// register-phase plugin-state channel
-    /// ([`Self::define_plugin_state`], read via
-    /// [`TurInstanceContext::plugin_state`](crate::core::js_runtime::TurInstanceContext::plugin_state)),
-    /// and per-object method state rides the JS object's `JsData` payload
-    /// (read off `this`). There is deliberately no closure escape hatch.
-    pub fn register_module(&mut self, specifier: &str, fns: Vec<FnEntry>, consts: Vec<ConstEntry>) {
-        let module = build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &consts);
-        self.loader.register(specifier, module);
-        tracing::info!(
-            "registered module {specifier} ({} fns, {} consts)",
-            fns.len(),
-            consts.len()
-        );
-    }
-
-    /// Register a ctx-free native module (free functions that don't need `TurInstanceContext`).
-    /// Used for `tur:net`, `tur-ext/demo-helper`, etc.
-    pub fn register_native_module(
-        &mut self,
-        specifier: &str,
-        exports: Vec<(String, NativeFunction, usize)>,
-    ) {
-        let owned: Vec<(&str, NativeFunction, usize)> = exports
-            .iter()
-            .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
-            .collect();
-        let module = build_fn_module(self.boa, &owned);
-        self.loader.register(specifier, module);
-        tracing::info!(
-            "registered native module {specifier} ({} exports)",
-            owned.len()
-        );
-    }
-
-    /// Register a boa `JsData` global class (e.g. `TextEditingController`).
-    pub fn register_class<T: Class>(&mut self) -> Result<(), JsError> {
-        self.boa.register_global_class::<T>()
-    }
-
-    /// Register a global JS property on `globalThis`.
-    pub fn register_global(&mut self, name: &str, value: JsValue) {
-        let _ = self
-            .boa
-            .register_global_property(js_string!(name), value, Attribute::all());
-    }
-
-    /// Access the shared JS context (reactive store, node tree, etc.).
-    pub fn js_ctx(&self) -> &TurInstanceContext {
+impl PluginRegisterContext {
+    /// Access the shared instance context (reactive store, node tree, etc.).
+    pub fn js_ctx(&self) -> &InstanceContext {
         &self.js_ctx
     }
 
@@ -230,16 +144,11 @@ impl<'a> PluginRegisterContext<'a> {
         self.js_ctx.capability()
     }
 
-    /// Access the boa `Context` directly (for custom registration needs).
-    pub fn boa_mut(&mut self) -> &mut Context {
-        self.boa
-    }
-
     /// Spawn a worker-side async task, handing it an
     /// [`AsyncWorkerContext`](crate::core::async_::AsyncWorkerContext) for
-    /// timers / nested spawns / paint signals. Plugins' bridge fns use this
+    /// timers / nested spawns / paint signals. Plugins' async rows use this
     /// instead of the raw scheduler. See
-    /// [`TurInstanceContext::spawn_local`](crate::core::js_runtime::TurInstanceContext::spawn_local).
+    /// [`InstanceContext::spawn_local`](crate::core::instance::InstanceContext::spawn_local).
     pub fn spawn_local<F, Fut>(&self, f: F) -> crate::core::scheduler::TaskHandle
     where
         F: FnOnce(crate::core::async_::AsyncWorkerContext) -> Fut,
@@ -250,33 +159,20 @@ impl<'a> PluginRegisterContext<'a> {
 
     /// Obtain the engine's [`HostExecutor`] — a `Send + Sync + Clone`
     /// handle for hopping work onto the engine's host thread. Plugins /
-    /// bridges / subsystems that need to run OS-API calls on the host thread (e.g.
+    /// subsystems that need to run OS-API calls on the host thread (e.g.
     /// macOS `NSPasteboard` via `arboard`) clone this and call
-    /// [`HostExecutor::run_on_host`] (sync closure, result bridged
-    /// via oneshot) or [`HostExecutor::spawn_on_host`]
-    /// (fire-and-forget).
+    /// [`HostExecutor::run_on_host`] (sync closure, result bridged via
+    /// oneshot) or [`HostExecutor::spawn_on_host`] (fire-and-forget).
     ///
     /// The hop runs on a serialized drain on the engine's host thread
     /// (safe for non-reentrant OS APIs). The engine creates the channel
     /// internally at `build()` — no embedder wiring is required.
-    ///
-    /// Capabilities (backends) that need host-thread access receive their
-    /// own clone at construction via the closure form of
-    /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder), so they
-    /// don't go through this accessor.
     pub fn to_host_executor(&self) -> HostExecutor {
         self.host_exec.clone()
     }
 
-    /// Cheap-cloned completion handle. Plugins' bridge fns capture this
-    /// inside spawned futures and call `push(closure)` to settle
-    /// JsPromises under `&mut Context` on the next flush.
-    pub fn completion_handle(&self) -> crate::core::async_::CompletionHandle {
-        self.js_ctx.completion_handle()
-    }
-
     /// The engine-wide mutation queue (shared with `flush_pending_mutations`).
-    /// Plugins that defer JS callbacks (e.g. animation `onTick`/`onEnd`) stash
+    /// Plugins that defer callbacks (e.g. animation `onTick`/`onEnd`) stash
     /// this handle at registration time and push onto the queue when their
     /// subsystem ticks.
     pub fn mutation_queue(&self) -> Rc<RefCell<PendingMutationInvocationQueue>> {
@@ -284,14 +180,10 @@ impl<'a> PluginRegisterContext<'a> {
     }
 
     /// The reactive atom minter + writer face. Plugins mint atoms from Rust
-    /// via this face (`decl_source` / `decl_derive` / `decl_mutate` take
-    /// seeds; `build_derive` / `build_mutate` take Rust closures), then
-    /// expose them to JS as bridge-fn return values, global properties, or
-    /// module consts. JS reads/writes the atoms through the unchanged
-    /// `tur:core` bridge (`get` / `set`), so the JS side cannot tell
-    /// whether an atom was minted by Rust or JS. `build_derive` /
-    /// `build_mutate` closures skip the `{get, set}` JsObject round-trip,
-    /// receiving typed faces directly.
+    /// via this face (`decl_source` takes a seed value; `build_derive` /
+    /// `build_mutate` take Rust closures) and bind them into views / rut
+    /// rows. The closures receive typed faces directly — the
+    /// auto-dependency tracker works identically.
     ///
     /// Rust-minted atoms materialize per store like any atom. A plugin that
     /// publishes engine environment truth should follow the
@@ -303,12 +195,11 @@ impl<'a> PluginRegisterContext<'a> {
     ///
     /// ```text
     /// let bridge = ctx.reactive();
-    /// let backing: Source<JsValue> = bridge.decl_source(initial);
+    /// let backing: Source<Value> = bridge.decl_source(initial);
     /// let engine_read = bridge.read_only();
-    /// let handle = bridge.build_derive(move |_read, boa| {
-    ///     Ok(engine_read.read(Readable::from(backing), boa))
+    /// let handle = bridge.build_derive(move |_read| {
+    ///     Ok(engine_read.read(Readable::from(backing)))
     /// });
-    /// ctx.register_global("foo$", handle.into_js(ctx.boa_mut()));
     /// // in the subsystem tick (no tree chase — works pre- and post-mount):
     /// //   bridge.set_source(backing, value)
     /// ```
@@ -316,12 +207,17 @@ impl<'a> PluginRegisterContext<'a> {
         self.js_ctx.reactive()
     }
 
-    /// The engine's shared clock (set via
-    /// [`TurRuntimeBuilder::clock`](crate::TurRuntimeBuilder::clock)). Plugins
-    /// that own time-driven subsystems (animation, audio, etc.) stash this
-    /// handle at registration time and query `clock.now()` during their tick.
+    /// The engine's shared clock. Plugins that own time-driven subsystems
+    /// (animation, fling inertia, …) stash this handle at registration time
+    /// and query `clock.now_millis()` during their tick.
     pub fn clock(&self) -> Rc<dyn Clock> {
         self.app.borrow().frame_env.clock()
+    }
+
+    /// The instance context — for plugin rails that hang per-instance
+    /// state off it.
+    pub fn instance(&self) -> &InstanceContext {
+        &self.js_ctx
     }
 
     /// The build-time viewport (logical CSS pixels) — the size
@@ -346,21 +242,15 @@ impl<'a> PluginRegisterContext<'a> {
         self.subsystems.push(sub);
     }
 
+    /// Push a rut pkg extension — plugin-owned rows for the `tur` host pkg
+    /// (decl rows at compile time, bodies at boot). See
+    /// [`crate::core::rut_runtime::RutPkgExt`].
+    pub fn push_rut_ext(&self, ext: crate::core::rut_runtime::RutPkgExt) {
+        self.js_ctx.rut_pkg_exts.borrow_mut().push(ext);
+    }
+
     /// Define a per-instance **plugin state** slot — typed state the plugin
-    /// owns, readable at runtime by ctx-bound bridge fns via
-    /// [`TurInstanceContext::plugin_state`] (reached through
-    /// `extract_js_ctx(args)`).
-    ///
-    /// This is the channel that lets a stateful bridge be a plain
-    /// [`FnEntry`](crate::core::js_runtime::helpers::FnEntry) fn pointer
-    /// (state via `args[0]`) instead of an
-    /// `unsafe NativeFunction::from_closure` capture: mint the shared state
-    /// here, hand clones to your subsystem / elements, and read the slot
-    /// back inside the bridge fns. Per-**object** method state (not
-    /// per-instance) instead rides the JS object's `JsData` payload and is
-    /// read off `this` (the store `{get,set}` / `Task.cancel` /
-    /// `eventBus.on/send` pattern — clone out of the payload before
-    /// running JS).
+    /// owns, readable at runtime via [`InstanceContext::plugin_state`].
     ///
     /// Register-phase only — the collector is consumed by the builder
     /// ([`into_parts`](Self::into_parts)) once the last plugin registers
@@ -387,38 +277,6 @@ impl<'a> PluginRegisterContext<'a> {
             subsystems: self.subsystems,
             plugin_state: self.plugin_state,
         }
-    }
-
-    /// The always-installed event bus handle (shared with
-    /// [`TurApp::event_bus`](crate::TurApp::event_bus)). Plugins that need to
-    /// wire up host↔JS byte traffic (specifically [`install_event_bus`])
-    /// read this and clone the `Rc` for their subsystem / bridge captures.
-    ///
-    /// [`install_event_bus`]: crate::core::event_bus::install_event_bus
-    pub fn event_bus(&self) -> Rc<crate::core::event_bus::EventBus> {
-        self.event_bus.clone()
-    }
-
-    /// Register a JS source module under a bare specifier (e.g.
-    /// `tur:animation`). The source is parsed into a boa `Module` and
-    /// stored in the loader; consumer code can then
-    /// `import { ... } from "<specifier>"` and boa resolves it to this module.
-    ///
-    /// Used by plugins that ship their own JS alongside the Rust bridge fns
-    /// (e.g. `tur-animation` ships an `index.js` defining `AnimatedContainer`
-    /// etc. on top of native bridge fns registered via
-    /// [`register_module`](Self::register_module)).
-    pub fn register_js_module(
-        &mut self,
-        specifier: &str,
-        source: &str,
-        path: &Path,
-    ) -> Result<(), TurError> {
-        let module = Module::parse(Source::from_bytes(source).with_path(path), None, self.boa)
-            .map_err(|e| TurError::Other(format!("failed to parse JS module {specifier}: {e}")))?;
-        self.loader.register(specifier, module);
-        tracing::info!("registered JS module {specifier} ({} bytes)", source.len());
-        Ok(())
     }
 }
 

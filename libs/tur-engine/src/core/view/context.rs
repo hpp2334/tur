@@ -1,28 +1,23 @@
-use boa_engine::{Context, JsValue};
-
-use crate::core::edgy::reactive::{ReactiveReadStore, Readable, Store, SubscriberId};
+use crate::core::edgy::reactive::{Readable, ReactiveReadStore, Store, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree};
-use crate::core::js_runtime::TurInstanceContext;
+use crate::core::instance::InstanceContext;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::build_cx::controller_handles;
 use crate::core::view::{View, ViewCx};
 
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
-///
-/// The boa `Context` is passed alongside (not stored) so callers can reborrow
-/// freely while holding `&mut SharedViewCx`.
 pub struct SharedViewCx {
-    js_ctx: TurInstanceContext,
+    js_ctx: InstanceContext,
 }
 
 impl SharedViewCx {
-    pub fn new(js_ctx: TurInstanceContext) -> Self {
+    pub fn new(js_ctx: InstanceContext) -> Self {
         SharedViewCx { js_ctx }
     }
 
-    pub fn js_ctx(&self) -> &TurInstanceContext {
+    pub fn js_ctx(&self) -> &InstanceContext {
         &self.js_ctx
     }
 
@@ -41,9 +36,10 @@ impl SharedViewCx {
         self.mounted_store().read_only()
     }
 
-    /// Read an atom's current value as a raw `JsValue` (untracked).
-    pub fn read_atom_raw<T>(&self, readable: Readable<T>, boa: &mut Context) -> JsValue {
-        self.store_read_only().read(readable, boa)
+    /// Read an atom's current value as a native [`Value`] (untracked).
+    pub fn read_atom_value<T>(&mut self, readable: Readable<T>) -> crate::core::edgy::Value {
+        let store = self.store_read_only();
+        store.read(readable)
     }
 
     /// Create a `SubscribeCx` scoped to a fragment, so the fragment can
@@ -54,21 +50,21 @@ impl SharedViewCx {
         SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
     }
 
-    /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
-    /// atom is lazily read from the store (untracked).  Used during the effect
-    /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
+    /// Resolve a `Val<T>` to its current `T` value. For reactive vals the
+    /// atom is lazily read from the store (untracked) as a native `Value`
+    /// and decoded via `FromValue`. Used during the effect phase; layout
+    /// uses `LayoutContext::read_val` (with subscriber tracking).
     /// Declaration ids materialize into the mounted store.
-    pub fn read_val<T: crate::core::view::FromJs + Clone + 'static>(
-        &self,
+    pub fn read_val<T: crate::core::edgy::FromValue + Clone + 'static>(
+        &mut self,
         val: &crate::core::view::Val<T>,
-        boa: &mut Context,
     ) -> Option<T> {
         use crate::core::view::Val;
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let js = self.store_read_only().read(*readable, boa);
-                T::from_js(&js).ok()
+                let value = self.read_atom_value(*readable);
+                T::from_value(&value).ok()
             }
         }
     }
@@ -81,8 +77,9 @@ impl SharedViewCx {
     }
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
-    pub fn insert_node(&self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
-        let node = ElementObject::new(id, element, boa);
+    /// Realm-free: the node's JS-visible handle materializes lazily.
+    pub fn insert_node(&self, id: ElementNodeId, element: AnyElement) {
+        let node = ElementObject::new(id, element);
         self.js_ctx.element_tree.borrow_mut().insert_element(node);
     }
 
@@ -167,13 +164,8 @@ impl SharedViewCx {
     }
 
     /// Build a child view under `parent` and return the resulting node id.
-    pub fn build_child<Cx: ViewCx>(
-        cx: &mut Cx,
-        view: &dyn View,
-        boa: &mut Context,
-        parent: NodeId,
-    ) -> NodeId {
-        view.build(cx, boa, parent)
+    pub fn build_child<Cx: ViewCx>(cx: &mut Cx, view: &dyn View, parent: NodeId) -> NodeId {
+        view.build(cx, parent)
     }
 
     /// Mark a node dirty (needs re-layout + re-paint).
@@ -204,12 +196,12 @@ impl SharedViewCx {
             .map(|n| n.computed_layout)
     }
 
-    /// Resolve pending focus/blur notifications recorded by `FocusManager`.
-    /// Phase 1 enqueues JS mutations (on_focus / on_blur); Phase 2 fires
-    /// Rust-level `on_focus_changed` lifecycle callbacks on each affected
-    /// element, giving them a chance to spawn/cancel async tasks tied to
-    /// focus state (e.g. caret blink).
-    pub fn flush_focus_notifications(&mut self, boa: &mut Context) {
+    /// Resolve pending focus/blur notifications recorded by `FocusManager`:
+    /// enqueue the focus/blur mutations, then fire the Rust-level
+    /// `on_focus_changed` lifecycle callbacks on each affected element,
+    /// giving them a chance to spawn/cancel async tasks tied to focus state
+    /// (e.g. caret blink).
+    pub fn flush_focus_notifications(&mut self) {
         let focus_changes = {
             let tree = self.js_ctx.element_tree.borrow();
             let mut focus = self.js_ctx.focus_manager.borrow_mut();
@@ -225,7 +217,7 @@ impl SharedViewCx {
                 tree.get_element_mut(*id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
-                elem.run_on_focus_changed(*focused, self, boa);
+                elem.run_on_focus_changed(*focused, self);
             }
             if let Some(elem) = element {
                 let mut tree = self.js_ctx.element_tree.borrow_mut();
@@ -240,16 +232,14 @@ impl SharedViewCx {
 // ---------------------------------------------------------------------------
 // ViewCx for SharedViewCx — delegates to the inherent helpers above. This is the
 // non-layout build context (interior mutability via the shared `NodeTree`).
-// A layout-backed adapter implements the same trait against a direct
-// `&mut NodeTreeData` borrow (added in a later phase).
 // ---------------------------------------------------------------------------
 
 impl ViewCx for SharedViewCx {
     fn alloc_node(&mut self) -> NodeId {
         SharedViewCx::alloc_node(self)
     }
-    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
-        SharedViewCx::insert_node(self, id, element, boa);
+    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement) {
+        SharedViewCx::insert_node(self, id, element);
     }
     fn insert_fragment(&mut self, host: FragmentHost) {
         SharedViewCx::insert_fragment(self, host);

@@ -1,0 +1,8 @@
+// text-empty-content: empty text content measures to zero.
+use tur::{ mount };
+use tur_kit::{ Text };
+
+
+entry fn start() {
+    mount(Text.builder().text("").build());
+}

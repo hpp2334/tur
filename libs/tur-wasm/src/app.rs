@@ -1,9 +1,9 @@
 use crate::fonts::WasmFontLoader;
-use boa_engine::context::time::{Clock, JsInstant};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
 use tur_engine::TurApp;
+use tur_engine::core::clock::Clock;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerInput};
@@ -17,31 +17,24 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 
-/// Engine `Clock` for wasm. boa's `StdClock` panics on
-/// `wasm32-unknown-unknown` (`SystemTime::now()` is unimplemented), and
-/// `std::time::Instant::now()` is unsupported too, so this reads
-/// `Date.now()` — the same wall-clock source the old frame loop used for its
-/// per-frame delta. Production thus gets live real time with no manual clock
-/// forwarding. (Not strictly monotonic across system-clock adjustments, but
-/// the engine's animation/timer math derives durations from deltas, which is
+/// Engine `Clock` for wasm. `SystemTime::now()` is unimplemented on
+/// `wasm32-unknown-unknown`, and `std::time::Instant::now()` is unsupported
+/// too, so this reads `Date.now()` / `performance.now()` — the same
+/// wall-clock source the old frame loop used for its per-frame delta.
+/// Production thus gets live real time with no manual clock forwarding.
+/// (Not strictly monotonic across system-clock adjustments, but the
+/// engine's animation/timer math derives durations from deltas, which is
 /// robust to the rare jump.)
 #[derive(Default)]
 struct WasmClock;
 
 impl Clock for WasmClock {
-    fn now(&self) -> JsInstant {
+    fn now_millis(&self) -> f64 {
         // Prefer `performance.now()` — monotonic AND sub-millisecond (the
         // frame-stats probe measures µs-scale phase times, which
         // `Date.now()`'s whole-ms resolution cannot see). Available on both
         // the window and worker global scopes; `Date.now()` is the fallback.
-        let ms = performance_now().unwrap_or_else(js_sys::Date::now);
-        let secs = (ms / 1000.0) as u64;
-        let nanos = ((ms % 1000.0) * 1_000_000.0) as u32;
-        JsInstant::new(secs, nanos)
-    }
-
-    fn system_time_millis(&self) -> i64 {
-        js_sys::Date::now() as i64
+        performance_now().unwrap_or_else(js_sys::Date::now)
     }
 }
 
@@ -57,6 +50,10 @@ fn performance_now() -> Option<f64> {
 
 struct WasmState {
     app: Rc<TurApp>,
+    /// The shell's vsync source (same instance the engine subscribed at
+    /// construction) — retained so RPC bridges can nudge the looper (see
+    /// [`crate::scheduler::WasmVsyncSource::nudge`]).
+    vsync: Rc<crate::scheduler::WasmVsyncSource>,
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
@@ -531,10 +528,11 @@ impl WasmApp {
         // TextInputState, so a shell installed after build() could miss
         // it; the engine likewise takes the vsync source once, here.
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
+        let vsync = crate::scheduler::WasmVsyncSource::new();
         let wasm_shell = WasmShell {
             canvas: canvas.clone(),
             state_weak: state_weak.clone(),
-            vsync: Some(crate::scheduler::WasmVsyncSource::new()),
+            vsync: Some(vsync.clone()),
         };
         let (app, looper) = runtime
             .runtime
@@ -1056,6 +1054,7 @@ impl WasmApp {
 
         let wasm_state = WasmState {
             app,
+            vsync,
             _canvas: canvas,
             textarea,
             is_composing: Cell::new(false),
@@ -1104,12 +1103,12 @@ impl WasmApp {
         Ok(WasmApp { state: state_clone })
     }
 
-    /// Evaluate `js_source` as an ES module (supports real
-    /// `import { ... } from "tur:..."`, resolved by the engine's module
-    /// loader), then start the frame loop. Used by the website to load the
-    /// playground-view bundle. The module must export `start()` (the
-    /// module lifecycle contract).
-    pub async fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
+    /// Compile + boot `source` as a **rut** module (the boa-replacement
+    /// scripting rail) and start the frame loop. The module must export
+    /// `entry fn start()` (the module lifecycle contract). Mirrors
+    /// [`Self::load_and_run_module`] on the engine's `load_rut_module`
+    /// RPC — zero JS is parsed or evaluated.
+    pub async fn load_and_run_rut_module(&self, source: &str) -> Result<(), JsValue> {
         let app = {
             let guard = self.state.borrow();
             let Some(s) = guard.as_ref() else {
@@ -1117,35 +1116,12 @@ impl WasmApp {
             };
             s.app.clone()
         };
-        app.load_module(js_source)
+        app.load_rut_module(source)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        // The worker self-paints on load (dirty state → coalesced self-wake);
-        // no embedder paint request needed.
         Ok(())
     }
 
-    /// Evaluate a JS expression in the engine realm (the boa world is a
-    /// separate JS universe from the page) and resolve to its string result —
-    /// the shared dev-tool transport (JSON strings are the simplest
-    /// cross-realm shape). The returned Promise rejects never: an eval error
-    /// surfaces as the engine's error display string, like the test-only
-    /// `eval_js` RPC it wraps.
-    pub fn eval_js_promise(&self, source: String) -> js_sys::Promise {
-        // Bail out synchronously if no state is mounted (avoids borrowing
-        // the RefCell across the async boundary).
-        let app = {
-            let guard = self.state.borrow();
-            match guard.as_ref() {
-                Some(s) => s.app.clone(),
-                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
-            }
-        };
-        wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.eval_js(&source).await;
-            Ok(JsValue::from_str(&s))
-        })
-    }
 
     /// JSON snapshot of the root node, or `""` if no tree is mounted.
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
@@ -1154,12 +1130,102 @@ impl WasmApp {
     /// `wasm_bindgen_futures::future_to_promise` — the JS caller `await`s
     /// the returned `Promise`.
     pub fn element_tree(&self) -> js_sys::Promise {
-        self.eval_js_promise("JSON.stringify(turDevTool.elementTree())".to_string())
+        let (app, vsync) = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => (s.app.clone(), s.vsync.clone()),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
+            }
+        };
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_element_tree()).await;
+            Ok(JsValue::from_str(&s))
+        })
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
     /// are returned as bare `{id}` handles). Returns `""` if not found.
+    /// JSON frame-stats snapshot — the render-performance probe
+    /// (`turDevTool.frameStats()`):
+    /// `{ flushes, paintedFrames, totals, last, lastHost, hostTimingEnabled }`.
+    pub fn frame_stats(&self) -> js_sys::Promise {
+        let (app, vsync) = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => (s.app.clone(), s.vsync.clone()),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
+            }
+        };
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_frame_stats()).await;
+            Ok(JsValue::from_str(&s))
+        })
+    }
+
+    /// Toggle host-side render-commit timing collection
+    /// (`turDevTool.setHostFrameTiming(...)`).
+    pub fn set_host_frame_timing(&self, enabled: bool) -> js_sys::Promise {
+        let app = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => s.app.clone(),
+                None => return js_sys::Promise::resolve(&JsValue::undefined()),
+            }
+        };
+        app.set_host_frame_timing(enabled);
+        js_sys::Promise::resolve(&JsValue::undefined())
+    }
+
+    /// Internal: the dev-tool element snapshot transport (the JSON snapshot
+    /// methods above).
     pub fn get_element(&self, id: u32) -> js_sys::Promise {
-        self.eval_js_promise(format!("JSON.stringify(turDevTool.getElement({id}))"))
+        let (app, vsync) = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => (s.app.clone(), s.vsync.clone()),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("null")),
+            }
+        };
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = rpc_with_looper_nudge(&vsync, app.dev_tool_get_element(id as u64)).await;
+            Ok(JsValue::from_str(&s))
+        })
+    }
+}
+
+/// Await a worker RPC reply, nudging the main-thread looper so the reply
+/// (shipped as a `HostMsg` under the host-drain transport — see
+/// `WorkerExecutor::wakes_host_tasks_cross_thread`) is drained even on a
+/// quiescent page, where rAF is disarmed and the looper parks on
+/// `select(vsync, host_rx)` with a waker that can't fire cross-thread.
+/// The nudges ride `setTimeout` (0 ms + 60 ms): main-thread events, so
+/// the looper re-polls after the reply has had time to land.
+async fn rpc_with_looper_nudge<F: std::future::Future<Output = String>>(
+    vsync: &Rc<crate::scheduler::WasmVsyncSource>,
+    fut: F,
+) -> String {
+    schedule_looper_nudges(vsync);
+    fut.await
+}
+
+/// Fire two deferred vsync nudges (setTimeout 0 + 60 ms). Dev-tool probes
+/// are rare, so the per-nudge `Closure` leak is bounded and harmless.
+fn schedule_looper_nudges(vsync: &Rc<crate::scheduler::WasmVsyncSource>) {
+    use wasm_bindgen::JsCast;
+    for delay_ms in [0, 60] {
+        let vsync = vsync.clone();
+        let cb = wasm_bindgen::closure::Closure::<dyn Fn()>::new(move || vsync.nudge());
+        let scheduled = web_sys::window()
+            .and_then(|w| {
+                w.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    delay_ms,
+                )
+                .ok()
+            })
+            .is_some();
+        if scheduled {
+            cb.forget();
+        }
     }
 }

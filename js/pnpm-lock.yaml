@@ -19,38 +19,7 @@ importers:
         version: 0.21.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@microsoft/api-extractor@7.58.2(@types/node@25.6.0))(core-js@3.49.0)(typescript@5.9.3)
       '@rspack/cli':
         specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
-      '@rspack/core':
-        specifier: ^1.2.0
-        version: 1.7.11(@swc/helpers@0.5.21)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  ../demo/playground-view:
-    dependencies:
-      '@tur-ng/animation':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-animation
-      '@tur-ng/clipboard':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-clipboard
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-core
-      '@tur-ng/filepicker':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-filepicker
-      '@tur-ng/net':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-net
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../../js/packages/tur-std
-    devDependencies:
-      '@rspack/cli':
-        specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)
       '@rspack/core':
         specifier: ^1.2.0
         version: 1.7.11(@swc/helpers@0.5.21)
@@ -62,7 +31,7 @@ importers:
     devDependencies:
       '@rspack/cli':
         specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)
       '@rspack/core':
         specifier: ^1.2.0
         version: 1.7.11(@swc/helpers@0.5.21)
@@ -70,69 +39,7 @@ importers:
         specifier: ^10.0.3
         version: 10.0.3
 
-  packages/tur-animation:
-    dependencies:
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../tur-core
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/tur-clipboard:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-core: {}
-
-  packages/tur-filepicker:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-net:
-    dependencies:
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-
-  packages/tur-std:
-    dependencies:
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../tur-core
-
-  packages/tur-test-cases:
-    dependencies:
-      '@tur-ng/animation':
-        specifier: workspace:*
-        version: link:../tur-animation
-      '@tur-ng/core':
-        specifier: workspace:*
-        version: link:../tur-core
-      '@tur-ng/net':
-        specifier: workspace:*
-        version: link:../tur-net
-      '@tur-ng/std':
-        specifier: workspace:*
-        version: link:../tur-std
-    devDependencies:
-      '@rspack/cli':
-        specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
-      '@rspack/core':
-        specifier: ^1.2.0
-        version: 1.7.11(@swc/helpers@0.5.21)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
+  packages/tur-test-cases: {}
 
 packages:
 
@@ -2119,11 +2026,11 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@rspack/cli@1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)':
+  '@rspack/cli@1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)':
     dependencies:
       '@discoveryjs/json-ext': 0.5.7
       '@rspack/core': 1.7.11(@swc/helpers@0.5.21)
-      '@rspack/dev-server': 1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+      '@rspack/dev-server': 1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)
       exit-hook: 4.0.0
       webpack-bundle-analyzer: 4.10.2
     transitivePeerDependencies:
@@ -2153,13 +2060,13 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@rspack/dev-server@1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)':
+  '@rspack/dev-server@1.1.5(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)':
     dependencies:
       '@rspack/core': 1.7.11(@swc/helpers@0.5.21)
       chokidar: 3.6.0
-      http-proxy-middleware: 2.0.9(@types/express@4.17.25)
+      http-proxy-middleware: 2.0.9(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))
       p-retry: 6.2.1
-      webpack-dev-server: 5.2.2(tslib@2.8.1)
+      webpack-dev-server: 5.2.2(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1)
       ws: 8.20.0
     transitivePeerDependencies:
       - '@types/express'
@@ -2369,11 +2276,11 @@ snapshots:
 
   binary-extensions@2.3.0: {}
 
-  body-parser@1.20.4:
+  body-parser@1.20.4(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       depd: 2.0.0
       destroy: 1.2.0
       http-errors: 2.0.1
@@ -2443,11 +2350,11 @@ snapshots:
     dependencies:
       mime-db: 1.54.0
 
-  compression@1.8.1:
+  compression@1.8.1(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       compressible: 2.0.18
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       negotiator: 0.6.4
       on-headers: 1.1.0
       safe-buffer: 5.2.1
@@ -2483,13 +2390,17 @@ snapshots:
 
   debounce@1.2.1: {}
 
-  debug@2.6.9:
+  debug@2.6.9(supports-color@10.2.2):
     dependencies:
       ms: 2.0.0
+    optionalDependencies:
+      supports-color: 10.2.2
 
-  debug@4.4.3:
+  debug@4.4.3(supports-color@10.2.2):
     dependencies:
       ms: 2.1.3
+    optionalDependencies:
+      supports-color: 10.2.2
 
   default-browser-id@5.0.1: {}
 
@@ -2548,21 +2459,21 @@ snapshots:
 
   exit-hook@4.0.0: {}
 
-  express@4.22.1:
+  express@4.22.1(supports-color@10.2.2):
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.4
+      body-parser: 1.20.4(supports-color@10.2.2)
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.0.7
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       depd: 2.0.0
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 1.3.2
+      finalhandler: 1.3.2(supports-color@10.2.2)
       fresh: 0.5.2
       http-errors: 2.0.1
       merge-descriptors: 1.0.3
@@ -2574,8 +2485,8 @@ snapshots:
       qs: 6.14.2
       range-parser: 1.2.1
       safe-buffer: 5.2.1
-      send: 0.19.2
-      serve-static: 1.16.3
+      send: 0.19.2(supports-color@10.2.2)
+      serve-static: 1.16.3(supports-color@10.2.2)
       setprototypeof: 1.2.0
       statuses: 2.0.2
       type-is: 1.6.18
@@ -2596,9 +2507,9 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  finalhandler@1.3.2:
+  finalhandler@1.3.2(supports-color@10.2.2):
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -2608,7 +2519,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  follow-redirects@1.15.11: {}
+  follow-redirects@1.15.11(debug@4.4.3(supports-color@10.2.2)):
+    optionalDependencies:
+      debug: 4.4.3(supports-color@10.2.2)
 
   forwarded@0.2.0: {}
 
@@ -2702,10 +2615,10 @@ snapshots:
 
   http-parser-js@0.5.10: {}
 
-  http-proxy-middleware@2.0.9(@types/express@4.17.25):
+  http-proxy-middleware@2.0.9(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2)):
     dependencies:
       '@types/http-proxy': 1.17.17
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.4.3(supports-color@10.2.2))
       is-glob: 4.0.3
       is-plain-obj: 3.0.0
       micromatch: 4.0.8
@@ -2714,10 +2627,10 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  http-proxy@1.18.1:
+  http-proxy@1.18.1(debug@4.4.3(supports-color@10.2.2)):
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11
+      follow-redirects: 1.15.11(debug@4.4.3(supports-color@10.2.2))
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -2984,9 +2897,9 @@ snapshots:
     dependencies:
       lru-cache: 6.0.0
 
-  send@0.19.2:
+  send@0.19.2(supports-color@10.2.2):
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       depd: 2.0.0
       destroy: 1.2.0
       encodeurl: 2.0.0
@@ -3002,11 +2915,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-index@1.9.2:
+  serve-index@1.9.2(supports-color@10.2.2):
     dependencies:
       accepts: 1.3.8
       batch: 0.6.1
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@10.2.2)
       escape-html: 1.0.3
       http-errors: 1.8.1
       mime-types: 2.1.35
@@ -3014,12 +2927,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@1.16.3:
+  serve-static@1.16.3(supports-color@10.2.2):
     dependencies:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 0.19.2
+      send: 0.19.2(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -3069,9 +2982,9 @@ snapshots:
 
   source-map@0.6.1: {}
 
-  spdy-transport@3.0.0:
+  spdy-transport@3.0.0(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       detect-node: 2.1.0
       hpack.js: 2.1.6
       obuf: 1.1.2
@@ -3080,13 +2993,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  spdy@4.0.2:
+  spdy@4.0.2(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       handle-thing: 2.0.1
       http-deceiver: 1.2.7
       select-hose: 2.0.0
-      spdy-transport: 3.0.0
+      spdy-transport: 3.0.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -3205,7 +3118,7 @@ snapshots:
     transitivePeerDependencies:
       - tslib
 
-  webpack-dev-server@5.2.2(tslib@2.8.1):
+  webpack-dev-server@5.2.2(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)(tslib@2.8.1):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
@@ -3219,20 +3132,20 @@ snapshots:
       bonjour-service: 1.3.0
       chokidar: 3.6.0
       colorette: 2.0.20
-      compression: 1.8.1
+      compression: 1.8.1(supports-color@10.2.2)
       connect-history-api-fallback: 2.0.0
-      express: 4.22.1
+      express: 4.22.1(supports-color@10.2.2)
       graceful-fs: 4.2.11
-      http-proxy-middleware: 2.0.9(@types/express@4.17.25)
+      http-proxy-middleware: 2.0.9(@types/express@4.17.25)(debug@4.4.3(supports-color@10.2.2))
       ipaddr.js: 2.3.0
       launch-editor: 2.13.2
       open: 10.2.0
       p-retry: 6.2.1
       schema-utils: 4.3.3
       selfsigned: 2.4.1
-      serve-index: 1.9.2
+      serve-index: 1.9.2(supports-color@10.2.2)
       sockjs: 0.3.24
-      spdy: 4.0.2
+      spdy: 4.0.2(supports-color@10.2.2)
       webpack-dev-middleware: 7.4.5(tslib@2.8.1)
       ws: 8.20.0
     transitivePeerDependencies:

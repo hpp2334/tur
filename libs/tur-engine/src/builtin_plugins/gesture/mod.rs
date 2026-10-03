@@ -8,7 +8,7 @@
 //!   pointer moves; cursor resolution still happens in the paint pass.
 
 pub(in crate::builtin_plugins) mod gesture_handler;
-pub(in crate::builtin_plugins) mod mouse_region;
+pub mod mouse_region;
 pub(in crate::builtin_plugins) mod pointer_interact;
 pub(in crate::builtin_plugins) mod pointer_region_handler;
 pub(in crate::builtin_plugins) mod pointer_region_tracker;
@@ -17,22 +17,22 @@ pub(in crate::builtin_plugins) mod pointer_region_tracker;
 // those tests to use JS+dev-tool queries) constructs these element types
 // directly. After Phase H, this re-export goes away.
 pub use gesture_handler::GestureSubsystem;
+pub(crate) mod rut_rows;
+
 pub use mouse_region::{MouseRegionElement, MouseRegionView, PointerRegionEvent};
-pub use pointer_interact::{PointerInteractElement, PointerInteractView};
+pub use pointer_interact::{PointerInteractElement, PointerInteractEvent, PointerInteractView};
 pub use pointer_region_handler::PointerSubsystem;
 
-use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
 /// Install the gesture plugin (`MouseRegion`, `PointerInteract`) and
-/// register `GestureSubsystem` + `PointerSubsystem`. Returns the JS factory
-/// fns to be merged into `tur:std` by the orchestrator.
-pub fn install_gesture(ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
+/// register `GestureSubsystem` + `PointerSubsystem`.
+pub fn install_gesture(ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
+    // The gesture families' `tur` rows (the kit wraps them):
+    // PointerInteract / MouseRegion / Focusable.
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     ctx.register_subsystem(Box::new(gesture_handler::GestureSubsystem::new()));
     ctx.register_subsystem(Box::new(pointer_region_handler::PointerSubsystem::new()));
-    let mut v: Vec<FnEntry> = Vec::new();
-    v.extend(mouse_region::bridge::fns());
-    v.extend(pointer_interact::bridge::fns());
-    Ok(v)
+    Ok(())
 }

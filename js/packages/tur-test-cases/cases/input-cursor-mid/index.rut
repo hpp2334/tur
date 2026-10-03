@@ -1,0 +1,17 @@
+// input-cursor-mid: the same shape as input-typing (the cursor-mid-tick
+// seam is a no-op probe on the rut side too).
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Container, Input };
+
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let mut outer = Container.builder();
+    outer.child(Input.builder().controller(ctrl).undo(undo).width_height(200.0, 30.0).build());
+    mount(outer.build());
+}
+
+// The `__setCursorMidTick` seam's rut twin: a deliberate no-op.
+entry fn set_cursor_mid_tick(_a: u64, _b: f64) {
+}

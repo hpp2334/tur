@@ -1,0 +1,35 @@
+// lazy-grid-gallery: a header row above a virtualized gallery grid in a
+// column.
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Column, Container, Expanded, LazyGrid, Text };
+
+
+entry fn cell(i: u64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(0.0, 0.0);
+    b.color(0x1E293BFF);
+    let mut label = Text.builder();
+
+    label.text(f"tile {i}");
+    label.font_size(12.0);
+    b.child(label.build());
+    return b.build();
+}
+
+entry fn start() {
+    let count = rs_source_f64();
+    rs_set_f64(count, 120.0);
+    let mut col = Column.builder();
+    let mut header = Container.builder();
+    header.width_height(0.0, 40.0);
+    header.color(0x0F172AFF);
+    let mut title = Text.builder();
+
+    title.text("Gallery");
+    title.font_size(16.0);
+    header.child(title.build());
+    col.child(header.build());
+    let grid = LazyGrid.builder().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).build();
+    col.child(Expanded.builder().flex(1.0).child(grid).build());
+    mount(col.build());
+}

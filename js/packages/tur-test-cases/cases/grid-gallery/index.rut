@@ -1,0 +1,29 @@
+// grid-gallery: a header + scrollable tile grid (the hover-cursor demo
+// surface).
+use tur::{ CROSS_ALIGN_CENTER, CURSOR_POINTER, mount };
+use tur_kit::{ Column, Container, Expanded, MouseRegion, Row, SizedBox, Text };
+
+
+entry fn tile(i: u64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(100.0, 100.0);
+    b.color(0x1E293BFF);
+    let mut label = Text.builder();
+
+    label.text(f"tile {i}");
+    label.font_size(12.0);
+    b.child(label.build());
+    return MouseRegion.builder().cursor(CURSOR_POINTER).behavior(0).child(b.build()).build();
+}
+
+entry fn start() {
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_CENTER);
+    let mut row = Row.builder();
+    row.child(tile(0));
+    row.child(tile(1));
+    row.child(tile(2));
+    col.child(SizedBox.builder(400.0, 40.0).child(Container.builder().build()).build());
+    col.child(row.build());
+    mount(Expanded.builder().flex(1.0).child(col.build()).build());
+}

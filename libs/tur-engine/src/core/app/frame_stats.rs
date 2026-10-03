@@ -71,9 +71,9 @@ pub fn estimate_batch_bytes(commands: usize, ops: usize) -> u64 {
 /// wasm32-unknown-unknown**: calling it panics
 /// ("time not implemented on this platform"), which took down the worker
 /// the first time a frame-stats flush ran on web. The engine clock is
-/// injected everywhere (boa uses the same source), so the probe rides it.
-pub(crate) fn clock_now_us(clock: &dyn boa_engine::context::time::Clock) -> u64 {
-    (clock.now().nanos_since_epoch() / 1_000) as u64
+/// injected everywhere, so the probe rides it.
+pub(crate) fn clock_now_us(clock: &dyn crate::core::clock::Clock) -> u64 {
+    (clock.now_millis() * 1_000.0) as u64
 }
 
 /// Host-side render-commit timings for one painted frame, pushed back via

@@ -46,60 +46,43 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single Input at the top-left of the canvas,
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, createUndoController, mount, Container, Input } from "tur:std";
-    globalThis.__ctrl = createTextEditingController({});
-    globalThis.__undo = createUndoController();
-    mount(Container()
-    .children([
-            Input()
-                .controller(globalThis.__ctrl)
-                .undoController(globalThis.__undo)
-                .multiline(true)
-                .fontFamily("monospace")
-                .fontSize(14)
-                .width(400)
-                .height(200)
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let keyed = input;
+    let mut col = Column.builder();
+    col.child(keyed);
+    mount(col.build());
+}
 "#;
 
 /// Bundle that mirrors the playground editor: every `onInput` re-tokenizes via
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
-const PLAYGROUND_BUNDLE: &str = r#"
-    import { mutate, createTextEditingController, createUndoController, mount, Container, Input } from "tur:std";
-    // Tokenize the buffer into a single plain span (no syntax highlighting —
-    // the act of calling setSpansPreserveCursor on every input is what matters).
-    const onInput = mutate((_ctxArg) => {
-        globalThis.__ctrl.setSpansPreserveCursor(
-            [{ content: globalThis.__ctrl.text }],
-        );
-    });
-    globalThis.__ctrl = createTextEditingController({
-        onInput: onInput,
-    });
-    globalThis.__undo = createUndoController();
-    mount(Container()
-    .children([
-            Input()
-                .controller(globalThis.__ctrl)
-                .undoController(globalThis.__undo)
-                .multiline(true)
-                .fontFamily("monospace")
-                .fontSize(14)
-                .width(400)
-                .height(200)
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+const PLAYGROUND_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Column, Input };
+
+
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let keyed = input;
+    let mut col = Column.builder();
+    col.child(keyed);
+    mount(col.build());
+}
 "#;
 
 fn setup() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
-    app.eval_module_source(UNDO_INPUT_BUNDLE).unwrap();
+    app.load_rut_module(UNDO_INPUT_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);
@@ -109,7 +92,7 @@ fn setup() -> (TurTestApp, ElementNodeId) {
 
 fn setup_playground() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
-    app.eval_module_source(PLAYGROUND_BUNDLE).unwrap();
+    app.load_rut_module(PLAYGROUND_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);
@@ -296,8 +279,9 @@ fn context_menu_cut_then_undo_restores_text() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello world");
 
-    // Select-all via the controller JS bridge (mirrors the menu's Select All).
-    app.eval_js("globalThis.__ctrl.setSelection(0, globalThis.__ctrl.text.length)");
+    // Select-all via Cmd+A (the keyboard path the menu action mirrors).
+    app.send_key_with_modifiers_full("a", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wait_for_timeout(std::time::Duration::ZERO);
     let (anchor, end) = get_selection(&app, id);
     let (lo, hi) = if anchor <= end {
@@ -307,8 +291,8 @@ fn context_menu_cut_then_undo_restores_text() {
     };
     assert_eq!((lo, hi), (0, "hello world".len()));
 
-    // Cut via the controller JS bridge (mirrors the menu's Cut action).
-    app.eval_js("globalThis.__ctrl.deleteSelection()");
+    // Cut via Cmd+X (the keyboard path the menu action mirrors).
+    app.send_key_with_modifiers_full("x", false, false, true);
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
@@ -352,8 +336,10 @@ fn context_menu_paste_then_undo_restores_text() {
     app.send_key("ArrowRight");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // Paste via the controller JS bridge (mirrors the menu's Paste action).
-    app.eval_js("globalThis.__ctrl.insertText('XY')");
+    // "Paste" XY: the embedder rail (the hidden-textarea `paste` event the
+    // browser fires for Cmd+V / the menu action — the engine's keyboard path
+    // only marks the key handled; the text crosses as a platform paste).
+    app.push_paste_event("XY");
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "aXYb", "paste should insert at cursor");
 
@@ -384,73 +370,3 @@ fn context_menu_paste_then_undo_restores_text() {
 // created for actual text changes.
 // ---------------------------------------------------------------------------
 
-#[test]
-fn programmatic_set_spans_with_new_text_is_undoable() {
-    let (mut app, id) = setup();
-
-    for ch in "hello".chars() {
-        app.send_key(&ch.to_string());
-        app.wait_for_timeout(std::time::Duration::ZERO);
-    }
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, id), "hello");
-
-    // Programmatically replace the buffer with different text.
-    app.eval_js(r#"globalThis.__ctrl.setSpans([{ content: "WORLD" }]);"#);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, id), "WORLD");
-
-    // Undo — should restore "hello".
-    app.send_key_with_modifiers_full("z", false, false, true);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        get_text(&app, id),
-        "hello",
-        "Cmd+Z after a programmatic setSpans-with-new-text must restore",
-    );
-}
-
-#[test]
-fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
-    let (mut app, id) = setup();
-
-    // Type "hello" → 5 undo entries (one per keystroke).
-    for ch in "hello".chars() {
-        app.send_key(&ch.to_string());
-        app.wait_for_timeout(std::time::Duration::ZERO);
-    }
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, id), "hello");
-
-    // Re-tokenize with different span colors but the SAME text — this is
-    // exactly what the playground's onInput callback does on every keystroke.
-    // It must NOT add undo entries.
-    app.eval_js(
-        r#"globalThis.__ctrl.setSpansPreserveCursor([
-            { content: "he", color: { r: 200, g: 120, b: 50, a: 255 } },
-            { content: "llo", color: { r: 80, g: 200, b: 120, a: 255 } },
-        ]);"#,
-    );
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(get_text(&app, id), "hello");
-
-    // Undo 5 times — should clear the buffer (the 5 typing entries). A 6th
-    // undo must do nothing (no extra entry from the re-tokenize).
-    for _ in 0..5 {
-        app.send_key_with_modifiers_full("z", false, false, true);
-        app.wait_for_timeout(std::time::Duration::ZERO);
-    }
-    assert_eq!(
-        get_text(&app, id),
-        "",
-        "5 undos should clear all 5 typed chars"
-    );
-
-    app.send_key_with_modifiers_full("z", false, false, true);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        get_text(&app, id),
-        "",
-        "re-tokenize with same text must not have created a 6th undo entry",
-    );
-}

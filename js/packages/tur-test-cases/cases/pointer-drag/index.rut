@@ -1,0 +1,49 @@
+// pointer-drag: a gesture pad reporting down/move/up — the phase label
+// and the last position ride two bound atoms (both cross in the intents).
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Container, PointerInteract, Text };
+
+
+entry fn start() -> u64 {
+    let phase = rs_source_str("idle");
+    let pos = rs_source_str("0,0");
+
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_START);
+
+    let mut b = Container.builder();
+    b.width_height(100.0, 50.0);
+    b.color(0xCCCCCCFFu64);
+    b.alignment(ALIGN_CENTER);
+    let mut phase_t = Text.builder();
+
+    phase_t.text_bound(phase);
+    phase_t.query_key("drag-phase");
+    b.child(phase_t.build());
+
+    col.child(PointerInteract.builder().ids(phase, pos).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build());
+
+    let mut pos_t = Text.builder();
+
+    pos_t.text_bound(pos);
+    pos_t.query_key("drag-pos");
+    col.child(pos_t.build());
+
+    mount(col.build());
+    return phase;
+}
+
+entry fn g_down(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    rs_set_str(pos, f"{gx as u64},{gy as u64}");
+    rs_set_str(phase, "down");
+}
+
+entry fn g_move(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    rs_set_str(pos, f"{gx as u64},{gy as u64}");
+    rs_set_str(phase, "move");
+}
+
+entry fn g_up(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    rs_set_str(pos, f"{gx as u64},{gy as u64}");
+    rs_set_str(phase, "up");
+}

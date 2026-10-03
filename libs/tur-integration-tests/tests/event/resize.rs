@@ -6,17 +6,19 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-import { mount, Column, Expanded, Container } from "tur:std";
+use tur::{ mount };
+use tur_kit::{ Column, Container, Expanded };
 
-mount(Column()
-    .children([
-        Expanded()
-            .child(Container()
-     .queryKey(["fill"])
-     .build())
-            .build(),
-    ])
-    .build());
+
+entry fn start() {
+    let mut fill_builder = Container.builder();
+    fill_builder.color(0x404040FFu64);
+    let mut fill = Expanded.builder().flex(1.0).child(fill_builder.build()).query_key("fill").build();
+    let fill = fill;
+    let mut col = Column.builder();
+    col.child(fill);
+    mount(col.build());
+}
 "#;
 
 fn fill_height(app: &TurTestApp) -> f64 {
@@ -29,7 +31,7 @@ fn fill_height(app: &TurTestApp) -> f64 {
 #[test]
 fn resize_reflows_descendants() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(RESIZE_BUNDLE).unwrap();
+    app.load_rut_module(RESIZE_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let h0 = fill_height(&app);

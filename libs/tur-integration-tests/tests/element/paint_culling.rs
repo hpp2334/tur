@@ -40,25 +40,31 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 /// Mount a `ScrollView > Column > 6 Containers` (each 100px → 600px of content
 /// in a 300px-tall viewport) and return the 6 container node ids in order.
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, ScrollView, Column, Container, createColor, CrossAxisAlignment } from "tur:std";
-        const kids = [];
-        for (let i = 0; i < 6; i++) {
-            kids.push(Container()
-    .height(100)
-    .color(createColor(255, 0, 0, 255))
-    .queryKey(["item", i])
-    .build());
-        }
-        mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Column()
-     .crossAlignment(CrossAxisAlignment.Stretch)
-     .children(kids)
-     .build())
-    .build());
-    "#,
+use tur::{ AXIS_VERTICAL, mount };
+use tur_kit::{ Column, Container, ScrollView };
+
+
+entry fn item(i: u64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(10.0, 100.0);
+    b.color(0xFF0000FFu64);
+    b.query_key(f"item/{i}");
+    return b.build();
+}
+
+entry fn start() {
+    let mut col = Column.builder();
+    let mut i: u64 = 0;
+    while (i < 6) {
+        col.child(item(i));
+        i += 1;
+    }
+    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    mount(scroller);
+}
+"#,
     )
     .expect("mount");
 
@@ -179,16 +185,20 @@ fn no_clip_means_no_culling() {
     )
     .expect("app");
 
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container()
-    .width(100)
-    .height(100)
-    .color(createColor(0, 128, 255, 255))
-    .queryKey(["onscreen"])
-    .build());
-    "#,
+use tur::{ mount };
+use tur_kit::{ Container };
+
+
+entry fn start() {
+    let mut b = Container.builder();
+    b.width_height(100.0, 100.0);
+    b.color(0x0080FFFF);
+    b.query_key("onscreen");
+    mount(b.build());
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);

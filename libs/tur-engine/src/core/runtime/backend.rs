@@ -4,9 +4,10 @@
 //!
 //! ## Architecture
 //!
-//! - [`WorkerBackend`] lives on the worker thread and owns the boa
-//!   `Context`, element tree, reactive store, subsystems. `pump()` runs one
-//!   flush and produces a `Vec<RenderCommand>` batch (stored in
+//! - [`WorkerBackend`] lives on the worker thread and owns the rut runtime
+//!   (the loaded module's VM), the element tree, the reactive store, and
+//!   the subsystems. `pump()` runs one flush and produces a
+//!   `Vec<RenderCommand>` batch (stored in
 //!   `TurAppInternal::pending_render_batch`).
 //!
 //! - [`HostBackend`] is `pub(crate)`: `TurApp` owns one. It spawns a worker
@@ -31,18 +32,14 @@
 //! wasm, `block_on` on the test/native caller thread).
 
 use std::cell::{Cell, RefCell};
-use std::path::Path;
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsObject, JsValue, Source};
 use futures::StreamExt;
 
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
-use crate::core::async_::TurJobExecutor;
+use crate::core::clock::Clock;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::{
     RenderCommand, RenderCommandBatch, Renderer, fingerprint_batch, referenced_image_ids,
@@ -54,44 +51,52 @@ use crate::error::TurError;
 // WorkerBackend — engine state on the worker thread (pub(crate))
 // ---------------------------------------------------------------------------
 
-/// The engine state container, owned by the worker thread. Holds the boa
-/// `Context`, `TurAppInternal`, and the job executor.
+/// The engine state container, owned by the worker thread. Holds the rut
+/// runtime (`Some` while a module is loaded), plus [`TurAppInternal`].
 ///
 /// Constructed on the worker thread (via [`build_worker_backend`]) so it
-/// can capture `!Send` types like `Rc<dyn Clock>` and `boa::Context` —
-/// these never cross threads. Once constructed, [`WorkerBackend::pump`]
-/// runs one flush and stores the resulting `Vec<RenderCommand>` batch in
+/// can capture `!Send` types like the rut `Vm` — these never cross threads.
+/// Once constructed, [`WorkerBackend::pump`] runs one flush and stores the
+/// resulting `Vec<RenderCommand>` batch in
 /// `TurAppInternal::pending_render_batch`, where [`HostBackend`]'s
 /// `worker_loop` drains it and ships to main.
 pub(crate) struct WorkerBackend {
-    pub(crate) boa_context: RefCell<Context>,
+    /// The rut runtime: `Some` while a module is loaded. Worker-side only
+    /// (`Vm` is `!Send`).
+    rut: RefCell<Option<crate::core::rut_runtime::RutRuntime>>,
+    /// The runtime clock — the frame environment's + the rut rows' time
+    /// source.
+    #[allow(dead_code)]
+    clock: std::sync::Arc<dyn Clock>,
+    /// Worker→host sender clone — the rut trap/fuel reporter ships runtime
+    /// errors to main through it, and the dev-tool RPC bridge ships
+    /// `HostMsg::DevToolReply` through it when the reply transport is
+    /// host-drain (see `rpc_via_host_drain`).
+    host_tx: HostTx,
+    /// RPC replies resolve on the awaiting (host) thread instead of via a
+    /// oneshot waker fired here on the worker — required by executors
+    /// whose task queues are thread-local (`wasm_bindgen_futures`).
+    /// Resolved once at construction from
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](crate::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread).
+    rpc_via_host_drain: bool,
     pub(crate) internal: TurAppInternal,
-    pub(crate) executor: Rc<TurJobExecutor>,
-    /// The argument object handed to the loaded module's `start`:
-    /// `{ store }` — the instance store wrapped as a live `{get, set}` JS
-    /// object. Built once at instance build (the tree is born-bound to this
-    /// store), reused for every module load.
-    start_arg: RefCell<JsObject>,
-    /// The cleanup function returned by the currently-loaded module's
-    /// `start()` (the module lifecycle contract). Runs (best-effort)
-    /// before the next `load_module` evaluates and at destroy. Worker-side
-    /// only — a `JsFunction` is `!Send`, matching the rest of the state.
-    pending_cleanup: RefCell<Option<JsFunction>>,
 }
 
 impl WorkerBackend {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        boa_context: Context,
         internal: TurAppInternal,
-        executor: Rc<TurJobExecutor>,
-        start_arg: JsObject,
+        clock: std::sync::Arc<dyn Clock>,
+        host_tx: HostTx,
+        _host_exec: crate::core::plugin::HostExecutor,
+        rpc_via_host_drain: bool,
     ) -> Self {
         Self {
-            boa_context: RefCell::new(boa_context),
+            rut: RefCell::new(None),
+            clock,
+            host_tx,
+            rpc_via_host_drain,
             internal,
-            executor,
-            start_arg: RefCell::new(start_arg),
-            pending_cleanup: RefCell::new(None),
         }
     }
 
@@ -109,116 +114,72 @@ impl WorkerBackend {
         self.internal.take_pending_render_batch()
     }
 
-    /// Run the pending module cleanup (best-effort) and clear any leftover
-    /// root tree. Called before a new module evaluates and at destroy, so a
-    /// re-load always starts from a clean root even when the previous
-    /// module's cleanup forgot to unmount.
-    fn teardown_current_module(&self) {
-        if let Some(cleanup) = self.pending_cleanup.borrow_mut().take() {
-            let mut boa = self.boa_context.borrow_mut();
-            if let Err(e) = cleanup.call(&boa_engine::JsValue::undefined(), &[], &mut boa) {
-                tracing::error!("module cleanup error: {e}");
-            }
-            drop(boa);
-            let mut boa = self.boa_context.borrow_mut();
-            let _ = boa.run_jobs();
-            drop(boa);
-            let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
+    /// The rut half of the module lifecycle: best-effort `entry fn stop()`.
+    /// (Root-tree teardown is shared — the auto-clear below covers both
+    /// rails.)
+    fn teardown_rut_module(&self) {
+        if let Some(rut) = self.rut.borrow_mut().as_mut() {
+            rut.stop();
         }
-        // Auto-clear: if the previous module's start mounted a root and its
-        // cleanup didn't unmount it, tear the stale root down now. The tree
-        // itself is instance-owned — only the root is cleared.
-        let js = &self.internal.js_context;
-        let leftover_root = js.element_tree.borrow().root_element_id();
-        if let Some(root) = leftover_root {
-            tracing::debug!("load_module: auto-clearing leftover root {root:?}");
-            js.element_tree.borrow_mut().destroy_subtree(root);
-            js.set_dirty();
-        }
-        // Fire the removed elements' `before_destroy` hooks and drain the
-        // mutations they queued (invoked against the still-bound instance
-        // store). The next module mounts into the same instance-owned tree
-        // (root-less until then).
-        self.internal
-            .drain_teardown_lifecycle(&mut self.boa_context.borrow_mut());
+        *self.rut.borrow_mut() = None;
     }
 
-    fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
-        // Parse first, so a syntactically-broken reload doesn't destroy the
-        // currently-running module's tree.
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("entry.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("module parse error: {e}");
-            ModuleError::Parse(e.to_string())
-        })?;
-        drop(boa);
+    /// Parse + compile + boot a rut module and invoke its `entry fn start()`
+    /// (see [`crate::core::rut_runtime`]). The parse-first contract: a
+    /// broken module fails before any teardown runs.
+    ///
+    /// The whole path — parse, boot, `start`, and `apply_root` (the
+    /// rut-built tree is pure Rust `Rc<dyn View>`) — is script-runtime-free.
+    fn load_rut_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+        let exts = self.internal.instance.rut_pkg_exts.borrow().clone();
+        crate::core::rut_runtime::RutRuntime::parse_check(source, &exts)?;
 
-        // Module lifecycle contract: run the previous module's cleanup (if
-        // any) + clear its leftover root tree before the new module runs.
-        self.teardown_current_module();
+        // Module lifecycle contract: run the previous module's cleanup +
+        // clear its leftover root tree before the new module runs.
+        self.teardown_rut_module();
 
-        let mut boa = self.boa_context.borrow_mut();
-        let promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("module run_jobs error: {e}");
-        }
-        // Surface module-body rejections as `ModuleError::Eval`. Without
-        // this check, errors thrown during evaluation silently vanish
-        // (run_jobs clears the rejection) — the engine appears to load
-        // successfully but the bundle's render() never runs.
-        if let boa_engine::builtins::promise::PromiseState::Rejected(reason) = promise.state() {
-            let to_string = reason
-                .to_string(&mut boa)
-                .map(|s| s.to_std_string_escaped())
-                .unwrap_or_default();
-            tracing::error!("module eval rejected: {to_string}");
-            drop(boa);
-            return Err(ModuleError::Eval(to_string));
-        }
-
-        // The lifecycle contract: the module MUST export a callable
-        // `start`. Call it; a function return value becomes the pending
-        // cleanup (invoked before the next load / at destroy).
-        let namespace = module.namespace(&mut boa);
-        let start = namespace
-            .get(boa_engine::js_string!("start"), &mut boa)
-            .map_err(|e| {
-                tracing::error!("module start export read error: {e}");
-                ModuleError::Eval(e.to_string())
-            })?;
-        let result = if !start.is_callable() {
-            let msg = "module must export a function start()".to_string();
-            tracing::error!("{msg}");
-            drop(boa);
-            return Err(ModuleError::Eval(msg));
-        } else {
-            let f = JsFunction::from_object(start.as_object().expect("is_callable checked"))
-                .expect("is_callable checked");
-            // `start({ store })` — the engine hands the module the instance
-            // store (a live `{get, set}` object; the tree is born-bound to
-            // it). Legacy `start()` modules simply ignore the argument.
-            let arg = JsValue::from(self.start_arg.borrow().clone());
-            f.call(&boa_engine::JsValue::undefined(), &[arg], &mut boa)
+        let js = &self.internal.instance;
+        let inputs = crate::core::rut_runtime::RutRealmInputs {
+            clock: self.internal.app_context.borrow().frame_env.clock(),
         };
-        let cleanup = match result {
-            Ok(v) => v.as_object().and_then(JsFunction::from_object),
-            Err(e) => {
-                let msg = e.to_string();
-                tracing::error!("module start() error: {msg}");
-                drop(boa);
-                return Err(ModuleError::Eval(msg));
-            }
+        let mut rut =
+            crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
+
+        // Apply the root the module's `start` stashed via `tur::mount` —
+        // outside the VM, realm-free (the rut-built tree is pure Rust).
+        rut.apply_root().map_err(ModuleError::Eval)?;
+        js.set_dirty();
+        *self.rut.borrow_mut() = Some(rut);
+        Ok(())
+    }
+
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)`.
+    fn call_rut_entry_inner(&self, name: &str, a: u64, b: f64) -> Result<(), ModuleError> {
+        let mut rut_guard = self.rut.borrow_mut();
+        let Some(rut) = rut_guard.as_mut() else {
+            return Err(ModuleError::Eval(
+                "call_rut_entry: no rut module loaded".into(),
+            ));
         };
-        drop(boa);
-        *self.pending_cleanup.borrow_mut() = cleanup;
-        if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
-            tracing::error!("load_module drain error: {e}");
+        let has_it = {
+            let vm = rut.vm.borrow();
+            vm.prog
+                .exports
+                .iter()
+                .any(|(n, _)| vm.prog.interner.name(*n) == name)
+        };
+        if !has_it {
+            return Ok(()); // no such entry — a no-op (event rails are optional)
         }
+        rut.call_entry(name, a, b)?;
+        // A deferred-mount entry (`mount_host(id)`-style: a host-minted id
+        // crossing through the entry rail) stashes a root — apply it here,
+        // the same realm-free apply the post-`start` path runs. Mount is a
+        // start-time or entry-drain-time op (the mount row's face-busy
+        // guard rejects mid-flush mounts); `apply_root` no-ops when the
+        // entry stashed nothing.
+        rut.apply_root().map_err(ModuleError::Eval)?;
+        self.internal.instance.set_dirty();
         Ok(())
     }
 
@@ -242,54 +203,52 @@ impl WorkerBackend {
                 // `worker_loop` (record-only, no pump); this arm only keeps
                 // the dispatch exhaustive.
             }
-            WorkerMsg::LoadModule { source, reply } => {
-                let res = self.load_module_inner(&source);
-                // The worker owns its paint state: if eval produced paint-
-                // worthy state (element creation already self-wakes via
-                // `set_dirty`; this also covers a pure reactive `set`),
-                // re-arm an idle worker so the bundle renders without an
-                // embedder paint request.
+            WorkerMsg::LoadRutModule { source, reply } => {
+                let res = self.load_rut_module_inner(&source);
                 self.wake_if_dirty();
                 reply.send(res);
             }
-            WorkerMsg::EvalJs { source, reply } => {
-                // Test-only synchronous JS evaluation. Drains promise jobs
-                // + completions so `await`-free side effects settle before
-                // the reply fires. If the result is a JS string, returns
-                // the string contents (no quotes); otherwise returns the
-                // display form (matches the legacy `eval_js` semantics).
-                let source_str: &str = &source;
-                let mut boa = self.boa_context.borrow_mut();
-                let result = boa.eval(boa_engine::Source::from_bytes(source_str));
-                let display = match result {
-                    Ok(v) => v
-                        .as_string()
-                        .map(|s| s.to_std_string_escaped())
-                        .unwrap_or_else(|| v.display().to_string()),
-                    Err(e) => {
-                        tracing::error!("EvalJs error: {e}");
-                        String::new()
-                    }
-                };
-                let _ = boa.run_jobs();
-                drop(boa);
-                let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
-                reply.send(display);
+            WorkerMsg::CallRutEntry { name, a, b, reply } => {
+                let res = self.call_rut_entry_inner(&name, a, b);
+                self.wake_if_dirty();
+                reply.send(res);
+            }
+            WorkerMsg::RutStartAnswer { reply } => {
+                let answer = self
+                    .rut
+                    .borrow()
+                    .as_ref()
+                    .map(|r| r.start_answer)
+                    .unwrap_or(0);
+                reply.send(answer);
             }
             WorkerMsg::WithTree { runner } => {
                 // Co-borrow is safe: `element_tree` and `focus_manager`
                 // are distinct RefCells (the sync `focused_is_editable`
                 // below borrows both the same way).
-                let tree = self.internal.js_context.element_tree.borrow();
-                let focus = self.internal.js_context.focus_manager.borrow();
+                let tree = self.internal.instance.element_tree.borrow();
+                let focus = self.internal.instance.focus_manager.borrow();
                 runner(&tree, &focus);
             }
-            WorkerMsg::EventBusToJs {
-                channel_id,
-                payload,
-            } => {
-                self.internal.event_bus.emit_to_js(channel_id, payload);
-                self.internal.js_context.wake_if_idle();
+            WorkerMsg::DevTool { req, reply } => {
+                let json = self.dev_tool_json(req);
+                if self.rpc_via_host_drain {
+                    // The awaiting task lives on the host thread and its
+                    // executor can't be woken from here — ride the drained
+                    // host channel; `apply_msg` fires the reply on main.
+                    let _ = self
+                        .host_tx
+                        .unbounded_send(HostMsg::DevToolReply { reply, json });
+                } else {
+                    reply.send(json);
+                }
+            }
+            WorkerMsg::FrameTimingEnabled { enabled } => {
+                self.internal
+                    .instance
+                    .frame_stats
+                    .host_timing_enabled
+                    .set(enabled);
             }
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
@@ -299,7 +258,7 @@ impl WorkerBackend {
                 // layout + paint serve the id (`insert_with_id` — the id was
                 // minted host-side, never by `ImageManager::allocate`).
                 self.internal
-                    .js_context
+                    .instance
                     .image_manager
                     .borrow_mut()
                     .insert_with_id(id, crate::core::image_resource::ImageMetadata { size });
@@ -307,8 +266,31 @@ impl WorkerBackend {
             WorkerMsg::Destroy { reply } => {
                 // Module lifecycle contract: run the loaded module's
                 // cleanup (best-effort) before the worker tears down.
-                self.teardown_current_module();
+                self.teardown_rut_module();
                 reply.send(());
+            }
+        }
+    }
+
+    /// Serialize a dev-tool snapshot request against the live instance
+    /// state (see `core::dev`). Shared by the worker's direct-reply path
+    /// (native — the waker fires cross-thread and native executors
+    /// re-poll) and the wasm bridge (`worker_loop` ships the JSON to main
+    /// as [`HostMsg::DevToolReply`]; `apply_msg` resolves it there, on
+    /// the thread the awaiting task was spawned on).
+    pub(crate) fn dev_tool_json(&self, req: crate::core::app::DevToolRequest) -> String {
+        let instance = &self.internal.instance;
+        match req {
+            crate::core::app::DevToolRequest::ElementTree => {
+                let tree = instance.element_tree.borrow();
+                crate::core::dev::element_tree_json(&tree)
+            }
+            crate::core::app::DevToolRequest::GetElement(id) => {
+                let tree = instance.element_tree.borrow();
+                crate::core::dev::get_element_json(&tree, crate::core::element::NodeId::new(id))
+            }
+            crate::core::app::DevToolRequest::FrameStats => {
+                crate::core::dev::frame_stats_json(&instance.frame_stats)
             }
         }
     }
@@ -317,8 +299,29 @@ impl WorkerBackend {
         // `Wake` is a no-op above; flush is driven here so the outcome can
         // be returned to the worker_loop, which then ships any pending
         // render batch.
-        let mut boa = self.boa_context.borrow_mut();
-        self.internal.flush(&mut boa)
+        //
+        // The rut VM drains FIRST — never inside a flush iteration
+        // (core::rut_runtime). A no-op when no rut module is loaded.
+        if let Some(rut) = self.rut.borrow_mut().as_mut() {
+            rut.run_ready();
+        }
+        let mut outcome = self.internal.flush()?;
+        // Callback intents queued during the flush (rut element callbacks)
+        // drain outside the flush — a callback may read atoms and mount.
+        let drained = self
+            .rut
+            .borrow_mut()
+            .as_mut()
+            .map(|rut| rut.drain_pending_calls());
+        if drained.unwrap_or(0) > 0 {
+            // Convergence flush: the callback's atom writes re-render here.
+            // `apply_root` is realm-free (the rut-built tree is pure Rust).
+            if let Some(rut) = self.rut.borrow_mut().as_mut() {
+                rut.apply_root().map_err(TurError::Other)?; // a callback may re-mount
+            }
+            outcome = self.internal.flush()?;
+        }
+        Ok(outcome)
     }
 
     fn push_app_event(&self, event: crate::core::app::AppEvent) {
@@ -334,15 +337,10 @@ impl WorkerBackend {
     /// gated by `TurInstanceContext::wake_if_idle`. Lets the worker self-paint on
     /// load with no embedder paint request.
     fn wake_if_dirty(&self) {
-        let js = &self.internal.js_context;
+        let js = &self.internal.instance;
         if js.dirty.get() || js.need_paint.get() {
             js.wake_if_idle();
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn event_bus(&self) -> Rc<EventBus> {
-        self.internal.event_bus.clone()
     }
 
     pub(crate) fn text_input_state(&self) -> crate::core::shell::TextInputState {
@@ -361,12 +359,12 @@ impl WorkerBackend {
     }
 
     pub(crate) fn focused_element(&self) -> Option<ElementNodeId> {
-        self.internal.js_context.focus_manager.borrow().focused()
+        self.internal.instance.focus_manager.borrow().focused()
     }
 
     pub(crate) fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
         let focused_id = self.focused_element()?;
-        let tree = self.internal.js_context.element_tree.borrow();
+        let tree = self.internal.instance.element_tree.borrow();
 
         let mut abs_x = 0.0f64;
         let mut abs_y = 0.0f64;
@@ -387,8 +385,8 @@ impl WorkerBackend {
 
     pub(crate) fn focused_is_editable(&self) -> bool {
         use crate::core::focus::helper;
-        let tree = self.internal.js_context.element_tree.borrow();
-        let focus = self.internal.js_context.focus_manager.borrow();
+        let tree = self.internal.instance.element_tree.borrow();
+        let focus = self.internal.instance.focus_manager.borrow();
         helper::focused_is_editable(&tree, &focus)
     }
 }
@@ -481,9 +479,6 @@ pub(crate) struct HostBackend {
     /// at construction via `TurAppBuilder::shell`; owned exclusively here,
     /// so `apply_msg` can apply commands with a plain `borrow_mut()`.
     shell: RefCell<Box<dyn crate::core::shell::Shell>>,
-    /// Cross-thread event bus handle. Routes `emit_to_js` via
-    /// `WorkerMsg::EventBusToJs`.
-    event_bus_handle: crate::core::event_bus::EventBusHandle,
     /// Main-side renderer (owned — no sink callback). Worker ships
     /// `HostMsg::RenderCommands` batches; main applies them here. `None`
     /// while the instance is **detached** (built without a renderer, or
@@ -527,10 +522,10 @@ pub(crate) struct HostBackend {
     /// re-encode + re-raster when a new batch carries identical content
     /// (see [`Self::render_batch`]).
     last_frame_fingerprint: Cell<Option<u64>>,
-    /// The runtime clock (same source boa + the worker use) — times the
-    /// host-side render-commit phases for the frame-timing probe. Held as
-    /// an `Arc` clone; `std::time::Instant` is unavailable on wasm.
-    clock: std::sync::Arc<dyn boa_engine::context::time::Clock>,
+    /// The runtime clock — times the host-side render-commit phases for
+    /// the frame-timing probe. Held as an `Arc` clone;
+    /// `std::time::Instant` is unavailable on wasm.
+    clock: std::sync::Arc<dyn Clock>,
 }
 
 impl HostBackend {
@@ -538,7 +533,7 @@ impl HostBackend {
     /// [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner). The entry runs
     /// on the chosen worker (lane thread / Web Worker — platform-defined)
     /// and constructs the [`WorkerBackend`] (so it can build `!Send` types
-    /// like `Rc<dyn Clock>` and `boa::Context`).
+    /// like the rut `Vm`).
     ///
     /// The platform hands the entry a
     /// [`WorkerContext`](crate::core::scheduler::WorkerContext) for that
@@ -561,7 +556,7 @@ impl HostBackend {
     /// only the sending-side plumbing.
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
-        clock: std::sync::Arc<dyn boa_engine::context::time::Clock>,
+        clock: std::sync::Arc<dyn Clock>,
         renderer: Option<Box<dyn Renderer>>,
         shell: Box<dyn crate::core::shell::Shell>,
         worker_pool: crate::core::scheduler::WorkerPoolHandle,
@@ -612,7 +607,6 @@ impl HostBackend {
                 _worker_ticket: worker_ticket,
                 worker_wake,
                 shell: RefCell::new(shell),
-                event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
                 renderer: RefCell::new(renderer),
                 image_resource_map: RefCell::new(
                     crate::core::image_resource::ImageResourceMap::default(),
@@ -632,12 +626,6 @@ impl HostBackend {
     /// the parent's worker) reuses it after every send.
     pub(crate) fn worker_wake_handle(&self) -> Rc<dyn Fn()> {
         self.worker_wake.clone()
-    }
-
-    /// Cross-thread event bus handle (queues mode is unused; the worker's
-    /// `EventBus` isn't reachable from main).
-    pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
-        self.event_bus_handle.clone()
     }
 
     /// Send a fire-and-forget [`WorkerMsg`] (no Reply slot). Used by
@@ -866,6 +854,13 @@ impl HostBackend {
     /// Borrow the worker→host channel sender. Used by call sites that
     /// build a `WorkerMsg` carrying a closure / reply slot directly (e.g.
     /// [`TurApp::with_tree`](crate::TurApp::with_tree)).
+    /// Toggle host-side frame-timing collection (the dev tool's
+    /// `setHostFrameTiming`): gates the per-frame `WorkerMsg::FrameTiming`
+    /// push-back.
+    pub(crate) fn set_frame_timing_enabled(&self, enabled: bool) {
+        self.frame_timing_enabled.set(enabled);
+    }
+
     pub(crate) fn worker_tx(&self) -> &WorkerTx {
         &self.worker_tx
     }
@@ -904,11 +899,11 @@ impl HostBackend {
                 self.frame_timing_enabled.set(on);
                 MsgOutcome::Continue
             }
-            HostMsg::EventBusToEmbedder {
-                channel_id,
-                payload,
-            } => {
-                self.event_bus_handle.dispatch_to_host(channel_id, payload);
+            HostMsg::DevToolReply { reply, json } => {
+                // Resolve on MAIN — the whole point of the bridge (see the
+                // variant doc): the awaiting dev-tool task is a main-thread
+                // `wasm_bindgen_futures` task, so its waker must fire here.
+                reply.send(json);
                 MsgOutcome::Continue
             }
             // Virtual-app controls are routed by `TurAppLooper` — the drain
@@ -941,29 +936,40 @@ impl HostBackend {
         rx.rx.await.expect("reply sender dropped without firing")
     }
 
-    /// String-based module load (the raw RPC entry behind
-    /// [`TurApp::load_module`](crate::TurApp::load_module) /
-    /// [`TurApp::load_module_source`](crate::TurApp::load_module_source)).
-    pub(crate) async fn load_module(
+    /// Module load — the RPC entry behind [`TurApp::load_rut_module`].
+    pub(crate) async fn load_rut_module(
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), ModuleError> {
         let source = source.into();
-        tracing::info!("load_module: evaluating module ({} bytes)", source.len());
-        self.rpc(|tx| WorkerMsg::LoadModule { source, reply: tx })
+        tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
+        self.rpc(|tx| WorkerMsg::LoadRutModule { source, reply: tx })
             .await
     }
 
-    /// Synchronous JS expression evaluation. Dev-tool / test-only —
-    /// production code uses `load_module`. Useful for inspecting JS-side
-    /// state via `globalThis.__x = ...`.
-    pub(crate) async fn eval_js(&self, source: &str) -> String {
-        self.rpc(|tx| WorkerMsg::EvalJs {
-            source: std::sync::Arc::from(source),
+    /// Engine→rut event rail — the RPC entry behind
+    /// [`TurApp::call_rut_entry`].
+    pub(crate) async fn call_rut_entry(
+        &self,
+        name: &str,
+        a: u64,
+        b: f64,
+    ) -> Result<(), ModuleError> {
+        let name = std::sync::Arc::from(name);
+        self.rpc(|tx| WorkerMsg::CallRutEntry {
+            name,
+            a,
+            b,
             reply: tx,
         })
         .await
     }
+
+    /// The loaded rut module's `entry fn start() -> u64` answer.
+    pub(crate) async fn rut_start_answer(&self) -> u64 {
+        self.rpc(|tx| WorkerMsg::RutStartAnswer { reply: tx }).await
+    }
+
 
     /// Count of image resources retained on main (pixel `Blob`s). Test-only
     /// introspection (forwarded on
@@ -1063,7 +1069,7 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 // drive a flush (it would create a render↔timing feedback
                 // loop). A busy worker delivers it within the current frame
                 // stream; an idle worker doesn't need it.
-                backend.internal.js_context.frame_stats.record_host_timing(
+                backend.internal.instance.frame_stats.record_host_timing(
                     crate::core::app::frame_stats::HostFrameTiming {
                         frame_id,
                         apply_us,
@@ -1084,7 +1090,7 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
                 break;
             }
             // All other variants (PlatformEvent, LoadModule,
-            // Dev*, EventBusToJs) delegate to the worker dispatch — RPC
+            // RPCs) delegate to the worker dispatch — RPC
             // variants fire their own ReplySender.
             other => backend.handle_worker_msg(other),
         }

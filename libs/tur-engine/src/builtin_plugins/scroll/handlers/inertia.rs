@@ -19,9 +19,8 @@
 
 use std::rc::Rc;
 
-use boa_engine::context::time::Clock;
-
 use crate::core::app::AppEvent;
+use crate::core::clock::Clock;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -48,7 +47,7 @@ struct InertiaState {
     /// Hit-test position (touch-up location). Re-used each frame.
     position: crate::core::layout::Offset,
     /// Clock time at the last integration tick (ms since epoch).
-    last_ms: u64,
+    last_ms: f64,
 }
 
 /// Touch-scroll inertia subsystem. Captures the engine clock at registration
@@ -121,7 +120,7 @@ impl Subsystem for ScrollInertiaSubsystem {
                     vx: fling.vx,
                     vy: fling.vy,
                     position: fling.position,
-                    last_ms: self.clock.now().millis_since_epoch(),
+                    last_ms: self.clock.now_millis(),
                 });
             }
         }
@@ -137,10 +136,10 @@ impl Subsystem for ScrollInertiaSubsystem {
         if id != self.last_frame {
             self.last_frame = id;
             if let Some(state) = self.state.as_mut() {
-                let now_ms = self.clock.now().millis_since_epoch();
-                let dt_ms_raw = now_ms.saturating_sub(state.last_ms);
-                if dt_ms_raw > 0 {
-                    let dt_ms = (dt_ms_raw as f64).min(MAX_FRAME_MS);
+                let now_ms = self.clock.now_millis();
+                let dt_ms_raw = now_ms - state.last_ms;
+                if dt_ms_raw > 0.0 {
+                    let dt_ms = dt_ms_raw.min(MAX_FRAME_MS);
 
                     // Exponential decay: v(t) = v0 * exp(-t/tau).
                     // Exact delta over [0, dt]:

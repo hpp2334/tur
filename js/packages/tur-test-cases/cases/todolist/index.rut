@@ -1,0 +1,72 @@
+// todolist: the checkable list showcase (the corpus's composite surface:
+// scroll + per-item gestures + derived count).
+use tur::{ AXIS_VERTICAL, MAIN_ALIGN_SPACE_BETWEEN, mount, rs_derive, rs_list_new, rs_list_push,
+    rs_set_value, rs_source_value, stf_put, stf_take };
+use tur_kit::{ Column, Container, Each, Expanded, PointerInteract, Row, ScrollView, SizedBox, Text };
+
+
+let K_ITEMS: u64 = 1;
+
+entry fn item(_i: u64, s: str) -> opaque {
+    let mut r = Row.builder();
+    r.main_alignment(MAIN_ALIGN_SPACE_BETWEEN);
+    let mut label = Text.builder();
+
+    label.text(s);
+    r.child(label.build());
+    let mut check = Container.builder();
+    check.width_height(20.0, 20.0);
+    check.query_key("check");
+    r.child(check.build());
+    let mut wrap = Container.builder();
+    wrap.width_height(0.0, 44.0);
+    wrap.child(r.build());
+    return PointerInteract.builder().ids(_i, 0).on_click("it_tap").query_key("rut/gesture").child(wrap.build()).build();
+}
+
+entry fn start() -> u64 {
+    let items = rs_list_new();
+    rs_list_push(items, "Buy milk");
+    rs_list_push(items, "Ship phase 4");
+    rs_list_push(items, "Walk the dog");
+    let items_atom = rs_source_value(items);
+    stf_put(K_ITEMS, items_atom as f64);
+    let count = rs_derive("fmt_count", items_atom);
+
+    let mut col = Column.builder();
+    let mut head = Container.builder();
+    head.width_height(0.0, 48.0);
+    let mut ht = Text.builder();
+
+    ht.text_bound_derived(count);
+    ht.query_key("count");
+    head.child(ht.build());
+    col.child(head.build());
+    let mut content = Column.builder();
+    content.child(Each.builder(items_atom).item_builder("item").build());
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).build();
+    col.child(Expanded.builder().flex(1.0).child(scroller).build());
+    let mut add = Container.builder();
+    add.width_height(0.0, 48.0);
+    add.child(PointerInteract.builder().ids(items_atom, items_atom).on_tap("b_add").child(Text.builder().text("+ add").build()).build());
+    col.child(add.build());
+    mount(SizedBox.builder(400.0, 600.0).child(col.build()).build());
+}
+
+entry fn fmt_count(_v: f64) -> str {
+    return "todos";
+}
+
+entry fn it_tap(_idx: u64, _b: u64, _n: f64) {
+}
+
+entry fn b_add(_a: u64, _b: u64, _n: f64) {
+    let items = stf_take(K_ITEMS) as u64;
+    let fresh = rs_list_new();
+    rs_list_push(fresh, "Buy milk");
+    rs_list_push(fresh, "Ship phase 4");
+    rs_list_push(fresh, "Walk the dog");
+    rs_list_push(fresh, "New todo");
+    rs_set_value(items, fresh);
+    stf_put(K_ITEMS, items as f64);
+}

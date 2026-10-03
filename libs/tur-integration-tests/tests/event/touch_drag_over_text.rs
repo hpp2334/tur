@@ -21,8 +21,8 @@ fn center_of(app: &TurTestApp, query: &[&str]) -> (f64, f64) {
 }
 
 fn down_count(app: &TurTestApp) -> u32 {
-    app.eval_js("globalThis.__getDownCount()")
-        .parse::<u32>()
+    app.query_text(&["down-count"])
+        .and_then(|s| s.trim().parse().ok())
         .unwrap_or(0)
 }
 

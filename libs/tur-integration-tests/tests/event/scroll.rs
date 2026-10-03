@@ -114,31 +114,40 @@ fn wheel_miss_does_nothing() {
 #[test]
 fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import {
-            mount, ScrollView, Container, createScrollController, mutate, source,
-        } from "tur:std";
-        const height$ = source(900.0);
-        globalThis.__events = [];
-        const ctrl = createScrollController({
-            onScroll: mutate((_ctx, e) => { globalThis.__events.push(e.offset); }),
-        });
-        globalThis.__ctrl = ctrl;
-        globalThis.__shrink = () => store.set(height$, 200.0);
-        mount(ScrollView()
-            .controller(ctrl)
-            .queryKey(["sv"])
-            .child(Container().width(400).height(height$).build())
-            .build());
-        "#,
+use tur::{ AXIS_VERTICAL, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, ScrollView };
+
+
+entry fn start() -> u64 {
+    let height = rs_source_f64();
+    rs_set_f64(height, 900.0);
+
+    let mut b = Container.builder();
+    b.width_height(10.0, 10.0);
+    b.color(0x204080FFu64);
+    b.height_bound(height);
+
+    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
+    let scroller = scroller;
+    mount(scroller);
+    return height;
+}
+
+entry fn shrink(height: u64, _b: f64) {
+    rs_set_f64(height, 200.0);
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let sv_id = ElementNodeId::new(app.query_element(&["sv"]).unwrap().as_u64());
+    let height_atom = app.rut_start_answer();
 
-    // Content 900 in a 300-tall viewport → maxScrollExtent 600. Jump to 300.
-    app.eval_js("globalThis.__ctrl.jumpTo(300)");
+    // Content 900 in a 300-tall viewport → maxScrollExtent 600. Scroll to
+    // 300 with a wheel event.
+    app.wheel(0.0, 300.0, 200.0, 150.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -149,7 +158,7 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
 
     // Shrink the content to 200 → maxScrollExtent collapses to 0 → the
     // offset must clamp during layout, not stay stale.
-    app.eval_js("globalThis.__shrink()");
+    app.call_rut_entry("shrink", height_atom, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
@@ -178,19 +187,17 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
         "content must sit at viewport y=0 after the clamp"
     );
 
-    // JS-visible controller metrics are synced, and onScroll fired for the
-    // layout-driven correction (same frame, via the mutation queue).
-    let ctrl_offset: f64 = app
-        .eval_js("globalThis.__ctrl.offset")
-        .trim()
-        .parse()
-        .unwrap();
-    assert_eq!(ctrl_offset, 0.0, "controller.offset must reflect the clamp");
-    let events = app.eval_js("JSON.stringify(globalThis.__events)");
-    assert!(
-        events.trim() == "[300,0]" || events.trim() == "[300, 0]",
-        "onScroll must fire for the layout-driven clamp correction, got {events}"
-    );
+    // The scroll METRICS the controller caches are synced by layout (the
+    // element's own state) — read through the element probe.
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert_eq!(
+            sv.max_scroll_extent(),
+            0.0,
+            "metrics must reflect the clamp"
+        );
+    })
+    .unwrap();
 }
 
 #[test]

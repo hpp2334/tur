@@ -2,9 +2,9 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::core::clock::Clock;
 use crate::core::layout::Offset;
 use crate::core::shell::Cursor;
-use boa_engine::context::time::Clock;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
 ///
@@ -79,13 +79,12 @@ impl FrameEnv {
 
     /// Current frame time as a `Duration` since the epoch.
     ///
-    /// The clock is shared with the boa `Context` (the same `Rc<dyn Clock>`
-    /// is passed to both at build time), so JS `Date.now()` and engine
-    /// scheduling read the same source. The clock is advanced by the embedder
-    /// — a real wall-clock (`StdClock`) in production self-advances; a
-    /// `FixedClock` in tests is bumped by the test harness.
+    /// The same clock handle is shared engine-wide (frame timing, subsystem
+    /// ticks, the rut rows' `now_ms`). A real wall-clock (`StdClock`) in
+    /// production self-advances; a `FixedClock` in tests is bumped by the
+    /// test harness.
     pub fn now(&self) -> Duration {
-        Duration::from_millis(self.clock.now().millis_since_epoch())
+        Duration::from_millis(self.clock.now_millis() as u64)
     }
 
     /// The shared clock handle. Plugins obtain this via

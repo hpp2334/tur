@@ -1,0 +1,61 @@
+// table-basic: shared column geometry with a header row, stripes and
+// dividers (the Table widget's corpus twin, authored from flex rows).
+use tur::{ mount };
+use tur_kit::{ Column, Container, Row, SizedBox, Text };
+
+
+fn header_cell(label: str, w: f64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(w, 0.0);
+    b.padding(8.0);
+    let mut t = Text.builder();
+
+    t.text(label);
+    t.font_size(12.0);
+    b.child(t.build());
+    return b.build();
+}
+
+fn cell(label: str, w: f64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(w, 0.0);
+    b.padding(8.0);
+    let mut t = Text.builder();
+
+    t.text(label);
+    t.font_size(14.0);
+    b.child(t.build());
+    return b.build();
+}
+
+fn header() -> opaque {
+    let mut r = Row.builder();
+    r.child(header_cell("PLANET", 150.0));
+    r.child(header_cell("NOTES", 100.0));
+    r.child(header_cell("DISTANCE", 100.0));
+    return r.build();
+}
+
+fn planet(name: str, notes: str, distance: str) -> opaque {
+    let mut r = Row.builder();
+    r.child(cell(name, 150.0));
+    r.child(cell(notes, 100.0));
+    r.child(cell(distance, 100.0));
+    let mut wrapped = Container.builder();
+    wrapped.width_height(0.0, 36.0);
+    wrapped.child(r.build());
+    return wrapped.build();
+}
+
+entry fn start() {
+    let mut table = Column.builder();
+    table.child(header());
+    table.child(planet("Mercury", "Smallest planet", "0.39 AU"));
+    table.child(planet("Venus", "Hottest surface", "0.72 AU"));
+    table.child(planet("Earth", "Home of life", "1.00 AU"));
+    table.child(planet("Mars", "The red planet", "1.52 AU"));
+    let mut frame = Container.builder();
+    frame.color(0x0B1220FF);
+    frame.child(table.build());
+    mount(SizedBox.builder(400.0, 240.0).child(frame.build()).build());
+}

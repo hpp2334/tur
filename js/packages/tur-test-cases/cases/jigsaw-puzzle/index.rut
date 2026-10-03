@@ -1,0 +1,52 @@
+// jigsaw-puzzle: the drag-a-tile board (the regression fixture family the
+// drag-with-lift / drag-redrag-multi tests pin, as a playable board).
+use tur::{ ALIGN_TOP_LEFT, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, stf_put, stf_take };
+use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+
+
+let K_X: u64 = 1;
+let K_Y: u64 = 2;
+let K_PIECE: u64 = 3;
+
+entry fn start() -> u64 {
+    let x = rs_source_f64();
+    let y = rs_source_f64();
+    stf_put(K_X, x as f64);
+    stf_put(K_Y, y as f64);
+    let piece = rs_source_str("A");
+    stf_put(K_PIECE, piece as f64);
+
+    let mut stack = Stack.builder();
+    stack.alignment(ALIGN_TOP_LEFT);
+    stack.child(SizedBox.builder(300.0, 300.0).child(Container.builder().build()).build());
+    let mut b = Container.builder();
+    b.width_height(80.0, 80.0);
+    b.color(0x6366F1FFu64);
+    b.query_key("piece");
+    let mut label = Text.builder();
+
+    label.text("A");
+    b.child(label.build());
+    let pad = PointerInteract.builder().ids(piece, piece).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pos = Positioned.builder().left(10.0).top(10.0).child(pad).build();
+    stack.child(pos);
+    mount(stack.build());
+    return piece;
+}
+
+entry fn g_down(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    rs_set_str(piece, "dragging");
+}
+
+entry fn g_move(piece: u64, _id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+    let x = stf_take(K_X) as u64;
+    let y = stf_take(K_Y) as u64;
+    rs_set_f64(x, gx - 40.0);
+    rs_set_f64(y, gy - 40.0);
+    stf_put(K_X, x as f64);
+    stf_put(K_Y, y as f64);
+}
+
+entry fn g_up(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    rs_set_str(piece, "A");
+}

@@ -1,0 +1,8 @@
+// sized-box-basic: an exactly-sized box wrapping a Text child.
+use tur::{ mount };
+use tur_kit::{ SizedBox, Text };
+
+
+entry fn start() {
+    mount(SizedBox.builder(100.0, 50.0).child(Text.builder().text("Hi").build()).build());
+}

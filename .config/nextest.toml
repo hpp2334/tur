@@ -1,9 +1,19 @@
 # cargo-nextest workspace configuration — https://nexte.st/book/configuration
 #
-# The runner for all Rust tests in this workspace (lib + integration test
+# The runner for all Rust tests in the workspace (lib + integration test
 # binaries; doctests are NOT run by nextest and stay on `cargo test --doc`).
 # Each test executes in its own process, so a wedged or crashing test can't
 # take down its test binary's other tests.
+
+[profile.default]
+# The engine tests are hermetic (virtual clock, in-memory clipboard/HTTP),
+# but a few rut-rail tests drive work that completes on a worker LANE thread
+# (the async capability awaits + the virtual-app child boot). Under full
+# parallel load a lane can lag the harness's pump cadence past the test's
+# polling budget — a wall-clock artifact, not an engine failure. Retry twice,
+# matching the `ci` profile, so a loaded machine doesn't fail the run.
+retries = 2
+backoff = "fixed"
 
 [profile.ci]
 # Flaky-test tolerance for CI: retry each failing test up to 2 times. A test

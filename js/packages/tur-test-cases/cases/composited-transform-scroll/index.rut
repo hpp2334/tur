@@ -1,0 +1,30 @@
+// composited-transform-scroll: the target lives inside a scrollable
+// (content offset y=100); scrolling moves the target and the follower
+// tracks it.
+use tur::{ ALIGN_TOP_LEFT, AXIS_VERTICAL, ct_link_new, mount };
+use tur_kit::{ Column, CompositedFollower, CompositedTarget, Container, Positioned, ScrollView, SizedBox, Stack };
+
+
+entry fn start() {
+    let link = ct_link_new();
+    let mut stack = Stack.builder();
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
+
+    // The scrollable viewport (200x200) with 400px of content; the target
+    // sits at content y=100 (after a 100px spacer).
+    let mut content = Column.builder();
+    content.child(SizedBox.builder(200.0, 100.0).child(Container.builder().build()).build());
+    let target_child = SizedBox.builder(60.0, 40.0).child(Container.builder().build()).build();
+    let target = CompositedTarget.builder().link(link).child(target_child).build();
+    content.child(target);
+    content.child(SizedBox.builder(200.0, 300.0).child(Container.builder().build()).build());
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).build();
+    stack.child(Positioned.builder().width(200.0).height(200.0).child(scroller).build());
+
+    let mut red = Container.builder();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.builder().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
+    mount(stack.build());
+}

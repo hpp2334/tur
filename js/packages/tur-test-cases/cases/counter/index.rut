@@ -1,0 +1,69 @@
+// counter: a reactive count label between -/+ pill buttons — the full
+// interactive loop (button → intent entry → atom write → re-render).
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64,
+    rs_source_str };
+use tur_kit::{ Column, Container, PointerInteract, Row, Text };
+
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    let label = rs_source_str("Count: 0");
+
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_CENTER);
+    let mut ctext = Text.builder();
+
+    ctext.text_bound(label);
+    ctext.query_key("count");
+    ctext.font_size(36.0);
+    col.child(ctext.build());
+
+    let mut row = Row.builder();
+    row.cross_alignment(CROSS_ALIGN_CENTER);
+    let pad = rs_source_f64();
+    row.child(button(count, label, "ts_dec", "-1", "dec"));
+    row.child(gap());
+    row.child(button(count, label, "ts_inc", "+1", "inc"));
+    col.child(row.build());
+
+    let mut bg = Container.builder();
+    bg.color(0xF8FAFCFFu64);
+    bg.child(col.build());
+    mount(bg.build());
+    return count;
+}
+
+// A 100x44 indigo pill with a centered label.
+fn button(count: u64, label: u64, cb: str, text: str, key: str) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(100.0, 44.0);
+    b.color(0x6366F1FFu64);
+    b.alignment(ALIGN_CENTER);
+    b.query_key(key);
+    let mut t = Text.builder();
+
+    t.text(text);
+    t.font_size(18.0);
+    b.child(t.build());
+    return PointerInteract.builder().ids(count, label).on_tap(cb).child(b.build()).build();
+}
+
+fn gap() -> opaque {
+    let mut b = Container.builder();
+    b.width_height(12.0, 0.0);
+    return b.build();
+}
+
+fn refresh(count: u64, label: u64) {
+    rs_set_str(label, f"Count: {rs_get_f64(count) as u64}");
+}
+
+entry fn ts_inc(count: u64, label: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) + 1.0);
+    refresh(count, label);
+}
+
+entry fn ts_dec(count: u64, label: u64, _n: f64) {
+    rs_set_f64(count, rs_get_f64(count) - 1.0);
+    refresh(count, label);
+}

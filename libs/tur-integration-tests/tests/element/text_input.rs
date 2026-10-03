@@ -63,15 +63,19 @@ fn text_input_requests_fire_on_editable_focus() {
         })
     })
     .unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { Input, mount } from "tur:std";
-        mount(Input({ text: "" })
-    .width(200)
-    .height(44)
-    .queryKey(["editor"])
-    .build());
-        "#,
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Input };
+
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(200.0, 44.0).query_key("editor").build();
+    mount(input);
+}
+"#,
     )
     .unwrap();
     // Let the module's initial render settle.

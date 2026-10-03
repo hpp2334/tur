@@ -1,0 +1,200 @@
+// countdown: a 1 Hz countdown with start/pause/reset, an edit modal (a
+// pre-filled Input + confirm), and a ticking display derived from the
+// remaining atom. The ticker is an async loop over `sleep(1000)` with a
+// generation guard (a stale loop exits when a new start supersedes it).
+// State atom ids ride the scalar stash (stf_*).
+use async_host::{ launch_future, sleep };
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mem_get, mem_new, mem_set, mount,
+    rs_derive, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64,
+    st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,
+    undo_new };
+use tur_kit::{ Column, Condition, Container, Input, PointerInteract, Row, Text };
+
+
+let K_GEN: u64 = 1;
+let K_CTRL: u64 = 2;
+let K_REMAINING: u64 = 3;
+let K_INITIAL: u64 = 4;
+let K_RUNNING: u64 = 5;
+let K_EDITING: u64 = 6;
+
+entry fn start() -> u64 {
+    let remaining = rs_source_f64();
+    rs_set_f64(remaining, 60.0);
+    let initial = rs_source_f64();
+    rs_set_f64(initial, 60.0);
+    let running = rs_source_bool(false);
+    let editing = rs_source_bool(false);
+    stf_put(K_REMAINING, remaining as f64);
+    stf_put(K_INITIAL, initial as f64);
+    stf_put(K_RUNNING, running as f64);
+    stf_put(K_EDITING, editing as f64);
+    st_put(K_GEN, mem_new(0.0));
+
+    let display = rs_derive("fmt_display", remaining);
+
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_CENTER);
+
+    let mut display_t = Text.builder();
+
+    display_t.text_bound_derived(display);
+    display_t.query_key("display");
+    col.child(display_t.build());
+
+    let mut row = Row.builder();
+    row.main_alignment(MAIN_ALIGN_CENTER);
+    row.child(button("btn-start", "Start", "b_start", running, running));
+    row.child(button("btn-pause", "Pause", "b_pause", running, running));
+    row.child(button("btn-reset", "Reset", "b_reset", initial, remaining));
+    row.child(button("btn-edit", "Edit", "b_edit", initial, editing));
+    col.child(row.build());
+
+    // The edit modal overlay (both branches authored at start).
+    let modal = build_modal(initial, remaining);
+    let mut empty = Container.builder();
+    col.child(Condition.builder(editing).then(modal).else_branch(empty.build()).build());
+
+    mount(col.build());
+    return remaining;
+}
+
+// A pill button with a query key; both atoms cross to the entry.
+fn button(key: str, label: str, cb: str, a: u64, b: u64) -> opaque {
+    let mut bld = Container.builder();
+    bld.width_height(90.0, 40.0);
+    bld.color(0x6366F1FF);
+    bld.alignment(ALIGN_CENTER);
+    bld.radius(8.0);
+    bld.query_key(key);
+    bld.child(Text.builder().text(label).build());
+    return PointerInteract.builder().ids(a, b).on_tap(cb).child(bld.build()).build();
+}
+
+// The edit modal: a centered card with a pre-filled Input + confirm.
+fn build_modal(initial: u64, remaining: u64) -> opaque {
+    let ctrl = tctrl_new();
+    tctrl_set_text(ctrl, f"{rs_get_f64(initial) as u64}");
+    st_put(K_CTRL, ctrl);
+
+    let mut card = Container.builder();
+    card.width_height(240.0, 140.0);
+    card.color(0xFFFFFFFFu64);
+    card.radius(12.0);
+    card.padding(16.0);
+    card.alignment(ALIGN_CENTER);
+
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_CENTER);
+    col.child(Text.builder().text("Set seconds").build());
+    let undo = undo_new();
+    let mut input = Input.builder().controller(ctrl).undo(undo).placeholder("seconds").width_height(180.0, 32.0).query_key("edit-input").build();
+    col.child(input);
+    col.child(button("btn-confirm", "Confirm", "b_confirm", initial, remaining));
+    card.child(col.build());
+    return card.build();
+}
+
+// "m:ss" display format.
+entry fn fmt_display(v: f64) -> str {
+    let total = v as u64;
+    let m = total / 60;
+    let s = total % 60;
+    if (s < 10) {
+        return f"{m}:0{s}";
+    }
+    return f"{m}:{s}";
+}
+
+// The 1 Hz ticker. `g` pins the generation: a stale loop (superseded by a
+// later start / pause) exits without ticking.
+async fn ticker(g: f64) -> str {
+    let running = stf_take(K_RUNNING) as u64;
+    while (rs_get_bool(running)) {
+        await sleep(1000);
+        if (gen_read() != g) {
+            stf_put(K_RUNNING, running as f64);
+            return "";
+        }
+        if (!rs_get_bool(running)) {
+            stf_put(K_RUNNING, running as f64);
+            return "";
+        }
+        let remaining = stf_take(K_REMAINING) as u64;
+        let r = rs_get_f64(remaining);
+        if (r <= 1.0) {
+            rs_set_f64(remaining, 0.0);
+            rs_set_bool(running, false);
+            stf_put(K_REMAINING, remaining as f64);
+            stf_put(K_RUNNING, running as f64);
+            return "";
+        }
+        rs_set_f64(remaining, r - 1.0);
+        stf_put(K_REMAINING, remaining as f64);
+    }
+    stf_put(K_RUNNING, running as f64);
+    return "";
+}
+
+fn gen_read() -> f64 {
+    let cell = st_take(K_GEN);
+    let v = mem_get(cell);
+    st_put(K_GEN, cell);
+    return v;
+}
+
+fn gen_bump() -> f64 {
+    let cell = st_take(K_GEN);
+    let g = mem_get(cell) + 1.0;
+    mem_set(cell, g);
+    st_put(K_GEN, cell);
+    return g;
+}
+
+entry fn b_start(_running: u64, _b: u64, _n: f64) {
+    let running = stf_take(K_RUNNING) as u64;
+    if (rs_get_bool(running)) {
+        stf_put(K_RUNNING, running as f64);
+        return;
+    }
+    rs_set_bool(running, true);
+    stf_put(K_RUNNING, running as f64);
+    launch_future(ticker(gen_bump()));
+}
+
+entry fn b_pause(_running: u64, _b: u64, _n: f64) {
+    let running = stf_take(K_RUNNING) as u64;
+    rs_set_bool(running, false);
+    stf_put(K_RUNNING, running as f64);
+    gen_bump();
+}
+
+entry fn b_reset(initial: u64, remaining: u64, _n: f64) {
+    let running = stf_take(K_RUNNING) as u64;
+    rs_set_bool(running, false);
+    stf_put(K_RUNNING, running as f64);
+    gen_bump();
+    rs_set_f64(remaining, rs_get_f64(initial));
+}
+
+entry fn b_edit(initial: u64, editing: u64, _n: f64) {
+    let running = stf_take(K_RUNNING) as u64;
+    rs_set_bool(running, false);
+    stf_put(K_RUNNING, running as f64);
+    gen_bump();
+    // (Re-)seed the modal controller with the current initial value.
+    let ctrl = st_take(K_CTRL);
+    tctrl_set_text(ctrl, f"{rs_get_f64(initial) as u64}");
+    st_put(K_CTRL, ctrl);
+    rs_set_bool(editing, true);
+}
+
+entry fn b_confirm(initial: u64, remaining: u64, _n: f64) {
+    let ctrl = st_take(K_CTRL);
+    let v = str_parse_f64(tctrl_text(ctrl));
+    rs_set_f64(initial, v);
+    rs_set_f64(remaining, v);
+    let editing = stf_take(K_EDITING) as u64;
+    rs_set_bool(editing, false);
+    stf_put(K_EDITING, editing as f64);
+}

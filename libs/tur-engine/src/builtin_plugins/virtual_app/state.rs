@@ -1,11 +1,11 @@
-//! Worker-side virtual-app state — shared between the bridge fns, the
+//! Worker-side virtual-app state — shared between the rut rows, the
 //! `VirtualAppSubsystem`, and the `VirtualAppView` element (all on the
 //! parent's worker). One `Rc<VirtualState>` per instance, created in
 //! `install_virtual_app`.
 //!
 //! Identity model:
-//! - A **controller** (`createVirtualAppController`) has a stable `base`
-//!   id — that's what the JS handle carries and what records are keyed by.
+//! - A **controller** (`va_controller`) has a stable `base` id — that's
+//!   what the author-side opaque carries and what records are keyed by.
 //! - Each **spawn** allocates a fresh incarnation `token`
 //!   ([`VirtualAppId`]) — so a rapid destroy/re-bind can never race two
 //!   children under one identity (host + outputs are keyed by token).
@@ -15,111 +15,61 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::{Context, JsError, JsNativeError, JsValue, js_string};
-use boa_gc::{Finalize, Trace};
-
 use crate::core::app::HostTx;
 use crate::core::app::comm::HostMsg;
 use crate::core::app::runtime_error::RuntimeErrorReport;
-use crate::core::edgy::mutation::{MutationHandle, PendingMutationInvocationQueue};
-use crate::core::edgy::reactive::{Mutation, ReactiveBridgeStore, Source};
+use crate::core::edgy::mutation::{MutationHandle, MutationPayload, PendingMutationInvocationQueue};
+use crate::core::edgy::reactive::{ReactiveBridgeStore, Source};
+use crate::core::edgy::value::Value;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
-use crate::core::js_runtime::js_value::{IntoJs, IntoJsArgs};
 use crate::core::render::RenderCommandBatch;
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::virtual_app::{VirtualAppId, VirtualControl};
 
-/// JS-opaque handle returned by `createModuleSource` — the source string
-/// never crosses the JS API again, only this id does.
-#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub(crate) struct ModuleSourceHandle(pub(crate) u64);
-
-impl crate::core::js_runtime::js_value::IntoJs for ModuleSourceHandle {
-    fn into_js(self, ctx: &mut Context) -> JsValue {
-        let proto = ctx.intrinsics().constructors().object().prototype();
-        boa_engine::JsObject::from_proto_and_data(proto, self).into()
-    }
-}
-
-/// JS-opaque handle returned by `forWorkerPool(name)` — wraps the very
-/// `WorkerPoolHandle` the embedder registered (resolved eagerly against the
-/// runtime's registry), so a controller built with it spawns its child
-/// into exactly the pool Rust code would have assigned. Unforgeable from
-/// JS: the payload can only be minted by the bridge.
-#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub(crate) struct JsWorkerPoolHandle(pub(crate) WorkerPoolHandle);
-
-impl crate::core::js_runtime::js_value::IntoJs for JsWorkerPoolHandle {
-    fn into_js(self, ctx: &mut Context) -> JsValue {
-        let proto = ctx.intrinsics().constructors().object().prototype();
-        boa_engine::JsObject::from_proto_and_data(proto, self).into()
-    }
-}
-
-/// Stable per-controller identity carried by the JS controller object.
+/// Stable per-controller identity carried by the author-side opaque (the
+/// rut rows wrap the bare `u64`; this newtype is the typed view the
+/// element's `app$` val decodes to).
 #[derive(Debug, Clone)]
 pub(crate) struct VirtualControllerRef(pub(crate) u64);
 
-/// The `onRuntimeError$` callback argument: a reconstructed `Error` minted
-/// in the PARENT realm (`e instanceof Error`, `e.message`, best-effort
-/// `e.stack`). The child's thrown value never crosses the worker boundary
-/// — only its formatted message + stack do.
+impl crate::core::edgy::FromValue for VirtualControllerRef {
+    /// A reactive `app$` val carries the ref opaquely (`Value::Opaque`
+    /// holding an `Rc<VirtualControllerRef>` — identity-preserving, the
+    /// same escape hatch every engine handle rides).
+    fn from_value(value: &Value) -> Result<Self, String> {
+        value
+            .as_opaque()
+            .and_then(|o| o.clone().downcast::<VirtualControllerRef>().ok())
+            .map(|rc| (*rc).clone())
+            .ok_or_else(|| crate::core::edgy::value::type_error("a virtual app controller"))
+    }
+}
+
+/// The `onRuntimeError$` callback argument. The child's thrown value never
+/// crosses the worker boundary — only its formatted message does.
 pub(crate) struct RuntimeErrorArg {
     message: String,
-    stack: Option<String>,
 }
 
 impl From<RuntimeErrorReport> for RuntimeErrorArg {
     fn from(report: RuntimeErrorReport) -> Self {
         Self {
             message: report.message,
-            stack: report.stack,
         }
     }
 }
 
-impl IntoJsArgs for RuntimeErrorArg {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        let value = JsError::from(JsNativeError::error().with_message(self.message.clone()))
-            .into_opaque(ctx)
-            .unwrap_or_else(|_| JsValue::from(js_string!(self.message.as_str())));
-        if let (Some(stack), Some(obj)) = (&self.stack, value.as_object()) {
-            let _ = obj.set(
-                js_string!("stack"),
-                JsValue::from(js_string!(stack.as_str())),
-                true,
-                ctx,
-            );
-        }
-        vec![value]
+impl MutationPayload for RuntimeErrorArg {
+    /// `[message]` — the child's formatted runtime-error message.
+    fn to_value_args(&self) -> Vec<Value> {
+        vec![Value::str(self.message.as_str())]
     }
 }
-
-impl crate::core::js_runtime::js_value::FromJs for VirtualControllerRef {
-    fn from_js(value: &JsValue) -> Result<Self, boa_engine::JsError> {
-        let obj = value.as_object().ok_or_else(|| {
-            crate::core::js_runtime::js_value::type_error("a virtual app controller")
-        })?;
-        obj.downcast_ref::<JsVirtualController>()
-            .map(|c| VirtualControllerRef(c.0))
-            .ok_or_else(|| {
-                crate::core::js_runtime::js_value::type_error("a virtual app controller")
-            })
-    }
-}
-
-/// `JsData` payload of the JS controller object. The object also carries
-/// `status$` / `errorMsg$` / `destroy$` properties.
-#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub(crate) struct JsVirtualController(pub(crate) u64);
 
 /// One controller's worker-side record.
 pub(crate) struct ControllerRecord {
-    pub status: Source<JsValue>,
-    pub error_msg: Source<JsValue>,
+    pub status: Source<crate::core::edgy::Value>,
+    pub error_msg: Source<crate::core::edgy::Value>,
     pub keep_alive: bool,
     /// Resolved target pool (a `forWorkerPool` handle or the default
     /// `"virtual"` pool, resolved at controller creation).
@@ -152,15 +102,20 @@ pub(crate) struct ChildOutput {
     pub image_remap: HashMap<ImageResourceId, ImageResourceId>,
 }
 
-pub(crate) struct VirtualState {
-    pub host_tx: HostTx,
-    pub bridge: ReactiveBridgeStore,
+/// The shared per-instance virtual-app state (register-phase plugin state,
+/// read back through `InstanceContext::plugin_state::<VirtualState>()`).
+/// Public so embedder-side services (the playground's `pg_compile` row) can
+/// mint sources on the Rust side ([`VirtualState::create_source`]) — the
+/// rut realm then lifts the bare `u64` through `va_source_handle`.
+pub struct VirtualState {
+    pub(crate) host_tx: HostTx,
+    pub(crate) bridge: ReactiveBridgeStore,
     next_id: Cell<u64>,
     sources: RefCell<HashMap<u64, Arc<str>>>,
-    pub controllers: RefCell<HashMap<u64, Rc<ControllerRecord>>>,
+    pub(crate) controllers: RefCell<HashMap<u64, Rc<ControllerRecord>>>,
     /// incarnation token → controller base (for status-event routing).
     tokens: RefCell<HashMap<u64, u64>>,
-    pub outputs: RefCell<HashMap<u64, ChildOutput>>,
+    pub(crate) outputs: RefCell<HashMap<u64, ChildOutput>>,
 }
 
 impl VirtualState {
@@ -184,7 +139,7 @@ impl VirtualState {
 
     // ── module sources ────────────────────────────────────────────────
 
-    pub(crate) fn register_source(&self, source: Arc<str>) -> u64 {
+    pub fn create_source(&self, source: Arc<str>) -> u64 {
         let id = self.alloc_id();
         self.sources.borrow_mut().insert(id, source);
         id
@@ -204,8 +159,10 @@ impl VirtualState {
         on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
     ) -> u64 {
         let base = self.alloc_id();
-        let status = self.bridge.decl_source(JsValue::from(js_string!("idle")));
-        let error_msg = self.bridge.decl_source(JsValue::from(js_string!("")));
+        let status = self
+            .bridge
+            .decl_source(crate::core::edgy::Value::str("idle"));
+        let error_msg = self.bridge.decl_source(crate::core::edgy::Value::str(""));
         self.controllers.borrow_mut().insert(
             base,
             Rc::new(ControllerRecord {
@@ -226,26 +183,6 @@ impl VirtualState {
 
     pub(crate) fn record(&self, base: u64) -> Option<Rc<ControllerRecord>> {
         self.controllers.borrow().get(&base).cloned()
-    }
-
-    /// Build the JS controller object: `JsData(JsVirtualController(base))`
-    /// carrying `status$` / `errorMsg$` / `destroy$`.
-    pub(crate) fn controller_js_object(
-        &self,
-        base: u64,
-        destroy: Mutation,
-        ctx: &mut Context,
-    ) -> JsValue {
-        let record = self
-            .record(base)
-            .expect("controller record exists until Destroyed is confirmed");
-        let proto = ctx.intrinsics().constructors().object().prototype();
-        let obj = boa_engine::JsObject::from_proto_and_data(proto, JsVirtualController(base));
-        let _ = obj.create_data_property(js_string!("status$"), record.status.into_js(ctx), ctx);
-        let _ =
-            obj.create_data_property(js_string!("errorMsg$"), record.error_msg.into_js(ctx), ctx);
-        let _ = obj.create_data_property(js_string!("destroy$"), destroy.into_js(ctx), ctx);
-        obj.into()
     }
 
     // ── bind / unbind (driven by the element's layout diff) ───────────
@@ -282,7 +219,7 @@ impl VirtualState {
         }
     }
 
-    /// Explicit destroy (the `destroy$` control mutation) — always retires,
+    /// Explicit destroy (the rut rail's `va_destroy` row) — always retires,
     /// regardless of `keepAlive`.
     pub(crate) fn destroy(&self, base: u64) {
         if let Some(record) = self.record(base) {
@@ -309,10 +246,10 @@ impl VirtualState {
         };
         let _ = self
             .bridge
-            .set_source(record.status, JsValue::from(js_string!(status)));
+            .set_source(record.status, crate::core::edgy::Value::str(status));
         let _ = self
             .bridge
-            .set_source(record.error_msg, JsValue::from(js_string!(error)));
+            .set_source(record.error_msg, crate::core::edgy::Value::str(error));
     }
 
     /// Route a `Destroyed` confirmation for an incarnation token.

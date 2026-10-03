@@ -7,25 +7,31 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-import { mount, ScrollView, Input, Column, CrossAxisAlignment } from "tur:std";
+use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Column, Input, ScrollView };
 
-const lines = [];
-for (let i = 0; i < 30; i++) lines.push("line " + i);
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Column()
-     .crossAlignment(CrossAxisAlignment.Stretch)
-     .children([Input()
-    .controller(globalThis.__ctrl)
-    .multiline(true)
-    .fontSize(14)
-    .fontFamily("monospace")
-    .queryKey(["editor"])
-    .build()])
-     .build())
-    .build());
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 30) {
+        tctrl_push_span(ctrl, f"line {i}\n");
+        i += 1;
+    }
+    let undo = undo_new();
+    // Multiline (flags bit 0), auto height — the editable lays out at its
+    // content height (~30 lines) so the ScrollView has overflow to scroll.
+    // The width spans the window (the JS twin's stretched-column geometry):
+    // a ScrollView shrink-wraps its cross axis, so without it the whole
+    // scroller would hug the longest line and the top-left click misses it.
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let input = input;
+    let mut col = Column.builder();
+    col.child(input);
+    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    let scroller = scroller;
+    mount(scroller);
+}
 "#;
 
 fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
@@ -38,7 +44,7 @@ fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
 #[test]
 fn caret_into_view_scrolls_to_caret() {
     let mut app = TurTestApp::new(300.0, 200.0).unwrap();
-    app.eval_module_source(CARET_SCROLL_BUNDLE).unwrap();
+    app.load_rut_module(CARET_SCROLL_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
@@ -90,3 +96,4 @@ fn caret_into_view_scrolls_to_caret() {
         "viewport should be near the top after returning the caret to line 0 (got {after_up})",
     );
 }
+

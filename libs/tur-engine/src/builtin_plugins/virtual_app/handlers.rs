@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::core::app::AppEvent;
 use crate::core::elements::NodeTreeData;
 use crate::core::hit_test::HitTest;
-use crate::core::js_runtime::TurInstanceContext;
+use crate::core::instance::InstanceContext;
 use crate::core::layout::Offset;
 use crate::core::platform::PlatformEvent;
 use crate::core::shell::{PointerInput, ShellEvent};
@@ -24,12 +24,12 @@ use super::state::VirtualState;
 
 pub(crate) struct VirtualAppSubsystem {
     state: Rc<VirtualState>,
-    js_ctx: TurInstanceContext,
+    instance: InstanceContext,
 }
 
 impl VirtualAppSubsystem {
-    pub(crate) fn new(state: Rc<VirtualState>, js_ctx: TurInstanceContext) -> Self {
-        Self { state, js_ctx }
+    pub(crate) fn new(state: Rc<VirtualState>, instance: InstanceContext) -> Self {
+        Self { state, instance }
     }
 
     /// Ship the host element's final rect to its child (deduped per
@@ -234,12 +234,12 @@ impl Subsystem for VirtualAppSubsystem {
             // re-layout through the ordinary invalidation rail.
         }
         if let Some(frame) = event.as_custom::<VirtualFrameEvent>() {
-            let js_ctx = self.js_ctx.clone();
+            let instance = self.instance.clone();
             self.state.store_frame(
                 frame.token,
                 frame.batch.clone(),
                 frame.images.clone(),
-                |image| js_ctx.register_image(image),
+                |image| instance.register_image(image),
             );
             cx.request_paint();
         }

@@ -1,5 +1,6 @@
 pub mod builtin_plugins;
 pub mod core;
+pub mod kit;
 pub mod renderer;
 
 pub mod error;
@@ -23,7 +24,6 @@ pub use crate::builtin_plugins::clipboard::{
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
 pub use crate::builtin_plugins::TurStdPlugin;
-pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an
@@ -138,32 +138,102 @@ impl TurApp {
         self.host.id()
     }
 
-    /// String-based module load: parse + evaluate `source` as an ES module
-    /// and invoke its `start()` export (the module lifecycle contract:
-    /// `start` returns an optional cleanup function; the engine runs it
-    /// before the next load and at destroy).
-    ///
-    /// The string-based sibling of [`Self::load_module_source`] — used by
-    /// embedders that produce the source at runtime (the wasm host, tests).
-    /// Embedders holding Rust-side sources (APK assets, bundle files)
-    /// prefer the handle-based path so the source never crosses an
-    /// embedder boundary as a string.
-    pub async fn load_module(
+    /// Rut-rail module load: compile + boot `source` as a rut module and
+    /// invoke its `entry fn start()` — see `core::rut_runtime`.
+    pub async fn load_rut_module(
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), TurError> {
         self.host
             .backend()
-            .load_module(source)
+            .load_rut_module(source)
             .await
             .map_err(TurError::from)
     }
 
-    /// Synchronous JS expression evaluation. Dev-tool / test-only —
-    /// production code uses [`Self::load_module`]. Useful for inspecting
-    /// JS-side state via `globalThis.__x = ...`.
-    pub async fn eval_js(&self, source: &str) -> String {
-        self.host.backend().eval_js(source).await
+    /// Handle-based rut load: resolve `handle` in `registry` and compile +
+    /// boot it via [`Self::load_rut_module`]. The natural pair for
+    /// [`ModuleSourceRegistry`] — embedders that register sources Rust-side
+    /// (APK assets, bundle files) load them by opaque id, so the source
+    /// never crosses an embedder boundary as a string. An unknown /
+    /// released handle is an error (registry handles are monotonic ids, so
+    /// a stale value can only miss).
+    pub async fn load_rut_module_source(
+        &self,
+        registry: &ModuleSourceRegistry,
+        handle: u64,
+    ) -> Result<(), TurError> {
+        let source = registry
+            .get(handle)
+            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
+        self.host
+            .backend()
+            .load_rut_module(source)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
+    /// loaded rut module. A missing entry is a successful no-op.
+    pub async fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .call_rut_entry(name, a, b)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
+    /// `start` returns nil or no rut module is loaded).
+    pub async fn rut_start_answer(&self) -> u64 {
+        self.host.backend().rut_start_answer().await
+    }
+
+    // -- dev tool (the E3 rut-surface snapshots; see `core::dev`) ----------
+
+    /// JSON snapshot of the root node, or `"null"` if no tree is mounted.
+    /// Shape:
+    /// `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
+    pub async fn dev_tool_element_tree(&self) -> String {
+        self.dev_tool(core::app::DevToolRequest::ElementTree).await
+    }
+
+    /// JSON snapshot of a single node by id (full subtree metadata; children
+    /// are returned as bare `{id}` handles). Returns `"null"` if not found.
+    pub async fn dev_tool_get_element(&self, id: u64) -> String {
+        self.dev_tool(core::app::DevToolRequest::GetElement(id))
+            .await
+    }
+
+    /// JSON frame-stats snapshot — the render-performance probe:
+    /// `{ flushes, paintedFrames, totals, last, lastHost, hostTimingEnabled }`.
+    pub async fn dev_tool_frame_stats(&self) -> String {
+        self.dev_tool(core::app::DevToolRequest::FrameStats).await
+    }
+
+    /// Toggle host-side render-commit timing collection. While on, every
+    /// applied frame's `applyUs`/`presentUs` timings are measured and land
+    /// in `frameStats().lastHost`. Off by default (zero per-frame overhead).
+    pub fn set_host_frame_timing(&self, enabled: bool) {
+        self.host.backend().set_frame_timing_enabled(enabled);
+        // Through the waking send path (see `TurApp::dev_tool`): a bare
+        // `unbounded_send` strands the message on executors without
+        // cross-thread wakes until unrelated traffic arrives.
+        self.host
+            .backend()
+            .send_worker_msg(core::app::WorkerMsg::FrameTimingEnabled { enabled });
+    }
+
+    async fn dev_tool(&self, req: core::app::DevToolRequest) -> String {
+        // Through the backend's disciplined RPC path (send + worker kick):
+        // on executors without cross-thread wakes (wasm) a bare
+        // `unbounded_send` leaves the request sitting in the worker's
+        // channel until unrelated traffic arrives — the kick is what
+        // rouses the parked worker loop.
+        self.host
+            .backend()
+            .rpc(|reply| core::app::WorkerMsg::DevTool { req, reply })
+            .await
     }
 
     /// Count of image resources retained on the host side (pixel `Blob`s).
@@ -199,46 +269,12 @@ impl TurApp {
         self.host.backend().register_image(image)
     }
 
-    /// Handle-based module load: resolve `handle` in `registry` and load
-    /// the shared source via [`Self::load_module`] (parse + evaluate
-    /// as an ES module and invoke its `start()` export — the module
-    /// lifecycle contract: `start` returns an optional cleanup function;
-    /// the engine runs it before the next load and at destroy).
-    ///
-    /// The natural pair for [`ModuleSourceRegistry`] — embedders that
-    /// register sources Rust-side (APK assets, bundle files) load them by
-    /// opaque id, so the source never crosses an embedder boundary as a
-    /// string. String-based embedders (the wasm host, tests) call
-    /// [`Self::load_module`] directly.
-    ///
-    /// An unknown / released handle is an error (never UB — registry handles
-    /// are monotonic ids, so a stale value can only miss).
-    pub async fn load_module_source(
-        &self,
-        registry: &ModuleSourceRegistry,
-        handle: u64,
-    ) -> Result<(), TurError> {
-        let source = registry
-            .get(handle)
-            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
-        self.host
-            .backend()
-            .load_module(source)
-            .await
-            .map_err(TurError::from)
-    }
+
 
     /// Read rendered pixels back from the owned renderer (screenshot
     /// tests). Returns `None` if the renderer doesn't support readback.
     pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
         self.host.backend().render_to_pixels()
-    }
-
-    /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
-    /// worker's channel; JS→host messages fire handlers registered via
-    /// `on_bus_event` (shipped back as `HostMsg::EventBusToEmbedder`).
-    pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
-        self.host.backend().event_bus_handle()
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
@@ -550,12 +586,12 @@ impl TurAppLooper {
                     //    flushes+records N+1 while main encodes N below.
                     host.backend().send_worker_msg(core::app::WorkerMsg::Wake);
                     // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins). Skip empty batches — an empty command
-                    //    list paints a blank frame (clears the surface), which
-                    //    is never desirable.
-                    if let Some((batch, viewport, frame_id)) =
-                        pending.take().filter(|(b, _, _)| !b.is_empty())
-                    {
+                    //    latest-wins). An EMPTY batch is a legitimate frame:
+                    //    a painted flush that recorded zero commands is how
+                    //    "the content went away" presents (clear to
+                    //    background). The frame fingerprint dedup below
+                    //    render_batch suppresses redundant repeats.
+                    if let Some((batch, viewport, frame_id)) = pending.take() {
                         host.backend().render_batch(&batch, viewport, frame_id);
                     }
                 }
@@ -594,16 +630,15 @@ impl TurAppLooper {
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 host.vsync().request_frame();
                                 false
-                            } else if let Some((batch, viewport, frame_id)) =
-                                pending.take().filter(|(b, _, _)| !b.is_empty())
-                            {
+                            } else if let Some((batch, viewport, frame_id)) = pending.take() {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
                                 // would stall with an un-rendered batch
                                 // (e.g. the initial frame, or a one-shot
-                                // paint request). Flush it now (empty
-                                // batches skipped — they'd paint blank) —
-                                // the next frame only starts on a new input.
+                                // paint request). Flush it now — an EMPTY
+                                // batch is a legitimate clear-to-background
+                                // frame (see the vsync arm above); the next
+                                // frame only starts on a new input.
                                 host.backend().render_batch(&batch, viewport, frame_id);
                                 false
                             } else {

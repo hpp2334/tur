@@ -1,0 +1,20 @@
+// column-container-text-intrinsic: a padded, unsized Container in a Column
+// sizes from its Text child's intrinsic measurement.
+use tur::{ mount };
+use tur_kit::{ Column, Container, Text };
+
+
+entry fn start() {
+    let mut col = Column.builder();
+    let mut b = Container.builder();
+    b.padding(48.0);
+    b.query_key("container");
+    let mut t = Text.builder();
+
+    t.text("Empty State");
+    t.font_size(24.0);
+    t.query_key("text");
+    b.child(t.build());
+    col.child(b.build());
+    mount(col.build());
+}

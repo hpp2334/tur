@@ -1,0 +1,80 @@
+// hit-through-overlay: the floating-pill pattern — a full-size invisible
+// overlay must not steal pointer/wheel input from the scrollable beneath;
+// the opaque anchored pill still consumes clicks. The counters render into
+// bound Texts (`beneath-downs` / `pill-clicks`).
+use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mem_get, mem_new, mem_set, mount, rs_set_str,
+    rs_source_str, st_put, st_take };
+use tur_kit::{ Column, Container, PointerInteract, Positioned, ScrollView, Stack, Text };
+
+
+let K_DOWNS: u64 = 7;
+let K_CLICKS: u64 = 8;
+
+entry fn start() -> u64 {
+    let downs = rs_source_str("0");
+    let clicks = rs_source_str("0");
+    st_put(K_DOWNS, mem_new(0.0));
+    st_put(K_CLICKS, mem_new(0.0));
+
+    let mut stack = Stack.builder();
+
+    // The scrollable beneath, wrapped in a gesture target so pointer
+    // events reaching THROUGH the overlay are observable.
+    let mut content = Column.builder();
+    content.cross_alignment(CROSS_ALIGN_STRETCH);
+    content.child(box_h(300.0));
+    content.child(box_h(300.0));
+    content.child(box_h(300.0));
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).query_key("sv").build();
+    stack.child(PointerInteract.builder().id(downs).on_down("g_down").child(scroller).build());
+
+    // The invisible full-size overlay: no decoration, no gesture.
+    let mut overlay = Container.builder();
+    overlay.width_height(400.0, 600.0);
+    overlay.query_key("overlay");
+    stack.child(overlay.build());
+
+    // The floating pill, anchored bottom-right.
+    let mut pill_box = Container.builder();
+    pill_box.width_height(64.0, 28.0);
+    pill_box.query_key("pill");
+    let pill = PointerInteract.builder().ids(clicks, clicks).on_tap("pill_click").child(pill_box.build()).build();
+    stack.child(Positioned.builder().right(8.0).bottom(8.0).child(pill).build());
+
+    // Counter readouts (the test parses these).
+    let mut downs_t = Text.builder();
+
+    downs_t.text_bound(downs);
+    downs_t.query_key("beneath-downs");
+    stack.child(downs_t.build());
+    let mut clicks_t = Text.builder();
+
+    clicks_t.text_bound(clicks);
+    clicks_t.query_key("pill-clicks");
+    stack.child(clicks_t.build());
+
+    mount(stack.build());
+    return downs;
+}
+
+entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+    let cell = st_take(K_DOWNS);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_DOWNS, cell);
+    rs_set_str(downs, f"{n as u64}");
+}
+
+entry fn pill_click(clicks: u64, _b: u64, _n: f64) {
+    let cell = st_take(K_CLICKS);
+    let n = mem_get(cell) + 1.0;
+    mem_set(cell, n);
+    st_put(K_CLICKS, cell);
+    rs_set_str(clicks, f"{n as u64}");
+}
+
+fn box_h(h: f64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(0.0, h);
+    return b.build();
+}

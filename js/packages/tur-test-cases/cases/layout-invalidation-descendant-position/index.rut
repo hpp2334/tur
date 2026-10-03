@@ -1,0 +1,35 @@
+// layout-invalidation-descendant-position: a reactive-width container
+// around an end-aligned Row holding a tracker box — the tracker's X must
+// track the width change through the intermediate Row (the divider-drag
+// position-gap repro). The `set_width` probe drives the change.
+use tur::{ MAIN_ALIGN_END, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur_kit::{ Container, Row };
+
+
+let K_WIDTH: u64 = 1;
+
+entry fn start() -> u64 {
+    let width = rs_source_f64();
+    rs_set_f64(width, 100.0);
+    stf_put(K_WIDTH, width as f64);
+
+    let mut outer = Container.builder();
+    outer.width_bound(width);
+    let mut row = Row.builder();
+    row.main_alignment(MAIN_ALIGN_END);
+    let mut tracker = Container.builder();
+    tracker.width_height(20.0, 20.0);
+    tracker.color(0x22C55EFFu64);
+    tracker.query_key("tracker");
+    row.child(tracker.build());
+    outer.child(row.build());
+    mount(outer.build());
+    return width;
+}
+
+// The `__setWidth(w)` seam.
+entry fn set_width(a: u64, _b: f64) {
+    let width = stf_take(K_WIDTH) as u64;
+    rs_set_f64(width, a as f64);
+    stf_put(K_WIDTH, width as f64);
+}

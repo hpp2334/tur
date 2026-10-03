@@ -1,0 +1,20 @@
+// composited-transform-basic: default TopLeft/TopLeft anchors, zero
+// targetOffset — the follower lands on the target's top-left (100, 80).
+use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack };
+
+
+entry fn start() {
+    let link = ct_link_new();
+    let mut stack = Stack.builder();
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
+    let target_child = SizedBox.builder(60.0, 40.0).child(Container.builder().build()).build();
+    let target = CompositedTarget.builder().link(link).child(target_child).build();
+    stack.child(Positioned.builder().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.builder();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.builder().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
+    mount(stack.build());
+}

@@ -1,0 +1,1168 @@
+// tur_kit.rut — the authored element-construction surface (the kit).
+//
+// ONE wrapper class per element over its family's `tur` host-pkg rows:
+// chainable methods (ONE METHOD PER PROP, named after the historical
+// camelCase props in snake_case), `.child(c)` / `.children([...])`
+// appending, and `.build()` as the ONLY terminal (each class's build calls
+// its FAMILY's build row — `Column.build()` → `flex_build`, …). Callbacks
+// keep the intent-queue law (names + ids, never closures); reactive
+// bindings are methods (`text_bound(atom)`, `color_bound(atom)`), not
+// constructor variants. Flags are the `u64` consts the `tur` pkg declares
+// (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` / `MAIN_ALIGN_*` /
+// `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` / `BOXFIT_*` /
+// `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from `tur` directly.
+//
+// Color law: every `packed: u64` color prop (`color` / `color_bound` /
+// `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
+// packs **`0xRRGGBBAA`** — R in bits 31..24, A in bits 7..0. An OPAQUE
+// color is `0xRRGGBBFF`; passing a bare `0xRRGGBB` shifts the channels
+// (it decodes as a translucent `0x00'GG'BB'??` cyan-ish wash — the law is
+// pinned natively by `tests/element/color_packing_law.rs`).
+//
+// The kit lives OUTSIDE core/ (the layering law): core owns mechanism,
+// each plugin owns its spec + rows, and this module — registered as a
+// compile-session prelude by the standard bundle assembly — is the stable
+// authored surface rut modules import (`use tur_kit::{ Column, … };`).
+//
+// Shape note: every class holds exactly ONE `spec: opaque` field (the
+// family's host-side spec) — no rut-side containers; the host spec
+// accumulates children through the `*_child` rows.
+use tur::{
+  box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
+  box_height_bound, box_new, box_padding, box_qkey, box_radius, box_shadow, box_size, box_width,
+  box_width_bound,
+  col_fixed, col_flex, cols_new, cond_build, cond_else, cond_new, cond_qkey, cond_then, ct_follower_build,
+  ct_follower_child, ct_follower_follower_anchor, ct_follower_link, ct_follower_new,
+  ct_follower_offset, ct_follower_target_anchor, ct_follower_target_anchor_bound, ct_link_new,
+  ct_target_build, ct_target_child, ct_target_link, ct_target_new, each_build, each_builder,
+  each_new, flex_build, flex_child, flex_column, flex_cross_align, flex_main_align,
+  flex_main_size, flex_qkey, flex_row, flexi_build, flexi_child, flexi_fit, flexi_flex,
+  flexi_qkey,
+  focus_build, focus_child, focus_new, focus_on_blur,
+  focus_on_focus, focus_on_key_down, frag_build, frag_child, frag_new, grid_aspect,
+  grid_build, grid_child, grid_main_extent, grid_max_cross, grid_qkey, grid_spacing,
+  img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_width,
+  input_build, input_color, input_controller, input_cursor_color, input_font_family,
+  input_font_size, input_multiline, input_new, input_obscure, input_obscure_char,
+  input_on_input, input_placeholder, input_placeholder_color, input_qkey, input_size, input_undo,
+  lazy_axis,
+  lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
+  lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
+  lazy_grid_qkey, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
+  lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
+  mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child, pi_id, pi_ids,
+  pi_new, pi_on_click, pi_on_context_menu, pi_on_down, pi_on_move, pi_on_tap, pi_on_up,
+  pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_new, pos_right, pos_top,
+  pos_width, scroll_axis, scroll_build, scroll_child, scroll_new, scroll_offset, scroll_qkey,
+  sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
+  span_add, spans_new, stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
+  switch_build, switch_case, switch_fallback, switch_new, switch_qkey, switch_value_derived,
+  switch_value_source, table_build, table_columns, table_header_builder, table_new, table_qkey,
+  table_row_builder, table_rows_atom, text_bind, text_bind_derived, text_build, text_clip,
+  text_color, text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey,
+  text_selectable, text_size, text_spans, text_text, text_weight, va_app_atom, va_bind, va_build,
+  va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
+  va_source_handle,
+};
+
+// ---- flex (Column / Row) ------------------------------------------------
+
+class Column {
+  spec: opaque;
+}
+
+impl Column {
+  pub fn builder() -> Self {
+    return Self { spec: flex_column() };
+  }
+  pub fn main_alignment(mut self, v: u64) -> Self {
+    flex_main_align(self.spec, v);
+    return self;
+  }
+  pub fn cross_alignment(mut self, v: u64) -> Self {
+    flex_cross_align(self.spec, v);
+    return self;
+  }
+  pub fn main_axis_size(mut self, v: u64) -> Self {
+    flex_main_size(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flex_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    flex_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      flex_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return flex_build(self.spec);
+  }
+}
+
+class Row {
+  spec: opaque;
+}
+
+impl Row {
+  pub fn builder() -> Self {
+    return Self { spec: flex_row() };
+  }
+  pub fn main_alignment(mut self, v: u64) -> Self {
+    flex_main_align(self.spec, v);
+    return self;
+  }
+  pub fn cross_alignment(mut self, v: u64) -> Self {
+    flex_cross_align(self.spec, v);
+    return self;
+  }
+  pub fn main_axis_size(mut self, v: u64) -> Self {
+    flex_main_size(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flex_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    flex_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      flex_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return flex_build(self.spec);
+  }
+}
+
+// ---- flexible items (Expanded / Flexible) --------------------------------
+
+class Expanded {
+  spec: opaque;
+}
+
+impl Expanded {
+  pub fn builder() -> Self {
+    return Self { spec: flexi_new() };
+  }
+  pub fn flex(mut self, v: f64) -> Self {
+    flexi_flex(self.spec, v);
+    return self;
+  }
+  pub fn flex_bound(mut self, atom: u64) -> Self {
+    flexi_flex_bound(self.spec, atom);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flexi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    flexi_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return flexi_build(self.spec);
+  }
+}
+
+class Flexible {
+  spec: opaque;
+}
+
+impl Flexible {
+  pub fn builder() -> Self {
+    let s = flexi_new();
+    flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot
+    return Self { spec: s };
+  }
+  pub fn flex(mut self, v: f64) -> Self {
+    flexi_flex(self.spec, v);
+    return self;
+  }
+  pub fn flex_bound(mut self, atom: u64) -> Self {
+    flexi_flex_bound(self.spec, atom);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flexi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    flexi_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return flexi_build(self.spec);
+  }
+}
+
+// ---- stack + positioned ---------------------------------------------------
+
+class Stack {
+  spec: opaque;
+}
+
+impl Stack {
+  pub fn builder() -> Self {
+    return Self { spec: stack_new() };
+  }
+  pub fn alignment(mut self, v: u64) -> Self {
+    stack_align(self.spec, v);
+    return self;
+  }
+  pub fn fit(mut self, v: u64) -> Self {
+    stack_fit(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    stack_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    stack_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      stack_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return stack_build(self.spec);
+  }
+}
+
+class Positioned {
+  spec: opaque;
+}
+
+impl Positioned {
+  pub fn builder() -> Self {
+    return Self { spec: pos_new() };
+  }
+  pub fn left(mut self, v: f64) -> Self {
+    pos_left(self.spec, v);
+    return self;
+  }
+  pub fn top(mut self, v: f64) -> Self {
+    pos_top(self.spec, v);
+    return self;
+  }
+  pub fn right(mut self, v: f64) -> Self {
+    pos_right(self.spec, v);
+    return self;
+  }
+  pub fn bottom(mut self, v: f64) -> Self {
+    pos_bottom(self.spec, v);
+    return self;
+  }
+  pub fn width(mut self, v: f64) -> Self {
+    pos_width(self.spec, v);
+    return self;
+  }
+  pub fn height(mut self, v: f64) -> Self {
+    pos_height(self.spec, v);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    pos_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return pos_build(self.spec);
+  }
+}
+
+// ---- container family (Container / SizedBox) ------------------------------
+
+class Container {
+  spec: opaque;
+}
+
+impl Container {
+  pub fn builder() -> Self {
+    return Self { spec: box_new() };
+  }
+  pub fn width(mut self, v: f64) -> Self {
+    box_width(self.spec, v);
+    return self;
+  }
+  pub fn height(mut self, v: f64) -> Self {
+    box_height(self.spec, v);
+    return self;
+  }
+  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+    box_size(self.spec, w, h);
+    return self;
+  }
+  pub fn padding(mut self, v: f64) -> Self {
+    box_padding(self.spec, v);
+    return self;
+  }
+  pub fn color(mut self, packed: u64) -> Self {
+    box_color(self.spec, packed);
+    return self;
+  }
+  pub fn color_bound(mut self, atom: u64) -> Self {
+    box_color_bound(self.spec, atom);
+    return self;
+  }
+  pub fn width_bound(mut self, atom: u64) -> Self {
+    box_width_bound(self.spec, atom);
+    return self;
+  }
+  pub fn height_bound(mut self, atom: u64) -> Self {
+    box_height_bound(self.spec, atom);
+    return self;
+  }
+  pub fn border(mut self, packed: u64, width: f64, position: u64) -> Self {
+    box_border(self.spec, packed, width, position);
+    return self;
+  }
+  pub fn radius(mut self, r: f64) -> Self {
+    box_radius(self.spec, r);
+    return self;
+  }
+  pub fn shadow(mut self, packed: u64, blur: f64, dx: f64, dy: f64) -> Self {
+    box_shadow(self.spec, packed, blur, dx, dy);
+    return self;
+  }
+  pub fn alignment(mut self, v: u64) -> Self {
+    box_align(self.spec, v);
+    return self;
+  }
+  pub fn clip(mut self, v: u64) -> Self {
+    box_clip(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    box_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    box_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      box_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return box_build(self.spec);
+  }
+}
+
+class SizedBox {
+  spec: opaque;
+}
+
+impl SizedBox {
+  pub fn builder(w: f64, h: f64) -> Self {
+    return Self { spec: sizedbox_new(w, h) };
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    sizedbox_child(self.spec, c);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    sizedbox_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return sizedbox_build(self.spec);
+  }
+}
+
+// ---- text family (Text / spans) -------------------------------------------
+
+class Text {
+  spec: opaque;
+}
+
+impl Text {
+  pub fn builder() -> Self {
+    return Self { spec: text_new() };
+  }
+  pub fn text(mut self, v: str) -> Self {
+    text_text(self.spec, v);
+    return self;
+  }
+  pub fn text_bound(mut self, atom: u64) -> Self {
+    text_bind(self.spec, atom);
+    return self;
+  }
+  pub fn text_bound_derived(mut self, atom: u64) -> Self {
+    text_bind_derived(self.spec, atom);
+    return self;
+  }
+  pub fn font_size(mut self, v: f64) -> Self {
+    text_size(self.spec, v);
+    return self;
+  }
+  pub fn font_weight(mut self, v: f64) -> Self {
+    text_weight(self.spec, v);
+    return self;
+  }
+  pub fn color(mut self, packed: u64) -> Self {
+    text_color(self.spec, packed);
+    return self;
+  }
+  pub fn max_lines(mut self, n: u64) -> Self {
+    text_max_lines(self.spec, n);
+    return self;
+  }
+  pub fn clip(mut self) -> Self {
+    text_clip(self.spec);
+    return self;
+  }
+  pub fn ellipsis(mut self) -> Self {
+    text_ellipsis(self.spec);
+    return self;
+  }
+  pub fn overflow_visible(mut self) -> Self {
+    text_overflow_visible(self.spec);
+    return self;
+  }
+  pub fn selectable(mut self, v: bool) -> Self {
+    text_selectable(self.spec, v);
+    return self;
+  }
+  pub fn spans(mut self, list: Spans) -> Self {
+    text_spans(self.spec, list.spec);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    text_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return text_build(self.spec);
+  }
+}
+
+class Spans {
+  spec: opaque;
+}
+
+impl Spans {
+  pub fn builder() -> Self {
+    return Self { spec: spans_new() };
+  }
+  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: u64) -> Self {
+    span_add(self.spec, text, size, packed, weight, flags);
+    return self;
+  }
+}
+
+// ---- input -----------------------------------------------------------------
+
+class Input {
+  spec: opaque;
+}
+
+impl Input {
+  pub fn builder() -> Self {
+    return Self { spec: input_new() };
+  }
+  pub fn controller(mut self, c: opaque) -> Self {
+    input_controller(self.spec, c);
+    return self;
+  }
+  pub fn undo(mut self, u: opaque) -> Self {
+    input_undo(self.spec, u);
+    return self;
+  }
+  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+    input_size(self.spec, w, h);
+    return self;
+  }
+  pub fn placeholder(mut self, v: str) -> Self {
+    input_placeholder(self.spec, v);
+    return self;
+  }
+  pub fn color(mut self, packed: u64) -> Self {
+    input_color(self.spec, packed);
+    return self;
+  }
+  pub fn placeholder_color(mut self, packed: u64) -> Self {
+    input_placeholder_color(self.spec, packed);
+    return self;
+  }
+  pub fn cursor_color(mut self, packed: u64) -> Self {
+    input_cursor_color(self.spec, packed);
+    return self;
+  }
+  pub fn font_size(mut self, v: f64) -> Self {
+    input_font_size(self.spec, v);
+    return self;
+  }
+  pub fn obscure(mut self, v: bool) -> Self {
+    input_obscure(self.spec, v);
+    return self;
+  }
+  pub fn obscure_char(mut self, v: str) -> Self {
+    input_obscure_char(self.spec, v);
+    return self;
+  }
+  pub fn multiline(mut self, v: bool) -> Self {
+    input_multiline(self.spec, v);
+    return self;
+  }
+  pub fn font_family(mut self, v: str) -> Self {
+    input_font_family(self.spec, v);
+    return self;
+  }
+  // The on-input rail (the intent-queue law): the named entry fn delivers
+  // `(id, 0, seq)` on every user edit; the handler reads the fresh text
+  // via `tctrl_text`. Bind `.controller(...)` first — the row installs
+  // through the builder's shared controller.
+  pub fn on_input(mut self, name: str, id: u64) -> Self {
+    input_on_input(self.spec, name, id);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    input_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return input_build(self.spec);
+  }
+}
+
+// ---- gesture family (PointerInteract / MouseRegion / Focusable) -------------
+
+class PointerInteract {
+  spec: opaque;
+}
+
+impl PointerInteract {
+  pub fn builder() -> Self {
+    return Self { spec: pi_new() };
+  }
+  // The single-id rail: pointer callbacks deliver `(id, lx, ly, gx, gy, btn)`.
+  pub fn id(mut self, v: u64) -> Self {
+    pi_id(self.spec, v);
+    return self;
+  }
+  // The two-id rail: pointer callbacks deliver `(a, b, lx, ly, gx, gy, btn)`;
+  // taps deliver the `(a, b, seq)` click shape either way.
+  pub fn ids(mut self, a: u64, b: u64) -> Self {
+    pi_ids(self.spec, a, b);
+    return self;
+  }
+  pub fn on_tap(mut self, name: str) -> Self {
+    pi_on_tap(self.spec, name);
+    return self;
+  }
+  pub fn on_click(mut self, name: str) -> Self {
+    pi_on_click(self.spec, name);
+    return self;
+  }
+  pub fn on_down(mut self, name: str) -> Self {
+    pi_on_down(self.spec, name);
+    return self;
+  }
+  pub fn on_move(mut self, name: str) -> Self {
+    pi_on_move(self.spec, name);
+    return self;
+  }
+  pub fn on_up(mut self, name: str) -> Self {
+    pi_on_up(self.spec, name);
+    return self;
+  }
+  pub fn on_context_menu(mut self, name: str) -> Self {
+    pi_on_context_menu(self.spec, name);
+    return self;
+  }
+  pub fn behavior(mut self, v: u64) -> Self {
+    pi_behavior(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    pi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    pi_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return pi_build(self.spec);
+  }
+}
+
+class MouseRegion {
+  spec: opaque;
+}
+
+impl MouseRegion {
+  pub fn builder() -> Self {
+    return Self { spec: mr_new() };
+  }
+  pub fn on_enter(mut self, name: str, id: u64) -> Self {
+    mr_on_enter(self.spec, name, id);
+    return self;
+  }
+  pub fn on_exit(mut self, name: str, id: u64) -> Self {
+    mr_on_exit(self.spec, name, id);
+    return self;
+  }
+  pub fn cursor(mut self, v: u64) -> Self {
+    mr_cursor(self.spec, v);
+    return self;
+  }
+  pub fn cursor_bound(mut self, atom: u64) -> Self {
+    mr_cursor_bound(self.spec, atom);
+    return self;
+  }
+  pub fn behavior(mut self, v: u64) -> Self {
+    mr_behavior(self.spec, v);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    mr_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return mr_build(self.spec);
+  }
+}
+
+class Focusable {
+  spec: opaque;
+}
+
+impl Focusable {
+  pub fn builder() -> Self {
+    return Self { spec: focus_new() };
+  }
+  pub fn on_key_down(mut self, name: str, id: u64) -> Self {
+    focus_on_key_down(self.spec, name, id);
+    return self;
+  }
+  pub fn on_focus(mut self, name: str, id: u64) -> Self {
+    focus_on_focus(self.spec, name, id);
+    return self;
+  }
+  pub fn on_blur(mut self, name: str, id: u64) -> Self {
+    focus_on_blur(self.spec, name, id);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    focus_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return focus_build(self.spec);
+  }
+}
+
+// ---- scroll + lazy containers ----------------------------------------------
+
+class ScrollView {
+  spec: opaque;
+}
+
+impl ScrollView {
+  pub fn builder() -> Self {
+    return Self { spec: scroll_new() };
+  }
+  pub fn axis(mut self, v: u64) -> Self {
+    scroll_axis(self.spec, v);
+    return self;
+  }
+  pub fn initial_offset(mut self, v: f64) -> Self {
+    scroll_offset(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    scroll_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    scroll_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return scroll_build(self.spec);
+  }
+}
+
+class LazyList {
+  spec: opaque;
+}
+
+impl LazyList {
+  pub fn builder() -> Self {
+    return Self { spec: lazy_list_new() };
+  }
+  pub fn item_builder(mut self, name: str) -> Self {
+    lazy_builder(self.spec, name);
+    return self;
+  }
+  pub fn count(mut self, atom: u64) -> Self {
+    lazy_count(self.spec, atom);
+    return self;
+  }
+  pub fn axis(mut self, v: u64) -> Self {
+    lazy_axis(self.spec, v);
+    return self;
+  }
+  pub fn overscan(mut self, v: u64) -> Self {
+    lazy_overscan(self.spec, v);
+    return self;
+  }
+  pub fn item_extent(mut self, v: f64) -> Self {
+    lazy_item_extent(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    lazy_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return lazy_build(self.spec);
+  }
+}
+
+class LazyGrid {
+  spec: opaque;
+}
+
+impl LazyGrid {
+  pub fn builder() -> Self {
+    return Self { spec: lazy_grid_new() };
+  }
+  pub fn item_builder(mut self, name: str) -> Self {
+    lazy_grid_builder(self.spec, name);
+    return self;
+  }
+  pub fn count(mut self, atom: u64) -> Self {
+    lazy_grid_count(self.spec, atom);
+    return self;
+  }
+  pub fn axis(mut self, v: u64) -> Self {
+    lazy_grid_axis(self.spec, v);
+    return self;
+  }
+  pub fn overscan(mut self, v: u64) -> Self {
+    lazy_grid_overscan(self.spec, v);
+    return self;
+  }
+  pub fn max_cross(mut self, v: f64) -> Self {
+    lazy_grid_max_cross(self.spec, v);
+    return self;
+  }
+  pub fn aspect(mut self, v: f64) -> Self {
+    lazy_grid_aspect(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    lazy_grid_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return lazy_grid_build(self.spec);
+  }
+}
+
+// ---- grid + table ------------------------------------------------------------
+
+class Grid {
+  spec: opaque;
+}
+
+impl Grid {
+  pub fn builder() -> Self {
+    return Self { spec: grid_new() };
+  }
+  pub fn max_cross(mut self, v: f64) -> Self {
+    grid_max_cross(self.spec, v);
+    return self;
+  }
+  pub fn aspect(mut self, v: f64) -> Self {
+    grid_aspect(self.spec, v);
+    return self;
+  }
+  pub fn spacing(mut self, cross: f64, main: f64) -> Self {
+    grid_spacing(self.spec, cross, main);
+    return self;
+  }
+  pub fn main_extent(mut self, v: f64) -> Self {
+    grid_main_extent(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    grid_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    grid_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      grid_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return grid_build(self.spec);
+  }
+}
+
+class TableCols {
+  spec: opaque;
+}
+
+impl TableCols {
+  pub fn builder() -> Self {
+    return Self { spec: cols_new() };
+  }
+  pub fn fixed(mut self, w: f64) -> Self {
+    col_fixed(self.spec, w);
+    return self;
+  }
+  pub fn flex(mut self, f: f64, min: f64) -> Self {
+    col_flex(self.spec, f, min);
+    return self;
+  }
+}
+
+class Table {
+  spec: opaque;
+}
+
+impl Table {
+  pub fn builder() -> Self {
+    return Self { spec: table_new() };
+  }
+  pub fn columns(mut self, cols: TableCols) -> Self {
+    table_columns(self.spec, cols.spec);
+    return self;
+  }
+  pub fn rows_atom(mut self, atom: u64) -> Self {
+    table_rows_atom(self.spec, atom);
+    return self;
+  }
+  pub fn row_builder(mut self, name: str) -> Self {
+    table_row_builder(self.spec, name);
+    return self;
+  }
+  pub fn header_builder(mut self, name: str) -> Self {
+    table_header_builder(self.spec, name);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    table_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return table_build(self.spec);
+  }
+}
+
+// ---- control flow (Switch / Condition / Each / Fragment) ---------------------
+
+class Switch {
+  spec: opaque;
+}
+
+impl Switch {
+  pub fn builder() -> Self {
+    return Self { spec: switch_new() };
+  }
+  pub fn value_source(mut self, atom: u64) -> Self {
+    switch_value_source(self.spec, atom);
+    return self;
+  }
+  pub fn value_derived(mut self, atom: u64) -> Self {
+    switch_value_derived(self.spec, atom);
+    return self;
+  }
+  // Appends one case — the historical `cases` prop's crossing (`case` is
+  // a reserved word in rut).
+  pub fn cases(mut self, key: str, branch: opaque) -> Self {
+    switch_case(self.spec, key, branch);
+    return self;
+  }
+  pub fn fallback(mut self, branch: opaque) -> Self {
+    switch_fallback(self.spec, branch);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    switch_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return switch_build(self.spec);
+  }
+}
+
+class Condition {
+  spec: opaque;
+}
+
+impl Condition {
+  pub fn builder(atom: u64) -> Self {
+    return Self { spec: cond_new(atom) };
+  }
+  pub fn then(mut self, branch: opaque) -> Self {
+    cond_then(self.spec, branch);
+    return self;
+  }
+  pub fn else_branch(mut self, branch: opaque) -> Self {
+    cond_else(self.spec, branch);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    cond_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return cond_build(self.spec);
+  }
+}
+
+class Each {
+  spec: opaque;
+}
+
+impl Each {
+  pub fn builder(atom: u64) -> Self {
+    return Self { spec: each_new(atom) };
+  }
+  pub fn item_builder(mut self, name: str) -> Self {
+    each_builder(self.spec, name);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return each_build(self.spec);
+  }
+}
+
+class Fragment {
+  spec: opaque;
+}
+
+impl Fragment {
+  pub fn builder() -> Self {
+    return Self { spec: frag_new() };
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    frag_child(self.spec, c);
+    return self;
+  }
+  pub fn children(mut self, cs: [opaque]) -> Self {
+    for (let c of cs) {
+      frag_child(self.spec, c);
+    }
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return frag_build(self.spec);
+  }
+}
+
+// ---- image + virtual app + lifecycle ------------------------------------------
+
+class Image {
+  spec: opaque;
+}
+
+impl Image {
+  pub fn builder(res: u64) -> Self {
+    return Self { spec: img_new(res) };
+  }
+  pub fn width(mut self, v: f64) -> Self {
+    img_width(self.spec, v);
+    return self;
+  }
+  pub fn height(mut self, v: f64) -> Self {
+    img_height(self.spec, v);
+    return self;
+  }
+  pub fn fit(mut self, v: u64) -> Self {
+    img_fit(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    img_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return img_build(self.spec);
+  }
+}
+
+class VirtualApp {
+  spec: opaque;
+}
+
+impl VirtualApp {
+  pub fn builder() -> Self {
+    return Self { spec: va_new() };
+  }
+  pub fn controller(mut self, c: opaque) -> Self {
+    va_controller_set(self.spec, c);
+    return self;
+  }
+  pub fn bind(mut self, atom: u64) -> Self {
+    va_bind(self.spec, atom);
+    return self;
+  }
+  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+    va_size(self.spec, w, h);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    va_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return va_build(self.spec);
+  }
+}
+
+class Lifecycle {
+  spec: opaque;
+}
+
+impl Lifecycle {
+  pub fn builder() -> Self {
+    return Self { spec: lc_new() };
+  }
+  pub fn on_mount(mut self, name: str) -> Self {
+    lc_on_mount(self.spec, name);
+    return self;
+  }
+  pub fn before_destroy(mut self, name: str) -> Self {
+    lc_before_destroy(self.spec, name);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    lc_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return lc_build(self.spec);
+  }
+}
+
+// ---- composited target / follower ------------------------------------------------
+
+class CompositedTarget {
+  spec: opaque;
+}
+
+impl CompositedTarget {
+  pub fn builder() -> Self {
+    return Self { spec: ct_target_new() };
+  }
+  pub fn link(mut self, l: opaque) -> Self {
+    ct_target_link(self.spec, l);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    ct_target_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return ct_target_build(self.spec);
+  }
+}
+
+class CompositedFollower {
+  spec: opaque;
+}
+
+impl CompositedFollower {
+  pub fn builder() -> Self {
+    return Self { spec: ct_follower_new() };
+  }
+  pub fn link(mut self, l: opaque) -> Self {
+    ct_follower_link(self.spec, l);
+    return self;
+  }
+  pub fn target_anchor(mut self, v: u64) -> Self {
+    ct_follower_target_anchor(self.spec, v);
+    return self;
+  }
+  pub fn target_anchor_bound(mut self, atom: u64) -> Self {
+    ct_follower_target_anchor_bound(self.spec, atom);
+    return self;
+  }
+  pub fn follower_anchor(mut self, v: u64) -> Self {
+    ct_follower_follower_anchor(self.spec, v);
+    return self;
+  }
+  pub fn offset(mut self, x: f64, y: f64) -> Self {
+    ct_follower_offset(self.spec, x, y);
+    return self;
+  }
+  pub fn child(mut self, c: opaque) -> Self {
+    ct_follower_child(self.spec, c);
+    return self;
+  }
+  pub fn build(self) -> opaque {
+    return ct_follower_build(self.spec);
+  }
+}
+
+// ---- shared helpers ----------------------------------------------------------------
+
+// Mint a LayerLink (the JS `createLayerLink` twin) for the composited
+// target/follower pair.
+pub fn layer_link() -> opaque {
+  return ct_link_new();
+}
+
+// Register an encoded image resource (PNG/JPEG) — the `createImageResource`
+// twin.
+pub fn image_resource_bytes(bytes: bytes) -> u64 {
+  return img_res_bytes(bytes);
+}
+
+// A synthetic solid RGBA image resource (fixture-friendly).
+pub fn image_resource_solid(w: u64, h: u64, packed: u64) -> u64 {
+  return img_res_solid(w, h, packed);
+}
+
+// Register a string-authored child module source with the virtual-app
+// subsystem — the `createModuleSource` twin.
+pub fn virtual_app_source(src: str) -> opaque {
+  return va_create_source(src);
+}
+
+// Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
+// answers) into the source handle — Rust-defined sources enter the realm
+// as plain u64s.
+pub fn virtual_app_source_handle(id: u64) -> opaque {
+  return va_source_handle(id);
+}
+
+// Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
+// (`VirtualApp.bind(atom)` + `va_app_set` / `va_app_clear` swaps).
+pub fn virtual_app_atom() -> u64 {
+  return va_app_atom();
+}
+
+// Mint a virtual-app controller from a registered source — the
+// `createVirtualAppController` twin.
+pub fn virtual_app_controller(src: opaque) -> opaque {
+  return va_controller(src);
+}

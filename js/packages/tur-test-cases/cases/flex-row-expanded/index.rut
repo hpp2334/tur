@@ -1,0 +1,19 @@
+// flex-row-expanded: a fixed-width child plus an Expanded filling the
+// remaining main axis.
+use tur::{ CROSS_ALIGN_START, mount };
+use tur_kit::{ Container, Expanded, Row };
+
+
+fn box_wh(w: f64, h: f64) -> opaque {
+    let mut b = Container.builder();
+    b.width_height(w, h);
+    return b.build();
+}
+
+entry fn start() {
+    let mut row = Row.builder();
+    row.cross_alignment(CROSS_ALIGN_START);
+    row.child(box_wh(50.0, 0.0));
+    row.child(Expanded.builder().flex(1.0).child(box_wh(0.0, 0.0)).build());
+    mount(row.build());
+}

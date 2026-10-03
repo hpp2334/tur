@@ -1,0 +1,42 @@
+// composited-transform-sibling-relayout: an unrelated sibling's reactive
+// height flip forces the common Stack to relayout — the follower must keep
+// painting at the tracked (100, 80).
+use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount, rs_set_f64, rs_source_f64, stf_put };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, PointerInteract, Positioned, SizedBox, Stack };
+
+
+let K_TALL: u64 = 1;
+
+entry fn start() -> u64 {
+    let tall = rs_source_f64();
+    rs_set_f64(tall, 0.0);
+    stf_put(K_TALL, tall as f64);
+    let link = ct_link_new();
+    let mut stack = Stack.builder();
+    stack.child(SizedBox.builder(400.0, 600.0).child(Container.builder().build()).build());
+    let target_child = SizedBox.builder(60.0, 40.0).child(Container.builder().build()).build();
+    let target = CompositedTarget.builder().link(link).child(target_child).build();
+    stack.child(Positioned.builder().left(100.0).top(80.0).child(target).build());
+    let mut red = Container.builder();
+    red.width_height(20.0, 20.0);
+    red.color(0xFF0000FFu64);
+    let follower = CompositedFollower.builder().link(link).target_anchor(ALIGN_TOP_LEFT).follower_anchor(ALIGN_TOP_LEFT).child(red.build()).build();
+    stack.child(follower);
+
+    // The reactive sibling (non-positioned): height flips 10 -> 120.
+    let mut sib = Container.builder();
+    sib.width_height(40.0, 0.0);
+    sib.color(0x4F46E1FFu64);
+    stack.child(sib.build());
+
+    let mut btn = Container.builder();
+    btn.width_height(60.0, 30.0);
+    btn.color(0x16A34AFFu64);
+    stack.child(Positioned.builder().left(300.0).top(540.0).child(PointerInteract.builder().ids(tall, tall).on_tap("b_tall").child(btn.build()).build()).build());
+    mount(stack.build());
+    return tall;
+}
+
+entry fn b_tall(tall: u64, _b: u64, _n: f64) {
+    rs_set_f64(tall, 120.0);
+}

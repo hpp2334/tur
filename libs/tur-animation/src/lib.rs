@@ -16,10 +16,12 @@
 
 pub mod controller;
 pub mod curve;
+pub mod kit;
 pub mod event;
 pub mod flush_hook;
 pub mod manager;
 pub mod plugin;
+pub(crate) mod rut_rows;
 pub mod tween;
 
 pub use controller::AnimationController;

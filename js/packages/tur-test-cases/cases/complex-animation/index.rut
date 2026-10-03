@@ -1,0 +1,29 @@
+// complex-animation: the showcase twin — a controller-driven animation
+// with explicit tween composition (opacity + translate on one target).
+use tur::{ anim_ctrl, anim_forward, anim_repeat, mount, rs_source_f64 };
+use tur_kit::{ Column, Container, Expanded, SizedBox, Text };
+use tur_anim_kit::{ Opacity };
+
+
+entry fn start() -> u64 {
+    let t = rs_source_f64();
+    let ctrl = anim_ctrl(t, 2000.0, "easeInOut", 0, "a_tick", "a_end");
+    anim_repeat(ctrl, 1000);
+    anim_forward(ctrl);
+
+    let mut col = Column.builder();
+    col.child(SizedBox.builder(400.0, 40.0).child(Text.builder().text("complex-animation: repeat + tween").build()).build());
+    let mut target = Container.builder();
+    target.width_height(60.0, 60.0);
+    target.color(0x6366F1FFu64);
+    let opacity = Opacity.builder(0.0).bound(t).child(target.build()).build();
+    col.child(Expanded.builder().flex(1.0).child(opacity).build());
+    mount(col.build());
+    return t;
+}
+
+entry fn a_tick(_atom: u64, _t: f64) {
+}
+
+entry fn a_end(_atom: u64, _v: f64) {
+}

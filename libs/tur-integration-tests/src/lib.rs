@@ -8,9 +8,6 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::Context;
-use boa_engine::NativeFunction;
-use boa_engine::context::time::Clock;
 use futures::StreamExt;
 use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
@@ -23,33 +20,29 @@ use tur_engine::core::element::{ElementNodeId, NodeId};
 /// worker threads (Phase 8 threaded mode). Tests are single-threaded but
 /// must satisfy the same bound — `Mutex` adds negligible overhead for the
 /// test's per-frame clock access.
-pub struct MutexFixedClock(pub std::sync::Mutex<boa_engine::context::time::FixedClock>);
+pub struct MutexFixedClock(pub std::sync::Mutex<f64>);
 
-impl boa_engine::context::time::Clock for MutexFixedClock {
-    fn now(&self) -> boa_engine::context::time::JsInstant {
-        self.0.lock().unwrap().now()
-    }
-    fn system_time_millis(&self) -> i64 {
-        self.0.lock().unwrap().system_time_millis()
+impl tur_engine::core::clock::Clock for MutexFixedClock {
+    fn now_millis(&self) -> f64 {
+        *self.0.lock().unwrap()
     }
 }
 
 impl MutexFixedClock {
     pub fn new(start_millis: u64) -> Self {
-        Self(std::sync::Mutex::new(
-            boa_engine::context::time::FixedClock::from_millis(start_millis),
-        ))
+        Self(std::sync::Mutex::new(start_millis as f64))
     }
     pub fn forward(&self, millis: u64) {
-        self.0.lock().unwrap().forward(millis);
+        *self.0.lock().unwrap() += millis as f64;
     }
 }
+use tur_engine::core::clock::Clock as _;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
-use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
+use tur_engine::core::plugin::Plugin;
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
@@ -66,74 +59,10 @@ use tur_net_capability::{
     TurNetPlugin,
 };
 
-/// A minimal [`Plugin`] that registers a single ctx-free host module at
-/// build time. Test-only convenience for the cases that previously used the
-/// runtime `TurApp::register_native_module` API (now removed) — lets a test
-/// inject `tur:<whatever>` exports through the plugin path.
-///
-/// **Phase 7**: holds builder closures (not pre-built `NativeFunction`s)
-/// because `NativeFunction` wraps a boa `TraceableClosure` (`!Send`). Each
-/// instance's `register()` calls the builder to produce a fresh
-/// `NativeFunction` against its own boa `Context`.
-pub struct NativeModulePlugin {
-    /// Module specifier to register (e.g. `"tur:test"`).
-    pub specifier: &'static str,
-    /// `(name, builder, length)` exports.
-    pub exports: Vec<NativeExport>,
-}
-
-/// One export of a [`NativeModulePlugin`]. The `builder` closure produces a
-/// fresh `NativeFunction` for each instance (called inside `register`).
-pub struct NativeExport {
-    pub name: String,
-    pub builder: Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>,
-    pub length: usize,
-}
-
-impl Plugin for NativeModulePlugin {
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-        let exports: Vec<(String, NativeFunction, usize)> = self
-            .exports
-            .iter()
-            .map(|e| (e.name.clone(), (e.builder)(ctx.boa_mut()), e.length))
-            .collect();
-        ctx.register_native_module(self.specifier, exports);
-        Ok(())
-    }
-}
-
 /// Fixed per-frame time step (ms) used by [`TurTestApp::wait_frames`] and
 /// [`TurTestApp::wait_for`] — 60 fps. Animation/timer tests express elapsed
 /// time as a frame count rather than a wall duration.
 const FRAME_STEP_MS: u64 = 16;
-
-/// Legacy fixture adapter: if `source` doesn't already contain an `export`
-/// (inline fixtures never do; dist bundles and hand-written contract
-/// modules always do), hoist its import statements to the top and wrap the
-/// remaining statements in `export function start({ store }) { … }` so the
-/// source satisfies the module lifecycle contract without hand-editing
-/// every inline test bundle. The injected `{ store }` is the instance
-/// store; the fixture body's bare `store` references resolve to it.
-fn wrap_legacy_start(source: &str) -> String {
-    if source.contains("export") {
-        return source.to_string();
-    }
-    let mut imports = String::new();
-    let mut body = String::new();
-    let mut in_import = false;
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if in_import || trimmed.starts_with("import ") {
-            in_import = !trimmed.contains(" from ") && !trimmed.ends_with(';');
-            imports.push_str(line);
-            imports.push('\n');
-        } else {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    format!("{imports}export function start({{ store }}) {{\n{body}}}\n")
-}
 
 /// `Clipboard` impl for tests. Reads return a pre-canned value (set via
 /// [`Self::set_next_read`]); writes are appended to a log drainable via
@@ -496,6 +425,7 @@ impl TurTestApp {
             None,
             TestSchedulerDriver::new(),
             dpr,
+            false,
         )
     }
 
@@ -528,6 +458,7 @@ impl TurTestApp {
             Some(shell),
             driver,
             1.0,
+            false,
         )
     }
 
@@ -575,6 +506,30 @@ impl TurTestApp {
         Self::build(width, height, None, None, extra_plugins, None, None)
     }
 
+    /// Construct with the RPC reply transport forced to **host-drain**
+    /// (the wasm browser path — see
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](tur_engine::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread)):
+    /// worker RPC replies ride `HostMsg` and are resolved by the looper's
+    /// drain on the awaiting thread. Pins the transport that makes
+    /// `turDevTool.elementTree()` resolve in browsers. Dev-tool probes on
+    /// such an app must use the LocalSet-driving harness methods
+    /// (`dev_tool_element_tree_json` / `pump`), never a bare
+    /// `futures::executor::block_on` (the reply needs the looper polled).
+    pub fn new_with_host_drain_rpc(width: f64, height: f64) -> Result<Self, TurError> {
+        Self::build_with_driver(
+            width,
+            height,
+            None,
+            None,
+            Vec::new(),
+            None,
+            None,
+            TestSchedulerDriver::new(),
+            1.0,
+            true,
+        )
+    }
+
     /// Construct with a custom [`Renderer`] (instead of the default
     /// `NoopRenderer`), keeping every other harness ergonomic (load / wheel /
     /// render / element_tree). Used by tests that need to inspect the actual
@@ -607,6 +562,7 @@ impl TurTestApp {
             shell,
             TestSchedulerDriver::new(),
             1.0,
+            false,
         )
     }
 
@@ -624,16 +580,26 @@ impl TurTestApp {
         shell: Option<Box<dyn tur_engine::Shell>>,
         driver: Rc<TestSchedulerDriver>,
         dpr: f64,
+        rpc_via_host_drain: bool,
     ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         // Default pool: effectively uncapped → every harness app gets its
         // own dedicated lane thread (the historical threading).
         let worker_pool = WorkerPoolHandle::new("test", usize::MAX);
+        let spawner: std::rc::Rc<dyn tur_engine::core::scheduler::WorkerSpawner> =
+            if rpc_via_host_drain {
+                // The wasm browser path, forced natively: RPC replies ride
+                // the drained host channel instead of a cross-thread
+                // oneshot waker (see ViaHostDrainExecutor).
+                driver.worker_spawner_via_host_drain()
+            } else {
+                driver.worker_spawner()
+            };
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
-            .worker_spawner(driver.worker_spawner())
+            .worker_spawner(spawner)
             .host_loop(driver.host_loop())
             .worker_pool(worker_pool.clone())
             .capability({
@@ -646,11 +612,15 @@ impl TurTestApp {
         if let Some(http_impl) = http.clone() {
             builder = builder
                 .capability(move |_| Ok(Http::new(http_impl)))
+                // TurNetPlugin pushes the rut net rows itself when the Http
+                // capability is present — registering the row plugin too
+                // would install the same rows twice (a boot panic).
                 .plugin(TurNetPlugin);
         }
         if let Some(filepicker_impl) = filepicker.clone() {
             builder = builder
                 .capability(move |_| Ok(FilePicker::new(filepicker_impl)))
+                // Same: TurFilePickerPlugin owns the rut filepicker rows.
                 .plugin(TurFilePickerPlugin);
         }
         for p in extra_plugins {
@@ -742,24 +712,54 @@ impl TurTestApp {
     }
 
     pub fn load_bundle(&mut self, name: &str) -> Result<(), TurError> {
+        // The corpus is rut sources only (the JS dist rail was deleted in
+        // Phase E) — this is an alias of [`Self::load_rut_bundle`].
+        self.load_rut_bundle(name)
+    }
+
+    /// Load the **rut** case `name` from the shared case corpus
+    /// (`js/packages/tur-test-cases/cases/<name>/index.rut`) through the
+    /// rut rail — the Phase-4 twin of [`Self::load_bundle`].
+    ///
+    /// The corpus's per-case contract (see the corpus README): the module
+    /// declares `entry fn start()` that authors + mounts its tree, plus
+    /// probe `entry fn`s the test drives via [`Self::call_rut_entry`]
+    /// (state reads ride dev-tool tree queries / bound atoms, never a JS
+    /// realm).
+    pub fn load_rut_bundle(&mut self, name: &str) -> Result<(), TurError> {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let workspace_root = Path::new(&manifest_dir)
             .parent()
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
         let path = workspace_root
-            .join("js/packages/tur-test-cases/dist")
-            .join(format!("{name}.js"));
+            .join("js/packages/tur-test-cases/cases")
+            .join(name)
+            .join("index.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        // Case dist files are ES modules that import `tur:*` (resolved by
-        // the engine's module loader) and satisfy the module lifecycle
-        // contract natively: their own `start({ store })` calls `mount(view)`
-        // against the engine-provided instance store.
-        block_on(self.inner.load_module(source.as_str()))?;
-        // Drive the module's initial render to quiescence (frozen clock)
+        self.load_rut_module(&source)?;
+        // Same quiescence drive as `load_bundle`: settle the initial render
         // before the test starts interacting.
         self.wait_for_timeout(Duration::ZERO);
         Ok(())
+    }
+
+    /// Read a Text node's rendered content by query key — the rut corpus's
+    /// standard state probe (the rut twin of the `eval_js` state pokes the
+    /// JS-era fixtures used). `None` when no element carries the key.
+    pub fn query_text(&self, key: &[&str]) -> Option<String> {
+        let id = self.query_element(key)?;
+        let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+        self.with_element(id, |e| {
+            e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+                .map(|c| {
+                    c.spans()
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                })
+        })
+        .flatten()
     }
 
     /// Direct access to the underlying `TurApp` — lets a test register extra
@@ -1043,7 +1043,7 @@ impl TurTestApp {
     /// sequence is pushed fire-and-forget; a subsequent `wait_for` /
     /// `wait_for_timeout` drives it.
     pub fn touch_drag(&mut self, start: (f64, f64), end: (f64, f64), steps: usize) {
-        let time_ms = self.clock.now().millis_since_epoch();
+        let time_ms = self.clock.now_millis() as u64;
         self.inner
             .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(start.0, start.1),
@@ -1056,7 +1056,7 @@ impl TurTestApp {
             let t = i as f64 / steps as f64;
             let x = start.0 + (end.0 - start.0) * t;
             let y = start.1 + (end.1 - start.1) * t;
-            let time_ms = self.clock.now().millis_since_epoch();
+            let time_ms = self.clock.now_millis() as u64;
             self.inner
                 .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
                     position: Offset::new(x, y),
@@ -1065,7 +1065,7 @@ impl TurTestApp {
                 }));
         }
         self.advance_clock(FRAME_STEP_MS);
-        let time_ms = self.clock.now().millis_since_epoch();
+        let time_ms = self.clock.now_millis() as u64;
         self.inner
             .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(end.0, end.1),
@@ -1359,32 +1359,22 @@ impl TurTestApp {
             .push_platform_event(tur_engine::platform_paste(text.to_string()));
     }
 
-    pub fn eval_js(&self, source: &str) -> String {
-        // RPC to the worker: it runs `ctx.eval(source)`, drains jobs, and
-        // replies with the display string. Synchronous from the test's POV
-        // (blocks on the worker's reply via `block_on`).
-        block_on(self.inner.eval_js(source))
+    /// Rut-rail module load (Phase 1 of the boa→rut migration): compile +
+    /// boot a rut module and invoke its `entry fn start()`.
+    pub fn load_rut_module(&self, source: &str) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module(source))
     }
 
-    /// Evaluate `source` as an ES module and invoke its `start()` export
-    /// (the module lifecycle contract) — supports real
-    /// `import { … } from "tur:std"` (or `tur-ext/demo-helper`/`tur:net`). Returns
-    /// nothing; read results back via [`eval_js`](Self::eval_js).
-    ///
-    /// Legacy fixture adapter: inline test bundles predate the lifecycle
-    /// contract, so a source that doesn't already export `start` is
-    /// auto-wrapped (imports hoisted, remaining statements moved into
-    /// `export function start() { … }`). Contract tests use
-    /// [`load_module_raw`](Self::load_module_raw) for the strict path.
-    pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
-        let wrapped = wrap_legacy_start(source);
-        block_on(self.inner.load_module(wrapped.as_str()))
+    /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
+    /// loaded rut module. A missing entry is a successful no-op.
+    pub fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {
+        block_on(self.inner.call_rut_entry(name, a, b))
     }
 
-    /// Strict module-lifecycle path: loads `source` verbatim — it MUST
-    /// export `function start()` (missing/invalid `start` fails the load).
-    pub fn load_module_raw(&self, source: &str) -> Result<(), TurError> {
-        block_on(self.inner.load_module(source))
+    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
+    /// `start` returns nil or no rut module is loaded).
+    pub fn rut_start_answer(&self) -> u64 {
+        block_on(self.inner.rut_start_answer())
     }
 
     /// Structured dev-tool snapshot of the root node, or `None` if no root
@@ -1396,6 +1386,36 @@ impl TurTestApp {
                 .and_then(|root| tree.dev_tool_node(root.into()))
         })
         .flatten()
+    }
+
+    /// JSON frame-stats snapshot (the `devToolFrameStats` RPC) — the
+    /// render-performance probe's raw JSON. Driven through the LocalSet
+    /// (see `dev_tool_element_tree_json`) so it works under BOTH RPC
+    /// transports.
+    pub fn dev_tool_frame_stats(&self) -> String {
+        self.driver.block_on(self.inner.dev_tool_frame_stats())
+    }
+
+    /// JSON root-tree snapshot via the RPC surface (`turDevTool
+    /// .elementTree()`'s engine twin) — the String transport, exactly as
+    /// the browser sees it. Driven through the LocalSet (the looper must
+    /// be polled for the host-drain RPC transport), so it works under
+    /// BOTH transports.
+    pub fn dev_tool_element_tree_json(&self) -> String {
+        self.driver.block_on(self.inner.dev_tool_element_tree())
+    }
+
+    /// JSON snapshot of one node by id (`turDevTool.getElement()`'s
+    /// engine twin) — children arrive as bare `{id}` handles in
+    /// `element_tree_json`, so fetch the child to inspect its content.
+    pub fn dev_tool_get_element_json(&self, id: u64) -> String {
+        self.driver.block_on(self.inner.dev_tool_get_element(id))
+    }
+
+    /// Toggle host-side render-commit timing collection (mirrored worker +
+    /// host side — see `FrameStats::host_timing_enabled`).
+    pub fn set_host_frame_timing(&self, enabled: bool) {
+        self.inner.set_host_frame_timing(enabled);
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.

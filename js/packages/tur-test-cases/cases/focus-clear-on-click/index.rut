@@ -1,0 +1,29 @@
+// focus-clear-on-click: a focused Input above a PointerInteract button —
+// clicking the button clears focus (the gesture handler's outside-click
+// path).
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, tctrl_new, undo_new };
+use tur_kit::{ Column, Input, PointerInteract, Text };
+
+
+entry fn start() -> u64 {
+    let clicks = rs_source_f64();
+    let label = rs_source_str("clicks: 0");
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+
+    let mut col = Column.builder();
+    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
+    col.child(input);
+    let mut t = Text.builder();
+
+    t.text_bound(label);
+    t.query_key("button");
+    col.child(PointerInteract.builder().ids(clicks, label).on_tap("b_click").child(t.build()).build());
+    mount(col.build());
+    return clicks;
+}
+
+entry fn b_click(clicks: u64, label: u64, _n: f64) {
+    rs_set_f64(clicks, rs_get_f64(clicks) + 1.0);
+    rs_set_str(label, f"clicks: {rs_get_f64(clicks) as u64}");
+}

@@ -282,6 +282,16 @@ impl TestSchedulerDriver {
         self.pools.clone()
     }
 
+    /// `worker_spawner()` wrapped so every hosted worker's
+    /// [`WorkerContext`](tur_engine::core::scheduler::WorkerContext) runs
+    /// under a [`ViaHostDrainExecutor`] — the engine's RPC reply transport
+    /// flips to host-drain (the wasm browser path), letting tests pin
+    /// that path natively. See
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](tur_engine::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread).
+    pub fn worker_spawner_via_host_drain(&self) -> Rc<dyn tur_engine::core::scheduler::WorkerSpawner> {
+        ViaHostDrainSpawner::new(self.pools.clone())
+    }
+
     /// The manual vsync source.
     pub fn vsync_source(&self) -> Rc<TestVsyncSource> {
         self.vsync.clone()
@@ -318,5 +328,70 @@ impl TestSchedulerDriver {
     /// `self.host_loop().spawn_local(fut)`).
     pub fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         self.host_loop().spawn_local(fut)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Host-drain RPC transport forcing (pins the wasm browser path natively)
+// ---------------------------------------------------------------------------
+
+/// A [`WorkerSpawner`](tur_engine::core::scheduler::WorkerSpawner) that
+/// delegates worker hosting to an inner spawner but rewraps every
+/// worker's [`WorkerContext`](tur_engine::core::scheduler::WorkerContext)
+/// under a [`ViaHostDrainExecutor`] — flipping the engine's RPC reply
+/// transport to host-drain (the wasm browser path).
+pub struct ViaHostDrainSpawner {
+    inner: Rc<dyn tur_engine::core::scheduler::WorkerSpawner>,
+}
+
+impl ViaHostDrainSpawner {
+    pub fn new(
+        inner: Rc<dyn tur_engine::core::scheduler::WorkerSpawner>,
+    ) -> Rc<Self> {
+        Rc::new(Self { inner })
+    }
+}
+
+impl tur_engine::core::scheduler::WorkerSpawner for ViaHostDrainSpawner {
+    fn spawn_worker(
+        &self,
+        pool: &tur_engine::core::scheduler::WorkerPoolHandle,
+        entry: tur_engine::core::scheduler::WorkerEntry,
+    ) -> tur_engine::core::scheduler::WorkerTicket {
+        let wrapped: tur_engine::core::scheduler::WorkerEntry =
+            Box::new(move |ctx| {
+                let exec = Rc::new(ViaHostDrainExecutor {
+                    inner: ctx.executor().clone(),
+                });
+                entry(tur_engine::core::scheduler::WorkerContext::new(exec))
+            });
+        self.inner.spawn_worker(pool, wrapped)
+    }
+}
+
+/// Delegating worker executor reporting
+/// `wakes_host_tasks_cross_thread() == false`: all real scheduling still
+/// happens on the wrapped (native) executor, but the engine routes RPC
+/// replies through the drained host channel — reproducing the
+/// `wasm_bindgen_futures` wake semantics that made `turDevTool.*` hang
+/// in browsers.
+struct ViaHostDrainExecutor {
+    inner: Rc<dyn tur_engine::core::scheduler::WorkerExecutor>,
+}
+
+impl tur_engine::core::scheduler::WorkerExecutor for ViaHostDrainExecutor {
+    fn spawn_local(
+        &self,
+        fut: tur_engine::core::scheduler::LocalFut,
+    ) -> tur_engine::core::scheduler::TaskHandle {
+        self.inner.spawn_local(fut)
+    }
+
+    fn sleep(&self, d: std::time::Duration) -> tur_engine::core::scheduler::Sleep {
+        self.inner.sleep(d)
+    }
+
+    fn wakes_host_tasks_cross_thread(&self) -> bool {
+        false
     }
 }

@@ -1,15 +1,20 @@
-use boa_engine::object::JsObject;
+use std::rc::Rc;
 
 use crate::controller::AnimationController;
 
-/// Registry of active JS `AnimationController`s. Each `AnimationController`
-/// registers itself via `forward()` / `reverse()`; the frame loop ticks them
-/// and enqueues (does not fire) their `onTick` / `onEnd` callbacks on the
-/// mutation queue, which fire later in `flush_pending_mutations` after the
-/// `RefMut` on each controller is released.
+/// A registered controller handle (`Rc<RefCell<AnimationController>>`).
+/// The frame loop ticks every registered controller identically.
+pub type ControllerFace = Rc<std::cell::RefCell<AnimationController>>;
+
+/// Registry of active `AnimationController`s. Each controller registers
+/// itself via `forward()` / `reverse()` (the `tur` pkg rows); the frame loop
+/// ticks them and enqueues (does not fire) their `onTick` / `onEnd`
+/// callbacks on the mutation queue, which fire later in
+/// `flush_pending_mutations` after the `RefMut` on each controller is
+/// released.
 #[derive(Default)]
 pub struct AnimationManager {
-    controllers: Vec<JsObject>,
+    controllers: Vec<ControllerFace>,
 }
 
 impl AnimationManager {
@@ -19,28 +24,35 @@ impl AnimationManager {
         }
     }
 
-    pub fn register_controller(&mut self, obj: JsObject) {
-        if !self.controllers.iter().any(|c| c == &obj) {
-            self.controllers.push(obj);
+    pub fn register_controller(&mut self, face: ControllerFace) {
+        let fresh = !self
+            .controllers
+            .iter()
+            .any(|c| Rc::ptr_eq(c, &face));
+        if fresh {
+            self.controllers.push(face);
         }
     }
 
-    /// Tick all active JS controllers. Each tick updates `value` / `status` and
+    /// Tick all active controllers. Each tick updates `value` / `status` and
     /// **enqueues** (does not fire) any `onTick` / `onEnd` callbacks on the
     /// mutation queue. The callbacks fire later in `flush_pending_mutations`,
     /// after the `RefMut` on each controller is released.
-    pub fn tick_controllers(&mut self, now_ms: u64, _ctx: &mut boa_engine::Context) {
+    pub fn tick_controllers(&mut self, now_ms: u64) {
         let mut active = Vec::new();
-        for obj in self.controllers.drain(..) {
+        for rc in self.controllers.drain(..) {
+            // A re-entrant borrow (a row driving the controller mid-tick)
+            // skips this frame — the single-thread borrow discipline.
+            let Ok(mut ctrl) = rc.try_borrow_mut() else {
+                continue;
+            };
             let keep = {
-                let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() else {
-                    continue;
-                };
                 let _ = ctrl.tick_compute(now_ms);
                 ctrl.is_active()
             };
+            drop(ctrl);
             if keep {
-                active.push(obj);
+                active.push(rc);
             }
         }
         self.controllers = active;

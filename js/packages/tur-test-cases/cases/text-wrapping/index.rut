@@ -1,0 +1,12 @@
+// text-wrapping: a long 14px line wraps within the width budget.
+use tur::{ mount };
+use tur_kit::{ Text };
+
+
+entry fn start() {
+    let mut t = Text.builder();
+
+    t.text("Hello World this is a long text that should wrap");
+    t.font_size(14.0);
+    mount(t.build());
+}

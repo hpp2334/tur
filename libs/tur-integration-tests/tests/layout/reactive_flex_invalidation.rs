@@ -39,7 +39,8 @@ fn reactive_flex_change_relays_out_children() {
 
     // Flip the flex to 3:1 via a reactive source set — no gesture, so no
     // `mark_dirty` is called on any descendant. Only the Row is dirtied.
-    app.eval_js("globalThis.__setFlex(3, 1)");
+    let flex_a = app.rut_start_answer();
+    app.call_rut_entry("set_flex", 3, 1.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     {

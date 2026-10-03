@@ -39,11 +39,19 @@ fn identical_frames_render_once() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container().height(50).color(createColor(255, 0, 0, 255)).build());
-        "#,
+use tur::{ mount };
+use tur_kit::{ Container };
+
+
+entry fn start() {
+    let mut b = Container.builder();
+    b.width_height(100.0, 50.0);
+    b.color(0xFF0000FFu64);
+    mount(b.build());
+}
+"#,
     )
     .expect("mount");
     // Drive the initial paint through.
@@ -77,31 +85,42 @@ fn changed_content_reapplies() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    // Visible container + a source-driven color so the test can flip it.
-    app.eval_module_source(
+    // Visible container + a brush atom so the test can flip it.
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor, source, derive } from "tur:std";
+use tur::{ mount, rs_list_new, rs_set_brush, rs_source_value };
+use tur_kit::{ Container };
 
-        const red$ = source(255);
+entry fn start() -> u64 {
+    let color = rs_source_value(rs_list_new());
+    rs_set_brush(color, 0xFF0000FFu64);
 
-        export function start({ store }) {
-            Object.assign(globalThis, {
-                __setRed: (v) => { store.set(red$, v); },
-            });
-            mount(Container()
-                .height(50)
-                .color(derive((ctx) => createColor(ctx.get(red$) | 0, 0, 0, 255)))
-                .build());
-        }
-        "#,
+    let mut b = Container.builder();
+    b.width_height(100.0, 50.0);
+    b.color_bound(color);
+    mount(b.build());
+    return color;
+}
+
+entry fn do_set(color: u64, v: f64) {
+    // 0 clears the brush (Nil — the prop resolves absent); the container
+    // repaints unpainted (the batch differs either way).
+    if (v == 0.0) {
+        rs_set_brush(color, 0);
+    } else {
+        rs_set_brush(color, 0x00FF00FFu64);
+    }
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
+    let color_atom = app.rut_start_answer();
     let after_initial = *calls.borrow();
     assert!(after_initial >= 1);
 
     // Flip the color: the batch differs → must apply.
-    app.eval_js("globalThis.__setRed(0)");
+    app.call_rut_entry("do_set", color_atom, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let after_flip = *calls.borrow();
     assert!(
@@ -131,11 +150,21 @@ fn attach_resets_dedup() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container().height(50).color(createColor(255, 0, 0, 255)).build());
-        "#,
+use tur::{ mount };
+use tur_kit::{ Container };
+use tur_kit::{ Container };
+
+
+
+entry fn start() {
+    let mut b = Container.builder();
+    b.width_height(100.0, 50.0);
+    b.color(0xFF0000FFu64);
+    mount(b.build());
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -161,3 +190,4 @@ fn attach_resets_dedup() {
         "freshly attached renderer must apply the identical batch ({after_initial} → {after_attach})"
     );
 }
+

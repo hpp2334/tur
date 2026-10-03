@@ -1,6 +1,6 @@
 # tur Playground — Style Guide
 
-**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `@tur-ng/playground-view`
+**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `playground.rut`
 
 The design system tells you *what* the tokens are. This guide tells you *how to think* about them — the principles behind product decisions, the patterns to reach for, and the mistakes to refuse in review.
 
@@ -65,10 +65,10 @@ When something is in a non-default state, communicate it with a symbol first and
 
 ### 6. Tokens, not hexes
 
-No `Color.hex("...")` outside `src/tokens.ts` and `src/compile.ts`'s `code.*` definitions. Every visual value traces back to a named token.
+No `Color.hex("...")` outside the token layer — the `code.*` syntax definitions are its one sanctioned exception. Every visual value traces back to a named token.
 
 This rule has three payoffs:
-1. **Rethemable**: a future dark mode (or branded variant) only edits `tokens.ts`.
+1. **Rethemable**: a future dark mode (or branded variant) only edits the token layer.
 2. **Reviewable**: a PR that introduces `Color.hex("#...")` in a view is automatically suspect — the reviewer doesn't have to read every line.
 3. **Discoverable**: when a designer asks "what's our success green?", there's one answer.
 
@@ -174,7 +174,7 @@ Controllers (`createTextEditingController`, `createScrollController`, ...) are c
 - ✓ Controller created once, `controller` prop passed down.
 - ✗ Controller created inside `view(() => ...)` — it'll be recreated when the view rebuilds, losing state.
 
-The current `editorCtrl` in `index.ts` is correct: created at module scope, used by every render.
+The editor controller in `playground.rut` is correct: minted once in `start`, reused by every rebuild.
 
 ### 3.4 Naming
 
@@ -186,26 +186,14 @@ The current `editorCtrl` in `index.ts` is correct: created at module scope, used
 ### 3.5 File structure
 
 ```
-src/
-  tokens.ts              # The token layer (only place Color.hex is allowed)
-  compile.ts             # Case compiler + code.* syntax highlighting
-  index.ts               # App entry: sources, controllers, render(Shell)
-  views/
-    Shell.ts
-    Panel.ts
-    NavItem.ts
-    NavList.ts
-    Button.ts
-    StatusBadge.ts
-    EditorSurface.ts
-    ViewerSurface.ts
-    ErrorBanner.ts
-    Placeholder.ts
-  icons/
-    resources.ts         # createImageResource calls for bundled SVGs
+demo/playground-view/
+  playground.rut         # The module: state atoms, controllers, build_ui() tree
+  cases_gen.rut          # AUTO-GENERATED case registry — do not edit
+  scripts/gen-cases.cjs  # Regenerates cases_gen.rut from the shared corpus
+                         # (js/packages/tur-test-cases/cases)
 ```
 
-Each view is one file, one default export, no side effects at module load.
+Views are builder fns inside the module; all side effects live in `entry fn`s.
 
 ---
 
@@ -234,7 +222,7 @@ Add this to `biome.json` under the playground package (phase 1 of the roadmap):
             "options": [
                 {
                     "selector": "CallExpression[callee.object.property.name='Color'][callee.property.name='hex']",
-                    "message": "Use tokens from src/tokens.ts instead of Color.hex(). Exception: tokens.ts itself."
+                    "message": "Use tokens from the token layer instead of Color.hex(). Exception: the token layer itself."
                 }
             ]
         }
@@ -247,7 +235,7 @@ This makes any new `Color.hex("...")` outside `tokens.ts` a lint error. The toke
 ### 4.3 View file template
 
 ```ts
-// src/views/Button.ts
+// Button — one view factory (sketch; views live in playground.rut)
 import {
     type Element, Container, PointerInteract, Row, Text,
     derive, get, mutate, set, source,
@@ -417,10 +405,10 @@ There is exactly one editor surface in the playground. If a future feature needs
 
 ## 6. PR review checklist
 
-Before approving any PR that touches `@tur-ng/playground-view`, verify:
+Before approving any PR that touches `playground.rut` / `scripts/gen-cases.cjs`, verify:
 
-- [ ] **No new `Color.hex(...)` outside `tokens.ts` / `compile.ts`.** Run `rg 'Color\.hex' demo/playground-view/src` and confirm the only matches are in those two files.
-- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' demo/playground-view/src/views` should return nothing.
+- [ ] **No new raw hexes outside the token layer.** Run `rg '0x[0-9A-Fa-f]{8}' demo/playground-view/playground.rut` and confirm every match traces to a token (the token port lands in a later phase).
+- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' demo/playground-view/playground.rut` should return nothing (post token port).
 - [ ] **No `derive(() => ...)` wrapping static values.** Grep for `derive` and check each one reads at least one source via `get(...)`.
 - [ ] **No off-scale spacing.** Search for `padding:`, `margin:` (if introduced), and verify values are in `{0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64}`. Documented exceptions allowed with a comment.
 - [ ] **No off-scale font sizes.** Values must be in `{10, 11, 13, 14, 18}` for UI, `13` for code.
@@ -579,7 +567,7 @@ ListView semantics and still require bounded constraints.
 
 ### 9.5 Pattern: debounced auto-run via `launch` + `sleep`
 
-Auto-run debouncing uses the engine's `sleep` + `launch` task primitives (see `libs/tur-engine/src/core/bridge/task.rs`). `launch` runs a generator function as a cancellable coroutine; `yield sleep(ms)` suspends it. Each keystroke cancels the pending task and launches a fresh one — only the last survives:
+Auto-run debouncing uses the engine's `sleep` + `launch` task primitives (the rut side rides the `async_host` weave — installed by `libs/tur-engine/src/core/rut_runtime/mod.rs`; the sketches below are the legacy TS shape of the same pattern). `launch` runs a generator function as a cancellable coroutine; `yield sleep(ms)` suspends it. Each keystroke cancels the pending task and launches a fresh one — only the last survives:
 
 ```ts
 import { launch, mutate, sleep, type Task } from "tur:std";

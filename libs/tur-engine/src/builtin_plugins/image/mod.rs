@@ -1,46 +1,31 @@
 //! Image plugin — `Image` element + format decoders.
 //!
 //! Provides the `Image` element (`ImageElement` / `ImageView`), its layout +
-//! paint implementations, the JS bridge fns (`Image`, `createImageResource`,
-//! `createSvgResource`), and the format-specific decoders
+//! paint implementations, and the format-specific decoders
 //! (`decode_image_bytes` for PNG/JPEG, `decode_svg` for SVG strings).
 //!
-//! Installed into `tur:std` by `TurStdPlugin` via [`install_image`],
-//! which returns the JS factory fns to be merged into `std_fns`. From JS's
-//! perspective `Image` / `createImageResource` / `createSvgResource` ship as
-//! part of `tur:std`.
+//! Elements materialize pure-Rust views (authored through the
+//! `core::rut_runtime` image rows); resources are registered via
+//! `InstanceContext::register_image` (worker keeps sizes only; the pixel
+//! `Blob` ships to main via `HostMsg::UploadImage`).
 //!
 //! The engine retains only the paint/layout contract —
 //! `crate::core::image_resource::{ImageResourceId, ImageManager,
 //! ImageResource}` (pure-data struct with `pub` fields) — which
-//! `Canvas::draw_image` consumes. This plugin produces these structs from
-//! raw bytes / SVG strings via [`decode`]. Decoded images are registered via
-//! `TurInstanceContext::register_image` (worker keeps sizes only; the pixel `Blob`
-//! ships to main via `HostMsg::UploadImage`).
+//! `Canvas::draw_image` consumes.
 
-pub mod bridge;
 pub mod decode;
 pub mod element;
 pub mod handle;
 pub mod layout;
+pub(crate) mod rut_rows;
 pub mod render;
 
-pub use element::{ImageElement, ImageView};
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Wire image plugin into `tur:std`. Called by `TurStdPlugin`'s
-/// `register` impl.
-///
-/// Side effects: none beyond returning the factory fns (no classes, no
-/// subsystems — image rendering is fully synchronous and stateless from the
-/// JS bridge's perspective).
-///
-/// Returns: the `Image` / `createImageResource` / `createSvgResource` factory
-/// fns, which the caller merges into `std_fns` before
-/// `register_module("tur:std", ...)`.
-pub fn install_image(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    Ok(bridge::fns())
+/// Install the image family's `tur` host-pkg rows (the kit wraps them):
+/// resource registration + the Image spec.
+pub fn install_image(ctx: &mut crate::core::plugin::PluginRegisterContext) -> Result<(), crate::error::TurError> {
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
+    Ok(())
 }
+
+pub use element::{ImageElement, ImageView};

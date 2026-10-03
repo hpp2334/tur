@@ -1,0 +1,22 @@
+// clickable-text: a PointerInteract wrapping a bound Text — the click
+// swaps the atom's content.
+use tur::{ CROSS_ALIGN_START, mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, PointerInteract, Text };
+
+
+entry fn start() -> u64 {
+    let content = rs_source_str("before");
+    let mut col = Column.builder();
+    col.cross_alignment(CROSS_ALIGN_START);
+    let mut t = Text.builder();
+
+    t.text_bound(content);
+    t.query_key("click-text");
+    col.child(PointerInteract.builder().ids(content, content).on_tap("ts_click").child(t.build()).build());
+    mount(col.build());
+    return content;
+}
+
+entry fn ts_click(content: u64, _b: u64, _n: f64) {
+    rs_set_str(content, "after");
+}

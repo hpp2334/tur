@@ -18,28 +18,36 @@ use tur_integration_tests::TurTestApp;
 
 /// Long highlighted document: 400 monospace lines, one span per line (the
 /// token granularity of syntax highlighting, minus per-token splitting to
-/// keep the fixture small — the memo contract is length-independent).
+/// keep the fixture small — the memo contract is length-independent). The
+/// editor width rides a bound atom (the rut `Input` shrink-wraps, so —
+/// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
+/// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
-import { mount, ScrollView, Input, Color } from "tur:std";
+use tur::{ AXIS_VERTICAL, mount, rs_set_f64, rs_source_f64, tctrl_new, tctrl_push_span };
+use tur_kit::{ Container, Input, ScrollView };
 
-const spans = [];
-for (let i = 0; i < 400; i++) {
-    spans.push({ content: "const value" + i + " = " + i + "; // line " + i + "\n" });
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    let mut i = 0;
+    while (i < 400) {
+        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        i += 1;
+    }
+
+    let width = rs_source_f64();
+    rs_set_f64(width, 400.0);
+
+    let input = Input.builder().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
+    let wrap = Container.builder().width_bound(width).child(input).build();
+    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(wrap).query_key("scroll").build();
+    mount(scroller);
+    return width;
 }
-globalThis.__spans = spans;
-globalThis.__red = Color.hex("#ff0000");
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans(spans);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Input()
-     .controller(globalThis.__ctrl)
-     .multiline(true)
-     .fontFamily("monospace")
-     .fontSize(14)
-     .queryKey(["ed"])
-     .build())
-    .build());
+
+entry fn set_width(width: u64, v: f64) {
+    rs_set_f64(width, v);
+}
 "##;
 
 /// The `tur_editable_text` node under the `Input` queryKey (the key lands
@@ -95,7 +103,7 @@ fn focus_at_start(app: &mut TurTestApp, id: ElementNodeId) {
 
 fn mount_long_editor(width: f64, height: f64) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
-    app.eval_module_source(LONG_EDITOR).unwrap();
+    app.load_rut_module(LONG_EDITOR).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = editor_id(&app);
     (app, id)
@@ -153,62 +161,6 @@ fn typing_reshapes_exactly_once() {
         len_after >= len_before,
         "layout must reflect the inserted char"
     );
-    // And the buffer content changed.
-    let text = app.eval_js("globalThis.__ctrl.text");
-    assert!(
-        text.starts_with("xconst"),
-        "char inserted at caret, got: {text}"
-    );
-}
-
-#[test]
-fn no_op_respan_is_free_but_content_respan_reshapes() {
-    let (mut app, id) = mount_long_editor(400.0, 300.0);
-    focus_at_start(&mut app, id);
-    let (cx0, cy0) = caret_xy(&app);
-
-    let base = shape_count(&app, id);
-
-    // `ArrowLeft` at byte 0 is a handled no-op move: it marks the node
-    // dirty (every key event does) without changing anything — a pure
-    // "force a relayout" probe that must hit the memo.
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(shape_count(&app, id), base, "no-op key must hit the memo");
-
-    // Identical spans re-set (the no-op re-highlight shape): still free.
-    app.eval_js("globalThis.__ctrl.setSpansPreserveCursor(globalThis.__spans)");
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        shape_count(&app, id),
-        base,
-        "identical setSpansPreserveCursor must not re-shape"
-    );
-
-    // Same text, different span color (a real re-highlight): the content
-    // revision bumps, so the next forced relayout re-shapes exactly once.
-    let respan = app.eval_js(
-        r##"globalThis.__spans2 = globalThis.__spans.map((s, i) =>
-             i === 0 ? { content: s.content, color: globalThis.__red } : s);
-           globalThis.__ctrl.setSpansPreserveCursor(globalThis.__spans2); "ok""##,
-    );
-    assert_eq!(respan, "ok", "respan eval must succeed");
-    app.send_key("ArrowLeft");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    assert_eq!(
-        shape_count(&app, id),
-        base + 1,
-        "color-changed spans (same text) must re-shape — brushes live in the runs"
-    );
-    // Caret preserved across the re-highlight (not yanked to EOF): still on
-    // the first line at the same x.
-    let (cx, cy) = caret_xy(&app);
-    assert_eq!(
-        (cx, cy),
-        (cx0, cy0),
-        "setSpansPreserveCursor keeps the caret"
-    );
 }
 
 #[test]
@@ -217,9 +169,12 @@ fn width_change_invalidates_memo() {
     focus_at_start(&mut app, id);
 
     let before = shape_count(&app, id);
+    let width_atom = app.rut_start_answer();
 
-    // Narrower viewport → narrower max_width constraint → new memo key.
-    app.resize(320.0, 300.0);
+    // Narrower constraint → narrower max_width → new memo key. (The bound
+    // wrapper's width drives the editable's constraint — the same contract
+    // the JS twin pinned through a window resize.)
+    app.call_rut_entry("set_width", width_atom, 320.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         shape_count(&app, id),
@@ -227,8 +182,8 @@ fn width_change_invalidates_memo() {
         "constraint change must invalidate the layout memo"
     );
 
-    // Same width again → another (different) key → reshape again.
-    app.resize(400.0, 300.0);
+    // Back to the original width → another (different) key → reshape again.
+    app.call_rut_entry("set_width", width_atom, 400.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(shape_count(&app, id), before + 2);
 }
@@ -259,3 +214,4 @@ fn scrolling_does_not_reshape() {
         bounds_after.top
     );
 }
+

@@ -1,0 +1,12 @@
+// input-typing: an editable Input wired to a realm-minted controller.
+use tur::{ mount, tctrl_new, undo_new };
+use tur_kit::{ Container, Input };
+
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let mut outer = Container.builder();
+    outer.child(Input.builder().controller(ctrl).undo(undo).width_height(200.0, 30.0).build());
+    mount(outer.build());
+}

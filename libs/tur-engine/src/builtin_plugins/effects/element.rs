@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Alignment, ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -22,8 +18,20 @@ pub struct OpacityView {
     pub(crate) child: Option<Rc<dyn View>>,
 }
 
+impl OpacityView {
+    /// Rut-rail constructor (the `tur-animation` rut rows): a static or
+    /// atom-bound opacity around one child.
+    pub fn new_rut(value: Option<Val<f32>>, child: Rc<dyn View>) -> Self {
+        OpacityView {
+            value,
+            query_key: Some(vec!["rut".to_string(), "opacity".to_string()]),
+            child: Some(child),
+        }
+    }
+}
+
 impl View for OpacityView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -31,13 +39,12 @@ impl View for OpacityView {
                 view: self.clone(),
                 painting: OpacityPainting::default(),
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child_spec) = &self.child {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -47,6 +54,13 @@ impl View for OpacityView {
 pub struct OpacityElement {
     pub(crate) view: OpacityView,
     pub(crate) painting: OpacityPainting,
+}
+
+impl OpacityElement {
+    /// The resolved paint value (layout fills it; tests read it back).
+    pub fn painted_value(&self) -> f32 {
+        self.painting.value
+    }
 }
 
 /// Resolved paint prop (filled during layout). Paint reads it directly.
@@ -81,21 +95,6 @@ impl ElementTrace for OpacityElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
-impl OpacityView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        OpacityView {
-            value: p.val::<f32>("value"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // TransformView — applies a 2D affine transform to its child subtree.
 //
 // Supported props: `scale` (uniform), `scaleX`, `scaleY`, `rotate` (radians),
@@ -117,8 +116,32 @@ pub struct TransformView {
     pub(crate) child: Option<Rc<dyn View>>,
 }
 
+impl TransformView {
+    /// Rut-rail constructor (the `tur-animation` rut rows): static
+    /// scale / rotate / translate around one child.
+    pub fn new_rut(
+        scale: Option<Val<f64>>,
+        rotate: Option<Val<f64>>,
+        translate_x: Option<Val<f64>>,
+        translate_y: Option<Val<f64>>,
+        child: Rc<dyn View>,
+    ) -> Self {
+        TransformView {
+            scale,
+            scale_x: None,
+            scale_y: None,
+            rotate,
+            translate_x,
+            translate_y,
+            alignment: None,
+            query_key: Some(vec!["rut".to_string(), "transform".to_string()]),
+            child: Some(child),
+        }
+    }
+}
+
 impl View for TransformView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -126,13 +149,12 @@ impl View for TransformView {
                 view: self.clone(),
                 painting: TransformPainting::default(),
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child_spec) = &self.child {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -195,22 +217,5 @@ impl ElementTrace for TransformElement {
             parts.push(format!("rotate={v}"));
         }
         parts.join(" ")
-    }
-}
-
-impl TransformView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        TransformView {
-            scale: p.val::<f64>("scale"),
-            scale_x: p.val::<f64>("scaleX"),
-            scale_y: p.val::<f64>("scaleY"),
-            rotate: p.val::<f64>("rotate"),
-            translate_x: p.val::<f64>("translateX"),
-            translate_y: p.val::<f64>("translateY"),
-            alignment: p.val::<Alignment>("alignment"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
-        }
     }
 }

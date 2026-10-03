@@ -1,0 +1,13 @@
+// container-basic: a padded container around a fixed-size child.
+use tur::{ mount };
+use tur_kit::{ Container };
+
+
+entry fn start() {
+    let mut outer = Container.builder();
+    outer.padding(16.0);
+    let mut inner = Container.builder();
+    inner.width_height(100.0, 100.0);
+    outer.child(inner.build());
+    mount(outer.build());
+}

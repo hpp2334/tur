@@ -1,0 +1,28 @@
+// mouse-region-cursor: a MouseRegion whose cursor + enter/exit drive the
+// shell cursor and the bound state label.
+use tur::{ CURSOR_COL_RESIZE, mount, rs_set_str, rs_source_str };
+use tur_kit::{ Column, Container, MouseRegion, Text };
+
+
+entry fn start() -> u64 {
+    let state = rs_source_str("");
+    let mut col = Column.builder();
+    let mut b = Container.builder();
+    b.width_height(100.0, 50.0);
+    let mut t = Text.builder();
+
+    t.text_bound(state);
+    t.query_key("mr-state");
+    b.child(t.build());
+    col.child(MouseRegion.builder().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor(CURSOR_COL_RESIZE).behavior(0).child(b.build()).build());
+    mount(col.build());
+    return state;
+}
+
+entry fn mr_enter(state: u64, _b: u64, _n: f64) {
+    rs_set_str(state, "entered");
+}
+
+entry fn mr_exit(state: u64, _b: u64, _n: f64) {
+    rs_set_str(state, "exited");
+}

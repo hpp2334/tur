@@ -12,7 +12,7 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 
 /// Post-subsystem that keeps the caret on screen after text-moving events
-/// (keyboard, IME, clipboard-paste). Registered by [`crate::install_text_feature`]
+/// (keyboard, IME, clipboard-paste). Registered by [`crate::builtin_plugins::text::install_text`]
 /// after the engine's `KeyboardSubsystem` / `ImeSubsystem` (for keyboard /
 /// IME caret moves) and after tur-text's `ClipboardPasteSubsystem` (for paste
 /// caret moves), so by the time this subsystem runs the focused editable's

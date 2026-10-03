@@ -1,0 +1,16 @@
+use tur::{ mount };
+use tur_kit::{ Spans, Text };
+
+
+entry fn start() {
+    let mut t = Text.builder();
+
+    t.text("");
+    t.font_size(14.0);
+    let mut spans = Spans.builder();
+    spans.add("Hello ", 0.0, 0, 0.0, 0);
+    spans.add("Bold", 0.0, 0, 700.0, 0);
+    spans.add(" World", 0.0, 0, 0.0, 0);
+    t.spans(spans);
+    mount(t.build());
+}

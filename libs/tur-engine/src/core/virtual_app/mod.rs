@@ -9,8 +9,8 @@
 //! (vsync), and egress handling (`Shell`).
 //!
 //! This module is the **host-thread half** of that seam (the plugin half —
-//! the element, bridge fns, and subsystem — lives in
-//! [`builtin_plugins::virtual_app`]):
+//! the element, bridge fns, and subsystem — lives in the virtual-app
+//! plugin, a sibling under the engine's plugin tree):
 //!
 //! - [`VirtualHost`] — the **instance's host-side core**: identity
 //!   ([`VirtualAppId`]), backend rails (it wraps the instance's
@@ -537,20 +537,39 @@ impl VirtualHost {
                 let app_for_load = app;
                 let tx = self.backend.worker_tx().clone();
                 let wake = self.backend.worker_wake_handle();
-                self.host_loop.spawn_local(Box::pin(async move {
-                    let detail = match app_for_load.load_module(source).await {
-                        Ok(()) => None,
-                        Err(e) => Some(e.to_string()),
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // Cooperative lanes (main-thread driven): blocking here
+                    // would deadlock — the load stays a spawned task on the
+                    // host loop (the historical behavior).
+                    self.host_loop.spawn_local(Box::pin(async move {
+                        let (state, detail) = match app_for_load.load_rut_module(source).await {
+                            Ok(()) => (VirtualStatusState::Running, None),
+                            Err(e) => (VirtualStatusState::Error, Some(e.to_string())),
+                        };
+                        send_status(&tx, &wake, token, state, detail);
+                    }));
+                    self.host_loop.spawn_local(Box::pin(looper.run()));
+                    self.children.borrow_mut().insert(token, child_host);
+                    return;
+                }
+                #[allow(unreachable_code)]
+                {
+
+                // The load runs on the child's worker lane (its own
+                // thread); the core waits for it here so the spawn control
+                // returns only once the child's status is settled — no
+                // status event can race the parent's subsequent controls
+                // (resize, input forwarding).
+                let (state, detail) =
+                    match futures::executor::block_on(app_for_load.load_rut_module(source)) {
+                        Ok(()) => (VirtualStatusState::Running, None),
+                        Err(e) => (VirtualStatusState::Error, Some(e.to_string())),
                     };
-                    let state = if detail.is_some() {
-                        VirtualStatusState::Error
-                    } else {
-                        VirtualStatusState::Running
-                    };
-                    send_status(&tx, &wake, token, state, detail);
-                }));
+                send_status(&tx, &wake, token, state, detail);
                 self.host_loop.spawn_local(Box::pin(looper.run()));
                 self.children.borrow_mut().insert(token, child_host);
+                }
             }
             Err(e) => {
                 send_status(

@@ -1,25 +1,21 @@
 use std::rc::Rc;
 
-use crate::core::layout::{HitTestBehavior, Offset};
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
-
-use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
+use crate::core::edgy::mutation::{MutationHandle, MutationPayload};
+use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::elements::{
     ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue,
 };
-use crate::core::js_runtime::JsProps;
+use crate::core::layout::{HitTestBehavior, Offset};
 use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 // ---------------------------------------------------------------------------
-// PointerInteractView — the user's declaration. Pure Rust, no JsValues.
+// PointerInteractView — the user's declaration. Pure Rust.
 //
-// Callbacks are mutation atoms typed as `MutationHandle<E>`. The JS bridge
-// wraps user callbacks as mutation atoms and passes the `Mutation` handle as the
-// prop value. At event time the gesture handler resolves these and pushes
-// invocations onto the pending-mutation queue.
+// Callbacks are mutation atoms typed as `MutationHandle<E>` (the rut rows
+// mint them via `build_mutate`). At event time the gesture handler resolves
+// these and pushes invocations onto the pending-mutation queue.
 //
 // Enter/exit hover callbacks live on `MouseRegion` (which also manages the
 // OS cursor). PointerInteract is gesture-only: click + drag.
@@ -38,11 +34,11 @@ pub struct PointerInteractView {
 }
 
 impl View for PointerInteractView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let behavior = self
             .behavior
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or_default();
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
@@ -53,13 +49,12 @@ impl View for PointerInteractView {
                 behavior,
             })
             .with_callbacks(),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child) = &self.child {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -68,8 +63,8 @@ impl View for PointerInteractView {
 
 // ---------------------------------------------------------------------------
 // PointerInteractElement — the built element. Stores spec + eagerly-resolved
-// behavior (read by the gesture handler at event time where no store/Context
-// is available).
+// behavior (read by the gesture handler at event time where no store is
+// available).
 // ---------------------------------------------------------------------------
 
 pub struct PointerInteractElement {
@@ -170,29 +165,8 @@ impl ElementOnGesture for PointerInteractElement {
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl PointerInteractView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        PointerInteractView {
-            behavior: p.val::<HitTestBehavior>("behavior"),
-            on_click: p.mutation::<PointerInteractEvent>("onClick"),
-            on_pointer_down: p.mutation::<PointerInteractEvent>("onPointerDown"),
-            on_pointer_move: p.mutation::<PointerInteractEvent>("onPointerMove"),
-            on_pointer_up: p.mutation::<PointerInteractEvent>("onPointerUp"),
-            on_context_menu: p.mutation::<PointerInteractEvent>("onContextMenu"),
-            query_key: p.query_key("queryKey"),
-            child: p.child("child"),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// PointerInteractEvent — JS callback argument for click / drag events.
+// PointerInteractEvent — callback argument for click / drag events.
 // Carries both local (element-relative) and global (canvas-relative) coords.
-// Serialises to a single JS object `{ local: {x, y}, global: {x, y} }`.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -201,27 +175,15 @@ pub struct PointerInteractEvent {
     pub global: Offset,
 }
 
-impl IntoJsArgs for PointerInteractEvent {
-    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
-        use boa_engine::js_string;
-        use boa_engine::object::JsObject;
-
-        fn make_point(ctx: &mut Context, x: f64, y: f64) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("x"), JsValue::from(x), ctx);
-            let _ = obj.create_data_property(js_string!("y"), JsValue::from(y), ctx);
-            obj
-        }
-        fn make_event(ctx: &mut Context, local: JsObject, global: JsObject) -> JsObject {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let _ = obj.create_data_property(js_string!("local"), JsValue::from(local), ctx);
-            let _ = obj.create_data_property(js_string!("global"), JsValue::from(global), ctx);
-            obj
-        }
-
-        let local = make_point(ctx, self.local.x, self.local.y);
-        let global = make_point(ctx, self.global.x, self.global.y);
-        let event = make_event(ctx, local, global);
-        vec![JsValue::from(event)]
+impl MutationPayload for PointerInteractEvent {
+    /// Native crossing (the rut rail): `[local.x, local.y, global.x,
+    /// global.y]` — realm-free.
+    fn to_value_args(&self) -> Vec<Value> {
+        vec![
+            Value::Num(self.local.x),
+            Value::Num(self.local.y),
+            Value::Num(self.global.x),
+            Value::Num(self.global.y),
+        ]
     }
 }

@@ -2,14 +2,15 @@
 //!
 //! The table declares `columns` (fixed `width` px and/or `flex` share of the
 //! leftover width — CSS `table-layout: fixed` semantics), a reactive `rows`
-//! array, a per-row `build` fn returning that row's cells, and an optional
-//! `buildHeader` fn returning the header cells. The header row and every
-//! body row lay their cells at the same resolved column widths — the
-//! property plain flex composition can't express.
+//! list atom, a rut entry-builder invoked per cell — `entry fn(row, col) ->
+//! opaque` — to produce that row's cells, and an optional header builder
+//! (`entry fn(col) -> opaque`). The header row and every body row lay their
+//! cells at the same resolved column widths — the property plain flex
+//! composition can't express.
 //!
 //! Rows are mounted eagerly (all of them — this is the static sibling of a
 //! future virtualized table; wrap in a `ScrollView` to scroll). Writing a
-//! new array value to the `rows` atom rebuilds the row subtrees (the `Each`
+//! new list value to the `rows` atom rebuilds the row subtrees (the `Each`
 //! rebuild-all semantic) during the next layout pass; the header is built
 //! once at `View::build` (reactive header *content* flows through `Val`
 //! props inside the returned cells).
@@ -18,7 +19,6 @@
 //! `dividerColor` rules (between body rows + under the header) under its
 //! cells — pure decoration, no hit-test surface.
 
-pub mod bridge;
 mod element;
 mod layout;
 mod render;
