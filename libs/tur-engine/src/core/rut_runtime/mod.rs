@@ -160,7 +160,6 @@ pub fn tur_decl_module() -> rut_driver::Module {
             host_funcs: funcs,
             consts: Vec::new(),
             native_types: Vec::new(),
-            native_traits: Vec::new(),
             native_fns: Vec::new(),
             native_impls: Vec::new(),
         },

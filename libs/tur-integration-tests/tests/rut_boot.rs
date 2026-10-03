@@ -1071,13 +1071,12 @@ fn rut_animation_controller_ticks_into_opacity() {
 /// A clipboard round-trip and an HTTP request, awaited in rut
 /// (`launch_future` + `await`; the pump's `run_ready` drives it).
 const ASYNC_RUT: &str = r#"
-use core::RunContext;
 use async_host::launch_future;
 use tur::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, rs_get_str, rs_set_str,
     rs_source_str };
 use tur_kit::{ Column, Text };
 
-async fn work(cx: RunContext, label: u64) -> str {
+async fn work(label: u64) -> str {
     rs_set_str(label, "launched");
     await clipboard_write("from rut");
     let clip = await clipboard_read();
@@ -1136,7 +1135,6 @@ fn rut_async_clipboard_and_net_request() {
 /// into `on_chunk` (the chunk lengths append to the label); the task
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
-use core::RunContext;
 use async_host::launch_future;
 use tur::{ clipboard_write, mount, net_stream, rs_get_str, rs_set_str, rs_source_str, st_put, st_take,
     task_cancel };
@@ -1156,7 +1154,7 @@ entry fn start() -> u64 {
     return label;
 }
 
-async fn finish(cx: RunContext, label: u64) -> str {
+async fn finish(label: u64) -> str {
     // One beat (a quick capability await) so the drive is mid-flight,
     // then wire-abort the stream: whatever chunks landed stay on the
     // label; the rest never arrive.

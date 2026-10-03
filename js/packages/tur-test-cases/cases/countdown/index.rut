@@ -3,7 +3,6 @@
 // remaining atom. The ticker is an async loop over `sleep(1000)` with a
 // generation guard (a stale loop exits when a new start supersedes it).
 // State atom ids ride the scalar stash (stf_*).
-use core::RunContext;
 use async_host::{ launch_future, sleep };
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mem_get, mem_new, mem_set, mount,
     rs_derive, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64,
@@ -109,7 +108,7 @@ entry fn fmt_display(v: f64) -> str {
 
 // The 1 Hz ticker. `g` pins the generation: a stale loop (superseded by a
 // later start / pause) exits without ticking.
-async fn ticker(cx: RunContext, g: f64) -> str {
+async fn ticker(g: f64) -> str {
     let running = stf_take(K_RUNNING) as u64;
     while (rs_get_bool(running)) {
         await sleep(1000);
