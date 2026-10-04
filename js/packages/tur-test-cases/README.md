@@ -58,6 +58,8 @@ Every case is a **single `index.rut` module** with:
   promise-rejection reporting and JS error shapes were JS-rail concerns;
   the rut rail's equivalents (traps, fuel, parse diagnostics) are pinned by
   `libs/tur-integration-tests/tests/rut_boot.rs` instead.
+- **`compiler-bridge-demo` is intentionally omitted** — it demoed the JS
+  transpile bridge, which no longer exists in the rut era.
 
 ### Example
 

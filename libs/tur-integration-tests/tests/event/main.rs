@@ -6,6 +6,7 @@ mod countdown;
 mod counter;
 mod drag_delta;
 mod editable_text;
+mod github_viewer;
 mod focus_clear_on_click;
 mod hit_test_transparency;
 mod mouse_region;

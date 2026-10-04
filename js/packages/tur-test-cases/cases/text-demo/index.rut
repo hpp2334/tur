@@ -1,0 +1,266 @@
+// text-demo: the Text styling showcase — font sizes, weights, colors, a
+// rich-text span run (per-run size / weight / italic / underline / color),
+// and the interactive maxLines + overflow trio ("clip" / "ellipsis" /
+// "visible"). Single-file port of the boa TSX original (generated.ts,
+// "text-demo") to the kit.
+//
+// Reactivity: the overflow section's caption and button label are derives
+// over the maxLines source (`rs_derive`, numeric). The prop itself is
+// static per build, so the three cards ride a `Switch` on the mirrored
+// mode string ("1" / "2" / "3") — a maxLines change swaps in a freshly
+// authored card row (the same structural-swap trick the boa explorer used
+// for its download button).
+use tur::{
+    BORDER_INSIDE, CURSOR_POINTER, CROSS_ALIGN_END, CROSS_ALIGN_START, CROSS_ALIGN_STRETCH,
+    MAIN_SIZE_MIN, SPAN_ITALIC, SPAN_UNDERLINE, mount, rs_derive, rs_get_f64, rs_set_f64,
+    rs_set_str, rs_source_f64, rs_source_str, stf_put, stf_take,
+};
+use tur_kit::{
+    Column, Condition, Container, MouseRegion, PointerInteract, Row, ScrollView, SizedBox, Spans,
+    Switch, Text,
+};
+
+
+let K_MODE: u64 = 1;
+
+// The boa palette (slate text on a soft page, indigo accent).
+let PAGE_BG: u64 = 0xF8FAFCFFu64;
+let CARD_BG: u64 = 0xFFFFFFFFu64;
+let CARD_BORDER: u64 = 0xE2E8F0FFu64;
+let TEXT: u64 = 0x0F172AFFu64;
+let TEXT_MUTED: u64 = 0x64748BFFu64;
+let ACCENT: u64 = 0x4F46E5FFu64;
+let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+let ROSE: u64 = 0xE11D48FFu64;
+let EMERALD: u64 = 0x059669FFu64;
+let AMBER: u64 = 0xD97706FFu64;
+
+let BROWN: str = "The quick brown fox jumps over the lazy dog.";
+
+entry fn start() -> u64 {
+    let maxlines = rs_source_f64();
+    rs_set_f64(maxlines, 2.0);
+    let mode = rs_source_str("2");
+    stf_put(K_MODE, mode as f64);
+    let caption = rs_derive("fmt_caption", maxlines);
+    let btn_label = rs_derive("fmt_btn", maxlines);
+
+    let mut page = Column()
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .main_axis_size(MAIN_SIZE_MIN)
+        .child(SizedBox(0.0, 16.0).build())
+        .child(Text().text("Text").font_size(22.0).color(TEXT).build())
+        .child(SizedBox(0.0, 4.0).build())
+        .child(Text().text("size · weight · color · spans · overflow").font_size(12.0).color(TEXT_MUTED).build())
+        .child(SizedBox(0.0, 16.0).build())
+        .child(section("FONT SIZE", size_row()))
+        .child(SizedBox(0.0, 12.0).build())
+        .child(section("FONT WEIGHT", weight_col()))
+        .child(SizedBox(0.0, 12.0).build())
+        .child(section("COLOR", color_row()))
+        .child(SizedBox(0.0, 12.0).build())
+        .child(section("RICH TEXT (SPANS)", [spans_line()]))
+        .child(SizedBox(0.0, 12.0).build())
+        .child(section("OVERFLOW", [
+            Text().text_bound_derived(caption).font_size(11.0).color(TEXT_MUTED).query_key("overflow-caption").build(),
+            SizedBox(0.0, 8.0).build(),
+            overflow_cards(mode),
+            SizedBox(0.0, 10.0).build(),
+            cycle_button(maxlines, btn_label),
+        ]))
+        .child(SizedBox(0.0, 16.0).build());
+
+    let scroller = ScrollView().child(page.build()).build();
+    let root = Container().color(PAGE_BG).child(scroller).build();
+    mount(root);
+    return maxlines;
+}
+
+// A titled, content-sized card (the boa `Section`).
+fn section(title: str, kids: [opaque]) -> opaque {
+    return Container()
+        .padding(14.0)
+        .radius(10.0)
+        .color(CARD_BG)
+        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .child(
+            Column()
+                .cross_alignment(CROSS_ALIGN_START)
+                .main_axis_size(MAIN_SIZE_MIN)
+                .child(Text().text(title).font_size(11.0).color(TEXT_MUTED).build())
+                .child(SizedBox(0.0, 10.0).build())
+                .children(kids)
+                .build(),
+        )
+        .build();
+}
+
+// The size ladder: Aa at 10 / 14 / 20 / 28, baseline-aligned.
+fn size_row() -> [opaque] {
+    return [
+        Row()
+            .cross_alignment(CROSS_ALIGN_END)
+            .main_axis_size(MAIN_SIZE_MIN)
+            .child(Text().text("Aa").font_size(10.0).color(TEXT).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("Aa").font_size(14.0).color(TEXT).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("Aa").font_size(20.0).color(TEXT).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("Aa").font_size(28.0).color(TEXT).build())
+            .build(),
+    ];
+}
+
+// The weight ladder: the fox sentence at 300 / 400 / 700 / 900.
+fn weight_col() -> [opaque] {
+    return [
+        Text().text(BROWN).font_size(14.0).font_weight(300.0).color(TEXT).build(),
+        SizedBox(0.0, 4.0).build(),
+        Text().text(BROWN).font_size(14.0).font_weight(400.0).color(TEXT).build(),
+        SizedBox(0.0, 4.0).build(),
+        Text().text(BROWN).font_size(14.0).font_weight(700.0).color(TEXT).build(),
+        SizedBox(0.0, 4.0).build(),
+        Text().text(BROWN).font_size(14.0).font_weight(900.0).color(TEXT).build(),
+    ];
+}
+
+// The named colors in one row.
+fn color_row() -> [opaque] {
+    return [
+        Row()
+            .main_axis_size(MAIN_SIZE_MIN)
+            .child(Text().text("slate").font_size(14.0).color(TEXT).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("rose").font_size(14.0).color(ROSE).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("emerald").font_size(14.0).color(EMERALD).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("amber").font_size(14.0).color(AMBER).build())
+            .build(),
+    ];
+}
+
+// The span run: per-run size / weight / italic / underline / color
+// (0 = inherit, the span_add law).
+fn spans_line() -> opaque {
+    let run = Spans()
+        .add("The ", 0.0, TEXT, 0.0, 0)
+        .add("quick ", 0.0, TEXT, 0.0, SPAN_ITALIC)
+        .add("brown ", 0.0, AMBER, 700.0, 0)
+        .add("fox ", 0.0, TEXT, 0.0, SPAN_UNDERLINE)
+        .add("jumps ", 18.0, TEXT, 0.0, 0)
+        .add("over the ", 0.0, TEXT_MUTED, 0.0, 0)
+        .add("lazy", 0.0, EMERALD, 700.0, 0)
+        .add(" dog.", 0.0, TEXT_MUTED, 0.0, 0);
+    return Text().font_size(14.0).spans(run).build();
+}
+
+// One truncation card: the fox sentence clipped to `max_lines` lines at a
+// 100px width under the given overflow mode.
+fn overflow_card(kind: str, max_lines: u64) -> opaque {
+    return Container()
+        .width(100.0)
+        .padding(8.0)
+        .radius(8.0)
+        .color(CARD_BG)
+        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .child(
+            Column()
+                .cross_alignment(CROSS_ALIGN_START)
+                .main_axis_size(MAIN_SIZE_MIN)
+                .child(Text().text(kind).font_size(11.0).color(TEXT_MUTED).build())
+                .child(SizedBox(0.0, 6.0).build())
+                .child(overflow_text(kind, max_lines))
+                .build(),
+        )
+        .build();
+}
+
+// The styled sentence under one overflow mode (branches keep the chain —
+// no statement-mutated builders).
+fn overflow_text(kind: str, max_lines: u64) -> opaque {
+    if (kind == "clip") {
+        return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).clip().build();
+    }
+    if (kind == "ellipsis") {
+        return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).ellipsis().build();
+    }
+    return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).overflow_visible().build();
+}
+
+// The three truncation cards, keyed by the mirrored mode string — a
+// maxLines change structurally swaps the row (the prop is static per
+// build).
+fn overflow_cards(mode: u64) -> opaque {
+    return Switch()
+        .value_source(mode)
+        .query_key("overflow-cards")
+        .cases("1", cards_row(1))
+        .cases("2", cards_row(2))
+        .cases("3", cards_row(3))
+        .build();
+}
+
+fn cards_row(max_lines: u64) -> opaque {
+    return Row()
+        .cross_alignment(CROSS_ALIGN_START)
+        .main_axis_size(MAIN_SIZE_MIN)
+        .child(overflow_card("clip", max_lines))
+        .child(SizedBox(8.0, 0.0).build())
+        .child(overflow_card("ellipsis", max_lines))
+        .child(SizedBox(8.0, 0.0).build())
+        .child(overflow_card("visible", max_lines))
+        .build();
+}
+
+// The indigo pill button that cycles maxLines (2 → 1 → 3 → 2).
+fn cycle_button(maxlines: u64, btn_label: u64) -> opaque {
+    let pill = Container()
+        .padding(10.0)
+        .radius(8.0)
+        .color(ACCENT)
+        .child(
+            Row()
+                .main_axis_size(MAIN_SIZE_MIN)
+                .child(Text().text_bound_derived(btn_label).font_size(13.0).color(ACCENT_FG).build())
+                .build(),
+        )
+        .build();
+    return MouseRegion()
+        .cursor(CURSOR_POINTER)
+        .child(
+            PointerInteract()
+                .ids(maxlines, maxlines)
+                .on_tap("ts_cycle")
+                .query_key("overflow-btn")
+                .child(pill)
+                .build(),
+        )
+        .build();
+}
+
+// The caption over the cards: "maxLines = 2  ·  width = 100px".
+entry fn fmt_caption(v: f64) -> str {
+    return f"maxLines = {v as u64}  ·  width = 100px";
+}
+
+// The button label: "cycle maxLines (now 2)".
+entry fn fmt_btn(v: f64) -> str {
+    return f"cycle maxLines (now {v as u64})";
+}
+
+// The tap: cycle 2 → 1 → 3 → 2 and mirror onto the cards' mode string.
+entry fn ts_cycle(maxlines: u64, _b: u64, _n: f64) {
+    let mode = stf_take(K_MODE) as u64;
+    let cur = rs_get_f64(maxlines);
+    let mut next: f64 = 2.0;
+    if (cur == 2.0) {
+        next = 1.0;
+    } else if (cur == 1.0) {
+        next = 3.0;
+    }
+    rs_set_f64(maxlines, next);
+    rs_set_str(mode, f"{next as u64}");
+    stf_put(K_MODE, mode as f64);
+}

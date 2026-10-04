@@ -33,6 +33,7 @@ mod stack;
 mod switch_view;
 mod table;
 mod text;
+mod text_demo;
 mod text_huge_document;
 mod text_input;
 mod text_input_programmatic_refresh;

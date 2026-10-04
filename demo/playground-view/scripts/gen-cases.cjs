@@ -12,10 +12,10 @@
 // natively) but do not appear in the playground sidebar.
 //
 // Whitelist names deliberately absent from the manifest:
-// - `github-viewer` / `text-demo` — pending their rut ports (the plan's
-//   case-port phase); the manifest grows when they land.
 // - `composited-transform-anchor-playground` — removed from the corpus in
 //   b3d66d1 (a JS-rail-only demo; no rut port exists or is planned).
+// - `compiler-bridge-demo` — N/A by design: it demoed the JS transpile
+//   bridge, which no longer exists (see the corpus README).
 const fs = require("node:fs");
 const path = require("node:path");
 

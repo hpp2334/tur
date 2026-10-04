@@ -2,6 +2,7 @@
     "complex-animation",
     "countdown",
     "counter",
+    "github-viewer",
     "grid-aspect",
     "grid-basic",
     "grid-gallery",
@@ -15,5 +16,6 @@
     "password-input",
     "table-basic",
     "table-reactive",
+    "text-demo",
     "todolist"
 ]

@@ -79,7 +79,10 @@ fn cases_dir() -> std::path::PathBuf {
 }
 
 fn playground_app() -> TurTestApp {
-    let app = TurTestApp::new_with_extra_plugins(
+    // The browser-shaped capability set: the website's runtime registers
+    // `Http` (tur-net-wasm), so the playground instance must have it too
+    // for the net-riding showcase cases (github-viewer) to compile.
+    let app = TurTestApp::new_with_http_and_plugins(
         1200.0,
         700.0,
         vec![Box::new(TurRutPlaygroundPlugin)],
@@ -331,6 +334,33 @@ fn playground_viewer_runs_counter_to_ready() {
     );
     let id = app.query_element(&["viewer"]).expect("the viewer host node");
     let node = app.dev_tool_get_element(id).unwrap();
+    assert_eq!(node.name, "tur_virtual_app");
+    assert!(
+        node.size.0 > 0.0 && node.size.1 > 0.0,
+        "the hosting element kept its layout: {:?}",
+        node.size
+    );
+}
+
+#[test]
+fn playground_viewer_compiles_the_net_riding_github_viewer() {
+    // github-viewer is the showcase's net row rider: the sidebar select
+    // compiles it in the child instance (the net rows exist here because
+    // `playground_app` registers the Http capability, matching the
+    // website's runtime) and boots it to ready with the viewer hosting a
+    // live child. (The child's landing tree is pinned content-side by
+    // `event/github_viewer.rs`.)
+    let app = playground_app();
+    app.call_rut_entry("select", case_index("github-viewer"), 0.0)
+        .unwrap();
+    assert!(
+        wait_for_state(&app, "ready"),
+        "the child never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+    let node = app
+        .dev_tool_get_element(app.query_element(&["viewer"]).unwrap())
+        .expect("the viewer host in the dev-tool tree");
     assert_eq!(node.name, "tur_virtual_app");
     assert!(
         node.size.0 > 0.0 && node.size.1 > 0.0,

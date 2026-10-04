@@ -125,6 +125,10 @@ pub struct RecordingHttp {
 #[derive(Default)]
 struct RecordingHttpInner {
     next_response: std::sync::Mutex<Option<HttpOutcome>>,
+    /// Ordered canned responses (consumed one per request, then falling
+    /// back to `next_response`) — multi-request journeys (e.g. the
+    /// github-viewer case's meta + contents fetches).
+    next_responses: std::sync::Mutex<Vec<HttpOutcome>>,
     next_stream_chunks: std::sync::Mutex<Option<(u16, Vec<Vec<u8>>)>>,
     last_request: std::sync::Mutex<Option<RecordedRequest>>,
     /// Chunks produced so far by the canned stream body — bumped exactly when
@@ -148,6 +152,13 @@ impl RecordingHttp {
     /// `None`, the request resolves to `HttpOutcome::Err("no canned response")`.
     pub fn set_next_response(&self, outcome: HttpOutcome) {
         *self.inner.next_response.lock().unwrap() = Some(outcome);
+    }
+
+    /// Ordered canned responses consumed one per `request(opts).await`
+    /// (a multi-request journey's script); when the queue drains, requests
+    /// fall back to [`Self::set_next_response`]'s single body.
+    pub fn set_next_responses(&self, outcomes: Vec<HttpOutcome>) {
+        *self.inner.next_responses.lock().unwrap() = outcomes;
     }
 
     /// Pre-canned streaming response: returns the given status + chunks via
@@ -182,13 +193,19 @@ impl HttpBackend for RecordingHttp {
             url: opts.url.clone(),
             method: opts.method.clone(),
         });
-        let outcome = self
-            .inner
-            .next_response
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_else(|| HttpOutcome::Err("no canned response".to_string()));
+        let queued = {
+            let mut q = self.inner.next_responses.lock().unwrap();
+            if q.is_empty() {
+                None
+            } else {
+                Some(q.remove(0))
+            }
+        };
+        let outcome = match queued {
+            Some(outcome) => Some(outcome),
+            None => self.inner.next_response.lock().unwrap().clone(),
+        }
+        .unwrap_or_else(|| HttpOutcome::Err("no canned response".to_string()));
         Box::pin(std::future::ready(outcome))
     }
 
@@ -504,6 +521,26 @@ impl TurTestApp {
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
         Self::build(width, height, None, None, extra_plugins, None, None)
+    }
+
+    /// [`Self::new_with_extra_plugins`] plus the `Http` capability
+    /// (a fresh [`RecordingHttp`]; `TurNetPlugin` pushes the net rows) —
+    /// the browser-shaped capability set, for playground instances that
+    /// compile net-riding corpus cases (github-viewer).
+    pub fn new_with_http_and_plugins(
+        width: f64,
+        height: f64,
+        extra_plugins: Vec<Box<dyn Plugin>>,
+    ) -> Result<Self, TurError> {
+        Self::build(
+            width,
+            height,
+            Some(RecordingHttp::new()),
+            None,
+            extra_plugins,
+            None,
+            None,
+        )
     }
 
     /// Construct with the RPC reply transport forced to **host-drain**
@@ -1300,6 +1337,17 @@ impl TurTestApp {
             .as_ref()
             .expect("TurTestApp::set_http_response requires new_with_http")
             .set_next_response(outcome);
+    }
+
+    /// Ordered canned responses consumed one per `request(opts).await` —
+    /// a multi-request journey's script (falls back to the single body
+    /// once drained). Panics if this app wasn't constructed via
+    /// [`Self::new_with_http`] (or its plugin-taking twin).
+    pub fn set_http_responses(&self, outcomes: Vec<HttpOutcome>) {
+        self.http
+            .as_ref()
+            .expect("TurTestApp::set_http_responses requires an Http-capable app")
+            .set_next_responses(outcomes);
     }
 
     /// Pre-canned streaming response for the next `requestStream(opts).await`.
