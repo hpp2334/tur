@@ -3,7 +3,7 @@
 // remaining atom. The ticker is an async loop over `sleep(1000)` with a
 // generation guard (a stale loop exits when a new start supersedes it).
 // State atom ids ride the scalar stash (stf_*).
-use async_host::{ launch_future, sleep };
+use futures::{ launch_future, sleep };
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mem_get, mem_new, mem_set, mount,
     rs_derive, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64,
     st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,

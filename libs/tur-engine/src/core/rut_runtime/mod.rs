@@ -34,7 +34,7 @@ use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
 use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64};
-use rut_driver::ModuleBody;
+use rut_driver::PkgBody;
 use rut_vm::Opaque;
 use rut_vm::interp::{CallArgs, Ret, Vm};
 use rut_vm::OpaqueRef;
@@ -100,11 +100,11 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 // their view types and arrive through the [`RutPkgExt`] seam.
 // ---------------------------------------------------------------------------
 
-/// The in-memory `tur` host-pkg Module (the DECL side): the mechanism
-/// surface rut code compiles against. Mounted via `Session::register_module`
-/// — no filesystem involved. Plugin families extend it through their
-/// pushed [`RutPkgExt`]s (decl rows + consts).
-pub fn tur_decl_module() -> rut_driver::Module {
+/// The in-memory `tur` host pkg (the DECL side): the mechanism surface
+/// rut code compiles against. Offered to the run chain — no filesystem
+/// involved. Plugin families extend it through their pushed
+/// [`RutPkgExt`]s (decl rows + consts).
+pub fn tur_decl_pkg() -> rut_driver::Pkg {
     let row = |name: &str, params: Vec<TypeId>, ret: TypeId| (name.to_string(), params, ret, false);
     let host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
         // stash the root — the engine applies it after `start` returns
@@ -154,9 +154,10 @@ pub fn tur_decl_module() -> rut_driver::Module {
     // ride the driver's five-row family expansion).
     let mut funcs = host_funcs;
     funcs.extend(async_caps::decl_rows());
-    rut_driver::Module {
+    rut_driver::Pkg {
+        spec: "tur".to_string(),
         namespace: Some("tur".to_string()),
-        body: ModuleBody::Host {
+        body: PkgBody::Host {
             host_funcs: funcs,
             consts: Vec::new(),
             native_types: Vec::new(),
@@ -721,7 +722,7 @@ impl RutRuntime {
         // surface, owned by the standard bundle assembly, never by core).
         let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId, bool)> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
-        let mut preludes: Vec<(String, rut_driver::Module)> = Vec::new();
+        let mut preludes: Vec<rut_driver::Pkg> = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur");
         for ext in exts {
             ext(&mut RutPkgCx {
@@ -732,46 +733,52 @@ impl RutRuntime {
                 preludes: &mut preludes,
             });
         }
-        let module = {
-            let mut m = tur_decl_module();
-            if let ModuleBody::Host { host_funcs, consts, .. } = &mut m.body {
-                host_funcs.extend(ext_decl);
-                consts.extend(ext_consts);
-            }
-            m
-        };
-        let mut session = rut_driver::Session::new();
-        rut_driver::mount_std_core(&mut session);
-        // The async weave (Future trait + the launch rows) — the C6 async
-        // capability rows `await` through it. On wasm the weave's mount
-        // reads the toolchain tree from disk (rut-driver's
-        // `mount_std_async` canonicalizes a checkout path) — unavailable,
-        // so the weave is native-only for now: non-async rut modules load
-        // on the web, async ones fail the compile with unknown-module
-        // diagnostics.
-        if !cfg!(target_arch = "wasm32") {
-            rut_driver::mount_std_async(&mut session);
+        let mut tur_pkg = tur_decl_pkg();
+        if let PkgBody::Host { host_funcs, consts, .. } = &mut tur_pkg.body {
+            host_funcs.extend(ext_decl);
+            consts.extend(ext_consts);
         }
-        session
-            .register_module("tur", module)
-            .map_err(|e| format!("mount tur pkg: {e}"))?;
-        // The preludes (the kit et al.) — registered after `tur`, whose
-        // rows they wrap.
-        for (spec, module) in preludes {
-            session
-                .register_module(&spec, module)
-                .map_err(|e| format!("mount prelude `{spec}`: {e}"))?;
+        // The async weave (the Future machinery + the launch/sleep rows) —
+        // offered to EVERY target: the decl surface lowers from the vendored
+        // upstream `.d.rut` (wasm has no filesystem — the old disk-bound
+        // `mount_std_async` gate died with the driver's path-free rewrite),
+        // and the bodies install at boot (`rut_std::async_host::pkg()` —
+        // pure VM-driving rows: launch / cancel / arm_timer).
+        let async_decl_txt: &str = include_str!("async_host.d.rut");
+        let mut async_host = rut_driver::lower_decl_module(async_decl_txt, "async_host.d.rut")
+            .map_err(|e| format!("mount async_host decl: {e}"))?;
+        async_host.spec = "async_host".to_string();
+        // The typed launcher surface (`launch_future` / `sleep` / the
+        // competition rows) — upstream's `futures` inline package, rut
+        // source over the `__*` engine rows (vendored alongside).
+        let futures = rut_driver::Pkg::source("futures", include_str!("futures.rut"));
+        // The run chain: offer the pkgs (first-offer-wins), root at the app
+        // source. `core` is auto-offered by `.compile()`; the host-row
+        // snapshot for the boot-side installs comes from the same offer set
+        // (core carries no host rows, so the snapshot matches the old
+        // session's `host_pkg_context`).
+        let mut offered = vec![tur_pkg.clone(), async_host.clone()];
+        offered.extend(preludes.iter().cloned());
+        let mut run = rut_driver::RutRun::new()
+            .pkg(tur_pkg)
+            .pkg(async_host)
+            .pkg(futures)
+            .pkg(rut_driver::Pkg::source("app", source))
+            .entrypoint("app");
+        for pkg in preludes {
+            run = run.pkg(pkg);
         }
-
-        let out = rut_driver::compile_module_in(&mut session, source, rut_parser::Mode::Impl, "app");
-        if !out.diags.is_empty() {
-            let msgs: Vec<String> = out.diags.iter().map(|d| d.msg.clone()).collect();
+        let compiled = run.compile().map_err(|e| e.msg)?;
+        if !compiled.graph.diags.is_empty() {
+            let msgs: Vec<String> = compiled.graph.diags.iter().map(|d| d.msg.clone()).collect();
             return Err(msgs.join("; "));
         }
-        let binary = out.binary.ok_or("rut compile emitted no binary")?;
-        let prog = rut_core::binary::decode(&binary).map_err(|e| format!("decode: {e}"))?;
+        let prog = compiled
+            .graph
+            .program
+            .ok_or("rut compile emitted no binary")?;
         rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
-        Ok((Rc::new(prog), session.host_pkg_context()))
+        Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&offered)))
     }
 
     /// Parse + compile only (the parse-first half of the load contract) —
@@ -818,12 +825,11 @@ impl RutRuntime {
         });
 
         let mut hosts = rut_vm::interp::HostRegistry::new();
-        // The async launcher set (`__launch` / `__abort` / `__sleep`) — the
-        // standard `mount_std_async` decls demand these bodies (the spike's
-        // wiring). Native-only, symmetric with the decl mount above.
-        if !cfg!(target_arch = "wasm32") {
-            hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
-        }
+        // The async launcher set (`__launch` / `__abort` / `__sleep`) —
+        // the vendored `async_host` decl demands these bodies (both
+        // targets: the rows are pure VM-driving — launch / cancel /
+        // arm_timer — and the decl lowers from the vendored `.d.rut`).
+        hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
         install_tur_pkg(&mut hosts, &ctx, &handles, &exts);
         hosts.verify_against(&ctx.flatten());
 
@@ -840,13 +846,13 @@ impl RutRuntime {
             .and_then(|fid| prog.funcs.get(fid))
             .is_some_and(|f| f.ret == TY_U64);
 
-        let vm = rut_vm::interp::Vm::new(
-            prog,
-            &default_limits(),
-            rut_vm::interp::HostHooks::default(),
-            hosts,
-        )
-        .map_err(|t| crate::core::app::ModuleError::Eval(format!("boot: {} — {}", t.name(), t.msg)))?;
+        let vm = rut_vm::interp::Vm::builder()
+            .program(prog)
+            .limits(default_limits())
+            .hooks(rut_vm::interp::HostHooks::default())
+            .hosts(hosts)
+            .build()
+            .map_err(|e| crate::core::app::ModuleError::Eval(format!("boot: {}", e.msg)))?;
         // The VM lives in a shared cell: view factories / deriveds minted
         // by rows reach it through the face's Weak (flush-time calls), so
         // they never hold a borrow across the engine's own `&mut Vm` calls.
@@ -1039,11 +1045,10 @@ pub struct RutPkgCx<'a> {
     /// The per-instance bridge handles — `None` at compile time (the decl
     /// probe), `Some` at boot.
     pub handles: Option<&'a Rc<RutHandles>>,
-    /// Prelude rut modules `(spec, module)` registered into the compile
-    /// session before the app source compiles (the kit — the authored
-    /// builder surface). Core never fills this; the standard bundle
-    /// assembly does.
-    pub preludes: &'a mut Vec<(String, rut_driver::Module)>,
+    /// Prelude rut pkgs registered into the compile run before the app
+    /// source compiles (the kit — the authored builder surface). Core
+    /// never fills this; the standard bundle assembly does.
+    pub preludes: &'a mut Vec<rut_driver::Pkg>,
 }
 
 /// A rut pkg extension: plugin-owned rows for the `tur` host pkg (e.g.

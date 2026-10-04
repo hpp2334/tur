@@ -1071,7 +1071,7 @@ fn rut_animation_controller_ticks_into_opacity() {
 /// A clipboard round-trip and an HTTP request, awaited in rut
 /// (`launch_future` + `await`; the pump's `run_ready` drives it).
 const ASYNC_RUT: &str = r#"
-use async_host::launch_future;
+use futures::launch_future;
 use tur::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, rs_get_str, rs_set_str,
     rs_source_str };
 use tur_kit::{ Column, Text };
@@ -1135,7 +1135,7 @@ fn rut_async_clipboard_and_net_request() {
 /// into `on_chunk` (the chunk lengths append to the label); the task
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
-use async_host::launch_future;
+use futures::launch_future;
 use tur::{ clipboard_write, mount, net_stream, rs_get_str, rs_set_str, rs_source_str, st_put, st_take,
     task_cancel };
 use tur_kit::{ Column, Text };

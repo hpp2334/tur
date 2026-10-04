@@ -60,8 +60,7 @@ impl Plugin for TurAnimationPlugin {
             crate::rut_rows::install(cx, manager.clone());
             // The animation kit prelude — the authored Opacity / Transform
             // wrappers over the rows above (same ownership law).
-            cx.preludes
-                .push(("tur_anim_kit".to_string(), crate::kit::tur_anim_kit_module()));
+            cx.preludes.push(crate::kit::tur_anim_kit_pkg());
         }));
 
         Ok(())

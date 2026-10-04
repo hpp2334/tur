@@ -13,14 +13,13 @@
 /// The kit's rut source (the authored builder surface).
 pub const TUR_KIT_RUT: &str = include_str!("tur_kit.rut");
 
-/// The kit as a compile-session module (spec `tur_kit`) — what the
-/// standard bundle assembly pushes into [`crate::core::rut_runtime::
-/// RutPkgCx::preludes`].
-pub fn tur_kit_module() -> rut_driver::Module {
-    rut_driver::Module {
+/// The kit as a compile pkg (spec `tur_kit`) — what the standard bundle
+/// assembly pushes into [`crate::core::rut_runtime::RutPkgCx::preludes`].
+pub fn tur_kit_pkg() -> rut_driver::Pkg {
+    rut_driver::Pkg {
         spec: "tur_kit".to_string(),
         namespace: Some("tur_kit".to_string()),
-        body: rut_driver::ModuleBody::Source {
+        body: rut_driver::PkgBody::Source {
             text: TUR_KIT_RUT.to_string(),
             is_decl: false,
         },

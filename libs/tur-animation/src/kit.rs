@@ -7,12 +7,12 @@
 /// The animation kit's rut source.
 pub const TUR_ANIM_KIT_RUT: &str = include_str!("kit.rut");
 
-/// The kit as a compile-session module (spec `tur_anim_kit`).
-pub fn tur_anim_kit_module() -> rut_driver::Module {
-    rut_driver::Module {
+/// The kit as a compile pkg (spec `tur_anim_kit`).
+pub fn tur_anim_kit_pkg() -> rut_driver::Pkg {
+    rut_driver::Pkg {
         spec: "tur_anim_kit".to_string(),
         namespace: Some("tur_anim_kit".to_string()),
-        body: rut_driver::ModuleBody::Source {
+        body: rut_driver::PkgBody::Source {
             text: TUR_ANIM_KIT_RUT.to_string(),
             is_decl: false,
         },

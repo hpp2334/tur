@@ -107,8 +107,7 @@ impl Plugin for TurStdPlugin {
         // prelude so `use tur_kit::{…}` resolves in every module the
         // standard plugin set compiles.
         ctx.push_rut_ext(std::rc::Rc::new(|cx: &mut crate::core::rut_runtime::RutPkgCx<'_>| {
-            cx.preludes
-                .push(("tur_kit".to_string(), crate::kit::tur_kit_module()));
+            cx.preludes.push(crate::kit::tur_kit_pkg());
         }));
 
         Ok(())
