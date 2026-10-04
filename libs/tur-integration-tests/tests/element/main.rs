@@ -17,6 +17,7 @@ mod host_image;
 mod image;
 mod input_placeholder_color;
 mod instance_data;
+mod kit_constructor_form;
 mod lazy_grid;
 mod lazy_list;
 mod multi_instance;

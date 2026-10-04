@@ -72,7 +72,7 @@ class Column {
 }
 
 impl Column {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: flex_column() };
   }
   pub fn main_alignment(mut self, v: u64) -> Self {
@@ -111,7 +111,7 @@ class Row {
 }
 
 impl Row {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: flex_row() };
   }
   pub fn main_alignment(mut self, v: u64) -> Self {
@@ -152,7 +152,7 @@ class Expanded {
 }
 
 impl Expanded {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: flexi_new() };
   }
   pub fn flex(mut self, v: f64) -> Self {
@@ -181,7 +181,7 @@ class Flexible {
 }
 
 impl Flexible {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     let s = flexi_new();
     flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot
     return Self { spec: s };
@@ -214,7 +214,7 @@ class Stack {
 }
 
 impl Stack {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: stack_new() };
   }
   pub fn alignment(mut self, v: u64) -> Self {
@@ -249,7 +249,7 @@ class Positioned {
 }
 
 impl Positioned {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: pos_new() };
   }
   pub fn left(mut self, v: f64) -> Self {
@@ -292,7 +292,7 @@ class Container {
 }
 
 impl Container {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: box_new() };
   }
   pub fn width(mut self, v: f64) -> Self {
@@ -371,7 +371,7 @@ class SizedBox {
 }
 
 impl SizedBox {
-  pub fn builder(w: f64, h: f64) -> Self {
+  [constructor] pub fn builder(w: f64, h: f64) -> Self {
     return Self { spec: sizedbox_new(w, h) };
   }
   pub fn child(mut self, c: opaque) -> Self {
@@ -394,7 +394,7 @@ class Text {
 }
 
 impl Text {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: text_new() };
   }
   pub fn text(mut self, v: str) -> Self {
@@ -459,7 +459,7 @@ class Spans {
 }
 
 impl Spans {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: spans_new() };
   }
   pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: u64) -> Self {
@@ -475,7 +475,7 @@ class Input {
 }
 
 impl Input {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: input_new() };
   }
   pub fn controller(mut self, c: opaque) -> Self {
@@ -550,7 +550,7 @@ class PointerInteract {
 }
 
 impl PointerInteract {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: pi_new() };
   }
   // The single-id rail: pointer callbacks deliver `(id, lx, ly, gx, gy, btn)`.
@@ -610,7 +610,7 @@ class MouseRegion {
 }
 
 impl MouseRegion {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: mr_new() };
   }
   pub fn on_enter(mut self, name: str, id: u64) -> Self {
@@ -647,7 +647,7 @@ class Focusable {
 }
 
 impl Focusable {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: focus_new() };
   }
   pub fn on_key_down(mut self, name: str, id: u64) -> Self {
@@ -678,7 +678,7 @@ class ScrollView {
 }
 
 impl ScrollView {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: scroll_new() };
   }
   pub fn axis(mut self, v: u64) -> Self {
@@ -707,7 +707,7 @@ class LazyList {
 }
 
 impl LazyList {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_list_new() };
   }
   pub fn item_builder(mut self, name: str) -> Self {
@@ -744,7 +744,7 @@ class LazyGrid {
 }
 
 impl LazyGrid {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_grid_new() };
   }
   pub fn item_builder(mut self, name: str) -> Self {
@@ -787,7 +787,7 @@ class Grid {
 }
 
 impl Grid {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: grid_new() };
   }
   pub fn max_cross(mut self, v: f64) -> Self {
@@ -830,7 +830,7 @@ class TableCols {
 }
 
 impl TableCols {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: cols_new() };
   }
   pub fn fixed(mut self, w: f64) -> Self {
@@ -848,7 +848,7 @@ class Table {
 }
 
 impl Table {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: table_new() };
   }
   pub fn columns(mut self, cols: TableCols) -> Self {
@@ -883,7 +883,7 @@ class Switch {
 }
 
 impl Switch {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: switch_new() };
   }
   pub fn value_source(mut self, atom: u64) -> Self {
@@ -918,7 +918,7 @@ class Condition {
 }
 
 impl Condition {
-  pub fn builder(atom: u64) -> Self {
+  [constructor] pub fn builder(atom: u64) -> Self {
     return Self { spec: cond_new(atom) };
   }
   pub fn then(mut self, branch: opaque) -> Self {
@@ -943,7 +943,7 @@ class Each {
 }
 
 impl Each {
-  pub fn builder(atom: u64) -> Self {
+  [constructor] pub fn builder(atom: u64) -> Self {
     return Self { spec: each_new(atom) };
   }
   pub fn item_builder(mut self, name: str) -> Self {
@@ -960,7 +960,7 @@ class Fragment {
 }
 
 impl Fragment {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: frag_new() };
   }
   pub fn child(mut self, c: opaque) -> Self {
@@ -985,7 +985,7 @@ class Image {
 }
 
 impl Image {
-  pub fn builder(res: u64) -> Self {
+  [constructor] pub fn builder(res: u64) -> Self {
     return Self { spec: img_new(res) };
   }
   pub fn width(mut self, v: f64) -> Self {
@@ -1014,7 +1014,7 @@ class VirtualApp {
 }
 
 impl VirtualApp {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: va_new() };
   }
   pub fn controller(mut self, c: opaque) -> Self {
@@ -1043,7 +1043,7 @@ class Lifecycle {
 }
 
 impl Lifecycle {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: lc_new() };
   }
   pub fn on_mount(mut self, name: str) -> Self {
@@ -1070,7 +1070,7 @@ class CompositedTarget {
 }
 
 impl CompositedTarget {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: ct_target_new() };
   }
   pub fn link(mut self, l: opaque) -> Self {
@@ -1091,7 +1091,7 @@ class CompositedFollower {
 }
 
 impl CompositedFollower {
-  pub fn builder() -> Self {
+  [constructor] pub fn builder() -> Self {
     return Self { spec: ct_follower_new() };
   }
   pub fn link(mut self, l: opaque) -> Self {
