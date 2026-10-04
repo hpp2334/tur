@@ -4,7 +4,15 @@
 // chainable methods (ONE METHOD PER PROP, named after the historical
 // camelCase props in snake_case), `.child(c)` / `.children([...])`
 // appending, and `.build()` as the ONLY terminal (each class's build calls
-// its FAMILY's build row — `Column.build()` → `flex_build`, …). Callbacks
+// its FAMILY's build row — `Column.build()` → `flex_build`, …).
+//
+// Construction law: build with the class call form — `Column()` /
+// `SizedBox(400.0, 200.0)` — over each class's `[constructor] fn
+// builder()` (the `.builder()` long form stays valid — byte-identical
+// lowering), and CHAIN it: `let c = X().prop(..).child(..);` — never
+// `let mut c` + `c.prop(..);` statement runs.
+//
+// Callbacks
 // keep the intent-queue law (names + ids, never closures); reactive
 // bindings are methods (`text_bound(atom)`, `color_bound(atom)`), not
 // constructor variants. Flags are the `u64` consts the `tur` pkg declares

@@ -4,6 +4,13 @@
 // rows (the layering law applied to the kit itself): tur-animation
 // registers this prelude alongside its rows, so engine plugin sets without
 // animation never see (or need) these classes.
+//
+// Construction law (as everywhere in the kit): build with the class call
+// form — `Opacity(0.5)` / `Transform(scale, rotate, tx, ty)` — over each
+// class's `[constructor] fn builder()` (the `.builder()` long form stays
+// valid — byte-identical lowering), and CHAIN it:
+// `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
+// statement runs.
 use tur::{ el_opacity, el_opacity_bound, el_transform };
 
 class Opacity {

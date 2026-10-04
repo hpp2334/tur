@@ -1,7 +1,9 @@
 //! rut-fluent — the kit fluent-construction rewriter (phase 2 of
 //! `kit-fluent-construction`; kept for future case normalization).
 //!
-//! Rewrites authored rut sources to the kit's fluent construction idiom:
+//! Rewrites authored rut sources from the legacy idiom (pre-phase-2; no
+//! longer the law) to the kit's fluent construction law — construction is
+//! the class call form, chained:
 //!
 //! ```text
 //! let mut x = T.builder();      →   let x = T().p(..).c(..);

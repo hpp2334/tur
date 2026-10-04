@@ -19,8 +19,11 @@ Every case is a **single `index.rut` module** with:
 
 - **`entry fn start()`** — the ONLY mount point. It authors the tree
   through the **kit** builder classes (`use tur_kit::{ Column, Text, … };`
-  — chainable, one method per prop, `.child(c)` / `.children([…])`
-  appending, `.build()` the only terminal) and hands the root to the engine
+  — constructed by class call (`Column()`, `Text()`; the `.builder()` long
+  form stays valid — byte-identical lowering), chainable one method per
+  prop, CHAINED — never `let mut x` + `x.prop(..)` statement runs — with
+  `.child(c)` / `.children([…])` appending and `.build()` the only
+  terminal) and hands the root to the engine
   with `mount(root.build())`. `start` may return `-> u64` (the host records
   the answer — conventionally the id of the module's root state atom —
   readable via `TurTestApp::rut_start_answer`).
@@ -42,7 +45,7 @@ Every case is a **single `index.rut` module** with:
 - **Naming**: the directory name is the case name (`kebab-case`), e.g.
   `cases/counter/index.rut` loads as `"counter"`.
 - **Query keys**: give every element a test needs to find a query key via
-  the builder's `.query_key("key")` method; tests locate it with
+  the element's chainable `.query_key("key")` method; tests locate it with
   `app.query_element(&["key"])`.
 - **Callbacks**: `entry fn` names are conventionally prefixed by their
   role (`ts_` for test-seam actions, `g_` gesture, `f_` focus, `a_`
@@ -65,10 +68,10 @@ use tur_kit::{ Column, Container, PointerInteract, Text };
 entry fn start() -> u64 {
     let count = rs_source_f64();
     let label = rs_source_str("Count: 0");
-    let mut col = Column.new();
-    col.query_key("col");
-    col.child(Text.new().text_bound(label).query_key("count").build());
-    col.child(button(count, label, "ts_inc", "+1"));
+    let col = Column()
+        .query_key("col")
+        .child(Text().text_bound(label).query_key("count").build())
+        .child(button(count, label, "ts_inc", "+1"));
     mount(col.build());
     return count;
 }
@@ -76,13 +79,13 @@ entry fn start() -> u64 {
 // A pill button: a PointerInteract pad (the tap delivers `(a, b, seq)`)
 // wrapping a styled label — the el_button composite, authored from families.
 fn button(count: u64, label: u64, cb: str, text: str) -> opaque {
-    return PointerInteract.new()
+    return PointerInteract()
         .ids(count, label)
         .on_tap(cb)
         .child(
-            Container.new()
+            Container()
                 .color(0x6366F1FFu64)
-                .child(Text.new().text(text).build())
+                .child(Text().text(text).build())
                 .build(),
         )
         .build();

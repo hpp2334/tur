@@ -258,7 +258,12 @@ Android build + device debugging live in the **`android-dev` skill** at
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
   snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
-  `obscure`, …). `.child(c)` / `.children([…])` append children; `.build()`
+  `obscure`, …). Construction is the class call form `X()` over the
+  `[constructor] fn builder()` (`Row()`, `SizedBox(400.0, 200.0)`) — the
+  `.builder()` long form stays valid (byte-identical lowering) — and
+  construction is CHAINED, never statement-mutated
+  (`let c = X().prop(..).child(..);`, not `let mut c` + `c.prop(..)` runs).
+  `.child(c)` / `.children([…])` append children; `.build()`
   is the ONLY terminal and calls the FAMILY's build row (`Column.build()` →
   `flex_build`, `Text.build()` → `text_build`). Required-prop validation
   stays in the rows/View constructors. Callbacks keep the intent-queue law —
