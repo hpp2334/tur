@@ -546,7 +546,7 @@ entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "hello");
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -564,7 +564,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "import");
     tctrl_push_span(ctrl, " {");
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -580,7 +580,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "def\n");
     tctrl_push_span(ctrl, "ghi");
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -762,7 +762,7 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -816,7 +816,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "");
     tctrl_push_span(ctrl, "abcd");
     let undo = undo_new();
-    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
     let keyed = input;
     mount(keyed);
 }
@@ -854,9 +854,9 @@ entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
-    let col = Column.builder().child(input).build();
-    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col).build();
+    let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
+    let col = Column().child(input).build();
+    let scroller = ScrollView().axis(AXIS_VERTICAL).child(col).build();
     mount(scroller);
 }
 "#;
@@ -955,7 +955,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
     // flags bit 0 = multiline.
-    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
     let keyed = input;
     mount(keyed);
 }
@@ -1082,7 +1082,7 @@ entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
-    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
     let keyed = input;
     mount(keyed);
 }

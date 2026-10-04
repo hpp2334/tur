@@ -11,12 +11,10 @@ use tur_kit::{ Column, Container, Expanded };
 
 
 entry fn start() {
-    let mut fill_builder = Container.builder();
-    fill_builder.color(0x404040FFu64);
-    let mut fill = Expanded.builder().flex(1.0).child(fill_builder.build()).query_key("fill").build();
+    let fill_builder = Container().color(0x404040FFu64);
+    let mut fill = Expanded().flex(1.0).child(fill_builder.build()).query_key("fill").build();
     let fill = fill;
-    let mut col = Column.builder();
-    col.child(fill);
+    let col = Column().child(fill);
     mount(col.build());
 }
 "#;

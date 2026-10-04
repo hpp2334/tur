@@ -5,8 +5,8 @@ use tur_kit::{ Column, Container, Text };
 
 
 entry fn start() {
-    let mut col = Column.builder();
-    col.child(Text.builder().text("hello vello").build());
-    col.child(Text.builder().text("second line").build());
-    mount(Container.builder().color(0xF0F4F8FFu64).padding(12.0).child(col.build()).build());
+    let col = Column()
+        .child(Text().text("hello vello").build())
+        .child(Text().text("second line").build());
+    mount(Container().color(0xF0F4F8FFu64).padding(12.0).child(col.build()).build());
 }

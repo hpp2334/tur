@@ -6,24 +6,15 @@ use tur_kit::{ Column, Container, MouseRegion, Text };
 
 entry fn start() -> u64 {
     let hover = rs_source_str("");
-    let mut col = Column.builder();
+    let mut col = Column();
 
-    let mut a = Container.builder();
-    a.width_height(100.0, 50.0);
-    a.color(0xEF4444FFu64);
-    a.query_key("a");
-    col.child(MouseRegion.builder().on_enter("a_enter", hover).on_exit("a_exit", hover).cursor(0).behavior(0).child(a.build()).build());
+    let a = Container().width_height(100.0, 50.0).color(0xEF4444FFu64).query_key("a");
+    col.child(MouseRegion().on_enter("a_enter", hover).on_exit("a_exit", hover).cursor(0).behavior(0).child(a.build()).build());
 
-    let mut b = Container.builder();
-    b.width_height(100.0, 50.0);
-    b.color(0x3B82F6FF);
-    b.query_key("b");
-    col.child(MouseRegion.builder().on_enter("b_enter", hover).on_exit("b_exit", hover).cursor(0).behavior(0).child(b.build()).build());
+    let b = Container().width_height(100.0, 50.0).color(0x3B82F6FF).query_key("b");
+    col.child(MouseRegion().on_enter("b_enter", hover).on_exit("b_exit", hover).cursor(0).behavior(0).child(b.build()).build());
 
-    let mut t = Text.builder();
-
-    t.text_bound(hover);
-    t.query_key("hover");
+    let t = Text().text_bound(hover).query_key("hover");
     col.child(t.build());
     mount(col.build());
     return hover;

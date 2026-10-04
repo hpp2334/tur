@@ -9,12 +9,11 @@ entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
 
-    let mut col = Column.builder();
-    let mut input = Input.builder().controller(ctrl).undo(undo).placeholder("password").width_height(220.0, 32.0).obscure(true).query_key("password-input").build();
+    let mut col = Column();
+    let input = Input().controller(ctrl).undo(undo).placeholder("password").width_height(220.0, 32.0).obscure(true).query_key("password-input").build();
     col.child(input);
-    col.child(PointerInteract.builder().ids(obscure, obscure).on_tap("b_toggle").child(Text.builder().text("reveal").build()).build());
-    let mut root = Container.builder();
-    root.child(col.build());
+    col.child(PointerInteract().ids(obscure, obscure).on_tap("b_toggle").child(Text().text("reveal").build()).build());
+    let root = Container().child(col.build());
     mount(root.build());
     return obscure;
 }

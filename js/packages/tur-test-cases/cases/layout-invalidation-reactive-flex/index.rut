@@ -16,20 +16,17 @@ entry fn start() -> u64 {
     stf_put(K_A, flex_a as f64);
     stf_put(K_B, flex_b as f64);
 
-    let mut row = Row.builder();
-    let a = Expanded.builder().flex_bound(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
+    let mut row = Row();
+    let a = Expanded().flex_bound(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
     row.child(a);
-    let b = Expanded.builder().flex_bound(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
+    let b = Expanded().flex_bound(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
     row.child(b);
     mount(row.build());
     return flex_a;
 }
 
 fn qkey_box(key: str, color: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, 0.0);
-    b.color(color);
-    b.query_key(key);
+    let b = Container().width_height(0.0, 0.0).color(color).query_key(key);
     return b.build();
 }
 

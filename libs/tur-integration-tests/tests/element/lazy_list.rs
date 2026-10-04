@@ -244,17 +244,17 @@ use tur_kit::{ Container, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(50.0, 50.0);
-    b.color(0xC8C8C8FFu64);
-    b.child(Text.builder().text(f"Item {i}").build());
+    let b = Container()
+        .width_height(50.0, 50.0)
+        .color(0xC8C8C8FFu64)
+        .child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    mount(LazyList.builder().item_builder("row").count(count).item_extent(50.0).build());
+    mount(LazyList().item_builder("row").count(count).item_extent(50.0).build());
     return count;
 }
     "#,
@@ -324,17 +324,17 @@ use tur_kit::{ Container, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(56.0, 56.0);
-    b.color(0xC8C8C8FFu64);
-    b.child(Text.builder().text(f"Item {i}").build());
+    let b = Container()
+        .width_height(56.0, 56.0)
+        .color(0xC8C8C8FFu64)
+        .child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 10000.0);
-    let mut lg = LazyList.builder().item_builder("row").count(count).item_extent(56.0).overscan(2).query_key("ll").build();
+    let mut lg = LazyList().item_builder("row").count(count).item_extent(56.0).overscan(2).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return count;
@@ -798,16 +798,14 @@ use tur_kit::{ Container, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(50.0, 50.0);
-    b.child(Text.builder().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let mut lg = LazyList.builder().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let mut lg = LazyList().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return count;
@@ -847,16 +845,14 @@ use tur_kit::{ Container, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(50.0, 50.0);
-    b.child(Text.builder().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let mut lg = LazyList.builder().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let mut lg = LazyList().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return count;
@@ -920,16 +916,14 @@ use tur_kit::{ Container, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(50.0, 50.0);
-    b.child(Text.builder().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 20.0);
-    let mut lg = LazyList.builder().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
+    let mut lg = LazyList().item_builder("row").count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return count;

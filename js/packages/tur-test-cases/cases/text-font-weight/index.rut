@@ -5,15 +5,7 @@ use tur_kit::{ Fragment, Text };
 
 
 entry fn start() {
-    let mut normal = Text.builder();
-
-    normal.text("Hello");
-    normal.font_size(20.0);
-    normal.font_weight(400.0);
-    let mut bold = Text.builder();
-
-    bold.text("Hello");
-    bold.font_size(20.0);
-    bold.font_weight(700.0);
-    mount(Fragment.builder().children([normal.build(), bold.build()]).build());
+    let normal = Text().text("Hello").font_size(20.0).font_weight(400.0);
+    let bold = Text().text("Hello").font_size(20.0).font_weight(700.0);
+    mount(Fragment().children([normal.build(), bold.build()]).build());
 }

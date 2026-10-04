@@ -5,39 +5,25 @@ use tur_kit::{ Column, Container, Row, Text };
 
 
 entry fn start() {
-    let mut row = Row.builder();
+    let mut row = Row();
     // Sidebar: one active tab pill.
-    let mut sidebar = Container.builder();
-    sidebar.color(0x1A1A2EFF);
-    sidebar.width_height(200.0, 0.0);
-    let mut tabs = Column.builder();
-    let mut tab = Container.builder();
-    tab.color(0x0F3460FF);
-    tab.padding(12.0);
-    let mut label = Text.builder();
-
-    label.text("TodoList");
-    label.font_size(14.0);
-    tab.child(label.build());
+    let mut sidebar = Container().color(0x1A1A2EFF).width_height(200.0, 0.0);
+    let mut tabs = Column();
+    let tab = Container()
+        .color(0x0F3460FF)
+        .padding(12.0)
+        .child(Text().text("TodoList").font_size(14.0).build());
     tabs.child(tab.build());
     sidebar.child(tabs.build());
     row.child(sidebar.build());
     // Content: heading + list shell.
-    let mut content = Container.builder();
-    content.padding(16.0);
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_CENTER);
-    let mut heading = Text.builder();
-
-    heading.text("Todo List");
-    heading.font_size(24.0);
-    col.child(heading.build());
-    col.child(box_h(16.0));
-    let mut list = Column.builder();
-    let mut item = Row.builder();
-    item.main_alignment(MAIN_ALIGN_SPACE_BETWEEN);
-    item.child(Text.builder().text("Buy milk").build());
-    list.child(item.build());
+    let mut content = Container().padding(16.0);
+    let mut col = Column()
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(Text().text("Todo List").font_size(24.0).build())
+        .child(box_h(16.0));
+    let list = Column()
+        .child(Row().main_alignment(MAIN_ALIGN_SPACE_BETWEEN).child(Text().text("Buy milk").build()).build());
     col.child(list.build());
     content.child(col.build());
     row.child(content.build());
@@ -45,7 +31,6 @@ entry fn start() {
 }
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }

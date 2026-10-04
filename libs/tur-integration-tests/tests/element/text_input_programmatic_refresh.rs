@@ -22,7 +22,7 @@ let K_CTRL: u64 = 1;
 
 entry fn start() {
     let ctrl = tctrl_new();
-    let mut input = Input.builder().controller(ctrl).width_height(200.0, 44.0).query_key("editor").build();
+    let mut input = Input().controller(ctrl).width_height(200.0, 44.0).query_key("editor").build();
     st_put(K_CTRL, ctrl);
     mount(input);
 }

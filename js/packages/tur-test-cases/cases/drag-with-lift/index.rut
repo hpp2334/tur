@@ -16,16 +16,14 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
     st_put(K_CTRL, ctrl);
 
-    let mut b = Container.builder();
-    b.width_height(80.0, 40.0);
-    b.query_key("lift-target");
-    b.child(Text.builder().text("piece").build());
-    let pad = PointerInteract.builder().id(phase).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let b = Container()
+        .width_height(80.0, 40.0)
+        .query_key("lift-target")
+        .child(Text().text("piece").build());
+    let pad = PointerInteract().id(phase).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
 
-    let phase_t = Text.builder().text_bound(phase).query_key("last-event").build();
-    let mut root = Column.builder();
-    root.child(pad);
-    root.child(phase_t);
+    let phase_t = Text().text_bound(phase).query_key("last-event").build();
+    let root = Column().child(pad).child(phase_t);
     mount(root.build());
     return phase;
 }

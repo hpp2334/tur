@@ -14,16 +14,12 @@ use tur_kit::{{ Container, Grid }};
 
 
 entry fn tile() -> opaque {{
-    let mut b = Container.builder();
-    b.width_height(10.0, 10.0);
-    b.color(0xC8C8C8FFu64);
+    let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);
     return b.build();
 }}
 
 entry fn start() {{
-    let mut g = Grid.builder();
-    g.query_key("g");
-    g.max_cross({max_cross});
+    let mut g = Grid().query_key("g").max_cross({max_cross});
 {aspect}{extent}{spacing}    let mut i = 0;
     while (i < {count}) {{
         g.child(tile());

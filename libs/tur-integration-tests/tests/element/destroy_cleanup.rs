@@ -27,8 +27,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.width_height(10.0, 10.0);
+    let b = Container().width_height(10.0, 10.0);
     mount(b.build());
 }
 

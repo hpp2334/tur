@@ -4,9 +4,6 @@ use tur_kit::{ Text };
 
 
 entry fn start() {
-    let mut t = Text.builder();
-
-    t.text("Hello");
-    t.font_size(14.0);
+    let t = Text().text("Hello").font_size(14.0);
     mount(t.build());
 }

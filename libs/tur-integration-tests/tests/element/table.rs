@@ -32,28 +32,19 @@ use tur_kit::{ Column, Container, Table, TableCols };
 let ROWS: u64 = 9;
 
 fn cell(key: str) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(10.0, 10.0);
-    b.color(0xC8C8C8FFu64);
-    b.query_key(key);
+    let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
     return b.build();
 }
 
 entry fn header_row() -> opaque {
-    let mut col = Column.builder();
-    col.child(cell("h0"));
-    col.child(cell("h1"));
-    col.child(cell("h2"));
+    let col = Column().child(cell("h0")).child(cell("h1")).child(cell("h2"));
     return col.build();
 }
 
 // The row builder receives the row INDEX directly (the RutEntryBuilder
 // face calls it with the row's position).
 entry fn row_cell(i: u64) -> opaque {
-    let mut col = Column.builder();
-    col.child(cell(f"c0-{i}"));
-    col.child(cell(f"c1-{i}"));
-    col.child(cell(f"c2-{i}"));
+    let col = Column().child(cell(f"c0-{i}")).child(cell(f"c1-{i}")).child(cell(f"c2-{i}"));
     return col.build();
 }
 
@@ -71,12 +62,9 @@ entry fn start() {
     let rows = rs_source_value(rows_of({ROWS_PLACEHOLDER}));
     stf_put(ROWS, rows as f64);
 
-    let mut cols = TableCols.builder();
-    cols.fixed(100.0);
-    cols.flex(1.0, 40.0);
-    cols.flex(3.0, 0.0);
+    let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
-    let mut t = Table.builder().columns(cols).rows_atom(rows).row_builder("row_cell").header_builder("header_row").query_key("t").build();
+    let mut t = Table().columns(cols).rows_atom(rows).row_builder("row_cell").header_builder("header_row").query_key("t").build();
     mount(t);
 }
 

@@ -70,11 +70,9 @@ use tur_kit::{ Column, Container, Text };
 
 
 entry fn start() {
-    let mut col = Column.builder();
-    let mut b = Container.builder();
-    b.width_height(100.0, 50.0);
-    col.child(b.build());
-    col.child(Text.builder().text("hello").build());
+    let col = Column()
+        .child(Container().width_height(100.0, 50.0).build())
+        .child(Text().text("hello").build());
     mount(col.build());
 }
 "#,
@@ -140,9 +138,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.width_height(100.0, 10.0);
-    b.color(0xFF0000FFu64);
+    let b = Container().width_height(100.0, 10.0).color(0xFF0000FFu64);
     mount(b.build());
 }
 "#,

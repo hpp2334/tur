@@ -164,7 +164,7 @@ use tur_kit::{ Text };
 
 
 entry fn start() {
-    mount(Text.builder().text("b").build());
+    mount(Text().text("b").build());
 }
 
 entry fn ping(_a: u64, _b: f64) {

@@ -6,17 +6,17 @@ use tur_kit::{ Condition, Container, Text };
 
 entry fn start() {
     let when = rs_source_bool(true);
-    let mut then_box = Container.builder();
-    then_box.width_height(200.0, 100.0);
-    then_box.color(0x303030FF);
-    then_box.query_key("then-branch");
-    then_box.child(Text.builder().text("then-branch").build());
-    let mut else_box = Container.builder();
-    else_box.width_height(200.0, 100.0);
-    else_box.color(0x501A1AFF);
-    else_box.query_key("else-branch");
-    else_box.child(Text.builder().text("else-branch").build());
-    let c = Condition.builder(when).then(then_box.build()).else_branch(else_box.build()).query_key("condition-basic").build();
+    let then_box = Container()
+        .width_height(200.0, 100.0)
+        .color(0x303030FF)
+        .query_key("then-branch")
+        .child(Text().text("then-branch").build());
+    let else_box = Container()
+        .width_height(200.0, 100.0)
+        .color(0x501A1AFF)
+        .query_key("else-branch")
+        .child(Text().text("else-branch").build());
+    let c = Condition(when).then(then_box.build()).else_branch(else_box.build()).query_key("condition-basic").build();
 
     mount(c);
 }

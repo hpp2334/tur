@@ -61,7 +61,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    mount(Container.builder().width_height(40.0, 40.0).color(0x11223344u64).build());
+    mount(Container().width_height(40.0, 40.0).color(0x11223344u64).build());
 }
 "#,
     )

@@ -6,17 +6,16 @@ use tur_kit::{ Column, Container, ScrollView };
 
 
 entry fn start() {
-    let mut content = Column.builder();
-    content.cross_alignment(CROSS_ALIGN_STRETCH);
-    content.child(box_h(200.0));
-    content.child(box_h(200.0));
-    content.child(box_h(200.0));
-    let mut sv = ScrollView.builder().axis(AXIS_VERTICAL).initial_offset(100.0).child(content.build()).query_key("scroll-view").build();
+    let content = Column()
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(box_h(200.0))
+        .child(box_h(200.0))
+        .child(box_h(200.0));
+    let sv = ScrollView().axis(AXIS_VERTICAL).initial_offset(100.0).child(content.build()).query_key("scroll-view").build();
     mount(sv);
 }
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }

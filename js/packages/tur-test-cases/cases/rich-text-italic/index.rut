@@ -3,13 +3,8 @@ use tur_kit::{ Spans, Text };
 
 
 entry fn start() {
-    let mut t = Text.builder();
-
-    t.text("");
-    t.font_size(14.0);
-    let mut spans = Spans.builder();
-    spans.add("Normal", 0.0, 0, 0.0, 0);
-    spans.add("Italic", 0.0, 0, 0.0, 1);
+    let mut t = Text().text("").font_size(14.0);
+    let spans = Spans().add("Normal", 0.0, 0, 0.0, 0).add("Italic", 0.0, 0, 0.0, 1);
     t.spans(spans);
     mount(t.build());
 }

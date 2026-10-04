@@ -5,14 +5,12 @@ use tur_kit::{ Container, Expanded, Positioned, Stack };
 
 
 entry fn start() {
-    let mut stack = Stack.builder();
-    stack.child(Positioned.builder().left(5.0).top(5.0).child(qkey_sized(10.0, 10.0, "dot")).build());
-    mount(Expanded.builder().flex(1.0).child(stack.build()).build());
+    let stack = Stack()
+        .child(Positioned().left(5.0).top(5.0).child(qkey_sized(10.0, 10.0, "dot")).build());
+    mount(Expanded().flex(1.0).child(stack.build()).build());
 }
 
 fn qkey_sized(w: f64, h: f64, key: str) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(w, h);
-    b.query_key(key);
+    let b = Container().width_height(w, h).query_key(key);
     return b.build();
 }

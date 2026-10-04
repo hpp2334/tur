@@ -16,41 +16,31 @@ entry fn start() -> u64 {
     st_put(K_DOWNS, mem_new(0.0));
     st_put(K_CLICKS, mem_new(0.0));
 
-    let mut stack = Stack.builder();
+    let mut stack = Stack();
 
     // The scrollable beneath, wrapped in a gesture target so pointer
     // events reaching THROUGH the overlay are observable.
-    let mut content = Column.builder();
-    content.cross_alignment(CROSS_ALIGN_STRETCH);
-    content.child(box_h(300.0));
-    content.child(box_h(300.0));
-    content.child(box_h(300.0));
-    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).query_key("sv").build();
-    stack.child(PointerInteract.builder().id(downs).on_down("g_down").child(scroller).build());
+    let content = Column()
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(box_h(300.0))
+        .child(box_h(300.0))
+        .child(box_h(300.0));
+    let scroller = ScrollView().axis(AXIS_VERTICAL).child(content.build()).query_key("sv").build();
+    stack.child(PointerInteract().id(downs).on_down("g_down").child(scroller).build());
 
     // The invisible full-size overlay: no decoration, no gesture.
-    let mut overlay = Container.builder();
-    overlay.width_height(400.0, 600.0);
-    overlay.query_key("overlay");
+    let overlay = Container().width_height(400.0, 600.0).query_key("overlay");
     stack.child(overlay.build());
 
     // The floating pill, anchored bottom-right.
-    let mut pill_box = Container.builder();
-    pill_box.width_height(64.0, 28.0);
-    pill_box.query_key("pill");
-    let pill = PointerInteract.builder().ids(clicks, clicks).on_tap("pill_click").child(pill_box.build()).build();
-    stack.child(Positioned.builder().right(8.0).bottom(8.0).child(pill).build());
+    let pill_box = Container().width_height(64.0, 28.0).query_key("pill");
+    let pill = PointerInteract().ids(clicks, clicks).on_tap("pill_click").child(pill_box.build()).build();
+    stack.child(Positioned().right(8.0).bottom(8.0).child(pill).build());
 
     // Counter readouts (the test parses these).
-    let mut downs_t = Text.builder();
-
-    downs_t.text_bound(downs);
-    downs_t.query_key("beneath-downs");
+    let downs_t = Text().text_bound(downs).query_key("beneath-downs");
     stack.child(downs_t.build());
-    let mut clicks_t = Text.builder();
-
-    clicks_t.text_bound(clicks);
-    clicks_t.query_key("pill-clicks");
+    let clicks_t = Text().text_bound(clicks).query_key("pill-clicks");
     stack.child(clicks_t.build());
 
     mount(stack.build());
@@ -74,7 +64,6 @@ entry fn pill_click(clicks: u64, _b: u64, _n: f64) {
 }
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }

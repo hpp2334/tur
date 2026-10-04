@@ -4,5 +4,5 @@ use tur_kit::{ SizedBox, Text };
 
 
 entry fn start() {
-    mount(SizedBox.builder(100.0, 50.0).child(Text.builder().text("Hi").build()).build());
+    mount(SizedBox(100.0, 50.0).child(Text().text("Hi").build()).build());
 }

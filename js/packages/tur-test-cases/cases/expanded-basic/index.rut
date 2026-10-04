@@ -5,15 +5,14 @@ use tur_kit::{ Column, Container, Expanded };
 
 
 fn box_wh(w: f64, h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(w, h);
+    let b = Container().width_height(w, h);
     return b.build();
 }
 
 entry fn start() {
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
-    col.child(box_wh(0.0, 50.0));
-    col.child(Expanded.builder().flex(1.0).child(box_wh(0.0, 0.0)).build());
+    let col = Column()
+        .cross_alignment(CROSS_ALIGN_START)
+        .child(box_wh(0.0, 50.0))
+        .child(Expanded().flex(1.0).child(box_wh(0.0, 0.0)).build());
     mount(col.build());
 }

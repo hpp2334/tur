@@ -124,12 +124,9 @@ entry fn start() -> u64 {
     let height = rs_source_f64();
     rs_set_f64(height, 900.0);
 
-    let mut b = Container.builder();
-    b.width_height(10.0, 10.0);
-    b.color(0x204080FFu64);
-    b.height_bound(height);
+    let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
 
-    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
+    let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
     return height;

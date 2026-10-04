@@ -6,30 +6,24 @@ use tur_kit::{ Column, Container, Expanded, Row, ScrollView, SizedBox };
 
 
 entry fn start() {
-    let mut row = Row.builder();
-    row.child(SizedBox.builder(200.0, 0.0).child(Container.builder().build()).build());
-    let mut outer_content = Column.builder();
-    outer_content.cross_alignment(CROSS_ALIGN_START);
-    outer_content.child(box_h(100.0));
-    let mut inner_wrapper = Container.builder();
-    inner_wrapper.width_height(0.0, 200.0);
-    inner_wrapper.query_key("inner-wrapper");
-    let mut inner_content = Column.builder();
-    inner_content.cross_alignment(CROSS_ALIGN_STRETCH);
-    inner_content.child(box_h(200.0));
-    inner_content.child(box_h(200.0));
-    inner_content.child(box_h(200.0));
-    let inner = ScrollView.builder().axis(AXIS_VERTICAL).child(inner_content.build()).build();
+    let mut row = Row().child(SizedBox(200.0, 0.0).child(Container().build()).build());
+    let mut outer_content = Column().cross_alignment(CROSS_ALIGN_START).child(box_h(100.0));
+    let mut inner_wrapper = Container().width_height(0.0, 200.0).query_key("inner-wrapper");
+    let inner_content = Column()
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(box_h(200.0))
+        .child(box_h(200.0))
+        .child(box_h(200.0));
+    let inner = ScrollView().axis(AXIS_VERTICAL).child(inner_content.build()).build();
     inner_wrapper.child(inner);
     outer_content.child(inner_wrapper.build());
     outer_content.child(box_h(400.0));
-    let mut outer = ScrollView.builder().axis(AXIS_VERTICAL).child(outer_content.build()).query_key("outer-scroll").build();
-    row.child(Expanded.builder().flex(1.0).child(outer).build());
+    let outer = ScrollView().axis(AXIS_VERTICAL).child(outer_content.build()).query_key("outer-scroll").build();
+    row.child(Expanded().flex(1.0).child(outer).build());
     mount(row.build());
 }
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }

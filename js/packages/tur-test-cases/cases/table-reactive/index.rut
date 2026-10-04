@@ -6,15 +6,8 @@ use tur_kit::{ Column, Container, Each, PointerInteract, Row, SizedBox, Text };
 
 
 entry fn row(_i: u64, name: str) -> opaque {
-    let mut r = Row.builder();
-    let mut c = Container.builder();
-    c.width_height(150.0, 0.0);
-    c.padding(8.0);
-    let mut t = Text.builder();
-
-    t.text(name);
-    t.font_size(14.0);
-    c.child(t.build());
+    let mut r = Row();
+    let c = Container().width_height(150.0, 0.0).padding(8.0).child(Text().text(name).font_size(14.0).build());
     r.child(c.build());
     return r.build();
 }
@@ -25,22 +18,16 @@ entry fn start() -> u64 {
     rs_list_push(rows, "Venus");
     let rows_atom = rs_source_value(rows);
 
-    let mut col = Column.builder();
-    let mut head = Container.builder();
-    head.width_height(0.0, 32.0);
-    head.color(0x1E293BFF);
-    let mut ht = Text.builder();
-
-    ht.text("PLANET");
-    ht.font_size(12.0);
-    head.child(ht.build());
+    let mut col = Column();
+    let head = Container()
+        .width_height(0.0, 32.0)
+        .color(0x1E293BFF)
+        .child(Text().text("PLANET").font_size(12.0).build());
     col.child(head.build());
-    col.child(Each.builder(rows_atom).item_builder("row").build());
-    col.child(PointerInteract.builder().ids(rows_atom, rows_atom).on_tap("b_add").child(Text.builder().text("add row").build()).build());
-    let mut frame = Container.builder();
-    frame.color(0x0B1220FF);
-    frame.child(col.build());
-    mount(SizedBox.builder(400.0, 240.0).child(frame.build()).build());
+    col.child(Each(rows_atom).item_builder("row").build());
+    col.child(PointerInteract().ids(rows_atom, rows_atom).on_tap("b_add").child(Text().text("add row").build()).build());
+    let frame = Container().color(0x0B1220FF).child(col.build());
+    mount(SizedBox(400.0, 240.0).child(frame.build()).build());
     return rows_atom;
 }
 

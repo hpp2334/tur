@@ -4,16 +4,15 @@ use tur_kit::{ Container, Row };
 
 
 fn box_wh(w: f64, h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(w, h);
+    let b = Container().width_height(w, h);
     return b.build();
 }
 
 entry fn start() {
-    let mut row = Row.builder();
-    row.main_alignment(MAIN_ALIGN_CENTER);
-    row.cross_alignment(CROSS_ALIGN_START);
-    row.child(box_wh(50.0, 0.0));
-    row.child(box_wh(30.0, 0.0));
+    let row = Row()
+        .main_alignment(MAIN_ALIGN_CENTER)
+        .cross_alignment(CROSS_ALIGN_START)
+        .child(box_wh(50.0, 0.0))
+        .child(box_wh(30.0, 0.0));
     mount(row.build());
 }

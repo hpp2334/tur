@@ -16,25 +16,16 @@ entry fn start() -> u64 {
     let phase = rs_source_str("");
     stf_put(K_PHASE, phase as f64);
 
-    let mut stack = Stack.builder();
-    stack.alignment(ALIGN_TOP_LEFT);
-    stack.child(SizedBox.builder(400.0, 400.0).child(Container.builder().build()).build());
+    let mut stack = Stack()
+        .alignment(ALIGN_TOP_LEFT)
+        .child(SizedBox(400.0, 400.0).child(Container().build()).build());
 
-    let mut label = Text.builder();
+    let label = Text().text("drag me").font_size(14.0);
+    let piece = Container().width_height(80.0, 40.0).query_key("drag-target").child(label.build());
+    let pad = PointerInteract().id(count).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(piece.build()).build();
+    stack.child(Transform(1.0, 0.0, 60.0, 50.0).child(pad).build());
 
-    label.text("drag me");
-    label.font_size(14.0);
-    let mut piece = Container.builder();
-    piece.width_height(80.0, 40.0);
-    piece.query_key("drag-target");
-    piece.child(label.build());
-    let pad = PointerInteract.builder().id(count).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(piece.build()).build();
-    stack.child(Transform.builder(1.0, 0.0, 60.0, 50.0).child(pad).build());
-
-    let mut count_t = Text.builder();
-
-    count_t.text_bound(count);
-    count_t.query_key("down-count");
+    let count_t = Text().text_bound(count).query_key("down-count");
     stack.child(count_t.build());
     mount(stack.build());
     return count;

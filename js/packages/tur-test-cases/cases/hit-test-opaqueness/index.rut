@@ -14,36 +14,26 @@ entry fn start() -> u64 {
     let downs = rs_source_str("0");
     st_put(K_COUNT, mem_new(0.0));
 
-    let mut stack = Stack.builder();
-    stack.alignment(ALIGN_TOP_LEFT);
+    let mut stack = Stack().alignment(ALIGN_TOP_LEFT);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
-    let mut target = Container.builder();
-    target.width_height(400.0, 600.0);
-    let mut downs_t = Text.builder();
-
-    downs_t.text_bound(downs);
-    downs_t.query_key("beneath-downs");
-    target.child(downs_t.build());
-    stack.child(PointerInteract.builder().id(downs).on_down("g_down").query_key("rut/gesture").child(target.build()).build());
+    let target = Container()
+        .width_height(400.0, 600.0)
+        .child(Text().text_bound(downs).query_key("beneath-downs").build());
+    stack.child(PointerInteract().id(downs).on_down("g_down").query_key("rut/gesture").child(target.build()).build());
 
     // A decoration-less full-size Container — transparent.
-    let mut plain = Container.builder();
-    plain.width_height(400.0, 600.0);
-    plain.query_key("plain");
+    let plain = Container().width_height(400.0, 600.0).query_key("plain");
     stack.child(plain.build());
 
     // A painted red 200x200 surface at the top-left — absorbs.
-    let mut red = Container.builder();
-    red.width_height(200.0, 200.0);
-    red.color(0xEF4444FFu64);
-    red.query_key("red");
+    let red = Container().width_height(200.0, 200.0).color(0xEF4444FFu64).query_key("red");
     stack.child(red.build());
 
     // A translucent MouseRegion over the right half (x 200..400).
-    let region_child = SizedBox.builder(200.0, 600.0).child(Container.builder().build()).query_key("region").build();
-    let region = MouseRegion.builder().cursor(CURSOR_AUTO).behavior(1).child(region_child).build();
-    stack.child(Positioned.builder().left(200.0).width(200.0).height(600.0).child(region).build());
+    let region_child = SizedBox(200.0, 600.0).child(Container().build()).query_key("region").build();
+    let region = MouseRegion().cursor(CURSOR_AUTO).behavior(1).child(region_child).build();
+    stack.child(Positioned().left(200.0).width(200.0).height(600.0).child(region).build());
 
     mount(stack.build());
     return downs;

@@ -25,17 +25,12 @@ use tur_kit::{{ Container, Expanded, Flexible, Row, Text }};
 
 
 entry fn start() {{
-    let mut row = Row.builder();
-    row.query_key("row");
+    let mut row = Row().query_key("row");
 
-    let mut fixed = Container.builder();
-    fixed.width_height(100.0, 40.0);
+    let fixed = Container().width_height(100.0, 40.0);
 
-    let mut txt = Text.builder();
-
-    txt.text({text});
-    txt.font_size(14.0);
-{text_extra}    let slot = {item}.builder().flex(1.0).child(txt.build()).build();
+    let txt = Text().text({text}).font_size(14.0);
+{text_extra}    let slot = {item}().flex(1.0).child(txt.build()).build();
 
     row.child(fixed.build());
     row.child(slot);
@@ -183,35 +178,24 @@ use tur_kit::{ Container, Flexible, Row, SizedBox, Text };
 
 
 entry fn start() {
-    let mut pill = Row.builder();
-    pill.query_key("pill");
-    pill.main_axis_size(1);
+    let mut pill = Row()
+        .query_key("pill")
+        .main_axis_size(1)
+        .child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
-    pill.child(SizedBox.builder(14.0, 0.0).child(Container.builder().build()).build());
-
-    let mut txt = Text.builder();
-
-    txt.text("Last Week Todos");
-    txt.font_size(14.0);
-    txt.max_lines(1);
-    txt.ellipsis();
-    let mut label = Flexible.builder().flex(1.0).child(txt.build()).query_key("label").build();
+    let txt = Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis();
+    let mut label = Flexible().flex(1.0).child(txt.build()).query_key("label").build();
     let label = label;
     pill.child(label);
 
-    pill.child(SizedBox.builder(8.0, 0.0).child(Container.builder().build()).build());
+    pill.child(SizedBox(8.0, 0.0).child(Container().build()).build());
 
-    let mut caret = Text.builder();
-
-    caret.text("v");
-    caret.font_size(14.0);
-    caret.query_key("caret");
+    let caret = Text().text("v").font_size(14.0).query_key("caret");
     pill.child(caret.build());
 
-    pill.child(SizedBox.builder(14.0, 0.0).child(Container.builder().build()).build());
+    pill.child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
-    let mut row = Row.builder();
-    row.child(pill.build());
+    let row = Row().child(pill.build());
     mount(row.build());
 }
 "#,
@@ -298,37 +282,30 @@ use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
 
 
 entry fn long_label() -> opaque {
-    let mut txt = Text.builder();
-
-    txt.text("A very long label that must ellipsize inside its slot");
-    txt.font_size(14.0);
-    txt.max_lines(1);
-    txt.ellipsis();
+    let txt = Text()
+        .text("A very long label that must ellipsize inside its slot")
+        .font_size(14.0)
+        .max_lines(1)
+        .ellipsis();
     return txt.build();
 }
 
 entry fn start() {
-    let mut long_row = Row.builder();
-    long_row.query_key("long-row");
-    long_row.main_axis_size(1);
-    let mut fixed = Container.builder();
-    fixed.width_height(100.0, 40.0);
-    long_row.child(fixed.build());
-    long_row.child(Flexible.builder().flex(1.0).child(long_label()).build());
-    long_row.child(SizedBox.builder(20.0, 0.0).child(Container.builder().build()).build());
+    let long_row = Row()
+        .query_key("long-row")
+        .main_axis_size(1)
+        .child(Container().width_height(100.0, 40.0).build())
+        .child(Flexible().flex(1.0).child(long_label()).build())
+        .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
-    let mut short_row = Row.builder();
-    short_row.query_key("short-row");
-    short_row.main_axis_size(1);
-    let mut fixed2 = Container.builder();
-    fixed2.width_height(100.0, 40.0);
-    short_row.child(fixed2.build());
-    short_row.child(Flexible.builder().flex(1.0).child(Text.builder().text("Hi").build()).build());
-    short_row.child(SizedBox.builder(20.0, 0.0).child(Container.builder().build()).build());
+    let short_row = Row()
+        .query_key("short-row")
+        .main_axis_size(1)
+        .child(Container().width_height(100.0, 40.0).build())
+        .child(Flexible().flex(1.0).child(Text().text("Hi").build()).build())
+        .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
-    let mut col = Column.builder();
-    col.child(long_row.build());
-    col.child(short_row.build());
+    let col = Column().child(long_row.build()).child(short_row.build());
     mount(col.build());
 }
 "#,
@@ -393,19 +370,14 @@ use tur_kit::{ Container, Flexible, Row, Text };
 
 
 entry fn start() {
-    let mut row = Row.builder();
+    let mut row = Row().child(Container().width_height(400.0, 40.0).build());
 
-    let mut filler = Container.builder();
-    filler.width_height(400.0, 40.0);
-    row.child(filler.build());
-
-    let mut txt = Text.builder();
-
-    txt.text("A very long label that must not paint naturally here");
-    txt.font_size(14.0);
-    txt.max_lines(1);
-    txt.ellipsis();
-    let mut label = Flexible.builder().flex(1.0).child(txt.build()).query_key("label").build();
+    let txt = Text()
+        .text("A very long label that must not paint naturally here")
+        .font_size(14.0)
+        .max_lines(1)
+        .ellipsis();
+    let mut label = Flexible().flex(1.0).child(txt.build()).query_key("label").build();
     let label = label;
     row.child(label);
 

@@ -5,15 +5,11 @@ use tur_kit::{ Column, Container };
 
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }
 
 entry fn start() {
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
-    col.child(box_h(50.0));
-    col.child(box_h(30.0));
+    let col = Column().cross_alignment(CROSS_ALIGN_START).child(box_h(50.0)).child(box_h(30.0));
     mount(col.build());
 }

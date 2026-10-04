@@ -7,18 +7,10 @@ use tur_kit::{ Column, Container, MouseRegion, Text };
 entry fn start() -> u64 {
     let cursor = rs_source_str("pointer");
     let state = rs_source_str("");
-    let mut col = Column.builder();
-    let mut b = Container.builder();
-    b.width_height(100.0, 50.0);
-    let mut t = Text.builder();
-
-    t.text_bound(state);
-    b.child(t.build());
-    col.child(MouseRegion.builder().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor_bound(cursor).behavior(0).child(b.build()).build());
-    let mut ct = Text.builder();
-
-    ct.text_bound(cursor);
-    ct.query_key("cursor-atom");
+    let mut col = Column();
+    let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());
+    col.child(MouseRegion().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor_bound(cursor).behavior(0).child(b.build()).build());
+    let ct = Text().text_bound(cursor).query_key("cursor-atom");
     col.child(ct.build());
     mount(col.build());
     return cursor;

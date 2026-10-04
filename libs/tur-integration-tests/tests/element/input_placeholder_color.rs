@@ -64,10 +64,7 @@ use tur_kit::{ Input };
 
 
 entry fn start() {
-    let mut input = Input.builder();
-    input.placeholder("hint");
-    input.font_size(20.0);
-    input.width_height(300.0, 40.0);
+    let input = Input().placeholder("hint").font_size(20.0).width_height(300.0, 40.0);
     mount(input.build());
 }
 "#,
@@ -102,11 +99,11 @@ use tur_kit::{ Input };
 
 
 entry fn start() {
-    let mut input = Input.builder();
-    input.placeholder("hint");
-    input.color(0x143CDCFFu64);
-    input.font_size(20.0);
-    input.width_height(300.0, 40.0);
+    let input = Input()
+        .placeholder("hint")
+        .color(0x143CDCFFu64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
     mount(input.build());
 }
 "#,
@@ -141,11 +138,11 @@ use tur_kit::{ Input };
 
 
 entry fn start() {
-    let mut input = Input.builder();
-    input.placeholder("hint");
-    input.color(0x000000C8u64);
-    input.font_size(20.0);
-    input.width_height(300.0, 40.0);
+    let input = Input()
+        .placeholder("hint")
+        .color(0x000000C8u64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
     mount(input.build());
 }
 "#,
@@ -177,12 +174,12 @@ use tur::{ mount };
 use tur_kit::{ Input };
 
 entry fn start() {
-    let mut input = Input.builder();
-    input.placeholder("hint");
-    input.color(0x143CDCFFu64);
-    input.placeholder_color(0x008000FFu64);
-    input.font_size(20.0);
-    input.width_height(300.0, 40.0);
+    let input = Input()
+        .placeholder("hint")
+        .color(0x143CDCFFu64)
+        .placeholder_color(0x008000FFu64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
     mount(input.build());
 }
 "#,

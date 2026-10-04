@@ -15,10 +15,10 @@ use tur_kit::{ Switch, Text };
 entry fn start() -> u64 {
     let key = rs_source_str("a");
 
-    let mut sw = Switch.builder().value_source(key);
-    sw.cases("a", Text.builder().text("AAA").query_key("case_a").build());
-    sw.cases("b", Text.builder().text("BBB").query_key("case_b").build());
-    sw.fallback(Text.builder().text("FALL").query_key("case_fallback").build());
+    let mut sw = Switch().value_source(key);
+    sw.cases("a", Text().text("AAA").query_key("case_a").build());
+    sw.cases("b", Text().text("BBB").query_key("case_b").build());
+    sw.fallback(Text().text("FALL").query_key("case_fallback").build());
     mount(sw.build());
     return key;
 }
@@ -134,10 +134,10 @@ entry fn start() -> u64 {
     rs_set_f64(key, 0.0);
     let derived = rs_derive("d", key);
 
-    let mut sw = Switch.builder().value_derived(derived);
-    sw.cases("a", Text.builder().text("AAA").query_key("d_case_a").build());
-    sw.cases("b", Text.builder().text("BBB").query_key("d_case_b").build());
-    sw.fallback(Text.builder().text("FALL").query_key("d_case_fallback").build());
+    let mut sw = Switch().value_derived(derived);
+    sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
+    sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
+    sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
     mount(sw.build());
     return key;
 }

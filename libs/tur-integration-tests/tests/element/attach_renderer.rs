@@ -31,9 +31,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.width_height(40.0, 40.0);
-    b.color(0x336699FFu64);
+    let b = Container().width_height(40.0, 40.0).color(0x336699FFu64);
     mount(b.build());
 }
 "##;

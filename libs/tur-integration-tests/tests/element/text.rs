@@ -337,15 +337,9 @@ use tur_kit::{ Container, Text };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.width_height(164.0, 40.0);
-    let mut txt = Text.builder();
-
-    txt.text("Last Week Todos");
-    txt.font_size(14.0);
-    txt.max_lines(1);
-    txt.ellipsis();
-    b.child(txt.build());
+    let b = Container()
+        .width_height(164.0, 40.0)
+        .child(Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis().build());
     mount(b.build());
 }
 "#;

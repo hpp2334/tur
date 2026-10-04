@@ -18,24 +18,22 @@ use tur_kit::{ Column, Container, Expanded, Row, SizedBox };
 
 
 entry fn start() {
-    let mut col = Column.builder();
+    let mut col = Column();
 
     // Stretch Row under an unbounded cross axis (non-flex child of a
     // Column): Stretch degrades to loose cross.
-    let mut stretch_row = Row.builder();
-    stretch_row.query_key("stretch-row");
-    stretch_row.cross_alignment(CROSS_ALIGN_STRETCH);
-    stretch_row.child(SizedBox.builder(50.0, 0.0).child(Container.builder().build()).build());
+    let stretch_row = Row()
+        .query_key("stretch-row")
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(SizedBox(50.0, 0.0).child(Container().build()).build());
     col.child(stretch_row.build());
 
     // Expanded inside a Column with unbounded height: the flex child lays
     // out as inflexible (natural size), never a zero slot and never
     // infinity.
-    let mut flex_col = Column.builder();
-    flex_col.query_key("flex-col");
-    let mut sized = Container.builder();
-    sized.width_height(10.0, 50.0);
-    flex_col.child(Expanded.builder().flex(1.0).child(sized.build()).build());
+    let mut flex_col = Column().query_key("flex-col");
+    let sized = Container().width_height(10.0, 50.0);
+    flex_col.child(Expanded().flex(1.0).child(sized.build()).build());
     col.child(flex_col.build());
 
     mount(col.build());

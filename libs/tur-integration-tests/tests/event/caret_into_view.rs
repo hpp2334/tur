@@ -24,11 +24,10 @@ entry fn start() {
     // The width spans the window (the JS twin's stretched-column geometry):
     // a ScrollView shrink-wraps its cross axis, so without it the whole
     // scroller would hug the longest line and the top-left click misses it.
-    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
     let input = input;
-    let mut col = Column.builder();
-    col.child(input);
-    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    let col = Column().child(input);
+    let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
 }

@@ -8,25 +8,17 @@ entry fn start() -> u64 {
     let phase = rs_source_str("idle");
     let pos = rs_source_str("0,0");
 
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
+    let mut col = Column().cross_alignment(CROSS_ALIGN_START);
 
-    let mut b = Container.builder();
-    b.width_height(100.0, 50.0);
-    b.color(0xCCCCCCFFu64);
-    b.alignment(ALIGN_CENTER);
-    let mut phase_t = Text.builder();
+    let b = Container()
+        .width_height(100.0, 50.0)
+        .color(0xCCCCCCFFu64)
+        .alignment(ALIGN_CENTER)
+        .child(Text().text_bound(phase).query_key("drag-phase").build());
 
-    phase_t.text_bound(phase);
-    phase_t.query_key("drag-phase");
-    b.child(phase_t.build());
+    col.child(PointerInteract().ids(phase, pos).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build());
 
-    col.child(PointerInteract.builder().ids(phase, pos).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build());
-
-    let mut pos_t = Text.builder();
-
-    pos_t.text_bound(pos);
-    pos_t.query_key("drag-pos");
+    let pos_t = Text().text_bound(pos).query_key("drag-pos");
     col.child(pos_t.build());
 
     mount(col.build());

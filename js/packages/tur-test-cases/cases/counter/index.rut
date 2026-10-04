@@ -9,48 +9,35 @@ entry fn start() -> u64 {
     let count = rs_source_f64();
     let label = rs_source_str("Count: 0");
 
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_CENTER);
-    let mut ctext = Text.builder();
+    let mut col = Column()
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(Text().text_bound(label).query_key("count").font_size(36.0).build());
 
-    ctext.text_bound(label);
-    ctext.query_key("count");
-    ctext.font_size(36.0);
-    col.child(ctext.build());
-
-    let mut row = Row.builder();
-    row.cross_alignment(CROSS_ALIGN_CENTER);
+    let mut row = Row().cross_alignment(CROSS_ALIGN_CENTER);
     let pad = rs_source_f64();
     row.child(button(count, label, "ts_dec", "-1", "dec"));
     row.child(gap());
     row.child(button(count, label, "ts_inc", "+1", "inc"));
     col.child(row.build());
 
-    let mut bg = Container.builder();
-    bg.color(0xF8FAFCFFu64);
-    bg.child(col.build());
+    let bg = Container().color(0xF8FAFCFFu64).child(col.build());
     mount(bg.build());
     return count;
 }
 
 // A 100x44 indigo pill with a centered label.
 fn button(count: u64, label: u64, cb: str, text: str, key: str) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(100.0, 44.0);
-    b.color(0x6366F1FFu64);
-    b.alignment(ALIGN_CENTER);
-    b.query_key(key);
-    let mut t = Text.builder();
-
-    t.text(text);
-    t.font_size(18.0);
-    b.child(t.build());
-    return PointerInteract.builder().ids(count, label).on_tap(cb).child(b.build()).build();
+    let b = Container()
+        .width_height(100.0, 44.0)
+        .color(0x6366F1FFu64)
+        .alignment(ALIGN_CENTER)
+        .query_key(key)
+        .child(Text().text(text).font_size(18.0).build());
+    return PointerInteract().ids(count, label).on_tap(cb).child(b.build()).build();
 }
 
 fn gap() -> opaque {
-    let mut b = Container.builder();
-    b.width_height(12.0, 0.0);
+    let b = Container().width_height(12.0, 0.0);
     return b.build();
 }
 

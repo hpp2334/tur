@@ -5,15 +5,10 @@ use tur_kit::{ Column, Container, ScrollView, Text };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.padding(48.0);
-    b.query_key("container");
-    let mut t = Text.builder();
-
-    t.text("Empty State");
-    t.font_size(24.0);
-    b.child(t.build());
-    let mut col = Column.builder();
-    col.child(b.build());
-    mount(ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).build());
+    let b = Container()
+        .padding(48.0)
+        .query_key("container")
+        .child(Text().text("Empty State").font_size(24.0).build());
+    let col = Column().child(b.build());
+    mount(ScrollView().axis(AXIS_VERTICAL).child(col.build()).build());
 }

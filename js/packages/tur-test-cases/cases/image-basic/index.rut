@@ -5,9 +5,8 @@ use tur_kit::{ Container, Image };
 
 entry fn start() {
     let res = img_res_solid(1, 1, 0xFF6366F1u64);
-    let mut outer = Container.builder();
-    outer.width_height(200.0, 100.0);
-    let img = Image.builder(res).width(200.0).height(100.0).fit(BOXFIT_FILL).build();
+    let mut outer = Container().width_height(200.0, 100.0);
+    let img = Image(res).width(200.0).height(100.0).fit(BOXFIT_FILL).build();
     outer.child(img);
     mount(outer.build());
 }

@@ -16,13 +16,10 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(progress, 300.0, "easeInOut", 0, "a_tick", "a_end");
     st_put(K_CTRL, ctrl);
 
-    let mut col = Column.builder();
-    let mut box_b = Container.builder();
-    box_b.width_height(100.0, 40.0);
-    box_b.color(0x6366F1FFu64);
-    box_b.query_key("animated-box");
-    col.child(PointerInteract.builder().ids(expanded, expanded).on_tap("b_toggle").child(box_b.build()).build());
-    col.child(Text.builder().text("toggle me").build());
+    let mut col = Column();
+    let box_b = Container().width_height(100.0, 40.0).color(0x6366F1FFu64).query_key("animated-box");
+    col.child(PointerInteract().ids(expanded, expanded).on_tap("b_toggle").child(box_b.build()).build());
+    col.child(Text().text("toggle me").build());
     mount(col.build());
     return expanded;
 }

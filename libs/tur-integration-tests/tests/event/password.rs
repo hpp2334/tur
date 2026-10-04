@@ -15,10 +15,9 @@ entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
     // flags bit 0 = multiline, bit 1 = obscure.
-    let mut input = Input.builder().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
     let keyed = input;
-    let mut col = Column.builder();
-    col.child(keyed);
+    let col = Column().child(keyed);
     mount(col.build());
 }
 "#;
@@ -33,7 +32,7 @@ use tur_kit::{ Input };
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = Input.builder().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
+    let input = Input().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
     mount(input);
 }
 "#;

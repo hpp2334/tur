@@ -15,8 +15,7 @@ use tur::{ mount };
 use tur_kit::{ Column, Text };
 
 entry fn start() {
-    let mut col = Column.builder();
-    col.child(Text.builder().text("host-drain rpc").query_key("probe").build());
+    let col = Column().child(Text().text("host-drain rpc").query_key("probe").build());
     mount(col.build());
 }
 "#;

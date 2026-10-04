@@ -6,7 +6,7 @@ use tur_kit::{ Container, Input };
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut outer = Container.builder();
-    outer.child(Input.builder().controller(ctrl).undo(undo).width_height(300.0, 400.0).multiline(true).build());
+    let outer = Container()
+        .child(Input().controller(ctrl).undo(undo).width_height(300.0, 400.0).multiline(true).build());
     mount(outer.build());
 }

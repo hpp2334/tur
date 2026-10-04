@@ -3,10 +3,10 @@ use tur_integration_tests::TurTestApp;
 
 /// The `[constructor]` call form over the kit: the module below constructs
 /// every element through `Type(..)` — the call form over each class's
-/// designated `[constructor] fn builder` — never through the `.builder()`
-/// long form. Arity-0 calls (`Column()`, `Row()`, `Text()`), parameter
-/// forwarding (`SizedBox(400.0, 200.0)`), and the animation kit's
-/// `Opacity(0.5)` all lower byte-identically to `Type.builder(..)`.
+/// designated `[constructor] fn builder` — never through the long form.
+/// Arity-0 calls (`Column()`, `Row()`, `Text()`), parameter forwarding
+/// (`SizedBox(400.0, 200.0)`), and the animation kit's `Opacity(0.5)` all
+/// lower byte-identically to their long-form member calls.
 const CTOR_FORM_RUT: &str = r#"
 use tur::{ mount };
 use tur_kit::{ Column, Row, SizedBox, Text };

@@ -4,9 +4,6 @@ use tur_kit::{ Text };
 
 
 entry fn start() {
-    let mut t = Text.builder();
-
-    t.text("Hello World this is a long text that should wrap");
-    t.font_size(14.0);
+    let t = Text().text("Hello World this is a long text that should wrap").font_size(14.0);
     mount(t.build());
 }

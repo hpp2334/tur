@@ -103,8 +103,7 @@ entry fn start() {
 }
 
 entry fn mount_host(host_id: u64, _b: f64) {
-    let mut col = Column.builder();
-    col.child(Image.builder(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    let col = Column().child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
     mount(col.build());
 }
 "#,
@@ -149,9 +148,9 @@ entry fn start() {
 // One worker-minted + one host-registered id, mounted side by side.
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
-    let mut col = Column.builder();
-    col.child(Image.builder(worker_id).width(1.0).fit(BOXFIT_FILL).build());
-    col.child(Image.builder(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    let col = Column()
+        .child(Image(worker_id).width(1.0).fit(BOXFIT_FILL).build())
+        .child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
     mount(col.build());
 }
 "#,
@@ -213,9 +212,9 @@ entry fn start() {
 
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
-    let mut col = Column.builder();
-    col.child(Image.builder(worker_id).width(1.0).fit(BOXFIT_FILL).build());
-    col.child(Image.builder(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    let col = Column()
+        .child(Image(worker_id).width(1.0).fit(BOXFIT_FILL).build())
+        .child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
     mount(col.build());
 }
 "#,
@@ -310,7 +309,7 @@ entry fn start() {
 }
 
 entry fn mount_one(id: u64, _b: f64) {
-    mount(Image.builder(id).width(4.0).fit(BOXFIT_FILL).build());
+    mount(Image(id).width(4.0).fit(BOXFIT_FILL).build());
 }
 "#,
     )

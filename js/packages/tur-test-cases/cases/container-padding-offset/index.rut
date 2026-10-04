@@ -5,14 +5,8 @@ use tur_kit::{ Column, Container };
 
 
 entry fn start() {
-    let mut outer = Container.builder();
-    outer.width_height(200.0, 100.0);
-    outer.padding(20.0);
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
-    let mut inner = Container.builder();
-    inner.width_height(40.0, 40.0);
-    col.child(inner.build());
+    let mut outer = Container().width_height(200.0, 100.0).padding(20.0);
+    let col = Column().cross_alignment(CROSS_ALIGN_START).child(Container().width_height(40.0, 40.0).build());
     outer.child(col.build());
     mount(outer.build());
 }

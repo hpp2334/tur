@@ -477,9 +477,9 @@ let K_CTRL: u64 = 2;
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     st_put(K_CTRL, ctrl);
-    let input = Input.builder().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
+    let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
         .multiline(true).query_key("editor").build();
-    mount(Column.builder().child(input).build());
+    mount(Column().child(input).build());
     return 0;
 }
 
@@ -607,11 +607,9 @@ entry fn start() -> u64 {
     stf_put(K_TEXT, text as f64);
     let ctrl = tctrl_new();
     st_put(K_CTRL, ctrl);
-    let input = Input.builder().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
+    let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
         .on_input("on_edit", 7).query_key("input").build();
-    let mut col = Column.builder();
-    col.child(input);
-    col.child(Text.builder().text_bound(text).query_key("echo").build());
+    let col = Column().child(input).child(Text().text_bound(text).query_key("echo").build());
     mount(col.build());
     return text;
 }

@@ -7,19 +7,15 @@ use tur_kit::{ Column, Container };
 
 
 fn box_h(h: f64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(0.0, h);
+    let b = Container().width_height(0.0, h);
     return b.build();
 }
 
 entry fn start() {
-    let mut outer = Column.builder();
-    outer.cross_alignment(CROSS_ALIGN_START);
-    outer.child(box_h(50.0));
-    let mut inner = Column.builder();
-    inner.cross_alignment(CROSS_ALIGN_START);
-    inner.child(box_h(30.0));
-    outer.child(inner.build());
-    outer.child(box_h(40.0));
+    let outer = Column()
+        .cross_alignment(CROSS_ALIGN_START)
+        .child(box_h(50.0))
+        .child(Column().cross_alignment(CROSS_ALIGN_START).child(box_h(30.0)).build())
+        .child(box_h(40.0));
     mount(outer.build());
 }

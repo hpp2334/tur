@@ -6,13 +6,9 @@ use tur_kit::{ Column, PointerInteract, Text };
 
 entry fn start() -> u64 {
     let content = rs_source_str("before");
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
-    let mut t = Text.builder();
-
-    t.text_bound(content);
-    t.query_key("click-text");
-    col.child(PointerInteract.builder().ids(content, content).on_tap("ts_click").child(t.build()).build());
+    let mut col = Column().cross_alignment(CROSS_ALIGN_START);
+    let t = Text().text_bound(content).query_key("click-text");
+    col.child(PointerInteract().ids(content, content).on_tap("ts_click").child(t.build()).build());
     mount(col.build());
     return content;
 }

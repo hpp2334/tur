@@ -6,20 +6,15 @@ use tur_kit::{ Column, Container, MouseRegion, Text };
 
 entry fn start() -> u64 {
     let state = rs_source_str("idle");
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_START);
+    let mut col = Column().cross_alignment(CROSS_ALIGN_START);
 
-    let mut b = Container.builder();
-    b.width_height(100.0, 50.0);
-    b.color(0xCCCCCCFFu64);
-    b.alignment(ALIGN_CENTER);
-    let mut t = Text.builder();
+    let b = Container()
+        .width_height(100.0, 50.0)
+        .color(0xCCCCCCFFu64)
+        .alignment(ALIGN_CENTER)
+        .child(Text().text_bound(state).query_key("region-text").build());
 
-    t.text_bound(state);
-    t.query_key("region-text");
-    b.child(t.build());
-
-    col.child(MouseRegion.builder().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor(CURSOR_AUTO).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor(CURSOR_AUTO).behavior(0).child(b.build()).build());
     mount(col.build());
     return state;
 }

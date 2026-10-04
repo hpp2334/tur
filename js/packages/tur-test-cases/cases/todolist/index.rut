@@ -8,20 +8,12 @@ use tur_kit::{ Column, Container, Each, Expanded, PointerInteract, Row, ScrollVi
 let K_ITEMS: u64 = 1;
 
 entry fn item(_i: u64, s: str) -> opaque {
-    let mut r = Row.builder();
-    r.main_alignment(MAIN_ALIGN_SPACE_BETWEEN);
-    let mut label = Text.builder();
-
-    label.text(s);
-    r.child(label.build());
-    let mut check = Container.builder();
-    check.width_height(20.0, 20.0);
-    check.query_key("check");
-    r.child(check.build());
-    let mut wrap = Container.builder();
-    wrap.width_height(0.0, 44.0);
-    wrap.child(r.build());
-    return PointerInteract.builder().ids(_i, 0).on_click("it_tap").query_key("rut/gesture").child(wrap.build()).build();
+    let r = Row()
+        .main_alignment(MAIN_ALIGN_SPACE_BETWEEN)
+        .child(Text().text(s).build())
+        .child(Container().width_height(20.0, 20.0).query_key("check").build());
+    let wrap = Container().width_height(0.0, 44.0).child(r.build());
+    return PointerInteract().ids(_i, 0).on_click("it_tap").query_key("rut/gesture").child(wrap.build()).build();
 }
 
 entry fn start() -> u64 {
@@ -33,24 +25,19 @@ entry fn start() -> u64 {
     stf_put(K_ITEMS, items_atom as f64);
     let count = rs_derive("fmt_count", items_atom);
 
-    let mut col = Column.builder();
-    let mut head = Container.builder();
-    head.width_height(0.0, 48.0);
-    let mut ht = Text.builder();
-
-    ht.text_bound_derived(count);
-    ht.query_key("count");
-    head.child(ht.build());
+    let mut col = Column();
+    let head = Container()
+        .width_height(0.0, 48.0)
+        .child(Text().text_bound_derived(count).query_key("count").build());
     col.child(head.build());
-    let mut content = Column.builder();
-    content.child(Each.builder(items_atom).item_builder("item").build());
-    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(content.build()).build();
-    col.child(Expanded.builder().flex(1.0).child(scroller).build());
-    let mut add = Container.builder();
-    add.width_height(0.0, 48.0);
-    add.child(PointerInteract.builder().ids(items_atom, items_atom).on_tap("b_add").child(Text.builder().text("+ add").build()).build());
+    let content = Column().child(Each(items_atom).item_builder("item").build());
+    let scroller = ScrollView().axis(AXIS_VERTICAL).child(content.build()).build();
+    col.child(Expanded().flex(1.0).child(scroller).build());
+    let add = Container()
+        .width_height(0.0, 48.0)
+        .child(PointerInteract().ids(items_atom, items_atom).on_tap("b_add").child(Text().text("+ add").build()).build());
     col.child(add.build());
-    mount(SizedBox.builder(400.0, 600.0).child(col.build()).build());
+    mount(SizedBox(400.0, 600.0).child(col.build()).build());
 }
 
 entry fn fmt_count(_v: f64) -> str {

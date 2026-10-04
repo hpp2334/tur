@@ -28,8 +28,8 @@ entry fn start() {
         i += 1;
     }
 
-    let input = Input.builder().controller(ctrl).width_height(100000.0, 4000.0).font_size(14.0).query_key("ed").build();
-    let scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(input).query_key("scroll").build();
+    let input = Input().controller(ctrl).width_height(100000.0, 4000.0).font_size(14.0).query_key("ed").build();
+    let scroller = ScrollView().axis(AXIS_VERTICAL).child(input).query_key("scroll").build();
     mount(scroller);
 }
 "##;

@@ -4,20 +4,16 @@ use tur_kit::{ Container, Expanded, LazyList, Text };
 
 
 entry fn row(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(400.0, 40.0);
-    b.color(0x0F172AFF);
-    let mut label = Text.builder();
-
-    label.text(f"row {i}");
-    label.font_size(12.0);
-    b.child(label.build());
+    let b = Container()
+        .width_height(400.0, 40.0)
+        .color(0x0F172AFF)
+        .child(Text().text(f"row {i}").font_size(12.0).build());
     return b.build();
 }
 
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 2000.0);
-    let list = LazyList.builder().item_builder("row").count(count).item_extent(40.0).build();
-    mount(Expanded.builder().flex(1.0).child(list).build());
+    let list = LazyList().item_builder("row").count(count).item_extent(40.0).build();
+    mount(Expanded().flex(1.0).child(list).build());
 }

@@ -56,17 +56,14 @@ entry fn start() -> u64 {
     let width = rs_source_f64();
     rs_set_f64(width, 100.0);
 
-    let mut b = Container.builder();
-    b.width_height(10.0, 10.0);
-    b.width_bound(width);
-    b.query_key("box");
+    let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
 
     let ctrl = anim_ctrl(width, 200.0, "linear", 0, "a_tick", "a_end");
     st_put(CTRL, ctrl);
 
-    let mut col = Column.builder();
-    col.child(b.build());
-    col.child(Text.builder().text_bound(label).query_key("rut/text").build());
+    let col = Column()
+        .child(b.build())
+        .child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }

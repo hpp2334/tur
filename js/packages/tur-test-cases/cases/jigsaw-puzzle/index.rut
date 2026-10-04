@@ -16,19 +16,16 @@ entry fn start() -> u64 {
     let piece = rs_source_str("A");
     stf_put(K_PIECE, piece as f64);
 
-    let mut stack = Stack.builder();
-    stack.alignment(ALIGN_TOP_LEFT);
-    stack.child(SizedBox.builder(300.0, 300.0).child(Container.builder().build()).build());
-    let mut b = Container.builder();
-    b.width_height(80.0, 80.0);
-    b.color(0x6366F1FFu64);
-    b.query_key("piece");
-    let mut label = Text.builder();
-
-    label.text("A");
-    b.child(label.build());
-    let pad = PointerInteract.builder().ids(piece, piece).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
-    let pos = Positioned.builder().left(10.0).top(10.0).child(pad).build();
+    let mut stack = Stack()
+        .alignment(ALIGN_TOP_LEFT)
+        .child(SizedBox(300.0, 300.0).child(Container().build()).build());
+    let b = Container()
+        .width_height(80.0, 80.0)
+        .color(0x6366F1FFu64)
+        .query_key("piece")
+        .child(Text().text("A").build());
+    let pad = PointerInteract().ids(piece, piece).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pos = Positioned().left(10.0).top(10.0).child(pad).build();
     stack.child(pos);
     mount(stack.build());
     return piece;

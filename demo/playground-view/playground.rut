@@ -324,9 +324,9 @@ fn build_ui() {
     // own selection/hover brushes (see `side_item` / `apply_row`).
     let sbw = stf_take(K_SBW) as u64;
     stf_put(K_SBW, sbw as f64);
-    let sidebar = Container.builder().width_bound(sbw).color(BG_PANEL).query_key("sidebar")
-        .child(ScrollView.builder().axis(AXIS_VERTICAL)
-            .child(Column.builder().child(Each.builder(names_atom).item_builder("side_item").build()).build())
+    let sidebar = Container().width_bound(sbw).color(BG_PANEL).query_key("sidebar")
+        .child(ScrollView().axis(AXIS_VERTICAL)
+            .child(Column().child(Each(names_atom).item_builder("side_item").build()).build())
             .build())
         .build();
 
@@ -334,16 +334,16 @@ fn build_ui() {
     // Brand (left) — case name (center, expands) — actions (right): Run,
     // Reset, the auto-run toggle and the Split/Edit/View tabs (the boa
     // tab cluster sits on the toolbar's right side).
-    let brand = Container.builder().padding(12.0)
-        .child(Row.builder().main_axis_size(MAIN_SIZE_MIN)
-            .child(Text.builder().text("tur").font_size(14.0).color(ACCENT_SOLID).build())
-            .child(SizedBox.builder(4.0, 0.0).build())
-            .child(Text.builder().text("playground").font_size(11.0).color(TEXT_SECONDARY).build())
+    let brand = Container().padding(12.0)
+        .child(Row().main_axis_size(MAIN_SIZE_MIN)
+            .child(Text().text("tur").font_size(14.0).color(ACCENT_SOLID).build())
+            .child(SizedBox(4.0, 0.0).build())
+            .child(Text().text("playground").font_size(11.0).color(TEXT_SECONDARY).build())
             .build())
         .build();
-    let case_name = Container.builder().padding(12.0)
-        .child(Expanded.builder().flex(1.0)
-            .child(Text.builder().text_bound(selected).font_size(13.0).color(TEXT_BODY)
+    let case_name = Container().padding(12.0)
+        .child(Expanded().flex(1.0)
+            .child(Text().text_bound(selected).font_size(13.0).color(TEXT_BODY)
                 .query_key("case-name").build())
             .build())
         .build();
@@ -354,39 +354,39 @@ fn build_ui() {
     stf_put(K_RUNH, run_h as f64);
     let reset_h = stf_take(K_RESETH) as u64;
     stf_put(K_RESETH, reset_h as f64);
-    let run = MouseRegion.builder().on_enter("run_hover_on", run_h).on_exit("run_hover_off", run_h)
+    let run = MouseRegion().on_enter("run_hover_on", run_h).on_exit("run_hover_off", run_h)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract.builder().ids(0, 0).on_tap("run_case").query_key("run")
-            .child(Container.builder().width_height(72.0, 28.0).color_bound(run_h).radius(6.0)
+        .child(PointerInteract().ids(0, 0).on_tap("run_case").query_key("run")
+            .child(Container().width_height(72.0, 28.0).color_bound(run_h).radius(6.0)
                 .alignment(ALIGN_CENTER)
-                .child(Text.builder().text("Run").color(TEXT_ON_ACCENT).font_size(13.0).build())
+                .child(Text().text("Run").color(TEXT_ON_ACCENT).font_size(13.0).build())
                 .build())
             .build())
         .build();
-    let reset = MouseRegion.builder().on_enter("reset_hover_on", reset_h).on_exit("reset_hover_off", reset_h)
+    let reset = MouseRegion().on_enter("reset_hover_on", reset_h).on_exit("reset_hover_off", reset_h)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract.builder().ids(0, 0).on_tap("reset_case").query_key("reset")
-            .child(Container.builder().width_height(72.0, 28.0).color_bound(reset_h).radius(6.0)
+        .child(PointerInteract().ids(0, 0).on_tap("reset_case").query_key("reset")
+            .child(Container().width_height(72.0, 28.0).color_bound(reset_h).radius(6.0)
                 .alignment(ALIGN_CENTER)
-                .child(Text.builder().text("Reset").color(TEXT_SECONDARY).font_size(13.0).build())
+                .child(Text().text("Reset").color(TEXT_SECONDARY).font_size(13.0).build())
                 .build())
             .build())
         .build();
-    let actions = Row.builder().main_axis_size(MAIN_SIZE_MIN)
+    let actions = Row().main_axis_size(MAIN_SIZE_MIN)
         .child(run)
-        .child(SizedBox.builder(6.0, 0.0).build())
+        .child(SizedBox(6.0, 0.0).build())
         .child(reset)
-        .child(SizedBox.builder(12.0, 0.0).build())
+        .child(SizedBox(12.0, 0.0).build())
         .child(auto_toggle(autorun))
-        .child(SizedBox.builder(12.0, 0.0).build())
+        .child(SizedBox(12.0, 0.0).build())
         .child(layout_tabs(tab_split, tab_edit, tab_view))
         .build();
-    let toolbar = Container.builder().width_height(0.0, 40.0).color(BG_ELEVATED)
+    let toolbar = Container().width_height(0.0, 40.0).color(BG_ELEVATED)
         .border(BORDER_SUBTLE, 1.0, BORDER_INSIDE)
-        .child(Row.builder()
+        .child(Row()
             .child(brand)
-            .child(Expanded.builder().flex(1.0).child(case_name).build())
-            .child(Container.builder().padding(6.0).child(actions).build())
+            .child(Expanded().flex(1.0).child(case_name).build())
+            .child(Container().padding(6.0).child(actions).build())
             .build())
         .build();
 
@@ -397,14 +397,14 @@ fn build_ui() {
     // The editable fills the pane (a stretch column — no hardcoded width,
     // so the hidden zero-width shell truly collapses it). Monospace 13 —
     // the boa editor's face (uniform glyphs keep the caret math honest).
-    let editor = Input.builder().controller(ctrl).undo(undo_new()).placeholder("select a case…")
+    let editor = Input().controller(ctrl).undo(undo_new()).placeholder("select a case…")
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
         .width_height(0.0, 480.0)
         .multiline(true).on_input("on_edit", 0)
         .query_key("editor").build();
-    let editor_pane = Container.builder().color(BG_CODE).padding(12.0).query_key("editor-pane")
-        .child(Column.builder().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
+    let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
+        .child(Column().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
         .build();
 
     // ---- viewer pane ----------------------------------------------------
@@ -414,11 +414,11 @@ fn build_ui() {
     // case)" / "starting..." hint is the FallbackView shape — an overlay
     // the child's first frame paints over (the Condition drops it once
     // the child settles).
-    let viewer_title = Text.builder().text("viewer").color(TEXT_PRIMARY).font_size(14.0).build();
-    let viewer_pane = Column.builder().cross_alignment(CROSS_ALIGN_STRETCH).query_key("viewer-pane")
-        .child(Container.builder().width_height(0.0, 44.0).color(BG_ELEVATED).child(viewer_title).build())
-        .child(Expanded.builder().flex(1.0)
-            .child(Switch.builder().value_source(state)
+    let viewer_title = Text().text("viewer").color(TEXT_PRIMARY).font_size(14.0).build();
+    let viewer_pane = Column().cross_alignment(CROSS_ALIGN_STRETCH).query_key("viewer-pane")
+        .child(Container().width_height(0.0, 44.0).color(BG_ELEVATED).child(viewer_title).build())
+        .child(Expanded().flex(1.0)
+            .child(Switch().value_source(state)
                 .cases("error", error_view("Runtime error", verr))
                 .cases("compile-error", error_view("Compile error", verr))
                 .fallback(ready_viewer(app_atom, hint, hint_on))
@@ -434,16 +434,16 @@ fn build_ui() {
     // clip keeps its content from bleeding over the visible pane).
     // `width(0)` / `height(0)` are REAL zeros (the box_width / box_height
     // rows — `width_height`'s 0 would mean "unset").
-    let editor_slot = Switch.builder().value_source(layout)
-        .cases("view", Container.builder().width(0.0).height(0.0).clip(CLIP_HARD_EDGE)
+    let editor_slot = Switch().value_source(layout)
+        .cases("view", Container().width(0.0).height(0.0).clip(CLIP_HARD_EDGE)
             .child(editor_pane).build())
-        .fallback(Expanded.builder().flex(1.0).child(editor_pane).build())
+        .fallback(Expanded().flex(1.0).child(editor_pane).build())
         .query_key("editor-slot")
         .build();
-    let viewer_slot = Switch.builder().value_source(layout)
-        .cases("edit", Container.builder().width(0.0).height(0.0).clip(CLIP_HARD_EDGE)
+    let viewer_slot = Switch().value_source(layout)
+        .cases("edit", Container().width(0.0).height(0.0).clip(CLIP_HARD_EDGE)
             .child(viewer_pane).build())
-        .fallback(Expanded.builder().flex(1.0).child(viewer_pane).build())
+        .fallback(Expanded().flex(1.0).child(viewer_pane).build())
         .query_key("viewer-slot")
         .build();
 
@@ -461,15 +461,15 @@ fn build_ui() {
     stf_put(K_DIVBAR, div_bar as f64);
     let div_tint = stf_take(K_DIVTINT) as u64;
     stf_put(K_DIVTINT, div_tint as f64);
-    let divider = MouseRegion.builder().cursor(CURSOR_COL_RESIZE)
-        .child(PointerInteract.builder().id(sbw_d).on_down("div_down").on_move("div_move")
+    let divider = MouseRegion().cursor(CURSOR_COL_RESIZE)
+        .child(PointerInteract().id(sbw_d).on_down("div_down").on_move("div_move")
             .on_up("div_up").query_key("divider")
-            .child(Container.builder().width(8.0).color_bound(div_tint)
+            .child(Container().width(8.0).color_bound(div_tint)
                 // The strip passes its tight 8px constraints down, so the
                 // 1px bar rides a stretch Row — the cross-stretch keeps it
                 // full-height while the width stays 1.
-                .child(Row.builder().cross_alignment(CROSS_ALIGN_STRETCH)
-                    .child(Container.builder().width(1.0).color_bound(div_bar).build())
+                .child(Row().cross_alignment(CROSS_ALIGN_STRETCH)
+                    .child(Container().width(1.0).color_bound(div_bar).build())
                     .build())
                 .build())
             .build())
@@ -480,40 +480,40 @@ fn build_ui() {
     // The state label mirrors the dot's law: green while fine, the status
     // red for the failure states (the boa status bar colors both). The
     // state atom is already in scope (taken at the top of build_ui).
-    let sbar_left = Container.builder().padding(4.0)
-        .child(Row.builder().main_axis_size(MAIN_SIZE_MIN)
-            .child(SizedBox.builder(8.0, 0.0).build())
-            .child(Container.builder().width_height(6.0, 6.0).radius(999.0).color_bound(dot)
+    let sbar_left = Container().padding(4.0)
+        .child(Row().main_axis_size(MAIN_SIZE_MIN)
+            .child(SizedBox(8.0, 0.0).build())
+            .child(Container().width_height(6.0, 6.0).radius(999.0).color_bound(dot)
                 .query_key("status-dot").build())
-            .child(SizedBox.builder(6.0, 0.0).build())
+            .child(SizedBox(6.0, 0.0).build())
             .child(state_label(state))
             .child(edited_pill(edited))
-            .child(SizedBox.builder(12.0, 0.0).build())
-            .child(Text.builder().text_bound_derived(ago_d).font_size(11.0).color(TEXT_TERTIARY)
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text_bound_derived(ago_d).font_size(11.0).color(TEXT_TERTIARY)
                 .query_key("compiled-ago").build())
             .build())
         .build();
-    let sbar_right = Container.builder().padding(4.0)
-        .child(Row.builder().main_axis_size(MAIN_SIZE_MIN)
+    let sbar_right = Container().padding(4.0)
+        .child(Row().main_axis_size(MAIN_SIZE_MIN)
             .child(auto_state_text(autorun))
-            .child(SizedBox.builder(12.0, 0.0).build())
-            .child(Text.builder().text("tur v0.1").font_size(11.0).color(TEXT_TERTIARY).build())
-            .child(SizedBox.builder(8.0, 0.0).build())
+            .child(SizedBox(12.0, 0.0).build())
+            .child(Text().text("tur v0.1").font_size(11.0).color(TEXT_TERTIARY).build())
+            .child(SizedBox(8.0, 0.0).build())
             .build())
         .build();
-    let sbar = Container.builder().width_height(0.0, 26.0).color(BG_ELEVATED)
+    let sbar = Container().width_height(0.0, 26.0).color(BG_ELEVATED)
         .border(BORDER_SUBTLE, 1.0, BORDER_INSIDE)
         .alignment(ALIGN_CENTER)
-        .child(Row.builder().main_alignment(MAIN_ALIGN_SPACE_BETWEEN)
+        .child(Row().main_alignment(MAIN_ALIGN_SPACE_BETWEEN)
             .child(sbar_left)
             .child(sbar_right)
             .build())
         .build();
 
-    let shell = Column.builder().cross_alignment(CROSS_ALIGN_STRETCH)
+    let shell = Column().cross_alignment(CROSS_ALIGN_STRETCH)
         .child(toolbar)
-        .child(Expanded.builder().flex(1.0)
-            .child(Row.builder().cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(Expanded().flex(1.0)
+            .child(Row().cross_alignment(CROSS_ALIGN_STRETCH)
                 .child(sidebar)
                 .child(divider)
                 .child(editor_slot)
@@ -545,31 +545,31 @@ fn build_ui() {
 // overlay fills (and centers its label) while visible; the hidden branch
 // is a decoration-less box that passes pointers through to the child.
 fn ready_viewer(app_atom: u64, hint: u64, hint_on: u64) -> opaque {
-    let host = VirtualApp.builder().bind(app_atom).query_key("viewer").build();
-    let overlay = Condition.builder(hint_on)
-        .then(Container.builder().color(BG_VIEWER).alignment(ALIGN_CENTER)
-            .child(Text.builder().text_bound(hint).font_size(13.0).color(TEXT_TERTIARY)
+    let host = VirtualApp().bind(app_atom).query_key("viewer").build();
+    let overlay = Condition(hint_on)
+        .then(Container().color(BG_VIEWER).alignment(ALIGN_CENTER)
+            .child(Text().text_bound(hint).font_size(13.0).color(TEXT_TERTIARY)
                 .query_key("viewer/hint").build())
             .build())
-        .else_branch(SizedBox.builder(0.0, 0.0).build())
+        .else_branch(SizedBox(0.0, 0.0).build())
         .build();
-    return Stack.builder().fit(STACK_FIT_EXPAND).child(host).child(overlay).build();
+    return Stack().fit(STACK_FIT_EXPAND).child(host).child(overlay).build();
 }
 
 // The error panels — the boa RuntimeErrorView / ErrorPanel shape: red
 // panel, "!" badge, title + message (the message atom is shared: the
 // compile diags and the child's `va_error` land in the same rail).
 fn error_view(title_text: str, err: u64) -> opaque {
-    return Container.builder().color(BG_DANGER).padding(24.0).alignment(ALIGN_CENTER)
-        .child(Column.builder().cross_alignment(CROSS_ALIGN_CENTER)
-            .child(Container.builder().width_height(32.0, 32.0).radius(16.0).color(STATUS_ERROR)
+    return Container().color(BG_DANGER).padding(24.0).alignment(ALIGN_CENTER)
+        .child(Column().cross_alignment(CROSS_ALIGN_CENTER)
+            .child(Container().width_height(32.0, 32.0).radius(16.0).color(STATUS_ERROR)
                 .alignment(ALIGN_CENTER)
-                .child(Text.builder().text("!").font_size(18.0).color(TEXT_INVERSE).build())
+                .child(Text().text("!").font_size(18.0).color(TEXT_INVERSE).build())
                 .build())
-            .child(SizedBox.builder(0.0, 16.0).build())
-            .child(Text.builder().text(title_text).font_size(14.0).color(TEXT_ON_DANGER).build())
-            .child(SizedBox.builder(0.0, 8.0).build())
-            .child(Text.builder().text_bound(err).font_size(12.0).color(TEXT_ON_DANGER).build())
+            .child(SizedBox(0.0, 16.0).build())
+            .child(Text().text(title_text).font_size(14.0).color(TEXT_ON_DANGER).build())
+            .child(SizedBox(0.0, 8.0).build())
+            .child(Text().text_bound(err).font_size(12.0).color(TEXT_ON_DANGER).build())
             .build())
         .build();
 }
@@ -578,13 +578,13 @@ fn error_view(title_text: str, err: u64) -> opaque {
 // the failure states read in the status red, everything else in the
 // success green (the boa label coloring; the dot leads, text confirms).
 fn state_label(state: u64) -> opaque {
-    let ok = Text.builder().text_bound(state).font_size(11.0).color(STATUS_SUCCESS)
+    let ok = Text().text_bound(state).font_size(11.0).color(STATUS_SUCCESS)
         .query_key("app-state").build();
-    let err_a = Text.builder().text_bound(state).font_size(11.0).color(STATUS_ERROR)
+    let err_a = Text().text_bound(state).font_size(11.0).color(STATUS_ERROR)
         .query_key("app-state").build();
-    let err_b = Text.builder().text_bound(state).font_size(11.0).color(STATUS_ERROR)
+    let err_b = Text().text_bound(state).font_size(11.0).color(STATUS_ERROR)
         .query_key("app-state").build();
-    return Switch.builder().value_source(state)
+    return Switch().value_source(state)
         .cases("error", err_a)
         .cases("compile-error", err_b)
         .fallback(ok)
@@ -595,61 +595,61 @@ fn state_label(state: u64) -> opaque {
 // (right when on, left when off). Two pre-built pills over a Condition
 // (both branches carry the `autorun` query key; only one mounts).
 fn auto_toggle(autorun: u64) -> opaque {
-    let on = PointerInteract.builder().ids(0, 0).on_tap("b_autorun").query_key("autorun")
-        .child(Container.builder().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
-            .child(Stack.builder().fit(STACK_FIT_EXPAND)
-                .child(Positioned.builder().top(2.0).left(14.0)
-                    .child(Container.builder().width_height(12.0, 12.0).radius(999.0)
+    let on = PointerInteract().ids(0, 0).on_tap("b_autorun").query_key("autorun")
+        .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
+            .child(Stack().fit(STACK_FIT_EXPAND)
+                .child(Positioned().top(2.0).left(14.0)
+                    .child(Container().width_height(12.0, 12.0).radius(999.0)
                         .color(TEXT_INVERSE).build())
                     .build())
                 .build())
             .build())
         .build();
-    let off = PointerInteract.builder().ids(0, 0).on_tap("b_autorun").query_key("autorun")
-        .child(Container.builder().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
-            .child(Stack.builder().fit(STACK_FIT_EXPAND)
-                .child(Positioned.builder().top(2.0).left(2.0)
-                    .child(Container.builder().width_height(12.0, 12.0).radius(999.0)
+    let off = PointerInteract().ids(0, 0).on_tap("b_autorun").query_key("autorun")
+        .child(Container().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
+            .child(Stack().fit(STACK_FIT_EXPAND)
+                .child(Positioned().top(2.0).left(2.0)
+                    .child(Container().width_height(12.0, 12.0).radius(999.0)
                         .color(TEXT_INVERSE).build())
                     .build())
                 .build())
             .build())
         .build();
-    return Condition.builder(autorun).then(on).else_branch(off).build();
+    return Condition(autorun).then(on).else_branch(off).build();
 }
 
 // The status bar's auto-run caption ("auto-run on" / "auto-run off" — the
 // boa status bar's right cluster, minus the ⌘S hint).
 fn auto_state_text(autorun: u64) -> opaque {
-    let on = Text.builder().text("auto-run on").font_size(11.0).color(TEXT_TERTIARY)
+    let on = Text().text("auto-run on").font_size(11.0).color(TEXT_TERTIARY)
         .query_key("auto-state").build();
-    let off = Text.builder().text("auto-run off").font_size(11.0).color(TEXT_TERTIARY)
+    let off = Text().text("auto-run off").font_size(11.0).color(TEXT_TERTIARY)
         .query_key("auto-state").build();
-    return Condition.builder(autorun).then(on).else_branch(off).build();
+    return Condition(autorun).then(on).else_branch(off).build();
 }
 
 // The edited pill — a coral dot + "edited", visible only while the editor
 // text differs from the last-compiled source.
 fn edited_pill(edited: u64) -> opaque {
-    let pill = Row.builder().main_axis_size(MAIN_SIZE_MIN)
-        .child(SizedBox.builder(12.0, 0.0).build())
-        .child(Container.builder().width_height(6.0, 6.0).radius(999.0).color(ACCENT_COMPLEMENT)
+    let pill = Row().main_axis_size(MAIN_SIZE_MIN)
+        .child(SizedBox(12.0, 0.0).build())
+        .child(Container().width_height(6.0, 6.0).radius(999.0).color(ACCENT_COMPLEMENT)
             .query_key("edited-pill").build())
-        .child(SizedBox.builder(6.0, 0.0).build())
-        .child(Text.builder().text("edited").font_size(11.0).color(TEXT_TERTIARY).build())
+        .child(SizedBox(6.0, 0.0).build())
+        .child(Text().text("edited").font_size(11.0).color(TEXT_TERTIARY).build())
         .build();
-    return Condition.builder(edited).then(pill).else_branch(SizedBox.builder(0.0, 0.0).build()).build();
+    return Condition(edited).then(pill).else_branch(SizedBox(0.0, 0.0).build()).build();
 }
 
 // A layout tab — the segmented control's option. The selected option's
 // fill is the tray's selected ink (the brush atoms; 0 = transparent); a
 // MouseRegion delivers the hover lift (the index crosses as the id).
 fn tab_button(label: str, cb: str, key: str, brush: u64, idx: u64) -> opaque {
-    return MouseRegion.builder().on_enter("tab_enter", idx).on_exit("tab_exit", idx)
+    return MouseRegion().on_enter("tab_enter", idx).on_exit("tab_exit", idx)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract.builder().ids(0, 0).on_tap(cb).query_key(key)
-            .child(Container.builder().padding(6.0).radius(4.0).color_bound(brush)
-                .child(Text.builder().text(label).font_size(11.0).color(TEXT_SECONDARY).build())
+        .child(PointerInteract().ids(0, 0).on_tap(cb).query_key(key)
+            .child(Container().padding(6.0).radius(4.0).color_bound(brush)
+                .child(Text().text(label).font_size(11.0).color(TEXT_SECONDARY).build())
                 .build())
             .build())
         .build();
@@ -658,12 +658,12 @@ fn tab_button(label: str, cb: str, key: str, brush: u64, idx: u64) -> opaque {
 // The Split / Edit / View segmented control (the boa toolbar's right
 // cluster): a tray with the three tabs.
 fn layout_tabs(tab_split: u64, tab_edit: u64, tab_view: u64) -> opaque {
-    let tray = Row.builder().main_axis_size(MAIN_SIZE_MIN)
+    let tray = Row().main_axis_size(MAIN_SIZE_MIN)
         .child(tab_button("Split", "tab_split", "tab-split", tab_split, 0))
         .child(tab_button("Edit", "tab_edit", "tab-edit", tab_edit, 1))
         .child(tab_button("View", "tab_view", "tab-view", tab_view, 2))
         .build();
-    return Container.builder().radius(6.0).color(BG_HOVER).padding(2.0).child(tray).build();
+    return Container().radius(6.0).color(BG_HOVER).padding(2.0).child(tray).build();
 }
 
 // A sidebar entry — tapping loads + runs the case. The Each index IS
@@ -679,19 +679,19 @@ entry fn side_item(i: u64, name: str) -> opaque {
     let bg = rs_source_value(rs_list_new());
     rs_set_brush(bg, 0);
     stf_put(K_ROW0 + i * 2 + 1, bg as f64);
-    let row = Container.builder().width_height(0.0, 32.0).padding(8.0).color_bound(bg)
+    let row = Container().width_height(0.0, 32.0).padding(8.0).color_bound(bg)
         .query_key(f"row/{name}")
-        .child(Row.builder().main_axis_size(MAIN_SIZE_MIN)
+        .child(Row().main_axis_size(MAIN_SIZE_MIN)
             // The reserved 3px bar (never clips — boa's trick): teal when
             // selected, transparent otherwise, so the label never shifts.
-            .child(Container.builder().width_height(3.0, 20.0).radius(2.0).color_bound(bar).build())
-            .child(SizedBox.builder(8.0, 0.0).build())
-            .child(Text.builder().text(name).color(TEXT_BODY).font_size(13.0).build())
+            .child(Container().width_height(3.0, 20.0).radius(2.0).color_bound(bar).build())
+            .child(SizedBox(8.0, 0.0).build())
+            .child(Text().text(name).color(TEXT_BODY).font_size(13.0).build())
             .build())
         .build();
-    return MouseRegion.builder().on_enter("row_enter", i).on_exit("row_exit", i)
+    return MouseRegion().on_enter("row_enter", i).on_exit("row_exit", i)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract.builder().ids(i, i).on_tap("case_tap").child(row).build())
+        .child(PointerInteract().ids(i, i).on_tap("case_tap").child(row).build())
         .build();
 }
 

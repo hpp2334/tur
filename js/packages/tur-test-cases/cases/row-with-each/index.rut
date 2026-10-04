@@ -5,10 +5,7 @@ use tur_kit::{ Column, Container, Each, Expanded, Row, SizedBox, Text };
 
 
 entry fn item(_i: u64, s: str) -> opaque {
-    let mut t = Text.builder();
-
-    t.text(s);
-    t.font_size(13.0);
+    let t = Text().text(s).font_size(13.0);
     return t.build();
 }
 
@@ -18,13 +15,10 @@ entry fn start() {
     rs_list_push(seg, "b");
     let seg_atom = rs_source_value(seg);
 
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_STRETCH);
-    let mut row = Row.builder();
-    row.child(SizedBox.builder(16.0, 16.0).child(Container.builder().build()).build());
-    row.child(Each.builder(seg_atom).item_builder("item").build());
-    col.child(row.build());
-    col.child(SizedBox.builder(40.0, 10.0).child(Container.builder().build()).build());
-    col.child(Expanded.builder().flex(1.0).child(Container.builder().build()).build());
+    let col = Column()
+        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(Each(seg_atom).item_builder("item").build()).build())
+        .child(SizedBox(40.0, 10.0).child(Container().build()).build())
+        .child(Expanded().flex(1.0).child(Container().build()).build());
     mount(col.build());
 }

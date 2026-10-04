@@ -17,17 +17,13 @@ entry fn start() -> u64 {
     st_put(K_LX, mem_new(0.0));
     st_put(K_LY, mem_new(0.0));
 
-    let mut b = Container.builder();
-    b.width_height(200.0, 200.0);
-    b.color(0x6366F1FF);
-    b.query_key("drag-target");
-    let mut info_t = Text.builder();
+    let b = Container()
+        .width_height(200.0, 200.0)
+        .color(0x6366F1FF)
+        .query_key("drag-target")
+        .child(Text().text_bound(info).query_key("drag-info").build());
 
-    info_t.text_bound(info);
-    info_t.query_key("drag-info");
-    b.child(info_t.build());
-
-    let pad = PointerInteract.builder().id(info).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().id(info).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
     mount(pad);
     return info;
 }

@@ -33,27 +33,15 @@ entry fn start() -> u64 {
 
     let display = rs_derive("fmt_display", remaining);
 
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_CENTER);
-
-    let mut display_t = Text.builder();
-
-    display_t.text_bound_derived(display);
-    display_t.query_key("display");
-    col.child(display_t.build());
-
-    let mut row = Row.builder();
-    row.main_alignment(MAIN_ALIGN_CENTER);
-    row.child(button("btn-start", "Start", "b_start", running, running));
-    row.child(button("btn-pause", "Pause", "b_pause", running, running));
-    row.child(button("btn-reset", "Reset", "b_reset", initial, remaining));
-    row.child(button("btn-edit", "Edit", "b_edit", initial, editing));
-    col.child(row.build());
+    let mut col = Column()
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(Text().text_bound_derived(display).query_key("display").build())
+        .child(Row().main_alignment(MAIN_ALIGN_CENTER).child(button("btn-start", "Start", "b_start", running, running)).child(button("btn-pause", "Pause", "b_pause", running, running)).child(button("btn-reset", "Reset", "b_reset", initial, remaining)).child(button("btn-edit", "Edit", "b_edit", initial, editing)).build());
 
     // The edit modal overlay (both branches authored at start).
     let modal = build_modal(initial, remaining);
-    let mut empty = Container.builder();
-    col.child(Condition.builder(editing).then(modal).else_branch(empty.build()).build());
+    let empty = Container();
+    col.child(Condition(editing).then(modal).else_branch(empty.build()).build());
 
     mount(col.build());
     return remaining;
@@ -61,14 +49,14 @@ entry fn start() -> u64 {
 
 // A pill button with a query key; both atoms cross to the entry.
 fn button(key: str, label: str, cb: str, a: u64, b: u64) -> opaque {
-    let mut bld = Container.builder();
-    bld.width_height(90.0, 40.0);
-    bld.color(0x6366F1FF);
-    bld.alignment(ALIGN_CENTER);
-    bld.radius(8.0);
-    bld.query_key(key);
-    bld.child(Text.builder().text(label).build());
-    return PointerInteract.builder().ids(a, b).on_tap(cb).child(bld.build()).build();
+    let bld = Container()
+        .width_height(90.0, 40.0)
+        .color(0x6366F1FF)
+        .alignment(ALIGN_CENTER)
+        .radius(8.0)
+        .query_key(key)
+        .child(Text().text(label).build());
+    return PointerInteract().ids(a, b).on_tap(cb).child(bld.build()).build();
 }
 
 // The edit modal: a centered card with a pre-filled Input + confirm.
@@ -77,18 +65,18 @@ fn build_modal(initial: u64, remaining: u64) -> opaque {
     tctrl_set_text(ctrl, f"{rs_get_f64(initial) as u64}");
     st_put(K_CTRL, ctrl);
 
-    let mut card = Container.builder();
-    card.width_height(240.0, 140.0);
-    card.color(0xFFFFFFFFu64);
-    card.radius(12.0);
-    card.padding(16.0);
-    card.alignment(ALIGN_CENTER);
+    let mut card = Container()
+        .width_height(240.0, 140.0)
+        .color(0xFFFFFFFFu64)
+        .radius(12.0)
+        .padding(16.0)
+        .alignment(ALIGN_CENTER);
 
-    let mut col = Column.builder();
-    col.cross_alignment(CROSS_ALIGN_CENTER);
-    col.child(Text.builder().text("Set seconds").build());
+    let mut col = Column()
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(Text().text("Set seconds").build());
     let undo = undo_new();
-    let mut input = Input.builder().controller(ctrl).undo(undo).placeholder("seconds").width_height(180.0, 32.0).query_key("edit-input").build();
+    let input = Input().controller(ctrl).undo(undo).placeholder("seconds").width_height(180.0, 32.0).query_key("edit-input").build();
     col.child(input);
     col.child(button("btn-confirm", "Confirm", "b_confirm", initial, remaining));
     card.child(col.build());

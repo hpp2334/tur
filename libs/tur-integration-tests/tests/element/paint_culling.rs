@@ -47,21 +47,18 @@ use tur_kit::{ Column, Container, ScrollView };
 
 
 entry fn item(i: u64) -> opaque {
-    let mut b = Container.builder();
-    b.width_height(10.0, 100.0);
-    b.color(0xFF0000FFu64);
-    b.query_key(f"item/{i}");
+    let b = Container().width_height(10.0, 100.0).color(0xFF0000FFu64).query_key(f"item/{i}");
     return b.build();
 }
 
 entry fn start() {
-    let mut col = Column.builder();
+    let mut col = Column();
     let mut i: u64 = 0;
     while (i < 6) {
         col.child(item(i));
         i += 1;
     }
-    let mut scroller = ScrollView.builder().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
+    let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();
     mount(scroller);
 }
 "#,
@@ -192,10 +189,7 @@ use tur_kit::{ Container };
 
 
 entry fn start() {
-    let mut b = Container.builder();
-    b.width_height(100.0, 100.0);
-    b.color(0x0080FFFF);
-    b.query_key("onscreen");
+    let b = Container().width_height(100.0, 100.0).color(0x0080FFFF).query_key("onscreen");
     mount(b.build());
 }
 "#,
