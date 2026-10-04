@@ -9,7 +9,7 @@
 
 use std::rc::Rc;
 
-use crate::builtin_plugins::image::decode::decode_image_bytes;
+use crate::builtin_plugins::image::decode::{decode_image_bytes, decode_svg};
 use crate::builtin_plugins::image::element::ImageView;
 use crate::builtin_plugins::image::handle::ImageResourceRef;
 use crate::core::image_resource::ImageResource;
@@ -38,6 +38,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     cx.decl.extend(vec![
         row("img_res_bytes", vec![TY_BYTES], TY_U64),
         row("img_res_solid", vec![TY_U64, TY_U64, TY_U64], TY_U64),
+        row("img_res_svg", vec![TY_STR], TY_U64),
         row("img_new", vec![TY_U64], TY_OPAQUE),
         row("img_width", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("img_height", vec![TY_OPAQUE, TY_F64], TY_NIL),
@@ -99,6 +100,16 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         }
         let image = ImageResource::from_rgba(&rgba, w as u32, hh as u32)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_solid: bad geometry"))?;
+        Ok(h.inst.register_image(image).as_u64())
+    });
+
+    // Rasterise an authored SVG string — the boa `createSvgResource` twin
+    // (the toolbar icons ride this): same worker-side raster + register
+    // rail as `img_res_bytes`, the declared size crossing as metadata.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "img_res_svg", (&str,) -> u64, move |_vm: &mut rut_vm::interp::Vm, svg: &str| {
+        let image = decode_svg(svg)
+            .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_svg: rasterise failed"))?;
         Ok(h.inst.register_image(image).as_u64())
     });
 

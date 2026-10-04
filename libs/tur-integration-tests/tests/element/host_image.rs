@@ -344,3 +344,41 @@ entry fn mount_one(id: u64, _b: f64) {
         "only the painted image may be ensured on the fresh renderer, got {log:?}"
     );
 }
+
+/// The rut twin of the boa `createSvgResource`: an SVG string authored in
+/// the module rasterises worker-side and registers through the same rail
+/// as `img_res_bytes` — the id mints in the worker range, the declared
+/// size crosses the metadata rail, and the pixel Blob is retained
+/// host-side. (The playground toolbar's ▶ / ↻ icons ride this row.)
+#[test]
+fn img_res_svg_row_registers_a_worker_minted_resource() {
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(
+        r##"
+use tur::{ BOXFIT_FILL, img_res_svg, mount };
+use tur_kit::{ Column, Image };
+
+entry fn start() {
+}
+
+entry fn mount_svg(_a: u64, _b: f64) {
+    let id = img_res_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
+    mount(Column().child(Image(id).width(10.0).fit(BOXFIT_FILL).build()).build());
+}
+"##,
+    )
+    .expect("load module");
+    app.call_rut_entry("mount_svg", 0, 0.0).expect("mount svg");
+    app.wait_for_timeout(Duration::ZERO);
+
+    let tree = app.element_tree();
+    let sizes = image_sizes(&tree);
+    assert_eq!(sizes.len(), 1, "exactly one image mounted");
+    assert_eq!(sizes[0].0, 10.0, "explicit width");
+    assert_eq!(
+        sizes[0].1, 24.0,
+        "natural height from the SVG's declared size (the decode + metadata rail)"
+    );
+    let count = app.with_app(|a| a.image_resource_count());
+    assert_eq!(count, 1, "the rasterised resource is retained host-side");
+}

@@ -177,26 +177,32 @@ fn wait_for_state(app: &TurTestApp, want: &str) -> bool {
     }
 }
 
-// ---- Phase B rail -----------------------------------------------------------
+// ---- Boot selection (the phase-2 chrome pass) --------------------------------
 
 #[test]
-fn playground_boots_and_shows_the_no_case_fallback() {
+fn playground_boot_auto_selects_counter() {
     let app = playground_app();
-
-    // The state atom rides the start answer (the probe channel); the
-    // status bar's label reads `ready` from boot.
     let _state_atom = app.rut_start_answer();
+
+    // The boot selection (the boa INITIAL_CASE): the toolbar's case name
+    // reads `counter` before any tap.
     assert_eq!(
-        app.query_text(&["app-state"]).as_deref(),
-        Some("ready"),
-        "the initial app-state label"
+        app.query_text(&["case-name"]).as_deref(),
+        Some("counter"),
+        "the boot selection"
     );
-    // The viewer is mounted (the always-live fallback branch) with the
-    // FallbackView shape showing.
-    assert_eq!(
-        app.query_text(&["viewer", "hint"]).as_deref(),
-        Some("(no case)"),
-        "the FallbackView hint before any case runs"
+
+    // The case is live: the status settles to ready, the viewer hosts the
+    // child with the FallbackView hint dropped, and the editor loaded the
+    // case's source.
+    assert!(
+        wait_for_state(&app, "ready"),
+        "the boot case never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+    assert!(
+        app.query_text(&["viewer", "hint"]).is_none_or(|h| h.is_empty()),
+        "the FallbackView hint dropped once the boot case ran"
     );
     let id = app.query_element(&["viewer"]).expect("the viewer host node");
     let node = app
@@ -207,6 +213,88 @@ fn playground_boots_and_shows_the_no_case_fallback() {
         node.size.0 > 0.0 && node.size.1 > 0.0,
         "the viewer pane laid out: {:?}",
         node.size
+    );
+    assert_eq!(
+        editor_text(&app),
+        case_source("counter"),
+        "the editor loaded the boot case's source"
+    );
+}
+
+// ---- The phase-2 chrome pins: metrics + structure -----------------------------
+// The boa chrome metrics (style parity, not pixel-perfect): a 48px toolbar
+// with the compact icon buttons + the "auto" caption, a 200px sidebar with
+// the CASES header + full-width inset row pills, the ~20px bordered status
+// bar, the inset viewer card (no header strip), and the visible 8px
+// divider bands.
+
+#[test]
+fn playground_chrome_metrics_match_the_boa_reference() {
+    let app = playground_app();
+    let _ = app.rut_start_answer();
+
+    // Toolbar: 48px band; the status bar: ~20px + hairlines (22 with the
+    // inside border); the sidebar: the boa 200 seed.
+    let height = |qk: &[&str]| -> f64 {
+        let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
+        let b = app
+            .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+            .unwrap();
+        b.bottom - b.top
+    };
+    assert_eq!(height(&["toolbar"]), 48.0, "the toolbar band");
+    assert_eq!(height(&["status-bar"]), 22.0, "the status bar band (20 + inside border)");
+    assert_eq!(qk_width(&app, &["sidebar"]), Some(200.0), "the sidebar seed");
+
+    // The toolbar's auto caption + the sidebar's CASES header (the count
+    // mirrors the generated registry = the showcase manifest).
+    assert_eq!(app.query_text(&["auto-caption"]).as_deref(), Some("auto"));
+    assert_eq!(
+        app.query_text(&["cases-count"]).as_deref(),
+        Some(showcase_names().len().to_string().as_str()),
+        "the CASES header count"
+    );
+
+    // The status bar's off-state is the "⌘S to run" hint (auto-run is ON
+    // at boot, so flip it first).
+    let mut app = app;
+    click_qk(&mut app, &["autorun"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.query_text(&["auto-state"]).as_deref(),
+        Some("\u{2318}S to run"),
+        "the auto-run off caption"
+    );
+
+    // The viewer card: the inset (pane − 24) with no header strip above —
+    // the card fills the pane minus the 12px ring on every side.
+    let pane_w = qk_width(&app, &["viewer-pane"]).expect("the viewer pane");
+    let card_w = qk_width(&app, &["viewer-card"]).expect("the viewer card");
+    assert!(
+        (pane_w - card_w - 24.0).abs() < 0.5,
+        "the viewer card is inset 12px per side: pane {pane_w} vs card {card_w}"
+    );
+}
+
+#[test]
+fn playground_sidebar_rows_are_full_width_left_aligned_pills() {
+    let app = playground_app();
+    let _ = app.rut_start_answer();
+
+    // The row's qk sits on the padding-8 wrapper: full sidebar width (the
+    // full-width inset pill law), natural boa pitch (2 + 8 + pill + 8 ≈
+    // 47.5 with the 13px label).
+    let id = app
+        .query_element(&["row", "counter"])
+        .expect("the showcase row's query key");
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+        .unwrap();
+    assert_eq!(b.right - b.left, 200.0, "the row spans the sidebar");
+    let h = b.bottom - b.top;
+    assert!(
+        (44.0..=52.0).contains(&h),
+        "the row pitch is the boa ~47.5: {h}"
     );
 }
 
@@ -251,13 +339,16 @@ fn playground_viewer_runs_counter_to_ready() {
     );
 }
 
+// ---- Phase B rail -----------------------------------------------------------
+
 #[test]
 fn playground_run_swaps_controllers_destroy_then_spawn() {
     let mut app = playground_app();
 
     // First run via the REAL intent path: a sidebar tap on the first row
     // (complex-animation — the showcase manifest's alphabetical head).
-    app.click(110.0, 56.0);
+    let (cx, cy) = qk_center(&app, &["row", "complex-animation"]);
+    app.click(cx, cy);
     app.wait_for_timeout(Duration::ZERO);
     assert!(
         wait_for_state(&app, "ready"),
@@ -412,10 +503,11 @@ fn playground_auto_run_off_keeps_the_case_running() {
     app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
     assert!(wait_for_state(&app, "ready"));
 
-    // Toggle auto-run OFF (the toolbar pill).
+    // Toggle auto-run OFF (the toolbar pill — the caption flips to the
+    // "⌘S to run" hint).
     click_qk(&mut app, &["autorun"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("auto-run off"));
+    assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("\u{2318}S to run"));
 
     // A keystroke still marks the editor edited... but never respawns:
     // the case keeps running well past the debounce window.
@@ -752,9 +844,9 @@ fn playground_select_paints_the_selected_row() {
 fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     let mut app = playground_app();
 
-    // Boot width (the atom's seed): 240 — the clamp floor.
+    // Boot width (the atom's seed): 200 — the clamp floor (the boa seed).
     let w0 = qk_width(&app, &["sidebar"]).expect("the sidebar");
-    assert_eq!(w0, 240.0, "the seeded sidebar width");
+    assert_eq!(w0, 200.0, "the seeded sidebar width");
 
     // The divider sits right of the sidebar; its strip is 8px wide (and
     // moves with the sidebar — re-locate it before every drag).
@@ -791,7 +883,7 @@ fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     app.pointer_up(dx + 100.0, dy);
     app.wait_for_timeout(Duration::ZERO);
     let w1 = qk_width(&app, &["sidebar"]).expect("the sidebar");
-    assert!((w1 - 340.0).abs() < 2.0, "the drag moved the width 240→{w1}");
+    assert!((w1 - 300.0).abs() < 2.0, "the drag moved the width 200→{w1}");
 
     // Post-release moves over the strip must NOT resize (the drag flag
     // gates `div_move`).
@@ -823,7 +915,7 @@ fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     }
     app.pointer_up(dx - 1200.0, dy);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(qk_width(&app, &["sidebar"]), Some(240.0), "the lower clamp");
+    assert_eq!(qk_width(&app, &["sidebar"]), Some(200.0), "the lower clamp");
 }
 
 // ---- Phase 4 (P0): the editor↔viewer divider -----------------------------------
