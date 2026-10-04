@@ -808,3 +808,163 @@ fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(qk_width(&app, &["sidebar"]), Some(240.0), "the lower clamp");
 }
+
+// ---- Phase 4 (P0): the editor↔viewer divider -----------------------------------
+// The boa shell's second VDivider: visible (and draggable) only in split
+// mode, riding an editor-width atom (seed 600, clamped 360–900) — the
+// editor pane goes `width_bound(edw)` in split mode, the viewer stays
+// Expanded.
+
+#[test]
+fn playground_editor_divider_drags_and_clamps_the_editor_width() {
+    let mut app = playground_app();
+
+    // Split boot: the second divider sits between the editor pane and the
+    // viewer pane, an 8px strip like the sidebar divider; the editor pane
+    // carries the seeded width (600), the viewer fills the rest.
+    let div2_center = |app: &TurTestApp| -> (f64, f64) {
+        let d = app
+            .query_element(&["divider2"])
+            .expect("the editor↔viewer divider");
+        let b = app
+            .get_element_absolute_bounds(ElementNodeId::new(d.as_u64()))
+            .unwrap();
+        assert_eq!(b.right - b.left, 8.0, "the grab strip is 8px");
+        (b.left + 4.0, (b.top + b.bottom) / 2.0)
+    };
+    let editor_w0 = qk_width(&app, &["editor-pane"]).expect("the editor pane");
+    let viewer_w0 = qk_width(&app, &["viewer-pane"]).expect("the viewer pane");
+    assert_eq!(editor_w0, 600.0, "the seeded editor width");
+    assert!(viewer_w0 > 300.0, "the viewer fills the rest: {viewer_w0}");
+
+    // Hovering the strip shows the col-resize cursor.
+    let (dx, dy) = div2_center(&app);
+    app.pointer_move(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.take_current_cursor(),
+        Some(Cursor::ColResize),
+        "the editor divider's cursor"
+    );
+
+    // Drag right by 120: the editor pane widens 1:1, the viewer shrinks.
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [40.0, 80.0, 120.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx + 120.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    let editor_w1 = qk_width(&app, &["editor-pane"]).expect("the editor pane");
+    let viewer_w1 = qk_width(&app, &["viewer-pane"]).expect("the viewer pane");
+    assert!((editor_w1 - 720.0).abs() < 2.0, "the drag moved the editor 600→{editor_w1}");
+    assert!((viewer_w0 - viewer_w1 - 120.0).abs() < 3.0, "the viewer gave the pixels back");
+
+    // Clamp high: a huge drag pins the editor at 900.
+    let (dx, dy) = div2_center(&app);
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [100.0, 300.0, 700.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx + 700.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(qk_width(&app, &["editor-pane"]), Some(900.0), "the upper clamp");
+
+    // Clamp low: a huge leftward drag pins at 360.
+    let (dx, dy) = div2_center(&app);
+    app.pointer_down(dx, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    for step in [-300.0, -600.0, -1200.0] {
+        app.pointer_move(dx + step, dy);
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.pointer_up(dx - 1200.0, dy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(qk_width(&app, &["editor-pane"]), Some(360.0), "the lower clamp");
+
+    // The divider hides outside split mode (the boa Condition): Edit shells
+    // the viewer, View shells the editor — no grab strip in either.
+    click_qk(&mut app, &["tab-edit"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(app.query_element(&["divider2"]).is_none(), "no divider2 in edit mode");
+    click_qk(&mut app, &["tab-view"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(app.query_element(&["divider2"]).is_none(), "no divider2 in view mode");
+    click_qk(&mut app, &["tab-split"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(app.query_element(&["divider2"]).is_some(), "divider2 back in split");
+}
+
+// ---- Phase 4 (P0): comment-span metrics pin -------------------------------------
+// The "wide inter-word gaps in editor comments" report: measured against
+// the boa reference, the advances are identical (one monospace cell per
+// char, spaces included — verified in the browser at 1× and in the layout
+// stops). This pin holds the law: inside a highlighted editor, caret
+// advances across a comment run equal the code runs' cell advance, so any
+// future span/shaping regression trips here.
+
+const SPACING_ROWS_MODULE: &str = r#"
+use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ Column, Input };
+
+let K_CTRL: u64 = 2;
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    st_put(K_CTRL, ctrl);
+    let src = "entry fn start() { // the quick brown fox jumps over the lazy dog\n    let x = 1; // spaced — out\n}\n";
+    tctrl_set_text(ctrl, src);
+    pg_apply_highlight(ctrl, pg_highlight(src));
+    mount(Column().child(
+        Input().controller(ctrl).undo(undo_new()).width_height(700.0, 200.0)
+            .font_family("monospace").font_size(13.0)
+            .multiline(true).query_key("editor").build()).build());
+    return 0;
+}
+"#;
+
+#[test]
+fn editor_comment_spans_keep_uniform_monospace_advances() {
+    let app = TurTestApp::new_with_extra_plugins(
+        800.0,
+        400.0,
+        vec![Box::new(TurRutPlaygroundPlugin)],
+    )
+    .unwrap();
+    app.load_rut_module(SPACING_ROWS_MODULE).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let _ = app.rut_start_answer();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let editable = editor_editable(&app);
+    let text = editor_text(&app);
+    let line0_len = text.split('\n').next().map(|l| l.len()).unwrap_or(0);
+    assert!(line0_len > 40, "the fixture's first line is comment-heavy");
+
+    // Caret x at every char boundary of line 0; in a monospace face every
+    // delta is one glyph advance — comment runs included.
+    let mut xs: Vec<f32> = Vec::new();
+    let mut b = 0usize;
+    while b <= line0_len {
+        let x = app
+            .with_element(editable, move |e| {
+                e.cast::<EditableTextElement>().unwrap().cursor_x_at(b)
+            })
+            .unwrap_or(None)
+            .unwrap_or(-1.0);
+        assert!(x >= 0.0, "caret x missing at byte {b}");
+        xs.push(x);
+        b += text[b..].chars().next().unwrap().len_utf8();
+    }
+    let deltas: Vec<f32> = xs.windows(2).map(|w| w[1] - w[0]).collect();
+    let first = deltas[0];
+    for (i, d) in deltas.iter().enumerate() {
+        assert!(
+            (d - first).abs() < 0.35,
+            "non-uniform advance at char {i} of line 0: {d} vs {first} (deltas {deltas:?})"
+        );
+    }
+}

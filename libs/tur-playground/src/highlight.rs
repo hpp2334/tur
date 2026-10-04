@@ -14,6 +14,14 @@
 //! `//` / `/* */` runs itself. `f"..."` interpolation holes are fully
 //! lexed token streams with absolute spans inside the literal: the literal
 //! colors as a string and the hole tokens overlay their own colors.
+//!
+//! Metric note (phase-4 P0): a "wide inter-word gaps in comments" report
+//! measured out clean — the per-comment runs shape with the same monospace
+//! advances as the code runs (parley `Glyph.x` is a per-glyph offset, and
+//! `extract_layout_data` accumulates correctly). The impression comes from
+//! the light comment ink (the palette, phase-2 territory). Pinned by
+//! `editor_comment_spans_keep_uniform_monospace_advances` in the
+//! playground gate.
 
 use rut_lexer::token::{FPart, Tok};
 
