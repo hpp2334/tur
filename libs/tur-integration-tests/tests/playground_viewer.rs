@@ -28,37 +28,54 @@ fn playground_source() -> String {
     format!("{PLAYGROUND_RUT}\n{CASES_GEN_RUT}")
 }
 
-/// The sidebar index of a corpus case (the gen-cases ordering: sorted
-/// readdir of `js/packages/tur-test-cases/cases`, `index.rut` dirs only).
+/// The workspace root (the tests' fixtures live outside the crate).
+fn workspace_root() -> std::path::PathBuf {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    std::path::Path::new(&manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("workspace root")
+        .to_path_buf()
+}
+
+/// The curated showcase manifest (`demo/playground-view/showcase.json`) —
+/// the same file `gen-cases.cjs` consumes. The registry emits it in
+/// alphabetical order (the generator sorts, like the boa reference), which
+/// is the sidebar order the `select` probes address. A plain comma split
+/// is enough: showcase names are lowercase-hyphen identifiers.
+fn showcase_names() -> Vec<String> {
+    let raw = std::fs::read_to_string(workspace_root().join("demo/playground-view/showcase.json"))
+        .expect("demo/playground-view/showcase.json");
+    let raw = raw.trim();
+    assert!(
+        raw.starts_with('[') && raw.ends_with(']'),
+        "showcase.json is a JSON array of names"
+    );
+    raw[1..raw.len() - 1]
+        .split(',')
+        .map(|s| s.trim().trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// The sidebar index of a showcase case (the gen-cases ordering: the
+/// `showcase.json` manifest, alphabetical — NOT the whole corpus dir).
 fn case_index(name: &str) -> u64 {
-    let dir = cases_dir();
-    let mut names: Vec<String> = std::fs::read_dir(&dir)
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir() && e.path().join("index.rut").exists())
-        .map(|e| e.file_name().to_string_lossy().to_string())
-        .collect();
-    names.sort();
-    names
+    showcase_names()
         .iter()
         .position(|n| n == name)
-        .unwrap_or_else(|| panic!("case `{name}` not in the corpus"))
+        .unwrap_or_else(|| panic!("case `{name}` not in demo/playground-view/showcase.json"))
         as u64
 }
 
-/// A corpus case's original source (what Reset restores).
+/// A showcase case's original source (what Reset restores).
 fn case_source(name: &str) -> String {
     std::fs::read_to_string(cases_dir().join(name).join("index.rut"))
         .unwrap_or_else(|e| panic!("case `{name}` source: {e}"))
 }
 
 fn cases_dir() -> std::path::PathBuf {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let root = std::path::Path::new(&manifest_dir)
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("workspace root");
-    root.join("js/packages/tur-test-cases/cases")
+    workspace_root().join("js/packages/tur-test-cases/cases")
 }
 
 fn playground_app() -> TurTestApp {
@@ -239,7 +256,7 @@ fn playground_run_swaps_controllers_destroy_then_spawn() {
     let mut app = playground_app();
 
     // First run via the REAL intent path: a sidebar tap on the first row
-    // (clickable-text — the corpus's sorted head).
+    // (complex-animation — the showcase manifest's alphabetical head).
     app.click(110.0, 56.0);
     app.wait_for_timeout(Duration::ZERO);
     assert!(
@@ -679,8 +696,8 @@ fn playground_sidebar_rows_hover_with_the_pointer_cursor() {
     // Rows carry query keys (`row/<name>` — the selection paint targets;
     // the qkey rows split on `/`, so the query is a two-segment path).
     let row = app
-        .query_element(&["row", "clickable-text"])
-        .expect("the first row's query key");
+        .query_element(&["row", "counter"])
+        .expect("the showcase row's query key");
     let (cx, cy) = app
         .get_element_absolute_bounds(ElementNodeId::new(row.as_u64()))
         .unwrap()
@@ -726,9 +743,9 @@ fn playground_select_paints_the_selected_row() {
 
     // Re-selecting another row keeps every rail consistent (the old row's
     // paint drops — the brush sweep in `case_tap`).
-    app.call_rut_entry("select", case_index("column-basic"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("todolist"), 0.0).unwrap();
     assert!(wait_for_state(&app, "ready"));
-    assert_eq!(app.query_text(&["case-name"]).as_deref(), Some("column-basic"));
+    assert_eq!(app.query_text(&["case-name"]).as_deref(), Some("todolist"));
 }
 
 #[test]
