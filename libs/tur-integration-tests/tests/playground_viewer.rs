@@ -439,6 +439,34 @@ fn playground_layout_tabs_switch_panes() {
     assert!(editor_w > 300.0 && viewer_w > 300.0, "split again: {editor_w} / {viewer_w}");
 }
 
+/// The Edit→Split wasm trap's native scenario pin (phase 6.5): every
+/// Edit↔Split transition re-cases the viewer-slot Switch — the live child
+/// retires and a fresh one spawns — and the status rail must settle back to
+/// `ready` with the viewer hosting a live child after each swap. (The
+/// wasm-only race itself — the retiring child's load RPC still in flight
+/// when its worker exits — is pinned at the seam by
+/// `rut_boot::rut_child_load_against_a_destroyed_child_reports_worker_gone`;
+/// native loads block on the spawn control, so the trap cannot fire here.)
+#[test]
+fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
+    let mut app = playground_app();
+    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    assert!(wait_for_state(&app, "ready"));
+
+    for tab in ["tab-edit", "tab-split", "tab-edit", "tab-split"] {
+        click_qk(&mut app, &[tab]);
+        assert!(
+            wait_for_state(&app, "ready"),
+            "{tab}: the swap never settled back to ready: {:?}",
+            app.query_text(&["app-state"])
+        );
+        let node = app
+            .dev_tool_get_element(app.query_element(&["viewer"]).unwrap())
+            .expect("the viewer host in the dev-tool tree");
+        assert_eq!(node.name, "tur_virtual_app", "{tab}: the viewer hosts the child");
+    }
+}
+
 // ---- Phase C: reset -----------------------------------------------------------
 
 #[test]

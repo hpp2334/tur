@@ -49,6 +49,7 @@ impl View for VirtualAppView {
                 view: self.clone(),
                 painting: VirtualPainting::default(),
                 bound_base: Cell::new(None),
+                binder: u64::from(id),
             }),
         );
         if let Some(qk) = &self.query_key {
@@ -81,12 +82,18 @@ pub struct VirtualAppElement {
     /// The controller base this element currently binds (layout-time
     /// bind/unbind diff — see `perform_layout`).
     pub(crate) bound_base: Cell<Option<u64>>,
+    /// This element instance's binder identity (its node id — unique per
+    /// built instance). The controller record's live incarnation is owned
+    /// by the binder that spawned it; a different instance binding the same
+    /// controller is a takeover, and this instance's unbind after a takeover
+    /// is a stale no-op (see `VirtualState::bind`).
+    pub(crate) binder: u64,
 }
 
 impl Lifecycle for VirtualAppElement {
     fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx) {
         if let Some(base) = self.bound_base.take() {
-            self.view.state.unbind(base);
+            self.view.state.unbind(base, self.binder);
         }
     }
 }
@@ -114,13 +121,17 @@ impl ElementLayout for VirtualAppElement {
         // materialized by binding (same "pure declaration, materialize on
         // demand" shape as `source`/`derive`/`mutate`). Runs in layout so a
         // resolution change can never skip it: `app$` is subscribed below.
+        // The bind/unbind carry this element's binder identity — a same-base
+        // bind from a DIFFERENT instance is a takeover, not a rebind (the
+        // Switch's mount-new-before-destroy-old order makes the new branch's
+        // bind race the old branch's unbind; see `VirtualState::bind`).
         let new_base = app.as_ref().map(|r| r.0);
         if new_base != self.bound_base.get() {
             if let Some(old) = self.bound_base.take() {
-                self.view.state.unbind(old);
+                self.view.state.unbind(old, self.binder);
             }
             if let Some(base) = new_base {
-                self.view.state.bind(base);
+                self.view.state.bind(base, self.binder);
             }
             self.bound_base.set(new_base);
         }

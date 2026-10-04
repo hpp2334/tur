@@ -86,6 +86,9 @@ pub(crate) struct ControllerRecord {
     /// (cleared by `destroy$` / unbind-destroy; a later bind respawns under
     /// a fresh token).
     pub current: Cell<Option<VirtualAppId>>,
+    /// The binder instance that owns the live incarnation (see
+    /// [`VirtualState::bind`]). `None` while no incarnation is live.
+    pub binder: Cell<Option<u64>>,
     /// An element currently binds this controller (gates the subsystem's
     /// post-layout rect walk).
     pub bound: Cell<bool>,
@@ -174,6 +177,7 @@ impl VirtualState {
                 on_runtime_error,
                 error_dispatch_frame: Cell::new(u64::MAX),
                 current: Cell::new(None),
+                binder: Cell::new(None),
                 bound: Cell::new(false),
                 last_rect: Cell::new((-1.0, -1.0, -1.0, -1.0)),
             }),
@@ -188,14 +192,27 @@ impl VirtualState {
     // ── bind / unbind (driven by the element's layout diff) ───────────
 
     /// An element binds the controller: spawn a child if none is live.
-    pub(crate) fn bind(&self, base: u64) {
+    ///
+    /// `binder` is the binding element's instance id. The live incarnation
+    /// is OWNED by its binder: a bind from the same instance is a keep-alive
+    /// rebind (no-op), while a bind from a DIFFERENT instance is a takeover
+    /// — the previous holder is being torn down in this same flush (the
+    /// Switch's mount-new-before-destroy-old order), so its incarnation is
+    /// retired here and a fresh one spawns for the new holder. That holder's
+    /// own `unbind` then arrives stale and no-ops.
+    pub(crate) fn bind(&self, base: u64, binder: u64) {
         let Some(record) = self.record(base) else {
             return;
         };
         record.bound.set(true);
         if record.current.get().is_some() {
-            return; // already hosting (keep-alive rebind)
+            if record.binder.get() == Some(binder) {
+                return; // same element re-binding its live incarnation
+            }
+            // Takeover: retire the previous holder's incarnation.
+            self.retire(base, &record);
         }
+        record.binder.set(Some(binder));
         let token = VirtualAppId(self.alloc_id());
         record.current.set(Some(token));
         self.tokens.borrow_mut().insert(token.0, base);
@@ -208,11 +225,17 @@ impl VirtualState {
     }
 
     /// The element stops binding the controller: destroy the child unless
-    /// `keepAlive`.
-    pub(crate) fn unbind(&self, base: u64) {
+    /// `keepAlive`. A stale unbind — from a former holder whose incarnation
+    /// was already taken over (see [`Self::bind`]) — is a no-op (it must not
+    /// clear `bound` either: the new holder's input-forwarding rect walk
+    /// gates on it).
+    pub(crate) fn unbind(&self, base: u64, binder: u64) {
         let Some(record) = self.record(base) else {
             return;
         };
+        if record.binder.get() != Some(binder) {
+            return; // the incarnation belongs to another binder now
+        }
         record.bound.set(false);
         if !record.keep_alive {
             self.retire(base, &record);
@@ -229,6 +252,7 @@ impl VirtualState {
     }
 
     fn retire(&self, base: u64, record: &ControllerRecord) {
+        record.binder.set(None);
         if let Some(token) = record.current.take() {
             self.set_status(base, "destroyed", "");
             self.send_control(VirtualControl::Destroy { token });

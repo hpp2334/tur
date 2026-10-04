@@ -542,8 +542,23 @@ impl VirtualHost {
                     // Cooperative lanes (main-thread driven): blocking here
                     // would deadlock — the load stays a spawned task on the
                     // host loop (the historical behavior).
+                    //
+                    // The host rides along so the status write can check
+                    // liveness: a layout-tab switch retires this child and
+                    // spawns its replacement in one flush, and the retiring
+                    // child's load task can poll AFTER the retire ran (the
+                    // wasm-bindgen main-thread queue may hold the task for
+                    // frames). A canceled reply is that lifecycle — the
+                    // retired host's `destroyed` flag says so; skip the
+                    // status write (retire already settled the record) and
+                    // never surface a stale Running/Error over "destroyed".
+                    let host_for_load = child_host.clone();
                     self.host_loop.spawn_local(Box::pin(async move {
-                        let (state, detail) = match app_for_load.load_rut_module(source).await {
+                        let outcome = app_for_load.load_rut_module(source).await;
+                        if host_for_load.is_destroyed() {
+                            return; // retired mid-load — lifecycle, not a status
+                        }
+                        let (state, detail) = match outcome {
                             Ok(()) => (VirtualStatusState::Running, None),
                             Err(e) => (VirtualStatusState::Error, Some(e.to_string())),
                         };
@@ -560,13 +575,18 @@ impl VirtualHost {
                 // thread); the core waits for it here so the spawn control
                 // returns only once the child's status is settled — no
                 // status event can race the parent's subsequent controls
-                // (resize, input forwarding).
+                // (resize, input forwarding). A concurrent `destroy` (the
+                // host torn down mid-load) surfaces as `WorkerGone`; the
+                // liveness gate skips the status write, matching the wasm
+                // arm (retire already settled the record).
                 let (state, detail) =
                     match futures::executor::block_on(app_for_load.load_rut_module(source)) {
                         Ok(()) => (VirtualStatusState::Running, None),
                         Err(e) => (VirtualStatusState::Error, Some(e.to_string())),
                     };
-                send_status(&tx, &wake, token, state, detail);
+                if !child_host.is_destroyed() {
+                    send_status(&tx, &wake, token, state, detail);
+                }
                 self.host_loop.spawn_local(Box::pin(looper.run()));
                 self.children.borrow_mut().insert(token, child_host);
                 }

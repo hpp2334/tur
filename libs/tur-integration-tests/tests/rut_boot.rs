@@ -1291,6 +1291,66 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
     assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
 }
 
+/// The Edit→Split wasm trap (phase 6.5), pinned at its seam: a child
+/// destroyed while a module load for it is in flight (or issued against the
+/// stale facade after the destroy) must surface as a typed
+/// [`ModuleError::WorkerGone`] — lifecycle, not an engine bug. The load's
+/// reply sender lives in the child worker's inbox; the destroy exits the
+/// worker's loop and drops that inbox, canceling the reply. The load path
+/// treated the cancellation as an invariant breach and PANICKED — on wasm
+/// (panic=abort) that aborted the whole engine: the playground's tab switch
+/// Edit→Split with a live child trapped the build with `unreachable`
+/// (backend.rs `reply sender dropped without firing`, from
+/// `VirtualHost::spawn_child`'s load task). Native pin: drive a load
+/// against a child facade whose worker already exited; it must return an
+/// error, not panic.
+#[test]
+fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(VAPP_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The child spawns and runs (the kit prelude compiles on the
+    // virtual-pool worker in real time).
+    let label_atom = app.rut_start_answer();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        app.call_rut_entry("poll", label_atom, 0.0).unwrap();
+        let s = rut_bound_text(&app);
+        if s == "running" || s == "error" {
+            assert_eq!(s, "running", "the child settled");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the child never reached running: {s}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    // Mint a facade over the live child (the stale-handle shape the wasm
+    // load task hits — its facade outlives the retired child).
+    let children = app.app().virtual_apps();
+    assert_eq!(children.len(), 1, "one live child");
+
+    // Destroy: the retire path tears the child's worker down (its loop
+    // exits and drops the RPC inbox).
+    app.call_rut_entry("destroy", label_atom, 0.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
+
+    // The stale facade's load reports `WorkerGone` ("worker gone" through
+    // the facade's TurError wrap) — it must NOT panic.
+    let outcome = futures::executor::block_on(children[0].load_rut_module(
+        "use tur::{ mount };\nentry fn start() {}\n",
+    ));
+    let err = outcome.expect_err("a load against a destroyed child must err, not panic");
+    assert!(
+        err.to_string().contains("worker gone"),
+        "the load reports the gone worker, not an engine bug: {err:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Phase C8 — derived atoms: the guarded sync VM call during flush + watch.
 // ---------------------------------------------------------------------------

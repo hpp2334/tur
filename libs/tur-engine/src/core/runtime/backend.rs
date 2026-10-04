@@ -937,14 +937,34 @@ impl HostBackend {
     }
 
     /// Module load — the RPC entry behind [`TurApp::load_rut_module`].
+    ///
+    /// Cancellation-tolerant by design: the caller can be an element-hosted
+    /// child whose host was destroyed while the load was in flight (the
+    /// layout-tab switch retires the live child and spawns its replacement
+    /// in one flush — the retiring child's worker loop exits on `Destroy`
+    /// and drops the RPC inbox, canceling this reply). A canceled reply is
+    /// that lifecycle event, so it surfaces as
+    /// [`ModuleError::WorkerGone`] — NOT the `rpc` invariant panic (which
+    /// on wasm is a `panic = "abort"` trap that took the whole engine
+    /// down: the Edit→Split playground crash).
     pub(crate) async fn load_rut_module(
         &self,
         source: impl Into<std::sync::Arc<str>>,
     ) -> Result<(), ModuleError> {
         let source = source.into();
         tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
-        self.rpc(|tx| WorkerMsg::LoadRutModule { source, reply: tx })
-            .await
+        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
+        let _ = self
+            .worker_tx
+            .unbounded_send(WorkerMsg::LoadRutModule { source, reply: tx });
+        self.wake_worker();
+        match rx.rx.await {
+            Ok(res) => res,
+            // The reply sender dropped without firing — the instance's
+            // worker is gone (destroyed mid-load). The load's outcome is
+            // moot; report the gone worker instead of aborting.
+            Err(_) => Err(ModuleError::WorkerGone),
+        }
     }
 
     /// Engine→rut event rail — the RPC entry behind
