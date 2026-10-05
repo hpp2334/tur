@@ -1,6 +1,6 @@
 // lazy-grid-gallery: a header row above a virtualized gallery grid in a
 // column.
-use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur::{ CROSS_ALIGN_STRETCH, mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Column, Container, Expanded, LazyGrid, Text };
 
 
@@ -15,13 +15,18 @@ fn cell(i: u64) -> opaque {
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 120.0);
-    let mut col = Column();
+    // The header is a BAND (width_height(0, h) = fixed height, width unset
+    // per the box_size idiom): Stretch is what makes the unset width span
+    // the column — without it the band shrink-wraps to the label and the
+    // default cross-center floats it over the grid.
+    let mut col = Column().cross_alignment(CROSS_ALIGN_STRETCH).query_key("gallery/col");
     let header = Container()
         .width_height(0.0, 40.0)
         .color(0x0F172AFF)
+        .query_key("gallery/header")
         .child(Text().text("Gallery").font_size(16.0).build());
     col.child(header.build());
-    let grid = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).build();
+    let grid = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("gallery/grid").build();
     col.child(Expanded().flex(1.0).child(grid).build());
     mount(col.build());
 }

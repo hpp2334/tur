@@ -12,6 +12,7 @@ mod each_in_row;
 mod encode;
 mod expanded;
 mod flexible;
+mod flex_sizing;
 mod frame_stats;
 mod grid;
 mod hit_test_dead_zones;

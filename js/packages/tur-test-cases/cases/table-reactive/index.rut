@@ -1,12 +1,12 @@
 // table-reactive: the table twin with a reactive row set — a button adds
 // a planet through an Each over the rows atom.
-use tur::{ mount, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value,
+use tur::{ CROSS_ALIGN_STRETCH, mount, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value,
     rs_value_item, rs_value_len };
 use tur_kit::{ Column, Container, Each, PointerInteract, Row, SizedBox, Text };
 
 
-fn row(_i: u64, name: str) -> opaque {
-    let mut r = Row();
+fn row(i: u64, name: str) -> opaque {
+    let mut r = Row().query_key(f"table/row{i as u64}");
     let c = Container().width_height(150.0, 0.0).padding(8.0).child(Text().text(name).font_size(14.0).build());
     r.child(c.build());
     return r.build();
@@ -18,10 +18,15 @@ entry fn start() -> u64 {
     rs_list_push(rows, "Venus");
     let rows_atom = rs_source_value(rows);
 
-    let mut col = Column();
+    // The head is a BAND (width_height(0, h) = fixed height, width unset
+    // per the box_size idiom): Stretch spans it over the table so the
+    // header sits flush-left above its rows instead of shrink-wrapping to
+    // the label and floating cross-centered.
+    let mut col = Column().cross_alignment(CROSS_ALIGN_STRETCH).query_key("table/col");
     let head = Container()
         .width_height(0.0, 32.0)
         .color(0x1E293BFF)
+        .query_key("table/head")
         .child(Text().text("PLANET").font_size(12.0).build());
     col.child(head.build());
     col.child(Each(rows_atom).item_builder(row).build());
