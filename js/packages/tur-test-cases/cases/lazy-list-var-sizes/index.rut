@@ -1,22 +1,259 @@
-// lazy-list-var-sizes: an unmeasured (var-extent) LazyList — rows report
-// their own heights (deterministic per-index sizes).
-use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, LazyList, Text };
+// lazy-list-var-sizes: the boa "Variable width + height LazyList" —
+// items with DIFFERENT main-axis extents (no itemExtent: every visible
+// item is measured and anchored). The indigo toggle flips the axis at
+// runtime: the list rides a one-item Each over the axis atom, so the
+// flip re-mounts a fresh LazyList (the rebuild-on-change idiom). Rows
+// show a colored width-bar (cross-axis sizes clamp to the viewport, so
+// "different widths" lives INSIDE the row) + the h/bar labels on a
+// zebra fill.
+//
+// Deterministic per-index sizes via the boa sine-hash (math_sin is the
+// engine's only trig row — exactly what the hash needs).
+use tur::{ ALIGN_CENTER, ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL,
+    CURSOR_POINTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, mount,
+    rs_get_bool, rs_list_new, rs_list_push, rs_set_bool, rs_set_value, rs_source_bool,
+    rs_source_value, stf_put, stf_take, str_parse_f64 };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion,
+    PointerInteract, Row, SizedBox, Text };
 
 
-fn row(i: u64) -> opaque {
-    let h = ((i * 37) % 120) as f64 + 30.0;
-    let b = Container()
-        .width_height(400.0, h)
-        .color(0x0B1220FF)
-        .child(Text().text(f"#{i} h={h as u64}").font_size(11.0).build());
-    return b.build();
-}
+let ITEM_COUNT: f64 = 2000.0;
+
+let K_AXIS: u64 = 1; // the axis bool atom (true = vertical)
+let K_ITEMS: u64 = 2; // the one-item list that re-mounts the list
+let K_COUNT: u64 = 3; // the item-count atom
+
+// The palette (the hsl(65,55) sweep's table twin), as "r,g,b" slots.
+let BAR_HUES: str = "217,87,87|217,126,87|203,164,63|132,180,91|71,171,139|70,163,196|79,134,198|110,110,214|146,104,219|180,104,219|204,102,175|197,102,119";
+
+let ZEBRA_A: u64 = 0x0F172AFFu64;
+let ZEBRA_B: u64 = 0x1E293BFFu64;
+let LABEL: u64 = 0xCBD5E1FFu64;
+let LABEL_FAINT: u64 = 0x64748BFFu64;
 
 entry fn start() {
+    let axis = rs_source_bool(true);
+    stf_put(K_AXIS, axis as f64);
+    let items = rs_source_value(one_list());
+    stf_put(K_ITEMS, items as f64);
     let count = rs_source_f64();
-    rs_set_f64(count, 500.0);
-    // itemExtent 0 = unmeasured (var sizes).
-    let list = LazyList().item_builder(row).count(count).query_key("lazy-list-var-sizes").build();
-    mount(list);
+    rs_set_f64(count, ITEM_COUNT);
+    stf_put(K_COUNT, count as f64);
+
+    let toggle = MouseRegion()
+        .cursor(CURSOR_POINTER)
+        .child(
+            PointerInteract()
+                .ids(axis, items)
+                .on_tap(b_flip)
+                .query_key("var-sizes-toggle")
+                .child(
+                    Container()
+                        .padding(10.0)
+                        .radius(8.0)
+                        .color(0x4F46E5FFu64)
+                        .child(
+                            Condition(axis)
+                                .then_build(fn () -> View { return Text().text("Axis: Vertical  (click to flip)").font_size(13.0).color(0xFFFFFFFFu64).build(); })
+                                .else_build(fn () -> View { return Text().text("Axis: Horizontal  (click to flip)").font_size(13.0).color(0xFFFFFFFFu64).build(); })
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+
+    let list_host = Container()
+        .radius(8.0)
+        .color(0x0B1220FFu64)
+        .child(Each(items).item_builder(list_of).build())
+        .build();
+
+    let col = Column()
+        .cross_alignment(CROSS_ALIGN_START)
+        .child(toggle)
+        .child(SizedBox(0.0, 12.0).build())
+        .child(Expanded().flex(1.0).child(list_host).build())
+        .build();
+
+    mount(Container().color(0x020617FFu64).padding(16.0).child(col).build());
+}
+
+// A fresh one-item list — rewriting it re-invokes the Each builder (the
+// list re-mounts with the axis read fresh).
+fn one_list() -> opaque {
+    let fresh = rs_list_new();
+    rs_list_push(fresh, "list");
+    return fresh;
+}
+
+// The Each branch: one LazyList keyed by the current axis.
+fn list_of(_i: u64, _s: str) -> opaque {
+    let axis = stf_take(K_AXIS);
+    stf_put(K_AXIS, axis);
+    let count = stf_take(K_COUNT);
+    stf_put(K_COUNT, count);
+    if (rs_get_bool(axis as u64)) {
+        return LazyList()
+            .item_builder(item)
+            .count(count as u64)
+            .overscan(2)
+            .axis(AXIS_VERTICAL)
+            .query_key("var-sizes-v")
+            .build();
+    }
+    return LazyList()
+        .item_builder(item)
+        .count(count as u64)
+        .overscan(2)
+        .axis(AXIS_HORIZONTAL)
+        .query_key("var-sizes-h")
+        .build();
+}
+
+// The deterministic main-axis extent: the boa sine-hash → [30, 180].
+fn main_size(i: u64) -> f64 {
+    let x = math_sin(i as f64 * 12.9898) * 43758.5453;
+    return 30.0 + frac_pos(x) * 151.0;
+}
+
+// x - floor(x), floored by hand (no floor row): negatives wrap positive.
+fn frac_pos(x: f64) -> f64 {
+    let mut fl = x as i64 as f64;
+    if (x < 0.0 && fl > x) {
+        fl = fl - 1.0;
+    }
+    return x - fl;
+}
+
+// The inner bar's cross size — the "different widths" proof.
+fn cross_size(i: u64) -> f64 {
+    return 60.0 + ((i * 37) % 200) as f64;
+}
+
+// Odd rows carry the lighter zebra fill (boa: #0f172a / #1e293b).
+fn zebra_fill(i: u64) -> u64 {
+    if (i % 2 == 1) {
+        return ZEBRA_B;
+    }
+    return ZEBRA_A;
+}
+
+// One item — a vertical row or a horizontal column, per the live axis.
+fn item(i: u64) -> opaque {
+    let main = main_size(i);
+    let cross = cross_size(i);
+    let bar_color = pal(BAR_HUES, (i * 5) % 12);
+    let zebra = zebra_fill(i);
+    let axis = stf_take(K_AXIS);
+    stf_put(K_AXIS, axis);
+    if (rs_get_bool(axis as u64)) {
+        return vertical_item(i, main, cross, bar_color, zebra);
+    }
+    return horizontal_item(i, main, cross, bar_color, zebra);
+}
+
+// The i'th '|'-separated slot of a data string.
+fn slot(data: str, i: u64) -> str {
+    let n = data.len();
+    let mut start = 0;
+    let mut k = 0;
+    let mut cur: u64 = 0;
+    while (k <= n) {
+        if (k == n || data.code_at(k) == 124) {
+            if (cur == i) {
+                return data.slice(start, k);
+            }
+            cur = cur + 1;
+            start = k + 1;
+        }
+        k = k + 1;
+    }
+    return "";
+}
+
+// The i'th "r,g,b" slot packed as 0xRRGGBBAA.
+fn pal(data: str, i: u64) -> u64 {
+    let rgb = slot(data, i);
+    let n = rgb.len();
+    let a = idx_of(rgb, 0, 44);
+    let b = idx_of(rgb, a + 1, 44);
+    let r = str_parse_f64(rgb.slice(0, a));
+    let g = str_parse_f64(rgb.slice(a + 1, b));
+    let bl = str_parse_f64(rgb.slice(b + 1, n));
+    return r as u64 * 16777216 + g as u64 * 65536 + bl as u64 * 256 + 255;
+}
+
+// The first ',' from `from` (the r,g,b splitter).
+fn idx_of(s: str, from: i32, c: u32) -> i32 {
+    let n = s.len();
+    let mut k = from;
+    while (k < n) {
+        if (s.code_at(k) == c) {
+            return k;
+        }
+        k = k + 1;
+    }
+    return -1;
+}
+
+// Vertical row: full-width (clamped), height = main; the inner bar of
+// width `cross` + the #i/h/bar label.
+fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> opaque {
+    let mut bar_h = main - 16.0;
+    if (bar_h > 26.0) {
+        bar_h = 26.0;
+    }
+    let label = f"#{i}  h={main as u64}  bar={cross as u64}";
+    let bar = Container().width_height(cross, bar_h).radius(4.0).color(bar_color).build();
+    let line = Row()
+        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(bar)
+        .child(SizedBox(10.0, 0.0).build())
+        .child(Text().text(label).font_size(11.0).color(LABEL).build())
+        .build();
+    return Container()
+        .height(main)
+        .color(zebra)
+        .padding(8.0)
+        .alignment(ALIGN_CENTER_LEFT)
+        .query_key("var-sizes-item")
+        .child(line)
+        .build();
+}
+
+// Horizontal column: full-height (clamped), width = main; the inner bar
+// of height `cross` + the #i / w= labels.
+fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> opaque {
+    let mut bar_w = main - 16.0;
+    if (bar_w > 26.0) {
+        bar_w = 26.0;
+    }
+    let count_label = f"#{i}";
+    let width_label = f"w={main as u64}";
+    let bar = Container().width_height(bar_w, cross).radius(4.0).color(bar_color).build();
+    let line = Column()
+        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .child(bar)
+        .child(SizedBox(0.0, 8.0).build())
+        .child(Text().text(count_label).font_size(11.0).color(LABEL).build())
+        .child(Text().text(width_label).font_size(10.0).color(LABEL_FAINT).build())
+        .build();
+    return Container()
+        .width(main)
+        .color(zebra)
+        .padding(8.0)
+        .alignment(ALIGN_TOP_CENTER)
+        .child(line)
+        .build();
+}
+
+// The flip: toggle the axis atom + rewrite the one-item list (the Each
+// re-mounts the LazyList with the fresh axis).
+fn b_flip(axis: u64, items: u64, _n: f64) {
+    rs_set_bool(axis, !rs_get_bool(axis));
+    rs_set_value(items, one_list());
 }

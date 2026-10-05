@@ -1,23 +1,110 @@
-// password-input: an obscure-toggle input — typing renders bullets and a
-// reveal button flips the obscure flag (a rebuild).
-use tur::{ mount, rs_get_bool, rs_set_bool, rs_source_bool, tctrl_new, undo_new };
-use tur_kit::{ Column, Container, Input, PointerInteract, Text };
+// password-input: the boa design — a plain Input, a password Input, and
+// a live `value: "…"` readout of the password controller's true text.
+// Typing renders bullets in the password field while the controller keeps
+// the real value (the on-input rail feeds the readout). A seeded
+// "hunter2" boots the field; the reveal pill flips the obscure flag via
+// obscure_bound (the reactive mask — no rebuild) and rebuilds its own
+// label through a Condition on the same atom.
+//
+// Phase-2 note: this case is typed in the playground VIEWER too — the
+// va-child keyboard rail forwards real keys into the focused child input.
+use tur::{ CROSS_ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_POINTER, mount, rs_get_bool,
+    rs_set_bool, rs_set_str, rs_source_bool, rs_source_str, st_put, st_take, stf_put, tctrl_new,
+    tctrl_set_text, tctrl_text, undo_new };
+use tur_kit::{ Column, Condition, Container, Input, MouseRegion, PointerInteract, Row, SizedBox,
+    Text };
 
+
+let K_OBSCURE: u64 = 1;
+let K_CTRL: u64 = 2;
+let K_VALUE: u64 = 4;
 
 entry fn start() -> u64 {
     let obscure = rs_source_bool(true);
+    stf_put(K_OBSCURE, obscure as f64);
+    let value = rs_source_str("value: \"hunter2\"");
+    stf_put(K_VALUE, value as f64);
     let ctrl = tctrl_new();
+    tctrl_set_text(ctrl, "hunter2");
+    st_put(K_CTRL, ctrl);
     let undo = undo_new();
 
-    let mut col = Column();
-    let input = Input().controller(ctrl).undo(undo).placeholder("password").width_height(220.0, 32.0).obscure(true).query_key("password-input").build();
-    col.child(input);
-    col.child(PointerInteract().ids(obscure, obscure).on_tap(b_toggle).child(Text().text("reveal").build()).build());
-    let root = Container().child(col.build());
-    mount(root.build());
+    let plain = Input()
+        .controller(tctrl_new())
+        .undo(undo_new())
+        .placeholder("Plain")
+        .font_size(16.0)
+        .width_height(240.0, 38.0)
+        .query_key("plain")
+        .build();
+    let password = Input()
+        .controller(ctrl)
+        .undo(undo)
+        .placeholder("Password")
+        .obscure_bound(obscure)
+        .on_input(on_value, 0)
+        .font_size(16.0)
+        .width_height(240.0, 38.0)
+        .query_key("password")
+        .build();
+
+    let col = Column()
+        .cross_alignment(CROSS_ALIGN_START)
+        .child(Text().text("Password Input").font_size(18.0).color(0x0F172AFFu64).query_key("password-title").build())
+        .child(SizedBox(0.0, 12.0).build())
+        .child(plain)
+        .child(SizedBox(0.0, 12.0).build())
+        .child(password)
+        .child(SizedBox(0.0, 12.0).build())
+        .child(
+            Row()
+                .cross_alignment(CROSS_ALIGN_CENTER)
+                .child(Text().text_bound(value).font_size(12.0).color(0x64748BFFu64).query_key("password-value").build())
+                .child(SizedBox(12.0, 0.0).build())
+                .child(Condition(obscure).then_build(fn () -> View { return reveal_pill("Show"); }).else_build(fn () -> View { return reveal_pill("Hide"); }).build())
+                .build(),
+        )
+        .build();
+
+    mount(Container().padding(32.0).child(col).build());
     return obscure;
 }
 
-fn b_toggle(obscure: u64, _b: u64, _n: f64) {
-    rs_set_bool(obscure, !rs_get_bool(obscure));
+// The reveal pill — Show while masked, Hide while revealed. (No ids: the
+// tap handler reads the atom from the stash.)
+fn reveal_pill(label: str) -> opaque {
+    let face = Container()
+        .padding(6.0)
+        .radius(7.0)
+        .color(0xF1F5F9FFu64)
+        .child(Text().text(label).font_size(11.0).color(0x334155FFu64).build())
+        .build();
+    return MouseRegion()
+        .cursor(CURSOR_POINTER)
+        .child(
+            PointerInteract()
+                .on_tap(b_toggle)
+                .query_key("password-reveal")
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// The on-input rail: the controller's fresh true text lands on the
+// readout atom, wrapped as value: "…".
+fn on_value(_id: u64, _b: u64, _n: f64) {
+    let value = stf_take(K_VALUE);
+    stf_put(K_VALUE, value);
+    let ctrl = st_take(K_CTRL);
+    st_put(K_CTRL, ctrl);
+    let text = tctrl_text(ctrl);
+    let q: str = "\"";
+    rs_set_str(value as u64, f"value: {q}{text}{q}");
+}
+
+fn b_toggle(_a: u64, _b: u64, _n: f64) {
+    let obscure = stf_take(K_OBSCURE);
+    stf_put(K_OBSCURE, obscure);
+    rs_set_bool(obscure as u64, !rs_get_bool(obscure as u64));
 }

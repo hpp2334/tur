@@ -1,38 +1,162 @@
-// implicit-animations: animated style channels driven by one shared
-// controller (the Animated* twin) — the toggle flips the target and
-// restarts the controller (the ImplicitlyAnimatedWidget retarget).
-use tur::{ anim_forward, anim_reverse, mount, rs_get_bool, rs_set_bool, rs_source_bool, rs_source_f64, st_put, st_take, stf_put };
-use tur_kit::{ Column, Container, PointerInteract, Text };
-use tur_anim_kit::{ anim_ctrl };
+// implicit-animations: the Animated* twin — one shared controller eases
+// 0..1 and the a_tick fn maps the eased progress into the box's animated
+// channels (width_bound 100→200, height_bound 40→80, color_bound
+// sky-blue→indigo, radius_bound 12→40, the slide left_bound 30→160 and
+// the label's opacity 0.45→1.0). The toggle flips the `expanded` atom and
+// retargets the controller (forward/reverse) — the
+// ImplicitlyAnimatedWidget retarget, case-side.
+//
+// Pure kit: every channel is a bound prop over the progress the tick
+// writes — the animation rows end-to-end with no per-channel controllers.
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
+    anim_reverse, color_tween_lerp, mount, rs_get_bool, rs_set_bool, rs_set_brush, rs_set_f64,
+    rs_source_bool, rs_source_f64, st_put, st_take, stf_put, stf_take, tween_lerp };
+use tur_kit::{ Column, Condition, Container, Expanded, PointerInteract, Positioned, Row, SizedBox,
+    Stack, Text };
+use tur_anim_kit::{ Opacity, anim_ctrl };
 
 
 let K_CTRL: u64 = 1;
 let K_EXPANDED: u64 = 2;
+let K_WIDTH: u64 = 3;
+let K_HEIGHT: u64 = 4;
+let K_COLOR: u64 = 5;
+let K_RADIUS: u64 = 6;
+let K_LEFT: u64 = 7;
+let K_FADE: u64 = 8;
+
+// The tween endpoints (the boa card, retargeted compact ↔ expanded).
+let W_MIN: f64 = 100.0;
+let W_MAX: f64 = 200.0;
+let H_MIN: f64 = 40.0;
+let H_MAX: f64 = 80.0;
+let R_MIN: f64 = 12.0;
+let R_MAX: f64 = 40.0;
+let X_MIN: f64 = 30.0;
+let X_MAX: f64 = 160.0;
+let A_MIN: f64 = 0.45;
+let A_MAX: f64 = 1.0;
+let BLUE: u64 = 0x0EA5E9FFu64; // compact — the sky-blue state
+let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
 
 entry fn start() -> u64 {
     let expanded = rs_source_bool(false);
     stf_put(K_EXPANDED, expanded as f64);
     let progress = rs_source_f64();
-    let ctrl = anim_ctrl(progress, 300.0, "easeInOut", 0, a_tick, a_end);
+    let width = rs_source_f64();
+    let height = rs_source_f64();
+    let color = rs_source_f64();
+    let radius = rs_source_f64();
+    let left = rs_source_f64();
+    let fade = rs_source_f64();
+
+    // Seed the channels at the compact state (progress 0).
+    rs_set_f64(width, W_MIN);
+    rs_set_f64(height, H_MIN);
+    rs_set_f64(radius, R_MIN);
+    rs_set_f64(left, X_MIN);
+    rs_set_f64(fade, A_MIN);
+    rs_set_brush(color, BLUE);
+
+    stf_put(K_WIDTH, width as f64);
+    stf_put(K_HEIGHT, height as f64);
+    stf_put(K_COLOR, color as f64);
+    stf_put(K_RADIUS, radius as f64);
+    stf_put(K_LEFT, left as f64);
+    stf_put(K_FADE, fade as f64);
+    let ctrl = anim_ctrl(progress, 600.0, "easeInOut", 1, a_tick, a_end);
     st_put(K_CTRL, ctrl);
 
-    let mut col = Column();
-    let box_b = Container().width_height(100.0, 40.0).color(0x6366F1FFu64).query_key("animated-box");
-    col.child(PointerInteract().ids(expanded, expanded).on_tap(b_toggle).child(box_b.build()).build());
-    col.child(Text().text("toggle me").build());
-    mount(col.build());
+    // The Compact↔Expanded label rides the state atom (a Condition swap).
+    let label = Condition(expanded)
+        .then_build(fn () -> View { return Text().text("Expanded").font_size(18.0).color(0xFFFFFFFFu64).build(); })
+        .else_build(fn () -> View { return Text().text("Compact").font_size(18.0).color(0xFFFFFFFFu64).build(); })
+        .build();
+
+    // The animated box: every prop is a bound atom the tick writes.
+    let box_inner = Container()
+        .width_bound(width)
+        .height_bound(height)
+        .color_bound(color)
+        .radius_bound(radius)
+        .alignment(ALIGN_CENTER)
+        .query_key("animated-box")
+        .child(label)
+        .build();
+    let faded = Opacity(1.0).bound(fade).child(box_inner).build();
+
+    // The slide channel: the box glides left ↔ right inside the canvas
+    // (the boa AnimatedPositioned).
+    let card = Stack()
+        .child(SizedBox(340.0, 220.0).build())
+        .child(Positioned().left_bound(left).top(30.0).child(faded).build())
+        .build();
+
+    let toggle = PointerInteract()
+        .ids(expanded, expanded)
+        .on_tap(b_toggle)
+        .query_key("implicit-toggle")
+        .child(
+            Container()
+                .padding(10.0)
+                .radius(8.0)
+                .color(0x1E293BFFu64)
+                .child(
+                    Condition(expanded)
+                        .then_build(fn () -> View { return Text().text("◀ Compact").font_size(12.0).color(0xE2E8F0FFu64).build(); })
+                        .else_build(fn () -> View { return Text().text("Expand ▶").font_size(12.0).color(0xE2E8F0FFu64).build(); })
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+
+    let col = Column()
+        .main_alignment(MAIN_ALIGN_CENTER)
+        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_axis_size(MAIN_SIZE_MIN)
+        .child(Text().text("Implicit Animations").font_size(16.0).color(0x0F172AFFu64).query_key("implicit-title").build())
+        .child(SizedBox(0.0, 4.0).build())
+        .child(Text().text("width · height · color · radius · slide · fade — one controller").font_size(10.0).color(0x64748BFFu64).build())
+        .child(SizedBox(0.0, 24.0).build())
+        .child(card)
+        .child(SizedBox(0.0, 24.0).build())
+        .child(Row().main_axis_size(MAIN_SIZE_MIN).child(toggle).build())
+        .build();
+
+    mount(Expanded().flex(1.0).child(Container().color(0xF8FAFCFFu64).child(col).build()).build());
     return expanded;
 }
 
-fn a_tick(_atom: u64, _t: f64) {
+// The tick: eased progress → every animated channel.
+fn a_tick(_atom: u64, t: f64) {
+    let width = stf_take(K_WIDTH) as u64;
+    stf_put(K_WIDTH, width as f64);
+    rs_set_f64(width, tween_lerp(W_MIN, W_MAX, t));
+    let height = stf_take(K_HEIGHT) as u64;
+    stf_put(K_HEIGHT, height as f64);
+    rs_set_f64(height, tween_lerp(H_MIN, H_MAX, t));
+    let radius = stf_take(K_RADIUS) as u64;
+    stf_put(K_RADIUS, radius as f64);
+    rs_set_f64(radius, tween_lerp(R_MIN, R_MAX, t));
+    let left = stf_take(K_LEFT) as u64;
+    stf_put(K_LEFT, left as f64);
+    rs_set_f64(left, tween_lerp(X_MIN, X_MAX, t));
+    let fade = stf_take(K_FADE) as u64;
+    stf_put(K_FADE, fade as f64);
+    rs_set_f64(fade, tween_lerp(A_MIN, A_MAX, t));
+    let color = stf_take(K_COLOR) as u64;
+    stf_put(K_COLOR, color as f64);
+    rs_set_brush(color, color_tween_lerp(BLUE, INDIGO, t));
 }
 
 fn a_end(_atom: u64, _v: f64) {
 }
 
+// The toggle: flip the state atom, then retarget the shared controller —
+// forward plays toward the expanded state, reverse back to compact.
 fn b_toggle(expanded: u64, _b: u64, _n: f64) {
     rs_set_bool(expanded, !rs_get_bool(expanded));
-    // Retarget: reverse or forward the shared controller.
     let ctrl = st_take(K_CTRL);
     if (rs_get_bool(expanded)) {
         anim_forward(ctrl);

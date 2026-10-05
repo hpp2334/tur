@@ -1,40 +1,100 @@
-// table-basic: shared column geometry with a header row, stripes and
-// dividers (the Table widget's corpus twin, authored from flex rows).
-use tur::{ mount };
-use tur_kit::{ Column, Container, Row, SizedBox, Text };
+// table-basic: the Table element showcase (the boa design) — shared
+// column geometry (a fixed 150px name column, a flex-1 notes column, a
+// flex-2 min-120 distance column) over 6 planets, a
+// PLANET/NOTES/DISTANCE header, alternating stripes and notes that WRAP
+// in the flex column.
+//
+// Sanctioned-surface note: the kit's Table class exposes no stripe/divider
+// rows, so the stripes are cell-painted (odd rows tint their cells) — the
+// same look, authored case-side. Row extents stay intrinsic so the
+// wrapped notes are never clipped. (Module lets are literals-only in this
+// build, so the planet data rides pipe-joined strings.)
+use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+use tur_kit::{ Container, Expanded, Table, TableCols, Text };
 
 
-fn header_cell(label: str, w: f64) -> opaque {
-    let b = Container().width_height(w, 0.0).padding(8.0).child(Text().text(label).font_size(12.0).build());
-    return b.build();
-}
+// The planet data (pipe-joined slots — the row builder indexes by row).
+let P_NAME: str = "Mercury|Venus|Earth|Mars|Jupiter|Saturn";
+let P_NOTES: str = "Smallest planet, closest to the Sun|Hottest surface in the solar system|The only known home of life|The red planet, home to Olympus Mons|Largest planet, a gas giant|Famous for its ring system";
+let P_DIST: str = "0.39 AU|0.72 AU|1.00 AU|1.52 AU|5.20 AU|9.58 AU";
 
-fn cell(label: str, w: f64) -> opaque {
-    let b = Container().width_height(w, 0.0).padding(8.0).child(Text().text(label).font_size(14.0).build());
-    return b.build();
-}
-
-fn header() -> opaque {
-    let r = Row()
-        .child(header_cell("PLANET", 150.0))
-        .child(header_cell("NOTES", 100.0))
-        .child(header_cell("DISTANCE", 100.0));
-    return r.build();
-}
-
-fn planet(name: str, notes: str, distance: str) -> opaque {
-    let r = Row().child(cell(name, 150.0)).child(cell(notes, 100.0)).child(cell(distance, 100.0));
-    let wrapped = Container().width_height(0.0, 36.0).child(r.build());
-    return wrapped.build();
-}
+// The boa palette (dark slate table on the #0b1220 frame).
+let HEADER_FG: u64 = 0x94A3B8FFu64;
+let CELL_FG: u64 = 0xE2E8F0FFu64;
+let STRIPE: u64 = 0x1E293BFFu64;
 
 entry fn start() {
-    let table = Column()
-        .child(header())
-        .child(planet("Mercury", "Smallest planet", "0.39 AU"))
-        .child(planet("Venus", "Hottest surface", "0.72 AU"))
-        .child(planet("Earth", "Home of life", "1.00 AU"))
-        .child(planet("Mars", "The red planet", "1.52 AU"));
-    let frame = Container().color(0x0B1220FF).child(table.build());
-    mount(SizedBox(400.0, 240.0).child(frame.build()).build());
+    let rows = rs_list_new();
+    let mut i = 0;
+    while (i < 6) {
+        rs_list_push(rows, f"p{i}");
+        i = i + 1;
+    }
+    let rows_atom = rs_source_value(rows);
+
+    // Per-column geometry: fixed 150 / flex 1 / flex 2 (min 120) — the
+    // widths resolve against the table width once, and the header + every
+    // row lay their cells on the same boundaries.
+    let cols = TableCols().fixed(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
+
+    let table = Table()
+        .columns(cols)
+        .rows_atom(rows_atom)
+        .header_builder(header_cell)
+        .row_builder(planet_cell)
+        .query_key("table-basic")
+        .build();
+
+    mount(Expanded().flex(1.0).child(Container().color(0x0B1220FFu64).child(table).build()).build());
+}
+
+// The i'th '|'-separated slot of a data string.
+fn slot(data: str, i: u64) -> str {
+    let n = data.len();
+    let mut start = 0;
+    let mut k = 0;
+    let mut cur: u64 = 0;
+    while (k <= n) {
+        if (k == n || data.code_at(k) == 124) {
+            if (cur == i) {
+                return data.slice(start, k);
+            }
+            cur = cur + 1;
+            start = k + 1;
+        }
+        k = k + 1;
+    }
+    return "";
+}
+
+// One header cell (called once per column): a padded muted label.
+fn header_cell(col: u64) -> opaque {
+    let mut label = "PLANET";
+    if (col == 1) {
+        label = "NOTES";
+    } else if (col == 2) {
+        label = "DISTANCE";
+    }
+    return Container()
+        .padding(8.0)
+        .child(Text().text(label).font_size(12.0).color(HEADER_FG).build())
+        .build();
+}
+
+// One body cell (called per (row, col)): the striped padded field. Odd
+// rows tint their cell — the case-side stripe.
+fn planet_cell(row: u64, col: u64) -> opaque {
+    let mut text = "";
+    if (col == 0) {
+        text = slot(P_NAME, row);
+    } else if (col == 1) {
+        text = slot(P_NOTES, row);
+    } else {
+        text = slot(P_DIST, row);
+    }
+    let label = Text().text(text).font_size(14.0).color(CELL_FG).build();
+    if (row % 2 == 1) {
+        return Container().padding(8.0).color(STRIPE).child(label).build();
+    }
+    return Container().padding(8.0).child(label).build();
 }

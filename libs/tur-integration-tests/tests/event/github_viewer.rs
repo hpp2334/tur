@@ -78,7 +78,11 @@ fn github_viewer_shows_the_error_state_when_offline() {
         app.query_text(&["gh-err"])
             .is_some_and(|t| t.contains("offline"))
     });
-    assert!(ok, "the offline banner should appear: {:?}", app.query_text(&["gh-err"]));
+    assert!(
+        ok,
+        "the offline banner should appear: {:?}",
+        app.query_text(&["gh-err"])
+    );
     // The failure falls back to the landing (the form is still up).
     assert!(
         app.query_element(&["gh-browse"]).is_some(),
@@ -89,7 +93,13 @@ fn github_viewer_shows_the_error_state_when_offline() {
 #[test]
 fn github_viewer_rejects_a_malformed_draft() {
     let mut app = build();
-    // Browse with an empty draft — the inline validation error.
+    // The landing boots with the draft pre-filled — clear it first (click
+    // into the field, select all, delete), then Browse with an empty
+    // draft: the inline validation error.
+    click_qk(&mut app, &["gh-input"]);
+    app.send_key_with_modifiers("a", false, true);
+    app.send_key("Backspace");
+    app.wait_for_timeout(Duration::ZERO);
     click_qk(&mut app, &["gh-browse"]);
     let ok = wait_for(&app, || {
         app.query_text(&["gh-err"])
@@ -113,7 +123,11 @@ fn github_viewer_opens_a_repo_into_the_explorer() {
     let ok = wait_for(&app, || {
         app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
     });
-    assert!(ok, "the explorer should open: {:?}", app.query_text(&["gh-crumb"]));
+    assert!(
+        ok,
+        "the explorer should open: {:?}",
+        app.query_text(&["gh-crumb"])
+    );
     assert_eq!(
         app.query_text(&["gh-stats"]).as_deref(),
         Some("TypeScript · stars 234.0k · forks 48.0k · issues 1.0k"),
@@ -153,7 +167,8 @@ fn github_viewer_descends_into_a_directory() {
 #[test]
 fn github_viewer_selects_a_file() {
     let mut app = build();
-    let files_only = "[{\"name\":\"README.md\",\"path\":\"README.md\",\"size\":2739,\"type\":\"file\"}]";
+    let files_only =
+        "[{\"name\":\"README.md\",\"path\":\"README.md\",\"size\":2739,\"type\":\"file\"}]";
     app.set_http_responses(vec![
         text_response(200, META),
         text_response(200, files_only),

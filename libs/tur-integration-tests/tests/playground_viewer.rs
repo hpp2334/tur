@@ -204,14 +204,20 @@ fn playground_boot_auto_selects_counter() {
         app.query_text(&["app-state"])
     );
     assert!(
-        app.query_text(&["viewer", "hint"]).is_none_or(|h| h.is_empty()),
+        app.query_text(&["viewer", "hint"])
+            .is_none_or(|h| h.is_empty()),
         "the FallbackView hint dropped once the boot case ran"
     );
-    let id = app.query_element(&["viewer"]).expect("the viewer host node");
+    let id = app
+        .query_element(&["viewer"])
+        .expect("the viewer host node");
     let node = app
         .dev_tool_get_element(id)
         .expect("the viewer host in the dev-tool tree");
-    assert_eq!(node.name, "tur_virtual_app", "the viewer hosts a VirtualAppView");
+    assert_eq!(
+        node.name, "tur_virtual_app",
+        "the viewer hosts a VirtualAppView"
+    );
     assert!(
         node.size.0 > 0.0 && node.size.1 > 0.0,
         "the viewer pane laid out: {:?}",
@@ -239,15 +245,25 @@ fn playground_chrome_metrics_match_the_boa_reference() {
     // Toolbar: 48px band; the status bar: ~20px + hairlines (22 with the
     // inside border); the sidebar: the boa 200 seed.
     let height = |qk: &[&str]| -> f64 {
-        let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
+        let id = app
+            .query_element(qk)
+            .unwrap_or_else(|| panic!("{qk:?} not found"));
         let b = app
             .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
             .unwrap();
         b.bottom - b.top
     };
     assert_eq!(height(&["toolbar"]), 48.0, "the toolbar band");
-    assert_eq!(height(&["status-bar"]), 22.0, "the status bar band (20 + inside border)");
-    assert_eq!(qk_width(&app, &["sidebar"]), Some(200.0), "the sidebar seed");
+    assert_eq!(
+        height(&["status-bar"]),
+        22.0,
+        "the status bar band (20 + inside border)"
+    );
+    assert_eq!(
+        qk_width(&app, &["sidebar"]),
+        Some(200.0),
+        "the sidebar seed"
+    );
 
     // The toolbar's auto caption + the sidebar's CASES header (the count
     // mirrors the generated registry = the showcase manifest).
@@ -307,7 +323,8 @@ fn playground_viewer_runs_counter_to_ready() {
     let state_atom = app.rut_start_answer();
 
     // Run the `counter` case through the probe entry.
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(
         wait_for_state(&app, "ready"),
         "the child never reached ready: {:?}",
@@ -332,7 +349,9 @@ fn playground_viewer_runs_counter_to_ready() {
             .is_none_or(|h| h.is_empty()),
         "the FallbackView hint was dropped once ready"
     );
-    let id = app.query_element(&["viewer"]).expect("the viewer host node");
+    let id = app
+        .query_element(&["viewer"])
+        .expect("the viewer host node");
     let node = app.dev_tool_get_element(id).unwrap();
     assert_eq!(node.name, "tur_virtual_app");
     assert!(
@@ -389,7 +408,8 @@ fn playground_run_swaps_controllers_destroy_then_spawn() {
     // Second run via the probe: the swap destroys the first child and
     // spawns a fresh one under a new controller; the new child must reach
     // ready on its own rail.
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(
         wait_for_state(&app, "ready"),
         "the swapped-in child never reached ready: {:?}",
@@ -402,7 +422,8 @@ fn playground_run_button_reruns_the_case() {
     let mut app = playground_app();
 
     // First run via the probe entry.
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     // The Run button (the toolbar's right action cluster) re-runs the
@@ -420,7 +441,8 @@ fn playground_run_button_reruns_the_case() {
 #[test]
 fn playground_layout_tabs_switch_panes() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     // Split (the boot mode): both panes share the row.
@@ -428,7 +450,10 @@ fn playground_layout_tabs_switch_panes() {
         qk_width(&app, &["editor-pane"]).expect("the editor pane"),
         qk_width(&app, &["viewer-pane"]).expect("the viewer pane"),
     );
-    assert!(editor_w > 300.0 && viewer_w > 300.0, "split panes: {editor_w} / {viewer_w}");
+    assert!(
+        editor_w > 300.0 && viewer_w > 300.0,
+        "split panes: {editor_w} / {viewer_w}"
+    );
 
     // Edit: the viewer shells into a zero-width, hard-clipped container
     // (it stays mounted — presence unchanged, width 0) and the editor
@@ -439,7 +464,10 @@ fn playground_layout_tabs_switch_panes() {
         qk_width(&app, &["editor-pane"]).expect("the editor pane"),
         qk_width(&app, &["viewer-pane"]).expect("the viewer pane"),
     );
-    assert!(editor_w > 900.0, "the editor fills the row in edit mode: {editor_w}");
+    assert!(
+        editor_w > 900.0,
+        "the editor fills the row in edit mode: {editor_w}"
+    );
     assert_eq!(viewer_w, 0.0, "the viewer pane collapsed in edit mode");
     // The child survived the layout churn (the viewer kept its host).
     assert_eq!(
@@ -457,7 +485,10 @@ fn playground_layout_tabs_switch_panes() {
         qk_width(&app, &["viewer-pane"]).expect("the viewer pane"),
     );
     assert_eq!(editor_w, 0.0, "the editor pane collapsed in view mode");
-    assert!(viewer_w > 900.0, "the viewer fills the row in view mode: {viewer_w}");
+    assert!(
+        viewer_w > 900.0,
+        "the viewer fills the row in view mode: {viewer_w}"
+    );
 
     // Back to split.
     click_qk(&mut app, &["tab-split"]);
@@ -466,7 +497,10 @@ fn playground_layout_tabs_switch_panes() {
         qk_width(&app, &["editor-pane"]).expect("the editor pane"),
         qk_width(&app, &["viewer-pane"]).expect("the viewer pane"),
     );
-    assert!(editor_w > 300.0 && viewer_w > 300.0, "split again: {editor_w} / {viewer_w}");
+    assert!(
+        editor_w > 300.0 && viewer_w > 300.0,
+        "split again: {editor_w} / {viewer_w}"
+    );
 }
 
 /// The Edit→Split wasm trap's native scenario pin (phase 6.5): every
@@ -480,7 +514,8 @@ fn playground_layout_tabs_switch_panes() {
 #[test]
 fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     for tab in ["tab-edit", "tab-split", "tab-edit", "tab-split"] {
@@ -493,7 +528,10 @@ fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
         let node = app
             .dev_tool_get_element(app.query_element(&["viewer"]).unwrap())
             .expect("the viewer host in the dev-tool tree");
-        assert_eq!(node.name, "tur_virtual_app", "{tab}: the viewer hosts the child");
+        assert_eq!(
+            node.name, "tur_virtual_app",
+            "{tab}: the viewer hosts the child"
+        );
     }
 }
 
@@ -503,22 +541,37 @@ fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
 fn playground_reset_restores_the_original_source() {
     let mut app = playground_app();
     let original = case_source("counter");
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
-    assert_eq!(editor_text(&app), original, "the editor loaded the case source");
-    assert!(app.query_element(&["edited-pill"]).is_none(), "not edited after a clean load");
+    assert_eq!(
+        editor_text(&app),
+        original,
+        "the editor loaded the case source"
+    );
+    assert!(
+        app.query_element(&["edited-pill"]).is_none(),
+        "not edited after a clean load"
+    );
 
     // Type a keystroke: the text diverges (the edited pill appears).
     focus_editor(&mut app);
     app.send_key("x");
     app.wait_for_timeout(Duration::ZERO);
-    assert!(app.query_element(&["edited-pill"]).is_some(), "the edited pill after a keystroke");
+    assert!(
+        app.query_element(&["edited-pill"]).is_some(),
+        "the edited pill after a keystroke"
+    );
 
     // Reset: the original source returns and the case re-runs (the pill
     // clears — the compiled baseline moved back to the original).
     click_qk(&mut app, &["reset"]);
     assert!(wait_for_state(&app, "ready"));
-    assert_eq!(editor_text(&app), original, "Reset restored the case source");
+    assert_eq!(
+        editor_text(&app),
+        original,
+        "Reset restored the case source"
+    );
     assert!(
         app.query_element(&["edited-pill"]).is_none(),
         "the edited pill cleared after the reset re-ran"
@@ -530,11 +583,15 @@ fn playground_reset_restores_the_original_source() {
 #[test]
 fn playground_auto_run_respawns_after_the_debounce() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     // Auto-run is ON from boot (the boa default).
-    assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("auto-run on"));
+    assert_eq!(
+        app.query_text(&["auto-state"]).as_deref(),
+        Some("auto-run on")
+    );
 
     // A keystroke breaks the source; after the 500 ms debounce the
     // auto-run recompiles and the viewer flips to the compile error.
@@ -549,7 +606,8 @@ fn playground_auto_run_respawns_after_the_debounce() {
     // The compiled-ago clock restarted with the (failed) run attempt —
     // the label is present either way.
     assert!(
-        app.query_text(&["compiled-ago"]).is_some_and(|s| s.starts_with("compiled ")),
+        app.query_text(&["compiled-ago"])
+            .is_some_and(|s| s.starts_with("compiled ")),
         "the compiled-ago label: {:?}",
         app.query_text(&["compiled-ago"])
     );
@@ -558,21 +616,28 @@ fn playground_auto_run_respawns_after_the_debounce() {
 #[test]
 fn playground_auto_run_off_keeps_the_case_running() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     // Toggle auto-run OFF (the toolbar pill — the caption flips to the
     // "⌘S to run" hint).
     click_qk(&mut app, &["autorun"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("\u{2318}S to run"));
+    assert_eq!(
+        app.query_text(&["auto-state"]).as_deref(),
+        Some("\u{2318}S to run")
+    );
 
     // A keystroke still marks the editor edited... but never respawns:
     // the case keeps running well past the debounce window.
     focus_editor(&mut app);
     app.send_key("x");
     app.wait_for_timeout(Duration::ZERO);
-    assert!(app.query_element(&["edited-pill"]).is_some(), "the edited pill appears");
+    assert!(
+        app.query_element(&["edited-pill"]).is_some(),
+        "the edited pill appears"
+    );
     app.wait_for_timeout(Duration::from_secs(1));
     assert_eq!(
         app.query_text(&["app-state"]).as_deref(),
@@ -583,7 +648,10 @@ fn playground_auto_run_off_keeps_the_case_running() {
     // Toggle back on (the pill flips in the status bar).
     click_qk(&mut app, &["autorun"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(app.query_text(&["auto-state"]).as_deref(), Some("auto-run on"));
+    assert_eq!(
+        app.query_text(&["auto-state"]).as_deref(),
+        Some("auto-run on")
+    );
 }
 
 // ---- Phase D: syntax highlighting ----------------------------------------------
@@ -661,12 +729,9 @@ entry fn highlight(_a: u64, _b: f64) {
 
 #[test]
 fn pg_highlight_rows_color_the_controller_spans() {
-    let app = TurTestApp::new_with_extra_plugins(
-        600.0,
-        400.0,
-        vec![Box::new(TurRutPlaygroundPlugin)],
-    )
-    .unwrap();
+    let app =
+        TurTestApp::new_with_extra_plugins(600.0, 400.0, vec![Box::new(TurRutPlaygroundPlugin)])
+            .unwrap();
     app.load_rut_module(HIGHLIGHT_ROWS_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let _ = app.rut_start_answer();
@@ -682,11 +747,7 @@ fn pg_highlight_rows_color_the_controller_spans() {
         "entry fn start() {\n    let s = f\"x {s}\"; // t\n}\n",
         "the colored runs tile the source"
     );
-    let has = |text: &str, color: u64| {
-        spans
-            .iter()
-            .any(|(t, c)| t == text && *c == color)
-    };
+    let has = |text: &str, color: u64| spans.iter().any(|(t, c)| t == text && *c == color);
     assert!(has("entry", CODE_KEYWORD), "the keyword: {spans:?}");
     assert!(has("let", CODE_KEYWORD), "the keyword");
     // The f-string: the prologue + tail color as the string, the hole's
@@ -700,24 +761,36 @@ fn pg_highlight_rows_color_the_controller_spans() {
 #[test]
 fn playground_highlights_on_load_and_the_spans_survive_editing() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
     // The case-load rail highlighted the editor: keyword, string and
     // comment runs ride the controller's span tree.
     let spans = editor_spans(&app);
     let source = joined(&spans);
-    assert_eq!(source, case_source("counter"), "the runs tile the case source");
+    assert_eq!(
+        source,
+        case_source("counter"),
+        "the runs tile the case source"
+    );
     assert!(
-        spans.iter().any(|(t, c)| t == "entry" && *c == CODE_KEYWORD),
+        spans
+            .iter()
+            .any(|(t, c)| t == "entry" && *c == CODE_KEYWORD),
         "the keyword run: {spans:?}"
     );
     assert!(spans.iter().any(|(t, c)| t == "let" && *c == CODE_KEYWORD));
     assert!(
-        spans.iter().any(|(t, c)| t == "\"Count: 0\"" && *c == CODE_STRING),
-        "the string run"
+        spans
+            .iter()
+            .any(|(t, c)| t == "f\"Count: {" && *c == CODE_STRING),
+        "the f-string run"
     );
-    assert!(spans.iter().any(|(_, c)| *c == CODE_COMMENT), "a comment run");
+    assert!(
+        spans.iter().any(|(_, c)| *c == CODE_COMMENT),
+        "a comment run"
+    );
 
     // Auto-run off: the only runs below are the explicit ones.
     click_qk(&mut app, &["autorun"]);
@@ -730,7 +803,11 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
     app.send_key("x");
     app.wait_for_timeout(Duration::ZERO);
     let edited = editor_spans(&app);
-    assert_eq!(joined(&edited).len(), source.len() + 1, "the keystroke landed");
+    assert_eq!(
+        joined(&edited).len(),
+        source.len() + 1,
+        "the keystroke landed"
+    );
     assert!(
         edited.iter().any(|(_, c)| *c == CODE_KEYWORD),
         "the keyword runs survived the keystroke"
@@ -739,7 +816,10 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
         edited.iter().any(|(_, c)| *c == CODE_COMMENT),
         "the comment runs survived the keystroke"
     );
-    assert!(edited.len() > 4, "the span tree did not collapse: {edited:?}");
+    assert!(
+        edited.len() > 4,
+        "the span tree did not collapse: {edited:?}"
+    );
 
     // Undo the keystroke (Backspace deletes left of the caret).
     app.send_key("Backspace");
@@ -752,9 +832,17 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
     assert!(wait_for_state(&app, "ready"));
     let rerun = editor_spans(&app);
     assert_eq!(joined(&rerun), source, "the run restored the exact source");
-    assert!(rerun.iter().any(|(t, c)| t == "entry" && *c == CODE_KEYWORD));
+    assert!(
+        rerun
+            .iter()
+            .any(|(t, c)| t == "entry" && *c == CODE_KEYWORD)
+    );
     assert!(rerun.iter().any(|(_, c)| *c == CODE_COMMENT));
-    assert!(rerun.iter().any(|(t, c)| t == "\"Count: 0\"" && *c == CODE_STRING));
+    assert!(
+        rerun
+            .iter()
+            .any(|(t, c)| t == "f\"Count: {" && *c == CODE_STRING)
+    );
 }
 
 // ---- Phase C: the `input_on_input` row (native pin) ----------------------------
@@ -795,7 +883,11 @@ fn input_on_input_row_fires_the_edit_intent() {
     app.load_rut_module(INPUT_ON_INPUT_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let _text_atom = app.rut_start_answer();
-    assert_eq!(app.query_text(&["echo"]).as_deref(), Some("cold"), "the pre-edit echo");
+    assert_eq!(
+        app.query_text(&["echo"]).as_deref(),
+        Some("cold"),
+        "the pre-edit echo"
+    );
 
     // Focus the input and type: the intent fires with the row's id.
     let container_id = app.query_element(&["input"]).expect("the input");
@@ -879,7 +971,8 @@ fn playground_select_paints_the_selected_row() {
 
     // Select via the probe: the selection atom moves, the toolbar's case
     // name follows, and the selected row's node is addressable.
-    app.call_rut_entry("select", case_index("counter"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("counter"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
     assert_eq!(
         app.query_text(&["case-name"]).as_deref(),
@@ -893,7 +986,8 @@ fn playground_select_paints_the_selected_row() {
 
     // Re-selecting another row keeps every rail consistent (the old row's
     // paint drops — the brush sweep in `case_tap`).
-    app.call_rut_entry("select", case_index("todolist"), 0.0).unwrap();
+    app.call_rut_entry("select", case_index("todolist"), 0.0)
+        .unwrap();
     assert!(wait_for_state(&app, "ready"));
     assert_eq!(app.query_text(&["case-name"]).as_deref(), Some("todolist"));
 }
@@ -941,7 +1035,10 @@ fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     app.pointer_up(dx + 100.0, dy);
     app.wait_for_timeout(Duration::ZERO);
     let w1 = qk_width(&app, &["sidebar"]).expect("the sidebar");
-    assert!((w1 - 300.0).abs() < 2.0, "the drag moved the width 200→{w1}");
+    assert!(
+        (w1 - 300.0).abs() < 2.0,
+        "the drag moved the width 200→{w1}"
+    );
 
     // Post-release moves over the strip must NOT resize (the drag flag
     // gates `div_move`).
@@ -949,7 +1046,10 @@ fn playground_divider_drag_resizes_and_clamps_the_sidebar() {
     app.pointer_move(dx + 40.0, dy);
     app.wait_for_timeout(Duration::ZERO);
     let w2 = qk_width(&app, &["sidebar"]).expect("the sidebar");
-    assert!((w2 - w1).abs() < 0.5, "a hover move after release is inert: {w1}→{w2}");
+    assert!(
+        (w2 - w1).abs() < 0.5,
+        "a hover move after release is inert: {w1}→{w2}"
+    );
 
     // Clamp high: a huge drag pins at 720.
     let (dx, dy) = divider_center(&app);
@@ -1025,8 +1125,14 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
     app.wait_for_timeout(Duration::ZERO);
     let editor_w1 = qk_width(&app, &["editor-pane"]).expect("the editor pane");
     let viewer_w1 = qk_width(&app, &["viewer-pane"]).expect("the viewer pane");
-    assert!((editor_w1 - 720.0).abs() < 2.0, "the drag moved the editor 600→{editor_w1}");
-    assert!((viewer_w0 - viewer_w1 - 120.0).abs() < 3.0, "the viewer gave the pixels back");
+    assert!(
+        (editor_w1 - 720.0).abs() < 2.0,
+        "the drag moved the editor 600→{editor_w1}"
+    );
+    assert!(
+        (viewer_w0 - viewer_w1 - 120.0).abs() < 3.0,
+        "the viewer gave the pixels back"
+    );
 
     // Clamp high: a huge drag pins the editor at 900.
     let (dx, dy) = div2_center(&app);
@@ -1038,7 +1144,11 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
     }
     app.pointer_up(dx + 700.0, dy);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(qk_width(&app, &["editor-pane"]), Some(900.0), "the upper clamp");
+    assert_eq!(
+        qk_width(&app, &["editor-pane"]),
+        Some(900.0),
+        "the upper clamp"
+    );
 
     // Clamp low: a huge leftward drag pins at 360.
     let (dx, dy) = div2_center(&app);
@@ -1050,19 +1160,32 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
     }
     app.pointer_up(dx - 1200.0, dy);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(qk_width(&app, &["editor-pane"]), Some(360.0), "the lower clamp");
+    assert_eq!(
+        qk_width(&app, &["editor-pane"]),
+        Some(360.0),
+        "the lower clamp"
+    );
 
     // The divider hides outside split mode (the boa Condition): Edit shells
     // the viewer, View shells the editor — no grab strip in either.
     click_qk(&mut app, &["tab-edit"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert!(app.query_element(&["divider2"]).is_none(), "no divider2 in edit mode");
+    assert!(
+        app.query_element(&["divider2"]).is_none(),
+        "no divider2 in edit mode"
+    );
     click_qk(&mut app, &["tab-view"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert!(app.query_element(&["divider2"]).is_none(), "no divider2 in view mode");
+    assert!(
+        app.query_element(&["divider2"]).is_none(),
+        "no divider2 in view mode"
+    );
     click_qk(&mut app, &["tab-split"]);
     app.wait_for_timeout(Duration::ZERO);
-    assert!(app.query_element(&["divider2"]).is_some(), "divider2 back in split");
+    assert!(
+        app.query_element(&["divider2"]).is_some(),
+        "divider2 back in split"
+    );
 }
 
 // ---- Phase 4 (P0): comment-span metrics pin -------------------------------------
@@ -1095,12 +1218,9 @@ entry fn start() -> u64 {
 
 #[test]
 fn editor_comment_spans_keep_uniform_monospace_advances() {
-    let app = TurTestApp::new_with_extra_plugins(
-        800.0,
-        400.0,
-        vec![Box::new(TurRutPlaygroundPlugin)],
-    )
-    .unwrap();
+    let app =
+        TurTestApp::new_with_extra_plugins(800.0, 400.0, vec![Box::new(TurRutPlaygroundPlugin)])
+            .unwrap();
     app.load_rut_module(SPACING_ROWS_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let _ = app.rut_start_answer();
