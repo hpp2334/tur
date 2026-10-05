@@ -86,20 +86,22 @@ entry fn start() {{
 
 /// Boot parent + child; returns the parent app and the child facade once
 /// the child's tree has mounted (module loaded + `start` ran + first
-/// layout).
-fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>) {
+/// layout). `wait_key` is the child element the mount poll waits for.
+fn setup_with_child_src(child_src: &str, wait_key: &str) -> (TurTestApp, Rc<tur_engine::TurApp>) {
+    let wait_key = wait_key.to_string();
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.load_rut_module(&parent_module(CHILD_SRC)).unwrap();
+    app.load_rut_module(&parent_module(child_src)).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // The child compiles + boots on the virtual-pool worker (real time).
-    // Poll until its Input exists in its own tree.
+    // Poll until its wait_key element exists in its own tree.
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let children = app.app().virtual_apps();
         if let Some(child) = children.first() {
-            let mounted = futures::executor::block_on(child.with_tree(|tree, _focus| {
-                tree.query_element(&["child-input"]).is_some()
+            let key = wait_key.clone();
+            let mounted = futures::executor::block_on(child.with_tree(move |tree, _focus| {
+                tree.query_element(&[key.as_str()]).is_some()
             }))
             .unwrap_or(false);
             if mounted {
@@ -112,6 +114,10 @@ fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>) {
         );
         std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>) {
+    setup_with_child_src(CHILD_SRC, "child-input")
 }
 
 /// The focused element id on the parent's focus manager (the key-routing
@@ -226,5 +232,77 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
         child_text(&child),
         "a",
         "keys must stop reaching the child after the parent regains focus"
+    );
+}
+
+// ===========================================================================
+// Wheel forwarding — position-routed like pointer input. A `ShellEvent::
+// Wheel` over the host element must reach the CHILD (translated into
+// child-local coordinates) and scroll the child's scrollable; a wheel
+// outside the host rect must not.
+// ===========================================================================
+
+/// The child case: a ScrollView whose content (1200px in a 200px-tall
+/// host) overflows, keyed for the offset probe.
+const WHEEL_CHILD_SRC: &str = r#"
+use tur::{ AXIS_VERTICAL, mount };
+use tur_kit::{ Column, Container, ScrollView, Text };
+
+
+entry fn start() -> u64 {
+    let rows = Column();
+    let rows = rows.child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r0").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r1").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r2").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r3").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r4").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r5").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r6").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r7").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r8").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r9").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r10").font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r11").font_size(12.0).build()).build());
+    mount(ScrollView().axis(AXIS_VERTICAL).child(rows.build()).query_key("child-scroll").build());
+    return 0;
+}
+"#;
+
+/// The child scroll view's current offset (the wheel-forward readback).
+fn child_scroll_offset(child: &Rc<tur_engine::TurApp>) -> f64 {
+    futures::executor::block_on(child.with_tree(|tree, _focus| {
+        let id = tree.query_element(&["child-scroll"])?;
+        let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
+        let element = node.element.as_ref()?;
+        use tur_engine::builtin_plugins::scroll::ScrollViewElement;
+        element.cast::<ScrollViewElement>().map(|sv| sv.scroll_offset())
+    }))
+    .flatten()
+    .unwrap_or(f64::NAN)
+}
+
+#[test]
+fn va_child_wheel_over_the_host_scrolls_the_child_scrollable() {
+    let (mut app, child) = setup_with_child_src(WHEEL_CHILD_SRC, "child-scroll");
+
+    // Wheel over the host (400×200 at the parent origin) — the child-local
+    // point lands on the child's scroll view, which fills its viewport.
+    app.wheel(0.0, 150.0, 200.0, 100.0);
+    let scrolled = app.wait_for(|_| child_scroll_offset(&child) > 100.0);
+    assert!(
+        scrolled,
+        "the wheel over the host must scroll the child's scroll view, got {}",
+        child_scroll_offset(&child)
+    );
+
+    // Wheel OUTSIDE the host (below its 200px bottom) — the parent keeps
+    // the event; the child's offset is unchanged.
+    let before = child_scroll_offset(&child);
+    app.wheel(0.0, 150.0, 200.0, 280.0);
+    app.wait_for_timeout(Duration::from_millis(32));
+    assert_eq!(
+        child_scroll_offset(&child),
+        before,
+        "a wheel outside the host rect must not reach the child"
     );
 }

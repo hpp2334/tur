@@ -683,25 +683,60 @@ impl WasmApp {
             )
             .err_to_jsval()?;
 
+        // Wheel is wired at the WINDOW level, not the canvas: the engine
+        // owns the whole viewport, but the page carries sibling DOM
+        // surfaces the event can target instead — the hidden IME
+        // `<textarea>` is a 1×1 element that FOLLOWS THE CARET, so a
+        // canvas-scoped listener silently drops every trusted wheel whose
+        // hit-test target isn't the canvas (a real user loses the notch
+        // exactly on the caret pixel; `agent-browser mouse wheel` pins the
+        // dispatch to the origin, where the textarea sits at boot). Wheel
+        // events bubble, so the window listener sees them all. Registered
+        // non-passive: Chrome treats root-target wheel listeners as
+        // passive by default, which would silence the `preventDefault`
+        // (the page has no DOM overflow, but overscroll bounce is real).
+        // Deltas are normalized to PIXELS (the engine's scroll physics are
+        // pixel-based): deltaMode LINE × 16 (the CSS default line height)
+        // and PAGE × the canvas CSS dimension — raw browser deltas are
+        // only guaranteed in pixel mode (Chrome), while Firefox reports
+        // lines (~3/notch) which would otherwise scroll 3px per notch.
         let wheel_state = state_clone.clone();
         let wheel_closure =
             Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
                 event.prevent_default();
                 let guard = wheel_state.borrow();
                 if let Some(s) = guard.as_ref() {
+                    const LINE_PX: f64 = 16.0;
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = event.client_x() as f64 - rect.left();
                     let y = event.client_y() as f64 - rect.top();
+                    // DOM_DELTA_PIXEL = 0, _LINE = 1, _PAGE = 2.
+                    let (delta_x, delta_y) = match event.delta_mode() {
+                        web_sys::WheelEvent::DOM_DELTA_LINE => {
+                            (event.delta_x() * LINE_PX, event.delta_y() * LINE_PX)
+                        }
+                        web_sys::WheelEvent::DOM_DELTA_PAGE => (
+                            event.delta_x() * rect.width(),
+                            event.delta_y() * rect.height(),
+                        ),
+                        _ => (event.delta_x(), event.delta_y()),
+                    };
                     s.app.push_platform_event(ShellEvent::Wheel {
-                        delta_x: event.delta_x(),
-                        delta_y: event.delta_y(),
+                        delta_x,
+                        delta_y,
                         position: Offset::new(x, y),
                     });
                 }
             });
 
-        canvas
-            .add_event_listener_with_callback("wheel", wheel_closure.as_ref().unchecked_ref())
+        let wheel_options = web_sys::AddEventListenerOptions::new();
+        wheel_options.set_passive(false);
+        window
+            .add_event_listener_with_callback_and_add_event_listener_options(
+                "wheel",
+                wheel_closure.as_ref().unchecked_ref(),
+                &wheel_options,
+            )
             .err_to_jsval()?;
 
         // Touch handling for mobile. Touch events are dispatched as

@@ -29,6 +29,7 @@ web-sys = { workspace = true, features = [
     "Node",
     "EventTarget",
     "Event",
+    "AddEventListenerOptions",
     "MouseEvent",
     "KeyboardEvent",
     "CompositionEvent",

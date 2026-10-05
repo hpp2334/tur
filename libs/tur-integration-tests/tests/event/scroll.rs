@@ -104,6 +104,110 @@ fn wheel_miss_does_nothing() {
 }
 
 // ===========================================================================
+// Sidebar-shape pin — the playground's root sidebar nesting (Container →
+// Column[header, Expanded[ScrollView[Column[rows]]]]) must scroll from a
+// real `ShellEvent::Wheel` pushed by the platform: graded deltas
+// accumulate, clamp at maxScrollExtent (the "clamps after one event"
+// observation is boundary physics, not a bug), and a wheel outside the
+// sidebar does nothing.
+// ===========================================================================
+
+#[test]
+fn wheel_scrolls_the_playground_sidebar_shape() {
+    let mut app = TurTestApp::new(400.0, 800.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, Expanded, ScrollView, Text };
+
+
+entry fn start() -> u64 {
+    let header = Container().padding(14.0)
+        .child(Text().text("CASES").font_size(10.0).build());
+    let rows = Column().cross_alignment(CROSS_ALIGN_STRETCH);
+    // 19 fixed-height rows — the sidebar's overflow content (939px total
+    // against a 754px scroll viewport in the 800-tall fixture window).
+    let rows = rows.child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
+        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build());
+    let sidebar = Container().width(200.0)
+        .child(Column().cross_alignment(CROSS_ALIGN_STRETCH)
+            .child(header.build())
+            .child(Expanded().flex(1.0)
+                .child(ScrollView().axis(AXIS_VERTICAL)
+                    .child(rows.build())
+                    .query_key("sidebar-scroll")
+                    .build())
+                .build())
+            .build());
+    mount(sidebar.build());
+    return 0;
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let sv_id = ElementNodeId::new(app.query_element(&["sidebar-scroll"]).unwrap().as_u64());
+
+    // First notch (120px) — graded scroll from zero.
+    app.wheel(0.0, 120.0, 100.0, 400.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert_eq!(sv.scroll_offset(), 120.0);
+    })
+    .unwrap();
+
+    // Second notch lands on the boundary; a third clamps exactly at
+    // maxScrollExtent (content 893 − viewport ≈754 → the "clamps after one
+    // event" observation is boundary physics, not a bug).
+    app.wheel(0.0, 120.0, 100.0, 400.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.wheel(0.0, 120.0, 100.0, 400.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert!(
+            sv.max_scroll_extent() >= 120.0,
+            "fixture must overflow: max={}",
+            sv.max_scroll_extent()
+        );
+        let max = sv.max_scroll_extent();
+        assert!(
+            (sv.scroll_offset() - max).abs() < 0.001,
+            "offset must clamp at maxScrollExtent: offset={}, max={max}",
+            sv.scroll_offset()
+        );
+    })
+    .unwrap();
+
+    // A wheel outside the sidebar (editor-pane side) does nothing.
+    app.wheel(0.0, 120.0, 300.0, 400.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert_eq!(sv.scroll_offset(), sv.max_scroll_extent());
+    })
+    .unwrap();
+}
+
+// ===========================================================================
 // Content-shrink clamp — Flutter `applyContentDimensions` parity. When the
 // content shrinks below the current scroll offset, layout must clamp the
 // offset to the new maxScrollExtent (otherwise the viewport shows blank
