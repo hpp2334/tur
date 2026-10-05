@@ -202,3 +202,44 @@ fn countdown_edit_then_start() {
         "should count down from edited time"
     );
 }
+
+// The start→edit interleaving: the ticker is live when the edit opens. The
+// ticker must not hold the K_RUNNING stash slot across its awaits (a tap
+// handler firing mid-tick would read an empty slot and write to atom 0 —
+// the clock kept "running" while frozen). Pins the fixed ticker: the edit
+// applies, the clock stops, the display holds.
+#[test]
+fn countdown_edit_while_ticking_stops_the_clock() {
+    let mut app = build_countdown();
+    click_qk(&mut app, &["btn-start"]);
+    advance_seconds(&mut app, 1);
+    assert_eq!(get_text(&app, &["display"]), "0:59");
+
+    click_qk(&mut app, &["btn-edit"]);
+    let input_id = find_input_id(&app);
+    focus_input(&mut app, input_id);
+    app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("Backspace");
+    app.send_key("2");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("0");
+    click_qk(&mut app, &["btn-confirm"]);
+
+    assert_eq!(
+        get_text(&app, &["display"]),
+        "0:20",
+        "should apply the edited time"
+    );
+    // The clock stopped: the Pause button (running=true) unmounted.
+    assert!(
+        app.query_element(&["btn-pause"]).is_none(),
+        "editing must stop the clock"
+    );
+    advance_seconds(&mut app, 2);
+    assert_eq!(
+        get_text(&app, &["display"]),
+        "0:20",
+        "the clock must stay stopped after edit"
+    );
+}
