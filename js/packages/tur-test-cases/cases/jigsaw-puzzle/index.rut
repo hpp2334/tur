@@ -1,5 +1,9 @@
 // jigsaw-puzzle: the drag-a-tile board (the regression fixture family the
 // drag-with-lift / drag-redrag-multi tests pin, as a playable board).
+// Phase-4 repair: single-build chained authoring (the kit law — never
+// build-then-mutate) and the piece label BOUND to the piece atom, so the
+// drag wiring is observable ("A" ⇄ "dragging"). The full game (snap
+// targets, board/tray, reactive piece positions) is the Phase-9 rewrite.
 use tur::{ ALIGN_TOP_LEFT, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, stf_put, stf_take };
 use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
 
@@ -16,18 +20,38 @@ entry fn start() -> u64 {
     let piece = rs_source_str("A");
     stf_put(K_PIECE, piece as f64);
 
-    let mut stack = Stack()
+    // The piece's label is BOUND to the piece atom — the drag callbacks
+    // flip it ("A" → "dragging" → "A"), so the wiring is observable (the
+    // Phase-4 audit's dead-zone probe).
+    let stack = Stack()
         .alignment(ALIGN_TOP_LEFT)
-        .child(SizedBox(300.0, 300.0).child(Container().build()).build());
-    let b = Container()
-        .width_height(80.0, 80.0)
-        .color(0x6366F1FFu64)
-        .query_key("piece")
-        .child(Text().text("A").build());
-    let pad = PointerInteract().ids(piece, piece).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b.build()).build();
-    let pos = Positioned().left(10.0).top(10.0).child(pad).build();
-    stack.child(pos);
-    mount(stack.build());
+        .child(SizedBox(300.0, 300.0).child(Container().build()).build())
+        .child(
+            Positioned()
+                .left(10.0)
+                .top(10.0)
+                .child(
+                    PointerInteract()
+                        .ids(piece, piece)
+                        .on_click2(g_down)
+                        .on_down2(g_down)
+                        .on_move2(g_move)
+                        .on_up2(g_up)
+                        .query_key("rut/gesture")
+                        .child(
+                            Container()
+                                .width_height(80.0, 80.0)
+                                .color(0x6366F1FFu64)
+                                .query_key("piece")
+                                .child(Text().text_bound(piece).query_key("piece/label").build())
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    mount(stack);
     return piece;
 }
 

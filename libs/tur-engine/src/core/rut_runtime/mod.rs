@@ -1014,10 +1014,11 @@ impl RutRuntime {
         let calls: Vec<Intent> = std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
         for intent in &calls {
             let entry = intent.entry();
-            let outcome = self.call_intent(intent);
-            match outcome {
-                Ok(()) => eprintln!("[rut-dbg] callback {entry} ok"),
-                Err(t) => eprintln!("[rut-dbg] callback {entry} TRAP: {} - {}", t.name(), t.msg),
+            if let Err(t) = self.call_intent(intent) {
+                // The audit trail: a failed callback surfaces through the
+                // error rail's log face (the embedder sees the report; the
+                // rest of the drain continues).
+                tracing::error!("rut callback {entry} trap: {} — {}", t.name(), t.msg);
             }
         }
         calls.len()

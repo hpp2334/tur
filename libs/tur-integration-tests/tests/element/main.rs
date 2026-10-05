@@ -14,6 +14,7 @@ mod expanded;
 mod flexible;
 mod frame_stats;
 mod grid;
+mod hit_test_dead_zones;
 mod host_image;
 mod image;
 mod input_placeholder_color;
