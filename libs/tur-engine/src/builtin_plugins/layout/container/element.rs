@@ -98,7 +98,9 @@ impl ContainerElement {
         static_f64(&self.view.border_width)
     }
     pub fn border_radius(&self) -> Option<f64> {
-        static_f64(&self.view.border_radius)
+        // The reactive twin (`box_radius_bound`) resolves through layout —
+        // painting carries the live value (the `color()` pattern).
+        static_f64(&self.view.border_radius).or(self.painting.border_radius)
     }
     pub fn shadow_blur(&self) -> Option<f64> {
         static_f64(&self.view.shadow_blur)

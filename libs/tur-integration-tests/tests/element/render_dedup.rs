@@ -184,4 +184,3 @@ entry fn start() {
         "freshly attached renderer must apply the identical batch ({after_initial} → {after_attach})"
     );
 }
-

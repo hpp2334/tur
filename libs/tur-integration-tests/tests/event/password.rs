@@ -287,6 +287,131 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 }
 
 // ---------------------------------------------------------------------------
+// Reactive bindings: `input_obscure_bound` / `input_placeholder_bound`
+// (bindings are methods — `Input().obscure_bound(atom)`; the reveal toggle
+// flips the live atom, not a rebuilt builder).
+// ---------------------------------------------------------------------------
+
+/// The bound-obscure bundle: the obscure flag rides a bool atom (`start`
+/// returns its id — the standard probe channel). `probe_obscure(b)` sets
+/// the atom (nonzero = masked).
+const BOUND_OBSCURE_BUNDLE: &str = r#"
+use tur::{ mount, rs_set_bool, rs_source_bool, stf_put, stf_take, tctrl_new, undo_new };
+use tur_kit::{ Input };
+
+let K_OBSCURE: u64 = 7;
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let obscure = rs_source_bool(true);
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+        .obscure_bound(obscure)
+        .query_key("input").build();
+    stf_put(K_OBSCURE, obscure as f64);
+    mount(input);
+    return obscure;
+}
+
+entry fn probe_obscure(_a: u64, b: f64) {
+    let obscure = stf_take(K_OBSCURE) as u64;
+    rs_set_bool(obscure, b != 0.0);
+    stf_put(K_OBSCURE, obscure as f64);
+}
+"#;
+
+#[test]
+fn obscure_bound_toggles_masking_reactively() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BOUND_OBSCURE_BUNDLE).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    type_str(&mut app, "abc");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(get_value(&app, id), "abc");
+    assert_eq!(
+        get_displayed(&app, id),
+        "•••",
+        "bound obscure starts masked"
+    );
+
+    // The reveal toggle flips the ATOM — the mounted input re-resolves
+    // its obscure flag without any rebuild.
+    let atom = app.rut_start_answer();
+    app.call_rut_entry("probe_obscure", atom, 0.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_displayed(&app, id),
+        "abc",
+        "reveal shows the plain value"
+    );
+    assert_eq!(get_value(&app, id), "abc", "value unchanged by the toggle");
+
+    // And back.
+    app.call_rut_entry("probe_obscure", atom, 1.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_displayed(&app, id),
+        "•••",
+        "masking re-arms from the atom"
+    );
+}
+
+/// The bound-placeholder twin (`Input().placeholder_bound(atom)`): the
+/// placeholder string rides a str atom. The display path (a layout run,
+/// not a TextElement) has no public string probe, so this pins the
+/// reactive plumbing end to end — the atom swap re-resolves through the
+/// same Val/subscribe machinery `obscure_bound` exercises above — plus
+/// the input's value behavior staying intact across swaps.
+const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
+use tur::{ mount, rs_set_str, rs_source_str, stf_put, stf_take, tctrl_new, undo_new };
+use tur_kit::{ Input };
+
+let K_HINT: u64 = 8;
+
+entry fn start() {
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+    let hint = rs_source_str("type here");
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+        .placeholder_bound(hint)
+        .query_key("input").build();
+    stf_put(K_HINT, hint as f64);
+    mount(input);
+}
+
+entry fn probe_hint(_a: u64, _b: f64) {
+    let hint = stf_take(K_HINT) as u64;
+    rs_set_str(hint, "other hint");
+    stf_put(K_HINT, hint as f64);
+}
+"#;
+
+#[test]
+fn placeholder_bound_swaps_through_the_live_atom() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BOUND_PLACEHOLDER_BUNDLE).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    type_str(&mut app, "val");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    // The placeholder atom swap must re-resolve the input cleanly (no
+    // trap, no stale subtree) and leave the value intact.
+    app.call_rut_entry("probe_hint", 0, 0.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_value(&app, id),
+        "val",
+        "value survives the placeholder swap"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Offset translation: a click resolves to a value-byte offset even though the
 // masked display string has a different byte length than the value.
 // ---------------------------------------------------------------------------

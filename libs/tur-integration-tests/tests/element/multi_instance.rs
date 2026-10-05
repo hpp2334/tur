@@ -33,9 +33,12 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
         let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
         let element = node.element.as_ref()?;
         use tur_engine::builtin_plugins::text::TextElement;
-        element
-            .cast::<TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+        element.cast::<TextElement>().map(|c| {
+            c.spans()
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect::<String>()
+        })
     }))
     .flatten()
 }
@@ -110,10 +113,8 @@ fn instances_have_isolated_state() {
         .expect("app B");
 
     // Load different state into each instance.
-    futures::executor::block_on(app_a.load_rut_module(id_module("A")))
-        .expect("load A");
-    futures::executor::block_on(app_b.load_rut_module(id_module("B")))
-        .expect("load B");
+    futures::executor::block_on(app_a.load_rut_module(id_module("A"))).expect("load A");
+    futures::executor::block_on(app_b.load_rut_module(id_module("B"))).expect("load B");
 
     // Each instance reads back its OWN label — they must differ.
     assert_eq!(
@@ -129,8 +130,7 @@ fn instances_have_isolated_state() {
 
     // Mutating A must not affect B.
     let atom_a = futures::executor::block_on(app_a.rut_start_answer());
-    futures::executor::block_on(app_a.call_rut_entry("set_value", atom_a, 0.0))
-        .expect("mutate A");
+    futures::executor::block_on(app_a.call_rut_entry("set_value", atom_a, 0.0)).expect("mutate A");
     assert_eq!(
         label_text(&app_b, "id"),
         Some("B".to_string()),
@@ -337,10 +337,7 @@ impl Plugin for CounterPlugin {
         self.compile_count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
-    fn register(
-        &self,
-        ctx: &mut PluginRegisterContext,
-    ) -> Result<(), tur_engine::error::TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), tur_engine::error::TurError> {
         self.register_count.fetch_add(1, Ordering::SeqCst);
         // Look up the shared capability (registered on the runtime builder) and
         // bump it — proves every instance's register sees the SAME backend.
@@ -574,8 +571,7 @@ entry fn flip(atom: u64, _b: f64) {
 
     // A retains its own value — flip it and read it back.
     let atom_a = futures::executor::block_on(app_a.rut_start_answer());
-    futures::executor::block_on(app_a.call_rut_entry("flip", atom_a, 0.0))
-        .expect("flip");
+    futures::executor::block_on(app_a.call_rut_entry("flip", atom_a, 0.0)).expect("flip");
     assert_eq!(
         label_text(&app_a, "id"),
         Some("A2".to_string()),

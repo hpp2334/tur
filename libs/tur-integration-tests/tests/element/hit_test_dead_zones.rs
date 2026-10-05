@@ -29,16 +29,23 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
     let el = app
         .dev_tool_get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()).into())
         .expect("dev tool element");
-    (el.absolute.0 + el.size.0 / 2.0, el.absolute.1 + el.size.1 / 2.0)
+    (
+        el.absolute.0 + el.size.0 / 2.0,
+        el.absolute.1 + el.size.1 / 2.0,
+    )
 }
 
 fn label(app: &TurTestApp, key: &[&str]) -> String {
     let id = app.query_element(key).expect("label not found");
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
-        e.cast::<tur_engine::builtin_plugins::text::TextElement>().map(|c| {
-            c.spans().iter().map(|s| s.text.as_str()).collect::<String>()
-        })
+        e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
     })
     .unwrap_or_default()
     .unwrap_or_default()
@@ -149,7 +156,8 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
     // Same shape with a short page — the button in view at offset 0. Isolates
     // "in-scroll taps work at all" from the scrolled-position case above.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_rut_module(SCROLL_BTN_RUT.replace("900.0", "20.0").as_str()).unwrap();
+    app.load_rut_module(SCROLL_BTN_RUT.replace("900.0", "20.0").as_str())
+        .unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let (cx, cy) = center(&app, &["dz", "scroll-btn"]);
     app.click(cx, cy);

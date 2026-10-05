@@ -20,7 +20,10 @@ pub struct FragmentView {
 impl FragmentView {
     /// Rut-rail constructor (`core::rut_runtime`): a transparent group.
     pub fn new_rut(children: Vec<Rc<dyn View>>) -> Self {
-        Self { children, query_key: None }
+        Self {
+            children,
+            query_key: None,
+        }
     }
 
     /// Append one child (the `frag_child` row).

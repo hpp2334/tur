@@ -34,7 +34,12 @@ fn label(app: &TurTestApp) -> String {
     let id = ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -440,7 +445,9 @@ fn animation_started_from_handler_schedules_next_frame() {
 
 /// The studio card's laid-out width (the width-bound tween target).
 fn studio_card_width(app: &TurTestApp) -> f64 {
-    let id = app.query_element(&["cas-card"]).expect("studio card not found");
+    let id = app
+        .query_element(&["cas-card"])
+        .expect("studio card not found");
     let tree = app.element_tree();
     tree.get_element(ElementNodeId::new(id.as_u64()))
         .unwrap()
@@ -453,7 +460,9 @@ fn studio_card_width(app: &TurTestApp) -> f64 {
 /// transport entries are 3-arg tap targets, only reachable through the
 /// pointer rail).
 fn tap_studio(app: &mut TurTestApp, key: &str) {
-    let id = app.query_element(&[key]).unwrap_or_else(|| panic!("{key} not found"));
+    let id = app
+        .query_element(&[key])
+        .unwrap_or_else(|| panic!("{key} not found"));
     let b = app
         .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
         .unwrap()

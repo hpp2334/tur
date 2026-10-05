@@ -25,7 +25,7 @@ use crate::builtin_plugins::text::{InputView, TextView};
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
 use crate::core::edgy::value::Value;
-use crate::core::rut_runtime::{cb_entries, Intent, RutHandles, RutView, color_of};
+use crate::core::rut_runtime::{Intent, RutHandles, RutView, cb_entries, color_of, readable_of};
 use crate::core::view::Val;
 
 use rut_vm::{Opaque, OpaqueRef};
@@ -45,18 +45,68 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     cx.decl.extend(vec![
         // text family
         ("text_new".to_string(), vec![], TY_OPAQUE, false),
-        ("text_text".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
-        ("text_bind".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("text_bind_derived".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("text_size".to_string(), vec![TY_OPAQUE, TY_F64], TY_NIL, false),
-        ("text_weight".to_string(), vec![TY_OPAQUE, TY_F64], TY_NIL, false),
-        ("text_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("text_max_lines".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
+        (
+            "text_text".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_bind".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_bind_derived".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_size".to_string(),
+            vec![TY_OPAQUE, TY_F64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_weight".to_string(),
+            vec![TY_OPAQUE, TY_F64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_color".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_max_lines".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
         ("text_clip".to_string(), vec![TY_OPAQUE], TY_NIL, false),
         ("text_ellipsis".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        ("text_overflow_visible".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        ("text_selectable".to_string(), vec![TY_OPAQUE, TY_BOOL], TY_NIL, false),
-        ("text_qkey".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "text_overflow_visible".to_string(),
+            vec![TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_selectable".to_string(),
+            vec![TY_OPAQUE, TY_BOOL],
+            TY_NIL,
+            false,
+        ),
+        (
+            "text_qkey".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         ("text_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
         // rich-text spans
         ("spans_new".to_string(), vec![], TY_OPAQUE, false),
@@ -66,51 +116,172 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
             TY_NIL,
             false,
         ),
-        ("text_spans".to_string(), vec![TY_OPAQUE, TY_OPAQUE], TY_NIL, false),
+        (
+            "text_spans".to_string(),
+            vec![TY_OPAQUE, TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
         // input family
         ("input_new".to_string(), vec![], TY_OPAQUE, false),
-        ("input_controller".to_string(), vec![TY_OPAQUE, TY_OPAQUE], TY_NIL, false),
-        ("input_undo".to_string(), vec![TY_OPAQUE, TY_OPAQUE], TY_NIL, false),
-        ("input_size".to_string(), vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL, false),
-        ("input_placeholder".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
-        ("input_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("input_placeholder_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("input_cursor_color".to_string(), vec![TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("input_font_size".to_string(), vec![TY_OPAQUE, TY_F64], TY_NIL, false),
+        (
+            "input_controller".to_string(),
+            vec![TY_OPAQUE, TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_undo".to_string(),
+            vec![TY_OPAQUE, TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_size".to_string(),
+            vec![TY_OPAQUE, TY_F64, TY_F64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_placeholder".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_color".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_placeholder_color".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_cursor_color".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_font_size".to_string(),
+            vec![TY_OPAQUE, TY_F64],
+            TY_NIL,
+            false,
+        ),
         // the password twin's surface: the obscure toggle + the configurable
         // obscuring character (the JS `obscureText` / `obscuringCharacter`).
-        ("input_obscure".to_string(), vec![TY_OPAQUE, TY_BOOL], TY_NIL, false),
-        ("input_obscure_char".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "input_obscure".to_string(),
+            vec![TY_OPAQUE, TY_BOOL],
+            TY_NIL,
+            false,
+        ),
+        // the reactive obscure toggle (`Input().obscure_bound(atom)` — the
+        // reveal flip rides a live bool atom, no rebuild).
+        (
+            "input_obscure_bound".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_obscure_char".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        // the reactive placeholder twin (`placeholder_bound`).
+        (
+            "input_placeholder_bound".to_string(),
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
         // the multiline toggle (the JS `multiline: true` twin).
-        ("input_multiline".to_string(), vec![TY_OPAQUE, TY_BOOL], TY_NIL, false),
+        (
+            "input_multiline".to_string(),
+            vec![TY_OPAQUE, TY_BOOL],
+            TY_NIL,
+            false,
+        ),
         // the font family (the JS `Input().fontFamily(...)` twin — the code
         // editor pins `"monospace"` so caret math sees uniform glyphs).
-        ("input_font_family".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "input_font_family".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         // the on-input rail (the intent-queue law): `input_on_input(
         // builder, name, id)` installs a mutation on the builder's shared
         // controller; every user edit delivers `(name, id, 0, seq)`.
-        ("input_on_input".to_string(), vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL, false),
-        ("input_qkey".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "input_on_input".to_string(),
+            vec![TY_OPAQUE, TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
+        (
+            "input_qkey".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         ("input_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
         // controllers (realm-minted, method rows)
         ("tctrl_new".to_string(), vec![], TY_OPAQUE, false),
         ("undo_new".to_string(), vec![], TY_OPAQUE, false),
         ("tctrl_text".to_string(), vec![TY_OPAQUE], TY_STR, false),
-        ("tctrl_set_text".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
-        ("tctrl_push_span".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
-        ("tctrl_delete_selection".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        ("tctrl_insert_text".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "tctrl_set_text".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        (
+            "tctrl_push_span".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        (
+            "tctrl_delete_selection".to_string(),
+            vec![TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        (
+            "tctrl_insert_text".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         ("tctrl_cursor".to_string(), vec![TY_OPAQUE], TY_U64, false),
-        ("tctrl_select".to_string(), vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL, false),
+        (
+            "tctrl_select".to_string(),
+            vec![TY_OPAQUE, TY_U64, TY_U64],
+            TY_NIL,
+            false,
+        ),
         ("tctrl_clear".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        ("tctrl_paste".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
+        (
+            "tctrl_paste".to_string(),
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         ("undo_can_undo".to_string(), vec![TY_OPAQUE], TY_BOOL, false),
         ("undo_can_redo".to_string(), vec![TY_OPAQUE], TY_BOOL, false),
         ("undo_clear".to_string(), vec![TY_OPAQUE], TY_NIL, false),
     ]);
     let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
     // span flags (bitfield)
-    cx.consts.extend(vec![c("SPAN_ITALIC", 1), c("SPAN_UNDERLINE", 2)]);
+    cx.consts
+        .extend(vec![c("SPAN_ITALIC", 1), c("SPAN_UNDERLINE", 2)]);
 }
 
 use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
@@ -151,9 +322,13 @@ fn input_mutation(
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         let n = h.click_seq.get() + 1;
         h.click_seq.set(n);
-        h.pending_calls
-            .borrow_mut()
-            .push(Intent::Click { entry: cb_entries::CLICK, cb: cb.clone(), a: id, b: 0, seq: n as f64 });
+        h.pending_calls.borrow_mut().push(Intent::Click {
+            entry: cb_entries::CLICK,
+            cb: cb.clone(),
+            a: id,
+            b: 0,
+            seq: n as f64,
+        });
         dirty.set(true);
         Ok(Value::Nil)
     });
@@ -287,6 +462,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "input_placeholder", (Opaque<InputView>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, text: &str| {
         b.with_mut(vm, |_vm, s| s.set_placeholder_str(text.to_string()))
     });
+    // input_placeholder_bound(builder, atom) — the reactive placeholder
+    // twin (a str atom drives the hint).
+    rut_vm::pkg_fn!(pkg, "input_placeholder_bound", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, atom: u64| {
+        let r = Readable::Source(Source::<String>::from_id(AtomId(atom as u32)));
+        b.with_mut(vm, |_vm, s| s.set_placeholder_reactive(r))
+    });
     rut_vm::pkg_fn!(pkg, "input_color", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, packed: u64| {
         let c = color_of(packed);
         b.with_mut(vm, |_vm, s| s.set_color(c))
@@ -306,6 +487,13 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // `obscureText: true` twin).
     rut_vm::pkg_fn!(pkg, "input_obscure", (Opaque<InputView>, bool) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, on: bool| {
         b.with_mut(vm, |_vm, s| s.set_obscure(on))
+    });
+    // input_obscure_bound(builder, atom) — the reactive reveal toggle
+    // (bindings are methods, the `text_bound` law): the mounted input
+    // re-resolves masking whenever the bool atom flips.
+    rut_vm::pkg_fn!(pkg, "input_obscure_bound", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, atom: u64| {
+        let r = readable_of::<bool>(atom);
+        b.with_mut(vm, |_vm, s| s.set_obscure_reactive(r))
     });
     // input_obscure_char(builder, ch) — the configurable obscuring
     // character (the JS `obscuringCharacter: '*'` twin; a multi-char str

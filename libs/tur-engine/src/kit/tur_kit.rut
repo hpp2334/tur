@@ -47,9 +47,10 @@
 // accumulates children through the `*_child` rows.
 use tur::{
   box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
-  box_height_bound, box_new, box_padding, box_qkey, box_radius, box_shadow, box_size, box_width,
-  box_width_bound,
-  col_fixed, col_flex, cols_new, cond_build, cond_else, cond_new, cond_qkey, cond_then, ct_follower_build,
+  box_height_bound, box_new, box_padding, box_qkey, box_radius, box_radius_bound, box_shadow,
+  box_size, box_width, box_width_bound,
+  col_fixed, col_flex, cols_new, cond_build, cond_else, cond_else_build, cond_new, cond_qkey,
+  cond_then, cond_then_build, ct_follower_build,
   ct_follower_child, ct_follower_follower_anchor, ct_follower_link, ct_follower_new,
   ct_follower_offset, ct_follower_target_anchor, ct_follower_target_anchor_bound, ct_link_new,
   ct_target_build, ct_target_child, ct_target_link, ct_target_new, each_build, each_builder,
@@ -61,8 +62,10 @@ use tur::{
   grid_build, grid_child, grid_main_extent, grid_max_cross, grid_qkey, grid_spacing,
   img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_width,
   input_build, input_color, input_controller, input_cursor_color, input_font_family,
-  input_font_size, input_multiline, input_new, input_obscure, input_obscure_char,
-  input_on_input, input_placeholder, input_placeholder_color, input_qkey, input_size, input_undo,
+  input_font_size, input_multiline, input_new, input_obscure, input_obscure_bound,
+  input_obscure_char,
+  input_on_input, input_placeholder, input_placeholder_bound, input_placeholder_color,
+  input_qkey, input_size, input_undo,
   lazy_axis,
   lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
   lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
@@ -70,12 +73,14 @@ use tur::{
   lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
   mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child, pi_id, pi_ids,
   pi_new, pi_on_click, pi_on_context_menu, pi_on_down, pi_on_move, pi_on_tap, pi_on_up,
-  pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_new, pos_right, pos_top,
+  pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_left_bound, pos_new,
+  pos_right, pos_top, pos_top_bound,
   pos_width, rs_derive2_cb, rs_derive_cb, rs_watch_cb, scroll_axis, scroll_build, scroll_child,
   scroll_new, scroll_offset, scroll_qkey,
   sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
   span_add, spans_new, stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
-  switch_build, switch_case, switch_fallback, switch_new, switch_qkey, switch_value_derived,
+  switch_build, switch_case, switch_case_build, switch_fallback, switch_new, switch_qkey,
+  switch_value_derived,
   switch_value_source, table_build, table_columns, table_header_builder, table_new, table_qkey,
   table_row_builder, table_rows_atom, text_bind, text_bind_derived, text_build, text_clip,
   text_color, text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey,
@@ -123,8 +128,16 @@ entry fn __tur_cb_ptr2(cb: opaque, a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy
   f(a, b, lx, ly, gx, gy, btn);
 }
 
-// The lazy builders (Each / LazyList / LazyGrid / Table) — face-called
-// WITH an answer (the built item view) during flush.
+// The lazy builders (branch builders / Each / LazyList / LazyGrid /
+// Table) — face-called WITH an answer (the built view) during flush. The
+// zero-arg entry drives the Condition/Switch branch factories: the
+// builder is invoked at activation and re-invoked at every re-activation
+// (fresh read of live state).
+entry fn __tur_cb_build0(cb: opaque) -> View {
+  let f = opaque.downcast<fn() -> View>(cb);
+  return f();
+}
+
 entry fn __tur_cb_build1(cb: opaque, i: u64) -> View {
   let f = opaque.downcast<fn(u64) -> View>(cb);
   return f(i);
@@ -366,6 +379,17 @@ impl Positioned {
     pos_top(self.spec, v);
     return self;
   }
+  // The reactive anchors (drag-to-move writes the live atom; a bound
+  // anchor's 0 is a real coordinate, unlike the authoring rows' 0 =
+  // absent idiom).
+  pub fn left_bound(mut self, atom: u64) -> Self {
+    pos_left_bound(self.spec, atom);
+    return self;
+  }
+  pub fn top_bound(mut self, atom: u64) -> Self {
+    pos_top_bound(self.spec, atom);
+    return self;
+  }
   pub fn right(mut self, v: f64) -> Self {
     pos_right(self.spec, v);
     return self;
@@ -431,6 +455,12 @@ impl Container {
   }
   pub fn height_bound(mut self, atom: u64) -> Self {
     box_height_bound(self.spec, atom);
+    return self;
+  }
+  // The reactive corner radius (animated radius rides a derive of the
+  // progress atom).
+  pub fn radius_bound(mut self, atom: u64) -> Self {
+    box_radius_bound(self.spec, atom);
     return self;
   }
   pub fn border(mut self, packed: u64, width: f64, position: u64) -> Self {
@@ -620,8 +650,19 @@ impl Input {
     input_obscure(self.spec, v);
     return self;
   }
+  // The reactive reveal toggle: masking rides a live bool atom (the
+  // `text_bound` law — bindings are methods).
+  pub fn obscure_bound(mut self, atom: u64) -> Self {
+    input_obscure_bound(self.spec, atom);
+    return self;
+  }
   pub fn obscure_char(mut self, v: str) -> Self {
     input_obscure_char(self.spec, v);
+    return self;
+  }
+  // The reactive placeholder twin: the hint rides a live str atom.
+  pub fn placeholder_bound(mut self, atom: u64) -> Self {
+    input_placeholder_bound(self.spec, atom);
     return self;
   }
   pub fn multiline(mut self, v: bool) -> Self {
@@ -1029,6 +1070,12 @@ impl Switch {
     switch_case(self.spec, key, branch);
     return self;
   }
+  // The lazy case twin: the branch is a FN VALUE, invoked when the key
+  // activates (fresh read of live state).
+  pub fn case_build(mut self, key: str, cb: fn() -> View) -> Self {
+    switch_case_build(self.spec, key, opaque(cb));
+    return self;
+  }
   pub fn fallback(mut self, branch: View) -> Self {
     switch_fallback(self.spec, branch);
     return self;
@@ -1056,6 +1103,18 @@ impl Condition {
   }
   pub fn else_branch(mut self, branch: View) -> Self {
     cond_else(self.spec, branch);
+    return self;
+  }
+  // The lazy twins: the branch is a FN VALUE (`fn() -> View`), invoked
+  // at activation and re-invoked at every re-activation — the built
+  // subtree reads LIVE state each time it mounts (the boa callback
+  // semantic; e.g. a modal reads the draft at open time).
+  pub fn then_build(mut self, cb: fn() -> View) -> Self {
+    cond_then_build(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn else_build(mut self, cb: fn() -> View) -> Self {
+    cond_else_build(self.spec, opaque(cb));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

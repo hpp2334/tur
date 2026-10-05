@@ -25,7 +25,12 @@ fn bound_text(app: &TurTestApp) -> String {
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -36,7 +41,10 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
     let el = app
         .dev_tool_get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()).into())
         .expect("dev tool element");
-    (el.absolute.0 + el.size.0 / 2.0, el.absolute.1 + el.size.1 / 2.0)
+    (
+        el.absolute.0 + el.size.0 / 2.0,
+        el.absolute.1 + el.size.1 / 2.0,
+    )
 }
 
 const RAIL_RUT: &str = r#"
@@ -143,7 +151,12 @@ fn each_item_builder_takes_a_fn_value() {
         let got = app
             .with_element(id, |e| {
                 e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-                    .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+                    .map(|c| {
+                        c.spans()
+                            .iter()
+                            .map(|s| s.text.as_str())
+                            .collect::<String>()
+                    })
                     .unwrap_or_default()
             })
             .unwrap_or_default();

@@ -19,7 +19,12 @@ use super::RutHandles;
 
 /// Declare the C6 rows on the `tur` decl module. The async rows ride the
 /// driver's family expansion (`is_async = true`).
-pub fn decl_rows() -> Vec<(String, Vec<rut_core::types::TypeId>, rut_core::types::TypeId, bool)> {
+pub fn decl_rows() -> Vec<(
+    String,
+    Vec<rut_core::types::TypeId>,
+    rut_core::types::TypeId,
+    bool,
+)> {
     vec![
         ("clipboard_read", vec![], TY_STR, true),
         ("clipboard_write", vec![TY_STR], TY_NIL, true),

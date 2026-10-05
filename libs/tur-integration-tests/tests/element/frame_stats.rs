@@ -35,7 +35,9 @@ fn stat(app: &TurTestApp, path: &str) -> f64 {
             let num: String = scope
                 .chars()
                 .skip_while(|c| *c == ' ')
-                .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-' || *c == 'e' || *c == '+')
+                .take_while(|c| {
+                    c.is_ascii_digit() || *c == '.' || *c == '-' || *c == 'e' || *c == '+'
+                })
                 .collect();
             return num
                 .parse()
@@ -151,7 +153,10 @@ entry fn start() {
         json.contains("\"hostTimingEnabled\":true"),
         "the toggle is mirrored into the snapshot: {json}"
     );
-    assert!(stat_present(&app, "lastHost"), "expected a host frame timing");
+    assert!(
+        stat_present(&app, "lastHost"),
+        "expected a host frame timing"
+    );
     let host_frame = stat(&app, "lastHost.frame");
     assert!(host_frame >= 1.0, "lastHost.frame = {host_frame}");
     // Timings are non-negative (0µs possible for a sub-µs noop render).

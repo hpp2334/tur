@@ -37,8 +37,7 @@ entry fn start() {
 #[test]
 fn huge_document_layout_and_paint_does_not_panic() {
     let mut app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.load_rut_module(HUGE_EDITOR)
-        .expect("load huge editor");
+    app.load_rut_module(HUGE_EDITOR).expect("load huge editor");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Layout + paint the whole document repeatedly (scroll offsets change

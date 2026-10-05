@@ -24,9 +24,12 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
         let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
         let element = node.element.as_ref()?;
         use tur_engine::builtin_plugins::text::TextElement;
-        element
-            .cast::<TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+        element.cast::<TextElement>().map(|c| {
+            c.spans()
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect::<String>()
+        })
     }))
     .flatten()
 }
@@ -100,9 +103,9 @@ fn setup_with_child_src(child_src: &str, wait_key: &str) -> (TurTestApp, Rc<tur_
         let children = app.app().virtual_apps();
         if let Some(child) = children.first() {
             let key = wait_key.clone();
-            let mounted = futures::executor::block_on(child.with_tree(move |tree, _focus| {
-                tree.query_element(&[key.as_str()]).is_some()
-            }))
+            let mounted = futures::executor::block_on(
+                child.with_tree(move |tree, _focus| tree.query_element(&[key.as_str()]).is_some()),
+            )
             .unwrap_or(false);
             if mounted {
                 break (app, child.clone());
@@ -123,9 +126,10 @@ fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>) {
 /// The focused element id on the parent's focus manager (the key-routing
 /// gate) — `None` when nothing is focused.
 fn parent_focused(app: &TurTestApp) -> Option<u64> {
-    futures::executor::block_on(app.app().with_tree(|_tree, focus| {
-        focus.focused().map(|id| u64::from(id))
-    }))
+    futures::executor::block_on(
+        app.app()
+            .with_tree(|_tree, focus| focus.focused().map(|id| u64::from(id))),
+    )
     .flatten()
 }
 
@@ -152,8 +156,7 @@ fn host_id(app: &TurTestApp) -> Option<u64> {
 /// The child controller's current text (via the sync probe + label read).
 fn child_text(child: &Rc<tur_engine::TurApp>) -> String {
     let label_atom = futures::executor::block_on(child.rut_start_answer());
-    futures::executor::block_on(child.call_rut_entry("sync", label_atom, 0.0))
-        .expect("sync probe");
+    futures::executor::block_on(child.call_rut_entry("sync", label_atom, 0.0)).expect("sync probe");
     label_text(child, "child-text").unwrap_or_default()
 }
 
@@ -172,7 +175,10 @@ fn va_child_receives_key_events_when_its_input_is_focused() {
     // the child's focus report arms the parent's routing gate — wait for
     // that gate before typing (keys are focus-routed).
     let armed = app.wait_for(|_| parent_focused(&app) == Some(host));
-    assert!(armed, "the parent's focus manager should hold the child host");
+    assert!(
+        armed,
+        "the parent's focus manager should hold the child host"
+    );
 
     // Typed keys flow: parent key rail → focused child host → child input.
     app.send_key("a");
@@ -191,7 +197,10 @@ fn va_child_receives_ime_composition_end() {
 
     app.click(100.0, 16.0);
     let armed = app.wait_for(|_| parent_focused(&app) == Some(host));
-    assert!(armed, "the parent's focus manager should hold the child host");
+    assert!(
+        armed,
+        "the parent's focus manager should hold the child host"
+    );
 
     use tur_engine::core::shell::ImeEvent;
     app.send_ime(ImeEvent::CompositionStart);
@@ -203,7 +212,10 @@ fn va_child_receives_ime_composition_end() {
         text: "héllo".to_string(),
     });
     let grew = app.wait_for(|_| child_text(&child) == "héllo");
-    assert!(grew, "child input should have received the composition text");
+    assert!(
+        grew,
+        "child input should have received the composition text"
+    );
 }
 
 /// Focus loss: clicking outside the host (parent background) blurs the
@@ -215,7 +227,10 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 
     app.click(100.0, 16.0);
     let armed = app.wait_for(|_| parent_focused(&app) == Some(host));
-    assert!(armed, "the parent's focus manager should hold the child host");
+    assert!(
+        armed,
+        "the parent's focus manager should hold the child host"
+    );
     app.send_key("a");
     let grew = app.wait_for(|_| child_text(&child) == "a");
     assert!(grew, "the typed key reached the focused child input");
@@ -275,7 +290,9 @@ fn child_scroll_offset(child: &Rc<tur_engine::TurApp>) -> f64 {
         let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
         let element = node.element.as_ref()?;
         use tur_engine::builtin_plugins::scroll::ScrollViewElement;
-        element.cast::<ScrollViewElement>().map(|sv| sv.scroll_offset())
+        element
+            .cast::<ScrollViewElement>()
+            .map(|sv| sv.scroll_offset())
     }))
     .flatten()
     .unwrap_or(f64::NAN)

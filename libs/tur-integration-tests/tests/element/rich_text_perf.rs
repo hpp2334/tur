@@ -214,4 +214,3 @@ fn scrolling_does_not_reshape() {
         bounds_after.top
     );
 }
-

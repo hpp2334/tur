@@ -820,7 +820,8 @@ entry fn set_count(count: u64, n: f64) {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0).unwrap();
+    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -868,7 +869,8 @@ entry fn set_count(count: u64, n: f64) {
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
     // Shrink 20 → 5: the tail (indices ≥ 5) unmounts.
-    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0).unwrap();
+    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -882,7 +884,8 @@ entry fn set_count(count: u64, n: f64) {
 
     // Grow back 5 → 20: the viewport window (600/50 = 12 + 2×overscan)
     // must re-mount, and the content extent must cover all 20 items again.
-    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0).unwrap();
+    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -938,7 +941,8 @@ entry fn set_count(count: u64, n: f64) {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 0.0).unwrap();
+    app.call_rut_entry("set_count", app.rut_start_answer(), 0.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -946,7 +950,8 @@ entry fn set_count(count: u64, n: f64) {
     })
     .unwrap();
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0).unwrap();
+    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();

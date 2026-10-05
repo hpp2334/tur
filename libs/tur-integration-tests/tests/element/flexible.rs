@@ -8,7 +8,11 @@ use tur_integration_tests::TurTestApp;
 /// (via the kit): `"el_flex"` authors `Flexible` (loose) and `"el_expand"`
 /// authors `Expanded` (tight). `text` is the
 /// wrapped label (a styled text builder).
-fn setup_row_flex_item(flex_item: &str, text: &str, text_extra: &str) -> (TurTestApp, ElementNodeId, ElementNodeId) {
+fn setup_row_flex_item(
+    flex_item: &str,
+    text: &str,
+    text_extra: &str,
+) -> (TurTestApp, ElementNodeId, ElementNodeId) {
     setup_row_flex_item_ex(flex_item, text, text_extra)
 }
 
@@ -39,7 +43,11 @@ entry fn start() {{
 "#,
         text = text,
         text_extra = text_extra,
-        item = if flex_item == "el_expand" { "Expanded" } else { "Flexible" },
+        item = if flex_item == "el_expand" {
+            "Expanded"
+        } else {
+            "Flexible"
+        },
     );
     app.load_rut_module(&source).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -77,7 +85,7 @@ entry fn start() {{
 fn flexible_loose_fit_ellipsizes_text_at_slot() {
     let (app, row_id, text_id) = setup_row_flex_item_ex(
         "el_flex",
-            "\"A very long label that must ellipsize inside its slot\"",
+        "\"A very long label that must ellipsize inside its slot\"",
         "    txt.max_lines(1);\n    txt.ellipsis();\n",
     );
 

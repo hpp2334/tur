@@ -307,12 +307,11 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
         .parent()
         .and_then(|p| p.parent())
         .expect("failed to resolve workspace root");
-    let source = std::fs::read_to_string(
-        workspace_root.join(
+    let source =
+        std::fs::read_to_string(workspace_root.join(
             "js/packages/tur-test-cases/cases/composited-transform-follower-anchor/index.rut",
-        ),
-    )
-    .unwrap();
+        ))
+        .unwrap();
     app.with_app(|a| {
         futures::executor::block_on(a.load_rut_module(source.as_str()))
             .map_err(tur_engine::error::TurError::from)

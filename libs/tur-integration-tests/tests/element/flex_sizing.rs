@@ -34,15 +34,8 @@ use tur_integration_tests::TurTestApp;
 /// Absolute rect (x, y, w, h) of the keyed element, from the dev tool.
 fn rect(app: &TurTestApp, key: &[&str]) -> (f64, f64, f64, f64) {
     let id = app.query_element(key).expect("element not found");
-    let el = app
-        .dev_tool_get_element(id)
-        .expect("dev tool element");
-    (
-        el.absolute.0,
-        el.absolute.1,
-        el.size.0,
-        el.size.1,
-    )
+    let el = app.dev_tool_get_element(id).expect("dev tool element");
+    (el.absolute.0, el.absolute.1, el.size.0, el.size.1)
 }
 
 // ── Shape (a): a fixed-size Container as a Column child ─────────────────
@@ -77,10 +70,21 @@ fn fixed_size_column_child_honored() {
 
     let (hx, hy, hw, hh) = rect(&app, &["fs", "header"]);
     let (cx, _, cw, _) = rect(&app, &["fs", "col"]);
-    assert_eq!((hw, hh), (400.0, 40.0), "width_height(400,40) must lay out 400×40, not shrink-wrap");
+    assert_eq!(
+        (hw, hh),
+        (400.0, 40.0),
+        "width_height(400,40) must lay out 400×40, not shrink-wrap"
+    );
     assert_eq!(hy, 0.0, "the band is the column's first child");
-    assert_eq!(hx, cx, "the band is the column's widest child → flush with its leading edge");
-    assert_eq!(cx, (435.0 - cw) / 2.0, "the root centers the column in the viewport");
+    assert_eq!(
+        hx, cx,
+        "the band is the column's widest child → flush with its leading edge"
+    );
+    assert_eq!(
+        cx,
+        (435.0 - cw) / 2.0,
+        "the root centers the column in the viewport"
+    );
 }
 
 // ── Shape (b): an unset-width (0 = unset idiom) child among siblings ────
@@ -146,10 +150,7 @@ fn unset_width_child_does_not_corrupt_sibling_placement() {
          must not push or pull siblings"
     );
     assert_eq!(rx, cx, "the widest child sits at the column's leading edge");
-    assert!(
-        rw <= cw && ry + rh <= 400.0,
-        "row stays inside the column"
-    );
+    assert!(rw <= cw && ry + rh <= 400.0, "row stays inside the column");
 }
 
 // ── Corpus pins: the repaired evidence cases ────────────────────────────
@@ -166,11 +167,21 @@ fn lazy_grid_gallery_header_is_a_band_above_the_grid() {
     let (gx, gy, gw, _) = rect(&app, &["gallery", "grid"]);
     let (cx, _, cw, _) = rect(&app, &["gallery", "col"]);
     assert_eq!(hh, 40.0, "the header band keeps its 40px height");
-    assert_eq!(hx, cx, "the header band starts at the column's leading edge");
-    assert_eq!(hw, cw, "the header band spans the column's full width — \
+    assert_eq!(
+        hx, cx,
+        "the header band starts at the column's leading edge"
+    );
+    assert_eq!(
+        hw, cw,
+        "the header band spans the column's full width — \
          `width_height(0, h)` is unset width, and Stretch is what makes \
-         it a band instead of a shrink-wrapped label chip");
-    assert_eq!(gy, hy + hh, "the grid starts directly below the header band");
+         it a band instead of a shrink-wrapped label chip"
+    );
+    assert_eq!(
+        gy,
+        hy + hh,
+        "the grid starts directly below the header band"
+    );
     assert_eq!(gx, cx, "the grid is flush with the band");
     assert_eq!(gw, cw, "the Expanded grid fills the column's width");
 }
@@ -190,7 +201,14 @@ fn table_reactive_header_sits_left_aligned_above_rows() {
     assert_eq!(hy, cy, "the header is the column's first child");
     assert_eq!(hh, 32.0, "the header band keeps its 32px height");
     assert_eq!(hx, cx, "the header band is left-aligned with the rows");
-    assert_eq!(hw, cw, "the header band spans the table's full width (Stretch)");
-    assert_eq!(ry, hy + hh, "the first row starts where the header band ends");
+    assert_eq!(
+        hw, cw,
+        "the header band spans the table's full width (Stretch)"
+    );
+    assert_eq!(
+        ry,
+        hy + hh,
+        "the first row starts where the header band ends"
+    );
     assert_eq!(rx, cx, "the rows sit flush left under the band");
 }

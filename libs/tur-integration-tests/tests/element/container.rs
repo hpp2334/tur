@@ -226,3 +226,52 @@ fn container_with_shadow() {
     assert_eq!(container_node.computed_layout.size.width, 200.0);
     assert_eq!(container_node.computed_layout.size.height, 200.0);
 }
+
+// ---------------------------------------------------------------------------
+// box_radius_bound — the reactive corner radius (`Container().radius_bound`
+// mirrors `width_bound`/`height_bound`/`color_bound`; animated corner
+// radius rides a derive of the progress atom).
+// ---------------------------------------------------------------------------
+
+const RADIUS_BOUND_RUT: &str = r#"
+use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur_kit::{ Container };
+
+let K_R: u64 = 3;
+
+entry fn start() {
+    let r = rs_source_f64();
+    rs_set_f64(r, 8.0);
+    let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
+    stf_put(K_R, r as f64);
+    mount(card);
+}
+
+entry fn probe_r(_a: u64, b: f64) {
+    let r = stf_take(K_R) as u64;
+    rs_set_f64(r, b);
+    stf_put(K_R, r as f64);
+}
+"#;
+
+#[test]
+fn radius_bound_resolves_through_the_live_atom() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(RADIUS_BOUND_RUT).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let box_id = ElementNodeId::new(app.query_element(&["rb", "box"]).unwrap().as_u64());
+    app.with_element(box_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        assert_eq!(c.border_radius(), Some(8.0), "the atom's initial value");
+    });
+
+    // The atom swap re-resolves the radius through layout (the subscribe
+    // → relayout rail; painting carries the reactive value).
+    app.call_rut_entry("probe_r", 0, 20.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(box_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        assert_eq!(c.border_radius(), Some(20.0), "radius follows the atom");
+    });
+}

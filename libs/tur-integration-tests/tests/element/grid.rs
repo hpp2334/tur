@@ -5,7 +5,12 @@ use tur_integration_tests::TurTestApp;
 /// Helper: load a Grid inline with the given props + child count, render, and
 /// return the Grid element's id. The fixture authors `count` gray tiles
 /// through the `el_grid` builder rows.
-fn setup_grid(width: f64, height: f64, grid_opts: &GridOpts, count: usize) -> (TurTestApp, ElementNodeId) {
+fn setup_grid(
+    width: f64,
+    height: f64,
+    grid_opts: &GridOpts,
+    count: usize,
+) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
     app.load_rut_module(&format!(
         r#"
@@ -31,18 +36,24 @@ entry fn start() {{
         max_cross = grid_opts.max_cross,
         aspect = grid_opts
             .aspect
-            .map(|a| format!("    g.aspect({a});
-"))
+            .map(|a| format!(
+                "    g.aspect({a});
+"
+            ))
             .unwrap_or_default(),
         extent = grid_opts
             .main_extent
-            .map(|e| format!("    g.main_extent({e});
-"))
+            .map(|e| format!(
+                "    g.main_extent({e});
+"
+            ))
             .unwrap_or_default(),
         spacing = grid_opts
             .spacing
-            .map(|(c, m)| format!("    g.spacing({c}, {m});
-"))
+            .map(|(c, m)| format!(
+                "    g.spacing({c}, {m});
+"
+            ))
             .unwrap_or_default(),
         count = count,
     ))
@@ -87,11 +98,7 @@ impl GridOpts {
 
 #[test]
 fn grid_mounts_as_tur_grid() {
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0), 4,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0), 4);
     let _ = id;
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
@@ -105,11 +112,7 @@ fn grid_mounts_as_tur_grid() {
 /// 400px wide, maxExtent 100, no spacing → 4 columns of 100px each.
 #[test]
 fn grid_column_count_derived_from_max_extent() {
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0), 8,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0), 8);
 
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -143,11 +146,7 @@ fn grid_column_count_derived_from_max_extent() {
 /// `childAspectRatio: 2` → cell_main = cell_cross / 2 = 50.
 #[test]
 fn grid_child_aspect_ratio_scales_main_axis() {
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0).aspect(2.0), 4,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0).aspect(2.0), 4);
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
     let c0 = tree
@@ -166,7 +165,8 @@ fn grid_main_axis_extent_overrides_aspect() {
     let (app, id) = setup_grid(
         400.0,
         600.0,
-        &GridOpts::new(100.0).aspect(2.0).main_extent(80.0), 4,
+        &GridOpts::new(100.0).aspect(2.0).main_extent(80.0),
+        4,
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
@@ -183,11 +183,7 @@ fn grid_spacing_advances_positions() {
     // 400w, maxExtent 100 → 4 cols. crossAxisSpacing 10, mainAxisSpacing 10.
     // usable = 400 - 3*10 = 370. cell_cross = 370/4 = 92.5.
     // x positions: 0, 102.5, 205, 307.5. row pitch = 92.5 + 10 = 102.5.
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0).spacing(10.0, 10.0), 8,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0).spacing(10.0, 10.0), 8);
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
 
@@ -213,11 +209,7 @@ fn grid_spacing_advances_positions() {
 /// Fewer children than columns → one row, no spillover.
 #[test]
 fn grid_fewer_children_than_columns() {
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0), 2,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0), 2);
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
     assert_eq!(g.children.len(), 2);
@@ -234,11 +226,7 @@ fn grid_fewer_children_than_columns() {
 /// of 217.5px and blows the bound (the operator audit's grid-case failure).
 #[test]
 fn grid_column_count_ceils_max_extent_division() {
-    let (app, id) = setup_grid(
-        435.0,
-        600.0,
-        &GridOpts::new(150.0), 6,
-    );
+    let (app, id) = setup_grid(435.0, 600.0, &GridOpts::new(150.0), 6);
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
 
@@ -273,11 +261,7 @@ fn grid_column_count_ceils_max_extent_division() {
 /// float fuzz above the integer would ceil to a phantom 4th column.
 #[test]
 fn grid_exact_multiple_stays_at_exact_count() {
-    let (app, id) = setup_grid(
-        435.0,
-        600.0,
-        &GridOpts::new(145.0), 6,
-    );
+    let (app, id) = setup_grid(435.0, 600.0, &GridOpts::new(145.0), 6);
     app.with_element(id, |e| {
         let g = e.cast::<GridElement>().unwrap();
         assert_eq!(g.cross_axis_count(), 3);
@@ -301,11 +285,7 @@ fn grid_exact_multiple_stays_at_exact_count() {
 /// The Grid element records the computed metrics for dev-tool tracing.
 #[test]
 fn grid_element_records_metrics() {
-    let (app, id) = setup_grid(
-        400.0,
-        600.0,
-        &GridOpts::new(100.0), 8,
-    );
+    let (app, id) = setup_grid(400.0, 600.0, &GridOpts::new(100.0), 8);
     app.with_element(id, |e| {
         let g = e.cast::<GridElement>().unwrap();
         assert_eq!(g.cross_axis_count(), 4);

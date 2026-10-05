@@ -73,7 +73,10 @@ fn tctrl_set_text_refreshes_the_mounted_editable() {
         .dev_tool_element_tree()
         .expect("dev-tool root after boot");
     let before = find_editable(&app, root).expect("editable mounted");
-    let (before_w, before_shapes) = (metric(&before, "layoutWidth"), metric(&before, "shapeCount"));
+    let (before_w, before_shapes) = (
+        metric(&before, "layoutWidth"),
+        metric(&before, "shapeCount"),
+    );
 
     // The programmatic write — then drive the frame that must repaint it.
     app.call_rut_entry("set_text", 0, 0.0).expect("entry runs");

@@ -9,6 +9,11 @@
 //! depth-limited, no-mount-guarded, traps reported (never aborting the
 //! flush). The item builder signature is
 //! `fn item_fn(index: u64, item: str) -> opaque`.
+//!
+//! The lazy branch rows (`cond_then_build` / `cond_else_build` /
+//! `switch_case_build`) store the same kind of sealed box behind a
+//! [`BranchBuilder`] factory — zero-arg `fn() -> opaque` branches invoked
+//! at activation (fresh read of live state) through `__tur_cb_build0`.
 
 use std::rc::Rc;
 
@@ -43,6 +48,11 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("cond_new", vec![TY_U64], TY_OPAQUE),
         row("cond_then", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("cond_else", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        // the lazy twins: the branch is a kit-sealed fn box, invoked at
+        // activation (fresh read of live state) and re-invoked at every
+        // re-activation.
+        row("cond_then_build", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("cond_else_build", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("cond_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("cond_build", vec![TY_OPAQUE], TY_OPAQUE),
         // switch
@@ -50,6 +60,12 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("switch_value_source", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("switch_value_derived", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("switch_case", vec![TY_OPAQUE, TY_STR, TY_OPAQUE], TY_NIL),
+        // the lazy case twin: invoked when the key activates.
+        row(
+            "switch_case_build",
+            vec![TY_OPAQUE, TY_STR, TY_OPAQUE],
+            TY_NIL,
+        ),
         row("switch_fallback", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("switch_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("switch_build", vec![TY_OPAQUE], TY_OPAQUE),
@@ -66,12 +82,13 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 
 use rut_core::types::{TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 
-/// The condition spec (both branches authored at start time; the swap is
-/// pure engine — the factory clones a pre-built Rc, no rut during flush).
+/// The condition spec (both branches authored at start time — a branch is
+/// either a pre-built view (`cond_then`) or a lazy fn-box factory
+/// (`cond_then_build`); the swap invokes the factory only at activation).
 pub(crate) struct CondSpec {
     condition: Val<bool>,
-    then_child: Option<Rc<dyn crate::core::view::View>>,
-    else_child: Option<Rc<dyn crate::core::view::View>>,
+    then_child: Option<Rc<dyn crate::core::view::ViewFactory>>,
+    else_child: Option<Rc<dyn crate::core::view::ViewFactory>>,
     query_key: Option<Vec<String>>,
 }
 
@@ -97,11 +114,25 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     rut_vm::pkg_fn!(pkg, "cond_then", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
-        b.with_mut(vm, |_vm, s| s.then_child = Some(child))
+        b.with_mut(vm, |_vm, s| s.then_child = Some(Rc::new(Prebuilt(child))))
     });
     rut_vm::pkg_fn!(pkg, "cond_else", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
-        b.with_mut(vm, |_vm, s| s.else_child = Some(child))
+        b.with_mut(vm, |_vm, s| s.else_child = Some(Rc::new(Prebuilt(child))))
+    });
+    // cond_then_build / cond_else_build — the lazy twins: the branch is
+    // a kit-sealed fn box (`fn() -> opaque`), stored as a factory and
+    // invoked at activation (fresh read of live state), re-invoked at
+    // every re-activation.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "cond_then_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
+        let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
+        b.with_mut(vm, |_vm, s| s.then_child = Some(factory))
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "cond_else_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
+        let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
+        b.with_mut(vm, |_vm, s| s.else_child = Some(factory))
     });
     rut_vm::pkg_fn!(pkg, "cond_qkey", (Opaque<CondSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
@@ -109,12 +140,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     rut_vm::pkg_fn!(pkg, "cond_build", (Opaque<CondSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>| {
         let view = b.with(|s| {
-            let then_v = s.then_child.clone().expect("cond_build: no then branch");
-            let else_v = s.else_child.clone().expect("cond_build: no else branch");
+            let then_factory = s.then_child.clone().expect("cond_build: no then branch");
+            let else_factory = s.else_child.clone().expect("cond_build: no else branch");
             let mut view = ConditionView::new_rut(
                 s.condition.clone(),
-                Rc::new(Prebuilt(then_v)),
-                Rc::new(Prebuilt(else_v)),
+                then_factory,
+                else_factory,
             );
             view.set_query_key(s.query_key.clone());
             Rc::new(view) as Rc<dyn crate::core::view::View>
@@ -150,6 +181,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let child = child.with(|v| v.0.clone())?;
         let key = crate::builtin_plugins::control_flow::SwitchKey(Value::str(key));
         b.with_mut(vm, |_vm, s| s.push_case(key, Rc::new(Prebuilt(child))))
+    });
+    // switch_case_build — the lazy case twin: the branch is a kit-sealed
+    // fn box, invoked when the key activates.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "switch_case_build", (Opaque<SwitchView>, &str, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str, cb: OpaqueRef| {
+        let key = crate::builtin_plugins::control_flow::SwitchKey(Value::str(key));
+        let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
+        b.with_mut(vm, |_vm, s| s.push_case(key, factory))
     });
     rut_vm::pkg_fn!(pkg, "switch_fallback", (Opaque<SwitchView>, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;

@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::builtin_plugins::layout::ContainerView;
 use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
+use crate::core::edgy::reactive::Readable;
 use crate::core::element::NodeId;
 use crate::core::render::brush::Color;
 use crate::core::view::{Val, View, ViewCx};
@@ -100,6 +101,9 @@ impl InputView {
     pub(crate) fn set_placeholder_str(&mut self, v: String) {
         self.placeholder = Some(Val::Static(v));
     }
+    pub(crate) fn set_placeholder_reactive(&mut self, r: Readable<String>) {
+        self.placeholder = Some(Val::Reactive(r));
+    }
     pub(crate) fn set_color(&mut self, v: crate::core::render::brush::Color) {
         self.color = Some(Val::Static(v));
     }
@@ -129,6 +133,9 @@ impl InputView {
     pub(crate) fn set_obscure(&mut self, v: bool) {
         self.obscure_text = Some(Val::Static(v));
     }
+    pub(crate) fn set_obscure_reactive(&mut self, r: Readable<bool>) {
+        self.obscure_text = Some(Val::Reactive(r));
+    }
     pub(crate) fn set_multiline(&mut self, v: bool) {
         self.multiline = Some(Val::Static(v));
     }
@@ -138,5 +145,4 @@ impl InputView {
     pub(crate) fn set_font_family_str(&mut self, v: String) {
         self.font_family = Some(Val::Static(v));
     }
-
 }

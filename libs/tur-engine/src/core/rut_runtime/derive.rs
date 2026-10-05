@@ -25,7 +25,7 @@ use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::edgy::value::Value;
 use rut_vm::{Opaque, OpaqueRef};
 
-use super::{cb_entries, Intent, RutHandles};
+use super::{Intent, RutHandles, cb_entries};
 
 /// The watch pair opaque (the `start$` / `stop$` control mutations).
 pub struct RutWatch {

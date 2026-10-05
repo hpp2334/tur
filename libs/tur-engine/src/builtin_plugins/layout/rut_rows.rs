@@ -15,14 +15,14 @@ use num_traits::FromPrimitive;
 
 use crate::builtin_plugins::layout::composited_transform::link::CompositedLinkState;
 use crate::builtin_plugins::layout::{
-    ContainerView, FlexView, FlexibleView, GridView, PositionedView, StackView,
-    TableColumnDef, TableView,
+    ContainerView, FlexView, FlexibleView, GridView, PositionedView, StackView, TableColumnDef,
+    TableView,
 };
 use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
-use crate::core::edgy::reactive::{AtomId, AnyReadable, Readable, Source};
+use crate::core::edgy::reactive::{AnyReadable, AtomId, Readable, Source};
 use crate::core::layout::{
-    Alignment, Axis, BorderPosition, ClipBehavior, CrossAxisAlignment, FlexFit,
-    MainAxisAlignment, MainAxisSize, StackFit,
+    Alignment, Axis, BorderPosition, ClipBehavior, CrossAxisAlignment, FlexFit, MainAxisAlignment,
+    MainAxisSize, StackFit,
 };
 use crate::core::render::brush::Brush;
 use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
@@ -69,14 +69,23 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("box_size", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
         row("box_width", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("box_height", vec![TY_OPAQUE, TY_F64], TY_NIL),
-        row("box_border", vec![TY_OPAQUE, TY_U64, TY_F64, TY_U64], TY_NIL),
+        row(
+            "box_border",
+            vec![TY_OPAQUE, TY_U64, TY_F64, TY_U64],
+            TY_NIL,
+        ),
         row("box_radius", vec![TY_OPAQUE, TY_F64], TY_NIL),
-        row("box_shadow", vec![TY_OPAQUE, TY_U64, TY_F64, TY_F64, TY_F64], TY_NIL),
+        row(
+            "box_shadow",
+            vec![TY_OPAQUE, TY_U64, TY_F64, TY_F64, TY_F64],
+            TY_NIL,
+        ),
         row("box_align", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_clip", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_width_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_height_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_color_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("box_radius_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("box_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("box_build", vec![TY_OPAQUE], TY_OPAQUE),
@@ -91,6 +100,10 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("pos_top", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("pos_right", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("pos_bottom", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        // the reactive anchors (drag-to-move rides a live atom; see the
+        // row bodies for the 0-is-a-real-zero law).
+        row("pos_left_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("pos_top_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pos_width", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("pos_height", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("pos_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
@@ -391,6 +404,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "box_color_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, color_atom: u64| {
         b.with_mut(vm, |_vm, s| s.color = Some(Val::Reactive(readable_of::<Brush>(color_atom))))
     });
+    rut_vm::pkg_fn!(pkg, "box_radius_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, r_atom: u64| {
+        b.with_mut(vm, |_vm, s| s.border_radius = Some(Val::Reactive(readable_of::<f64>(r_atom))))
+    });
     rut_vm::pkg_fn!(pkg, "box_child", (Opaque<ContainerView>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.children.push(child))
@@ -441,6 +457,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     rut_vm::pkg_fn!(pkg, "pos_bottom", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.bottom = (v != 0.0).then_some(Val::Static(v)))
+    });
+    // pos_left_bound / pos_top_bound — the reactive anchors (drag-to-move
+    // rides a live atom). Unlike the authoring rows above (whose 0 =
+    // ABSENT idiom keeps `width_height(0, h)` meaningful), a BOUND anchor
+    // is present VERBATIM: 0 is a real coordinate — a piece parked at the
+    // origin stays put (the box_width_bound law).
+    rut_vm::pkg_fn!(pkg, "pos_left_bound", (Opaque<PositionedSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, atom: u64| {
+        b.with_mut(vm, |_vm, s| s.left = Some(Val::Reactive(readable_of::<f64>(atom))))
+    });
+    rut_vm::pkg_fn!(pkg, "pos_top_bound", (Opaque<PositionedSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, atom: u64| {
+        b.with_mut(vm, |_vm, s| s.top = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "pos_width", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.width = (v != 0.0).then_some(Val::Static(v)))

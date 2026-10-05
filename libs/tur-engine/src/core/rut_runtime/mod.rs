@@ -26,18 +26,18 @@
 use std::rc::Rc;
 use std::rc::Weak;
 
-use crate::core::app::root::RootView;
 use crate::core::app::HostMsg;
-use crate::core::edgy::reactive::{AtomId, Readable, Source, ScalarRead};
+use crate::core::app::root::RootView;
+use crate::core::edgy::reactive::{AtomId, Readable, ScalarRead, Source};
 use crate::core::edgy::value::Value;
 use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
-use rut_core::types::{TypeId, TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64};
+use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64, TypeId};
 use rut_driver::PkgBody;
 use rut_vm::Opaque;
-use rut_vm::interp::{CallArgs, Ret, Vm};
 use rut_vm::OpaqueRef;
+use rut_vm::interp::{CallArgs, Ret, Vm};
 
 mod async_caps;
 mod derive;
@@ -150,6 +150,9 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("mem_get", vec![TY_OPAQUE], TY_F64),
         row("mem_set", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("str_parse_f64", vec![TY_STR], TY_F64),
+        // pure math (f64 radians in/out) — the orbit / wave case shapes
+        row("math_sin", vec![TY_F64], TY_F64),
+        row("math_cos", vec![TY_F64], TY_F64),
     ];
     // C6 — async capabilities (clipboard + bytes helpers; the async rows
     // ride the driver's five-row family expansion).
@@ -413,6 +416,15 @@ fn install_tur_pkg(
     rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
         Ok(s.trim().parse::<f64>().unwrap_or(0.0))
     });
+    // Trig helpers (f64 radians in/out) — the pure-math rows. No instance
+    // state, no reactivity: a case derives motion from them (the orbit /
+    // wave shapes feed them a progress atom and format the result).
+    rut_vm::pkg_fn!(pkg, "math_sin", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+        Ok(x.sin())
+    });
+    rut_vm::pkg_fn!(pkg, "math_cos", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+        Ok(x.cos())
+    });
 
     // C6 — async capabilities (clipboard + the bytes helpers).
     async_caps::install(&mut pkg, handles);
@@ -481,7 +493,8 @@ pub struct RutHandles {
     pub clock: Rc<dyn crate::core::clock::Clock>,
     /// The engine-wide mutation queue — animation `onTick` callbacks ride
     /// it (same dispatch path the JS controllers used).
-    pub mutation_queue: Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
+    pub mutation_queue:
+        Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
     /// The instance context — capability lookups + worker-side spawns (the
     /// async capability rows: clipboard / net / filepicker).
     pub inst: InstanceContext,
@@ -507,9 +520,23 @@ pub struct RutHandles {
 #[derive(Clone, Debug)]
 pub enum Intent {
     /// The tap shape: `(cb, id_a, id_b, seq)`.
-    Click { entry: &'static str, cb: OpaqueRef, a: u64, b: u64, seq: f64 },
+    Click {
+        entry: &'static str,
+        cb: OpaqueRef,
+        a: u64,
+        b: u64,
+        seq: f64,
+    },
     /// A key event from the Focusable's `onKeyDown` mutation.
-    Key { entry: &'static str, cb: OpaqueRef, id: u64, key: String, code: String, modifiers: u64, kind: u64 },
+    Key {
+        entry: &'static str,
+        cb: OpaqueRef,
+        id: u64,
+        key: String,
+        code: String,
+        modifiers: u64,
+        kind: u64,
+    },
     /// A pointer event from the PointerInteract down/move/up/context-menu
     /// mutations: `(cb, id, local_x, local_y, global_x, global_y, button)`.
     Pointer {
@@ -537,9 +564,19 @@ pub enum Intent {
     },
     /// A raw value payload (animation `onTick(eased)`, `watch(atom, cb)`
     /// change deliveries).
-    Value { entry: &'static str, cb: OpaqueRef, a: u64, value: crate::core::edgy::Value },
+    Value {
+        entry: &'static str,
+        cb: OpaqueRef,
+        a: u64,
+        value: crate::core::edgy::Value,
+    },
     /// A bytes payload (net-stream chunks): `cb(id, data: bytes)`.
-    Bytes { entry: &'static str, cb: OpaqueRef, a: u64, data: Vec<u8> },
+    Bytes {
+        entry: &'static str,
+        cb: OpaqueRef,
+        a: u64,
+        data: Vec<u8>,
+    },
 }
 
 impl Intent {
@@ -572,6 +609,9 @@ pub mod cb_entries {
     pub const PTR1: &str = "__tur_cb_ptr1";
     /// The two-id pointer shape.
     pub const PTR2: &str = "__tur_cb_ptr2";
+    /// The `(cb) -> view` zero-arg branch-builder shape (Condition
+    /// then/else + Switch cases — invoked at activation).
+    pub const BUILD0: &str = "__tur_cb_build0";
     /// The `(cb, i) -> view` lazy/table-header builder shape.
     pub const BUILD1: &str = "__tur_cb_build1";
     /// The `(cb, i, item) -> view` Each-builder shape.
@@ -637,17 +677,12 @@ impl VmFace {
         name: &str,
         args: A,
     ) -> Result<R, rut_vm::Trap> {
-        let vm = self
-            .vm
-            .borrow()
-            .clone()
-            .upgrade()
-            .ok_or_else(|| {
-                rut_vm::Trap::new(
-                    rut_vm::TrapKind::Invalid,
-                    format!("face call `{name}`: the rut module is gone"),
-                )
-            })?;
+        let vm = self.vm.borrow().clone().upgrade().ok_or_else(|| {
+            rut_vm::Trap::new(
+                rut_vm::TrapKind::Invalid,
+                format!("face call `{name}`: the rut module is gone"),
+            )
+        })?;
         let depth = handles.face_busy.get();
         if depth >= VM_FACE_MAX_DEPTH {
             report_runtime_error(
@@ -682,8 +717,9 @@ impl VmFace {
                                 done = Ok(v);
                                 break;
                             }
-                            Err(t2) if t2.kind == rut_vm::TrapKind::OutOfFuel
-                                && retries < VM_FACE_MAX_FUEL_RETRIES =>
+                            Err(t2)
+                                if t2.kind == rut_vm::TrapKind::OutOfFuel
+                                    && retries < VM_FACE_MAX_FUEL_RETRIES =>
                             {
                                 retries += 1;
                             }
@@ -696,14 +732,20 @@ impl VmFace {
                     if let Err(t) = &done {
                         report_runtime_error(
                             handles,
-                            &format!("face call `{name}`: out of fuel after bounded grants (total used {})", guard.fuel_used),
+                            &format!(
+                                "face call `{name}`: out of fuel after bounded grants (total used {})",
+                                guard.fuel_used
+                            ),
                         );
                         let _ = t;
                     }
                     done
                 }
                 Err(t) => {
-                    report_runtime_error(handles, &format!("face call `{name}`: {} — {}", t.name(), t.msg));
+                    report_runtime_error(
+                        handles,
+                        &format!("face call `{name}`: {} — {}", t.name(), t.msg),
+                    );
                     Err(t)
                 }
             }
@@ -764,7 +806,13 @@ impl RutRuntime {
     fn compile(
         source: &str,
         exts: &[RutPkgExt],
-    ) -> Result<(Rc<rut_core::binary::Program>, rut_vm::interp::HostPkgContext), String> {
+    ) -> Result<
+        (
+            Rc<rut_core::binary::Program>,
+            rut_vm::interp::HostPkgContext,
+        ),
+        String,
+    > {
         // The decl surface: the engine rows plus every extension's rows
         // (plugin-owned — the element families + capability crates), so
         // the compile sees the full surface the boot will bind. Extensions
@@ -784,7 +832,10 @@ impl RutRuntime {
             });
         }
         let mut tur_pkg = tur_decl_pkg();
-        if let PkgBody::Host { host_funcs, consts, .. } = &mut tur_pkg.body {
+        if let PkgBody::Host {
+            host_funcs, consts, ..
+        } = &mut tur_pkg.body
+        {
             host_funcs.extend(ext_decl);
             consts.extend(ext_consts);
         }
@@ -833,7 +884,10 @@ impl RutRuntime {
 
     /// Parse + compile only (the parse-first half of the load contract) —
     /// a broken reload must fail before any teardown runs.
-    pub fn parse_check(source: &str, exts: &[RutPkgExt]) -> Result<(), crate::core::app::ModuleError> {
+    pub fn parse_check(
+        source: &str,
+        exts: &[RutPkgExt],
+    ) -> Result<(), crate::core::app::ModuleError> {
         Self::compile(source, exts)
             .map(|_| ())
             .map_err(crate::core::app::ModuleError::Parse)
@@ -923,17 +977,14 @@ impl RutRuntime {
     fn call_start(&mut self, returns_u64: bool) -> Result<(), crate::core::app::ModuleError> {
         let mut vm = self.vm.borrow_mut();
         if returns_u64 {
-            let answer = vm
-                .call::<_, u64>("start", ())
-                .map_err(|t| {
-                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
-                })?;
+            let answer = vm.call::<_, u64>("start", ()).map_err(|t| {
+                crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
+            })?;
             self.start_answer = answer;
         } else {
-            vm.call::<_, ()>("start", ())
-                .map_err(|t| {
-                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
-                })?;
+            vm.call::<_, ()>("start", ()).map_err(|t| {
+                crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
+            })?;
         }
         Ok(())
     }
@@ -941,12 +992,19 @@ impl RutRuntime {
     /// Call a named `entry fn(u64, f64)` — the engine→rut event rail
     /// (input dispatch, embedder events). Runs OUTSIDE flush; rows must
     /// not mount (stash-and-apply is a `start`-time contract in Phase 2).
-    pub fn call_entry(&mut self, name: &str, a: u64, b: f64) -> Result<(), crate::core::app::ModuleError> {
+    pub fn call_entry(
+        &mut self,
+        name: &str,
+        a: u64,
+        b: f64,
+    ) -> Result<(), crate::core::app::ModuleError> {
         self.vm
             .borrow_mut()
             .call::<_, ()>(name, (a, b))
             .map(|_| ())
-            .map_err(|t| crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg)))
+            .map_err(|t| {
+                crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg))
+            })
     }
 
     /// Apply the root stashed by `tur::mount` into the instance tree —
@@ -994,15 +1052,12 @@ impl RutRuntime {
         if let Err(t) = self.vm.borrow_mut().run_ready() {
             eprintln!("[rut-dbg] task trap: {} — {}", t.name(), t.msg);
             let msg = format!("rut task trap: {} — {}", t.name(), t.msg);
-            let _ = self
-                .handles
-                .host_tx
-                .unbounded_send(HostMsg::RuntimeError {
-                    report: crate::core::app::runtime_error::RuntimeErrorReport {
-                        message: msg,
-                        stack: None,
-                    },
-                });
+            let _ = self.handles.host_tx.unbounded_send(HostMsg::RuntimeError {
+                report: crate::core::app::runtime_error::RuntimeErrorReport {
+                    message: msg,
+                    stack: None,
+                },
+            });
         }
     }
 
@@ -1031,22 +1086,59 @@ impl RutRuntime {
     fn call_intent(&mut self, intent: &Intent) -> Result<(), rut_vm::Trap> {
         let mut vm = self.vm.borrow_mut();
         match intent {
-            Intent::Click { entry, cb, a, b, seq } => {
-                vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *seq))
-            }
-            Intent::Key { entry, cb, id, key, code, modifiers, kind } => vm.call::<_, ()>(
+            Intent::Click {
                 entry,
-                (cb.clone(), *id, key.as_str(), code.as_str(), *modifiers, *kind),
-            ),
-            Intent::Pointer { entry, cb, id, lx, ly, gx, gy, button } => vm.call::<_, ()>(
+                cb,
+                a,
+                b,
+                seq,
+            } => vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *seq)),
+            Intent::Key {
                 entry,
-                (cb.clone(), *id, *lx, *ly, *gx, *gy, *button),
-            ),
-            Intent::Pointer2 { entry, cb, a, b, lx, ly, gx, gy, button } => vm.call::<_, ()>(
+                cb,
+                id,
+                key,
+                code,
+                modifiers,
+                kind,
+            } => vm.call::<_, ()>(
                 entry,
-                (cb.clone(), *a, *b, *lx, *ly, *gx, *gy, *button),
+                (
+                    cb.clone(),
+                    *id,
+                    key.as_str(),
+                    code.as_str(),
+                    *modifiers,
+                    *kind,
+                ),
             ),
-            Intent::Value { entry, cb, a, value } => {
+            Intent::Pointer {
+                entry,
+                cb,
+                id,
+                lx,
+                ly,
+                gx,
+                gy,
+                button,
+            } => vm.call::<_, ()>(entry, (cb.clone(), *id, *lx, *ly, *gx, *gy, *button)),
+            Intent::Pointer2 {
+                entry,
+                cb,
+                a,
+                b,
+                lx,
+                ly,
+                gx,
+                gy,
+                button,
+            } => vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *lx, *ly, *gx, *gy, *button)),
+            Intent::Value {
+                entry,
+                cb,
+                a,
+                value,
+            } => {
                 let n = match value {
                     Value::Num(n) => *n,
                     Value::Bool(b) => *b as u64 as f64,

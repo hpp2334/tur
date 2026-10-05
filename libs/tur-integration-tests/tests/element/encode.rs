@@ -40,7 +40,12 @@ fn encode_decode_roundtrips_through_rut_rows() {
     let text = app
         .with_element(id, |e| {
             e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-                .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+                .map(|c| {
+                    c.spans()
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                })
                 .unwrap_or_default()
         })
         .unwrap_or_default();
