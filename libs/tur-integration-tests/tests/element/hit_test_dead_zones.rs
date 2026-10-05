@@ -17,8 +17,9 @@
 //!    cannot: the kit's compile-time type check rejects the post-build
 //!    mutation outright (see `double_build_is_rejected_at_compile_time`).
 //!
-//! Also pins the corpus jigsaw-puzzle case itself (its callbacks write into
-//! atoms; the label must actually flip for the wiring to be observable).
+//! Also pins the corpus jigsaw-puzzle case — since Phase 9 the full 3×3
+//! game (drag → snap → count → shuffle → solve), riding the same
+//! Positioned-in-Stack shape the verdict cleared.
 
 use std::time::Duration;
 
@@ -312,37 +313,146 @@ fn double_build_is_rejected_at_compile_time() {
     );
 }
 
-// ── The corpus jigsaw-puzzle case itself ────────────────────────────────
+// ── The corpus jigsaw-puzzle case (the Phase-9 full game) ────────────────
+//
+// The Phase-9 rewrite turned the fixture case into the full 3×3 game:
+// bound `left`/`top` atoms per piece (the drag rail), `.ids(i, i)` shared
+// callbacks, a snap highlight (a Condition branch), the "N / 9 placed"
+// derive badge, Shuffle (a stash-cell Fisher-Yates re-deal), and the
+// Solved! overlay. This pins the whole loop headlessly — the drag rail
+// (down → move → up on a Positioned-in-Stack piece), snap + non-snap, the
+// placed lock, the re-deal, and the solve.
 
-#[test]
-fn jigsaw_corpus_piece_receives_drag() {
-    let mut app = TurTestApp::new(300.0, 400.0).unwrap();
+fn jigsaw_app() -> TurTestApp {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_bundle("jigsaw-puzzle").unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(label(&app, &["piece", "label"]), "A", "seed label");
+    app
+}
 
-    // Drag down + moves, then hold (no up): on_down must have flipped the
-    // bound label to "dragging" — the audit's dead-zone probe, now
-    // observable because the label is BOUND to the piece atom.
-    let (cx, cy) = center(&app, &["rut", "gesture"]);
-    app.pointer_down(cx, cy);
-    app.wait_for_timeout(Duration::ZERO);
-    app.pointer_move(cx + 13.0, cy + 13.0);
-    app.wait_for_timeout(Duration::from_millis(16));
-    app.pointer_move(cx + 27.0, cy + 27.0);
-    app.wait_for_timeout(Duration::from_millis(16));
-    assert_eq!(
-        label(&app, &["piece", "label"]),
-        "dragging",
-        "mid-drag: on_down + on_move must have fired"
+// A piece's target slot: its bound label names it, 1-based.
+fn jigsaw_target(app: &TurTestApp, piece: u64) -> u64 {
+    let key = format!("piece-{piece}-label");
+    label(app, &["jw", &key])
+        .trim()
+        .parse::<u64>()
+        .expect("numeric label")
+        - 1
+}
+
+#[test]
+fn jigsaw_game_drags_snaps_counts_and_solves() {
+    let mut app = jigsaw_app();
+
+    // Boot: counter seeds at 0, no highlight, 9 pieces + 9 ghosts.
+    assert_eq!(label(&app, &["jw", "counter"]), "0 / 9 placed", "seed count");
+    assert!(
+        app.query_element(&["jw", "snap-hl"]).is_none(),
+        "no highlight at rest"
     );
 
-    // Release: g_up restores the piece label.
-    app.pointer_up(cx + 40.0, cy + 40.0);
-    app.wait_for_timeout(Duration::from_millis(16));
+    // WRONG slot: the piece follows the drag, nothing snaps, nothing counts.
+    let target0 = jigsaw_target(&app, 0);
+    let wrong = (target0 + 1) % 9;
+    let from = center(&app, &["jw", "piece-0"]);
+    let wrong_center = center(&app, &["jw", &format!("ghost-{wrong}")]);
+    mouse_drag(&mut app, from, wrong_center, 6);
     assert_eq!(
-        label(&app, &["piece", "label"]),
-        "A",
-        "on_up restores the label"
+        label(&app, &["jw", "counter"]),
+        "0 / 9 placed",
+        "wrong slot must not count"
+    );
+    let dropped = center(&app, &["jw", "piece-0"]);
+    assert!(
+        (dropped.0 - wrong_center.0).abs() < 6.0 && (dropped.1 - wrong_center.1).abs() < 6.0,
+        "the piece stays where it was dropped: {dropped:?} vs {wrong_center:?}"
+    );
+
+    // CORRECT slot: the highlight shows within threshold mid-drag, hides on
+    // release, the piece pins to the slot center, the badge counts it.
+    let to = center(&app, &["jw", &format!("ghost-{target0}")]);
+    app.pointer_down(dropped.0, dropped.1);
+    app.wait_for_timeout(Duration::ZERO);
+    app.pointer_move(to.0 + 10.0, to.1 + 10.0);
+    app.wait_for_timeout(Duration::from_millis(16));
+    assert!(
+        app.query_element(&["jw", "snap-hl"]).is_some(),
+        "snap highlight shows within threshold"
+    );
+    app.pointer_move(to.0, to.1);
+    app.wait_for_timeout(Duration::from_millis(16));
+    app.pointer_up(to.0, to.1);
+    app.wait_for_timeout(Duration::from_millis(16));
+
+    assert_eq!(label(&app, &["jw", "counter"]), "1 / 9 placed", "snap counts");
+    assert!(
+        app.query_element(&["jw", "snap-hl"]).is_none(),
+        "highlight hides on release"
+    );
+    let snapped = center(&app, &["jw", "piece-0"]);
+    assert!(
+        (snapped.0 - to.0).abs() < 1.5 && (snapped.1 - to.1).abs() < 1.5,
+        "the piece pinned to the slot center: {snapped:?} vs {to:?}"
+    );
+
+    // A SECOND piece snaps the same way.
+    let target1 = jigsaw_target(&app, 1);
+    let from1 = center(&app, &["jw", "piece-1"]);
+    let to1 = center(&app, &["jw", &format!("ghost-{target1}")]);
+    mouse_drag(&mut app, from1, to1, 6);
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "2 / 9 placed",
+        "second snap counts"
+    );
+
+    // Placed pieces refuse re-grabs.
+    let pinned = center(&app, &["jw", "piece-0"]);
+    let elsewhere = center(&app, &["jw", "ghost-0"]);
+    mouse_drag(&mut app, pinned, elsewhere, 4);
+    let after = center(&app, &["jw", "piece-0"]);
+    assert!(
+        (after.0 - pinned.0).abs() < 0.5 && (after.1 - pinned.1).abs() < 0.5,
+        "placed pieces don't move: {after:?} vs {pinned:?}"
+    );
+    assert_eq!(label(&app, &["jw", "counter"]), "2 / 9 placed");
+
+    // Shuffle re-deals: the counter resets and piece 0 returns to tray
+    // slot 0 (absolute (140, 370) = play offset (10, 40) + tray slot 0).
+    let (sx, sy) = center(&app, &["jw", "shuffle"]);
+    app.click(sx, sy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(label(&app, &["jw", "counter"]), "0 / 9 placed", "shuffle resets");
+    assert!(
+        app.query_element(&["jw", "snap-hl"]).is_none(),
+        "no highlight after shuffle"
+    );
+    let home = center(&app, &["jw", "piece-0"]);
+    assert!(
+        (home.0 - 140.0).abs() < 1.0 && (home.1 - 370.0).abs() < 1.0,
+        "piece 0 re-dealt to tray slot 0: {home:?} vs (140, 370)"
+    );
+
+    // Replayable: piece 0 snaps again after the shuffle…
+    let target0b = jigsaw_target(&app, 0);
+    let from0b = center(&app, &["jw", "piece-0"]);
+    let to0b = center(&app, &["jw", &format!("ghost-{target0b}")]);
+    mouse_drag(&mut app, from0b, to0b, 6);
+    assert_eq!(label(&app, &["jw", "counter"]), "1 / 9 placed", "replay counts");
+
+    // …and solving the board flips the Solved! banner on at 9 / 9 (a
+    // full-viewer end screen — it covers Shuffle, so the game rests there).
+    assert!(app.query_element(&["jw", "banner"]).is_none(), "no banner yet");
+    for p in 1..9 {
+        let t = jigsaw_target(&app, p);
+        let from = center(&app, &["jw", &format!("piece-{p}")]);
+        let to = center(&app, &["jw", &format!("ghost-{t}")]);
+        mouse_drag(&mut app, from, to, 6);
+    }
+    assert_eq!(label(&app, &["jw", "counter"]), "9 / 9 placed", "solved count");
+    assert!(
+        app.query_element(&["jw", "banner"]).is_some(),
+        "the Solved! banner shows at 9 / 9"
     );
 }
+
