@@ -9,11 +9,13 @@ use std::rc::Rc;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::layout::{Constraints, Geometry, Offset, Size};
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::brush::{Brush, Color};
 use crate::core::render::{Canvas, CanvasOp, ElementRender, PaintContext, RenderCommand};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
+use crate::core::virtual_app::VirtualControl;
 
 use super::state::{VirtualControllerRef, VirtualState};
 
@@ -45,12 +47,19 @@ impl View for VirtualAppView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
+            // The host participates in the focus sweep: `with_callbacks`
+            // makes `has_focus()` true (a click INTO the child must not
+            // blur the parent's held host focus) and `with_focusable`
+            // resolves the host's focus/blur notifications so
+            // `on_focus_changed` can forward focus-out into the child.
             AnyElement::new(VirtualAppElement {
                 view: self.clone(),
                 painting: VirtualPainting::default(),
                 bound_base: Cell::new(None),
                 binder: u64::from(id),
-            }),
+            })
+            .with_callbacks()
+            .with_focusable::<VirtualAppElement>(),
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
@@ -91,10 +100,42 @@ pub struct VirtualAppElement {
 }
 
 impl Lifecycle for VirtualAppElement {
+    fn on_focus_changed(&mut self, focused: bool, _cx: &mut crate::core::view::SharedViewCx) {
+        // Focus-out forwarding: when the parent's focus manager drops this
+        // host (a pointer click elsewhere took focus, or another host /
+        // parent element gained it), the child must release its own
+        // focused element — keys are focus-routed, so a still-focused
+        // child would keep consuming keystrokes invisibly. The `ClearFocus`
+        // control is a no-op when the child already released focus (the
+        // child's own blur reported first).
+        if focused {
+            return;
+        }
+        if let Some(base) = self.bound_base.get()
+            && let Some(record) = self.view.state.record(base)
+            && let Some(token) = record.current.get()
+        {
+            self.view.state.send_control(VirtualControl::ClearFocus { token });
+        }
+    }
+
     fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx) {
         if let Some(base) = self.bound_base.take() {
             self.view.state.unbind(base, self.binder);
         }
+    }
+}
+
+impl Focusable for VirtualAppElement {
+    // No script-facing focus callbacks — the host registers as focusable
+    // purely to participate in the focus sweep + notification flush (its
+    // `on_focus_changed` above is the Rust-level focus-out rail).
+    fn on_focus_mutation(&self) -> Option<crate::core::edgy::mutation::MutationHandle<FocusEvent>> {
+        None
+    }
+
+    fn on_blur_mutation(&self) -> Option<crate::core::edgy::mutation::MutationHandle<BlurEvent>> {
+        None
     }
 }
 

@@ -8,15 +8,18 @@
 use std::rc::Rc;
 
 use crate::core::app::AppEvent;
+use crate::core::app::comm::ShellCommand;
+use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
 use crate::core::hit_test::HitTest;
 use crate::core::instance::InstanceContext;
 use crate::core::layout::Offset;
 use crate::core::platform::PlatformEvent;
-use crate::core::shell::{PointerInput, ShellEvent};
+use crate::core::shell::{PointerInput, ShellEvent, TextInputState};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::core::virtual_app::{
-    VirtualControl, VirtualErrorEvent, VirtualFrameEvent, VirtualStatusEvent,
+    VirtualControl, VirtualErrorEvent, VirtualFocusEvent, VirtualFrameEvent, VirtualStatusEvent,
+    VirtualTextInputEvent,
 };
 
 use super::element::VirtualAppElement;
@@ -84,7 +87,8 @@ impl VirtualAppSubsystem {
     /// interact) sits in front of every host, it consumes the event and the
     /// child sees nothing. The child composes gestures in its own arena;
     /// the parent never dispatches on the child's behalf. Key/IME events do
-    /// not participate (child focus is a later milestone).
+    /// not ride this walk — they are focus-routed, not position-routed (see
+    /// `forward_key_event`).
     fn forward_input(&self, cx: &SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let Some(global) = input_position(event) else {
             return;
@@ -133,6 +137,92 @@ impl VirtualAppSubsystem {
             }
         }
     }
+
+    /// Forward key/IME input into the child that holds focus.
+    ///
+    /// Keys are FOCUS-routed, not position-routed: the parent's focus
+    /// manager holds the host element's id while the child is focused (the
+    /// child reports focus in/out via [`VirtualFocusEvent`]), so a focused
+    /// host resolves to the child's live token and the event crosses
+    /// UNTRANSLATED (key/IME events carry no position). When a parent
+    /// element holds focus instead, nothing resolves here and the ordinary
+    /// key subsystems serve it — the two routes are exclusive.
+    fn forward_key_event(&self, cx: &SubsystemFlushContext<'_>, event: &PlatformEvent) {
+        let Some(translated) = key_event_payload(event) else {
+            return;
+        };
+        let focused = cx.focus_manager.borrow().focused();
+        let Some(token) = focused.and_then(|host| self.state.focused_child_token(host)) else {
+            return;
+        };
+        self.state.send_control(VirtualControl::PlatformEvent {
+            token,
+            event: PlatformEvent::Shell(translated),
+        });
+    }
+
+    /// The child reported a focus change (`inside` = its focus manager now
+    /// holds / no longer holds an element). The parent's focus manager
+    /// LEARNS this: the host element id — the record's binder — is set as
+    /// the focused node, so
+    ///
+    /// - a parent element holding focus is blurred first (`set_focus`
+    ///   blur-notification) — child and parent focus are exclusive, and
+    /// - a later pointer click elsewhere clears the host via the ordinary
+    ///   gesture sweep (the host is has_focus() + Focusable), whose blur
+    ///   notification forwards `ClearFocus` into the child.
+    fn handle_child_focus(
+        &self,
+        cx: &SubsystemFlushContext<'_>,
+        token: crate::core::virtual_app::VirtualAppId,
+        inside: bool,
+    ) {
+        let Some(record) = self.state.record_by_token(token) else {
+            return; // retired incarnation — nothing to inform
+        };
+        if record.current.get() != Some(token) {
+            return;
+        }
+        let Some(binder) = record.binder.get() else {
+            return;
+        };
+        let host = ElementNodeId::new(binder);
+        let mut focus = cx.focus_manager.borrow_mut();
+        if inside {
+            if focus.focused() != Some(host) {
+                focus.set_focus(host);
+            }
+        } else if focus.focused() == Some(host) {
+            focus.clear_focus();
+        }
+    }
+
+    /// The child's deduped text-input egress: re-ship it against THIS
+    /// instance's shell with the caret rect translated out of
+    /// child-viewport space (the host element's absolute rect is the
+    /// mapping — child-viewport coordinates map 1:1 onto it). This is what
+    /// raises/positions the embedder's IME surface (the browser's hidden
+    /// textarea) while a child editable is focused.
+    fn forward_text_input(
+        &self,
+        token: crate::core::virtual_app::VirtualAppId,
+        state: &TextInputState,
+    ) {
+        let Some(record) = self.state.record_by_token(token) else {
+            return;
+        };
+        if record.current.get() != Some(token) {
+            return;
+        }
+        let (hx, hy, _, _) = record.last_rect.get();
+        let translated = TextInputState {
+            is_editable: state.is_editable,
+            cursor_rect: state
+                .cursor_rect
+                .map(|(x, y, w, h)| (hx + x, hy + y, w, h)),
+        };
+        self.state.ship_shell(ShellCommand::RequestTextInput(translated));
+    }
 }
 
 /// The viewport position a position-carrying input event reports (pointer
@@ -145,6 +235,16 @@ fn input_position(event: &PlatformEvent) -> Option<Offset> {
             | PointerInput::PointerMove { position, .. },
         )) => Some(*position),
         PlatformEvent::Shell(ShellEvent::Wheel { position, .. }) => Some(*position),
+        _ => None,
+    }
+}
+
+/// A fresh Key/IME [`ShellEvent`] cloned out of a platform event — the
+/// focus-routed forwarder's payload. `None` for everything else.
+fn key_event_payload(event: &PlatformEvent) -> Option<ShellEvent> {
+    match event {
+        PlatformEvent::Shell(ShellEvent::Key(key)) => Some(ShellEvent::Key(key.clone())),
+        PlatformEvent::Shell(ShellEvent::Ime(ime)) => Some(ShellEvent::Ime(ime.clone())),
         _ => None,
     }
 }
@@ -223,10 +323,17 @@ impl Subsystem for VirtualAppSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         if self.state.any_bound() {
             self.forward_input(cx, event);
+            self.forward_key_event(cx, event);
         }
     }
 
     fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent) {
+        if let Some(focus) = event.as_custom::<VirtualFocusEvent>() {
+            self.handle_child_focus(cx, focus.token, focus.inside);
+        }
+        if let Some(text_input) = event.as_custom::<VirtualTextInputEvent>() {
+            self.forward_text_input(text_input.token, &text_input.state);
+        }
         if let Some(status) = event.as_custom::<VirtualStatusEvent>() {
             self.state
                 .handle_status(status.token, status.state, status.detail.as_deref());

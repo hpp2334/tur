@@ -103,11 +103,18 @@ pub enum VirtualControl {
     },
     /// A platform event translated into the child's viewport coordinates
     /// (`position − host element origin`). Raw primitives only — gestures
-    /// compose inside the child's own arena.
+    /// compose inside the child's own arena. Key/IME events ride this
+    /// untranslated (they carry no position): the parent forwards them
+    /// when its focus manager holds this child's host element.
     PlatformEvent {
         token: VirtualAppId,
         event: PlatformEvent,
     },
+    /// The hosting parent took focus away (a pointer click landed outside
+    /// the host while the child held focus). The child must release its
+    /// focused element — keys are focus-routed, and a still-focused child
+    /// would keep consuming keystrokes invisibly.
+    ClearFocus { token: VirtualAppId },
     /// Destroy the child (runs its module cleanup in the child worker).
     Destroy { token: VirtualAppId },
 }
@@ -137,6 +144,9 @@ impl std::fmt::Debug for VirtualControl {
                 .debug_struct("PlatformEvent")
                 .field("token", token)
                 .finish_non_exhaustive(),
+            Self::ClearFocus { token } => {
+                f.debug_struct("ClearFocus").field("token", token).finish()
+            }
             Self::Destroy { token } => f.debug_struct("Destroy").field("token", token).finish(),
         }
     }
@@ -214,6 +224,48 @@ pub struct VirtualErrorEvent {
 impl CustomAppEvent for VirtualErrorEvent {
     fn name(&self) -> &'static str {
         "virtual:error"
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// Focus-egress: child → parent worker, riding `AppEvent::Custom` (the
+/// status/frame pattern). The child reports every net change of its own
+/// `FocusManager`; the parent's `VirtualAppSubsystem` learns "focus sits
+/// inside this host" (`inside`) or "the child released it" — the signal
+/// the parent's focus manager and key rail need to route keyboard /
+/// IME events into the child.
+#[derive(Debug)]
+pub struct VirtualFocusEvent {
+    pub token: VirtualAppId,
+    pub inside: bool,
+}
+
+impl CustomAppEvent for VirtualFocusEvent {
+    fn name(&self) -> &'static str {
+        "virtual:focus"
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// Text-input-egress: child → parent worker, riding `AppEvent::Custom`.
+/// The child's deduped `Shell::request_text_input` ships are forwarded so
+/// the hosting parent can raise/position ITS text-input surface (the
+/// browser's hidden textarea) for the child's focused editable — with the
+/// caret rect translated from child-viewport space into parent space by
+/// the host element's rect.
+#[derive(Debug)]
+pub struct VirtualTextInputEvent {
+    pub token: VirtualAppId,
+    pub state: crate::core::shell::TextInputState,
+}
+
+impl CustomAppEvent for VirtualTextInputEvent {
+    fn name(&self) -> &'static str {
+        "virtual:text-input"
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -359,6 +411,31 @@ impl VirtualHost {
         }
     }
 
+    /// Forward a focus change (reported by this instance's worker through
+    /// `HostMsg::FocusChanged`) to whoever observes the instance: an
+    /// element-hosted child ships it to the PARENT's worker as a
+    /// [`VirtualFocusEvent`] — the signal that teaches the parent's focus
+    /// manager "focus sits inside this host" and arms key/IME forwarding.
+    /// The embedder-hosted root has no parent — nothing to inform.
+    pub(crate) fn forward_focus_changed(&self, focused: bool) {
+        if let Some(rails) = &self.parent_rails {
+            send_app_event(
+                &rails.worker_tx,
+                &rails.wake,
+                VirtualFocusEvent {
+                    token: self.id,
+                    inside: focused,
+                },
+            );
+        }
+    }
+
+    /// Apply the `ClearFocus` control: tell this instance's worker to
+    /// release its focused element (the hosting parent took focus away).
+    pub(crate) fn blur_focus(&self) {
+        self.backend.send_worker_msg(WorkerMsg::BlurFocus);
+    }
+
     /// The hosted children as host cores. The public surface
     /// (`TurApp::virtual_apps`) mints `TurApp` facades over them — facades
     /// are cheap and minted per call, so identity lives here, on the core.
@@ -392,6 +469,11 @@ impl VirtualHost {
             VirtualControl::PlatformEvent { token, event } => {
                 if let Some(child) = self.children.borrow().get(&token) {
                     child.push_platform_event(event);
+                }
+            }
+            VirtualControl::ClearFocus { token } => {
+                if let Some(child) = self.children.borrow().get(&token) {
+                    child.blur_focus();
                 }
             }
             VirtualControl::Destroy { token } => {
@@ -509,7 +591,11 @@ impl VirtualHost {
             self.backend.worker_wake_handle(),
             token,
         );
-        let shell = VirtualShell::new(self.vsync.clone());
+        let shell_rails = ParentRails {
+            worker_tx: self.backend.worker_tx().clone(),
+            wake: self.backend.worker_wake_handle(),
+        };
+        let shell = VirtualShell::new(token, self.vsync.clone(), shell_rails);
         // The engine-internal spawn path — identity is the parent-minted
         // token, never a builder option (the embedder-facing builder can
         // only ever name `ROOT`). Viewport/dpr are placeholders the host
@@ -672,23 +758,50 @@ impl std::fmt::Debug for ForwardingRenderer {
 
 /// The child's [`Shell`]: hands the child the PARENT's vsync source (both
 /// loopers wake on the same tick; an idle party just pumps and returns
-/// `Idle` — harmless, same as today between sibling instances) and (v1)
-/// drops cursor / text-input egress (translated forwarding is a later
-/// milestone).
+/// `Idle` — harmless, same as today between sibling instances) and
+/// forwards the text-input egress to the parent's worker
+/// ([`VirtualTextInputEvent`] — the parent raises/positions ITS text-input
+/// surface, e.g. the browser's hidden textarea, for the child's focused
+/// editable). Cursor egress is still dropped (v1).
 pub(crate) struct VirtualShell {
+    /// This instance's token — stamps the forwarded egress.
+    token: VirtualAppId,
     vsync: Option<Rc<dyn VsyncSource>>,
+    /// The parent's worker rails — text-input egress ships into the
+    /// parent's worker as `AppEvent::Custom`. `None` for the
+    /// embedder-hosted root, whose shell is the real platform surface.
+    parent_rails: Option<ParentRails>,
 }
 
 impl VirtualShell {
-    pub(crate) fn new(vsync: Rc<dyn VsyncSource>) -> Self {
-        Self { vsync: Some(vsync) }
+    pub(crate) fn new(
+        token: VirtualAppId,
+        vsync: Rc<dyn VsyncSource>,
+        parent_rails: ParentRails,
+    ) -> Self {
+        Self {
+            token,
+            vsync: Some(vsync),
+            parent_rails: Some(parent_rails),
+        }
     }
 }
 
 impl Shell for VirtualShell {
     fn set_cursor(&mut self, _cursor: crate::core::shell::Cursor) {}
 
-    fn request_text_input(&mut self, _state: crate::core::shell::TextInputState) {}
+    fn request_text_input(&mut self, state: crate::core::shell::TextInputState) {
+        if let Some(rails) = &self.parent_rails {
+            send_app_event(
+                &rails.worker_tx,
+                &rails.wake,
+                VirtualTextInputEvent {
+                    token: self.token,
+                    state,
+                },
+            );
+        }
+    }
 
     fn take_vsync(&mut self) -> Option<Rc<dyn VsyncSource>> {
         self.vsync.take()
@@ -716,4 +829,6 @@ const _: fn() = || {
     assert_send::<VirtualStatusEvent>();
     assert_send::<VirtualFrameEvent>();
     assert_send::<VirtualErrorEvent>();
+    assert_send::<VirtualFocusEvent>();
+    assert_send::<VirtualTextInputEvent>();
 };

@@ -136,6 +136,13 @@ pub enum WorkerMsg {
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
+    /// Clear the instance's focus. Sent by a hosting parent through the
+    /// virtual-app control rail ([`VirtualControl::ClearFocus`] — a
+    /// pointer click elsewhere in the parent took focus away from the
+    /// hosted child): keys are focus-routed, so a blurred child must
+    /// release its focused element or it would keep consuming (invisible)
+    /// keystrokes. Drives a flush like [`WorkerMsg::Wake`].
+    BlurFocus,
     /// Host-registered image receipt (`TurApp::register_image`): the host
     /// minted the id (host range — see
     /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)),
@@ -231,6 +238,14 @@ pub enum HostMsg {
     RuntimeError {
         report: crate::core::app::runtime_error::RuntimeErrorReport,
     },
+    /// The instance's focus changed (its own `FocusManager` gained or
+    /// cleared a focused element). Routed by `TurAppLooper` to the
+    /// instance's [`VirtualHost`](crate::core::virtual_app::VirtualHost):
+    /// an element-hosted child forwards it to its parent's worker
+    /// (`VirtualFocusEvent` — the parent's focus manager learns "focus
+    /// sits inside this host", which is what makes key routing work); the
+    /// embedder-hosted root has no parent — dropped there.
+    FocusChanged { focused: bool },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
     /// Enable/disable host-side frame-timing collection (the per-frame
@@ -339,6 +354,7 @@ impl fmt::Debug for WorkerMsg {
                 .finish(),
             Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
+            Self::BlurFocus => f.write_str("BlurFocus"),
             Self::RegisterImageMetadata { id, .. } => {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
             }
@@ -369,6 +385,10 @@ impl fmt::Debug for HostMsg {
             Self::Shell(cmd) => f.debug_tuple("Shell").field(cmd).finish(),
             Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
             Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
+            Self::FocusChanged { focused } => f
+                .debug_struct("FocusChanged")
+                .field("focused", focused)
+                .finish(),
             Self::Destroyed => write!(f, "Destroyed"),
             Self::FrameTimingEnabled(on) => f.debug_tuple("FrameTimingEnabled").field(on).finish(),
             Self::DevToolReply { .. } => f.write_str("DevToolReply"),

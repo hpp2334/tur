@@ -611,6 +611,10 @@ impl TurAppLooper {
                             host.forward_runtime_error(report);
                             MsgOutcome::Continue
                         }
+                        core::app::HostMsg::FocusChanged { focused } => {
+                            host.forward_focus_changed(focused);
+                            MsgOutcome::Continue
+                        }
                         msg => host.backend().apply_msg(msg),
                     };
                     let stop = match outcome {

@@ -202,6 +202,20 @@ impl SharedViewCx {
     /// giving them a chance to spawn/cancel async tasks tied to focus state
     /// (e.g. caret blink).
     pub fn flush_focus_notifications(&mut self) {
+        // Instance-level focus observers fire on the NET change since the
+        // last report — the FM's `focused()` mutates at `set_focus` time
+        // (not at flush time), so the report compares against the last
+        // value OBSERVERS SAW, not a before/after pair around the drain.
+        // The virtual-app plugin's reporter rides this to tell a hosting
+        // parent whether focus sits inside the instance.
+        let focused_now = self.js_ctx.focus_manager.borrow().focused();
+        if focused_now != self.js_ctx.reported_focus() {
+            self.js_ctx.set_reported_focus(focused_now);
+            let listeners = self.js_ctx.focus_listeners.borrow().clone();
+            for listener in listeners {
+                listener(focused_now);
+            }
+        }
         let focus_changes = {
             let tree = self.js_ctx.element_tree.borrow();
             let mut focus = self.js_ctx.focus_manager.borrow_mut();

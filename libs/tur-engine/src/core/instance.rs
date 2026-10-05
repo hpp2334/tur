@@ -8,6 +8,7 @@ use crate::core::app::HostTx;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
+use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
@@ -135,7 +136,19 @@ pub struct InstanceContext {
     /// worker-side counters, surfaced via `turDevTool.frameStats()`.
     ///
     pub frame_stats: Rc<crate::core::app::FrameStats>,
+    /// Instance-level focus observers — fired by
+    /// `SharedViewCx::flush_focus_notifications` whenever the instance's
+    /// focused element changes (the mechanism; who observes is policy:
+    /// the virtual-app plugin registers a reporter that ships the change
+    /// to a hosting parent).
+    pub(crate) focus_listeners: FocusListeners,
+    /// The focused-element state focus observers last saw (the net-change
+    /// baseline — `focused()` itself mutates at `set_focus` time).
+    pub(crate) reported_focus: Rc<Cell<Option<ElementNodeId>>>,
 }
+
+/// The shared focus-observer list ([`InstanceContext::focus_listeners`]).
+pub(crate) type FocusListeners = Rc<RefCell<Vec<Rc<dyn Fn(Option<ElementNodeId>)>>>>;
 
 impl InstanceContext {
     #[allow(clippy::too_many_arguments)]
@@ -177,7 +190,25 @@ impl InstanceContext {
             worker_pools,
             rut_pkg_exts: Rc::new(RefCell::new(Vec::new())),
             frame_stats,
+            focus_listeners: Rc::new(RefCell::new(Vec::new())),
+            reported_focus: Rc::new(Cell::new(None)),
         }
+    }
+
+    /// Register an instance-level focus observer (fired on every
+    /// focused-element change by the focus-notification flush step).
+    pub(crate) fn add_focus_listener(&self, listener: Rc<dyn Fn(Option<ElementNodeId>)>) {
+        self.focus_listeners.borrow_mut().push(listener);
+    }
+
+    /// The focused-element state focus observers last saw.
+    pub(crate) fn reported_focus(&self) -> Option<ElementNodeId> {
+        self.reported_focus.get()
+    }
+
+    /// Record the focused-element state focus observers last saw.
+    pub(crate) fn set_reported_focus(&self, focused: Option<ElementNodeId>) {
+        self.reported_focus.set(focused);
     }
 
     /// Mark this frame as paint-worthy AND, if the worker is idle (not

@@ -189,6 +189,33 @@ impl VirtualState {
         self.controllers.borrow().get(&base).cloned()
     }
 
+    /// The controller record owning a live incarnation `token`.
+    pub(crate) fn record_by_token(&self, token: VirtualAppId) -> Option<Rc<ControllerRecord>> {
+        let base = self.tokens.borrow().get(&token.0).copied()?;
+        self.record(base)
+    }
+
+    /// The live child token whose host element is `binder` — the key
+    /// forwarder's resolution of "which child holds focus" from the
+    /// parent's focus manager (keys are focus-routed, not hit-tested).
+    /// `None` when no bound controller's host matches.
+    pub(crate) fn focused_child_token(
+        &self,
+        binder: crate::core::element::ElementNodeId,
+    ) -> Option<VirtualAppId> {
+        let binder = u64::from(binder);
+        let controllers = self.controllers.borrow();
+        for record in controllers.values() {
+            if record.binder.get() == Some(binder)
+                && record.bound.get()
+                && let Some(token) = record.current.get()
+            {
+                return Some(token);
+            }
+        }
+        None
+    }
+
     // ── bind / unbind (driven by the element's layout diff) ───────────
 
     /// An element binds the controller: spawn a child if none is live.
@@ -354,6 +381,14 @@ impl VirtualState {
         let _ = self
             .host_tx
             .unbounded_send(HostMsg::VirtualControl(control));
+    }
+
+    /// Ship a deduped shell command to this instance's host surface — the
+    /// child text-input egress path: the parent's worker re-ships the
+    /// (caret-translated) request so the embedder's shell raises/positions
+    /// the text-input surface for a child's focused editable.
+    pub(crate) fn ship_shell(&self, cmd: crate::core::app::comm::ShellCommand) {
+        let _ = self.host_tx.unbounded_send(HostMsg::Shell(cmd));
     }
 
     // ── outputs ───────────────────────────────────────────────────────

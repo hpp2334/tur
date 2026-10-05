@@ -253,6 +253,19 @@ impl WorkerBackend {
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
             }
+            WorkerMsg::BlurFocus => {
+                // The hosting parent took focus away (the ClearFocus
+                // control): release the focused element so key/IME
+                // routing — which resolves through this instance's focus
+                // manager — stops delivering into it. The flush that
+                // follows resolves the blur notification + recomputes the
+                // text-input egress.
+                self.internal
+                    .instance
+                    .focus_manager
+                    .borrow_mut()
+                    .clear_focus();
+            }
             WorkerMsg::RegisterImageMetadata { id, size } => {
                 // Host-registered image receipt: record the natural size so
                 // layout + paint serve the id (`insert_with_id` — the id was
@@ -914,10 +927,11 @@ impl HostBackend {
             HostMsg::VirtualControl(_) => {
                 unreachable!("HostMsg::VirtualControl is routed by TurAppLooper before apply_msg")
             }
-            // Same for runtime-error reports — forwarded to the parent
-            // worker (children) or logged (root) by the looper.
-            HostMsg::RuntimeError { .. } => {
-                unreachable!("HostMsg::RuntimeError is routed by TurAppLooper before apply_msg")
+            // Same for runtime-error reports and focus reports — forwarded
+            // to the parent worker (children) or logged/dropped (root) by
+            // the looper.
+            HostMsg::RuntimeError { .. } | HostMsg::FocusChanged { .. } => {
+                unreachable!("HostMsg::RuntimeError/FocusChanged are routed by TurAppLooper before apply_msg")
             }
         }
     }
@@ -1037,7 +1051,7 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, host_tx: H
             // than wait for the next `Wake` (virtual-app frames stalled
             // without this: child resize → child repaint → frame event
             // queued → never drained → stale replay).
-            msg @ (WorkerMsg::Wake | WorkerMsg::AppEvent(_)) => {
+            msg @ (WorkerMsg::Wake | WorkerMsg::AppEvent(_) | WorkerMsg::BlurFocus) => {
                 backend.handle_worker_msg(msg);
                 let outcome = backend.pump();
                 let payload = match outcome {

@@ -35,7 +35,18 @@ pub(crate) fn install_virtual_app(ctx: &mut PluginRegisterContext) -> Result<(),
     let instance = ctx.instance().clone();
     let state = Rc::new(VirtualState::new(instance.host_tx.clone(), ctx.reactive()));
     ctx.define_plugin_state::<VirtualState>(state.clone());
-    ctx.register_subsystem(Box::new(handlers::VirtualAppSubsystem::new(state, instance)));
+    ctx.register_subsystem(Box::new(handlers::VirtualAppSubsystem::new(state, instance.clone())));
+    // The focus reporter — every net change of THIS instance's focus ships
+    // to its host (`HostMsg::FocusChanged`); the host forwards it to a
+    // hosting parent as a `VirtualFocusEvent` (the embedder-hosted root
+    // drops it). This is what teaches a parent's focus manager "focus sits
+    // inside this child" and arms key/IME forwarding.
+    let host_tx = instance.host_tx.clone();
+    instance.add_focus_listener(Rc::new(move |focused| {
+        let _ = host_tx.unbounded_send(crate::core::app::comm::HostMsg::FocusChanged {
+            focused: focused.is_some(),
+        });
+    }));
     // The virtual-app family's `tur` rows (the kit wraps them).
     ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     Ok(())
