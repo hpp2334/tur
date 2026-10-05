@@ -1135,3 +1135,47 @@ fn editor_comment_spans_keep_uniform_monospace_advances() {
         );
     }
 }
+
+// ---- the va-child animation surface (documented) -------------------------------
+//
+// The child instance's elements are invisible to the parent harness
+// (query_element / query_text / dev_tool_get_element on the `tur_virtual_app`
+// host see no children — the child's batch replays into the parent's PAINT
+// only), so there is no headless probe of a child-side animated prop. The
+// motion contract is pinned at ROOT level instead
+// (`element/animation.rs::complex_animation_case_runs_the_card_studio`).
+//
+// Browser status of the old "va-child controller animation never advances"
+// spike regression: the upgraded studio demonstrably animates in the wasm
+// viewer (Play → FORWARD badge, the % readout climbing, the card tweening to
+// COMPLETED/100%/W_MAX/coral — verified against the boa side-by-side), so the
+// phase-5 observation ("complex-animation targets never appear") described
+// the OLD bare-opacity case, whose only visible channel was a progress-0
+// bound opacity. `implicit-animations` (the other named case) drives no
+// visible prop from its tick, so it neither confirms nor refutes a residual
+// child-animation gap.
+#[test]
+fn playground_complex_animation_studio_boots_to_ready() {
+    // The upgraded studio case through the real spawn path: the sidebar
+    // select compiles the new source (embedded via cases_gen) and the
+    // viewer hosts the live child. (Motion itself is pinned at root level
+    // by the corpus test; the browser side-by-side verified the in-viewer
+    // tween end to end.)
+    let mut app = playground_app();
+    let (cx, cy) = qk_center(&app, &["row", "complex-animation"]);
+    app.click(cx, cy);
+    assert!(
+        wait_for_state(&app, "ready"),
+        "the upgraded complex-animation never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+    let node = app
+        .dev_tool_get_element(app.query_element(&["viewer"]).unwrap())
+        .expect("the viewer host in the dev-tool tree");
+    assert_eq!(node.name, "tur_virtual_app");
+    assert!(
+        node.size.0 > 0.0 && node.size.1 > 0.0,
+        "the hosting element kept its layout: {:?}",
+        node.size
+    );
+}

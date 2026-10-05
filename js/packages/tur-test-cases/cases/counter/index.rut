@@ -1,7 +1,7 @@
 // counter: a reactive count label between -/+ pill buttons — the full
 // interactive loop (button → intent entry → atom write → re-render).
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64,
-    rs_source_str };
+use tur::{ CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount, rs_get_f64, rs_set_f64, rs_set_str,
+    rs_source_f64, rs_source_str };
 use tur_kit::{ Column, Container, PointerInteract, Row, Text };
 
 
@@ -10,6 +10,7 @@ entry fn start() -> u64 {
     let label = rs_source_str("Count: 0");
 
     let mut col = Column()
+        .main_alignment(MAIN_ALIGN_CENTER)
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text_bound(label).query_key("count").font_size(36.0).build());
 
@@ -21,6 +22,8 @@ entry fn start() -> u64 {
     col.child(row.build());
 
     let bg = Container().color(0xF8FAFCFFu64).child(col.build());
+    // Centered in the pane (the boa counter): the column carries the main/cross
+    // centering — a bare Container-root alignment centers horizontally only.
     mount(bg.build());
     return count;
 }

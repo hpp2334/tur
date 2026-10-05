@@ -61,6 +61,38 @@ Every case is a **single `index.rut` module** with:
 - **`compiler-bridge-demo` is intentionally omitted** — it demoed the JS
   transpile bridge, which no longer exists in the rut era.
 
+### Content parity vs the boa reference (phase-8 audit)
+
+Side-by-side sweep of the curated 19 (rut 8080 vs the boa dist 8081; the
+editor language differs by design — this grades the VIEWER: content
+presence, layout spirit, interactivity affordances). Ranked, thinnest
+first — the follow-up queue:
+
+| case | parity | gap |
+|---|---|---|
+| `complex-animation` | ✅ upgraded | was a bare opacity tween; now the "Animated Card Studio" (controller transport, speed/curve/loop selectors, status badge + % readout, width + hue + opacity channels) — motion verified natively AND in the wasm viewer side-by-side. Remaining vs boa: static card radius (no bound-radius row), no orbiting dot (no trig rows in the engine VM's offer set), Transform rotation static (the `el_transform` row takes no atom). |
+| `jigsaw-puzzle` | ⚠️ thin | boa is a full 3×3 board game (shuffle, placed counter, scramble); rut is the one-tile drag fixture (by design — the corpus regression fixture family). |
+| `grid-gallery` | ⚠️ thin | boa: interactive gallery (aspect + density chips, selection ring); rut: three static dark tiles. |
+| `grid-aspect` | ⚠️ thin | boa: 10-tile HSL grid over `childAspectRatio: 2`; rut: three fixed 100×100 tiles in a Row (no Grid). |
+| `grid-basic` | ⚠️ thin | boa: 12-cell derived-count grid; rut: 2×2 static. |
+| `implicit-animations` | ⚠️ moderate | mechanism parity (shared controller + retarget) but the rut box binds nothing visible — the tick's progress atom drives no prop; boa shows an animated Compact/Expand card. |
+| `lazy-list-virtualized` | ⚠️ moderate | both scroll 2000+ virtualized rows; rut rows are near-invisible (dark text on dark cells), boa is a contact list with avatars. |
+| `lazy-list-var-sizes` | ⚠️ moderate | var-extent rows work; boa adds the axis-flip toggle and readable bar-chart rows. |
+| `lazy-grid-basic` / `-gallery` / `-scroll` | ⚠️ moderate | LazyGrid + header/chips present; rut cells are unlabeled dark boxes vs boa's labeled hue tiles. |
+| `todolist` | ✅ ok | per-item toggle, add, derived count all work; boa adds task cards, descriptions, a remove modal. |
+| `countdown` | ✅ ok | ticking, start/pause/reset, edit modal all work; boa chrome is richer (hero digits, status pill, button hierarchy). |
+| `counter` | ✅ fixed | content parity; the top-anchored column now centers (`Alignment.center` over an Expanded fill — #26). |
+| `github-viewer` | ✅ ok | single-file port: landing + chips + error banner + explorer; missing the prefilled input and the repo banner. |
+| `password-input` | ✅ ok | obscure toggle parity; boa adds the title + plain-echo input. |
+| `table-basic` | ✅ ok | same planets/columns; rut renders the dark frame vs boa's light theme. |
+| `table-reactive` | ✅ ok | comparable reactive emphasis (rut: Each-driven add-row; boa: async fetch + sortable headers). |
+| `text-demo` | ✅ full | section-for-section parity (size/weight/color/spans/overflow + the maxLines cycler). |
+
+The recurring rut-side tells: (1) dark-on-dark cell palettes read as
+broken — pick readable fills; (2) the grid cases predate the Grid family
+(port them over `Grid`/`LazyGrid`); (3) chips/toggle chrome is cheap in
+the kit now — the boa cases lean on it heavily.
+
 ### Example
 
 ```rut

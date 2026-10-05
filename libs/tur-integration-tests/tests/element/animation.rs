@@ -436,3 +436,108 @@ fn animation_started_from_handler_schedules_next_frame() {
         "an animation started from a handler must schedule the next vsync (width should advance past 100)"
     );
 }
+
+// ---- the corpus complex-animation case ("Animated Card Studio") ---------------
+
+/// The studio card's laid-out width (the width-bound tween target).
+fn studio_card_width(app: &TurTestApp) -> f64 {
+    let id = app.query_element(&["cas-card"]).expect("studio card not found");
+    let tree = app.element_tree();
+    tree.get_element(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .computed_layout
+        .size
+        .width
+}
+
+/// A real click on a keyed studio control (the tap intent path — the
+/// transport entries are 3-arg tap targets, only reachable through the
+/// pointer rail).
+fn tap_studio(app: &mut TurTestApp, key: &str) {
+    let id = app.query_element(&[key]).unwrap_or_else(|| panic!("{key} not found"));
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .center();
+    app.click(b.0, b.1);
+    app.wait_for_timeout(Duration::ZERO);
+}
+
+#[test]
+fn complex_animation_case_runs_the_card_studio() {
+    // The showcase case loads standalone (the corpus rail) and drives its
+    // whole studio through the real tap rail: boot state, play/pause/resume
+    // transport, the % readout, the 4x speed retime, and the loop toggle
+    // (the recreate-and-seek path).
+    let mut app = TurTestApp::new(500.0, 800.0).unwrap();
+    app.load_rut_bundle("complex-animation").unwrap();
+    let _progress = app.rut_start_answer();
+
+    // Boot: progress 0 — the card at W_MIN, the badge STOPPED, the readout 0%.
+    assert_eq!(
+        app.query_text(&["cas-title"]).as_deref(),
+        Some("Animated Card Studio")
+    );
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("STOPPED"));
+    assert_eq!(app.query_text(&["cas-pct"]).as_deref(), Some("0%"));
+    assert_eq!(studio_card_width(&app), 120.0, "the card boots at W_MIN");
+
+    // Play: the width + % readout advance with the tick (easeInOut 2400ms;
+    // halfway through, the eased value is 0.5 → width 200).
+    tap_studio(&mut app, "cas-play");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("FORWARD"));
+    app.wait_for_timeout(Duration::from_millis(1200));
+    let w = studio_card_width(&app);
+    assert!(
+        w > 150.0 && w < 250.0,
+        "mid-play the card width should be mid-tween (~200), got {w}"
+    );
+    assert_ne!(
+        app.query_text(&["cas-pct"]).as_deref(),
+        Some("0%"),
+        "the % readout tracks the tick"
+    );
+
+    // Pause freezes at the pause value; resume plays out to COMPLETED.
+    tap_studio(&mut app, "cas-pause");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("PAUSED"));
+    let frozen = studio_card_width(&app);
+    app.wait_for_timeout(Duration::from_millis(300));
+    assert!(
+        (studio_card_width(&app) - frozen).abs() < 1.0,
+        "paused width stays frozen at {frozen}"
+    );
+    tap_studio(&mut app, "cas-resume");
+    app.wait_for_timeout(Duration::from_millis(1400));
+    assert_eq!(
+        app.query_text(&["cas-status"]).as_deref(),
+        Some("COMPLETED")
+    );
+    assert_eq!(studio_card_width(&app), 280.0, "completed lands at W_MAX");
+    assert_eq!(app.query_text(&["cas-pct"]).as_deref(), Some("100%"));
+
+    // Stop freezes the status; the 4x chip retimes the controller so a
+    // fresh forward plays the 2400ms timeline in ~600ms.
+    tap_studio(&mut app, "cas-stop");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("STOPPED"));
+    tap_studio(&mut app, "cas-s3");
+    tap_studio(&mut app, "cas-play");
+    app.wait_for_timeout(Duration::from_millis(700));
+    assert_eq!(
+        app.query_text(&["cas-status"]).as_deref(),
+        Some("COMPLETED"),
+        "at 4x the 2400ms timeline completes in ~600ms of wall time"
+    );
+
+    // Loop: the recreate-and-seek path swaps in an infinite controller —
+    // it keeps cycling (never completes) from any frozen value.
+    tap_studio(&mut app, "cas-loop");
+    tap_studio(&mut app, "cas-play");
+    app.wait_for_timeout(Duration::from_millis(3000));
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("FORWARD"));
+    let w = studio_card_width(&app);
+    assert!(
+        (120.0..=280.0).contains(&w),
+        "an infinite loop keeps the width cycling inside the tween range: {w}"
+    );
+}
