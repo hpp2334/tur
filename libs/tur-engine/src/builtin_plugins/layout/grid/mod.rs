@@ -1,6 +1,8 @@
 //! `Grid` — a non-scrollable layout element that tiles its static children
 //! into a row-major grid. The cross-axis (column) count is derived from a
-//! max cross-axis extent: `count = floor(crossAxisSize / maxCrossAxisExtent)`.
+//! max cross-axis extent: `count = ceil(crossAxisSize / maxCrossAxisExtent)`
+//! (Flutter parity — the extent is an inclusive upper bound on the cell
+//! cross size).
 //!
 //! Cell sizes are uniform: the main-axis (row) size is either a fixed
 //! `mainAxisExtent` or derived from `childAspectRatio` (`cell_cross / ratio`),
@@ -48,7 +50,11 @@ pub(crate) fn compute_grid_metrics(
     let bounded = cross_axis_size.is_finite() && cross_axis_size > 0.0;
 
     let cross_axis_count = if bounded && max_cross_axis_extent > 0.0 {
-        ((cross_axis_size / max_cross_axis_extent).floor() as usize).max(1)
+        // Flutter parity: `maxCrossAxisExtent` is an inclusive upper bound on
+        // the cell cross size, so the division rounds UP — ceil. Floor let
+        // `cell_cross` exceed the bound (435px / maxExtent 150 → 2×217.5px
+        // instead of 3×145px).
+        ((cross_axis_size / max_cross_axis_extent).ceil() as usize).max(1)
     } else {
         1
     };

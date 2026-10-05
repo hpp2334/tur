@@ -228,6 +228,76 @@ fn grid_fewer_children_than_columns() {
     assert_eq!(c1.computed_layout.offset.y, 0.0);
 }
 
+/// 435px wide, maxExtent 150 → ceil(435/150) = 3 columns of 145px each.
+/// Flutter parity: `maxCrossAxisExtent` is an inclusive UPPER bound on the
+/// cell cross size, so the division must round UP — floor yields 2 columns
+/// of 217.5px and blows the bound (the operator audit's grid-case failure).
+#[test]
+fn grid_column_count_ceils_max_extent_division() {
+    let (app, id) = setup_grid(
+        435.0,
+        600.0,
+        &GridOpts::new(150.0), 6,
+    );
+    let tree = app.element_tree();
+    let g = tree.get_element(id).unwrap();
+
+    // Row 0: children 0..3 at x = 0, 145, 290; each 145x145.
+    let c0 = tree
+        .get_element(ElementNodeId::new(g.children[0].as_u64()))
+        .unwrap();
+    assert_eq!(c0.computed_layout.size.width, 145.0);
+    assert_eq!(c0.computed_layout.size.height, 145.0);
+    assert_eq!(c0.computed_layout.offset.x, 0.0);
+
+    let c1 = tree
+        .get_element(ElementNodeId::new(g.children[1].as_u64()))
+        .unwrap();
+    assert_eq!(c1.computed_layout.offset.x, 145.0);
+
+    // Child 3 wraps to row 1 (3 columns, not 2).
+    let c3 = tree
+        .get_element(ElementNodeId::new(g.children[3].as_u64()))
+        .unwrap();
+    assert_eq!(c3.computed_layout.offset.x, 0.0);
+    assert_eq!(c3.computed_layout.offset.y, 145.0);
+
+    app.with_element(id, |e| {
+        let g = e.cast::<GridElement>().unwrap();
+        assert_eq!(g.cross_axis_count(), 3);
+    })
+    .expect("element lookup");
+}
+
+/// Exact-multiple boundary: 435/145 = 3.0 exactly must resolve to 3 columns —
+/// float fuzz above the integer would ceil to a phantom 4th column.
+#[test]
+fn grid_exact_multiple_stays_at_exact_count() {
+    let (app, id) = setup_grid(
+        435.0,
+        600.0,
+        &GridOpts::new(145.0), 6,
+    );
+    app.with_element(id, |e| {
+        let g = e.cast::<GridElement>().unwrap();
+        assert_eq!(g.cross_axis_count(), 3);
+    })
+    .expect("element lookup");
+    let tree = app.element_tree();
+    let g = tree.get_element(id).unwrap();
+    let c0 = tree
+        .get_element(ElementNodeId::new(g.children[0].as_u64()))
+        .unwrap();
+    assert_eq!(c0.computed_layout.size.width, 145.0);
+    let c3 = tree
+        .get_element(ElementNodeId::new(g.children[3].as_u64()))
+        .unwrap();
+    assert_eq!(
+        c3.computed_layout.offset.x, 0.0,
+        "child 3 must wrap to row 1 (3 columns, not 4)"
+    );
+}
+
 /// The Grid element records the computed metrics for dev-tool tracing.
 #[test]
 fn grid_element_records_metrics() {

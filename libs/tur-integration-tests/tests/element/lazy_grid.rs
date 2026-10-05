@@ -345,3 +345,125 @@ fn lazy_grid_parent_children_count_matches_mounted() {
         );
     }
 }
+
+// ===========================================================================
+// Column-count ceil semantics (Flutter parity): maxCrossAxisExtent is an
+// inclusive UPPER bound on the cell cross size, so count = ceil(cross /
+// maxExtent) — floor minted 2 columns of 217.5px in a 435px viewport where
+// Flutter/boa produce 3 columns of 145px.
+// ===========================================================================
+
+/// 435px wide viewport, maxCrossAxisExtent 150 → ceil(435/150) = 3 columns
+/// of 145px each.
+#[test]
+fn lazy_grid_column_count_ceils_max_extent_division() {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyGrid };
+
+fn cell(i: u64) -> opaque {
+    let b = Container().width_height(145.0, 145.0).color(0xC8C8C8FFu64);
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 12.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return count;
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
+    assert_eq!(cols, 3, "435/150 must ceil to 3 columns (floor gives 2)");
+
+    // First mounted row (children are logical-index ordered): cells 145 wide
+    // at x = 0, 145, 290.
+    let tree = app.element_tree();
+    let lg = tree.get_element(id).unwrap();
+    let row: Vec<(f64, f64)> = lg.children[..3]
+        .iter()
+        .map(|&c| {
+            let n = tree.get_element(ElementNodeId::new(c.as_u64())).unwrap();
+            (n.computed_layout.size.width, n.computed_layout.offset.x)
+        })
+        .collect();
+    assert_eq!(
+        row,
+        vec![(145.0, 0.0), (145.0, 145.0), (145.0, 290.0)],
+        "first row must be 3 cells of 145px at column offsets"
+    );
+}
+
+/// Exact-multiple boundary: 435/145 = 3.0 exactly must stay 3 columns (a
+/// float fuzz above the integer would ceil to a phantom 4th), across an
+/// item-count change — `total_lines = item_count.div_ceil(count)` and the
+/// remount path must key off the same stable count.
+#[test]
+fn lazy_grid_exact_multiple_stays_at_exact_count() {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ Container, Expanded, LazyGrid };
+
+fn cell(i: u64) -> opaque {
+    let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count = rs_source_f64();
+    rs_set_f64(count, 6.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return count;
+}
+
+// The test drives count changes through the entry rail.
+entry fn set_count(count: u64, n: f64) {
+    rs_set_f64(count, n);
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let count_atom = app.rut_start_answer();
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    // 6 items / 3 columns = exactly 2 rows; maxScrollExtent clamps at 0
+    // (2*145 = 290 < 600 viewport).
+    let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
+    assert_eq!(cols, 3, "435/145 = 3.0 exactly must stay 3 columns");
+
+    // 30 items / 3 columns = exactly 10 rows → 10*145 - 600 = 850.
+    app.call_rut_entry("set_count", count_atom, 30.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let lg = e.cast::<LazyGridElement>().unwrap();
+        assert_eq!(
+            lg.cross_axis_count(),
+            3,
+            "count change must not re-derive the column count (still exactly 3)"
+        );
+        let max = lg.max_scroll_extent();
+        let expected = 10.0 * 145.0 - 600.0;
+        assert!(
+            (max - expected).abs() < 1.0,
+            "content extent must cover exactly 10 rows of 145px \
+             (maxScrollExtent ≈ {expected}), got {max}"
+        );
+    })
+    .unwrap();
+}
