@@ -3420,6 +3420,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "rut-core",
+ "rut-driver",
  "rut-vm",
  "tracing",
  "tur-engine",

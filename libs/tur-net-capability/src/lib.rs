@@ -27,6 +27,7 @@
 //!   net rows, and rut modules calling them trap with the unknown-row
 //!   error.
 
+pub mod kit;
 pub mod rut_rows;
 
 use std::future::Future;

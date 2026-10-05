@@ -28,11 +28,9 @@ Every case is a **single `index.rut` module** with:
   the answer — conventionally the id of the module's root state atom —
   readable via `TurTestApp::rut_start_answer`).
 - **probe `entry fn`s** — named entries the *test* drives via
-  `app.call_rut_entry(name, a, b)` (the engine→rut event rail: the same
-  shape element callbacks receive). Element callbacks
-  (`el_button`/`el_gesture`/`el_focusable`/`anim_ctrl` onTick/watch
-  deliveries) name their `entry fn` and the pump drains the intents into
-  them. Probes replace the JS era's `eval_js` state pokes.
+  `app.call_rut_entry(name, a, b)` (the engine→rut event rail). Probes
+  replace the JS era's `eval_js` state pokes. `entry` = a deliberate
+  embedder/test contract — element callbacks are NOT entries.
 - **no JS anywhere** — a rut case never touches a JS realm. State lives in
   atoms (`rs_source_str` / `rs_source_f64` / `rs_source_bool` / value
   atoms) whose ids cross into entries as plain `u64`s. Tests read state
@@ -47,10 +45,14 @@ Every case is a **single `index.rut` module** with:
 - **Query keys**: give every element a test needs to find a query key via
   the element's chainable `.query_key("key")` method; tests locate it with
   `app.query_element(&["key"])`.
-- **Callbacks**: `entry fn` names are conventionally prefixed by their
-  role (`ts_` for test-seam actions, `g_` gesture, `f_` focus, `a_`
-  animation, `on_` watch / chunk deliveries) but any name works — the
-  engine resolves the callback's string at intent-drain time.
+- **Callbacks are fn values** — plain `fn`s (conventionally prefixed by
+  their role: `ts_` test-seam actions, `g_` gesture, `f_` focus, `a_`
+  animation, `on_` watch / chunk deliveries), passed to the kit by name
+  or as anonymous fn literals (`PointerInteract().on_tap(b_toggle)`,
+  `Each(items).item_builder(fn(i: u64, item: str) -> View { … })`). The
+  kit checks the arity/types at compile time; the pump fires the callback
+  through the infra dispatch entries with the same payload shapes as
+  always.
 - **Determinism**: cases run under the harness's virtual clock. Time-based
   behavior (tickers, animations) rides `anim_ctrl` durations so tests can
   advance time deterministically.
@@ -105,14 +107,15 @@ entry fn start() -> u64 {
     let col = Column()
         .query_key("col")
         .child(Text().text_bound(label).query_key("count").build())
-        .child(button(count, label, "ts_inc", "+1"));
+        .child(button(count, label, ts_inc, "+1"));
     mount(col.build());
     return count;
 }
 
 // A pill button: a PointerInteract pad (the tap delivers `(a, b, seq)`)
 // wrapping a styled label — the el_button composite, authored from families.
-fn button(count: u64, label: u64, cb: str, text: str) -> opaque {
+// The callback is a FN VALUE (compile-time arity/type checked at the kit).
+fn button(count: u64, label: u64, cb: fn(u64, u64, f64), text: str) -> opaque {
     return PointerInteract()
         .ids(count, label)
         .on_tap(cb)
@@ -125,7 +128,7 @@ fn button(count: u64, label: u64, cb: str, text: str) -> opaque {
         .build();
 }
 
-entry fn ts_inc(count: u64, label: u64, _n: f64) {
+fn ts_inc(count: u64, label: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) + 1.0);
     rs_set_str(label, f"Count: {rs_get_f64(count) as u64}");
 }

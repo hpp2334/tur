@@ -36,14 +36,14 @@ fn cell(key: str) -> opaque {
     return b.build();
 }
 
-entry fn header_row() -> opaque {
+fn header_row(_col: u64) -> opaque {
     let col = Column().child(cell("h0")).child(cell("h1")).child(cell("h2"));
     return col.build();
 }
 
-// The row builder receives the row INDEX directly (the RutEntryBuilder
-// face calls it with the row's position).
-entry fn row_cell(i: u64) -> opaque {
+// The row builder receives `(row, col)` (the RutEntryBuilder face calls
+// it per column; the row spans all three columns, so `col` is ignored).
+fn row_cell(i: u64, _col: u64) -> opaque {
     let col = Column().child(cell(f"c0-{i}")).child(cell(f"c1-{i}")).child(cell(f"c2-{i}"));
     return col.build();
 }
@@ -64,11 +64,11 @@ entry fn start() {
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
-    let mut t = Table().columns(cols).rows_atom(rows).row_builder("row_cell").header_builder("header_row").query_key("t").build();
+    let mut t = Table().columns(cols).rows_atom(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
     mount(t);
 }
 
-entry fn set_rows(_a: u64, n: f64) {
+fn set_rows(_a: u64, n: f64) {
     let atom = stf_take(ROWS) as u64;
     rs_set_value(atom, rows_of(n as u64));
 }

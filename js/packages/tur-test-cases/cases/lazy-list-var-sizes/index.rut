@@ -4,7 +4,7 @@ use tur::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, LazyList, Text };
 
 
-entry fn row(i: u64) -> opaque {
+fn row(i: u64) -> opaque {
     let h = ((i * 37) % 120) as f64 + 30.0;
     let b = Container()
         .width_height(400.0, h)
@@ -17,6 +17,6 @@ entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 500.0);
     // itemExtent 0 = unmeasured (var sizes).
-    let list = LazyList().item_builder("row").count(count).query_key("lazy-list-var-sizes").build();
+    let list = LazyList().item_builder(row).count(count).query_key("lazy-list-var-sizes").build();
     mount(list);
 }

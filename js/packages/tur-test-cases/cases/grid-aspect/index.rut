@@ -4,7 +4,7 @@ use tur::{ mount };
 use tur_kit::{ Container, Row, SizedBox, Text };
 
 
-entry fn tile(label: str, color: u64) -> opaque {
+fn tile(label: str, color: u64) -> opaque {
     let b = Container()
         .width_height(100.0, 100.0)
         .color(color)

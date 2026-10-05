@@ -4,7 +4,7 @@ use tur::{ CROSS_ALIGN_CENTER, CURSOR_POINTER, mount };
 use tur_kit::{ Column, Container, Expanded, MouseRegion, Row, SizedBox, Text };
 
 
-entry fn tile(i: u64) -> opaque {
+fn tile(i: u64) -> opaque {
     let b = Container()
         .width_height(100.0, 100.0)
         .color(0x1E293BFF)

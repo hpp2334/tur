@@ -29,10 +29,7 @@ use tur::{
     rs_source_bool, rs_source_f64, rs_source_str, rs_source_value, rs_value_item, st_put, st_take,
     stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
 };
-use tur_kit::{
-    Column, Condition, Container, Each, Expanded, Input, PointerInteract, Row, ScrollView,
-    SizedBox, Switch, Text,
-};
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Input, PointerInteract, Row, ScrollView, SizedBox, Switch, Text };
 
 
 // The scalar-stash keys (atom ids + the text controller ride them).
@@ -124,7 +121,7 @@ entry fn start() -> u64 {
 // ---- shared chrome ---------------------------------------------------------
 
 // A compact pill button (the boa Button/IconButton composite).
-fn pill(key: str, label: str, cb: str, a: u64, bg: u64, fg: u64) -> opaque {
+fn pill(key: str, label: str, cb: fn(u64, u64, f64), a: u64, bg: u64, fg: u64) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(8.0)
@@ -193,7 +190,7 @@ fn landing_view() -> opaque {
                 .child(SizedBox(0.0, 8.0).build())
                 .child(error_banner())
                 .child(SizedBox(0.0, 8.0).build())
-                .child(Row().main_alignment(MAIN_ALIGN_END).child(pill("gh-browse", "Browse", "b_browse", 0, ACCENT, ACCENT_FG)).build())
+                .child(Row().main_alignment(MAIN_ALIGN_END).child(pill("gh-browse", "Browse", b_browse, 0, ACCENT, ACCENT_FG)).build())
                 .child(SizedBox(0.0, 22.0).build())
                 .child(Text().text("Try one of these").font_size(11.0).color(TEXT_SUBTLE).build())
                 .child(SizedBox(0.0, 8.0).build())
@@ -222,11 +219,11 @@ fn suggestion_row() -> opaque {
     return Column()
         .cross_alignment(CROSS_ALIGN_START)
         .main_axis_size(MAIN_SIZE_MIN)
-        .child(pill("gh-sug-0", "facebook/react", "b_sug", 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-0", "facebook/react", b_sug, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .child(SizedBox(0.0, 6.0).build())
-        .child(pill("gh-sug-1", "torvalds/linux", "b_sug", 1, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-1", "torvalds/linux", b_sug, 1, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .child(SizedBox(0.0, 6.0).build())
-        .child(pill("gh-sug-2", "rust-lang/rust", "b_sug", 2, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-2", "rust-lang/rust", b_sug, 2, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .build();
 }
 
@@ -260,7 +257,7 @@ fn explorer_view() -> opaque {
             Column()
                 .cross_alignment(CROSS_ALIGN_STRETCH)
                 .main_axis_size(MAIN_SIZE_MIN)
-                .child(Each(files).item_builder("item_file").build())
+                .child(Each(files).item_builder(item_file).build())
                 .build(),
         )
         .build();
@@ -282,7 +279,7 @@ fn explorer_view() -> opaque {
         .child(
             Row()
                 .cross_alignment(CROSS_ALIGN_CENTER)
-                .child(pill("gh-back", "Back", "b_back", 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+                .child(pill("gh-back", "Back", b_back, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
                 .child(Text().text_bound(repo_full).font_size(13.0).font_weight(600.0).color(ACCENT).query_key("gh-crumb").build())
                 .child(SizedBox(6.0, 0.0).build())
@@ -297,7 +294,7 @@ fn explorer_view() -> opaque {
         .child(
             Row()
                 .cross_alignment(CROSS_ALIGN_CENTER)
-                .child(pill("gh-refresh", "Refresh", "b_refresh", 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+                .child(pill("gh-refresh", "Refresh", b_refresh, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
                 .child(Text().text_bound(stats).font_size(12.0).color(TEXT_MUTED).query_key("gh-stats").build())
                 .build(),
@@ -315,7 +312,7 @@ fn explorer_view() -> opaque {
 
 // One listing row: icon square + name + size (dirs sort first — the two
 // array passes below order them).
-entry fn item_file(i: u64, s: str) -> opaque {
+fn item_file(i: u64, s: str) -> opaque {
     let is_dir = s.starts_with(0, "d|");
     let n = s.len();
     let mut name = "";
@@ -354,7 +351,7 @@ entry fn item_file(i: u64, s: str) -> opaque {
         .build();
     return PointerInteract()
         .ids(i, i)
-        .on_tap("b_row")
+        .on_tap(b_row)
         .query_key("gh-row")
         .child(card)
         .build();
@@ -363,7 +360,7 @@ entry fn item_file(i: u64, s: str) -> opaque {
 // ---- actions ---------------------------------------------------------------
 
 // The Browse tap: read the draft, validate the owner/name shape, launch.
-entry fn b_browse(_a: u64, _b: u64, _n: f64) {
+fn b_browse(_a: u64, _b: u64, _n: f64) {
     let ctrl = st_take(K_CTRL);
     let draft = tctrl_text(ctrl);
     st_put(K_CTRL, ctrl);
@@ -371,7 +368,7 @@ entry fn b_browse(_a: u64, _b: u64, _n: f64) {
 }
 
 // A quick-pick chip: pre-fill the field and open directly.
-entry fn b_sug(a: u64, _b: u64, _n: f64) {
+fn b_sug(a: u64, _b: u64, _n: f64) {
     let ctrl = st_take(K_CTRL);
     let mut name = "facebook/react";
     if (a == 1) {
@@ -385,7 +382,7 @@ entry fn b_sug(a: u64, _b: u64, _n: f64) {
 }
 
 // Back: up one directory, or back to the landing when at the root.
-entry fn b_back(_a: u64, _b: u64, _n: f64) {
+fn b_back(_a: u64, _b: u64, _n: f64) {
     let path = stf_take(K_PATH) as u64;
     let selected = stf_take(K_SEL) as u64;
     let cur = rs_get_str(path);
@@ -416,13 +413,13 @@ entry fn b_back(_a: u64, _b: u64, _n: f64) {
 }
 
 // Re-fetch the current directory.
-entry fn b_refresh(_a: u64, _b: u64, _n: f64) {
+fn b_refresh(_a: u64, _b: u64, _n: f64) {
     launch_future(fetch_dir());
 }
 
 // A listing-row tap: a directory descends (a fresh contents fetch); a
 // file fills the selection footer.
-entry fn b_row(a: u64, _b: u64, _n: f64) {
+fn b_row(a: u64, _b: u64, _n: f64) {
     let files = stf_take(K_FILES) as u64;
     stf_put(K_FILES, files as f64);
     let v = rs_get_value(files);

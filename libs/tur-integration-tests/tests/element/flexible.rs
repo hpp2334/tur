@@ -281,7 +281,7 @@ use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
 use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
 
 
-entry fn long_label() -> opaque {
+fn long_label() -> opaque {
     let txt = Text()
         .text("A very long label that must ellipsize inside its slot")
         .font_size(14.0)

@@ -12,12 +12,12 @@ entry fn start() -> u64 {
     let mut col = Column();
     let input = Input().controller(ctrl).undo(undo).placeholder("password").width_height(220.0, 32.0).obscure(true).query_key("password-input").build();
     col.child(input);
-    col.child(PointerInteract().ids(obscure, obscure).on_tap("b_toggle").child(Text().text("reveal").build()).build());
+    col.child(PointerInteract().ids(obscure, obscure).on_tap(b_toggle).child(Text().text("reveal").build()).build());
     let root = Container().child(col.build());
     mount(root.build());
     return obscure;
 }
 
-entry fn b_toggle(obscure: u64, _b: u64, _n: f64) {
+fn b_toggle(obscure: u64, _b: u64, _n: f64) {
     rs_set_bool(obscure, !rs_get_bool(obscure));
 }

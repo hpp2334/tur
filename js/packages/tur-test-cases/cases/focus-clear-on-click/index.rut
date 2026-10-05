@@ -15,12 +15,12 @@ entry fn start() -> u64 {
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
     col.child(input);
     let t = Text().text_bound(label).query_key("button");
-    col.child(PointerInteract().ids(clicks, label).on_tap("b_click").child(t.build()).build());
+    col.child(PointerInteract().ids(clicks, label).on_tap(b_click).child(t.build()).build());
     mount(col.build());
     return clicks;
 }
 
-entry fn b_click(clicks: u64, label: u64, _n: f64) {
+fn b_click(clicks: u64, label: u64, _n: f64) {
     rs_set_f64(clicks, rs_get_f64(clicks) + 1.0);
     rs_set_str(label, f"clicks: {rs_get_f64(clicks) as u64}");
 }

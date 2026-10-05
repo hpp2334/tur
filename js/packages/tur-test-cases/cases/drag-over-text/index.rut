@@ -22,7 +22,7 @@ entry fn start() -> u64 {
 
     let label = Text().text("drag me").font_size(14.0);
     let piece = Container().width_height(80.0, 40.0).query_key("drag-target").child(label.build());
-    let pad = PointerInteract().id(count).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(piece.build()).build();
+    let pad = PointerInteract().id(count).on_down(g_down).on_move(g_move).on_up(g_up).query_key("rut/gesture").child(piece.build()).build();
     stack.child(Transform(1.0, 0.0, 60.0, 50.0).child(pad).build());
 
     let count_t = Text().text_bound(count).query_key("down-count");
@@ -31,7 +31,7 @@ entry fn start() -> u64 {
     return count;
 }
 
-entry fn g_down(count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let cell = st_take(K_COUNT);
     let n = mem_get(cell) + 1.0;
     mem_set(cell, n);
@@ -42,13 +42,13 @@ entry fn g_down(count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     stf_put(K_PHASE, phase as f64);
 }
 
-entry fn g_move(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_move(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let phase = stf_take(K_PHASE) as u64;
     rs_set_str(phase, "move");
     stf_put(K_PHASE, phase as f64);
 }
 
-entry fn g_up(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_up(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let phase = stf_take(K_PHASE) as u64;
     rs_set_str(phase, "up");
     stf_put(K_PHASE, phase as f64);

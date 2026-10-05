@@ -2,12 +2,13 @@
 //! seam): Condition, Switch, Each (one child per item of a native list
 //! atom), and Fragment.
 //!
-//! rut closures cannot cross the host boundary, so the Each item builder is
-//! a named `entry fn` invoked through the guarded VM face ([`VmFace`]) —
-//! the same flush-time-call law C8 formalizes for deriveds: fuel-capped,
+//! rut closures cannot cross the host boundary, so the Each item builder
+//! is a kit-sealed fn box (`opaque(cb)`) invoked through the guarded VM
+//! face ([`VmFace`]) via the kit's `__tur_cb_build2` dispatch entry — the
+//! same flush-time-call law C8 formalizes for deriveds: fuel-capped,
 //! depth-limited, no-mount-guarded, traps reported (never aborting the
 //! flush). The item builder signature is
-//! `entry fn item_fn(index: u64, item: str) -> opaque`.
+//! `fn item_fn(index: u64, item: str) -> opaque`.
 
 use std::rc::Rc;
 
@@ -18,7 +19,7 @@ use crate::core::edgy::value::Value;
 use crate::core::rut_runtime::{RutHandles, RutView, readable_of};
 use crate::core::view::Val;
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 use super::Prebuilt;
 
@@ -54,7 +55,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("switch_build", vec![TY_OPAQUE], TY_OPAQUE),
         // each
         row("each_new", vec![TY_U64], TY_OPAQUE),
-        row("each_builder", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("each_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("each_build", vec![TY_OPAQUE], TY_OPAQUE),
         // fragment
         row("frag_new", vec![], TY_OPAQUE),
@@ -164,8 +165,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- each ---------------------------------------------------------------
-    // Each: one child per item of a list atom; the item builder is a named
-    // `entry fn(index, item) -> opaque`.
+    // Each: one child per item of a list atom; the item builder is a
+    // kit-sealed fn box `fn(index, item) -> opaque`, fired through the
+    // kit's `__tur_cb_build2` dispatch entry.
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "each_new", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = &h;
@@ -178,10 +180,10 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "each_builder", (Opaque<EachSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "each_builder", (Opaque<EachSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>, cb: OpaqueRef| {
         let _ = vm;
         let builder = EachBuilder {
-            name: cb.to_string(),
+            cb,
             face: h.face.clone(),
             handles: h.clone(),
         };

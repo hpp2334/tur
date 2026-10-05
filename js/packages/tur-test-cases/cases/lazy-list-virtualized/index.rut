@@ -3,7 +3,7 @@ use tur::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyList, Text };
 
 
-entry fn row(i: u64) -> opaque {
+fn row(i: u64) -> opaque {
     let b = Container()
         .width_height(400.0, 40.0)
         .color(0x0F172AFF)
@@ -14,6 +14,6 @@ entry fn row(i: u64) -> opaque {
 entry fn start() {
     let count = rs_source_f64();
     rs_set_f64(count, 2000.0);
-    let list = LazyList().item_builder("row").count(count).item_extent(40.0).build();
+    let list = LazyList().item_builder(row).count(count).item_extent(40.0).build();
     mount(Expanded().flex(1.0).child(list).build());
 }

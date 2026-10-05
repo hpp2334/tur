@@ -13,7 +13,7 @@ use tur::{{ mount }};
 use tur_kit::{{ Container, Grid }};
 
 
-entry fn tile() -> opaque {{
+fn tile() -> opaque {{
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);
     return b.build();
 }}

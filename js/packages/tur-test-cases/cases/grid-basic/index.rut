@@ -3,7 +3,7 @@ use tur::{ mount };
 use tur_kit::{ Column, Container, Row, SizedBox };
 
 
-entry fn tile(color: u64) -> opaque {
+fn tile(color: u64) -> opaque {
     let b = Container().width_height(80.0, 80.0).color(color);
     return b.build();
 }

@@ -1,9 +1,9 @@
 // drag-with-lift: the jigsaw piece mechanic — pointer-down drives a lift
 // animation (forward on down, reverse on up). The last gesture phase
 // renders into the `last-event` Text.
-use tur::{ anim_ctrl, anim_forward, anim_reverse, mount, rs_set_str, rs_source_f64, rs_source_str,
-    st_put, st_take, stf_put, stf_take };
+use tur::{ anim_forward, anim_reverse, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
 use tur_kit::{ Column, Container, PointerInteract, Text };
+use tur_anim_kit::{ anim_ctrl };
 
 
 let K_PHASE: u64 = 1;
@@ -13,14 +13,14 @@ entry fn start() -> u64 {
     let phase = rs_source_str("");
     stf_put(K_PHASE, phase as f64);
     let lift = rs_source_f64();
-    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
+    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, a_tick, a_end);
     st_put(K_CTRL, ctrl);
 
     let b = Container()
         .width_height(80.0, 40.0)
         .query_key("lift-target")
         .child(Text().text("piece").build());
-    let pad = PointerInteract().id(phase).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().id(phase).on_down(g_down).on_move(g_move).on_up(g_up).query_key("rut/gesture").child(b.build()).build();
 
     let phase_t = Text().text_bound(phase).query_key("last-event").build();
     let root = Column().child(pad).child(phase_t);
@@ -28,10 +28,10 @@ entry fn start() -> u64 {
     return phase;
 }
 
-entry fn a_tick(_atom: u64, _t: f64) {
+fn a_tick(_atom: u64, _t: f64) {
 }
 
-entry fn a_end(_atom: u64, _v: f64) {
+fn a_end(_atom: u64, _v: f64) {
 }
 
 // The `__resetDrag` seam (the lift keeps settling; only the transcript clears).
@@ -41,18 +41,18 @@ entry fn reset(_a: u64, _b: f64) {
     stf_put(K_PHASE, phase as f64);
 }
 
-entry fn g_down(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let ctrl = st_take(K_CTRL);
     anim_forward(ctrl);
     st_put(K_CTRL, ctrl);
     rs_set_str(phase, "down");
 }
 
-entry fn g_move(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_move(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     rs_set_str(phase, "move");
 }
 
-entry fn g_up(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_up(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let ctrl = st_take(K_CTRL);
     anim_reverse(ctrl);
     st_put(K_CTRL, ctrl);

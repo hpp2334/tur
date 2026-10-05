@@ -24,18 +24,18 @@ entry fn start() -> u64 {
         .color(0x6366F1FFu64)
         .query_key("piece")
         .child(Text().text("A").build());
-    let pad = PointerInteract().ids(piece, piece).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().ids(piece, piece).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b.build()).build();
     let pos = Positioned().left(10.0).top(10.0).child(pad).build();
     stack.child(pos);
     mount(stack.build());
     return piece;
 }
 
-entry fn g_down(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     rs_set_str(piece, "dragging");
 }
 
-entry fn g_move(piece: u64, _id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_move(piece: u64, _id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     let x = stf_take(K_X) as u64;
     let y = stf_take(K_Y) as u64;
     rs_set_f64(x, gx - 40.0);
@@ -44,6 +44,6 @@ entry fn g_move(piece: u64, _id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn
     stf_put(K_Y, y as f64);
 }
 
-entry fn g_up(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_up(piece: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     rs_set_str(piece, "A");
 }

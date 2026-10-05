@@ -5,7 +5,7 @@ use tur::{ mount, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_sour
 use tur_kit::{ Column, Container, Each, PointerInteract, Row, SizedBox, Text };
 
 
-entry fn row(_i: u64, name: str) -> opaque {
+fn row(_i: u64, name: str) -> opaque {
     let mut r = Row();
     let c = Container().width_height(150.0, 0.0).padding(8.0).child(Text().text(name).font_size(14.0).build());
     r.child(c.build());
@@ -24,14 +24,14 @@ entry fn start() -> u64 {
         .color(0x1E293BFF)
         .child(Text().text("PLANET").font_size(12.0).build());
     col.child(head.build());
-    col.child(Each(rows_atom).item_builder("row").build());
-    col.child(PointerInteract().ids(rows_atom, rows_atom).on_tap("b_add").child(Text().text("add row").build()).build());
+    col.child(Each(rows_atom).item_builder(row).build());
+    col.child(PointerInteract().ids(rows_atom, rows_atom).on_tap(b_add).child(Text().text("add row").build()).build());
     let frame = Container().color(0x0B1220FF).child(col.build());
     mount(SizedBox(400.0, 240.0).child(frame.build()).build());
     return rows_atom;
 }
 
-entry fn b_add(rows: u64, _b: u64, _n: f64) {
+fn b_add(rows: u64, _b: u64, _n: f64) {
     // Read-modify-write: rebuild the list with one more row.
     let cur = rs_get_value(rows);
     let n = rs_value_len(cur);

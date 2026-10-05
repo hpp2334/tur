@@ -266,8 +266,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   `.child(c)` / `.children([…])` append children; `.build()`
   is the ONLY terminal and calls the FAMILY's build row (`Column.build()` →
   `flex_build`, `Text.build()` → `text_build`). Required-prop validation
-  stays in the rows/View constructors. Callbacks keep the intent-queue law —
-  names + ids, never closures (`PointerInteract().on_tap("ts_click", count)`).
+  stays in the rows/View constructors. **Callbacks are fn values** (named
+  or anonymous fn literals, captures allowed — they stay rut-side in the
+  kit's opaque-box sealing; only the sealed box crosses to Rust as a
+  handle), fired through the infra dispatch entries
+  (`PointerInteract().on_tap(b_toggle)` /
+  `Each(items).item_builder(fn(i: u64, item: str) -> View { … })`); the
+  arity/type check happens at the kit boundary at compile time. Nothing
+  callable ever crosses the boundary as a string or a closure. Case
+  modules declare `entry fn` ONLY for `start` (+ deliberate test/
+  embedder probes — `entry` = a published contract, never a callback).
   Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
   `Text().text("literal")`, `Container().color_bound(atom)`,
   `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur` pkg,

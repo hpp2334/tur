@@ -11,7 +11,7 @@ use crate::core::layout::Axis;
 use crate::core::rut_runtime::{RutHandles, RutView, readable_of};
 use crate::core::view::Val;
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
 pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
@@ -31,7 +31,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     cx.decl.extend(vec![
         // lazy list
         row("lazy_list_new", vec![], TY_OPAQUE),
-        row("lazy_builder", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("lazy_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lazy_count", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lazy_axis", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lazy_overscan", vec![TY_OPAQUE, TY_U64], TY_NIL),
@@ -40,7 +40,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("lazy_build", vec![TY_OPAQUE], TY_OPAQUE),
         // lazy grid
         row("lazy_grid_new", vec![], TY_OPAQUE),
-        row("lazy_grid_builder", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("lazy_grid_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lazy_grid_count", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lazy_grid_axis", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lazy_grid_overscan", vec![TY_OPAQUE, TY_U64], TY_NIL),
@@ -92,9 +92,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_builder", (Opaque<LazyListSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "lazy_builder", (Opaque<LazyListSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, cb: OpaqueRef| {
         let _ = vm;
-        let entry = RutEntryBuilder { name: cb.to_string(), face: h.face.clone(), handles: h.clone() };
+        let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
     rut_vm::pkg_fn!(pkg, "lazy_count", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, atom: u64| {
@@ -135,9 +135,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_grid_builder", (Opaque<LazyGridSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "lazy_grid_builder", (Opaque<LazyGridSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cb: OpaqueRef| {
         let _ = vm;
-        let entry = RutEntryBuilder { name: cb.to_string(), face: h.face.clone(), handles: h.clone() };
+        let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
     rut_vm::pkg_fn!(pkg, "lazy_grid_count", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, atom: u64| {

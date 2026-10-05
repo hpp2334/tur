@@ -16,7 +16,7 @@ entry fn start() -> u64 {
         .alignment(ALIGN_CENTER)
         .child(Text().text_bound(phase).query_key("drag-phase").build());
 
-    col.child(PointerInteract().ids(phase, pos).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build());
+    col.child(PointerInteract().ids(phase, pos).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b.build()).build());
 
     let pos_t = Text().text_bound(pos).query_key("drag-pos");
     col.child(pos_t.build());
@@ -25,17 +25,17 @@ entry fn start() -> u64 {
     return phase;
 }
 
-entry fn g_down(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_down(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     rs_set_str(pos, f"{gx as u64},{gy as u64}");
     rs_set_str(phase, "down");
 }
 
-entry fn g_move(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_move(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     rs_set_str(pos, f"{gx as u64},{gy as u64}");
     rs_set_str(phase, "move");
 }
 
-entry fn g_up(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_up(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     rs_set_str(pos, f"{gx as u64},{gy as u64}");
     rs_set_str(phase, "up");
 }

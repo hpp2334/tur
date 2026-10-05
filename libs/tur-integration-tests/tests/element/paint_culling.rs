@@ -46,7 +46,7 @@ use tur::{ AXIS_VERTICAL, mount };
 use tur_kit::{ Column, Container, ScrollView };
 
 
-entry fn item(i: u64) -> opaque {
+fn item(i: u64) -> opaque {
     let b = Container().width_height(10.0, 100.0).color(0xFF0000FFu64).query_key(f"item/{i}");
     return b.build();
 }

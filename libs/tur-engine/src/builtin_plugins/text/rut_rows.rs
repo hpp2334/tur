@@ -25,10 +25,10 @@ use crate::builtin_plugins::text::{InputView, TextView};
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
 use crate::core::edgy::value::Value;
-use crate::core::rut_runtime::{Intent, RutHandles, RutView, color_of};
+use crate::core::rut_runtime::{cb_entries, Intent, RutHandles, RutView, color_of};
 use crate::core::view::Val;
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
 pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
@@ -89,7 +89,7 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         // the on-input rail (the intent-queue law): `input_on_input(
         // builder, name, id)` installs a mutation on the builder's shared
         // controller; every user edit delivers `(name, id, 0, seq)`.
-        ("input_on_input".to_string(), vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL, false),
+        ("input_on_input".to_string(), vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL, false),
         ("input_qkey".to_string(), vec![TY_OPAQUE, TY_STR], TY_NIL, false),
         ("input_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
         // controllers (realm-minted, method rows)
@@ -141,12 +141,11 @@ fn plain_span(text: &str) -> SpanData {
 /// `b` reserved (0). The payload text never crosses: the handler reads the
 /// fresh text through `tctrl_text` (the intent-queue law — names + ids,
 /// never closures).
-fn input_mutation(handles: &Rc<RutHandles>, id: u64, cb: &str) -> Option<MutationHandle<InputEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
+fn input_mutation(
+    handles: &Rc<RutHandles>,
+    id: u64,
+    cb: OpaqueRef,
+) -> Option<MutationHandle<InputEvent>> {
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
@@ -154,7 +153,7 @@ fn input_mutation(handles: &Rc<RutHandles>, id: u64, cb: &str) -> Option<Mutatio
         h.click_seq.set(n);
         h.pending_calls
             .borrow_mut()
-            .push(Intent::Click { name: name.clone(), a: id, b: 0, seq: n as f64 });
+            .push(Intent::Click { entry: cb_entries::CLICK, cb: cb.clone(), a: id, b: 0, seq: n as f64 });
         dirty.set(true);
         Ok(Value::Nil)
     });
@@ -320,13 +319,13 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "input_font_family", (Opaque<InputView>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, family: &str| {
         b.with_mut(vm, |_vm, s| s.set_font_family_str(family.to_string()))
     });
-    // input_on_input(builder, name, id) — install the on-input intent on
+    // input_on_input(builder, cb, id) — install the on-input intent on
     // the builder's shared controller (the element fires it on every user
     // edit: keystroke / IME commit; programmatic `tctrl_set_text` does NOT
     // fire it). A builder without `.controller` yet is a no-op — the kit
     // chain binds `.controller(...)` first.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "input_on_input", (Opaque<InputView>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "input_on_input", (Opaque<InputView>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, cb: OpaqueRef, id: u64| {
         let m = input_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| {
             if let Some(ctrl) = s.controller() {

@@ -15,13 +15,9 @@
 // radius row) and the boa orbiting dot is omitted — the engine VM's
 // offer set mounts no trig rows — so the inner-square opacity pulse
 // rides the same tick as the third animated channel.
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, anim_ctrl, anim_forward,
-    anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status,
-    anim_stop, anim_value, color_tween_lerp, mount, rs_get_bool, rs_set_brush, rs_set_f64,
-    rs_set_str, rs_source_bool, rs_source_f64, rs_source_str, st_put, st_take, stf_put,
-    stf_take, tween_lerp };
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, color_tween_lerp, mount, rs_get_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take, tween_lerp };
 use tur_kit::{ Column, Container, PointerInteract, Row, SizedBox, Text };
-use tur_anim_kit::{ Opacity };
+use tur_anim_kit::{ Opacity, anim_ctrl };
 
 
 let K_CTRL: u64 = 1;
@@ -102,7 +98,7 @@ entry fn start() -> u64 {
     stf_put(K_LP, lp as f64);
     stf_put(K_CURVE, 3.0); // easeInOut — the boa boot curve
     stf_put(K_LOOPB, 0.0);
-    let ctrl = anim_ctrl(progress, 2400.0, "easeInOut", 1 as u64, "a_tick", "a_end");
+    let ctrl = anim_ctrl(progress, 2400.0, "easeInOut", 1 as u64, a_tick, a_end);
     st_put(K_CTRL, ctrl);
 
     paint_speed(1.0);
@@ -120,26 +116,26 @@ entry fn start() -> u64 {
         .child(SizedBox(0.0, 28.0).build())
         .child(card())
         .child(SizedBox(0.0, 28.0).build())
-        .child(Row().child(pill("Play", GREEN, "b_play", "cas-play")).child(gap(6.0))
-            .child(pill("Pause", AMBER, "b_pause", "cas-pause")).child(gap(6.0))
-            .child(pill("Resume", 0x0EA5E9FFu64, "b_resume", "cas-resume")).child(gap(6.0))
-            .child(pill("Reverse", 0x8B5CF6FFu64, "b_reverse", "cas-reverse")).child(gap(6.0))
-            .child(pill("Stop", 0xEF4444FFu64, "b_stop", "cas-stop")).build())
+        .child(Row().child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
+            .child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0))
+            .child(pill("Resume", 0x0EA5E9FFu64, b_resume, "cas-resume")).child(gap(6.0))
+            .child(pill("Reverse", 0x8B5CF6FFu64, b_reverse, "cas-reverse")).child(gap(6.0))
+            .child(pill("Stop", 0xEF4444FFu64, b_stop, "cas-stop")).build())
         .child(SizedBox(0.0, 16.0).build())
         .child(Row().cross_alignment(CROSS_ALIGN_CENTER).child(Text().text("Speed:").font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
-            .child(chip(sp0, "0.5x", "b_speed0", "cas-s0")).child(gap(4.0))
-            .child(chip(sp1, "1x", "b_speed1", "cas-s1")).child(gap(4.0))
-            .child(chip(sp2, "2x", "b_speed2", "cas-s2")).child(gap(4.0))
-            .child(chip(sp3, "4x", "b_speed3", "cas-s3")).build())
+            .child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0))
+            .child(chip(sp1, "1x", b_speed1, "cas-s1")).child(gap(4.0))
+            .child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0))
+            .child(chip(sp3, "4x", b_speed3, "cas-s3")).build())
         .child(SizedBox(0.0, 12.0).build())
         .child(Row().cross_alignment(CROSS_ALIGN_CENTER).child(Text().text("Curve:").font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
-            .child(chip(cv0, "linear", "b_curve0", "cas-c0")).child(gap(4.0))
-            .child(chip(cv1, "easeIn", "b_curve1", "cas-c1")).child(gap(4.0))
-            .child(chip(cv2, "easeOut", "b_curve2", "cas-c2")).child(gap(4.0))
-            .child(chip(cv3, "easeInOut", "b_curve3", "cas-c3")).child(gap(12.0))
-            .child(chip(lp, "Loop", "b_loop", "cas-loop")).build())
+            .child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0))
+            .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
+            .child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0))
+            .child(chip(cv3, "easeInOut", b_curve3, "cas-c3")).child(gap(12.0))
+            .child(chip(lp, "Loop", b_loop, "cas-loop")).build())
         .child(SizedBox(0.0, 16.0).build())
         .child(Text().text("Controls: pause mid-play, change speed/curve, resume").font_size(10.0).color(0x94A3B8FFu64).build());
     mount(Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col.build()).build());
@@ -181,35 +177,35 @@ fn status_badge() -> opaque {
 
 // ---- transport entries ---------------------------------------------------------
 
-entry fn b_play(_a: u64, _b: u64, _n: f64) {
+fn b_play(_a: u64, _b: u64, _n: f64) {
     let c = st_take(K_CTRL);
     anim_forward(c);
     st_put(K_CTRL, c);
     sync(c);
 }
 
-entry fn b_pause(_a: u64, _b: u64, _n: f64) {
+fn b_pause(_a: u64, _b: u64, _n: f64) {
     let c = st_take(K_CTRL);
     anim_pause(c);
     st_put(K_CTRL, c);
     sync(c);
 }
 
-entry fn b_resume(_a: u64, _b: u64, _n: f64) {
+fn b_resume(_a: u64, _b: u64, _n: f64) {
     let c = st_take(K_CTRL);
     anim_resume(c);
     st_put(K_CTRL, c);
     sync(c);
 }
 
-entry fn b_reverse(_a: u64, _b: u64, _n: f64) {
+fn b_reverse(_a: u64, _b: u64, _n: f64) {
     let c = st_take(K_CTRL);
     anim_reverse(c);
     st_put(K_CTRL, c);
     sync(c);
 }
 
-entry fn b_stop(_a: u64, _b: u64, _n: f64) {
+fn b_stop(_a: u64, _b: u64, _n: f64) {
     let c = st_take(K_CTRL);
     anim_stop(c);
     st_put(K_CTRL, c);
@@ -217,10 +213,10 @@ entry fn b_stop(_a: u64, _b: u64, _n: f64) {
 }
 
 // Speed retimes the controller in place (no recreate).
-entry fn b_speed0(_a: u64, _b: u64, _n: f64) { speed_to(0.5, 0.0); }
-entry fn b_speed1(_a: u64, _b: u64, _n: f64) { speed_to(1.0, 1.0); }
-entry fn b_speed2(_a: u64, _b: u64, _n: f64) { speed_to(2.0, 2.0); }
-entry fn b_speed3(_a: u64, _b: u64, _n: f64) { speed_to(4.0, 3.0); }
+fn b_speed0(_a: u64, _b: u64, _n: f64) { speed_to(0.5, 0.0); }
+fn b_speed1(_a: u64, _b: u64, _n: f64) { speed_to(1.0, 1.0); }
+fn b_speed2(_a: u64, _b: u64, _n: f64) { speed_to(2.0, 2.0); }
+fn b_speed3(_a: u64, _b: u64, _n: f64) { speed_to(4.0, 3.0); }
 
 fn speed_to(factor: f64, idx: f64) {
     let c = st_take(K_CTRL);
@@ -231,12 +227,12 @@ fn speed_to(factor: f64, idx: f64) {
 
 // Curve + loop: the boa recreate-and-seek — a fresh controller over the
 // same progress atom, seeked to the frozen value, swapped into the stash.
-entry fn b_curve0(_a: u64, _b: u64, _n: f64) { curve_to(0.0); }
-entry fn b_curve1(_a: u64, _b: u64, _n: f64) { curve_to(1.0); }
-entry fn b_curve2(_a: u64, _b: u64, _n: f64) { curve_to(2.0); }
-entry fn b_curve3(_a: u64, _b: u64, _n: f64) { curve_to(3.0); }
+fn b_curve0(_a: u64, _b: u64, _n: f64) { curve_to(0.0); }
+fn b_curve1(_a: u64, _b: u64, _n: f64) { curve_to(1.0); }
+fn b_curve2(_a: u64, _b: u64, _n: f64) { curve_to(2.0); }
+fn b_curve3(_a: u64, _b: u64, _n: f64) { curve_to(3.0); }
 
-entry fn b_loop(_a: u64, _b: u64, _n: f64) {
+fn b_loop(_a: u64, _b: u64, _n: f64) {
     let prev = stf_take(K_LOOPB);
     let next = prev <= 0.5;
     stf_put(K_LOOPB, flag(next));
@@ -272,7 +268,7 @@ fn make_ctrl() -> opaque {
     if (looping) {
         repeat = 18446744073709551615.0 as u64; // the infinite crossing
     }
-    return anim_ctrl(progress, 2400.0, curve_name(idx), repeat, "a_tick", "a_end");
+    return anim_ctrl(progress, 2400.0, curve_name(idx), repeat, a_tick, a_end);
 }
 
 fn curve_name(idx: f64) -> str {
@@ -289,7 +285,7 @@ fn flag(b: bool) -> f64 {
 
 // ---- the tick: progress → the animated channels --------------------------------
 
-entry fn a_tick(_id: u64, v: f64) {
+fn a_tick(_id: u64, v: f64) {
     let width = stf_take(K_WIDTH) as u64;
     stf_put(K_WIDTH, width as f64);
     rs_set_f64(width, tween_lerp(W_MIN, W_MAX, v));
@@ -304,7 +300,7 @@ entry fn a_tick(_id: u64, v: f64) {
     rs_set_str(pct, f"{(v * 100.0) as u64}%");
 }
 
-entry fn a_end(_id: u64, _v: f64) {
+fn a_end(_id: u64, _v: f64) {
     let c = st_take(K_CTRL);
     st_put(K_CTRL, c);
     sync(c);
@@ -396,14 +392,14 @@ fn loop_color(on: bool) -> u64 {
 
 // A transport pill (the boa Button): a PointerInteract pad over a colored
 // label.
-fn pill(label: str, color: u64, cb: str, key: str) -> opaque {
+fn pill(label: str, color: u64, cb: fn(u64, u64, f64), key: str) -> opaque {
     let mut b = Container().padding(8.0).radius(6.0).color(color).query_key(key);
     b.child(Text().text(label).font_size(11.0).color(0xFFFFFFFFu64).build());
     return PointerInteract().on_tap(cb).child(b.build()).build();
 }
 
 // A selectable chip (speed / curve / loop): the fill rides its brush atom.
-fn chip(atom: u64, label: str, cb: str, key: str) -> opaque {
+fn chip(atom: u64, label: str, cb: fn(u64, u64, f64), key: str) -> opaque {
     let mut b = Container().padding(6.0).radius(6.0).color_bound(atom).query_key(key);
     b.child(Text().text(label).font_size(10.0).color(0x475569FFu64).build());
     return PointerInteract().on_tap(cb).child(b.build()).build();

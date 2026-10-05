@@ -116,10 +116,11 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 /// dep as f64 (`entry fn d(dep: f64) -> str`), so the source is a numeric
 /// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
-use tur::{ mount, rs_derive, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Switch, Text };
+use tur_kit::{ rs_derive };
 
-entry fn d(v: f64) -> str {
+fn d(v: f64) -> str {
     if (v == 1.0) {
         return "b";
     }
@@ -132,7 +133,7 @@ entry fn d(v: f64) -> str {
 entry fn start() -> u64 {
     let key = rs_source_f64();
     rs_set_f64(key, 0.0);
-    let derived = rs_derive("d", key);
+    let derived = rs_derive(d, key);
 
     let mut sw = Switch().value_derived(derived);
     sw.cases("a", Text().text("AAA").query_key("d_case_a").build());

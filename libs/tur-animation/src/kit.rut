@@ -11,7 +11,40 @@
 // valid — byte-identical lowering), and CHAIN it:
 // `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
 // statement runs.
-use tur::{ el_opacity, el_opacity_bound, el_transform };
+use tur::{ anim_ctrl_cb, anim_ctrl_cb_e, anim_ctrl_cb_t, anim_ctrl_cb_te, el_opacity, el_opacity_bound, el_transform };
+
+// The animation kit's dispatch entry (the scope law: this kit seals the
+// tick/end fn values, so THIS module owns the entry that downcasts them —
+// the box stamps this unit's `fn(u64, f64)` id).
+entry fn __tur_acb_val(cb: opaque, a: u64, v: f64) {
+  let f = opaque.downcast<fn(u64, f64)>(cb);
+  f(a, v);
+}
+
+// The animation controller — the authored face over the `anim_ctrl_cb*`
+// rows (`?opaque` has no param lane — rows are typed — and rut does not
+// coerce fn → ?fn at call sites, so each callback combo is its own
+// authored fn). The callbacks are fn VALUES (`fn(atom: u64, t: f64)`);
+// the kit seals them into opaque boxes rut-side, and the engine's drain
+// fires them through the `__tur_cb_val` dispatch entry.
+pub fn anim_ctrl(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_tick: fn(u64, f64), on_end: fn(u64, f64)) -> opaque {
+  return anim_ctrl_cb_te(atom, duration_ms, curve, repeat, opaque(on_tick), opaque(on_end));
+}
+
+// Tick-only twin.
+pub fn anim_ctrl_tick(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_tick: fn(u64, f64)) -> opaque {
+  return anim_ctrl_cb_t(atom, duration_ms, curve, repeat, opaque(on_tick));
+}
+
+// End-only twin.
+pub fn anim_ctrl_end(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_end: fn(u64, f64)) -> opaque {
+  return anim_ctrl_cb_e(atom, duration_ms, curve, repeat, opaque(on_end));
+}
+
+// The bare controller (no callbacks — polled through `anim_value`).
+pub fn anim_ctrl_open(atom: u64, duration_ms: f64, curve: str, repeat: u64) -> opaque {
+  return anim_ctrl_cb(atom, duration_ms, curve, repeat);
+}
 
 class Opacity {
   value: f64;

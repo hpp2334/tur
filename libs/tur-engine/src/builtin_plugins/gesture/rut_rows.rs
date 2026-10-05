@@ -5,20 +5,22 @@
 //!
 //! Payloads beyond the legacy `(u64, u64, f64)` click shape cross as
 //! intent records ([`Intent::Pointer`] / [`Intent::Pointer2`] /
-//! [`Intent::Key`]) — the drain dispatches each shape into its `entry fn`
-//! signature:
+//! [`Intent::Key`]) — the drain dispatches each shape into its infra
+//! dispatch entry (`__tur_cb_*`; the kit seals the callback fn value into
+//! the opaque box the intent carries). The fn signatures the entries
+//! recover:
 //!
 //! - tap callbacks (the historical `el_button` shape):
-//!   `entry fn cb(id_a: u64, id_b: u64, seq: f64)`
+//!   `fn cb(id_a: u64, id_b: u64, seq: f64)`
 //! - pointer callbacks (single-id rail):
-//!   `entry fn cb(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, button: u64)`
+//!   `fn cb(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, button: u64)`
 //!   (`button` is 0 for down/move/up/click, 2 for the context-menu's right
 //!   button); the two-id rail delivers
-//!   `entry fn cb(a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy: f64, button: u64)`
-//! - key callback: `entry fn cb(id: u64, key: str, code: str, mods: u64,
+//!   `fn cb(a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy: f64, button: u64)`
+//! - key callback: `fn cb(id: u64, key: str, code: str, mods: u64,
 //!   kind: u64)` — `mods` bit0 shift / bit1 ctrl / bit2 alt / bit3 meta,
 //!   `kind` 0 = down, 1 = up
-//! - focus/blur callbacks: `entry fn cb(id: u64, b: u64, n: f64)`
+//! - focus/blur callbacks: `fn cb(id: u64, b: u64, n: f64)`
 
 use std::rc::Rc;
 
@@ -32,10 +34,10 @@ use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::layout::HitTestBehavior;
 use crate::core::view::Val;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
-use crate::core::rut_runtime::{Intent, RutHandles, RutView, readable_of};
+use crate::core::rut_runtime::{cb_entries, Intent, RutHandles, RutView, readable_of};
 use crate::core::shell::Cursor;
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
 pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
@@ -57,20 +59,20 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("pi_new", vec![], TY_OPAQUE),
         row("pi_id", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pi_ids", vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL),
-        row("pi_on_tap", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_on_click", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_on_down", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_on_move", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_on_up", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_on_context_menu", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("pi_on_tap", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("pi_on_click", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("pi_on_down", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("pi_on_move", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("pi_on_up", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("pi_on_context_menu", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pi_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("pi_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_build", vec![TY_OPAQUE], TY_OPAQUE),
         // mouse region
         row("mr_new", vec![], TY_OPAQUE),
-        row("mr_on_enter", vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL),
-        row("mr_on_exit", vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL),
+        row("mr_on_enter", vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL),
+        row("mr_on_exit", vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL),
         row("mr_cursor", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("mr_cursor_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("mr_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
@@ -78,9 +80,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("mr_build", vec![TY_OPAQUE], TY_OPAQUE),
         // focusable
         row("focus_new", vec![], TY_OPAQUE),
-        row("focus_on_key_down", vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL),
-        row("focus_on_focus", vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL),
-        row("focus_on_blur", vec![TY_OPAQUE, TY_STR, TY_U64], TY_NIL),
+        row("focus_on_key_down", vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL),
+        row("focus_on_focus", vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL),
+        row("focus_on_blur", vec![TY_OPAQUE, TY_OPAQUE, TY_U64], TY_NIL),
         row("focus_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("focus_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("focus_request", vec![TY_U64], TY_NIL),
@@ -173,13 +175,10 @@ fn behavior_of(v: u64) -> HitTestBehavior {
 // ---------------------------------------------------------------------------
 
 /// Queue a tap intent (the historical click shape):
-/// `(name, id_a, id_b, seq)`.
-fn tap_mutation(handles: &Rc<RutHandles>, id_a: u64, id_b: u64, cb: &str) -> Option<MutationHandle<PointerInteractEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
+/// `(cb, id_a, id_b, seq)`. The callback is the kit-sealed fn box — an
+/// `OpaqueRef` handle; nil is rejected at the kit boundary (a fn value is
+/// required), so an empty/none check is unnecessary here.
+fn tap_mutation(handles: &Rc<RutHandles>, id_a: u64, id_b: u64, cb: OpaqueRef) -> Option<MutationHandle<PointerInteractEvent>> {
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
@@ -187,15 +186,15 @@ fn tap_mutation(handles: &Rc<RutHandles>, id_a: u64, id_b: u64, cb: &str) -> Opt
         h.click_seq.set(n);
         h.pending_calls
             .borrow_mut()
-            .push(Intent::Click { name: name.clone(), a: id_a, b: id_b, seq: n as f64 });
+            .push(Intent::Click { entry: cb_entries::CLICK, cb: cb.clone(), a: id_a, b: id_b, seq: n as f64 });
         dirty.set(true);
         Ok(Value::Nil)
     });
     Some(MutationHandle::new(mutation))
 }
 
-/// Queue a pointer intent for `cb` (empty name = absent). The mutation
-/// receives the pointer payload through the native crossing
+/// Queue a pointer intent for `cb`. The mutation receives the pointer
+/// payload through the native crossing
 /// (`[local.x, local.y, global.x, global.y]`); `two_ids` selects the
 /// two-id `Intent::Pointer2` rail.
 fn pointer_mutation(
@@ -204,13 +203,8 @@ fn pointer_mutation(
     id_b: u64,
     two_ids: bool,
     button: u64,
-    cb: &str,
+    cb: OpaqueRef,
 ) -> Option<MutationHandle<PointerInteractEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
@@ -223,7 +217,8 @@ fn pointer_mutation(
         let (lx, ly, gx, gy) = (nums(0), nums(1), nums(2), nums(3));
         if two_ids {
             h.pending_calls.borrow_mut().push(Intent::Pointer2 {
-                name: name.clone(),
+                entry: cb_entries::PTR2,
+                cb: cb.clone(),
                 a: id_a,
                 b: id_b,
                 lx,
@@ -234,7 +229,8 @@ fn pointer_mutation(
             });
         } else {
             h.pending_calls.borrow_mut().push(Intent::Pointer {
-                name: name.clone(),
+                entry: cb_entries::PTR1,
+                cb: cb.clone(),
                 id: id_a,
                 lx,
                 ly,
@@ -249,19 +245,13 @@ fn pointer_mutation(
     Some(MutationHandle::new(mutation))
 }
 
-/// Queue a key intent for `cb` (empty name = absent). The mutation
-/// receives the keydown payload through the native crossing
-/// (`[key, code, mods, kind]`).
+/// Queue a key intent for `cb`. The mutation receives the keydown payload
+/// through the native crossing (`[key, code, mods, kind]`).
 fn key_mutation(
     handles: &Rc<RutHandles>,
     id: u64,
-    cb: &str,
+    cb: OpaqueRef,
 ) -> Option<MutationHandle<KeydownEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
@@ -274,7 +264,8 @@ fn key_mutation(
             _ => 0,
         };
         h.pending_calls.borrow_mut().push(Intent::Key {
-            name: name.clone(),
+            entry: cb_entries::KEY,
+            cb: cb.clone(),
             id,
             key: arg_str(0),
             code: arg_str(1),
@@ -291,18 +282,14 @@ fn key_mutation(
 fn focus_mutation(
     handles: &Rc<RutHandles>,
     id: u64,
-    cb: &str,
+    cb: OpaqueRef,
 ) -> Option<MutationHandle<FocusEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
-            name: name.clone(),
+            entry: cb_entries::CLICK,
+            cb: cb.clone(),
             a: id,
             b: 0,
             seq: 1.0,
@@ -316,18 +303,14 @@ fn focus_mutation(
 fn blur_mutation(
     handles: &Rc<RutHandles>,
     id: u64,
-    cb: &str,
+    cb: OpaqueRef,
 ) -> Option<MutationHandle<BlurEvent>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
-            name: name.clone(),
+            entry: cb_entries::CLICK,
+            cb: cb.clone(),
             a: id,
             b: 1,
             seq: 1.0,
@@ -339,24 +322,21 @@ fn blur_mutation(
 }
 
 /// Build the enter/exit mutation: pushes a Click-shaped intent (the
-/// `(report, id, seq)` drain shape) into the named `entry fn(a, b, n)`.
+/// `(cb, id, seq)` drain shape) into the dispatch entry.
 fn region_mutation(
     handles: &Rc<RutHandles>,
     id: u64,
-    name: &str,
+    cb: OpaqueRef,
 ) -> Option<MutationHandle<PointerRegionEvent>> {
-    if name.is_empty() {
-        return None;
-    }
     let h = handles.clone();
-    let cb = name.to_string();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         let n = h.click_seq.get() + 1;
         h.click_seq.set(n);
         h.pending_calls
             .borrow_mut()
             .push(Intent::Click {
-                name: cb.clone(),
+                entry: cb_entries::CLICK,
+                cb: cb.clone(),
                 a: id,
                 b: id,
                 seq: n as f64,
@@ -405,37 +385,37 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         })
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_tap", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_tap", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb) = b.with(|s| (s.id_a, s.id_b))?;
         let m = tap_mutation(&h, a, bb, cb);
         b.with_mut(vm, |_vm, s| s.on_click = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_click", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_click", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
         let m = pointer_mutation(&h, a, bb, two, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_click = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_down", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_down", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
         let m = pointer_mutation(&h, a, bb, two, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_pointer_down = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_move", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_move", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
         let m = pointer_mutation(&h, a, bb, two, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_pointer_move = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_up", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_up", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
         let m = pointer_mutation(&h, a, bb, two, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_pointer_up = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_context_menu", (Opaque<PiSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "pi_on_context_menu", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
         let m = pointer_mutation(&h, a, bb, two, 2, cb);
         b.with_mut(vm, |_vm, s| s.on_context_menu = m)
@@ -473,12 +453,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "mr_on_enter", (Opaque<MrSpec>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "mr_on_enter", (Opaque<MrSpec>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, cb: OpaqueRef, id: u64| {
         let m = region_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| s.on_enter = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "mr_on_exit", (Opaque<MrSpec>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "mr_on_exit", (Opaque<MrSpec>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, cb: OpaqueRef, id: u64| {
         let m = region_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| s.on_exit = m)
     });
@@ -517,17 +497,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "focus_on_key_down", (Opaque<FocusSpec>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "focus_on_key_down", (Opaque<FocusSpec>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: OpaqueRef, id: u64| {
         let m = key_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| s.on_key_down = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "focus_on_focus", (Opaque<FocusSpec>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "focus_on_focus", (Opaque<FocusSpec>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: OpaqueRef, id: u64| {
         let m = focus_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| s.on_focus = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "focus_on_blur", (Opaque<FocusSpec>, &str, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: &str, id: u64| {
+    rut_vm::pkg_fn!(pkg, "focus_on_blur", (Opaque<FocusSpec>, OpaqueRef, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, cb: OpaqueRef, id: u64| {
         let m = blur_mutation(&h, id, cb);
         b.with_mut(vm, |_vm, s| s.on_blur = m)
     });

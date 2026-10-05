@@ -26,7 +26,7 @@ entry fn start() -> u64 {
         .child(box_h(300.0))
         .child(box_h(300.0));
     let scroller = ScrollView().axis(AXIS_VERTICAL).child(content.build()).query_key("sv").build();
-    stack.child(PointerInteract().id(downs).on_down("g_down").child(scroller).build());
+    stack.child(PointerInteract().id(downs).on_down(g_down).child(scroller).build());
 
     // The invisible full-size overlay: no decoration, no gesture.
     let overlay = Container().width_height(400.0, 600.0).query_key("overlay");
@@ -34,7 +34,7 @@ entry fn start() -> u64 {
 
     // The floating pill, anchored bottom-right.
     let pill_box = Container().width_height(64.0, 28.0).query_key("pill");
-    let pill = PointerInteract().ids(clicks, clicks).on_tap("pill_click").child(pill_box.build()).build();
+    let pill = PointerInteract().ids(clicks, clicks).on_tap(pill_click).child(pill_box.build()).build();
     stack.child(Positioned().right(8.0).bottom(8.0).child(pill).build());
 
     // Counter readouts (the test parses these).
@@ -47,7 +47,7 @@ entry fn start() -> u64 {
     return downs;
 }
 
-entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let cell = st_take(K_DOWNS);
     let n = mem_get(cell) + 1.0;
     mem_set(cell, n);
@@ -55,7 +55,7 @@ entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     rs_set_str(downs, f"{n as u64}");
 }
 
-entry fn pill_click(clicks: u64, _b: u64, _n: f64) {
+fn pill_click(clicks: u64, _b: u64, _n: f64) {
     let cell = st_take(K_CLICKS);
     let n = mem_get(cell) + 1.0;
     mem_set(cell, n);

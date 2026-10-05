@@ -775,14 +775,14 @@ entry fn start() -> u64 {
     let ctrl = tctrl_new();
     st_put(K_CTRL, ctrl);
     let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
-        .on_input("on_edit", 7).query_key("input").build();
+        .on_input(on_edit, 7).query_key("input").build();
     let col = Column().child(input).child(Text().text_bound(text).query_key("echo").build());
     mount(col.build());
     return text;
 }
 
 // The edit intent: the id crosses from the row argument (7).
-entry fn on_edit(id: u64, _b: u64, _n: f64) {
+fn on_edit(id: u64, _b: u64, _n: f64) {
     let text = stf_take(K_TEXT) as u64;
     rs_set_str(text, f"edit:{id}");
     stf_put(K_TEXT, text as f64);

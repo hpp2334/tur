@@ -23,13 +23,13 @@ entry fn start() -> u64 {
         .color_bound(color)
         .border(0xE2E8F0FFu64, 2.0, BORDER_CENTER)
         .query_key("checkbox");
-    outer.child(PointerInteract().id(checked).on_click("b_toggle").query_key("rut/gesture").child(checkbox.build()).build());
+    outer.child(PointerInteract().id(checked).on_click(b_toggle).query_key("rut/gesture").child(checkbox.build()).build());
 
     mount(outer.build());
     return checked;
 }
 
-entry fn b_toggle(_a: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn b_toggle(_a: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     // Uncheck: clear the color (the brush atom gets Nil).
     let color = stf_take(K_COLOR) as u64;
     rs_set_brush(color, 0);

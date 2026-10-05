@@ -19,11 +19,11 @@ entry fn start() -> u64 {
     stack.child(follower);
 
     let btn = Container().width_height(60.0, 30.0).color(0x4F46E1FFu64);
-    stack.child(Positioned().left(20.0).top(540.0).child(PointerInteract().ids(anchor, anchor).on_tap("b_flip").child(btn.build()).build()).build());
+    stack.child(Positioned().left(20.0).top(540.0).child(PointerInteract().ids(anchor, anchor).on_tap(b_flip).child(btn.build()).build()).build());
     mount(stack.build());
     return anchor;
 }
 
-entry fn b_flip(anchor: u64, _b: u64, _n: f64) {
+fn b_flip(anchor: u64, _b: u64, _n: f64) {
     rs_set_f64(anchor, 8.0);
 }

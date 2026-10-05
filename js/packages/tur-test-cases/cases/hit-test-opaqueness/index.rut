@@ -20,7 +20,7 @@ entry fn start() -> u64 {
     let target = Container()
         .width_height(400.0, 600.0)
         .child(Text().text_bound(downs).query_key("beneath-downs").build());
-    stack.child(PointerInteract().id(downs).on_down("g_down").query_key("rut/gesture").child(target.build()).build());
+    stack.child(PointerInteract().id(downs).on_down(g_down).query_key("rut/gesture").child(target.build()).build());
 
     // A decoration-less full-size Container — transparent.
     let plain = Container().width_height(400.0, 600.0).query_key("plain");
@@ -39,7 +39,7 @@ entry fn start() -> u64 {
     return downs;
 }
 
-entry fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let cell = st_take(K_COUNT);
     let n = mem_get(cell) + 1.0;
     mem_set(cell, n);

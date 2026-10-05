@@ -14,15 +14,15 @@ entry fn start() -> u64 {
         .alignment(ALIGN_CENTER)
         .child(Text().text_bound(state).query_key("region-text").build());
 
-    col.child(MouseRegion().on_enter("mr_enter", state).on_exit("mr_exit", state).cursor(CURSOR_AUTO).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(mr_enter, state).on_exit(mr_exit, state).cursor(CURSOR_AUTO).behavior(0).child(b.build()).build());
     mount(col.build());
     return state;
 }
 
-entry fn mr_enter(state: u64, _b: u64, _n: f64) {
+fn mr_enter(state: u64, _b: u64, _n: f64) {
     rs_set_str(state, "entered");
 }
 
-entry fn mr_exit(state: u64, _b: u64, _n: f64) {
+fn mr_exit(state: u64, _b: u64, _n: f64) {
     rs_set_str(state, "exited");
 }

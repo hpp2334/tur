@@ -149,13 +149,13 @@ entry fn start() -> u64 {
     let col = Column()
         .child(Text().text_bound(atom).query_key("rut/text").build())
         .child(
-        PointerInteract().ids(atom, atom).on_tap("ts_click").child(Text().text("tap me").build()).build(),
+        PointerInteract().ids(atom, atom).on_tap(ts_click).child(Text().text("tap me").build()).build(),
     );
     mount(col.build());
     return atom;
 }
 
-entry fn ts_click(atom: u64, _label: u64, n: f64) {
+fn ts_click(atom: u64, _label: u64, n: f64) {
     rs_set_str(atom, f"taps: {n}");
 }
 "#;
@@ -198,10 +198,10 @@ entry fn start() -> u64 {
     let col = Column()
         .child(Text().text_bound(label).query_key("rut/text").build())
         .child(
-        PointerInteract().ids(count, label).on_tap("ts_inc").child(Text().text("+1").build()).build(),
+        PointerInteract().ids(count, label).on_tap(ts_inc).child(Text().text("+1").build()).build(),
     )
         .child(
-        PointerInteract().ids(count, label).on_tap("ts_dec").child(Text().text("-1").build()).build(),
+        PointerInteract().ids(count, label).on_tap(ts_dec).child(Text().text("-1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -212,12 +212,12 @@ fn show(count: u64, label: u64) {
     rs_set_str(label, f"Count: {v}");
 }
 
-entry fn ts_inc(count: u64, label: u64, _n: f64) {
+fn ts_inc(count: u64, label: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) + 1);
     show(count, label);
 }
 
-entry fn ts_dec(count: u64, label: u64, _n: f64) {
+fn ts_dec(count: u64, label: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) - 1);
     show(count, label);
 }
@@ -269,13 +269,13 @@ entry fn start() -> u64 {
         .child(Condition(on).then(Text().text_bound(on_label).query_key("rut/text").build()).else_branch(Text().text_bound(off_label).query_key("rut/text").build()).build())
         .child(Stack().child(Text().text("base").build()).child(Positioned().left(4.0).top(4.0).child(Text().text("floating").build()).build()).build())
         .child(
-        PointerInteract().ids(on, on).on_tap("ts_toggle").child(Text().text("toggle").build()).build(),
+        PointerInteract().ids(on, on).on_tap(ts_toggle).child(Text().text("toggle").build()).build(),
     );
     mount(col.build());
     return on;
 }
 
-entry fn ts_toggle(on: u64, _b: u64, _n: f64) {
+fn ts_toggle(on: u64, _b: u64, _n: f64) {
     rs_set_bool(on, !(rs_get_bool(on)));
 }
 "#;
@@ -433,13 +433,13 @@ entry fn start() -> u64 {
     let col = Column()
         .child(Text().text_bound(label).query_key("rut/text").build())
         .child(
-        PointerInteract().ids(items, label).on_tap("ts_push").child(Text().text("push").build()).build(),
+        PointerInteract().ids(items, label).on_tap(ts_push).child(Text().text("push").build()).build(),
     );
     mount(col.build());
     return items;
 }
 
-entry fn ts_push(items: u64, label: u64, _n: f64) {
+fn ts_push(items: u64, label: u64, _n: f64) {
     // Set/read round trip: read the atom's list back, rebuild the whole
     // value with one more item, write it, re-join into the label.
     let v = rs_get_value(items);
@@ -613,7 +613,7 @@ use tur_kit::{ Column, Each, PointerInteract, Text };
 
 use tur_kit::{ Column, PointerInteract, Each, Text };
 
-entry fn item_row(i: u64, item: str) -> opaque {
+fn item_row(i: u64, item: str) -> opaque {
     let col = Column()
         .child(Text().text(f"{i}: {item}").font_size(16.0).color(0x222222FF).build());
     return col.build();
@@ -626,15 +626,15 @@ entry fn start() -> u64 {
     let atom = rs_source_value(list);
 
     let col = Column()
-        .child(Each(atom).item_builder("item_row").build())
+        .child(Each(atom).item_builder(item_row).build())
         .child(
-        PointerInteract().ids(atom, atom).on_tap("ts_push").child(Text().text("push").build()).build(),
+        PointerInteract().ids(atom, atom).on_tap(ts_push).child(Text().text("push").build()).build(),
     );
     mount(col.build());
     return atom;
 }
 
-entry fn ts_push(atom: u64, _b: u64, _n: f64) {
+fn ts_push(atom: u64, _b: u64, _n: f64) {
     let fresh = rs_list_new();
     rs_list_push(fresh, "alpha");
     rs_list_push(fresh, "beta");
@@ -715,7 +715,7 @@ use tur_kit::{ Column, Expanded, LazyList, Text };
 
 use tur_kit::{ Column, PointerInteract, Expanded, LazyList, Text };
 
-entry fn lazy_row(i: u64) -> opaque {
+fn lazy_row(i: u64) -> opaque {
     let col = Column().child(Text().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
     return col.build();
 }
@@ -723,7 +723,7 @@ entry fn lazy_row(i: u64) -> opaque {
 entry fn start() -> u64 {
     let count = rs_source_f64();
     rs_set_f64(count, 300.0);
-    let scroller = LazyList().item_builder("lazy_row").count(count).item_extent(20.0).query_key("rut/lazy").build();
+    let scroller = LazyList().item_builder(lazy_row).count(count).item_extent(20.0).query_key("rut/lazy").build();
     let root = Column().child(Expanded().flex(1.0).child(scroller).build());
     mount(root.build());
     return count;
@@ -857,8 +857,8 @@ use tur_kit::{ Column, Focusable, PointerInteract, Text };
 entry fn start() -> u64 {
     let label = rs_source_str("");
 
-    let pad = PointerInteract().id(label).on_click("g_click").on_down("g_down").on_move("g_move").on_up("g_up").on_context_menu("g_menu").query_key("rut/gesture").child(Text().text("pad").build()).build();
-    let foc = Focusable().on_key_down("f_key", label).on_focus("f_focus", label).on_blur("f_blur", label).child(Text().text("focus me").build()).build();
+    let pad = PointerInteract().id(label).on_click(g_click).on_down(g_down).on_move(g_move).on_up(g_up).on_context_menu(g_menu).query_key("rut/gesture").child(Text().text("pad").build()).build();
+    let foc = Focusable().on_key_down(f_key, label).on_focus(f_focus, label).on_blur(f_blur, label).child(Text().text("focus me").build()).build();
 
     let col = Column()
         .child(pad)
@@ -872,35 +872,35 @@ fn say(label: u64, line: str) {
     rs_set_str(label, f"{rs_get_str(label)}|{line}");
 }
 
-entry fn g_down(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+fn g_down(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"down {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
 }
 
-entry fn g_move(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+fn g_move(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"move {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
 }
 
-entry fn g_up(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+fn g_up(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"up {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
 }
 
-entry fn g_click(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+fn g_click(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"click {lx as u64},{ly as u64} b{btn}");
 }
 
-entry fn g_menu(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+fn g_menu(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"menu b{btn}");
 }
 
-entry fn f_key(id: u64, key: str, code: str, mods: u64, kind: u64) {
+fn f_key(id: u64, key: str, code: str, mods: u64, kind: u64) {
     say(id, f"key {key}/{code} m{mods} k{kind}");
 }
 
-entry fn f_focus(id: u64, b: u64, _n: f64) {
+fn f_focus(id: u64, b: u64, _n: f64) {
     say(id, "focused");
 }
 
-entry fn f_blur(id: u64, b: u64, _n: f64) {
+fn f_blur(id: u64, b: u64, _n: f64) {
     say(id, "blurred");
 }
 
@@ -988,10 +988,10 @@ fn rut_gesture_focus_key_payloads_realm_free() {
 /// the atom); the atom drives an Opacity. The label records the tween /
 /// curve helper answers at start.
 const ANIM_RUT: &str = r#"
-use tur::{ anim_ctrl, anim_forward, color_tween_lerp, curve_eval, mount, rs_set_f64, rs_set_str,
-    rs_source_f64, rs_source_str, tween_lerp };
+use tur::{ anim_forward, color_tween_lerp, curve_eval, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, tween_lerp };
 use tur_kit::{ Column, PointerInteract, Text };
 use tur_anim_kit::{ Opacity };
+use tur_anim_kit::{ anim_ctrl };
 
 
 entry fn start() -> u64 {
@@ -999,7 +999,7 @@ entry fn start() -> u64 {
     let alpha = rs_source_f64();
 
     // The controller's id IS the alpha atom — onTick delivers it back.
-    let ctrl = anim_ctrl(alpha, 200.0, "linear", 0, "a_tick", "a_end");
+    let ctrl = anim_ctrl(alpha, 200.0, "linear", 0, a_tick, a_end);
     anim_forward(ctrl);
 
     // The helper rows answer at start (pure math).
@@ -1015,11 +1015,11 @@ entry fn start() -> u64 {
     return alpha;
 }
 
-entry fn a_tick(atom: u64, t: f64) {
+fn a_tick(atom: u64, t: f64) {
     rs_set_f64(atom, t);
 }
 
-entry fn a_end(atom: u64, _v: f64) {
+fn a_end(atom: u64, _v: f64) {
     rs_set_f64(atom, 1.0);
 }
 "#;
@@ -1127,14 +1127,14 @@ fn rut_async_clipboard_and_net_request() {
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
 use futures::launch_future;
-use tur::{ clipboard_write, mount, net_stream, rs_get_str, rs_set_str, rs_source_str, st_put, st_take,
-    task_cancel };
+use tur::{ clipboard_write, mount, rs_get_str, rs_set_str, rs_source_str, st_put, st_take, task_cancel };
 use tur_kit::{ Column, Text };
+use tur_net_kit::{ net_stream };
 
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
-    let task = net_stream(label, "https://example.test/stream", "GET", "on_chunk");
+    let task = net_stream(label, "https://example.test/stream", "GET", on_chunk);
     // The task rides the stash (an async frame cannot carry opaque
     // params); the launched cancel journey takes it back by key.
     st_put(label, task);
@@ -1156,7 +1156,7 @@ async fn finish(label: u64) -> str {
     return "";
 }
 
-entry fn on_chunk(label: u64, data: bytes) {
+fn on_chunk(label: u64, data: bytes) {
     rs_set_str(label, f"{rs_get_str(label)}|{data.len() as u64}");
 }
 "#;
@@ -1220,17 +1220,17 @@ entry fn start() -> u64 {
     st_put(CTRL_KEY, ctrl);
 
     let col = Column()
-        .child(Lifecycle().on_mount("lc_mount").before_destroy("lc_destroy").child(Text().text("wrapped").build()).build())
+        .child(Lifecycle().on_mount(lc_mount).before_destroy(lc_destroy).child(Text().text("wrapped").build()).build())
         .child(VirtualApp().controller(ctrl).width_height(200.0, 80.0).build())
         .child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return label;
 }
 
-entry fn lc_mount(_id: u64, _b: u64, _n: f64) {
+fn lc_mount(_id: u64, _b: u64, _n: f64) {
 }
 
-entry fn lc_destroy(_id: u64, _b: u64, _n: f64) {
+fn lc_destroy(_id: u64, _b: u64, _n: f64) {
 }
 
 // The test drives the status poll: the label atom rides the entry arg,
@@ -1360,19 +1360,19 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 /// the flush (the guarded face call). A second derived (`d2`) chains two
 /// deps. A watcher reports changes into a transcript atom.
 const DERIVED_RUT: &str = r#"
-use tur::{ mount, rs_derive, rs_derive2, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_watch,
-    rs_watch_start };
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_watch_start };
 use tur_kit::{ Column, Text };
+use tur_kit::{ rs_derive, rs_derive2, rs_watch };
 
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     let other = rs_source_f64();
-    let d = rs_derive("d", count);
-    let d2 = rs_derive2("d2", count, other);
+    let d = rs_derive(d, count);
+    let d2 = rs_derive2(d2, count, other);
 
     let hits = rs_source_f64();
-    let watch = rs_watch(count, "on_count", hits);
+    let watch = rs_watch(count, on_count, hits);
     rs_watch_start(watch);
 
     let col = Column()
@@ -1380,7 +1380,7 @@ entry fn start() -> u64 {
         .child(Text().text_bound_derived(d2).query_key("rut/text").build())
         .child(Text().text_bound(hits).build())
         .child(
-        PointerInteract().ids(count, count).on_tap("ts_inc").child(Text().text("+1").build()).build(),
+        PointerInteract().ids(count, count).on_tap(ts_inc).child(Text().text("+1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -1388,21 +1388,21 @@ entry fn start() -> u64 {
 
 // The derive bodies — synchronous VM calls during flush, through the
 // guarded face.
-entry fn d(v: f64) -> str {
+fn d(v: f64) -> str {
     return f"count={v as u64}";
 }
 
-entry fn d2(a: f64, b: f64) -> str {
+fn d2(a: f64, b: f64) -> str {
     return f"sum={a as u64 + b as u64}";
 }
 
-entry fn ts_inc(count: u64, _b: u64, _n: f64) {
+fn ts_inc(count: u64, _b: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) + 1.0);
 }
 
 // The watch delivery: (report atom, watched atom, seq) — the fresh value
 // reads through the rows.
-entry fn on_count(report: u64, watched: u64, _n: f64) {
+fn on_count(report: u64, watched: u64, _n: f64) {
     let v = rs_get_f64(watched);
     rs_set_str(report, f"changed:{v as u64}");
 }
@@ -1413,19 +1413,20 @@ entry fn on_count(report: u64, watched: u64, _n: f64) {
 /// derived falls back to Nil — and the frame never wedges (the healthy
 /// derive beside it keeps materializing).
 const DERIVED_NO_MOUNT_RUT: &str = r#"
-use tur::{ mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Column, PointerInteract, Text };
+use tur_kit::{ rs_derive };
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
-    let bad = rs_derive("bad", count);
-    let good = rs_derive("good", count);
+    let bad = rs_derive(bad, count);
+    let good = rs_derive(good, count);
 
     let col = Column()
         .child(Text().text_bound_derived(bad).query_key("rut/text").build())
         .child(Text().text_bound_derived(good).query_key("rut/text").build())
         .child(
-        PointerInteract().ids(count, count).on_tap("ts_inc").child(Text().text("+1").build()).build(),
+        PointerInteract().ids(count, count).on_tap(ts_inc).child(Text().text("+1").build()).build(),
     );
     mount(col.build());
     return count;
@@ -1433,17 +1434,17 @@ entry fn start() -> u64 {
 
 // The hostile derive: tries to re-mount mid-flush — the no-mount guard
 // traps it.
-entry fn bad(v: f64) -> str {
+fn bad(v: f64) -> str {
     let col = Column().child(Text().text("hijack").build());
     mount(col.build());
     return f"bad={v as u64}";
 }
 
-entry fn good(v: f64) -> str {
+fn good(v: f64) -> str {
     return f"good={v as u64}";
 }
 
-entry fn ts_inc(count: u64, _b: u64, _n: f64) {
+fn ts_inc(count: u64, _b: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) + 1.0);
 }
 "#;

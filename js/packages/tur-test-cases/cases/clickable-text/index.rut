@@ -8,11 +8,11 @@ entry fn start() -> u64 {
     let content = rs_source_str("before");
     let mut col = Column().cross_alignment(CROSS_ALIGN_START);
     let t = Text().text_bound(content).query_key("click-text");
-    col.child(PointerInteract().ids(content, content).on_tap("ts_click").child(t.build()).build());
+    col.child(PointerInteract().ids(content, content).on_tap(ts_click).child(t.build()).build());
     mount(col.build());
     return content;
 }
 
-entry fn ts_click(content: u64, _b: u64, _n: f64) {
+fn ts_click(content: u64, _b: u64, _n: f64) {
     rs_set_str(content, "after");
 }

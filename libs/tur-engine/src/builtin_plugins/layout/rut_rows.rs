@@ -28,7 +28,7 @@ use crate::core::render::brush::Brush;
 use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
 use crate::core::view::{Val, View};
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
 pub(crate) fn install_decl_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
@@ -116,8 +116,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("table_new", vec![], TY_OPAQUE),
         row("table_columns", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("table_rows_atom", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("table_row_builder", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("table_header_builder", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("table_row_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("table_header_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("table_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("table_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("cols_new", vec![], TY_OPAQUE),
@@ -569,15 +569,15 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         })
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "table_row_builder", (Opaque<TableSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "table_row_builder", (Opaque<TableSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, cb: OpaqueRef| {
         let _ = vm;
-        let entry = RutEntryBuilder { name: cb.to_string(), face: h.face.clone(), handles: h.clone() };
+        let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.build = Some(entry))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "table_header_builder", (Opaque<TableSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "table_header_builder", (Opaque<TableSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, cb: OpaqueRef| {
         let _ = vm;
-        let entry = RutEntryBuilder { name: cb.to_string(), face: h.face.clone(), handles: h.clone() };
+        let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.build_header = Some(entry))
     });
     rut_vm::pkg_fn!(pkg, "table_qkey", (Opaque<TableSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, key: &str| {

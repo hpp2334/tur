@@ -9,10 +9,10 @@ entry fn start() -> u64 {
     let mut col = Column();
 
     let a = Container().width_height(100.0, 50.0).color(0xEF4444FFu64).query_key("a");
-    col.child(MouseRegion().on_enter("a_enter", hover).on_exit("a_exit", hover).cursor(0).behavior(0).child(a.build()).build());
+    col.child(MouseRegion().on_enter(a_enter, hover).on_exit(a_exit, hover).cursor(0).behavior(0).child(a.build()).build());
 
     let b = Container().width_height(100.0, 50.0).color(0x3B82F6FF).query_key("b");
-    col.child(MouseRegion().on_enter("b_enter", hover).on_exit("b_exit", hover).cursor(0).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_enter, hover).on_exit(b_exit, hover).cursor(0).behavior(0).child(b.build()).build());
 
     let t = Text().text_bound(hover).query_key("hover");
     col.child(t.build());
@@ -20,18 +20,18 @@ entry fn start() -> u64 {
     return hover;
 }
 
-entry fn a_enter(hover: u64, _b: u64, _n: f64) {
+fn a_enter(hover: u64, _b: u64, _n: f64) {
     rs_set_str(hover, "A");
 }
 
-entry fn a_exit(hover: u64, _b: u64, _n: f64) {
+fn a_exit(hover: u64, _b: u64, _n: f64) {
     rs_set_str(hover, "");
 }
 
-entry fn b_enter(hover: u64, _b: u64, _n: f64) {
+fn b_enter(hover: u64, _b: u64, _n: f64) {
     rs_set_str(hover, "B");
 }
 
-entry fn b_exit(hover: u64, _b: u64, _n: f64) {
+fn b_exit(hover: u64, _b: u64, _n: f64) {
     rs_set_str(hover, "");
 }

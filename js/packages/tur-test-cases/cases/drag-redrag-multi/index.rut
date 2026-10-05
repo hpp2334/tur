@@ -1,9 +1,9 @@
 // drag-redrag-multi: two tiles sharing one lift controller — the
 // multi-tile jigsaw repro. Per-tile event transcripts render into
 // `tile-events-0` / `tile-events-1`.
-use tur::{ ALIGN_TOP_LEFT, anim_ctrl, anim_forward, anim_reverse, mount, rs_get_str, rs_set_str,
-    rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
+use tur::{ ALIGN_TOP_LEFT, anim_forward, anim_reverse, mount, rs_get_str, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
 use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+use tur_anim_kit::{ anim_ctrl };
 
 
 let K_CTRL: u64 = 1;
@@ -12,7 +12,7 @@ let K_T1: u64 = 3;
 
 entry fn start() -> u64 {
     let lift = rs_source_f64();
-    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, "a_tick", "a_end");
+    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, a_tick, a_end);
     st_put(K_CTRL, ctrl);
 
     let t0 = rs_source_str("");
@@ -27,9 +27,9 @@ entry fn start() -> u64 {
     // Tile 0 at (10, 10); tile 1 at (150, 100). The tile index rides the
     // gesture's second id slot (100 + index).
     let b0 = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key("tile-0");
-    stack.child(Positioned().left(10.0).top(10.0).child(PointerInteract().ids(0, 100).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b0.build()).build()).build());
+    stack.child(Positioned().left(10.0).top(10.0).child(PointerInteract().ids(0, 100).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b0.build()).build()).build());
     let b1 = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key("tile-1");
-    stack.child(Positioned().left(150.0).top(100.0).child(PointerInteract().ids(1, 101).on_click("g_down").on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b1.build()).build()).build());
+    stack.child(Positioned().left(150.0).top(100.0).child(PointerInteract().ids(1, 101).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b1.build()).build()).build());
 
     // Transcript readouts.
     let t0t = Text().text_bound(t0).query_key("tile-events-0");
@@ -41,10 +41,10 @@ entry fn start() -> u64 {
     return lift;
 }
 
-entry fn a_tick(_atom: u64, _t: f64) {
+fn a_tick(_atom: u64, _t: f64) {
 }
 
-entry fn a_end(_atom: u64, _v: f64) {
+fn a_end(_atom: u64, _v: f64) {
 }
 
 // The `__resetDrag` seam.
@@ -66,18 +66,18 @@ fn say(idx: u64, line: str) {
     stf_put(key, t as f64);
 }
 
-entry fn g_down(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_down(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let ctrl = st_take(K_CTRL);
     anim_forward(ctrl);
     st_put(K_CTRL, ctrl);
     say(idx, "down");
 }
 
-entry fn g_move(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_move(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     say(idx, "move");
 }
 
-entry fn g_up(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn g_up(idx: u64, _id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     let ctrl = st_take(K_CTRL);
     anim_reverse(ctrl);
     st_put(K_CTRL, ctrl);

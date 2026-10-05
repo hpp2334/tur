@@ -4,7 +4,7 @@ use tur::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Column, Container, Expanded, LazyGrid, Text };
 
 
-entry fn cell(i: u64) -> opaque {
+fn cell(i: u64) -> opaque {
     let b = Container()
         .width_height(0.0, 0.0)
         .color(0x1E293BFF)
@@ -21,7 +21,7 @@ entry fn start() {
         .color(0x0F172AFF)
         .child(Text().text("Gallery").font_size(16.0).build());
     col.child(header.build());
-    let grid = LazyGrid().item_builder("cell").count(count).max_cross(150.0).aspect(1.0).build();
+    let grid = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).build();
     col.child(Expanded().flex(1.0).child(grid).build());
     mount(col.build());
 }

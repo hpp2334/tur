@@ -92,11 +92,12 @@ pub fn static_tree(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur::{ mount, rs_get_f64, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Column, Container, Row };
+use tur_kit::{ rs_derive };
 
 
-entry fn label(v: f64) -> str {
+fn label(v: f64) -> str {
     return f"t={v as u64}";
 }
 
@@ -117,14 +118,14 @@ entry fn start() -> u64 {
         i += 1;
     }
 
-    let d = rs_derive("label", tick);
+    let d = rs_derive(label, tick);
     root.child(el_text_bound_d(d));
     mount(root.build());
     return tick;
 }
 
 // The per-frame minimal mutation (the test drives it via the entry rail).
-entry fn bump(tick: u64, _b: f64) {
+fn bump(tick: u64, _b: f64) {
     rs_set_f64(tick, rs_get_f64(tick) + 1.0);
 }
 "##,
@@ -203,9 +204,10 @@ pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ anim_ctrl, anim_forward, mount, rs_set_f64, rs_source_f64 };
+use tur::{ anim_forward, mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Column, Container };
 use tur_anim_kit::{ Opacity };
+use tur_anim_kit::{ anim_ctrl };
 
 
 entry fn start() -> u64 {
@@ -221,17 +223,17 @@ entry fn start() -> u64 {
 
     // u64::MAX repeat = infinite; the onTick rail writes the eased value
     // into the bound opacity atom — every frame differs.
-    let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, "a_tick", "a_end");
+    let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, a_tick, a_end);
     anim_forward(ctrl);
     mount(Opacity(0.0).bound(alpha).child(col.build()).build());
     return alpha;
 }
 
-entry fn a_tick(atom: u64, v: f64) {
+fn a_tick(atom: u64, v: f64) {
     rs_set_f64(atom, v);
 }
 
-entry fn a_end(_atom: u64, _v: f64) {
+fn a_end(_atom: u64, _v: f64) {
 }
 "##,
     )

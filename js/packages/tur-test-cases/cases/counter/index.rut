@@ -16,9 +16,9 @@ entry fn start() -> u64 {
 
     let mut row = Row().cross_alignment(CROSS_ALIGN_CENTER);
     let pad = rs_source_f64();
-    row.child(button(count, label, "ts_dec", "-1", "dec"));
+    row.child(button(count, label, ts_dec, "-1", "dec"));
     row.child(gap());
-    row.child(button(count, label, "ts_inc", "+1", "inc"));
+    row.child(button(count, label, ts_inc, "+1", "inc"));
     col.child(row.build());
 
     let bg = Container().color(0xF8FAFCFFu64).child(col.build());
@@ -29,7 +29,7 @@ entry fn start() -> u64 {
 }
 
 // A 100x44 indigo pill with a centered label.
-fn button(count: u64, label: u64, cb: str, text: str, key: str) -> opaque {
+fn button(count: u64, label: u64, cb: fn(u64, u64, f64), text: str, key: str) -> opaque {
     let b = Container()
         .width_height(100.0, 44.0)
         .color(0x6366F1FFu64)
@@ -48,12 +48,12 @@ fn refresh(count: u64, label: u64) {
     rs_set_str(label, f"Count: {rs_get_f64(count) as u64}");
 }
 
-entry fn ts_inc(count: u64, label: u64, _n: f64) {
+fn ts_inc(count: u64, label: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) + 1.0);
     refresh(count, label);
 }
 
-entry fn ts_dec(count: u64, label: u64, _n: f64) {
+fn ts_dec(count: u64, label: u64, _n: f64) {
     rs_set_f64(count, rs_get_f64(count) - 1.0);
     refresh(count, label);
 }

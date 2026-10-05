@@ -15,7 +15,7 @@ entry fn start() {
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
 
     let indigo = Container().width_height(40.0, 40.0).color(0x4F46E1FFu64);
-    let pi = PointerInteract().ids(hit, hit).on_tap("b_hit").child(indigo.build()).build();
+    let pi = PointerInteract().ids(hit, hit).on_tap(b_hit).child(indigo.build()).build();
     stack.child(Transform(1.0, 0.0, 100.0, 80.0).child(pi).build());
 
     // The confirmation box appears when the click registers (the else
@@ -27,6 +27,6 @@ entry fn start() {
     mount(stack.build());
 }
 
-entry fn b_hit(hit: u64, _b: u64, _n: f64) {
+fn b_hit(hit: u64, _b: u64, _n: f64) {
     rs_set_bool(hit, true);
 }

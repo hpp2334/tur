@@ -132,10 +132,11 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
         // brush atoms (nonzero packed color sets, 0 clears)
         row("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
-        // C8 — derived atoms + watch (the guarded flush-time VM call)
-        row("rs_derive", vec![TY_STR, TY_U64], TY_U64),
-        row("rs_derive2", vec![TY_STR, TY_U64, TY_U64], TY_U64),
-        row("rs_watch", vec![TY_U64, TY_STR, TY_U64], TY_OPAQUE),
+        // C8 — derived atoms + watch (the guarded flush-time VM call;
+        // the format/watch callbacks arrive as kit-sealed fn boxes)
+        row("rs_derive_cb", vec![TY_OPAQUE, TY_U64], TY_U64),
+        row("rs_derive2_cb", vec![TY_OPAQUE, TY_U64, TY_U64], TY_U64),
+        row("rs_watch_cb", vec![TY_U64, TY_OPAQUE, TY_U64], TY_OPAQUE),
         row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
         row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
         // the opaque stash (cross-entry hand-off)
@@ -462,7 +463,7 @@ pub struct RutHandles {
     pub pending_root: std::cell::RefCell<Option<Rc<dyn View>>>,
     /// Callback intents queued by element callbacks (the row closures are
     /// realm-free: they only push here). Drained at pump level after
-    /// flush — `(callback name, id, payload)`.
+    /// flush — `(sealed callback box, id, payload)`.
     pub pending_calls: std::cell::RefCell<Vec<Intent>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
@@ -495,19 +496,25 @@ pub struct RutHandles {
 }
 
 /// One queued callback intent — the payload the drain dispatches into an
-/// `entry fn`. The legacy click shape (`(name, a, b, seq)`) plus the
-/// record payloads (keys, pointer positions, raw values) that the
+/// infra dispatch entry. The callback ITSELF is a rut fn value the kit
+/// sealed into an opaque box (`opaque(cb)`) at registration; only the box
+/// (a handle — the boundary's one-cell law) and the payload cross. The
+/// dispatch entry lives in the kit that sealed the callback (the
+/// scope law — see the kit's dispatch-entry docs); `entry` names it (an
+/// engine constant, never an author string). The legacy click shape plus
+/// the record payloads (keys, pointer positions, raw values) that the
 /// gesture / animation / watch rails queue.
 #[derive(Clone, Debug)]
 pub enum Intent {
-    /// The tap shape: `(name, id_a, id_b, seq)`.
-    Click { name: String, a: u64, b: u64, seq: f64 },
+    /// The tap shape: `(cb, id_a, id_b, seq)`.
+    Click { entry: &'static str, cb: OpaqueRef, a: u64, b: u64, seq: f64 },
     /// A key event from the Focusable's `onKeyDown` mutation.
-    Key { name: String, id: u64, key: String, code: String, modifiers: u64, kind: u64 },
+    Key { entry: &'static str, cb: OpaqueRef, id: u64, key: String, code: String, modifiers: u64, kind: u64 },
     /// A pointer event from the PointerInteract down/move/up/context-menu
-    /// mutations: `(name, id, local_x, local_y, global_x, global_y, button)`.
+    /// mutations: `(cb, id, local_x, local_y, global_x, global_y, button)`.
     Pointer {
-        name: String,
+        entry: &'static str,
+        cb: OpaqueRef,
         id: u64,
         lx: f64,
         ly: f64,
@@ -516,9 +523,10 @@ pub enum Intent {
         button: u64,
     },
     /// The two-id pointer variant (the two-id gesture rail):
-    /// `(name, id_a, id_b, positions…)`.
+    /// `(cb, id_a, id_b, positions...)`.
     Pointer2 {
-        name: String,
+        entry: &'static str,
+        cb: OpaqueRef,
         a: u64,
         b: u64,
         lx: f64,
@@ -529,9 +537,51 @@ pub enum Intent {
     },
     /// A raw value payload (animation `onTick(eased)`, `watch(atom, cb)`
     /// change deliveries).
-    Value { name: String, a: u64, value: crate::core::edgy::Value },
-    /// A bytes payload (net-stream chunks): `entry fn cb(id, data: bytes)`.
-    Bytes { name: String, a: u64, data: Vec<u8> },
+    Value { entry: &'static str, cb: OpaqueRef, a: u64, value: crate::core::edgy::Value },
+    /// A bytes payload (net-stream chunks): `cb(id, data: bytes)`.
+    Bytes { entry: &'static str, cb: OpaqueRef, a: u64, data: Vec<u8> },
+}
+
+impl Intent {
+    /// The intent's dispatch-entry name (the drain's fire target; also
+    /// the drain-log handle).
+    pub fn entry(&self) -> &'static str {
+        match self {
+            Intent::Click { entry, .. }
+            | Intent::Key { entry, .. }
+            | Intent::Pointer { entry, .. }
+            | Intent::Pointer2 { entry, .. }
+            | Intent::Value { entry, .. }
+            | Intent::Bytes { entry, .. } => entry,
+        }
+    }
+}
+
+/// The infra dispatch-entry names (engine constants - the kit modules
+/// declare the matching `entry fn`s; see the kit's scope-law note). The
+/// `tur_kit` prelude owns these shapes; other kits declare their own
+/// (`__tur_acb_val` in tur-animation's kit, `__tur_ncb_bytes` in the net
+/// kit).
+pub mod cb_entries {
+    /// The `(cb, a, b, n)` click shape - taps, focus/blur, enter/exit,
+    /// on-input, lifecycle, watch deliveries.
+    pub const CLICK: &str = "__tur_cb_click";
+    /// The `(cb, id, key, code, mods, kind)` key shape.
+    pub const KEY: &str = "__tur_cb_key";
+    /// The single-id pointer shape.
+    pub const PTR1: &str = "__tur_cb_ptr1";
+    /// The two-id pointer shape.
+    pub const PTR2: &str = "__tur_cb_ptr2";
+    /// The `(cb, i) -> view` lazy/table-header builder shape.
+    pub const BUILD1: &str = "__tur_cb_build1";
+    /// The `(cb, i, item) -> view` Each-builder shape.
+    pub const BUILD2: &str = "__tur_cb_build2";
+    /// The `(cb, i, col) -> view` table-row-builder shape.
+    pub const BUILD2I: &str = "__tur_cb_build2i";
+    /// The `(cb, v) -> str` derive-format shape.
+    pub const STR1: &str = "__tur_cb_str1";
+    /// The `(cb, a, b) -> str` two-dep derive-format shape.
+    pub const STR2: &str = "__tur_cb_str2";
 }
 
 /// The flush-time VM face — view factories / deriveds minted by rows reach
@@ -963,39 +1013,49 @@ impl RutRuntime {
     pub fn drain_pending_calls(&mut self) -> usize {
         let calls: Vec<Intent> = std::mem::take(&mut *self.handles.pending_calls.borrow_mut());
         for intent in &calls {
-            let name = intent_name(intent);
+            let entry = intent.entry();
             let outcome = self.call_intent(intent);
             match outcome {
-                Ok(()) => eprintln!("[rut-dbg] callback {name} ok"),
-                Err(t) => eprintln!("[rut-dbg] callback {name} TRAP: {} — {}", t.name(), t.msg),
+                Ok(()) => eprintln!("[rut-dbg] callback {entry} ok"),
+                Err(t) => eprintln!("[rut-dbg] callback {entry} TRAP: {} - {}", t.name(), t.msg),
             }
         }
         calls.len()
     }
 
-    /// Dispatch one intent into its `entry fn` (per-shape signatures).
+    /// Dispatch one intent into its infra dispatch entry (per-shape
+    /// signatures; the sealed callback box is the first argument - the
+    /// kit-scope entry recovers the fn with `opaque.downcast` and calls
+    /// it).
     fn call_intent(&mut self, intent: &Intent) -> Result<(), rut_vm::Trap> {
         let mut vm = self.vm.borrow_mut();
         match intent {
-            Intent::Click { name, a, b, seq } => vm.call::<_, ()>(name, (*a, *b, *seq)),
-            Intent::Key { name, id, key, code, modifiers, kind } => {
-                vm.call::<_, ()>(name, (*id, key.as_str(), code.as_str(), *modifiers, *kind))
+            Intent::Click { entry, cb, a, b, seq } => {
+                vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *seq))
             }
-            Intent::Pointer { name, id, lx, ly, gx, gy, button } => {
-                vm.call::<_, ()>(name, (*id, *lx, *ly, *gx, *gy, *button))
-            }
-            Intent::Pointer2 { name, a, b, lx, ly, gx, gy, button } => {
-                vm.call::<_, ()>(name, (*a, *b, *lx, *ly, *gx, *gy, *button))
-            }
-            Intent::Value { name, a, value } => {
+            Intent::Key { entry, cb, id, key, code, modifiers, kind } => vm.call::<_, ()>(
+                entry,
+                (cb.clone(), *id, key.as_str(), code.as_str(), *modifiers, *kind),
+            ),
+            Intent::Pointer { entry, cb, id, lx, ly, gx, gy, button } => vm.call::<_, ()>(
+                entry,
+                (cb.clone(), *id, *lx, *ly, *gx, *gy, *button),
+            ),
+            Intent::Pointer2 { entry, cb, a, b, lx, ly, gx, gy, button } => vm.call::<_, ()>(
+                entry,
+                (cb.clone(), *a, *b, *lx, *ly, *gx, *gy, *button),
+            ),
+            Intent::Value { entry, cb, a, value } => {
                 let n = match value {
                     Value::Num(n) => *n,
                     Value::Bool(b) => *b as u64 as f64,
                     _ => 0.0,
                 };
-                vm.call::<_, ()>(name, (*a, n))
+                vm.call::<_, ()>(entry, (cb.clone(), *a, n))
             }
-            Intent::Bytes { name, a, data } => vm.call::<_, ()>(name, (*a, data.clone())),
+            Intent::Bytes { entry, cb, a, data } => {
+                vm.call::<_, ()>(entry, (cb.clone(), *a, data.clone()))
+            }
         }
     }
 
@@ -1008,18 +1068,6 @@ impl RutRuntime {
         }
         // Root teardown is engine-owned (teardown_current_module clears it).
         self.handles.pending_root.borrow_mut().take();
-    }
-}
-
-/// The intent's entry-fn name (drain logging).
-fn intent_name(intent: &Intent) -> &str {
-    match intent {
-        Intent::Click { name, .. }
-        | Intent::Key { name, .. }
-        | Intent::Pointer { name, .. }
-        | Intent::Pointer2 { name, .. }
-        | Intent::Value { name, .. }
-        | Intent::Bytes { name, .. } => name,
     }
 }
 

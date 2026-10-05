@@ -14,10 +14,11 @@ use rut_vm::OpaqueRef;
 //
 // `items` is either a reactive atom (a native `Value::List`) or a static
 // list authored at start time. `build` is the rut-native item builder: a
-// named `entry fn(index, item) -> opaque` invoked through the guarded VM
-// face (fuel-capped, depth-limited, no-mount-guarded, traps reported — the
-// same flush-time-call law the `rs_each` row formalizes). Whenever the
-// `items` atom changes, the mounted item subtrees are rebuilt.
+// kit-sealed fn box (`opaque(cb)`) fired through the guarded VM face via
+// the kit's `__tur_cb_build2` dispatch entry (fuel-capped, depth-limited,
+// no-mount-guarded, traps reported — the same flush-time-call law the
+// derive rows formalize). Whenever the `items` atom changes, the mounted
+// item subtrees are rebuilt.
 //
 // EachView is a **fragment**: it hosts its item subtrees in the tree, but
 // the enclosing flex lays those items out directly as its own children —
@@ -26,23 +27,26 @@ use rut_vm::OpaqueRef;
 // content-sized, with no greedy fill.
 // ---------------------------------------------------------------------------
 
-/// The item-builder entry: a name + everything a guarded face call needs
-/// (the row captures `face` / `handles` off the boot handles).
+/// The item-builder entry: the sealed fn box + everything a guarded face
+/// call needs (the row captures `face` / `handles` off the boot handles).
 #[derive(Clone)]
 pub struct EachBuilder {
-    pub name: String,
+    pub cb: OpaqueRef,
     pub face: Rc<VmFace>,
     pub handles: Rc<RutHandles>,
 }
 
 impl EachBuilder {
-    /// Resolve the item spec for `(index, item)`. Items cross the entry
-    /// boundary as strings (the C2 gate's shape; structured items ride the
-    /// value rows).
+    /// Resolve the item spec for `(index, item)`. Items cross the
+    /// dispatch entry as strings (the C2 gate's shape; structured items
+    /// ride the value rows).
     fn build(&self, index: u64, item: &Value) -> Option<Rc<dyn View>> {
         let item_str = item.as_str().unwrap_or_default();
-        let handle: Result<OpaqueRef, _> =
-            self.face.call(&self.handles, &self.name, (index, item_str));
+        let handle: Result<OpaqueRef, _> = self.face.call(
+            &self.handles,
+            "__tur_cb_build2",
+            (self.cb.clone(), index, item_str),
+        );
         // Face calls report their own traps (error rail); a failed item
         // degrades to "not built".
         handle.ok().and_then(|h| opaque_to_view(&h))

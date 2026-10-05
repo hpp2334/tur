@@ -64,17 +64,18 @@
 // restarted on every edit (`anim_stop` = cancellation). The async weave
 // (`launch_future` / `sleep`) is native-only — on wasm an async import
 // fails the compile.
-use tur::{ ALIGN_CENTER, anim_ctrl, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
+use tur::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_COL_RESIZE, CURSOR_POINTER,
     img_res_svg, MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, mem_get, mem_new,
     mem_set, mount, pg_apply_highlight, pg_case_count, pg_case_name, pg_case_source, pg_compile,
-    pg_compile_diags, pg_highlight, rs_derive, rs_get_bool, rs_get_f64, rs_get_str,
+    pg_compile_diags, pg_highlight, rs_get_bool, rs_get_f64, rs_get_str,
     rs_list_new, rs_list_push, rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool,
-    rs_source_f64, rs_source_str, rs_source_value, rs_watch, rs_watch_start, rs_watch_stop,
+    rs_source_f64, rs_source_str, rs_source_value, rs_watch_start, rs_watch_stop,
     st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, tctrl_text, undo_new, va_app_atom,
     va_app_set, va_controller, va_create_source, va_destroy, va_error, va_source_handle,
     va_status, va_status_atom };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion,
+use tur_anim_kit::{ anim_ctrl_end };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, rs_derive, rs_watch,
     PointerInteract, Positioned, Row, ScrollView, SizedBox, Stack, Switch, Text, VirtualApp };
 
 // ---- design tokens ---------------------------------------------------------
@@ -253,27 +254,27 @@ entry fn start() -> u64 {
     let ago = rs_source_f64();
     let compiled = rs_source_str("");
     let dot = rs_source_value(rs_list_new());
-    let tab_split = rs_source_value(rs_list_new());
-    let tab_edit = rs_source_value(rs_list_new());
-    let tab_view = rs_source_value(rs_list_new());
+    let tab_split_brush = rs_source_value(rs_list_new());
+    let tab_edit_brush = rs_source_value(rs_list_new());
+    let tab_view_brush = rs_source_value(rs_list_new());
     rs_set_brush(dot, STATUS_SUCCESS);
-    rs_set_brush(tab_split, BG_APP);
+    rs_set_brush(tab_split_brush, BG_APP);
     stf_put(K_EDITED, edited as f64);
     stf_put(K_AUTORUN, autorun as f64);
     stf_put(K_LAYOUT, layout as f64);
     stf_put(K_AGO, ago as f64);
     stf_put(K_COMPILED, compiled as f64);
     stf_put(K_DOT, dot as f64);
-    stf_put(K_TAB_SPLIT, tab_split as f64);
-    stf_put(K_TAB_EDIT, tab_edit as f64);
-    stf_put(K_TAB_VIEW, tab_view as f64);
+    stf_put(K_TAB_SPLIT, tab_split_brush as f64);
+    stf_put(K_TAB_EDIT, tab_edit_brush as f64);
+    stf_put(K_TAB_VIEW, tab_view_brush as f64);
 
     // The timers (animation controllers — the wasm-safe rail): the ago
     // clock starts now; the debounce waits for the first edit.
-    let clock = anim_ctrl(0, 1000.0, "linear", 0, "", "on_clock_end");
+    let clock = anim_ctrl_end(0, 1000.0, "linear", 0, on_clock_end);
     st_put(K_CLOCK, clock);
     anim_forward(clock);
-    st_put(K_DEBOUNCE, anim_ctrl(0, 500.0, "linear", 0, "", "on_debounce_end"));
+    st_put(K_DEBOUNCE, anim_ctrl_end(0, 500.0, "linear", 0, on_debounce_end));
 
     // The phase-E rails: the sidebar width (the divider's atom — the clamp
     // lives in the drag intent; the boa seed is 200), the divider's drag
@@ -348,7 +349,7 @@ entry fn start() -> u64 {
 fn watch_controller(vctrl: opaque) {
     let stat = va_status_atom(vctrl);
     stf_put(K_VSTAT, stat as f64);
-    let watch = rs_watch(stat, "on_vstat", 0);
+    let watch = rs_watch(stat, on_vstat, 0);
     rs_watch_start(watch);
     st_put(K_WATCH, watch);
 }
@@ -370,9 +371,9 @@ fn build_ui() {
     let layout = stf_take(K_LAYOUT) as u64;
     let ago = stf_take(K_AGO) as u64;
     let dot = stf_take(K_DOT) as u64;
-    let tab_split = stf_take(K_TAB_SPLIT) as u64;
-    let tab_edit = stf_take(K_TAB_EDIT) as u64;
-    let tab_view = stf_take(K_TAB_VIEW) as u64;
+    let tab_split_brush = stf_take(K_TAB_SPLIT) as u64;
+    let tab_edit_brush = stf_take(K_TAB_EDIT) as u64;
+    let tab_view_brush = stf_take(K_TAB_VIEW) as u64;
 
     // ---- sidebar ------------------------------------------------------
     // The width rides the divider's atom (`K_SBW`); the rows paint their
@@ -394,7 +395,7 @@ fn build_ui() {
             .child(Expanded().flex(1.0)
                 .child(ScrollView().axis(AXIS_VERTICAL)
                     .child(Column().cross_alignment(CROSS_ALIGN_STRETCH)
-                        .child(Each(names_atom).item_builder("side_item").build()).build())
+                        .child(Each(names_atom).item_builder(side_item).build()).build())
                     .build())
                 .build())
             .build())
@@ -430,9 +431,9 @@ fn build_ui() {
     stf_put(K_RUNICON, run_icon as f64);
     let reset_icon = stf_take(K_RESETICON) as u64;
     stf_put(K_RESETICON, reset_icon as f64);
-    let run = MouseRegion().on_enter("run_hover_on", run_h).on_exit("run_hover_off", run_h)
+    let run = MouseRegion().on_enter(run_hover_on, run_h).on_exit(run_hover_off, run_h)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().ids(0, 0).on_tap("run_case").query_key("run")
+        .child(PointerInteract().ids(0, 0).on_tap(run_case).query_key("run")
             .child(Container().padding(6.0).radius(6.0).color_bound(run_h)
                 .child(Row().main_axis_size(MAIN_SIZE_MIN)
                     .child(Image(run_icon).width(10.0).height(10.0).build())
@@ -442,9 +443,9 @@ fn build_ui() {
                 .build())
             .build())
         .build();
-    let reset = MouseRegion().on_enter("reset_hover_on", reset_h).on_exit("reset_hover_off", reset_h)
+    let reset = MouseRegion().on_enter(reset_hover_on, reset_h).on_exit(reset_hover_off, reset_h)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().ids(0, 0).on_tap("reset_case").query_key("reset")
+        .child(PointerInteract().ids(0, 0).on_tap(reset_case).query_key("reset")
             .child(Container().padding(6.0).radius(6.0).color_bound(reset_h)
                 .child(Row().main_axis_size(MAIN_SIZE_MIN)
                     .child(Image(reset_icon).width(12.0).height(12.0).build())
@@ -461,7 +462,7 @@ fn build_ui() {
         .child(SizedBox(12.0, 0.0).build())
         .child(auto_toggle(autorun))
         .child(SizedBox(12.0, 0.0).build())
-        .child(layout_tabs(tab_split, tab_edit, tab_view))
+        .child(layout_tabs(tab_split_brush, tab_edit_brush, tab_view_brush))
         .child(SizedBox(12.0, 0.0).build())
         .build();
     let toolbar = Container().width_height(0.0, 48.0).color(BG_ELEVATED)
@@ -484,7 +485,7 @@ fn build_ui() {
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
         .width_height(0.0, 480.0)
-        .multiline(true).on_input("on_edit", 0)
+        .multiline(true).on_input(on_edit, 0)
         .query_key("editor").build();
     let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
         .child(Column().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
@@ -550,8 +551,8 @@ fn build_ui() {
     let div_bar = stf_take(K_DIVBAR) as u64;
     stf_put(K_DIVBAR, div_bar as f64);
     let divider = MouseRegion().cursor(CURSOR_COL_RESIZE)
-        .child(PointerInteract().id(sbw_d).on_down("div_down").on_move("div_move")
-            .on_up("div_up").query_key("divider")
+        .child(PointerInteract().id(sbw_d).on_down(div_down).on_move(div_move)
+            .on_up(div_up).query_key("divider")
             .child(Container().width(8.0).color_bound(div_bar).build())
             .build())
         .build();
@@ -570,8 +571,8 @@ fn build_ui() {
     let ediv_bar = stf_take(K_EDIVBAR) as u64;
     stf_put(K_EDIVBAR, ediv_bar as f64);
     let edivider = MouseRegion().cursor(CURSOR_COL_RESIZE)
-        .child(PointerInteract().id(edw_d).on_down("ediv_down").on_move("ediv_move")
-            .on_up("ediv_up").query_key("divider2")
+        .child(PointerInteract().id(edw_d).on_down(ediv_down).on_move(ediv_move)
+            .on_up(ediv_up).query_key("divider2")
             .child(Container().width(8.0).color_bound(ediv_bar).build())
             .build())
         .build();
@@ -583,7 +584,7 @@ fn build_ui() {
         .build();
 
     // ---- status bar -------------------------------------------------------
-    let ago_d = rs_derive("fmt_ago", ago);
+    let ago_d = rs_derive(fmt_ago, ago);
     // The state label mirrors the dot's law: green while fine, the status
     // red for the failure states (the boa status bar colors both). The
     // state atom is already in scope (taken at the top of build_ui).
@@ -644,9 +645,9 @@ fn build_ui() {
     stf_put(K_LAYOUT, layout as f64);
     stf_put(K_AGO, ago as f64);
     stf_put(K_DOT, dot as f64);
-    stf_put(K_TAB_SPLIT, tab_split as f64);
-    stf_put(K_TAB_EDIT, tab_edit as f64);
-    stf_put(K_TAB_VIEW, tab_view as f64);
+    stf_put(K_TAB_SPLIT, tab_split_brush as f64);
+    stf_put(K_TAB_EDIT, tab_edit_brush as f64);
+    stf_put(K_TAB_VIEW, tab_view_brush as f64);
 }
 
 // The live viewer: the boa ReadyViewer shape — 12px of pane ink around
@@ -711,7 +712,7 @@ fn state_label(state: u64) -> opaque {
 // Condition (both branches carry the `autorun` query key; only one
 // mounts).
 fn auto_toggle(autorun: u64) -> opaque {
-    let on = PointerInteract().ids(0, 0).on_tap("b_autorun").query_key("autorun")
+    let on = PointerInteract().ids(0, 0).on_tap(b_autorun).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
             .child(Stack().fit(STACK_FIT_EXPAND)
                 .child(Positioned().top(2.0).left(14.0)
@@ -721,7 +722,7 @@ fn auto_toggle(autorun: u64) -> opaque {
                 .build())
             .build())
         .build();
-    let off = PointerInteract().ids(0, 0).on_tap("b_autorun").query_key("autorun")
+    let off = PointerInteract().ids(0, 0).on_tap(b_autorun).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
             .child(Stack().fit(STACK_FIT_EXPAND)
                 .child(Positioned().top(2.0).left(2.0)
@@ -766,8 +767,8 @@ fn edited_pill(edited: u64) -> opaque {
 // A layout tab — the segmented control's option. The selected option's
 // fill is the tray's selected ink (the brush atoms; 0 = transparent); a
 // MouseRegion delivers the hover lift (the index crosses as the id).
-fn tab_button(label: str, cb: str, key: str, brush: u64, idx: u64) -> opaque {
-    return MouseRegion().on_enter("tab_enter", idx).on_exit("tab_exit", idx)
+fn tab_button(label: str, cb: fn(u64, u64, f64), key: str, brush: u64, idx: u64) -> opaque {
+    return MouseRegion().on_enter(tab_enter, idx).on_exit(tab_exit, idx)
         .cursor(CURSOR_POINTER)
         .child(PointerInteract().ids(0, 0).on_tap(cb).query_key(key)
             .child(Container().padding(6.0).radius(4.0).color_bound(brush)
@@ -779,11 +780,11 @@ fn tab_button(label: str, cb: str, key: str, brush: u64, idx: u64) -> opaque {
 
 // The Split / Edit / View segmented control (the boa toolbar's right
 // cluster): a tray with the three tabs.
-fn layout_tabs(tab_split: u64, tab_edit: u64, tab_view: u64) -> opaque {
+fn layout_tabs(split_brush: u64, edit_brush: u64, view_brush: u64) -> opaque {
     let tray = Row().main_axis_size(MAIN_SIZE_MIN)
-        .child(tab_button("Split", "tab_split", "tab-split", tab_split, 0))
-        .child(tab_button("Edit", "tab_edit", "tab-edit", tab_edit, 1))
-        .child(tab_button("View", "tab_view", "tab-view", tab_view, 2))
+        .child(tab_button("Split", tab_split, "tab-split", split_brush, 0))
+        .child(tab_button("Edit", tab_edit, "tab-edit", edit_brush, 1))
+        .child(tab_button("View", tab_view, "tab-view", view_brush, 2))
         .build();
     return Container().radius(6.0).color(BG_HOVER).padding(2.0).child(tray).build();
 }
@@ -796,7 +797,7 @@ fn layout_tabs(tab_split: u64, tab_edit: u64, tab_view: u64) -> opaque {
 // cursor. Geometry = the boa NavItem: a 2px gap, then padding-8 around a
 // reserved 3x20 bar, an 8px gap and the full-width inset pill (radius 5,
 // padding 7) carrying the 13px label — label x ≈ 26.
-entry fn side_item(i: u64, name: str) -> opaque {
+fn side_item(i: u64, name: str) -> opaque {
     let bar = rs_source_value(rs_list_new());
     rs_set_brush(bar, 0);
     stf_put(K_ROW0 + i * 2, bar as f64);
@@ -817,9 +818,9 @@ entry fn side_item(i: u64, name: str) -> opaque {
                 .build())
             .build())
         .build();
-    let item = MouseRegion().on_enter("row_enter", i).on_exit("row_exit", i)
+    let item = MouseRegion().on_enter(row_enter, i).on_exit(row_exit, i)
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().ids(i, i).on_tap("case_tap").child(row).build())
+        .child(PointerInteract().ids(i, i).on_tap(case_tap).child(row).build())
         .build();
     // Initial paint from the live selection/hover indices: the boot
     // selection (`counter` — the boa INITIAL_CASE) runs before the Each
@@ -866,7 +867,7 @@ fn apply_row(i: u64) {
 // engine's pointer-region tracker orders exit-before-enter across a
 // single sampled move (pinned by the corpus race case), so the shared
 // hover index can't double-paint.
-entry fn row_enter(i: u64, _b: u64, _n: f64) {
+fn row_enter(i: u64, _b: u64, _n: f64) {
     let prev = stf_take(K_HOVERI);
     stf_put(K_HOVERI, i as f64);
     if (prev >= 0.0 && prev != i as f64) {
@@ -875,7 +876,7 @@ entry fn row_enter(i: u64, _b: u64, _n: f64) {
     apply_row(i);
 }
 
-entry fn row_exit(i: u64, _b: u64, _n: f64) {
+fn row_exit(i: u64, _b: u64, _n: f64) {
     // Drop the hover index only if it is THIS row (a batched exit for a
     // stale row must not clear the live hover — scrolling under a
     // stationary pointer delivers several exits at once), but ALWAYS
@@ -889,7 +890,7 @@ entry fn row_exit(i: u64, _b: u64, _n: f64) {
     apply_row(i);
 }
 
-entry fn case_tap(idx: u64, _b: u64, _n: f64) {
+fn case_tap(idx: u64, _b: u64, _n: f64) {
     let name = pg_case_name(idx);
     // Select: load the source into the editor controller (highlighted —
     // the case-load rail), then run it. The mounted Input refreshes on the
@@ -947,7 +948,7 @@ entry fn probe(state: u64, _b: f64) {
 // child and spawn a fresh one under a new controller (the `runCase`
 // destroy-then-spawn swap). On failure the viewer flips to the
 // compile-error panel and the diagnostics land in the error rail.
-entry fn run_case(_a: u64, _b: u64, _n: f64) {
+fn run_case(_a: u64, _b: u64, _n: f64) {
     do_run();
 }
 
@@ -1016,7 +1017,7 @@ fn do_run() {
 // Reset: restore the selected case's original source into the editor
 // controller (highlighted — the same load rail as a selection; the mounted
 // editable refreshes on the write) and re-run.
-entry fn reset_case(_a: u64, _b: u64, _n: f64) {
+fn reset_case(_a: u64, _b: u64, _n: f64) {
     let name = rs_get_str(selected_atom());
     load_editor(pg_case_source(name));
     do_run();
@@ -1043,14 +1044,14 @@ fn set_dragging(on: bool) {
     stf_put(K_DIVBAR, bar as f64);
 }
 
-entry fn div_down(_id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
+fn div_down(_id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     let lastx = st_take(K_DRAGX);
     mem_set(lastx, gx);
     st_put(K_DRAGX, lastx);
     set_dragging(true);
 }
 
-entry fn div_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
+fn div_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     let dragging = stf_take(K_DRAGGING) as u64;
     stf_put(K_DRAGGING, dragging as f64);
     if (!rs_get_bool(dragging)) {
@@ -1070,7 +1071,7 @@ entry fn div_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     rs_set_f64(id, w);
 }
 
-entry fn div_up(_id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn div_up(_id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     set_dragging(false);
 }
 
@@ -1094,14 +1095,14 @@ fn set_edragging(on: bool) {
     stf_put(K_EDIVBAR, bar as f64);
 }
 
-entry fn ediv_down(_id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
+fn ediv_down(_id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     let lastx = st_take(K_EDRAGX);
     mem_set(lastx, gx);
     st_put(K_EDRAGX, lastx);
     set_edragging(true);
 }
 
-entry fn ediv_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
+fn ediv_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     let edragging = stf_take(K_EDRAGGING) as u64;
     stf_put(K_EDRAGGING, edragging as f64);
     if (!rs_get_bool(edragging)) {
@@ -1121,31 +1122,31 @@ entry fn ediv_move(id: u64, _lx: f64, _ly: f64, gx: f64, _gy: f64, _btn: u64) {
     rs_set_f64(id, w);
 }
 
-entry fn ediv_up(_id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn ediv_up(_id: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
     set_edragging(false);
 }
 
 // ---- the toolbar buttons' hover rails --------------------------------------
 
-entry fn run_hover_on(id: u64, _b: u64, _n: f64) {
+fn run_hover_on(id: u64, _b: u64, _n: f64) {
     rs_set_brush(id, BTN_PRIMARY_HOVER);
 }
 
-entry fn run_hover_off(id: u64, _b: u64, _n: f64) {
+fn run_hover_off(id: u64, _b: u64, _n: f64) {
     rs_set_brush(id, ACCENT_PRIMARY);
 }
 
-entry fn reset_hover_on(id: u64, _b: u64, _n: f64) {
+fn reset_hover_on(id: u64, _b: u64, _n: f64) {
     rs_set_brush(id, BG_HOVER);
 }
 
-entry fn reset_hover_off(id: u64, _b: u64, _n: f64) {
+fn reset_hover_off(id: u64, _b: u64, _n: f64) {
     rs_set_brush(id, BTN_GHOST);
 }
 
 // The auto-run toggle. Turning auto-run OFF also cancels any pending
 // debounced run.
-entry fn b_autorun(_a: u64, _b: u64, _n: f64) {
+fn b_autorun(_a: u64, _b: u64, _n: f64) {
     let autorun = stf_take(K_AUTORUN) as u64;
     rs_set_bool(autorun, !rs_get_bool(autorun));
     stf_put(K_AUTORUN, autorun as f64);
@@ -1170,25 +1171,25 @@ entry fn b_autorun(_a: u64, _b: u64, _n: f64) {
 // tests). Verified manually on a fresh wasm build: boot → View → Split →
 // Run → Reset with a live child, plus typed edits under auto-run — no
 // overlay, no hang, viewer intact throughout.
-entry fn tab_split(_a: u64, _b: u64, _n: f64) {
+fn tab_split(_a: u64, _b: u64, _n: f64) {
     set_layout("split");
 }
-entry fn tab_edit(_a: u64, _b: u64, _n: f64) {
+fn tab_edit(_a: u64, _b: u64, _n: f64) {
     set_layout("edit");
 }
-entry fn tab_view(_a: u64, _b: u64, _n: f64) {
+fn tab_view(_a: u64, _b: u64, _n: f64) {
     set_layout("view");
 }
 
 // The tab hover intents (the segmented control's per-tab lift — the boa
 // LayoutButton): entering marks the index, exiting clears it; all three
 // brushes repaint either way.
-entry fn tab_enter(i: u64, _b: u64, _n: f64) {
+fn tab_enter(i: u64, _b: u64, _n: f64) {
     stf_put(K_TABH, i as f64);
     repaint_tabs();
 }
 
-entry fn tab_exit(i: u64, _b: u64, _n: f64) {
+fn tab_exit(i: u64, _b: u64, _n: f64) {
     let cur = stf_take(K_TABH);
     stf_put(K_TABH, -1.0);
     if (cur == i as f64) {
@@ -1248,7 +1249,7 @@ fn set_layout(mode: str) {
 // pill, and with auto-run on restart the debounced recompile+respawn —
 // a 500 ms one-shot animation controller that a newer edit stops
 // (cancellation = stop; no generation guard needed).
-entry fn on_edit(_id: u64, _b: u64, _n: f64) {
+fn on_edit(_id: u64, _b: u64, _n: f64) {
     mark_edited();
     let autorun = stf_take(K_AUTORUN) as u64;
     stf_put(K_AUTORUN, autorun as f64);
@@ -1261,7 +1262,7 @@ entry fn on_edit(_id: u64, _b: u64, _n: f64) {
 }
 
 // The debounce window elapsed: recompile + respawn the editor's source.
-entry fn on_debounce_end(_id: u64, _v: f64) {
+fn on_debounce_end(_id: u64, _v: f64) {
     do_run();
 }
 
@@ -1278,7 +1279,7 @@ fn mark_edited() {
 
 // The "compiled Xs ago" clock: a 1 Hz one-shot that restarts itself (the
 // status bar's derive re-formats the label — no polling anywhere else).
-entry fn on_clock_end(_id: u64, _v: f64) {
+fn on_clock_end(_id: u64, _v: f64) {
     let ago = stf_take(K_AGO) as u64;
     rs_set_f64(ago, rs_get_f64(ago) + 1.0);
     stf_put(K_AGO, ago as f64);
@@ -1287,7 +1288,7 @@ entry fn on_clock_end(_id: u64, _v: f64) {
     st_put(K_CLOCK, clock);
 }
 
-entry fn fmt_ago(v: f64) -> str {
+fn fmt_ago(v: f64) -> str {
     if (v < 5.0) {
         return f"compiled just now";
     }
@@ -1298,7 +1299,7 @@ entry fn fmt_ago(v: f64) -> str {
 // atom, seq). Stale rails (a destroyed controller's atom still firing on
 // its `destroyed` write) are ignored by identity; the live rail settles
 // the viewer atoms — the boa FallbackView / RuntimeError states.
-entry fn on_vstat(_report: u64, watched: u64, _n: f64) {
+fn on_vstat(_report: u64, watched: u64, _n: f64) {
     let cur = stf_take(K_VSTAT) as u64;
     stf_put(K_VSTAT, cur as f64);
     if (watched != cur) {

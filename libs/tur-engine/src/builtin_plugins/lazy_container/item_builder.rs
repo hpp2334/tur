@@ -1,9 +1,10 @@
 //! The lazy-container item-builder face: a rut entry-builder (the rut
 //! rail's guarded flush-time VM call).
 //!
-//! Item specs materialize by calling an `entry fn(index) -> opaque` through
-//! the [`VmFace`] — fuel-capped, depth-limited, no-mount-guarded, traps
-//! reported (never aborting the flush).
+//! Item specs materialize by calling the kit-sealed fn box through the
+//! [`VmFace`] via the kit's `__tur_cb_build1` dispatch entry — fuel-capped,
+//! depth-limited, no-mount-guarded, traps reported (never aborting the
+//! flush).
 
 use std::rc::Rc;
 
@@ -17,7 +18,7 @@ use rut_vm::OpaqueRef;
 /// `rs_lazy_list` / `rs_lazy_grid` / table rows.
 #[derive(Clone)]
 pub struct RutEntryBuilder {
-    pub name: String,
+    pub cb: OpaqueRef,
     pub face: Rc<VmFace>,
     pub handles: Rc<RutHandles>,
 }
@@ -26,7 +27,8 @@ impl RutEntryBuilder {
     /// Resolve the item spec for `index`. A failed face call degrades to
     /// "not built" — face calls report their own traps (error rail).
     pub fn build(&self, index: u64) -> Option<Rc<dyn View>> {
-        let handle: Result<OpaqueRef, _> = self.face.call(&self.handles, &self.name, (index,));
+        let handle: Result<OpaqueRef, _> =
+            self.face.call(&self.handles, "__tur_cb_build1", (self.cb.clone(), index));
         match handle {
             Ok(h) => opaque_to_view(&h),
             Err(_) => None,

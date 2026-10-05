@@ -4,11 +4,8 @@
 // generation guard (a stale loop exits when a new start supersedes it).
 // State atom ids ride the scalar stash (stf_*).
 use futures::{ launch_future, sleep };
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mem_get, mem_new, mem_set, mount,
-    rs_derive, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64,
-    st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,
-    undo_new };
-use tur_kit::{ Column, Condition, Container, Input, PointerInteract, Row, Text };
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mem_get, mem_new, mem_set, mount, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64, st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new };
+use tur_kit::{ Column, Condition, Container, Input, PointerInteract, Row, Text, rs_derive };
 
 
 let K_GEN: u64 = 1;
@@ -31,12 +28,12 @@ entry fn start() -> u64 {
     stf_put(K_EDITING, editing as f64);
     st_put(K_GEN, mem_new(0.0));
 
-    let display = rs_derive("fmt_display", remaining);
+    let display = rs_derive(fmt_display, remaining);
 
     let mut col = Column()
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text_bound_derived(display).query_key("display").build())
-        .child(Row().main_alignment(MAIN_ALIGN_CENTER).child(button("btn-start", "Start", "b_start", running, running)).child(button("btn-pause", "Pause", "b_pause", running, running)).child(button("btn-reset", "Reset", "b_reset", initial, remaining)).child(button("btn-edit", "Edit", "b_edit", initial, editing)).build());
+        .child(Row().main_alignment(MAIN_ALIGN_CENTER).child(button("btn-start", "Start", b_start, running, running)).child(button("btn-pause", "Pause", b_pause, running, running)).child(button("btn-reset", "Reset", b_reset, initial, remaining)).child(button("btn-edit", "Edit", b_edit, initial, editing)).build());
 
     // The edit modal overlay (both branches authored at start).
     let modal = build_modal(initial, remaining);
@@ -48,7 +45,7 @@ entry fn start() -> u64 {
 }
 
 // A pill button with a query key; both atoms cross to the entry.
-fn button(key: str, label: str, cb: str, a: u64, b: u64) -> opaque {
+fn button(key: str, label: str, cb: fn(u64, u64, f64), a: u64, b: u64) -> opaque {
     let bld = Container()
         .width_height(90.0, 40.0)
         .color(0x6366F1FF)
@@ -78,13 +75,13 @@ fn build_modal(initial: u64, remaining: u64) -> opaque {
     let undo = undo_new();
     let input = Input().controller(ctrl).undo(undo).placeholder("seconds").width_height(180.0, 32.0).query_key("edit-input").build();
     col.child(input);
-    col.child(button("btn-confirm", "Confirm", "b_confirm", initial, remaining));
+    col.child(button("btn-confirm", "Confirm", b_confirm, initial, remaining));
     card.child(col.build());
     return card.build();
 }
 
 // "m:ss" display format.
-entry fn fmt_display(v: f64) -> str {
+fn fmt_display(v: f64) -> str {
     let total = v as u64;
     let m = total / 60;
     let s = total % 60;
@@ -139,7 +136,7 @@ fn gen_bump() -> f64 {
     return g;
 }
 
-entry fn b_start(_running: u64, _b: u64, _n: f64) {
+fn b_start(_running: u64, _b: u64, _n: f64) {
     let running = stf_take(K_RUNNING) as u64;
     if (rs_get_bool(running)) {
         stf_put(K_RUNNING, running as f64);
@@ -150,14 +147,14 @@ entry fn b_start(_running: u64, _b: u64, _n: f64) {
     launch_future(ticker(gen_bump()));
 }
 
-entry fn b_pause(_running: u64, _b: u64, _n: f64) {
+fn b_pause(_running: u64, _b: u64, _n: f64) {
     let running = stf_take(K_RUNNING) as u64;
     rs_set_bool(running, false);
     stf_put(K_RUNNING, running as f64);
     gen_bump();
 }
 
-entry fn b_reset(initial: u64, remaining: u64, _n: f64) {
+fn b_reset(initial: u64, remaining: u64, _n: f64) {
     let running = stf_take(K_RUNNING) as u64;
     rs_set_bool(running, false);
     stf_put(K_RUNNING, running as f64);
@@ -165,7 +162,7 @@ entry fn b_reset(initial: u64, remaining: u64, _n: f64) {
     rs_set_f64(remaining, rs_get_f64(initial));
 }
 
-entry fn b_edit(initial: u64, editing: u64, _n: f64) {
+fn b_edit(initial: u64, editing: u64, _n: f64) {
     let running = stf_take(K_RUNNING) as u64;
     rs_set_bool(running, false);
     stf_put(K_RUNNING, running as f64);
@@ -177,7 +174,7 @@ entry fn b_edit(initial: u64, editing: u64, _n: f64) {
     rs_set_bool(editing, true);
 }
 
-entry fn b_confirm(initial: u64, remaining: u64, _n: f64) {
+fn b_confirm(initial: u64, remaining: u64, _n: f64) {
     let ctrl = st_take(K_CTRL);
     let v = str_parse_f64(tctrl_text(ctrl));
     rs_set_f64(initial, v);

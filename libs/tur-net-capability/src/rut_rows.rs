@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use futures::StreamExt;
 use rut_core::types::{TY_BYTES, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 use tur_engine::core::rut_runtime::Intent;
 use tur_engine::core::scheduler::TaskHandle;
 
@@ -26,18 +26,27 @@ pub struct RutNetTask {
 }
 
 /// Declare the rows + install the bodies (the pkg-extension payload).
+/// The net kit's dispatch entry for the `(id, chunk)` shape — lives in
+/// the net kit prelude (the scope law: the kit that seals the callback
+/// owns the entry that downcasts it).
+pub const NCB_BYTES: &str = "__tur_ncb_bytes";
+
 /// (The allow covers the upstream `pkg_async_fn!` row expansion's
 /// cosmetic — the spike's precedent.)
 #[allow(clippy::needless_question_mark)]
 pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
+    // The net kit — the authored face over these rows (callback sealing
+    // + this kit's dispatch entry). Registered alongside the rows, so it
+    // compiles only when the Http capability is present.
+    cx.preludes.push(crate::kit::net_kit_pkg());
     cx.decl.extend(
         vec![
             ("net_request", vec![TY_STR, TY_STR], TY_BYTES, true),
             ("net_status", vec![TY_OPAQUE], TY_U64, false),
             ("net_error", vec![TY_OPAQUE], TY_STR, false),
             (
-                "net_stream",
-                vec![TY_U64, TY_STR, TY_STR, TY_STR],
+                "net_stream_cb",
+                vec![TY_U64, TY_STR, TY_STR, TY_OPAQUE],
                 TY_OPAQUE,
                 false,
             ),
@@ -90,18 +99,18 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
         t.with(|t| Ok(t.error.borrow().clone()))?
     });
 
-    // net_stream(url, method, on_chunk) -> opaque — each chunk crosses as
-    // an intent record (`entry fn cb(id: u64, data: bytes)`); the returned
-    // task's `task_cancel` wire-aborts the download.
+    // net_stream_cb(url, method, on_chunk) -> opaque — each chunk crosses as
+    // an intent record (the kit-sealed fn box delivers `(id, data: bytes)`
+    // through `__tur_cb_bytes`); the returned task's `task_cancel`
+    // wire-aborts the download.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "net_stream", (u64, &str, &str, &str) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, url: &str, method: &str, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "net_stream_cb", (u64, &str, &str, OpaqueRef) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, url: &str, method: &str, cb: OpaqueRef| {
         let Some(http) = h.inst.capability().of::<Http>() else {
             return Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "no http capability"));
         };
         let http = http.backend().clone();
         let status: Rc<RefCell<u16>> = Rc::new(RefCell::new(0));
         let error: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
-        let cb = cb.to_string();
         let h2 = h.clone();
         let (status2, error2) = (status.clone(), error.clone());
         let (url, method) = (url.to_string(), method.to_string());
@@ -123,7 +132,8 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
                 match chunk {
                     Ok(bytes) => {
                         h2.pending_calls.borrow_mut().push(Intent::Bytes {
-                            name: cb.clone(),
+                            entry: NCB_BYTES,
+                            cb: cb.clone(),
                             a: id,
                             data: bytes,
                         });

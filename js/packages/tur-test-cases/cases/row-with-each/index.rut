@@ -4,7 +4,7 @@ use tur::{ CROSS_ALIGN_STRETCH, mount, rs_list_new, rs_list_push, rs_source_valu
 use tur_kit::{ Column, Container, Each, Expanded, Row, SizedBox, Text };
 
 
-entry fn item(_i: u64, s: str) -> opaque {
+fn item(_i: u64, s: str) -> opaque {
     let t = Text().text(s).font_size(13.0);
     return t.build();
 }
@@ -17,7 +17,7 @@ entry fn start() {
 
     let col = Column()
         .cross_alignment(CROSS_ALIGN_STRETCH)
-        .child(Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(Each(seg_atom).item_builder("item").build()).build())
+        .child(Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(Each(seg_atom).item_builder(item).build()).build())
         .child(SizedBox(40.0, 10.0).child(Container().build()).build())
         .child(Expanded().flex(1.0).child(Container().build()).build());
     mount(col.build());

@@ -7,9 +7,9 @@ use std::rc::Rc;
 use crate::builtin_plugins::lifecycle::{LifecycleFactory, LifecycleView};
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::value::Value;
-use crate::core::rut_runtime::{Intent, RutHandles, RutView};
+use crate::core::rut_runtime::{cb_entries, Intent, RutHandles, RutView};
 
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
 pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
@@ -28,14 +28,14 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     };
     cx.decl.extend(vec![
         row("lc_new", vec![], TY_OPAQUE),
-        row("lc_on_mount", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("lc_before_destroy", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("lc_on_mount", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("lc_before_destroy", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lc_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lc_build", vec![TY_OPAQUE], TY_OPAQUE),
     ]);
 }
 
-use rut_core::types::{TY_NIL, TY_OPAQUE, TY_STR};
+use rut_core::types::{TY_NIL, TY_OPAQUE};
 
 /// The lifecycle spec.
 pub(crate) struct LcSpec {
@@ -45,18 +45,14 @@ pub(crate) struct LcSpec {
 }
 
 /// Queue a no-payload lifecycle intent (the drain dispatches
-/// `(id, 0, 1)`).
-fn lifecycle_mutation(handles: &Rc<RutHandles>, id: u64, cb: &str) -> Option<MutationHandle<()>> {
-    let name = cb.trim();
-    if name.is_empty() {
-        return None;
-    }
-    let name = name.to_string();
+/// `(cb, id, 0, 1)` — the callback is the kit-sealed fn box).
+fn lifecycle_mutation(handles: &Rc<RutHandles>, id: u64, cb: OpaqueRef) -> Option<MutationHandle<()>> {
     let h = handles.clone();
     let dirty = handles.dirty.clone();
     let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
         h.pending_calls.borrow_mut().push(Intent::Click {
-            name: name.clone(),
+            entry: cb_entries::CLICK,
+            cb: cb.clone(),
             a: id,
             b: 0,
             seq: 1.0,
@@ -80,12 +76,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // receive the sequence (b=0) — modules route by closure-free
     // convention (the label atom id)).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lc_on_mount", (Opaque<LcSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "lc_on_mount", (Opaque<LcSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: OpaqueRef| {
         let m = lifecycle_mutation(&h, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_mounted = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lc_before_destroy", (Opaque<LcSpec>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: &str| {
+    rut_vm::pkg_fn!(pkg, "lc_before_destroy", (Opaque<LcSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: OpaqueRef| {
         let m = lifecycle_mutation(&h, 1, cb);
         b.with_mut(vm, |_vm, s| s.before_destroy = m)
     });

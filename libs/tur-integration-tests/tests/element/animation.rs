@@ -43,10 +43,9 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
-use tur::{ anim_ctrl, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek,
-    anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_f64, rs_set_str,
-    rs_source_f64, rs_source_str, st_put, st_take };
+use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take };
 use tur_kit::{ Column, Container, Text };
+use tur_anim_kit::{ anim_ctrl };
 
 
 let CTRL: u64 = 7;
@@ -58,7 +57,7 @@ entry fn start() -> u64 {
 
     let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
 
-    let ctrl = anim_ctrl(width, 200.0, "linear", 0, "a_tick", "a_end");
+    let ctrl = anim_ctrl(width, 200.0, "linear", 0, a_tick, a_end);
     st_put(CTRL, ctrl);
 
     let col = Column()
@@ -68,11 +67,11 @@ entry fn start() -> u64 {
     return label;
 }
 
-entry fn a_tick(id: u64, v: f64) {
+fn a_tick(id: u64, v: f64) {
     rs_set_f64(id, 100.0 + (200.0 - 100.0) * v);
 }
 
-entry fn a_end(_id: u64, _v: f64) {
+fn a_end(_id: u64, _v: f64) {
 }
 
 entry fn do_forward(_a: u64, _b: f64) {

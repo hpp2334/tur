@@ -12,13 +12,23 @@
 // lowering), and CHAIN it: `let c = X().prop(..).child(..);` — never
 // `let mut c` + `c.prop(..);` statement runs.
 //
-// Callbacks
-// keep the intent-queue law (names + ids, never closures); reactive
-// bindings are methods (`text_bound(atom)`, `color_bound(atom)`), not
-// constructor variants. Flags are the `u64` consts the `tur` pkg declares
-// (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` / `MAIN_ALIGN_*` /
-// `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` / `BOXFIT_*` /
-// `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from `tur` directly.
+// Callback law: every callback-taking method takes a FN VALUE — a named
+// `fn` reference or an anonymous fn literal (`fn(a: u64, _b: u64) { … }`,
+// captures legal). The kit seals the value into an opaque box
+// (`opaque(cb)`) rut-side and hands the ROW only the box; the engine's
+// intent drain fires it back through the infra dispatch entries below
+// (`__tur_cb_*` — they recover the fn with `opaque.downcast` and call
+// it). The arity/type check happens at THIS boundary, at compile time —
+// a callback whose signature doesn't match its pad is a compile error,
+// never a runtime name lookup. Nothing callable crosses the boundary as
+// a string. `View` is the user-facing alias for built views.
+//
+// Reactive bindings are methods (`text_bound(atom)`, `color_bound(atom)`),
+// not constructor variants. Flags are the `u64` consts the `tur` pkg
+// declares (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` /
+// `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` /
+// `BOXFIT_*` / `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from
+// `tur` directly.
 //
 // Color law: every `packed: u64` color prop (`color` / `color_bound` /
 // `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
@@ -61,7 +71,8 @@ use tur::{
   mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child, pi_id, pi_ids,
   pi_new, pi_on_click, pi_on_context_menu, pi_on_down, pi_on_move, pi_on_tap, pi_on_up,
   pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_new, pos_right, pos_top,
-  pos_width, scroll_axis, scroll_build, scroll_child, scroll_new, scroll_offset, scroll_qkey,
+  pos_width, rs_derive2_cb, rs_derive_cb, rs_watch_cb, scroll_axis, scroll_build, scroll_child,
+  scroll_new, scroll_offset, scroll_qkey,
   sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
   span_add, spans_new, stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
   switch_build, switch_case, switch_fallback, switch_new, switch_qkey, switch_value_derived,
@@ -72,6 +83,93 @@ use tur::{
   va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
   va_source_handle,
 };
+
+// The user-facing view alias: built views cross kit signatures as `View`
+// (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
+pub type View = opaque;
+
+// ---- the infra dispatch entries (the callback rail's fire half) ----------
+//
+// The engine's intent drain calls these with the SEALED callback box as
+// the first argument (the only callable shape that ever crosses). Each
+// entry recovers the fn value — the downcast spells the same fn type the
+// sealing kit method declared, so the ids always match — and calls it.
+// One entry per payload shape; the arities are the drain's contract.
+//
+// Scope law: a kit's dispatch entries live in the SAME module that seals
+// its callbacks (the box stamps the sealing unit's fn-type id; the
+// downcast must spell the same id). So this kit owns the shapes its
+// surfaces declare — click/key/pointer/build/derive — and OTHER kits own
+// theirs (tur_anim_kit: `__tur_acb_val`; the net kit: `__tur_ncb_bytes`).
+// A fn-type shape is exported by at most ONE kit per program.
+
+entry fn __tur_cb_click(cb: opaque, a: u64, b: u64, n: f64) {
+  let f = opaque.downcast<fn(u64, u64, f64)>(cb);
+  f(a, b, n);
+}
+
+entry fn __tur_cb_key(cb: opaque, id: u64, key: str, code: str, mods: u64, kind: u64) {
+  let f = opaque.downcast<fn(u64, str, str, u64, u64)>(cb);
+  f(id, key, code, mods, kind);
+}
+
+entry fn __tur_cb_ptr1(cb: opaque, id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(u64, f64, f64, f64, f64, u64)>(cb);
+  f(id, lx, ly, gx, gy, btn);
+}
+
+entry fn __tur_cb_ptr2(cb: opaque, a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(u64, u64, f64, f64, f64, f64, u64)>(cb);
+  f(a, b, lx, ly, gx, gy, btn);
+}
+
+// The lazy builders (Each / LazyList / LazyGrid / Table) — face-called
+// WITH an answer (the built item view) during flush.
+entry fn __tur_cb_build1(cb: opaque, i: u64) -> View {
+  let f = opaque.downcast<fn(u64) -> View>(cb);
+  return f(i);
+}
+
+entry fn __tur_cb_build2(cb: opaque, i: u64, item: str) -> View {
+  let f = opaque.downcast<fn(u64, str) -> View>(cb);
+  return f(i, item);
+}
+
+entry fn __tur_cb_build2i(cb: opaque, i: u64, col: u64) -> View {
+  let f = opaque.downcast<fn(u64, u64) -> View>(cb);
+  return f(i, col);
+}
+
+// The derive format fns — face-called WITH an answer (the formatted str).
+entry fn __tur_cb_str1(cb: opaque, v: f64) -> str {
+  let f = opaque.downcast<fn(f64) -> str>(cb);
+  return f(v);
+}
+
+entry fn __tur_cb_str2(cb: opaque, a: f64, b: f64) -> str {
+  let f = opaque.downcast<fn(f64, f64) -> str>(cb);
+  return f(a, b);
+}
+
+// ---- reactive helpers (the C8 substrate's authored face) ------------------
+
+// Mint a derived atom: `rs_derive(fmt, dep)` — `fmt` is a fn value
+// (`fn(v: f64) -> str`) invoked through the guarded face on every
+// materialization. (The row underneath is `rs_derive_cb` — the box rail.)
+pub fn rs_derive(fmt: fn(f64) -> str, dep: u64) -> u64 {
+  return rs_derive_cb(opaque(fmt), dep);
+}
+
+// The two-dep twin: `fn(a: f64, b: f64) -> str`.
+pub fn rs_derive2(fmt: fn(f64, f64) -> str, da: u64, db: u64) -> u64 {
+  return rs_derive2_cb(opaque(fmt), da, db);
+}
+
+// Watch an atom: every change queues an intent into `cb` (a fn value with
+// the click shape); `report` crosses as the callback's first argument.
+pub fn rs_watch(atom: u64, cb: fn(u64, u64, f64), report: u64) -> opaque {
+  return rs_watch_cb(atom, opaque(cb), report);
+}
 
 // ---- flex (Column / Row) ------------------------------------------------
 
@@ -99,17 +197,17 @@ impl Column {
     flex_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     flex_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       flex_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return flex_build(self.spec);
   }
 }
@@ -138,17 +236,17 @@ impl Row {
     flex_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     flex_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       flex_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return flex_build(self.spec);
   }
 }
@@ -175,11 +273,11 @@ impl Expanded {
     flexi_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     flexi_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return flexi_build(self.spec);
   }
 }
@@ -206,11 +304,11 @@ impl Flexible {
     flexi_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     flexi_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return flexi_build(self.spec);
   }
 }
@@ -237,17 +335,17 @@ impl Stack {
     stack_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     stack_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       stack_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return stack_build(self.spec);
   }
 }
@@ -284,11 +382,11 @@ impl Positioned {
     pos_height(self.spec, v);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     pos_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return pos_build(self.spec);
   }
 }
@@ -359,17 +457,17 @@ impl Container {
     box_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     box_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       box_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return box_build(self.spec);
   }
 }
@@ -382,7 +480,7 @@ impl SizedBox {
   [constructor] pub fn builder(w: f64, h: f64) -> Self {
     return Self { spec: sizedbox_new(w, h) };
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     sizedbox_child(self.spec, c);
     return self;
   }
@@ -390,7 +488,7 @@ impl SizedBox {
     sizedbox_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return sizedbox_build(self.spec);
   }
 }
@@ -457,7 +555,7 @@ impl Text {
     text_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return text_build(self.spec);
   }
 }
@@ -534,19 +632,19 @@ impl Input {
     input_font_family(self.spec, v);
     return self;
   }
-  // The on-input rail (the intent-queue law): the named entry fn delivers
-  // `(id, 0, seq)` on every user edit; the handler reads the fresh text
+  // The on-input rail: every user edit delivers `cb` — a fn value with
+  // the click shape — `(id, 0, seq)`; the handler reads the fresh text
   // via `tctrl_text`. Bind `.controller(...)` first — the row installs
   // through the builder's shared controller.
-  pub fn on_input(mut self, name: str, id: u64) -> Self {
-    input_on_input(self.spec, name, id);
+  pub fn on_input(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
+    input_on_input(self.spec, opaque(cb), id);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     input_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return input_build(self.spec);
   }
 }
@@ -572,28 +670,51 @@ impl PointerInteract {
     pi_ids(self.spec, a, b);
     return self;
   }
-  pub fn on_tap(mut self, name: str) -> Self {
-    pi_on_tap(self.spec, name);
+  pub fn on_tap(mut self, cb: fn(u64, u64, f64)) -> Self {
+    pi_on_tap(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_click(mut self, name: str) -> Self {
-    pi_on_click(self.spec, name);
+  pub fn on_click(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_click(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_down(mut self, name: str) -> Self {
-    pi_on_down(self.spec, name);
+  pub fn on_down(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_down(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_move(mut self, name: str) -> Self {
-    pi_on_move(self.spec, name);
+  pub fn on_move(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_move(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_up(mut self, name: str) -> Self {
-    pi_on_up(self.spec, name);
+  pub fn on_up(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_up(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_context_menu(mut self, name: str) -> Self {
-    pi_on_context_menu(self.spec, name);
+  pub fn on_context_menu(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_context_menu(self.spec, opaque(cb));
+    return self;
+  }
+  // The two-id twins: over `.ids(a, b)` the pointer callbacks deliver
+  // `(a, b, lx, ly, gx, gy, btn)` (taps stay the `(a, b, seq)` click
+  // shape either way — use `on_tap` for that).
+  pub fn on_click2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_click(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn on_down2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_down(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn on_move2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_move(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn on_up2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_up(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn on_context_menu2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
+    pi_on_context_menu(self.spec, opaque(cb));
     return self;
   }
   pub fn behavior(mut self, v: u64) -> Self {
@@ -604,11 +725,11 @@ impl PointerInteract {
     pi_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     pi_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return pi_build(self.spec);
   }
 }
@@ -621,12 +742,12 @@ impl MouseRegion {
   [constructor] pub fn builder() -> Self {
     return Self { spec: mr_new() };
   }
-  pub fn on_enter(mut self, name: str, id: u64) -> Self {
-    mr_on_enter(self.spec, name, id);
+  pub fn on_enter(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
+    mr_on_enter(self.spec, opaque(cb), id);
     return self;
   }
-  pub fn on_exit(mut self, name: str, id: u64) -> Self {
-    mr_on_exit(self.spec, name, id);
+  pub fn on_exit(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
+    mr_on_exit(self.spec, opaque(cb), id);
     return self;
   }
   pub fn cursor(mut self, v: u64) -> Self {
@@ -641,11 +762,11 @@ impl MouseRegion {
     mr_behavior(self.spec, v);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     mr_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return mr_build(self.spec);
   }
 }
@@ -658,23 +779,23 @@ impl Focusable {
   [constructor] pub fn builder() -> Self {
     return Self { spec: focus_new() };
   }
-  pub fn on_key_down(mut self, name: str, id: u64) -> Self {
-    focus_on_key_down(self.spec, name, id);
+  pub fn on_key_down(mut self, cb: fn(u64, str, str, u64, u64), id: u64) -> Self {
+    focus_on_key_down(self.spec, opaque(cb), id);
     return self;
   }
-  pub fn on_focus(mut self, name: str, id: u64) -> Self {
-    focus_on_focus(self.spec, name, id);
+  pub fn on_focus(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
+    focus_on_focus(self.spec, opaque(cb), id);
     return self;
   }
-  pub fn on_blur(mut self, name: str, id: u64) -> Self {
-    focus_on_blur(self.spec, name, id);
+  pub fn on_blur(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
+    focus_on_blur(self.spec, opaque(cb), id);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     focus_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return focus_build(self.spec);
   }
 }
@@ -701,11 +822,11 @@ impl ScrollView {
     scroll_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     scroll_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return scroll_build(self.spec);
   }
 }
@@ -718,8 +839,8 @@ impl LazyList {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_list_new() };
   }
-  pub fn item_builder(mut self, name: str) -> Self {
-    lazy_builder(self.spec, name);
+  pub fn item_builder(mut self, cb: fn(u64) -> View) -> Self {
+    lazy_builder(self.spec, opaque(cb));
     return self;
   }
   pub fn count(mut self, atom: u64) -> Self {
@@ -742,7 +863,7 @@ impl LazyList {
     lazy_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return lazy_build(self.spec);
   }
 }
@@ -755,8 +876,8 @@ impl LazyGrid {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_grid_new() };
   }
-  pub fn item_builder(mut self, name: str) -> Self {
-    lazy_grid_builder(self.spec, name);
+  pub fn item_builder(mut self, cb: fn(u64) -> View) -> Self {
+    lazy_grid_builder(self.spec, opaque(cb));
     return self;
   }
   pub fn count(mut self, atom: u64) -> Self {
@@ -783,7 +904,7 @@ impl LazyGrid {
     lazy_grid_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return lazy_grid_build(self.spec);
   }
 }
@@ -818,17 +939,17 @@ impl Grid {
     grid_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     grid_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       grid_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return grid_build(self.spec);
   }
 }
@@ -867,19 +988,19 @@ impl Table {
     table_rows_atom(self.spec, atom);
     return self;
   }
-  pub fn row_builder(mut self, name: str) -> Self {
-    table_row_builder(self.spec, name);
+  pub fn row_builder(mut self, cb: fn(u64, u64) -> View) -> Self {
+    table_row_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn header_builder(mut self, name: str) -> Self {
-    table_header_builder(self.spec, name);
+  pub fn header_builder(mut self, cb: fn(u64) -> View) -> Self {
+    table_header_builder(self.spec, opaque(cb));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     table_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return table_build(self.spec);
   }
 }
@@ -904,11 +1025,11 @@ impl Switch {
   }
   // Appends one case — the historical `cases` prop's crossing (`case` is
   // a reserved word in rut).
-  pub fn cases(mut self, key: str, branch: opaque) -> Self {
+  pub fn cases(mut self, key: str, branch: View) -> Self {
     switch_case(self.spec, key, branch);
     return self;
   }
-  pub fn fallback(mut self, branch: opaque) -> Self {
+  pub fn fallback(mut self, branch: View) -> Self {
     switch_fallback(self.spec, branch);
     return self;
   }
@@ -916,7 +1037,7 @@ impl Switch {
     switch_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return switch_build(self.spec);
   }
 }
@@ -929,11 +1050,11 @@ impl Condition {
   [constructor] pub fn builder(atom: u64) -> Self {
     return Self { spec: cond_new(atom) };
   }
-  pub fn then(mut self, branch: opaque) -> Self {
+  pub fn then(mut self, branch: View) -> Self {
     cond_then(self.spec, branch);
     return self;
   }
-  pub fn else_branch(mut self, branch: opaque) -> Self {
+  pub fn else_branch(mut self, branch: View) -> Self {
     cond_else(self.spec, branch);
     return self;
   }
@@ -941,7 +1062,7 @@ impl Condition {
     cond_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return cond_build(self.spec);
   }
 }
@@ -954,11 +1075,11 @@ impl Each {
   [constructor] pub fn builder(atom: u64) -> Self {
     return Self { spec: each_new(atom) };
   }
-  pub fn item_builder(mut self, name: str) -> Self {
-    each_builder(self.spec, name);
+  pub fn item_builder(mut self, cb: fn(u64, str) -> View) -> Self {
+    each_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return each_build(self.spec);
   }
 }
@@ -971,17 +1092,17 @@ impl Fragment {
   [constructor] pub fn builder() -> Self {
     return Self { spec: frag_new() };
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     frag_child(self.spec, c);
     return self;
   }
-  pub fn children(mut self, cs: [opaque]) -> Self {
+  pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
       frag_child(self.spec, c);
     }
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return frag_build(self.spec);
   }
 }
@@ -1012,7 +1133,7 @@ impl Image {
     img_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return img_build(self.spec);
   }
 }
@@ -1041,7 +1162,7 @@ impl VirtualApp {
     va_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return va_build(self.spec);
   }
 }
@@ -1054,19 +1175,19 @@ impl Lifecycle {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lc_new() };
   }
-  pub fn on_mount(mut self, name: str) -> Self {
-    lc_on_mount(self.spec, name);
+  pub fn on_mount(mut self, cb: fn(u64, u64, f64)) -> Self {
+    lc_on_mount(self.spec, opaque(cb));
     return self;
   }
-  pub fn before_destroy(mut self, name: str) -> Self {
-    lc_before_destroy(self.spec, name);
+  pub fn before_destroy(mut self, cb: fn(u64, u64, f64)) -> Self {
+    lc_before_destroy(self.spec, opaque(cb));
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     lc_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return lc_build(self.spec);
   }
 }
@@ -1085,11 +1206,11 @@ impl CompositedTarget {
     ct_target_link(self.spec, l);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     ct_target_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return ct_target_build(self.spec);
   }
 }
@@ -1122,11 +1243,11 @@ impl CompositedFollower {
     ct_follower_offset(self.spec, x, y);
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     ct_follower_child(self.spec, c);
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     return ct_follower_build(self.spec);
   }
 }

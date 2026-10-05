@@ -23,7 +23,7 @@ entry fn start() -> u64 {
         .query_key("drag-target")
         .child(Text().text_bound(info).query_key("drag-info").build());
 
-    let pad = PointerInteract().id(info).on_down("g_down").on_move("g_move").on_up("g_up").query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().id(info).on_down(g_down).on_move(g_move).query_key("rut/gesture").child(b.build()).build();
     mount(pad);
     return info;
 }
@@ -45,7 +45,7 @@ fn emit(id: u64, gx: f64, gy: f64) {
     st_put(K_LY, ly);
 }
 
-entry fn g_down(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_down(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     let sx = st_take(K_SX);
     let sy = st_take(K_SY);
     mem_set(sx, gx);
@@ -56,7 +56,7 @@ entry fn g_down(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     emit(id, gx, gy);
 }
 
-entry fn g_move(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
+fn g_move(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
     emit(id, gx, gy);
     move_last(gx, gy);
 }

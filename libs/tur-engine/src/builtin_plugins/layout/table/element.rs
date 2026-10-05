@@ -73,13 +73,14 @@ pub struct TableView {
 pub(super) type RowSpecs = Vec<Option<Rc<dyn View>>>;
 
 /// Resolve one cell spec through a rut entry-builder (the guarded
-/// flush-time VM face). Failures degrade to `None` — the empty-cell
-/// placeholder, exactly like a throwing JS builder cell.
-fn resolve_cell<A>(entry: &RutEntryBuilder, args: A) -> Option<Rc<dyn View>>
+/// flush-time VM face). `entry_name` selects the kit dispatch entry the
+/// payload shape routes through. Failures degrade to `None` — the
+/// empty-cell placeholder, exactly like a throwing JS builder cell.
+fn resolve_cell<A>(entry: &RutEntryBuilder, entry_name: &str, args: A) -> Option<Rc<dyn View>>
 where
     A: rut_vm::interp::CallArgs,
 {
-    let handle: Result<OpaqueRef, _> = entry.face.call(&entry.handles, &entry.name, args);
+    let handle: Result<OpaqueRef, _> = entry.face.call(&entry.handles, entry_name, args);
     handle.ok().and_then(|h| opaque_to_view(&h))
 }
 
@@ -87,7 +88,7 @@ where
 /// (positional: the `(row, col)` call maps to column `col`).
 fn resolve_row_specs(view: &TableView, index: u64) -> RowSpecs {
     (0..view.columns.len() as u64)
-        .map(|col| resolve_cell(&view.build, (index, col)))
+        .map(|col| resolve_cell(&view.build, "__tur_cb_build2i", (view.build.cb.clone(), index, col)))
         .collect()
 }
 
@@ -98,7 +99,7 @@ fn resolve_header_specs(view: &TableView) -> RowSpecs {
         return Vec::new();
     };
     (0..view.columns.len() as u64)
-        .map(|col| resolve_cell(header, (col,)))
+        .map(|col| resolve_cell(header, "__tur_cb_build1", (header.cb.clone(), col)))
         .collect()
 }
 

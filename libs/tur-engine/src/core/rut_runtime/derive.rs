@@ -1,10 +1,11 @@
 //! C8 — derived atoms + `watch` on the rut rail: the decided law — a
 //! **synchronous VM call during flush**, guarded.
 //!
-//! `rs_derive(name, dep)` mints a derived whose materialization reads its
+//! `rs_derive_cb(cb, dep)` mints a derived whose materialization reads its
 //! dep through the tracked read face (auto-dependency tracking works
-//! exactly as for JS derives) and then calls `entry fn name(dep: f64)`
-//! through the [`VmFace`]. The face applies every guard the plan decided:
+//! exactly as for JS derives) and then fires the kit-sealed format fn box
+//! through the [`VmFace`] via the kit's `__tur_cb_str1` dispatch entry.
+//! The face applies every guard the plan decided:
 //!
 //! - **fuel-capped** — the call runs on the VM's budget with bounded
 //!   retry grants, then one drain grant that always returns the machine
@@ -22,9 +23,9 @@ use std::rc::Rc;
 
 use crate::core::edgy::reactive::{AtomId, Readable, Source};
 use crate::core::edgy::value::Value;
-use rut_vm::Opaque;
+use rut_vm::{Opaque, OpaqueRef};
 
-use super::{Intent, RutHandles};
+use super::{cb_entries, Intent, RutHandles};
 
 /// The watch pair opaque (the `start$` / `stop$` control mutations).
 pub struct RutWatch {
@@ -34,19 +35,19 @@ pub struct RutWatch {
 
 /// Install the C8 bodies.
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
-    // rs_derive(name, dep) -> derived-id — the entry fn signature is
-    // `entry fn name(v: f64) -> str`; the materialization reads the dep
-    // through the tracked face (recording the dependency), then calls.
+    // rs_derive_cb(cb, dep) -> derived-id — the format fn is a fn value
+    // with the `fn(v: f64) -> str` shape, kit-sealed; the materialization
+    // reads the dep through the tracked face (recording the dependency),
+    // then fires `__tur_cb_str1`.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_derive", (&str, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, name: &str, dep: u64| {
-        let name = name.to_string();
+    rut_vm::pkg_fn!(pkg, "rs_derive_cb", (OpaqueRef, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, dep: u64| {
         let h2 = h.clone();
         let derived = h.store.bridge().build_derive(move |read| {
             let v = read
                 .read(Readable::from(Source::<Value>::from_id(AtomId(dep as u32))))
                 .as_num()
                 .unwrap_or(0.0);
-            match h2.face.call::<_, String>(&h2, &name, (v,)) {
+            match h2.face.call::<_, String>(&h2, "__tur_cb_str1", (cb.clone(), v)) {
                 Ok(s) => Ok(Value::str(s.as_str())),
                 // Reported by the face (error rail); the derived falls
                 // back to Nil — the flush never aborts.
@@ -56,10 +57,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(derived.id().0 as u64)
     });
 
-    // rs_derive2(name, a, b) — two f64 deps, `entry fn name(a: f64, b: f64) -> str`.
+    // rs_derive2_cb(cb, a, b) — two f64 deps, `fn(a: f64, b: f64) -> str`.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_derive2", (&str, u64, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, name: &str, da: u64, db: u64| {
-        let name = name.to_string();
+    rut_vm::pkg_fn!(pkg, "rs_derive2_cb", (OpaqueRef, u64, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, da: u64, db: u64| {
         let h2 = h.clone();
         let derived = h.store.bridge().build_derive(move |read| {
             let va = read
@@ -70,7 +70,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 .read(Readable::from(Source::<Value>::from_id(AtomId(db as u32))))
                 .as_num()
                 .unwrap_or(0.0);
-            match h2.face.call::<_, String>(&h2, &name, (va, vb)) {
+            match h2.face.call::<_, String>(&h2, "__tur_cb_str2", (cb.clone(), va, vb)) {
                 Ok(s) => Ok(Value::str(s.as_str())),
                 Err(_) => Ok(Value::Nil),
             }
@@ -78,17 +78,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(derived.id().0 as u64)
     });
 
-    // rs_watch(atom, cb, report) — the callback intent carries the report
-    // atom (a) and the watched atom (b); the entry fn reads the fresh
-    // value via the rs_get_* rows.
+    // rs_watch_cb(atom, cb, report) — the callback intent carries the
+    // kit-sealed fn box, the report atom (a) and the watched atom (b);
+    // the callback reads the fresh value via the rs_get_* rows.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_watch", (u64, &str, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, atom: u64, cb: &str, report: u64| {
-        let name = cb.to_string();
+    rut_vm::pkg_fn!(pkg, "rs_watch_cb", (u64, OpaqueRef, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, atom: u64, cb: OpaqueRef, report: u64| {
         let h2 = h.clone();
         let dirty = h.dirty.clone();
         let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
             h2.pending_calls.borrow_mut().push(Intent::Click {
-                name: name.clone(),
+                entry: cb_entries::CLICK,
+                cb: cb.clone(),
                 a: report,
                 b: atom,
                 seq: 1.0,
