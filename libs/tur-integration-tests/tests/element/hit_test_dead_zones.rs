@@ -72,12 +72,15 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 // ── Shape (a): PointerInteract inside ScrollView content ────────────────
 
 const SCROLL_BTN_RUT: &str = r#"
-use tur::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount, rs_derive, rs_get_f64, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container, MouseRegion, PointerInteract, ScrollView, SizedBox, Text };
+use tur::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, MutationCtx, PointerInteract, Readable,
+    ScrollView, SizedBox, Text, derive_str, mutate, source_f64 };
 
 entry fn start() -> u64 {
-    let taps = rs_source_f64();
-    let label = rs_derive(fmt_taps, taps);
+    let taps: Readable<f64> = source_f64(0.0);
+    let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return fmt_taps(ctx.get_f64(taps));
+    });
     // text-demo's cycle-button shape: MouseRegion(cursor) wrapping the
     // PointerInteract pill, at the bottom of a page taller than the
     // viewport, inside a ScrollView.
@@ -85,14 +88,17 @@ entry fn start() -> u64 {
         .padding(10.0)
         .radius(8.0)
         .color(0x4F46E5FFu64)
-        .child(Text().text_bound_derived(label).font_size(13.0).query_key("dz/scroll-label").build())
+        .child(Text().text_bound(label).font_size(13.0).query_key("dz/scroll-label").build())
         .build();
+    let b_tap = mutate(fn (ctx: MutationCtx) {
+        // The derive re-renders the label through fmt_taps.
+        ctx.set_f64(taps, ctx.get_f64(taps) + 1.0);
+    });
     let btn = MouseRegion()
         .cursor(CURSOR_POINTER)
         .child(
             PointerInteract()
-                .id(taps)
-                .on_tap(b_tap)
+                .on_click(b_tap)
                 .query_key("dz/scroll-btn")
                 .child(pill)
                 .build(),
@@ -106,16 +112,11 @@ entry fn start() -> u64 {
         .child(SizedBox(0.0, 40.0).build())
         .build();
     mount(ScrollView().child(page).build());
-    return taps;
+    return taps.atom_id();
 }
 
 fn fmt_taps(v: f64) -> str {
     return f"taps {v as u64}";
-}
-
-fn b_tap(a: u64, _b: u64, _n: f64) {
-    // The derive re-renders the label through fmt_taps.
-    rs_set_f64(a, rs_get_f64(a) + 1.0);
 }
 "#;
 
@@ -174,22 +175,31 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 // ── Shape (b): PointerInteract inside Positioned inside Stack ───────────
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
-use tur::{ ALIGN_TOP_LEFT, mount, rs_set_str, rs_source_str };
-use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+use tur::{ ALIGN_TOP_LEFT, mount };
+use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable,
+    SizedBox, Stack, Text, mutate_ev, source_str };
 
 entry fn start() -> u64 {
-    let piece = rs_source_str("idle");
+    let piece: Readable<str> = source_str("idle");
     let b = Container()
         .width_height(80.0, 80.0)
         .color(0x6366F1FFu64)
         .query_key("dz/piece")
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
+    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "down");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "moving");
+    });
+    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "up");
+    });
     let pad = PointerInteract()
-        .id(piece)
-        .on_down(g_down)
-        .on_move(g_move)
-        .on_up(g_up)
+        .on_pointer_down(b_down)
+        .on_pointer_move(b_move)
+        .on_pointer_up(b_up)
         .query_key("dz/piece-pad")
         .child(b)
         .build();
@@ -198,19 +208,7 @@ entry fn start() -> u64 {
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .child(Positioned().left(10.0).top(10.0).child(pad).build())
         .build());
-    return piece;
-}
-
-fn g_down(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "down");
-}
-
-fn g_move(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "moving");
-}
-
-fn g_up(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "up");
+    return piece.atom_id();
 }
 "#;
 
@@ -218,22 +216,31 @@ fn g_up(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
 // `.child(pos)` on that View, then `mount(stack.build())`. See the test
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
-use tur::{ ALIGN_TOP_LEFT, mount, rs_set_str, rs_source_str };
-use tur_kit::{ Container, PointerInteract, Positioned, SizedBox, Stack, Text };
+use tur::{ ALIGN_TOP_LEFT, mount };
+use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable,
+    SizedBox, Stack, Text, mutate_ev, source_str };
 
 entry fn start() -> u64 {
-    let piece = rs_source_str("idle");
+    let piece: Readable<str> = source_str("idle");
     let b = Container()
         .width_height(80.0, 80.0)
         .color(0x6366F1FFu64)
         .query_key("dz/piece")
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
+    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "down");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "moving");
+    });
+    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(piece, "up");
+    });
     let pad = PointerInteract()
-        .id(piece)
-        .on_down(g_down)
-        .on_move(g_move)
-        .on_up(g_up)
+        .on_pointer_down(b_down)
+        .on_pointer_move(b_move)
+        .on_pointer_up(b_up)
         .query_key("dz/piece-pad")
         .child(b)
         .build();
@@ -243,19 +250,7 @@ entry fn start() -> u64 {
         .build();
     stack.child(Positioned().left(10.0).top(10.0).child(pad).build());
     mount(stack.build());
-    return piece;
-}
-
-fn g_down(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "down");
-}
-
-fn g_move(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "moving");
-}
-
-fn g_up(piece: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(piece, "up");
+    return piece.atom_id();
 }
 "#;
 

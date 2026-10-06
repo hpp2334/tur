@@ -266,16 +266,20 @@ Android build + device debugging live in the **`android-dev` skill** at
   `.child(c)` / `.children([…])` append children; `.build()`
   is the ONLY terminal and calls the FAMILY's build row (`Column.build()` →
   `flex_build`, `Text.build()` → `text_build`). Required-prop validation
-  stays in the rows/View constructors. **Callbacks are fn values** (named
-  or anonymous fn literals, captures allowed — they stay rut-side in the
-  kit's opaque-box sealing; only the sealed box crosses to Rust as a
-  handle), fired through the infra dispatch entries
-  (`PointerInteract().on_tap(b_toggle)` /
-  `Each(items).item_builder(fn(i: u64, item: str) -> View { … })`); the
-  arity/type check happens at the kit boundary at compile time. Nothing
-  callable ever crosses the boundary as a string or a closure. Case
-  modules declare `entry fn` ONLY for `start` (+ deliberate test/
-  embedder probes — `entry` = a published contract, never a callback).
+  stays in the rows/View constructors. **Handlers are mutations**
+  (`on_click(mutate(fn (ctx: MutationCtx) { … }))` over the MutationCtx —
+  the boa triad: source / derive / mutate; writes flow through `ctx.set_*`,
+  composition through `ctx.run*`, state by capture); fn-values are the
+  SUBSTRATE (the branch builders stay plain fn literals —
+  `Each(items).item_builder(fn (i: u64, item: str) -> View { … })` —
+  sealed into opaque boxes rut-side, fired through the infra dispatch
+  entries); the arity/type check happens at the kit boundary at compile
+  time. Nothing callable ever crosses the boundary as a string or a
+  closure. Case modules declare `entry fn` ONLY for `start` (+ deliberate
+  test/embedder probes — `entry` = a published contract, never a
+  callback). Async journeys ride `spawn(work(TaskCtx.mint(), handles…))`
+  — the handles bind at the launch site, the ctx is task-scoped; the
+  stash rails (`st_*` / `stf_*` / `peek`) never appear in case code.
   Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
   `Text().text("literal")`, `Container().color_bound(atom)`,
   `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur` pkg,

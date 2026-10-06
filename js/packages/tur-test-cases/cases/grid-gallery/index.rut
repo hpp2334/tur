@@ -12,38 +12,19 @@
 // branch that mounts ANOTHER switch mid-flush would defer that inner
 // switch's initial case activation (a known mounting-order gap), so the
 // aspect × density matrix is spelled out instead of nested. Tile rings
-// ride per-tile brush atoms (rs_set_brush); the subtitle's three
-// fragments are 1-dep derives over the aspect / density / selection
-// atoms.
+// ride per-tile brush sources (an array of handles the taps index); the
+// subtitle's three fragments are derives over the aspect / density /
+// selection sources.
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur::{
-    ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, mount, rs_get_f64,
-    rs_set_brush, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, stf_put, stf_take,
-};
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
 use tur_kit::{
-    Column, Container, Expanded, Grid, MouseRegion, PointerInteract, Row, ScrollView, SizedBox,
-    Switch, Text, rs_derive,
+    Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Mutation, MutationCtx,
+    PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, Text, derive_str, mutate,
+    source_f64, source_str,
 };
 
-
-// The scalar-stash keys (atom ids + the ring brushes ride them; the 27
-// ring brushes live at K_TILES + i).
-let K_ASPECT: u64 = 1;
-let K_MAXEXT: u64 = 2;
-let K_SEL: u64 = 3;
-let K_AKEY: u64 = 4;
-let K_DKEY: u64 = 5;
-let K_MODE: u64 = 6;
-let K_A0: u64 = 7;
-let K_A1: u64 = 8;
-let K_A2: u64 = 9;
-let K_D0: u64 = 10;
-let K_D1: u64 = 11;
-let K_D2: u64 = 12;
-let K_PREV: u64 = 13;
-let K_TILES: u64 = 100;
 
 // The boa palette (deep slate page, indigo active chips).
 let PAGE_BG: u64 = 0x0F172AFFu64;
@@ -57,58 +38,72 @@ let LABEL_FG: u64 = 0xFFFFFFFFu64;
 let RING_ON: u64 = 0xFFFFFFFFu64;
 
 entry fn start() -> u64 {
-    let aspect = rs_source_f64();
-    rs_set_f64(aspect, 1.0);
-    let maxext = rs_source_f64();
-    rs_set_f64(maxext, 150.0);
-    let sel = rs_source_f64();
-    rs_set_f64(sel, 0.0);
-    let akey = rs_source_str("1:1");
-    let dkey = rs_source_str("150");
-    let mode = rs_source_str("1:1/150");
-    stf_put(K_ASPECT, aspect as f64);
-    stf_put(K_MAXEXT, maxext as f64);
-    stf_put(K_SEL, sel as f64);
-    stf_put(K_AKEY, akey as f64);
-    stf_put(K_DKEY, dkey as f64);
-    stf_put(K_MODE, mode as f64);
-    stf_put(K_PREV, 0.0);
+    let aspect: Readable<f64> = source_f64(1.0);
+    let maxext: Readable<f64> = source_f64(150.0);
+    let sel: Readable<f64> = source_f64(0.0);
+    let akey: Readable<str> = source_str("1:1");
+    let dkey: Readable<str> = source_str("150");
+    let mode: Readable<str> = source_str("1:1/150");
 
-    // The six chip brushes, seeded to the boot state (1:1 + Normal).
-    let a0 = rs_source_f64();
-    stf_put(K_A0, a0 as f64);
-    let a1 = rs_source_f64();
-    stf_put(K_A1, a1 as f64);
-    let a2 = rs_source_f64();
-    stf_put(K_A2, a2 as f64);
-    let d0 = rs_source_f64();
-    stf_put(K_D0, d0 as f64);
-    let d1 = rs_source_f64();
-    stf_put(K_D1, d1 as f64);
-    let d2 = rs_source_f64();
-    stf_put(K_D2, d2 as f64);
-    paint_aspect_chips("1:1");
-    paint_density_chips("150");
+    // The six chip brushes (the chip fills ride them).
+    let a_chips: [Readable<f64>] = [source_f64(0.0), source_f64(0.0), source_f64(0.0)];
+    let d_chips: [Readable<f64>] = [source_f64(0.0), source_f64(0.0), source_f64(0.0)];
+    // The 27 tile selection rings (per-tile brush sources — the taps
+    // index the array; the grid rebuilds re-bind the same handles).
+    let rings: [Readable<f64>] = [
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0),
+    ];
+    let boot: MutationCtx = MutationCtx.over(ctx_bridge());
+    paint_chips(boot, a_chips, 0);
+    paint_chips(boot, d_chips, 1);
+    boot.set_brush(rings[0], RING_ON);
 
-    // The subtitle fragments (three 1-dep derives over the state atoms).
-    let d_tile = rs_derive(fmt_tile, sel);
-    let d_aspect = rs_derive(fmt_aspect, aspect);
-    let d_extent = rs_derive(fmt_extent, maxext);
+    // The chip taps (each captures its handles + its literal knob).
+    let b_a0 = set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "1:1", 1.0, 0);
+    let b_a1 = set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "16:9", 16.0 / 9.0, 1);
+    let b_a2 = set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "9:16", 0.5625, 2);
+    let b_d0 = set_density_mutation(maxext, akey, dkey, mode, d_chips, "95", 95.0, 0);
+    let b_d1 = set_density_mutation(maxext, akey, dkey, mode, d_chips, "150", 150.0, 1);
+    let b_d2 = set_density_mutation(maxext, akey, dkey, mode, d_chips, "220", 220.0, 2);
+
+    // The subtitle fragments (three derives over the state sources).
+    let d_tile: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"tile #{ctx.get_f64(sel) as u64}";
+    });
+    let d_aspect: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        let v = ctx.get_f64(aspect);
+        if (v > 1.01) {
+            return "16:9";
+        }
+        if (v < 0.99) {
+            return "9:16";
+        }
+        return "1:1";
+    });
+    let d_extent: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"maxExtent {ctx.get_f64(maxext) as u64}";
+    });
 
     // The reactive grid: one Switch over the combined mode string — nine
     // lazy cases, each rebuilding the grid with its literal knobs (the
-    // aspect × density matrix, kept FLAT — see the header note).
+    // aspect × density matrix, kept FLAT — see the header note). The ring
+    // array rides by capture into the branch factories.
     let grid_switch = Switch()
-        .value_source(mode)
-        .case_build("1:1/95", fn () -> View { return gallery_grid(1.0, 95.0); })
-        .case_build("1:1/150", fn () -> View { return gallery_grid(1.0, 150.0); })
-        .case_build("1:1/220", fn () -> View { return gallery_grid(1.0, 220.0); })
-        .case_build("16:9/95", fn () -> View { return gallery_grid(1.7777778, 95.0); })
-        .case_build("16:9/150", fn () -> View { return gallery_grid(1.7777778, 150.0); })
-        .case_build("16:9/220", fn () -> View { return gallery_grid(1.7777778, 220.0); })
-        .case_build("9:16/95", fn () -> View { return gallery_grid(0.5625, 95.0); })
-        .case_build("9:16/150", fn () -> View { return gallery_grid(0.5625, 150.0); })
-        .case_build("9:16/220", fn () -> View { return gallery_grid(0.5625, 220.0); })
+        .value(mode)
+        .case_build("1:1/95", fn () -> View { return gallery_grid(1.0, 95.0, rings, sel); })
+        .case_build("1:1/150", fn () -> View { return gallery_grid(1.0, 150.0, rings, sel); })
+        .case_build("1:1/220", fn () -> View { return gallery_grid(1.0, 220.0, rings, sel); })
+        .case_build("16:9/95", fn () -> View { return gallery_grid(1.7777778, 95.0, rings, sel); })
+        .case_build("16:9/150", fn () -> View { return gallery_grid(1.7777778, 150.0, rings, sel); })
+        .case_build("16:9/220", fn () -> View { return gallery_grid(1.7777778, 220.0, rings, sel); })
+        .case_build("9:16/95", fn () -> View { return gallery_grid(0.5625, 95.0, rings, sel); })
+        .case_build("9:16/150", fn () -> View { return gallery_grid(0.5625, 150.0, rings, sel); })
+        .case_build("9:16/220", fn () -> View { return gallery_grid(0.5625, 220.0, rings, sel); })
         .build();
     let panel = Container()
         .color(PANEL_BG)
@@ -124,55 +119,62 @@ entry fn start() -> u64 {
         .child(subtitle(d_tile, d_aspect, d_extent))
         .child(SizedBox(0.0, 12.0).build())
         .child(Row().main_axis_size(MAIN_SIZE_MIN)
-            .child(chip(a0, "gallery/a-1-1", "1:1", b_a0)).child(SizedBox(6.0, 0.0).build())
-            .child(chip(a1, "gallery/a-16-9", "16:9", b_a1)).child(SizedBox(6.0, 0.0).build())
-            .child(chip(a2, "gallery/a-9-16", "9:16", b_a2))
+            .child(chip(a_chips[0], "gallery/a-1-1", "1:1", b_a0)).child(SizedBox(6.0, 0.0).build())
+            .child(chip(a_chips[1], "gallery/a-16-9", "16:9", b_a1)).child(SizedBox(6.0, 0.0).build())
+            .child(chip(a_chips[2], "gallery/a-9-16", "9:16", b_a2))
             .build())
         .child(SizedBox(0.0, 8.0).build())
         .child(Row().main_axis_size(MAIN_SIZE_MIN)
-            .child(chip(d0, "gallery/d-dense", "Dense", b_d0)).child(SizedBox(6.0, 0.0).build())
-            .child(chip(d1, "gallery/d-normal", "Normal", b_d1)).child(SizedBox(6.0, 0.0).build())
-            .child(chip(d2, "gallery/d-sparse", "Sparse", b_d2))
+            .child(chip(d_chips[0], "gallery/d-dense", "Dense", b_d0)).child(SizedBox(6.0, 0.0).build())
+            .child(chip(d_chips[1], "gallery/d-normal", "Normal", b_d1)).child(SizedBox(6.0, 0.0).build())
+            .child(chip(d_chips[2], "gallery/d-sparse", "Sparse", b_d2))
             .build())
         .child(SizedBox(0.0, 12.0).build())
         .child(Expanded().flex(1.0).child(panel).build())
         .build();
 
     mount(Container().color(PAGE_BG).padding(16.0).child(col).build());
-    return sel;
+    return sel.atom_id();
 }
 
 // "tile #0 · 1:1 · maxExtent 150" — three live fragments.
-fn subtitle(d_tile: u64, d_aspect: u64, d_extent: u64) -> opaque {
+fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> opaque {
     return Row()
         .main_axis_size(MAIN_SIZE_MIN)
-        .child(Text().text_bound_derived(d_tile).font_size(12.0).color(SUB_FG).query_key("gallery/subtitle").build())
+        .child(Text().text_bound(d_tile).font_size(12.0).color(SUB_FG).query_key("gallery/subtitle").build())
         .child(Text().text(" · ").font_size(12.0).color(SUB_FG).build())
-        .child(Text().text_bound_derived(d_aspect).font_size(12.0).color(SUB_FG).query_key("gallery/aspect-label").build())
+        .child(Text().text_bound(d_aspect).font_size(12.0).color(SUB_FG).query_key("gallery/aspect-label").build())
         .child(Text().text(" · ").font_size(12.0).color(SUB_FG).build())
-        .child(Text().text_bound_derived(d_extent).font_size(12.0).color(SUB_FG).query_key("gallery/extent").build())
+        .child(Text().text_bound(d_extent).font_size(12.0).color(SUB_FG).query_key("gallery/extent").build())
         .build();
 }
 
 // The 27-tile gallery grid under one (aspect, max_cross) mode.
-fn gallery_grid(aspect: f64, max_cross: f64) -> View {
+fn gallery_grid(aspect: f64, max_cross: f64, rings: [Readable<f64>], sel: Readable<f64>) -> View {
     let mut grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
-    let mut i: u64 = 0;
+    let mut i: i32 = 0;
     while (i < 27) {
-        grid.child(tile(i));
+        // The loop scalar rides a one-slot array into the tile (the
+        // capture law: a loop-carried scalar capture trips the VM's
+        // null-reference guard — the array form is sound).
+        let ii: [f64] = [i as f64];
+        grid.child(tile(ii, rings, sel));
         i = i + 1;
     }
     return grid.build();
 }
 
 // One tile: the hue face with a centered label, wrapped in the selection
-// ring (a per-tile brush atom — white when selected, cleared otherwise).
-fn tile(i: u64) -> opaque {
-    let sel = stf_take(K_SEL) as u64;
-    stf_put(K_SEL, sel as f64);
-    let ring = rs_source_f64();
-    rs_set_brush(ring, ring_color(rs_get_f64(sel) == i as f64));
-    stf_put(K_TILES + i, ring as f64);
+// ring (the tile's own brush source — white when selected, cleared
+// otherwise). The tap captures the ring array + the selection source.
+fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
+    let i: u64 = ii[0] as u64;
+    let b_tap = mutate(fn (ctx: MutationCtx) {
+        let prev = ctx.get_f64(sel) as i32;
+        ctx.set_brush(rings[prev], 0x00000000u64);
+        ctx.set_f64(sel, ii[0]);
+        ctx.set_brush(rings[ii[0] as i32], RING_ON);
+    });
     let face = Container()
         .color(hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0))
         .radius(5.0)
@@ -180,30 +182,30 @@ fn tile(i: u64) -> opaque {
         .child(Text().text(f"{i}").font_size(13.0).color(LABEL_FG).build())
         .build();
     let framed = Container()
-        .color_bound(ring)
+        .color_bound(rings[i as i32])
         .radius(8.0)
         .padding(3.0)
         .child(face)
         .build();
     return MouseRegion()
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().ids(i, i).on_tap(b_tile).child(framed).build())
+        .child(PointerInteract().on_click(b_tap).child(framed).build())
         .build();
 }
 
-// A pill chip: the fill rides its brush atom (indigo when active).
-fn chip(atom: u64, key: str, label: str, cb: fn(u64, u64, f64)) -> opaque {
+// A pill chip: the fill rides its brush source (indigo when active).
+fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque {
     let face = Container()
         .padding(7.0)
         .radius(7.0)
-        .color_bound(atom)
+        .color_bound(r)
         .child(Text().text(label).font_size(12.0).color(CHIP_FG).build())
         .build();
     return MouseRegion()
         .cursor(CURSOR_POINTER)
         .child(
             PointerInteract()
-                .on_tap(cb)
+                .on_click(m)
                 .query_key(key)
                 .child(face)
                 .build(),
@@ -211,126 +213,47 @@ fn chip(atom: u64, key: str, label: str, cb: fn(u64, u64, f64)) -> opaque {
         .build();
 }
 
-// ---- the subtitle derive formats ---------------------------------------------
+// ---- the chip taps -------------------------------------------------------------
 
-fn fmt_tile(v: f64) -> str {
-    return f"tile #{v as u64}";
+// One aspect chip's mutation: write the key + the recomposed mode string +
+// the aspect value, then repaint the trio.
+fn set_aspect_mutation(aspect: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
+                       mode: Readable<str>, chips: [Readable<f64>], key: str, v: f64,
+                       on_idx: u64) -> Mutation<nil, nil> {
+    return mutate(fn (ctx: MutationCtx) {
+        ctx.set_str(akey, key);
+        ctx.set_str(mode, f"{key}/{ctx.get_str(dkey)}");
+        ctx.set_f64(aspect, v);
+        paint_chips(ctx, chips, on_idx);
+    });
 }
 
-fn fmt_aspect(v: f64) -> str {
-    if (v > 1.01) {
-        return "16:9";
+// One density chip's mutation (the mirror twin).
+fn set_density_mutation(maxext: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
+                        mode: Readable<str>, chips: [Readable<f64>], key: str, v: f64,
+                        on_idx: u64) -> Mutation<nil, nil> {
+    return mutate(fn (ctx: MutationCtx) {
+        ctx.set_str(dkey, key);
+        ctx.set_str(mode, f"{ctx.get_str(akey)}/{key}");
+        ctx.set_f64(maxext, v);
+        paint_chips(ctx, chips, on_idx);
+    });
+}
+
+// Paint a chip trio: the active index indigo, the others slate.
+fn paint_chips(ctx: MutationCtx, chips: [Readable<f64>], on_idx: u64) {
+    let mut i: i32 = 0;
+    while (i < 3) {
+        let mut c: u64 = CHIP_OFF;
+        if (i as u64 == on_idx) {
+            c = CHIP_ON;
+        }
+        ctx.set_brush(chips[i], c);
+        i = i + 1;
     }
-    if (v < 0.99) {
-        return "9:16";
-    }
-    return "1:1";
 }
 
-fn fmt_extent(v: f64) -> str {
-    return f"maxExtent {v as u64}";
-}
-
-// ---- chip taps -----------------------------------------------------------------
-
-fn b_a0(_a: u64, _b: u64, _n: f64) { set_aspect("1:1", 1.0); }
-fn b_a1(_a: u64, _b: u64, _n: f64) { set_aspect("16:9", 16.0 / 9.0); }
-fn b_a2(_a: u64, _b: u64, _n: f64) { set_aspect("9:16", 0.5625); }
-fn b_d0(_a: u64, _b: u64, _n: f64) { set_density("95", 95.0); }
-fn b_d1(_a: u64, _b: u64, _n: f64) { set_density("150", 150.0); }
-fn b_d2(_a: u64, _b: u64, _n: f64) { set_density("220", 220.0); }
-
-fn set_aspect(key: str, v: f64) {
-    let akey = stf_take(K_AKEY) as u64;
-    stf_put(K_AKEY, akey as f64);
-    rs_set_str(akey, key);
-    let mode = stf_take(K_MODE) as u64;
-    stf_put(K_MODE, mode as f64);
-    rs_set_str(mode, f"{key}/{rs_get_str(dkey_of())}");
-    let aspect = stf_take(K_ASPECT) as u64;
-    stf_put(K_ASPECT, aspect as f64);
-    rs_set_f64(aspect, v);
-    paint_aspect_chips(key);
-}
-
-fn set_density(key: str, v: f64) {
-    let dkey = stf_take(K_DKEY) as u64;
-    stf_put(K_DKEY, dkey as f64);
-    rs_set_str(dkey, key);
-    let mode = stf_take(K_MODE) as u64;
-    stf_put(K_MODE, mode as f64);
-    rs_set_str(mode, f"{rs_get_str(akey_of())}/{key}");
-    let maxext = stf_take(K_MAXEXT) as u64;
-    stf_put(K_MAXEXT, maxext as f64);
-    rs_set_f64(maxext, v);
-    paint_density_chips(key);
-}
-
-// The stash-held key atoms (read-only helpers for the mode composition).
-fn dkey_of() -> u64 {
-    let dkey = stf_take(K_DKEY) as u64;
-    stf_put(K_DKEY, dkey as f64);
-    return dkey;
-}
-
-fn akey_of() -> u64 {
-    let akey = stf_take(K_AKEY) as u64;
-    stf_put(K_AKEY, akey as f64);
-    return akey;
-}
-
-// ---- tile taps -----------------------------------------------------------------
-
-// A tile tap: move the selection ring and re-derive the subtitle.
-fn b_tile(i: u64, _b: u64, _n: f64) {
-    let sel = stf_take(K_SEL) as u64;
-    stf_put(K_SEL, sel as f64);
-    rs_set_f64(sel, i as f64);
-    let prev = stf_take(K_PREV) as u64;
-    stf_put(K_PREV, i as f64);
-    ring_brush(prev, false);
-    ring_brush(i, true);
-}
-
-// One ring brush repaint (the atom id rides the scalar stash).
-fn ring_brush(i: u64, on: bool) {
-    let atom = stf_take(K_TILES + i) as u64;
-    stf_put(K_TILES + i, atom as f64);
-    rs_set_brush(atom, ring_color(on));
-}
-
-fn ring_color(on: bool) -> u64 {
-    if (on) {
-        return RING_ON;
-    }
-    return 0x00000000u64;
-}
-
-// ---- the chip brushes ------------------------------------------------------------
-
-fn paint_aspect_chips(sel: str) {
-    paint_chip(K_A0, sel == "1:1");
-    paint_chip(K_A1, sel == "16:9");
-    paint_chip(K_A2, sel == "9:16");
-}
-
-fn paint_density_chips(sel: str) {
-    paint_chip(K_D0, sel == "95");
-    paint_chip(K_D1, sel == "150");
-    paint_chip(K_D2, sel == "220");
-}
-
-fn paint_chip(key: u64, on: bool) {
-    let atom = stf_take(key) as u64;
-    stf_put(key, atom as f64);
-    let mut c: u64 = CHIP_OFF;
-    if (on) {
-        c = CHIP_ON;
-    }
-    rs_set_brush(atom, c);
-}
-
-// ---- the tile ramp ---------------------------------------------------------------
+// ---- the tile ramp -------------------------------------------------------------
 
 // hsl(h, s%, l%) → the packed 0xRRGGBBAA color (the boa tile ramp).
 fn hsl_packed(h: f64, s: f64, l: f64) -> u64 {

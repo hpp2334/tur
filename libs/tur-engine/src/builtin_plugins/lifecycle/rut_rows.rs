@@ -28,14 +28,14 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     };
     cx.decl.extend(vec![
         row("lc_new", vec![], TY_OPAQUE),
-        row("lc_on_mount", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("lc_on_mount", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lc_before_destroy", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lc_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("lc_build", vec![TY_OPAQUE], TY_OPAQUE),
     ]);
 }
 
-use rut_core::types::{TY_NIL, TY_OPAQUE};
+use rut_core::types::{TY_NIL, TY_OPAQUE, TY_U64};
 
 /// The lifecycle spec.
 pub(crate) struct LcSpec {
@@ -44,8 +44,11 @@ pub(crate) struct LcSpec {
     child: Option<Rc<dyn crate::core::view::View>>,
 }
 
-/// Queue a no-payload lifecycle intent (the drain dispatches
-/// `(cb, id, 0, 1)` — the callback is the kit-sealed fn box).
+/// Queue a no-payload lifecycle intent for the `before_destroy` fn rail
+/// (the drain dispatches `(cb, id, 0, 1)` — the callback is the kit-sealed
+/// fn box). `on_mount` rides the mutation rail (`lc_on_mount(spec, atom)`)
+/// — the element enqueues the sealed mutation and the flush's mutation
+/// pass invokes it with the ctx + the typed `MountEvent`.
 fn lifecycle_mutation(handles: &Rc<RutHandles>, id: u64, cb: OpaqueRef) -> Option<MutationHandle<()>> {
     let h = handles.clone();
     let dirty = handles.dirty.clone();
@@ -71,13 +74,11 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let spec = LcSpec { on_mounted: None, before_destroy: None, child: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
-    // lc_on_mount(spec, name) — the mounted intent (the lifecycle id: the
-    // child tree node id is unknown at author time, so the callbacks
-    // receive the sequence (b=0) — modules route by closure-free
-    // convention (the label atom id)).
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lc_on_mount", (Opaque<LcSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: OpaqueRef| {
-        let m = lifecycle_mutation(&h, 0, cb);
+    // lc_on_mount(spec, atom) — the sealed on-mount mutation (the element
+    // enqueues it at the mount lifecycle point; the flush's mutation pass
+    // invokes it with the ctx + the typed `MountEvent`).
+    rut_vm::pkg_fn!(pkg, "lc_on_mount", (Opaque<LcSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, atom: u64| {
+        let m = Some(MutationHandle::<()>::new(crate::core::rut_runtime::mutation_of(atom)));
         b.with_mut(vm, |_vm, s| s.on_mounted = m)
     });
     let h = handles.clone();

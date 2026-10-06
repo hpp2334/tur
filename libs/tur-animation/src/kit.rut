@@ -11,54 +11,62 @@
 // valid — byte-identical lowering), and CHAIN it:
 // `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
 // statement runs.
-use tur::{ anim_ctrl_cb, anim_ctrl_cb_e, anim_ctrl_cb_t, anim_ctrl_cb_te, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
+//
+// Handler law (the mutation rail): the controller's tick / end are SEALED
+// MUTATIONS — `mutate_f64(fn (ctx: MutationCtx, v: f64) { ... })` ticks
+// (boa wraps onTick in mutate), `mutate(fn (ctx: MutationCtx) { ... })`
+// ends. Nullable class params (the `kid: ?opaque` field pattern) let one
+// kit fn serve every combo: the kit branches to the row's 0 = absent by
+// null-check.
+use tur::{ anim_ctrl_mut, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
+use tur_kit::{ Mutation, MutationCtx, Readable, mutate, mutate_f64 };
 
-// The animation kit's dispatch entry (the scope law: this kit seals the
-// tick/end fn values, so THIS module owns the entry that downcasts them —
-// the box stamps this unit's `fn(u64, f64)` id).
-entry fn __tur_acb_val(cb: opaque, a: u64, v: f64) {
-  let f = opaque.downcast<fn(u64, f64)>(cb);
-  f(a, v);
+// The animation controller — the authored face over the `anim_ctrl_mut`
+// row. The tick is `Mutation<f64, nil>` (`mutate_f64`; the eased progress
+// crosses as the invocation payload) and the end is `Mutation<nil, nil>`;
+// either may be nil (the controller then only drives its bound channels —
+// polled through `anim_value`). The tick mutation CAPTURES the channels
+// it drives — no id rail, no stash.
+pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64, nil>, on_end: ?Mutation<nil, nil>) -> opaque {
+  let mut tick: u64 = 0;
+  if (on_tick != nil) {
+    tick = on_tick.atom;
+  }
+  let mut end: u64 = 0;
+  if (on_end != nil) {
+    end = on_end.atom;
+  }
+  return anim_ctrl_mut(duration_ms, curve, repeat, tick, end);
 }
 
-// The animation controller — the authored face over the `anim_ctrl_cb*`
-// rows (`?opaque` has no param lane — rows are typed — and rut does not
-// coerce fn → ?fn at call sites, so each callback combo is its own
-// authored fn). The callbacks are fn VALUES (`fn(atom: u64, t: f64)`);
-// the kit seals them into opaque boxes rut-side, and the engine's drain
-// fires them through the `__tur_cb_val` dispatch entry.
-pub fn anim_ctrl(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_tick: fn(u64, f64), on_end: fn(u64, f64)) -> opaque {
-  return anim_ctrl_cb_te(atom, duration_ms, curve, repeat, opaque(on_tick), opaque(on_end));
+// The tick-only twin — `anim_ctrl_tick(dur, curve, repeat, tick)`.
+pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutation<f64, nil>) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.atom, 0);
 }
 
-// Tick-only twin.
-pub fn anim_ctrl_tick(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_tick: fn(u64, f64)) -> opaque {
-  return anim_ctrl_cb_t(atom, duration_ms, curve, repeat, opaque(on_tick));
-}
-
-// End-only twin.
-pub fn anim_ctrl_end(atom: u64, duration_ms: f64, curve: str, repeat: u64, on_end: fn(u64, f64)) -> opaque {
-  return anim_ctrl_cb_e(atom, duration_ms, curve, repeat, opaque(on_end));
+// The end-only twin — `anim_ctrl_end(dur, curve, repeat, end)`.
+pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil, nil>) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.atom);
 }
 
 // The bare controller (no callbacks — polled through `anim_value`).
-pub fn anim_ctrl_open(atom: u64, duration_ms: f64, curve: str, repeat: u64) -> opaque {
-  return anim_ctrl_cb(atom, duration_ms, curve, repeat);
+pub fn anim_ctrl_open(duration_ms: f64, curve: str, repeat: u64) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, 0, 0);
 }
 
 class Opacity {
   value: f64;
-  atom: u64;
+  r: ?Readable<f64>;
   kid: ?opaque;
 }
 
 impl Opacity {
   [constructor] pub fn builder(value: f64) -> Self {
-    return Self { value: value, atom: 0, kid: nil };
+    return Self { value: value, r: nil, kid: nil };
   }
-  // Bind the opacity to an f64 atom (the onTick rail's consumer).
-  pub fn bound(mut self, atom: u64) -> Self {
-    self.atom = atom;
+  // Bind the opacity to a live f64 (the onTick rail's consumer).
+  pub fn bound(mut self, r: Readable<f64>) -> Self {
+    self.r = r;
     return self;
   }
   pub fn child(mut self, c: opaque) -> Self {
@@ -66,8 +74,8 @@ impl Opacity {
     return self;
   }
   pub fn build(self) -> opaque {
-    if (self.atom != 0) {
-      return el_opacity_bound(self.atom, self.kid);
+    if (self.r != nil) {
+      return el_opacity_bound(self.r.atom, self.kid);
     }
     return el_opacity(self.value, self.kid);
   }
@@ -78,45 +86,47 @@ class Transform {
   rotate: f64;
   tx: f64;
   ty: f64;
-  // The bound channels (0 = static): at most ONE rides a live f64 atom —
-  // the row set is one bound twin per channel, so each `*_bound` method
-  // CLEARS the other atoms (last-bind-wins, never a silent combo).
-  scale_atom: u64;
-  rotate_atom: u64;
-  tx_atom: u64;
-  ty_atom: u64;
+  // The bound channels (nil = static): each channel rides its own live
+  // f64 — an orbit writes cx + r·cos / cy + r·sin independently, an
+  // eased scale binds alone (the rows are Val-backed per channel).
+  scale_r: ?Readable<f64>;
+  rotate_r: ?Readable<f64>;
+  tx_r: ?Readable<f64>;
+  ty_r: ?Readable<f64>;
   kid: ?opaque;
 }
 
 impl Transform {
   [constructor] pub fn builder(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
-    return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, scale_atom: 0, rotate_atom: 0, tx_atom: 0, ty_atom: 0, kid: nil };
+    return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, scale_r: nil, rotate_r: nil, tx_r: nil, ty_r: nil, kid: nil };
   }
-  // Bind the rotation channel to an f64 atom (radians — the onTick rail's
+  // Bind the rotation channel to a live f64 (radians — the onTick rail's
   // consumer): the angle re-resolves through the subscribe → relayout
-  // rail and the subtree NEVER re-mounts (no rebuild channel).
-  pub fn rotate_bound(mut self, atom: u64) -> Self {
-    self.rotate_atom = atom;
-    self.scale_atom = 0;
-    self.tx_atom = 0;
-    self.ty_atom = 0;
+  // rail and the subtree NEVER re-mounts (no rebuild channel). The rows
+  // are ONE bound channel per element — the last bind clears the others
+  // (never a silent combo).
+  pub fn rotate_bound(mut self, r: Readable<f64>) -> Self {
+    self.rotate_r = r;
+    self.scale_r = nil;
+    self.tx_r = nil;
+    self.ty_r = nil;
     return self;
   }
-  // The symmetric-cheap twin: the uniform scale rides an f64 atom.
-  pub fn scale_bound(mut self, atom: u64) -> Self {
-    self.scale_atom = atom;
-    self.rotate_atom = 0;
-    self.tx_atom = 0;
-    self.ty_atom = 0;
+  // The uniform scale rides a live f64 (last bind wins).
+  pub fn scale_bound(mut self, r: Readable<f64>) -> Self {
+    self.scale_r = r;
+    self.rotate_r = nil;
+    self.tx_r = nil;
+    self.ty_r = nil;
     return self;
   }
-  // The translate twin: each offset rides its own f64 atom (an orbit
-  // writes cx + r·cos / cy + r·sin independently).
-  pub fn translate_bound(mut self, tx_atom: u64, ty_atom: u64) -> Self {
-    self.tx_atom = tx_atom;
-    self.ty_atom = ty_atom;
-    self.scale_atom = 0;
-    self.rotate_atom = 0;
+  // The translate twins: each offset rides its own live f64 (last bind
+  // wins — the translate row is the one multi-channel shape).
+  pub fn translate_bound(mut self, tx: Readable<f64>, ty: Readable<f64>) -> Self {
+    self.tx_r = tx;
+    self.ty_r = ty;
+    self.scale_r = nil;
+    self.rotate_r = nil;
     return self;
   }
   pub fn child(mut self, c: opaque) -> Self {
@@ -124,14 +134,22 @@ impl Transform {
     return self;
   }
   pub fn build(self) -> opaque {
-    if (self.rotate_atom != 0) {
-      return el_transform_angle_bound(self.scale, self.rotate_atom, self.tx, self.ty, self.kid);
+    if (self.rotate_r != nil) {
+      return el_transform_angle_bound(self.scale, self.rotate_r.atom, self.tx, self.ty, self.kid);
     }
-    if (self.scale_atom != 0) {
-      return el_transform_scale_bound(self.scale_atom, self.rotate, self.tx, self.ty, self.kid);
+    if (self.scale_r != nil) {
+      return el_transform_scale_bound(self.scale_r.atom, self.rotate, self.tx, self.ty, self.kid);
     }
-    if (self.tx_atom != 0 || self.ty_atom != 0) {
-      return el_transform_translate_bound(self.scale, self.rotate, self.tx_atom, self.ty_atom, self.kid);
+    if (self.tx_r != nil || self.ty_r != nil) {
+      let mut tx_atom: u64 = 0;
+      if (self.tx_r != nil) {
+        tx_atom = self.tx_r.atom;
+      }
+      let mut ty_atom: u64 = 0;
+      if (self.ty_r != nil) {
+        ty_atom = self.ty_r.atom;
+      }
+      return el_transform_translate_bound(self.scale, self.rotate, tx_atom, ty_atom, self.kid);
     }
     return el_transform(self.scale, self.rotate, self.tx, self.ty, self.kid);
   }

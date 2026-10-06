@@ -313,12 +313,12 @@ entry fn busy(_a: u64, _b: f64) {
     // return after it finished.
     futures::executor::block_on(ui_app.load_rut_module(
         r#"
-use tur::{ mount, rs_source_str };
-use tur_kit::{ Text };
+use tur::mount;
+use tur_kit::{ Readable, Text, source_str };
 
 
 entry fn start() {
-    let atom = rs_source_str("42");
+    let atom: Readable<str> = source_str("42");
     let txt = Text().text_bound(atom).build();
     mount(txt);
 }

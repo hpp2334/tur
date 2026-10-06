@@ -1,8 +1,9 @@
 // table-reactive: the table twin with a reactive row set — a button adds
-// a planet through an Each over the rows atom.
-use tur::{ CROSS_ALIGN_STRETCH, mount, rs_get_value, rs_list_new, rs_list_push, rs_set_value, rs_source_value,
-    rs_value_item, rs_value_len };
-use tur_kit::{ Column, Container, Each, PointerInteract, Row, SizedBox, Text };
+// a planet through an Each over the rows atom. The tap is a mutation over
+// the MutationCtx; the rows source rides by capture.
+use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, Each, MutationCtx, PointerInteract, Readable, Row, SizedBox, Text,
+    list_new, list_push, mutate, source_value, value_item, value_len };
 
 
 fn row(i: u64, name: str) -> opaque {
@@ -13,10 +14,23 @@ fn row(i: u64, name: str) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let rows = rs_list_new();
-    rs_list_push(rows, "Mercury");
-    rs_list_push(rows, "Venus");
-    let rows_atom = rs_source_value(rows);
+    let rows = list_new();
+    list_push(rows, "Mercury");
+    list_push(rows, "Venus");
+    let rows_atom: Readable<opaque> = source_value(rows);
+    let b_add = mutate(fn (ctx: MutationCtx) {
+        // Read-modify-write: rebuild the list with one more row.
+        let cur = ctx.get_value(rows_atom);
+        let n = value_len(cur);
+        let fresh = list_new();
+        let mut i = 0;
+        while (i < n as i32) {
+            list_push(fresh, value_item(cur, i as u64));
+            i += 1;
+        }
+        list_push(fresh, f"Planet {n as u64}");
+        ctx.set_value(rows_atom, fresh);
+    });
 
     // The head is a BAND (width_height(0, h) = fixed height, width unset
     // per the box_size idiom): Stretch spans it over the table so the
@@ -30,22 +44,8 @@ entry fn start() -> u64 {
         .child(Text().text("PLANET").font_size(12.0).build());
     col.child(head.build());
     col.child(Each(rows_atom).item_builder(row).build());
-    col.child(PointerInteract().ids(rows_atom, rows_atom).on_tap(b_add).child(Text().text("add row").build()).build());
+    col.child(PointerInteract().on_click(b_add).child(Text().text("add row").build()).build());
     let frame = Container().color(0x0B1220FF).child(col.build());
     mount(SizedBox(400.0, 240.0).child(frame.build()).build());
-    return rows_atom;
-}
-
-fn b_add(rows: u64, _b: u64, _n: f64) {
-    // Read-modify-write: rebuild the list with one more row.
-    let cur = rs_get_value(rows);
-    let n = rs_value_len(cur);
-    let fresh = rs_list_new();
-    let mut i = 0;
-    while (i < n as i32) {
-        rs_list_push(fresh, rs_value_item(cur, i as u64));
-        i += 1;
-    }
-    rs_list_push(fresh, f"Planet {n as u64}");
-    rs_set_value(rows, fresh);
+    return rows_atom.atom_id();
 }

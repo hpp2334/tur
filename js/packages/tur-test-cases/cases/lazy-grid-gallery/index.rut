@@ -8,37 +8,25 @@
 //
 // Reactivity: the LazyGrid's max_cross / aspect rows are static per build,
 // so the chips ride the rebuild-on-change idiom — the grid hangs on a
-// one-item Each and every tap rewrites the list atom, re-mounting a fresh
-// LazyGrid that reads the live aspect / density state (the
+// one-item Each and every tap rewrites the list source, re-mounting a
+// fresh LazyGrid that reads the live aspect / density state (the
 // lazy-list-var-sizes axis-flip pattern; the eager grid-gallery spells the
 // same matrix out as one flat Switch). Chip fills ride per-chip brush
-// atoms (rs_set_brush), seeded + repainted from the tap intents.
+// sources, seeded + repainted from the tap mutations. The 6,000 count is
+// reactive (the lazy count row takes the handle).
 //
 // Deltas vs boa, deliberate: the boa 4px grid spacing has no lazy-grid
 // row, so each cell pads 2 — the between-tile gap re-forms as 2+2 of the
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur::{
-    CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, mount, rs_get_bool, rs_get_f64,
-    rs_list_new, rs_list_push, rs_set_bool, rs_set_brush, rs_set_f64, rs_set_value,
-    rs_source_bool, rs_source_f64, rs_source_value, stf_put, stf_take,
-};
+use tur::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
 use tur_kit::{
-    Column, Container, Each, Expanded, LazyGrid, MouseRegion, PointerInteract, Row, SizedBox, Text,
+    Column, Container, Each, Expanded, LazyGrid, MouseRegion, Mutation, MutationCtx,
+    PointerInteract, Readable, Row, SizedBox, Text, list_new, list_push, mutate, source_bool,
+    source_f64, source_value,
 };
 
-
-// The scalar-stash keys (atom ids cross the entries as f64).
-let K_ASPECT: u64 = 1; // the aspect atom (1 = square, 2 = wide, 0.5 = tall)
-let K_DENSE: u64 = 2; // the density bool atom
-let K_COUNT: u64 = 3; // the 6000-item count atom
-let K_ITEMS: u64 = 4; // the one-item list re-mounting the grid
-let K_SQ: u64 = 5; // the Square chip brush
-let K_WD: u64 = 6; // the Wide chip brush
-let K_TL: u64 = 7; // the Tall chip brush
-let K_NM: u64 = 8; // the Normal chip brush
-let K_DS: u64 = 9; // the Dense chip brush
 
 // The boa palette (the deep-slate gallery chrome).
 let PAGE_BG: u64 = 0x0F172AFFu64;
@@ -50,29 +38,24 @@ let CHIP_OFF: u64 = 0x1E293BFFu64;
 let CHIP_FG: u64 = 0xE2E8F0FFu64;
 
 entry fn start() {
-    let aspect = rs_source_f64();
-    rs_set_f64(aspect, 1.0);
-    let dense = rs_source_bool(false);
-    let count = rs_source_f64();
-    rs_set_f64(count, 6000.0);
-    let items = rs_source_value(one_list());
-    stf_put(K_ASPECT, aspect as f64);
-    stf_put(K_DENSE, dense as f64);
-    stf_put(K_COUNT, count as f64);
-    stf_put(K_ITEMS, items as f64);
+    let aspect: Readable<f64> = source_f64(1.0);
+    let dense: Readable<bool> = source_bool(false);
+    let count: Readable<f64> = source_f64(6000.0);
+    let items: Readable<opaque> = source_value(one_list());
 
-    // The five chip brushes, seeded to the boot state (Square + Normal).
-    let sq = rs_source_f64();
-    stf_put(K_SQ, sq as f64);
-    let wd = rs_source_f64();
-    stf_put(K_WD, wd as f64);
-    let tl = rs_source_f64();
-    stf_put(K_TL, tl as f64);
-    let nm = rs_source_f64();
-    stf_put(K_NM, nm as f64);
-    let ds = rs_source_f64();
-    stf_put(K_DS, ds as f64);
-    paint_chips();
+    // The five chip brushes (Square / Wide / Tall / Normal / Dense),
+    // seeded to the boot state (Square + Normal).
+    let chips: [Readable<f64>] = [
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+    ];
+    paint_chips(MutationCtx.over(ctx_bridge()), aspect, dense, chips);
+
+    // The chip taps: write the state, repaint the trio, remount the grid.
+    let b_square = aspect_mutation(aspect, dense, chips, items, 1.0);
+    let b_wide = aspect_mutation(aspect, dense, chips, items, 2.0);
+    let b_tall = aspect_mutation(aspect, dense, chips, items, 0.5);
+    let b_normal = dense_mutation(aspect, dense, chips, items, false);
+    let b_dense = dense_mutation(aspect, dense, chips, items, true);
 
     let col = Column()
         .cross_alignment(CROSS_ALIGN_START)
@@ -84,20 +67,20 @@ entry fn start() {
         .child(
             Row()
                 .main_axis_size(MAIN_SIZE_MIN)
-                .child(chip(sq, "gallery/a-square", "Square", b_square))
+                .child(chip(chips[0], "gallery/a-square", "Square", b_square))
                 .child(SizedBox(6.0, 0.0).build())
-                .child(chip(wd, "gallery/a-wide", "Wide", b_wide))
+                .child(chip(chips[1], "gallery/a-wide", "Wide", b_wide))
                 .child(SizedBox(6.0, 0.0).build())
-                .child(chip(tl, "gallery/a-tall", "Tall", b_tall))
+                .child(chip(chips[2], "gallery/a-tall", "Tall", b_tall))
                 .build(),
         )
         .child(SizedBox(0.0, 8.0).build())
         .child(
             Row()
                 .main_axis_size(MAIN_SIZE_MIN)
-                .child(chip(nm, "gallery/d-normal", "Normal", b_normal))
+                .child(chip(chips[3], "gallery/d-normal", "Normal", b_normal))
                 .child(SizedBox(6.0, 0.0).build())
-                .child(chip(ds, "gallery/d-dense", "Dense", b_dense))
+                .child(chip(chips[4], "gallery/d-dense", "Dense", b_dense))
                 .build(),
         )
         .child(SizedBox(0.0, 12.0).build())
@@ -106,7 +89,9 @@ entry fn start() {
                 Container()
                     .color(PANEL_BG)
                     .radius(10.0)
-                    .child(Each(items).item_builder(grid_of).build())
+                    .child(Each(items).item_builder(fn (_i: u64, _s: str) -> View {
+                        return grid_of(aspect, dense, count);
+                    }).build())
                     .build(),
             ).build(),
         )
@@ -120,29 +105,26 @@ entry fn start() {
 // A fresh one-item list — rewriting it re-invokes the Each (the grid
 // re-mounts with the live aspect / density read at build time).
 fn one_list() -> opaque {
-    let fresh = rs_list_new();
-    rs_list_push(fresh, "grid");
+    let fresh = list_new();
+    list_push(fresh, "grid");
     return fresh;
 }
 
 // The Each branch: one LazyGrid over the LIVE state (aspect shapes the
 // cells; density narrows the max cross 140 → 85 — more, smaller tiles).
-fn grid_of(_i: u64, _s: str) -> opaque {
-    let aspect = stf_take(K_ASPECT) as u64;
-    stf_put(K_ASPECT, aspect as f64);
-    let dense = stf_take(K_DENSE) as u64;
-    stf_put(K_DENSE, dense as f64);
-    let count = stf_take(K_COUNT) as u64;
-    stf_put(K_COUNT, count as f64);
+// The handles ride by parameter; the read face is the ctx over the
+// bridge.
+fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> opaque {
+    let read = MutationCtx.over(ctx_bridge());
     let mut max_cross: f64 = 140.0;
-    if (rs_get_bool(dense)) {
+    if (read.get_bool(dense)) {
         max_cross = 85.0;
     }
     return LazyGrid()
         .item_builder(tile)
         .count(count)
         .max_cross(max_cross)
-        .aspect(rs_get_f64(aspect))
+        .aspect(read.get_f64(aspect))
         .overscan(2)
         .query_key("gallery/grid")
         .build();
@@ -162,69 +144,53 @@ fn tile(i: u64) -> opaque {
 
 // ---- the chips -----------------------------------------------------------------
 
-// A pill chip: the fill rides its brush atom (indigo when active).
-fn chip(atom: u64, key: str, label: str, cb: fn(u64, u64, f64)) -> opaque {
+// A pill chip: the fill rides its brush source (indigo when active).
+fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque {
     let face = Container()
         .padding(7.0)
         .radius(7.0)
-        .color_bound(atom)
+        .color_bound(r)
         .child(Text().text(label).font_size(12.0).color(CHIP_FG).build())
         .build();
     return MouseRegion()
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().on_tap(cb).query_key(key).child(face).build())
+        .child(PointerInteract().on_click(m).query_key(key).child(face).build())
         .build();
 }
 
-// ---- the chip taps ---------------------------------------------------------------
+// ---- the chip taps -------------------------------------------------------------
 
-fn b_square(_a: u64, _b: u64, _n: f64) { aspect_to(1.0); }
-fn b_wide(_a: u64, _b: u64, _n: f64) { aspect_to(2.0); }
-fn b_tall(_a: u64, _b: u64, _n: f64) { aspect_to(0.5); }
-fn b_normal(_a: u64, _b: u64, _n: f64) { dense_to(false); }
-fn b_dense(_a: u64, _b: u64, _n: f64) { dense_to(true); }
-
-// An aspect tap: write the atom, repaint the chips, remount the grid.
-fn aspect_to(v: f64) {
-    let aspect = stf_take(K_ASPECT) as u64;
-    stf_put(K_ASPECT, aspect as f64);
-    rs_set_f64(aspect, v);
-    paint_chips();
-    remount_grid();
+// An aspect tap's mutation: write the value, repaint the chips, remount
+// the grid.
+fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
+                   items: Readable<opaque>, v: f64) -> Mutation<nil, nil> {
+    return mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(aspect, v);
+        paint_chips(ctx, aspect, dense, chips);
+        ctx.set_value(items, one_list());
+    });
 }
 
-// A density tap: same rail over the bool atom.
-fn dense_to(d: bool) {
-    let dense = stf_take(K_DENSE) as u64;
-    stf_put(K_DENSE, dense as f64);
-    rs_set_bool(dense, d);
-    paint_chips();
-    remount_grid();
+// A density tap's mutation (the mirror twin over the bool).
+fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
+                  items: Readable<opaque>, d: bool) -> Mutation<nil, nil> {
+    return mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(dense, d);
+        paint_chips(ctx, aspect, dense, chips);
+        ctx.set_value(items, one_list());
+    });
 }
 
 // The five chip brushes over the live state (boa: derive-driven pills).
-fn paint_chips() {
-    let aspect = stf_take(K_ASPECT) as u64;
-    stf_put(K_ASPECT, aspect as f64);
-    let dense = stf_take(K_DENSE) as u64;
-    stf_put(K_DENSE, dense as f64);
-    let a = rs_get_f64(aspect);
-    let d = rs_get_bool(dense);
-    let sq = stf_take(K_SQ) as u64;
-    stf_put(K_SQ, sq as f64);
-    let wd = stf_take(K_WD) as u64;
-    stf_put(K_WD, wd as f64);
-    let tl = stf_take(K_TL) as u64;
-    stf_put(K_TL, tl as f64);
-    let nm = stf_take(K_NM) as u64;
-    stf_put(K_NM, nm as f64);
-    let ds = stf_take(K_DS) as u64;
-    stf_put(K_DS, ds as f64);
-    rs_set_brush(sq, chip_color(a > 0.5 && a < 1.5));
-    rs_set_brush(wd, chip_color(a > 1.5));
-    rs_set_brush(tl, chip_color(a < 0.5));
-    rs_set_brush(nm, chip_color(!d));
-    rs_set_brush(ds, chip_color(d));
+fn paint_chips(ctx: MutationCtx, aspect: Readable<f64>, dense: Readable<bool>,
+               chips: [Readable<f64>]) {
+    let a = ctx.get_f64(aspect);
+    let d = ctx.get_bool(dense);
+    ctx.set_brush(chips[0], chip_color(a > 0.5 && a < 1.5));
+    ctx.set_brush(chips[1], chip_color(a > 1.5));
+    ctx.set_brush(chips[2], chip_color(a < 0.5));
+    ctx.set_brush(chips[3], chip_color(!d));
+    ctx.set_brush(chips[4], chip_color(d));
 }
 
 fn chip_color(on: bool) -> u64 {
@@ -232,13 +198,6 @@ fn chip_color(on: bool) -> u64 {
         return CHIP_ON;
     }
     return CHIP_OFF;
-}
-
-// The rebuild channel: a fresh one-item list re-invokes the Each.
-fn remount_grid() {
-    let items = stf_take(K_ITEMS) as u64;
-    stf_put(K_ITEMS, items as f64);
-    rs_set_value(items, one_list());
 }
 
 // ---- the tile ramp ---------------------------------------------------------------

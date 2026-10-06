@@ -1,20 +1,28 @@
 // drag-over-text: a Positioned -> Transform -> PointerInteract -> Text
 // piece — a non-selectable Text must not steal touch drags from the
 // PointerInteract beneath. The down count renders into `down-count`.
-use tur::{ ALIGN_TOP_LEFT, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, st_put,
-    st_take, stf_put, stf_take };
-use tur_kit::{ Container, PointerInteract, SizedBox, Stack, Text };
+use tur::{ ALIGN_TOP_LEFT, mount };
+use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Readable, SizedBox, Stack,
+    Text, mutate_ev, source_f64, source_str };
 use tur_anim_kit::{ Transform };
 
 
-let K_COUNT: u64 = 1;
-let K_PHASE: u64 = 2;
-
 entry fn start() -> u64 {
-    let count = rs_source_str("0");
-    st_put(K_COUNT, mem_new(0.0));
-    let phase = rs_source_str("");
-    stf_put(K_PHASE, phase as f64);
+    let count: Readable<str> = source_str("0");
+    let n: Readable<f64> = source_f64(0.0);
+    let phase: Readable<str> = source_str("");
+
+    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_f64(n, ctx.get_f64(n) + 1.0);
+        ctx.set_str(count, f"{ctx.get_f64(n) as u64}");
+        ctx.set_str(phase, "down");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(phase, "move");
+    });
+    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(phase, "up");
+    });
 
     let mut stack = Stack()
         .alignment(ALIGN_TOP_LEFT)
@@ -22,34 +30,11 @@ entry fn start() -> u64 {
 
     let label = Text().text("drag me").font_size(14.0);
     let piece = Container().width_height(80.0, 40.0).query_key("drag-target").child(label.build());
-    let pad = PointerInteract().id(count).on_down(g_down).on_move(g_move).on_up(g_up).query_key("rut/gesture").child(piece.build()).build();
+    let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(piece.build()).build();
     stack.child(Transform(1.0, 0.0, 60.0, 50.0).child(pad).build());
 
     let count_t = Text().text_bound(count).query_key("down-count");
     stack.child(count_t.build());
     mount(stack.build());
-    return count;
-}
-
-fn g_down(count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let cell = st_take(K_COUNT);
-    let n = mem_get(cell) + 1.0;
-    mem_set(cell, n);
-    st_put(K_COUNT, cell);
-    rs_set_str(count, f"{n as u64}");
-    let phase = stf_take(K_PHASE) as u64;
-    rs_set_str(phase, "down");
-    stf_put(K_PHASE, phase as f64);
-}
-
-fn g_move(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let phase = stf_take(K_PHASE) as u64;
-    rs_set_str(phase, "move");
-    stf_put(K_PHASE, phase as f64);
-}
-
-fn g_up(_count: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let phase = stf_take(K_PHASE) as u64;
-    rs_set_str(phase, "up");
-    stf_put(K_PHASE, phase as f64);
+    return n.atom_id();
 }

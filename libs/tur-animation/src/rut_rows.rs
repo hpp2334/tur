@@ -7,17 +7,17 @@
 //! The controller is NOT realm-minted: `AnimationManager` gained a
 //! [`ControllerFace`](crate::manager::ControllerFace) (Js | Rust) so a rut
 //! controller is an `Rc<RefCell<AnimationController>>` — realm-free mint,
-//! ticking, and control. `onTick` / `onEnd` ride the engine's intent rail
-//! (the native `AnimationTickEvent` crossing carries the eased progress;
-//! the fn value receives it as its second argument — the callbacks are
-//! kit-sealed fn boxes, nil = absent).
+//! ticking, and control. `onTick` / `onEnd` are SEALED MUTATIONS (`mutate_f64`
+//! ticks `(ctx, v: f64)`; `mutate` ends `(ctx)` — the controller enqueues
+//! the invocation with the eased progress; the flush's mutation pass fires
+//! it). 0 = absent.
 
 use std::rc::Rc;
 
 use rut_core::types::{TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
-use rut_vm::{Opaque, OpaqueRef};
+use rut_vm::Opaque;
 use tur_engine::builtin_plugins::effects::{OpacityView, TransformView};
-use tur_engine::core::rut_runtime::{Intent, RutHandles, RutView, readable_of};
+use tur_engine::core::rut_runtime::{RutView, readable_of};
 
 use crate::controller::{AnimationController, RepeatMode};
 use crate::curve::Curve;
@@ -26,11 +26,6 @@ use crate::{event::AnimationEndEvent, event::AnimationTickEvent};
 
 /// The Rust-held controller opaque.
 pub struct RutAnimCtrl(pub Rc<std::cell::RefCell<AnimationController>>);
-
-/// The animation kit's dispatch entry for the `(atom, eased)` tick/end
-/// shape — lives in tur_anim_kit (the scope law: the kit that seals the
-/// callback owns the entry that downcasts it).
-pub const ACB_VAL: &str = "__tur_acb_val";
 
 /// Declare the C5 rows + install the bodies — the
 /// [`RutPkgExt`](tur_engine::core::rut_runtime::RutPkgExt) payload.
@@ -73,20 +68,13 @@ pub fn install(
             vec![TY_F64, TY_F64, TY_U64, TY_U64, TY_OPAQUE],
             TY_OPAQUE,
         ),
-        row("anim_ctrl_cb", vec![TY_U64, TY_F64, TY_STR, TY_U64], TY_OPAQUE),
+        // The M2 mutation rail: the controller's tick/end are SEALED
+        // MUTATIONS (`mutate_f64` ticks `(ctx, v: f64)`; `mutate` ends
+        // `(ctx)`); 0 = absent. The four legacy cb-twin rows died with the
+        // M2 corpus sweep.
         row(
-            "anim_ctrl_cb_t",
-            vec![TY_U64, TY_F64, TY_STR, TY_U64, TY_OPAQUE],
-            TY_OPAQUE,
-        ),
-        row(
-            "anim_ctrl_cb_e",
-            vec![TY_U64, TY_F64, TY_STR, TY_U64, TY_OPAQUE],
-            TY_OPAQUE,
-        ),
-        row(
-            "anim_ctrl_cb_te",
-            vec![TY_U64, TY_F64, TY_STR, TY_U64, TY_OPAQUE, TY_OPAQUE],
+            "anim_ctrl_mut",
+            vec![TY_F64, TY_STR, TY_U64, TY_U64, TY_U64],
             TY_OPAQUE,
         ),
         row("anim_forward", vec![TY_OPAQUE], TY_NIL),
@@ -187,89 +175,28 @@ pub fn install(
     });
 
     // ---- the controller opaque (Rust-held; the manager ticks it) --------
-    // Four arities over one mint (`?opaque` has no param lane — rows are
-    // typed): the kit's `anim_ctrl` picks the combo. onTick / onEnd ride
-    // the intent rail (the native `AnimationTickEvent` crossing carries
-    // the eased progress; the fn value gets `(id, eased)`).
+    // One arity over one mint: the tick/end are sealed mutations (0 =
+    // absent). The subsystem enqueues the tick invocation with the eased
+    // progress; the flush's mutation pass invokes the kit-sealed closure
+    // with the ctx (the tick fn's `(ctx, v: f64)` crossing).
     let h = handles.clone();
-    #[allow(clippy::too_many_arguments)]
-    fn mint(
-        vm: &mut rut_vm::interp::Vm,
-        h: &Rc<RutHandles>,
-        id: u64,
-        duration_ms: f64,
-        curve: &str,
-        repeat: u64,
-        on_tick: Option<OpaqueRef>,
-        on_end: Option<OpaqueRef>,
-    ) -> Result<rut_vm::OpaqueRef, rut_vm::Trap> {
+    rut_vm::pkg_fn!(pkg, "anim_ctrl_mut", (f64, &str, u64, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, duration_ms: f64, curve: &str, repeat: u64, on_tick: u64, on_end: u64| {
         let mut ctrl = AnimationController::new(duration_ms.max(1.0) as u64, curve_of(curve));
         ctrl.set_repeat_mode(repeat_of(repeat));
-        let wire_tick = |cb: &OpaqueRef, h: &Rc<RutHandles>| {
-            let cb = cb.clone();
-            let h2 = h.clone();
-            let dirty = h.dirty.clone();
-            let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
-                let t = match args.first() {
-                    Some(tur_engine::core::edgy::Value::Num(n)) => *n,
-                    _ => 0.0,
-                };
-                h2.pending_calls.borrow_mut().push(Intent::Value {
-                    entry: ACB_VAL,
-                    cb: cb.clone(),
-                    a: id,
-                    value: tur_engine::core::edgy::Value::Num(t),
-                });
-                dirty.set(true);
-                Ok(tur_engine::core::edgy::Value::Nil)
-            });
-            Some(tur_engine::core::edgy::mutation::MutationHandle::<
+        if on_tick != 0 {
+            ctrl.set_on_tick(tur_engine::core::edgy::mutation::MutationHandle::<
                 AnimationTickEvent,
-            >::new(mutation))
-        };
-        if let Some(m) = on_tick.as_ref().and_then(|cb| wire_tick(cb, h)) {
-            ctrl.set_on_tick(m);
+            >::new(tur_engine::core::rut_runtime::mutation_of(on_tick)));
         }
-        let wire_end = |cb: &OpaqueRef, h: &Rc<RutHandles>| {
-            let cb = cb.clone();
-            let h2 = h.clone();
-            let dirty = h.dirty.clone();
-            let mutation = h.store.bridge().build_mutate(move |_bridge, _args| {
-                h2.pending_calls.borrow_mut().push(Intent::Value {
-                    entry: ACB_VAL,
-                    cb: cb.clone(),
-                    a: id,
-                    value: tur_engine::core::edgy::Value::Nil,
-                });
-                dirty.set(true);
-                Ok(tur_engine::core::edgy::Value::Nil)
-            });
-            Some(tur_engine::core::edgy::mutation::MutationHandle::<
+        if on_end != 0 {
+            ctrl.set_on_end(tur_engine::core::edgy::mutation::MutationHandle::<
                 AnimationEndEvent,
-            >::new(mutation))
-        };
-        if let Some(m) = on_end.as_ref().and_then(|cb| wire_end(cb, h)) {
-            ctrl.set_on_end(m);
+            >::new(tur_engine::core::rut_runtime::mutation_of(on_end)));
         }
         ctrl.set_mutation_queue(h.mutation_queue.clone());
         let rc: Rc<std::cell::RefCell<AnimationController>> =
             Rc::new(std::cell::RefCell::new(ctrl));
         Ok(Opaque::alloc(vm, RutAnimCtrl(rc))?.handle().clone())
-    }
-    rut_vm::pkg_fn!(pkg, "anim_ctrl_cb", (u64, f64, &str, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, duration_ms: f64, curve: &str, repeat: u64| {
-        mint(vm, &h, id, duration_ms, curve, repeat, None, None)
-    });
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_ctrl_cb_t", (u64, f64, &str, u64, OpaqueRef) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, duration_ms: f64, curve: &str, repeat: u64, on_tick: OpaqueRef| {
-        mint(vm, &h, id, duration_ms, curve, repeat, Some(on_tick), None)
-    });
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_ctrl_cb_e", (u64, f64, &str, u64, OpaqueRef) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, duration_ms: f64, curve: &str, repeat: u64, on_end: OpaqueRef| {
-        mint(vm, &h, id, duration_ms, curve, repeat, None, Some(on_end))
-    });
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_ctrl_cb_te", (u64, f64, &str, u64, OpaqueRef, OpaqueRef) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, duration_ms: f64, curve: &str, repeat: u64, on_tick: OpaqueRef, on_end: OpaqueRef| {
-        mint(vm, &h, id, duration_ms, curve, repeat, Some(on_tick), Some(on_end))
     });
 
     // ---- control rows (forward/reverse/resume re-register into the

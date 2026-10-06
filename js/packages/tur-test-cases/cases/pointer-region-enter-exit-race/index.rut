@@ -1,37 +1,35 @@
 // pointer-region-enter-exit-race: two regions sharing one hover atom —
 // moving A->B in a single event must land on "B" (exit-before-enter).
-use tur::{ mount, rs_set_str, rs_source_str };
-use tur_kit::{ Column, Container, MouseRegion, Text };
+// The four handlers are mutations over the shared hover source.
+use tur::mount;
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCtx, Readable, Text,
+    mutate_enter, mutate_exit, source_str };
 
 
 entry fn start() -> u64 {
-    let hover = rs_source_str("");
+    let hover: Readable<str> = source_str("");
+    let b_a_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set_str(hover, "A");
+    });
+    let b_a_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set_str(hover, "");
+    });
+    let b_b_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set_str(hover, "B");
+    });
+    let b_b_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set_str(hover, "");
+    });
     let mut col = Column();
 
     let a = Container().width_height(100.0, 50.0).color(0xEF4444FFu64).query_key("a");
-    col.child(MouseRegion().on_enter(a_enter, hover).on_exit(a_exit, hover).cursor(0).behavior(0).child(a.build()).build());
+    col.child(MouseRegion().on_enter(b_a_enter).on_exit(b_a_exit).cursor(0).behavior(0).child(a.build()).build());
 
     let b = Container().width_height(100.0, 50.0).color(0x3B82F6FF).query_key("b");
-    col.child(MouseRegion().on_enter(b_enter, hover).on_exit(b_exit, hover).cursor(0).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_b_enter).on_exit(b_b_exit).cursor(0).behavior(0).child(b.build()).build());
 
     let t = Text().text_bound(hover).query_key("hover");
     col.child(t.build());
     mount(col.build());
-    return hover;
-}
-
-fn a_enter(hover: u64, _b: u64, _n: f64) {
-    rs_set_str(hover, "A");
-}
-
-fn a_exit(hover: u64, _b: u64, _n: f64) {
-    rs_set_str(hover, "");
-}
-
-fn b_enter(hover: u64, _b: u64, _n: f64) {
-    rs_set_str(hover, "B");
-}
-
-fn b_exit(hover: u64, _b: u64, _n: f64) {
-    rs_set_str(hover, "");
+    return hover.atom_id();
 }

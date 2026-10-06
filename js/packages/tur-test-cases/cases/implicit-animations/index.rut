@@ -1,30 +1,24 @@
 // implicit-animations: the Animated* twin — one shared controller eases
-// 0..1 and the a_tick fn maps the eased progress into the box's animated
-// channels (color_bound sky-blue→indigo, radius_bound 12→40, the SHADOW
-// BLUR bound 16→32 over the static [0,8] offset, the slide left_bound
-// 30→160 and the label's opacity 0.45→1.0). The card itself is FIXED
-// 150×160 (only the decoration animates — the boa AnimatedContainer
-// retarget). The toggle flips the `expanded` atom and retargets the
-// controller (forward/reverse) — the ImplicitlyAnimatedWidget retarget,
-// case-side.
+// 0..1 and the a_tick mutation maps the eased progress into the box's
+// animated channels (color_bound sky-blue→indigo, radius_bound 12→40, the
+// SHADOW BLUR bound 16→32 over the static [0,8] offset, the slide
+// left_bound 30→160 and the label's opacity 0.45→1.0). The card itself is
+// FIXED 150×160 (only the decoration animates — the boa
+// AnimatedContainer retarget). The toggle flips the `expanded` atom and
+// retargets the controller (forward/reverse) — the
+// ImplicitlyAnimatedWidget retarget, case-side. The tick and the toggle
+// are MUTATIONS over the channel handles they capture — no ids, no
+// stash; the boot brush seed rides the root Lifecycle's on_mount.
 //
 // Pure kit: every channel is a bound prop over the progress the tick
 // writes — the animation rows end-to-end with no per-channel controllers.
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
-    anim_reverse, color_tween_lerp, mount, rs_get_bool, rs_set_bool, rs_set_brush, rs_set_f64,
-    rs_source_bool, rs_source_f64, st_put, st_take, stf_put, stf_take, tween_lerp };
-use tur_kit::{ Column, Condition, Container, Expanded, PointerInteract, Positioned, Row, SizedBox,
-    Stack, Text };
+    anim_reverse, color_tween_lerp, mount, tween_lerp };
+use tur_kit::{ Column, Condition, Container, Expanded, Lifecycle, MountEvent, MutationCtx,
+    PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, mutate, mutate_f64,
+    mutate_mount, source_bool, source_f64 };
 use tur_anim_kit::{ Opacity, anim_ctrl };
 
-
-let K_CTRL: u64 = 1;
-let K_EXPANDED: u64 = 2;
-let K_COLOR: u64 = 5;
-let K_BLUR: u64 = 6;
-let K_LEFT: u64 = 7;
-let K_FADE: u64 = 8;
-let K_RADIUS: u64 = 9;
 
 // The tween endpoints (the boa card, retargeted compact ↔ expanded). The
 // card box is FIXED 150×160 — the boa AnimatedContainer animates only the
@@ -41,29 +35,43 @@ let BLUE: u64 = 0x0EA5E9FFu64; // compact — the sky-blue state
 let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
 
 entry fn start() -> u64 {
-    let expanded = rs_source_bool(false);
-    stf_put(K_EXPANDED, expanded as f64);
-    let progress = rs_source_f64();
-    let color = rs_source_f64();
-    let blur = rs_source_f64();
-    let radius = rs_source_f64();
-    let left = rs_source_f64();
-    let fade = rs_source_f64();
+    let expanded: Readable<bool> = source_bool(false);
+    let progress: Readable<f64> = source_f64(0.0);
+    let color: Readable<f64> = source_f64(0.0);
+    let blur: Readable<f64> = source_f64(B_MIN);
+    let radius: Readable<f64> = source_f64(R_MIN);
+    let left: Readable<f64> = source_f64(X_MIN);
+    let fade: Readable<f64> = source_f64(A_MIN);
 
-    // Seed the channels at the compact state (progress 0).
-    rs_set_f64(radius, R_MIN);
-    rs_set_f64(blur, B_MIN);
-    rs_set_f64(left, X_MIN);
-    rs_set_f64(fade, A_MIN);
-    rs_set_brush(color, BLUE);
+    // The tick: eased progress → every animated channel (the channels
+    // ride by capture).
+    let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
+        ctx.set_f64(blur, tween_lerp(B_MIN, B_MAX, t));
+        ctx.set_f64(radius, tween_lerp(R_MIN, R_MAX, t));
+        ctx.set_f64(left, tween_lerp(X_MIN, X_MAX, t));
+        ctx.set_f64(fade, tween_lerp(A_MIN, A_MAX, t));
+        ctx.set_brush(color, color_tween_lerp(BLUE, INDIGO, t));
+    });
+    let ctrl = anim_ctrl(600.0, "easeInOut", 1, a_tick, nil);
 
-    stf_put(K_COLOR, color as f64);
-    stf_put(K_BLUR, blur as f64);
-    stf_put(K_RADIUS, radius as f64);
-    stf_put(K_LEFT, left as f64);
-    stf_put(K_FADE, fade as f64);
-    let ctrl = anim_ctrl(progress, 600.0, "easeInOut", 1, a_tick, a_end);
-    st_put(K_CTRL, ctrl);
+    // The toggle: flip the state atom, then retarget the shared
+    // controller — forward plays toward the expanded state, reverse back
+    // to compact.
+    let b_toggle = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(expanded, !ctx.get_bool(expanded));
+        if (ctx.get_bool(expanded)) {
+            anim_forward(ctrl);
+        } else {
+            anim_reverse(ctrl);
+        }
+    });
+
+    // The boot brush seed (the compact sky-blue state; the f64 channels
+    // seed at their mints above). The lifecycle surface delivers the
+    // typed `MountEvent`.
+    let seed = mutate_mount(fn (ctx: MutationCtx, _ev: MountEvent) {
+        ctx.set_brush(color, BLUE);
+    });
 
     // The Compact↔Expanded label rides the state atom (a Condition swap).
     let label = Condition(expanded)
@@ -95,8 +103,7 @@ entry fn start() -> u64 {
         .build();
 
     let toggle = PointerInteract()
-        .ids(expanded, expanded)
-        .on_tap(b_toggle)
+        .on_click(b_toggle)
         .query_key("implicit-toggle")
         .child(
             Container()
@@ -126,41 +133,9 @@ entry fn start() -> u64 {
         .child(Row().main_axis_size(MAIN_SIZE_MIN).child(toggle).build())
         .build();
 
-    mount(Expanded().flex(1.0).child(Container().color(0xF8FAFCFFu64).child(col).build()).build());
-    return expanded;
-}
-
-// The tick: eased progress → every animated channel.
-fn a_tick(_atom: u64, t: f64) {
-    let blur = stf_take(K_BLUR) as u64;
-    stf_put(K_BLUR, blur as f64);
-    rs_set_f64(blur, tween_lerp(B_MIN, B_MAX, t));
-    let radius = stf_take(K_RADIUS) as u64;
-    stf_put(K_RADIUS, radius as f64);
-    rs_set_f64(radius, tween_lerp(R_MIN, R_MAX, t));
-    let left = stf_take(K_LEFT) as u64;
-    stf_put(K_LEFT, left as f64);
-    rs_set_f64(left, tween_lerp(X_MIN, X_MAX, t));
-    let fade = stf_take(K_FADE) as u64;
-    stf_put(K_FADE, fade as f64);
-    rs_set_f64(fade, tween_lerp(A_MIN, A_MAX, t));
-    let color = stf_take(K_COLOR) as u64;
-    stf_put(K_COLOR, color as f64);
-    rs_set_brush(color, color_tween_lerp(BLUE, INDIGO, t));
-}
-
-fn a_end(_atom: u64, _v: f64) {
-}
-
-// The toggle: flip the state atom, then retarget the shared controller —
-// forward plays toward the expanded state, reverse back to compact.
-fn b_toggle(expanded: u64, _b: u64, _n: f64) {
-    rs_set_bool(expanded, !rs_get_bool(expanded));
-    let ctrl = st_take(K_CTRL);
-    if (rs_get_bool(expanded)) {
-        anim_forward(ctrl);
-    } else {
-        anim_reverse(ctrl);
-    }
-    st_put(K_CTRL, ctrl);
+    // The root Lifecycle fires the brush seed at mount (a transparent
+    // pass-through around the unchanged page chain).
+    let page = Expanded().flex(1.0).child(Container().color(0xF8FAFCFFu64).child(col).build()).build();
+    mount(Lifecycle().on_mount(seed).child(page).build());
+    return expanded.atom_id();
 }

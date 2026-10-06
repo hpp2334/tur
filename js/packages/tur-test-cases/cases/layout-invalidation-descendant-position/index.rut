@@ -1,17 +1,14 @@
 // layout-invalidation-descendant-position: a reactive-width container
 // around an end-aligned Row holding a tracker box — the tracker's X must
 // track the width change through the intermediate Row (the divider-drag
-// position-gap repro). The `set_width` probe drives the change.
-use tur::{ MAIN_ALIGN_END, mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Container, Row };
+// position-gap repro). The `set_width` probe drives the change (the atom
+// id rides the entry arg — the probe's handles bind at the call site).
+use tur::{ MAIN_ALIGN_END, ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, Row, source_f64 };
 
-
-let K_WIDTH: u64 = 1;
 
 entry fn start() -> u64 {
-    let width = rs_source_f64();
-    rs_set_f64(width, 100.0);
-    stf_put(K_WIDTH, width as f64);
+    let width: Readable<f64> = source_f64(100.0);
 
     let mut outer = Container().width_bound(width);
     let row = Row()
@@ -19,12 +16,12 @@ entry fn start() -> u64 {
         .child(Container().width_height(20.0, 20.0).color(0x22C55EFFu64).query_key("tracker").build());
     outer.child(row.build());
     mount(outer.build());
-    return width;
+    return width.atom_id();
 }
 
-// The `__setWidth(w)` seam.
-entry fn set_width(a: u64, _b: f64) {
-    let width = stf_take(K_WIDTH) as u64;
-    rs_set_f64(width, a as f64);
-    stf_put(K_WIDTH, width as f64);
+// The `__setWidth(w)` seam: re-wrap the passed atom and write through the
+// ctx face (a direct store write — no gesture, no extra mark_dirty).
+entry fn set_width(atom: u64, w: f64) {
+    let width = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(width, w);
 }

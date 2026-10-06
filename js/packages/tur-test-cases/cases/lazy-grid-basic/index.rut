@@ -5,8 +5,8 @@
 // boa 4px grid spacing has no lazy-grid row, so each cell pads 2 — the
 // between-tile gap re-forms as 2+2 of pane background (the sanctioned
 // case-side stand-in; the outer edges sit 2px in where boa's sit flush).
-use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, LazyGrid, Text };
+use tur::mount;
+use tur_kit::{ Container, LazyGrid, Text, source_f64 };
 
 
 fn cell(i: u64) -> opaque {
@@ -18,8 +18,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() {
-    let count = rs_source_f64();
-    rs_set_f64(count, 500.0);
+    let count = source_f64(500.0);
     let grid = LazyGrid()
         .item_builder(cell)
         .count(count)

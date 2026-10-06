@@ -1,6 +1,6 @@
 // lazy-list-row: a 50-item HORIZONTAL virtualized list (80px columns).
-use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, LazyList };
+use tur::{ AXIS_HORIZONTAL, mount };
+use tur_kit::{ Container, LazyList, source_f64 };
 
 
 fn item(i: u64) -> opaque {
@@ -14,8 +14,7 @@ fn item(i: u64) -> opaque {
 }
 
 entry fn start() {
-    let count = rs_source_f64();
-    rs_set_f64(count, 50.0);
+    let count = source_f64(50.0);
     let list = LazyList().item_builder(item).count(count).axis(AXIS_HORIZONTAL).item_extent(80.0).query_key("lazy-list-row").build();
     mount(list);
 }

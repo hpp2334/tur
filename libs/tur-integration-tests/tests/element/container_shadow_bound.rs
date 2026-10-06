@@ -14,23 +14,17 @@ use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
-use tur::{ mount, rs_set_brush, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Column, Container };
-
-let K_COLOR: u64 = 1;
-let K_BLUR: u64 = 2;
-let K_DY: u64 = 3;
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
 
 entry fn start() -> u64 {
-    let color = rs_source_f64();
-    let blur = rs_source_f64();
-    let dy = rs_source_f64();
-    rs_set_brush(color, 0xFF0000FFu64);
-    rs_set_f64(blur, 10.0);
-    rs_set_f64(dy, 4.0);
-    stf_put(K_COLOR, color as f64);
-    stf_put(K_BLUR, blur as f64);
-    stf_put(K_DY, dy as f64);
+    // The channels mint in order: color, blur, dy (the probe entries
+    // address them by the start answer + offset).
+    let color: Readable<f64> = source_f64(0.0);
+    let blur: Readable<f64> = source_f64(10.0);
+    let dy: Readable<f64> = source_f64(4.0);
+    // The boot glow (the ctx face at start).
+    MutationCtx.over(ctx_bridge()).set_brush(color, 0xFF0000FFu64);
     let card = Container()
         .width_height(60.0, 40.0)
         .color(0x222222FFu64)
@@ -40,34 +34,28 @@ entry fn start() -> u64 {
         .query_key("card")
         .build();
     mount(card);
-    return 0;
+    return color.atom_id();
 }
 
-// Re-tint the glow (the placed-piece hue swap) — an atom write only; the
+// Re-tint the glow (the placed-piece hue swap) — a brush write only; the
 // element must repaint without remounting.
-entry fn retint(_a: u64, _b: f64) {
-    let color = stf_take(K_COLOR) as u64;
-    stf_put(K_COLOR, color as f64);
-    rs_set_brush(color, 0x00FF00FFu64);
+entry fn retint(atom: u64, _b: f64) {
+    let color = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_brush(color, 0x00FF00FFu64);
 }
 
-entry fn resteepen(_a: u64, _b: f64) {
-    let dy = stf_take(K_DY) as u64;
-    stf_put(K_DY, dy as f64);
-    rs_set_f64(dy, 12.0);
+entry fn resteepen(atom: u64, _b: f64) {
+    let dy = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(dy, 12.0);
 }
 "#;
 
 const STATIC_SHADOW_RUT: &str = r#"
-use tur::{ mount, rs_set_f64, rs_source_f64, stf_put };
-use tur_kit::{ Container };
-
-let K_DY: u64 = 3;
+use tur::mount;
+use tur_kit::{ Container, Readable, source_f64 };
 
 entry fn start() -> u64 {
-    let dy = rs_source_f64();
-    rs_set_f64(dy, 12.0);
-    stf_put(K_DY, dy as f64);
+    let dy: Readable<f64> = source_f64(12.0);
     let card = Container()
         .width_height(60.0, 40.0)
         .color(0x222222FFu64)
@@ -76,7 +64,7 @@ entry fn start() -> u64 {
         .query_key("card")
         .build();
     mount(card);
-    return 0;
+    return dy.atom_id();
 }
 "#;
 
@@ -112,8 +100,9 @@ fn bound_shadow_channels_paint_their_atoms() {
 fn shadow_atom_writes_repaint_without_remount() {
     let (mut app, card) = setup(SHADOW_BOUND_RUT);
 
-    app.call_rut_entry("retint", 0, 0.0).unwrap();
-    app.call_rut_entry("resteepen", 0, 0.0).unwrap();
+    let color_atom = app.rut_start_answer();
+    app.call_rut_entry("retint", color_atom, 0.0).unwrap();
+    app.call_rut_entry("resteepen", color_atom + 2, 0.0).unwrap(); // the dy channel mints third
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // The SAME element id — a rebuild would have minted a new one.

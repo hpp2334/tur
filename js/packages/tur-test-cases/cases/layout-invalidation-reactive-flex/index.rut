@@ -1,20 +1,15 @@
 // layout-invalidation-reactive-flex: two reactive flex weights — the
-// `set_flex` probe flips them (a click would mark extra nodes dirty via
-// the gesture handler and mask the layout-invalidation behavior).
-use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Container, Expanded, Row };
+// `set_flex_a` / `set_flex_b` probes flip them (a click would mark extra
+// nodes dirty via the gesture handler and mask the layout-invalidation
+// behavior). The atoms ride the entry args: the pair mints in order, so
+// the b probe addresses a's answer + 1.
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, source_f64 };
 
-
-let K_A: u64 = 1;
-let K_B: u64 = 2;
 
 entry fn start() -> u64 {
-    let flex_a = rs_source_f64();
-    rs_set_f64(flex_a, 1.0);
-    let flex_b = rs_source_f64();
-    rs_set_f64(flex_b, 1.0);
-    stf_put(K_A, flex_a as f64);
-    stf_put(K_B, flex_b as f64);
+    let flex_a: Readable<f64> = source_f64(1.0);
+    let flex_b: Readable<f64> = source_f64(1.0);
 
     let mut row = Row();
     let a = Expanded().flex_bound(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
@@ -22,7 +17,7 @@ entry fn start() -> u64 {
     let b = Expanded().flex_bound(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
     row.child(b);
     mount(row.build());
-    return flex_a;
+    return flex_a.atom_id();
 }
 
 fn qkey_box(key: str, color: u64) -> opaque {
@@ -30,13 +25,15 @@ fn qkey_box(key: str, color: u64) -> opaque {
     return b.build();
 }
 
-// The `__setFlex(a, b)` seam: flip both weights (a crosses the u64 slot,
-// b the f64 slot).
-entry fn set_flex(a_new: u64, b_new: f64) {
-    let flex_a = stf_take(K_A) as u64;
-    let flex_b = stf_take(K_B) as u64;
-    rs_set_f64(flex_a, a_new as f64);
-    rs_set_f64(flex_b, b_new);
-    stf_put(K_A, flex_a as f64);
-    stf_put(K_B, flex_b as f64);
+// The `__setFlex(a, b)` seams: flip one weight per entry (a direct store
+// write — no gesture, no extra mark_dirty); the atom id rides the entry
+// arg (the probe's handle binds at the call site).
+entry fn set_flex_a(atom: u64, v: f64) {
+    let flex_a = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(flex_a, v);
+}
+
+entry fn set_flex_b(atom: u64, v: f64) {
+    let flex_b = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(flex_b, v);
 }

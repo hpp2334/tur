@@ -30,11 +30,9 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
-use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value, stf_put, stf_take };
+use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
 use tur_kit::{ Column, Container, Table, TableCols };
 
-
-let ROWS: u64 = 9;
 
 fn cell(key: str) -> opaque {
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
@@ -63,18 +61,17 @@ fn rows_of(n: u64) -> opaque {
     return list;
 }
 
-entry fn start() {
-    let rows = rs_source_value(rows_of({ROWS_PLACEHOLDER}));
-    stf_put(ROWS, rows as f64);
+entry fn start() -> u64 {
+    let rows: Readable<opaque> = Readable<opaque>.of(ctx_bridge(), rs_source_value(rows_of({ROWS_PLACEHOLDER})));
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
     let mut t = Table().columns(cols).rows_atom(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
     mount(t);
+    return rows.atom_id();
 }
 
-fn set_rows(_a: u64, n: f64) {
-    let atom = stf_take(ROWS) as u64;
+fn set_rows(atom: u64, n: f64) {
     rs_set_value(atom, rows_of(n as u64));
 }
 "#
@@ -143,8 +140,8 @@ fn fills_for(
 /// declarative stripes — even rows red, odd rows blue (the cells paint
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
-use tur::{ mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Table, TableCols };
+use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
+use tur_kit::{ Readable, Container, Table, TableCols };
 
 
 fn body_cell(_row: u64, _col: u64) -> opaque {
@@ -162,7 +159,7 @@ fn rows_of(n: u64) -> opaque {
 }
 
 entry fn start() {
-    let rows = rs_source_value(rows_of(4));
+    let rows: Readable<opaque> = Readable<opaque>.of(ctx_bridge(), rs_source_value(rows_of(4)));
     let cols = TableCols().extent(300.0);
     let t = Table()
         .columns(cols)
@@ -220,8 +217,8 @@ fn column_extent_honored_in_layout() {
     // (min 120) — the leftover 250 splits 1:2.
     app.load_rut_module(
         r#"
-use tur::{ mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Table, TableCols };
+use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
+use tur_kit::{ Readable, Container, Table, TableCols };
 
 
 fn body_cell(_row: u64, _col: u64) -> opaque {
@@ -231,7 +228,7 @@ fn body_cell(_row: u64, _col: u64) -> opaque {
 entry fn start() {
     let rows = rs_list_new();
     rs_list_push(rows, "a");
-    let rows_atom = rs_source_value(rows);
+    let rows_atom: Readable<opaque> = Readable<opaque>.of(ctx_bridge(), rs_source_value(rows));
     let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
     let t = Table()
         .columns(cols)

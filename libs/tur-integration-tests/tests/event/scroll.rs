@@ -220,24 +220,24 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ AXIS_VERTICAL, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, ScrollView };
+use tur::{ ctx_bridge, AXIS_VERTICAL, mount };
+use tur_kit::{ Container, MutationCtx, Readable, ScrollView, source_f64 };
 
 
 entry fn start() -> u64 {
-    let height = rs_source_f64();
-    rs_set_f64(height, 900.0);
+    let height: Readable<f64> = source_f64(900.0);
 
     let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
 
     let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
-    return height;
+    return height.atom_id();
 }
 
-entry fn shrink(height: u64, _b: f64) {
-    rs_set_f64(height, 200.0);
+entry fn shrink(atom: u64, _b: f64) {
+    let height = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(height, 200.0);
 }
 "#,
     )

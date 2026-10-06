@@ -18,13 +18,12 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    rs_set_f64(count, 10000.0);
+    let count: Readable<f64> = source_f64(10000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count;
+    return count.atom_id();
 }
 "#,
     )
@@ -159,18 +158,18 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    rs_set_f64(count, 100.0);
+    let count: Readable<f64> = source_f64(100.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count;
+    return count.atom_id();
 }
 
 // The test drives count changes through the entry rail.
-entry fn set_count(count: u64, n: f64) {
-    rs_set_f64(count, n);
+entry fn set_count(atom: u64, n: f64) {
+    let count = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(count, n);
 }
 "#,
     )
@@ -278,13 +277,12 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    rs_set_f64(count, 1000.0);
+    let count: Readable<f64> = source_f64(1000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count;
+    return count.atom_id();
 }
 "#,
     )
@@ -369,13 +367,12 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    rs_set_f64(count, 12.0);
+    let count: Readable<f64> = source_f64(12.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count;
+    return count.atom_id();
 }
 "#,
     )
@@ -422,18 +419,18 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    rs_set_f64(count, 6.0);
+    let count: Readable<f64> = source_f64(6.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count;
+    return count.atom_id();
 }
 
 // The test drives count changes through the entry rail.
-entry fn set_count(count: u64, n: f64) {
-    rs_set_f64(count, n);
+entry fn set_count(atom: u64, n: f64) {
+    let count = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(count, n);
 }
 "#,
     )

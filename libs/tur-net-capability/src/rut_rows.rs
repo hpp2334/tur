@@ -1,5 +1,5 @@
 //! C6 — the `tur:net` rut rows (via the pkg-extension seam): `net_request`
-//! (async, the body as bytes), `net_stream` (chunk callbacks + a task
+//! (async, the body as bytes), `net_stream` (chunk mutations + a task
 //! opaque whose `task_cancel` row wire-aborts the download), and
 //! `net_status` (the stashed request status).
 //!
@@ -11,8 +11,7 @@ use std::rc::Rc;
 
 use futures::StreamExt;
 use rut_core::types::{TY_BYTES, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
-use rut_vm::{Opaque, OpaqueRef};
-use tur_engine::core::rut_runtime::Intent;
+use rut_vm::Opaque;
 use tur_engine::core::scheduler::TaskHandle;
 
 use crate::{Http, HttpOutcome, RequestOpts};
@@ -25,19 +24,13 @@ pub struct RutNetTask {
     pub error: Rc<RefCell<String>>,
 }
 
-/// Declare the rows + install the bodies (the pkg-extension payload).
-/// The net kit's dispatch entry for the `(id, chunk)` shape — lives in
-/// the net kit prelude (the scope law: the kit that seals the callback
-/// owns the entry that downcasts it).
-pub const NCB_BYTES: &str = "__tur_ncb_bytes";
-
 /// (The allow covers the upstream `pkg_async_fn!` row expansion's
 /// cosmetic — the spike's precedent.)
 #[allow(clippy::needless_question_mark)]
 pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
-    // The net kit — the authored face over these rows (callback sealing
-    // + this kit's dispatch entry). Registered alongside the rows, so it
-    // compiles only when the Http capability is present.
+    // The net kit — the authored face over these rows (the chunk mutation
+    // mint's sealing). Registered alongside the rows, so it compiles only
+    // when the Http capability is present.
     cx.preludes.push(crate::kit::net_kit_pkg());
     cx.decl.extend(
         vec![
@@ -45,8 +38,8 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             ("net_status", vec![TY_OPAQUE], TY_U64, false),
             ("net_error", vec![TY_OPAQUE], TY_STR, false),
             (
-                "net_stream_cb",
-                vec![TY_U64, TY_STR, TY_STR, TY_OPAQUE],
+                "net_stream_mut",
+                vec![TY_STR, TY_STR, TY_U64],
                 TY_OPAQUE,
                 false,
             ),
@@ -99,12 +92,12 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
         t.with(|t| Ok(t.error.borrow().clone()))?
     });
 
-    // net_stream_cb(url, method, on_chunk) -> opaque — each chunk crosses as
-    // an intent record (the kit-sealed fn box delivers `(id, data: bytes)`
-    // through `__tur_cb_bytes`); the returned task's `task_cancel`
-    // wire-aborts the download.
+    // net_stream(url, method, chunk_mutation) -> opaque — each chunk
+    // enqueues the sealed mutation's invocation (the kit-sealed closure
+    // receives `(ctx, chunk: bytes)` at the flush's mutation pass); the
+    // returned task's `task_cancel` wire-aborts the download.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "net_stream_cb", (u64, &str, &str, OpaqueRef) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64, url: &str, method: &str, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "net_stream_mut", (&str, &str, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, url: &str, method: &str, chunk_atom: u64| {
         let Some(http) = h.inst.capability().of::<Http>() else {
             return Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "no http capability"));
         };
@@ -131,12 +124,14 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             while let Some(chunk) = stream.next().await {
                 match chunk {
                     Ok(bytes) => {
-                        h2.pending_calls.borrow_mut().push(Intent::Bytes {
-                            entry: NCB_BYTES,
-                            cb: cb.clone(),
-                            a: id,
-                            data: bytes,
-                        });
+                        h2.mutation_queue.borrow_mut().push(
+                            tur_engine::core::edgy::mutation::MutationHandle::<
+                                tur_engine::core::rut_runtime::ValueArgs,
+                            >::new(tur_engine::core::rut_runtime::mutation_of(chunk_atom)),
+                            tur_engine::core::rut_runtime::ValueArgs(vec![
+                                tur_engine::core::edgy::Value::Bytes(bytes.into()),
+                            ]),
+                        );
                         h2.dirty.set(true);
                     }
                     Err(e) => {

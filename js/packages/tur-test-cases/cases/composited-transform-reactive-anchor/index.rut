@@ -1,13 +1,16 @@
-// composited-transform-reactive-anchor: the target anchor resolves from an
-// atom; the button (20, 540) flips it to BottomRight — the follower
+// composited-transform-reactive-anchor: the target anchor resolves from a
+// source; the button (20, 540) flips it to BottomRight — the follower
 // relocates to the target's bottom-right (160, 120).
-use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, PointerInteract, Positioned, SizedBox, Stack };
+use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, MutationCtx, PointerInteract,
+    Positioned, Readable, SizedBox, Stack, mutate, source_f64 };
 
 
 entry fn start() -> u64 {
-    let anchor = rs_source_f64();
-    rs_set_f64(anchor, 0.0);
+    let anchor: Readable<f64> = source_f64(0.0);
+    let b_flip = mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(anchor, 8.0);
+    });
     let link = ct_link_new();
     let mut stack = Stack()
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
@@ -19,11 +22,7 @@ entry fn start() -> u64 {
     stack.child(follower);
 
     let btn = Container().width_height(60.0, 30.0).color(0x4F46E1FFu64);
-    stack.child(Positioned().left(20.0).top(540.0).child(PointerInteract().ids(anchor, anchor).on_tap(b_flip).child(btn.build()).build()).build());
+    stack.child(Positioned().left(20.0).top(540.0).child(PointerInteract().on_click(b_flip).child(btn.build()).build()).build());
     mount(stack.build());
-    return anchor;
-}
-
-fn b_flip(anchor: u64, _b: u64, _n: f64) {
-    rs_set_f64(anchor, 8.0);
+    return anchor.atom_id();
 }

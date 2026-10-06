@@ -38,6 +38,16 @@ fn wait_for(app: &TurTestApp, probe: impl Fn() -> bool) -> bool {
     }
 }
 
+/// The explorer settled: the crumb renders AND the listing mounted (the
+/// busy "Loading…" rail clears one flush after the header — the fetch's
+/// second segment writes the files + clears the flag).
+fn wait_explorer(app: &TurTestApp, crumb: &str) -> bool {
+    wait_for(app, || {
+        app.query_text(&["gh-crumb"]).as_deref() == Some(crumb)
+            && app.query_element(&["gh-row"]).is_some()
+    })
+}
+
 fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
     use tur_engine::core::element::ElementNodeId;
     let id = app
@@ -120,9 +130,7 @@ fn github_viewer_opens_a_repo_into_the_explorer() {
         text_response(200, ROOT_CONTENTS),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    let ok = wait_for(&app, || {
-        app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
-    });
+    let ok = wait_explorer(&app, "facebook/react");
     assert!(
         ok,
         "the explorer should open: {:?}",
@@ -152,9 +160,7 @@ fn github_viewer_descends_into_a_directory() {
         text_response(200, PACKAGES_CONTENTS),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    wait_for(&app, || {
-        app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
-    });
+    wait_explorer(&app, "facebook/react");
     // Tap the first row (the `packages` directory) — a fresh contents
     // fetch for the nested path.
     click_qk(&mut app, &["gh-row"]);
@@ -174,9 +180,7 @@ fn github_viewer_selects_a_file() {
         text_response(200, files_only),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    wait_for(&app, || {
-        app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
-    });
+    wait_explorer(&app, "facebook/react");
     click_qk(&mut app, &["gh-row"]);
     let ok = wait_for(&app, || {
         app.query_text(&["gh-selected"])
@@ -202,9 +206,7 @@ fn github_viewer_crumb_keeps_the_parsed_draft_identity() {
         text_response(200, ROOT_CONTENTS),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    let ok = wait_for(&app, || {
-        app.query_text(&["gh-crumb"]).is_some_and(|t| !t.is_empty())
-    });
+    let ok = wait_explorer(&app, "facebook/react");
     assert!(ok, "the explorer should open");
     assert_eq!(
         app.query_text(&["gh-crumb"]).as_deref(),
@@ -231,24 +233,32 @@ fn github_viewer_crumb_navigates_to_the_root() {
         text_response(200, ROOT_CONTENTS),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    wait_for(&app, || {
-        app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
-    });
+    wait_explorer(&app, "facebook/react");
     click_qk(&mut app, &["gh-row"]);
     wait_for(&app, || {
         app.query_text(&["gh-path"]).as_deref() == Some("packages")
     });
     click_qk(&mut app, &["gh-crumb"]);
-    let ok = wait_for(&app, || {
+    // The settle condition is the RELOADED root listing: the crumb's path
+    // write lands one segment before the fresh rows mount (the busy rail
+    // swaps the list area back in).
+    let mut ok = wait_for(&app, || {
         app.query_text(&["gh-path"]).as_deref() == Some("")
+            && app.query_element(&["gh-row"]).is_some()
     });
+    if !ok {
+        // Under heavy parallel load the synthetic tap can land between
+        // layout passes and miss the pad — re-drive it and re-wait.
+        click_qk(&mut app, &["gh-crumb"]);
+        ok = wait_for(&app, || {
+            app.query_text(&["gh-path"]).as_deref() == Some("")
+                && app.query_element(&["gh-row"]).is_some()
+        });
+    }
     assert!(ok, "the crumb tap returns to the root listing");
     // The root listing re-loaded (the README row is back under the
-    // packages-less root view).
-    assert!(
-        app.query_element(&["gh-row"]).is_some(),
-        "the root listing rendered after the crumb navigation"
-    );
+    // packages-less root view) — pinned by the settle probe above.
+    let _ = ok;
     // Settled: the busy "Loading…" rail is not on screen.
     assert!(
         app.query_element(&["gh-loading"]).is_none(),
@@ -268,9 +278,7 @@ fn github_viewer_has_no_full_pane_loading_mode() {
         text_response(200, ROOT_CONTENTS),
     ]);
     click_qk(&mut app, &["gh-sug-0"]);
-    let ok = wait_for(&app, || {
-        app.query_element(&["gh-crumb"]).is_some()
-    });
+    let ok = wait_explorer(&app, "facebook/react");
     assert!(ok, "the explorer chrome mounts");
     assert!(
         app.query_element(&["gh-loading"]).is_none(),

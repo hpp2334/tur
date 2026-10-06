@@ -1,21 +1,37 @@
 // drag-delta-tracking: a drag pad computing deltaFromStart/deltaFromLast
-// (the VDivider pattern). Scratch numbers ride stashed mem cells; the
-// transcript atom renders "dsx,dsy,dlx,dly" for the test to parse.
-use tur::{ mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str, st_put, st_take };
-use tur_kit::{ Container, PointerInteract, Text };
+// (the VDivider pattern). The scratch points ride f64 sources captured by
+// the drag mutations; the transcript source renders "dsx,dsy,dlx,dly" for
+// the test to parse.
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text, mutate_ev,
+    source_f64, source_str };
 
-
-let K_SX: u64 = 2;
-let K_SY: u64 = 3;
-let K_LX: u64 = 4;
-let K_LY: u64 = 5;
 
 entry fn start() -> u64 {
-    let info = rs_source_str("0,0,0,0");
-    st_put(K_SX, mem_new(0.0));
-    st_put(K_SY, mem_new(0.0));
-    st_put(K_LX, mem_new(0.0));
-    st_put(K_LY, mem_new(0.0));
+    let info: Readable<str> = source_str("0,0,0,0");
+    let sx: Readable<f64> = source_f64(0.0);
+    let sy: Readable<f64> = source_f64(0.0);
+    let lx: Readable<f64> = source_f64(0.0);
+    let ly: Readable<f64> = source_f64(0.0);
+
+    // The anchor press: from-start + from-last are both 0 (the anchors
+    // seed BEFORE the emit reads).
+    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        let gx = ev.global.x;
+        let gy = ev.global.y;
+        ctx.set_f64(sx, gx);
+        ctx.set_f64(sy, gy);
+        ctx.set_f64(lx, gx);
+        ctx.set_f64(ly, gy);
+        ctx.set_str(info, f"{gx - ctx.get_f64(sx)},{gy - ctx.get_f64(sy)},{gx - ctx.get_f64(lx)},{gy - ctx.get_f64(ly)}");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        let gx = ev.global.x;
+        let gy = ev.global.y;
+        ctx.set_str(info, f"{gx - ctx.get_f64(sx)},{gy - ctx.get_f64(sy)},{gx - ctx.get_f64(lx)},{gy - ctx.get_f64(ly)}");
+        ctx.set_f64(lx, gx);
+        ctx.set_f64(ly, gy);
+    });
 
     let b = Container()
         .width_height(200.0, 200.0)
@@ -23,67 +39,15 @@ entry fn start() -> u64 {
         .query_key("drag-target")
         .child(Text().text_bound(info).query_key("drag-info").build());
 
-    let pad = PointerInteract().id(info).on_down(g_down).on_move(g_move).query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).query_key("rut/gesture").child(b.build()).build();
     mount(pad);
-    return info;
+    return info.atom_id();
 }
 
-// From-start + from-last deltas, read BEFORE the last-point update.
-fn emit(id: u64, gx: f64, gy: f64) {
-    let sx = st_take(K_SX);
-    let sy = st_take(K_SY);
-    let lx = st_take(K_LX);
-    let ly = st_take(K_LY);
-    let dsx = gx - mem_get(sx);
-    let dsy = gy - mem_get(sy);
-    let dlx = gx - mem_get(lx);
-    let dly = gy - mem_get(ly);
-    rs_set_str(id, f"{dsx},{dsy},{dlx},{dly}");
-    st_put(K_SX, sx);
-    st_put(K_SY, sy);
-    st_put(K_LX, lx);
-    st_put(K_LY, ly);
-}
-
-fn g_down(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    let sx = st_take(K_SX);
-    let sy = st_take(K_SY);
-    mem_set(sx, gx);
-    mem_set(sy, gy);
-    st_put(K_SX, sx);
-    st_put(K_SY, sy);
-    move_last(gx, gy);
-    emit(id, gx, gy);
-}
-
-fn g_move(id: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    emit(id, gx, gy);
-    move_last(gx, gy);
-}
-
-// The test's explicit reset probe (the `__resetDrag` seam): clear the
-// drag tracking so post-release hover-moves produce no deltas.
-entry fn reset(id: u64, _b: f64) {
-    let sx = st_take(K_SX);
-    let sy = st_take(K_SY);
-    let lx = st_take(K_LX);
-    let ly = st_take(K_LY);
-    mem_set(sx, 0.0);
-    mem_set(sy, 0.0);
-    mem_set(lx, 0.0);
-    mem_set(ly, 0.0);
-    st_put(K_SX, sx);
-    st_put(K_SY, sy);
-    st_put(K_LX, lx);
-    st_put(K_LY, ly);
-    rs_set_str(id, "0,0,0,0");
-}
-
-fn move_last(gx: f64, gy: f64) {
-    let lx = st_take(K_LX);
-    let ly = st_take(K_LY);
-    mem_set(lx, gx);
-    mem_set(ly, gy);
-    st_put(K_LX, lx);
-    st_put(K_LY, ly);
+// The test's reset probe (the `__resetDrag` seam): clear the transcript —
+// the engine stops delivering moves once the pointer is up, so no further
+// deltas land. The atom id rides the entry arg.
+entry fn reset(atom: u64, _b: f64) {
+    let info = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(info, "0,0,0,0");
 }

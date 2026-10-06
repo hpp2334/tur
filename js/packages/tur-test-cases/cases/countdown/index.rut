@@ -1,37 +1,31 @@
 // countdown: a 1 Hz countdown with start/pause/reset, an edit modal (a
 // pre-filled Input + confirm), and a ticking display derived from the
 // remaining atom. The ticker is an async loop over `sleep(1000)` with a
-// generation guard (a stale loop exits when a new start supersedes it).
-// State atom ids ride the scalar stash (stf_*).
+// generation guard (a stale loop exits when a new start supersedes it):
+// a spawned task over a task-scoped TaskCtx, the handles and the mem-cell
+// generation passed as parameters. State rides typed Readable handles
+// captured by the mutations — no ids, no stash.
 //
 // The boa design: a light slate page with the 96px display centered in
 // the pane, a "● Ready/Running" status pill, a big emerald Start that
 // swaps to an amber Pause (a Condition on the running atom; the Start
 // label re-derives to "Restart" once drained), ghost Edit/Reset buttons,
-// and a scrim modal. The modal rides `then_build(edit_modal)` — the
-// branch builder runs at ACTIVATION, so it mints the text controller
-// pre-filled with the live `initial` (the old boot-time pre-build +
-// `b_edit` re-seed workaround is gone).
-use futures::{ launch_future, sleep };
+// and a scrim modal. The modal rides `then_build(...)` — the branch
+// builder runs at ACTIVATION over the text controller the edit mutation
+// re-seeded with the live `initial` (minted once at boot, next to its
+// undo stack).
+use futures::{ sleep };
 use tur::{
     ALIGN_CENTER, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_POINTER,
     HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, mem_get, mem_new, mem_set,
-    mount, rs_get_bool, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64,
-    st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,
-    undo_new,
+    mount, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
 };
 use tur_kit::{
-    Column, Condition, Container, Input, MouseRegion, PointerInteract, Row, SizedBox, Stack, Text,
-    rs_derive,
+    Column, Condition, Container, DeriveCtx, Input, MouseRegion, Mutation, MutationCtx,
+    PointerInteract, Readable, Row, SizedBox, Stack, TaskCtx, Text, derive_str, mutate, spawn,
+    source_bool, source_f64,
 };
 
-
-let K_CTRL: u64 = 2;
-let K_EDITING: u64 = 4;
-let K_INITIAL: u64 = 5;
-let K_GEN: u64 = 6;
-let K_RUNNING: u64 = 7;
-let K_REMAINING: u64 = 8;
 
 // The light-slate palette (the boa countdown).
 let PAGE_BG: u64 = 0xF8FAFCFFu64;
@@ -48,24 +42,81 @@ let PAUSE_SHADOW: u64 = 0xF59E0B5Au64;
 let BACKDROP: u64 = 0x0F172A6Eu64;
 
 entry fn start() -> u64 {
-    let remaining = rs_source_f64();
-    rs_set_f64(remaining, 60.0);
-    let initial = rs_source_f64();
-    rs_set_f64(initial, 60.0);
-    let running = rs_source_bool(false);
-    let editing = rs_source_bool(false);
-    stf_put(K_REMAINING, remaining as f64);
-    stf_put(K_INITIAL, initial as f64);
-    stf_put(K_RUNNING, running as f64);
-    stf_put(K_EDITING, editing as f64);
+    let remaining: Readable<f64> = source_f64(60.0);
+    let initial: Readable<f64> = source_f64(60.0);
+    let running: Readable<bool> = source_bool(false);
+    let editing: Readable<bool> = source_bool(false);
 
-    let display = rs_derive(fmt_display, remaining);
-    let start_label = rs_derive(fmt_start_label, remaining);
+    let display: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return fmt_display(ctx.get_f64(remaining));
+    });
+    let start_label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return fmt_start_label(ctx.get_f64(remaining));
+    });
 
-    st_put(K_GEN, mem_new(0.0));
+    // The generation guard: the mem cell holds the live generation; the
+    // ticker pins its own and exits when superseded.
+    let cell = mem_new(0.0);
 
-    let edit_button = ghost_button("btn-edit", "Edit", b_edit, initial, editing);
-    let reset_button = ghost_button("btn-reset", "Reset", b_reset, initial, remaining);
+    // The modal's text controller + undo stack: minted once, re-seeded by
+    // the edit mutation at every open.
+    let ctrl = tctrl_new();
+    let undo = undo_new();
+
+    // Start: guard against double-start, set running, launch the ticker
+    // with a fresh generation.
+    let b_start = mutate(fn (ctx: MutationCtx) {
+        if (ctx.get_bool(running)) {
+            return;
+        }
+        ctx.set_bool(running, true);
+        spawn(ticker(TaskCtx.mint(), gen_bump(cell), cell, running, remaining));
+    });
+
+    // Pause: stop the clock and supersede any live ticker.
+    let b_pause = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(running, false);
+        gen_bump(cell);
+    });
+
+    // Reset: stop the clock and restore the initial time.
+    let b_reset = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(running, false);
+        gen_bump(cell);
+        ctx.set_f64(remaining, ctx.get_f64(initial));
+    });
+
+    // Open the editor: stop the clock, supersede any live ticker, mark
+    // editing, and pre-seed the modal's controller with the live
+    // `initial` (the branch builds fresh at activation, over the seeded
+    // controller).
+    let b_edit = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(running, false);
+        gen_bump(cell);
+        ctx.set_bool(editing, true);
+        tctrl_set_text(ctrl, f"{ctx.get_f64(initial) as u64}");
+    });
+
+    // Cancel: close the modal.
+    let b_cancel = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(editing, false);
+    });
+
+    // Confirm: parse the field, apply it to initial + remaining, close.
+    let b_confirm = mutate(fn (ctx: MutationCtx) {
+        let v = str_parse_f64(tctrl_text(ctrl));
+        ctx.set_f64(initial, v);
+        ctx.set_f64(remaining, v);
+        ctx.set_bool(editing, false);
+    });
+
+    // Clicks inside the card stop at the card (the scrim's cancel never
+    // sees them).
+    let b_swallow = mutate(fn (_ctx: MutationCtx) {
+    });
+
+    let edit_button = ghost_button("btn-edit", "Edit", b_edit);
+    let reset_button = ghost_button("btn-reset", "Reset", b_reset);
 
     // The primary action: amber Pause while running, emerald
     // Start/Restart otherwise (the label re-derives over `remaining`).
@@ -83,7 +134,7 @@ entry fn start() -> u64 {
 
     // The edit modal overlays the pane while `editing` is set.
     let modal = Condition(editing)
-        .then_build(fn () -> View { return edit_modal(); })
+        .then_build(fn () -> View { return edit_modal(ctrl, undo, b_confirm, b_cancel, b_swallow); })
         .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
         .build();
 
@@ -92,7 +143,7 @@ entry fn start() -> u64 {
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text("COUNTDOWN").font_size(11.0).color(TEXT_FAINT).build())
         .child(SizedBox(0.0, 10.0).build())
-        .child(Text().text_bound_derived(display).font_size(96.0).color(TEXT).query_key("display").build())
+        .child(Text().text_bound(display).font_size(96.0).color(TEXT).query_key("display").build())
         .child(SizedBox(0.0, 12.0).build())
         .child(status)
         .child(SizedBox(0.0, 36.0).build())
@@ -112,13 +163,13 @@ entry fn start() -> u64 {
     // The pane centered in the viewer; the modal overlays it when open.
     let page = Container().color(PAGE_BG).alignment(ALIGN_CENTER).child(pane).build();
     mount(Stack().fit(STACK_FIT_EXPAND).child(page).child(modal).build());
-    return remaining;
+    return remaining.atom_id();
 }
 
 // ---- the styled pieces -------------------------------------------------------
 
 // The big rounded primary button (the boa PrimaryButton).
-fn pad(key: str, label: str, bg: u64, shade: u64, cb: fn(u64, u64, f64)) -> opaque {
+fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil, nil>) -> opaque {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
@@ -128,31 +179,31 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: fn(u64, u64, f64)) -> opaq
         .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
-        .on_tap(cb)
+        .on_click(cb)
         .query_key(key)
         .child(face)
         .build();
 }
 
 // The Start pad: the label rides the derive ("Restart" once drained).
-fn start_pad(label_atom: u64, cb: fn(u64, u64, f64)) -> opaque {
+fn start_pad(label: Readable<str>, cb: Mutation<nil, nil>) -> opaque {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
         .color(START)
         .shadow(START_SHADOW, 14.0, 0.0, 6.0)
         .alignment(ALIGN_CENTER)
-        .child(Text().text_bound_derived(label_atom).font_size(15.0).color(BTN_FG).build())
+        .child(Text().text_bound(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
-        .on_tap(cb)
+        .on_click(cb)
         .query_key("btn-start")
         .child(face)
         .build();
 }
 
 // The bordered ghost button (the boa GhostButton).
-fn ghost_button(key: str, label: str, cb: fn(u64, u64, f64), a: u64, b: u64) -> opaque {
+fn ghost_button(key: str, label: str, cb: Mutation<nil, nil>) -> opaque {
     let face = Container()
         .padding(10.0)
         .radius(10.0)
@@ -164,8 +215,7 @@ fn ghost_button(key: str, label: str, cb: fn(u64, u64, f64), a: u64, b: u64) -> 
         .cursor(CURSOR_POINTER)
         .child(
             PointerInteract()
-                .ids(a, b)
-                .on_tap(cb)
+                .on_click(cb)
                 .query_key(key)
                 .child(face)
                 .build(),
@@ -199,16 +249,9 @@ fn chip_status(running: bool) -> opaque {
 }
 
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
-// swallows its own taps. Runs at ACTIVATION — the controller is minted
-// fresh and pre-filled with the live `initial`.
-fn edit_modal() -> opaque {
-    let initial = stf_take(K_INITIAL) as u64;
-    stf_put(K_INITIAL, initial as f64);
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, f"{rs_get_f64(initial) as u64}");
-    st_put(K_CTRL, ctrl);
-
-    let undo = undo_new();
+// swallows its own taps. Runs at ACTIVATION over the controller the edit
+// mutation re-seeded.
+fn edit_modal(ctrl: opaque, undo: opaque, b_confirm: Mutation<nil, nil>, b_cancel: Mutation<nil, nil>, b_swallow: Mutation<nil, nil>) -> opaque {
     let field = Input()
         .controller(ctrl)
         .undo(undo)
@@ -245,14 +288,14 @@ fn edit_modal() -> opaque {
                     Row()
                         .main_alignment(MAIN_ALIGN_END)
                         .main_axis_size(MAIN_SIZE_MIN)
-                        .child(ghost_button("btn-cancel", "Cancel", b_cancel, 0, 0))
+                        .child(ghost_button("btn-cancel", "Cancel", b_cancel))
                         .child(SizedBox(8.0, 0.0).build())
                         .child(
                             MouseRegion()
                                 .cursor(CURSOR_POINTER)
                                 .child(
                                     PointerInteract()
-                                        .on_tap(b_confirm)
+                                        .on_click(b_confirm)
                                         .query_key("btn-confirm")
                                         .child(
                                             Container()
@@ -276,7 +319,7 @@ fn edit_modal() -> opaque {
 
     let inner = PointerInteract()
         .behavior(HIT_TEST_OPAQUE)
-        .on_tap(b_swallow)
+        .on_click(b_swallow)
         .child(card)
         .build();
     let scrim = Container()
@@ -286,7 +329,7 @@ fn edit_modal() -> opaque {
         .build();
     return PointerInteract()
         .behavior(HIT_TEST_OPAQUE)
-        .on_tap(b_cancel)
+        .on_click(b_cancel)
         .query_key("edit-modal")
         .child(scrim)
         .build();
@@ -316,105 +359,31 @@ fn fmt_start_label(v: f64) -> str {
 // ---- the 1 Hz ticker ------------------------------------------------------------
 
 // `g` pins the generation: a stale loop (superseded by a later start /
-// pause) exits without ticking. The running-atom id is taken and restored
-// IMMEDIATELY — the slot must stay populated across the awaits, or a tap
-// handler firing mid-tick reads an empty slot (0) and writes to atom 0.
-async fn ticker(g: f64) -> str {
-    let running = stf_take(K_RUNNING) as u64;
-    stf_put(K_RUNNING, running as f64);
-    while (rs_get_bool(running)) {
+// pause / edit / reset) exits without ticking. The handles and the mem
+// cell ride as parameters; the ctx is task-scoped.
+async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, remaining: Readable<f64>) -> str {
+    while (ctx.get_bool(running)) {
         await sleep(1000);
-        if (gen_read() != g) {
+        if (mem_get(cell) != g) {
             return "";
         }
-        if (!rs_get_bool(running)) {
+        if (!ctx.get_bool(running)) {
             return "";
         }
-        let remaining = stf_take(K_REMAINING) as u64;
-        stf_put(K_REMAINING, remaining as f64);
-        let r = rs_get_f64(remaining);
+        let r = ctx.get_f64(remaining);
         if (r <= 1.0) {
-            rs_set_f64(remaining, 0.0);
-            rs_set_bool(running, false);
+            ctx.set_f64(remaining, 0.0);
+            ctx.set_bool(running, false);
             return "";
         }
-        rs_set_f64(remaining, r - 1.0);
+        ctx.set_f64(remaining, r - 1.0);
     }
     return "";
 }
 
-fn gen_read() -> f64 {
-    let cell = st_take(K_GEN);
-    let v = mem_get(cell);
-    st_put(K_GEN, cell);
-    return v;
-}
-
-fn gen_bump() -> f64 {
-    let cell = st_take(K_GEN);
+// Bump the generation cell and answer the fresh generation.
+fn gen_bump(cell: opaque) -> f64 {
     let g = mem_get(cell) + 1.0;
     mem_set(cell, g);
-    st_put(K_GEN, cell);
     return g;
-}
-
-// ---- the taps -------------------------------------------------------------------
-
-fn b_start(_a: u64, _b: u64, _n: f64) {
-    let running = stf_take(K_RUNNING) as u64;
-    if (rs_get_bool(running)) {
-        stf_put(K_RUNNING, running as f64);
-        return;
-    }
-    rs_set_bool(running, true);
-    stf_put(K_RUNNING, running as f64);
-    launch_future(ticker(gen_bump()));
-}
-
-fn b_pause(_a: u64, _b: u64, _n: f64) {
-    let running = stf_take(K_RUNNING) as u64;
-    rs_set_bool(running, false);
-    stf_put(K_RUNNING, running as f64);
-    gen_bump();
-}
-
-fn b_reset(initial: u64, remaining: u64, _n: f64) {
-    let running = stf_take(K_RUNNING) as u64;
-    rs_set_bool(running, false);
-    stf_put(K_RUNNING, running as f64);
-    gen_bump();
-    rs_set_f64(remaining, rs_get_f64(initial));
-}
-
-// Open the editor: stop the clock; the modal branch builds fresh (and
-// pre-seeds its controller) at activation.
-fn b_edit(initial: u64, editing: u64, _n: f64) {
-    let running = stf_take(K_RUNNING) as u64;
-    rs_set_bool(running, false);
-    stf_put(K_RUNNING, running as f64);
-    gen_bump();
-    rs_set_bool(editing, true);
-}
-
-fn b_cancel(_a: u64, _b: u64, _n: f64) {
-    let editing = stf_take(K_EDITING) as u64;
-    rs_set_bool(editing, false);
-    stf_put(K_EDITING, editing as f64);
-}
-
-// Clicks inside the card stop at the card (the scrim's cancel never sees them).
-fn b_swallow(_a: u64, _b: u64, _n: f64) {}
-
-fn b_confirm(_a: u64, _b: u64, _n: f64) {
-    let ctrl = st_take(K_CTRL);
-    let v = str_parse_f64(tctrl_text(ctrl));
-    let initial = stf_take(K_INITIAL) as u64;
-    rs_set_f64(initial, v);
-    stf_put(K_INITIAL, initial as f64);
-    let remaining = stf_take(K_REMAINING) as u64;
-    rs_set_f64(remaining, v);
-    stf_put(K_REMAINING, remaining as f64);
-    let editing = stf_take(K_EDITING) as u64;
-    rs_set_bool(editing, false);
-    stf_put(K_EDITING, editing as f64);
 }

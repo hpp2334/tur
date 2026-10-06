@@ -8,8 +8,8 @@
 use tur_integration_tests::TurTestApp;
 
 const PROBE_RUT: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str, stf_put, stf_take };
-use tur_kit::{ Column, Text };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Column, MutationCtx, Readable, Text, source_str };
 
 // ASCII codepoints the scanner compares against (typed so the literals
 // land on `u32`).
@@ -25,32 +25,25 @@ let C_RBRACE: u32 = 125;
 let C_LBRACKET: u32 = 91;
 let C_RBRACKET: u32 = 93;
 
-let K_FULL: u64 = 1;
-let K_DESC: u64 = 2;
-
 entry fn start() -> u64 {
-    let full = rs_source_str("");
-    let desc = rs_source_str("");
-    stf_put(K_FULL, full as f64);
-    stf_put(K_DESC, desc as f64);
+    let full: Readable<str> = source_str("");
+    let desc: Readable<str> = source_str("");
     let col = Column()
         .child(Text().text_bound(full).query_key("ghj-full").build())
         .child(Text().text_bound(desc).query_key("ghj-desc").build())
         .build();
     mount(col);
-    return 0;
+    return full.atom_id();
 }
 
 // Run the scanner over META (the payload rides the f64 arg as a selector
 // into the case's payloads) and land the fields on the bound strings.
-entry fn probe(_a: u64, _b: f64) {
+entry fn probe(atom: u64, _b: f64) {
     let meta = "{\"id\":10270450,\"node_id\":\"MDEwOlJlcG9zaXRvcnkxMDI3MDQ1MA==\",\"name\":\"react\",\"full_name\":\"facebook/react\",\"private\":false,\"owner\":{\"login\":\"facebook\",\"id\":69631,\"node_id\":\"MDEyOk9yZ2FuaXphdGlvbjY5NjMx\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/69631?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/facebook\",\"html_url\":\"https://github.com/facebook\",\"followers_url\":\"https://api.github.com/users/facebook/followers\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/facebook/react\",\"description\":\"The library for web and native user interfaces.\",\"fork\":false,\"url\":\"https://api.github.com/repos/facebook/react\",\"stargazers_count\":237000,\"watchers_count\":237000,\"language\":\"JavaScript\",\"open_issues_count\":995,\"license\":{\"key\":\"mit\",\"name\":\"MIT License\",\"spdx_id\":\"MIT\"},\"forks\":48500,\"default_branch\":\"main\"}";
-    let full = stf_take(K_FULL) as u64;
-    stf_put(K_FULL, full as f64);
-    rs_set_str(full, json_get_str(meta, "full_name"));
-    let desc = stf_take(K_DESC) as u64;
-    stf_put(K_DESC, desc as f64);
-    rs_set_str(desc, json_get_str(meta, "description"));
+    // The desc atom mints right after full — the probe addresses the pair.
+    let write = MutationCtx.over(ctx_bridge());
+    write.set_str(Readable<str>.of(ctx_bridge(), atom), json_get_str(meta, "full_name"));
+    write.set_str(Readable<str>.of(ctx_bridge(), atom + 1), json_get_str(meta, "description"));
 }
 
 fn skip_ws(t: str, i: i32) -> i32 {
@@ -214,7 +207,7 @@ fn setup() -> TurTestApp {
 #[test]
 fn full_name_extracts_verbatim() {
     let mut app = setup();
-    app.call_rut_entry("probe", 0, 0.0).unwrap();
+    app.call_rut_entry("probe", app.rut_start_answer(), 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         app.query_text(&["ghj-full"]).as_deref(),

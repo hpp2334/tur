@@ -9,21 +9,21 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur::{ decode_utf8, encode_utf8, mount, rs_set_str, rs_source_str };
-use tur_kit::{ Column, Text };
+use tur::{ ctx_bridge, decode_utf8, encode_utf8, mount };
+use tur_kit::{ Column, MutationCtx, Readable, Text, source_str };
 
 
 entry fn start() -> u64 {
-    let label = rs_source_str("");
+    let label: Readable<str> = source_str("");
 
     let ascii = decode_utf8(encode_utf8("hello world"));
     let unicode = decode_utf8(encode_utf8("héllo 世界 🚀"));
     let empty = decode_utf8(encode_utf8(""));
-    rs_set_str(label, f"{ascii}|{unicode}|{empty}|");
+    MutationCtx.over(ctx_bridge()).set_str(label, f"{ascii}|{unicode}|{empty}|");
 
     let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
-    return label;
+    return label.atom_id();
 }
 "#;
 

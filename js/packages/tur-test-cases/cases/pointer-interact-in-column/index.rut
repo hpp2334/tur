@@ -1,14 +1,13 @@
 // pointer-interact-in-column: two gesture pads stacked in a column.
-use tur::{ CROSS_ALIGN_START, mount, rs_source_f64 };
+use tur::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container, PointerInteract };
 
 
 entry fn start() {
-    let pad = rs_source_f64();
     let mut col = Column().cross_alignment(CROSS_ALIGN_START);
     let a = Container().width_height(80.0, 40.0);
     let b = Container().width_height(60.0, 30.0);
-    col.child(PointerInteract().ids(pad, pad).child(a.build()).build());
-    col.child(PointerInteract().ids(pad, pad).child(b.build()).build());
+    col.child(PointerInteract().child(a.build()).build());
+    col.child(PointerInteract().child(b.build()).build());
     mount(col.build());
 }

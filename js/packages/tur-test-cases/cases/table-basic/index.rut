@@ -10,8 +10,8 @@
 // Row extents stay intrinsic so the wrapped notes are never clipped.
 // (Module lets are literals-only in this build, so the planet data rides
 // pipe-joined strings.)
-use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
-use tur_kit::{ Container, Expanded, Table, TableCols, Text };
+use tur::mount;
+use tur_kit::{ Container, Expanded, Table, TableCols, Text, list_new, list_push, source_value };
 
 
 // The planet data (pipe-joined slots — the row builder indexes by row).
@@ -25,13 +25,13 @@ let CELL_FG: u64 = 0xE2E8F0FFu64;
 let STRIPE: u64 = 0x1E293BFFu64;
 
 entry fn start() {
-    let rows = rs_list_new();
+    let rows = list_new();
     let mut i = 0;
     while (i < 6) {
-        rs_list_push(rows, f"p{i}");
+        list_push(rows, f"p{i}");
         i = i + 1;
     }
-    let rows_atom = rs_source_value(rows);
+    let rows_atom = source_value(rows);
 
     // Per-column geometry: extent 150 / flex 1 / flex 2 (min 120) — the
     // widths resolve against the table width once, and the header + every

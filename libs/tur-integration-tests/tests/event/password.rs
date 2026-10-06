@@ -296,27 +296,23 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// returns its id — the standard probe channel). `probe_obscure(b)` sets
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
-use tur::{ mount, rs_set_bool, rs_source_bool, stf_put, stf_take, tctrl_new, undo_new };
-use tur_kit::{ Input };
-
-let K_OBSCURE: u64 = 7;
+use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
+use tur_kit::{ Input, MutationCtx, Readable, source_bool };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let obscure = rs_source_bool(true);
+    let obscure: Readable<bool> = source_bool(true);
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .obscure_bound(obscure)
         .query_key("input").build();
-    stf_put(K_OBSCURE, obscure as f64);
     mount(input);
-    return obscure;
+    return obscure.atom_id();
 }
 
-entry fn probe_obscure(_a: u64, b: f64) {
-    let obscure = stf_take(K_OBSCURE) as u64;
-    rs_set_bool(obscure, b != 0.0);
-    stf_put(K_OBSCURE, obscure as f64);
+entry fn probe_obscure(atom: u64, b: f64) {
+    let obscure = Readable<bool>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_bool(obscure, b != 0.0);
 }
 "#;
 
@@ -366,26 +362,23 @@ fn obscure_bound_toggles_masking_reactively() {
 /// same Val/subscribe machinery `obscure_bound` exercises above — plus
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str, stf_put, stf_take, tctrl_new, undo_new };
-use tur_kit::{ Input };
+use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
+use tur_kit::{ Input, MutationCtx, Readable, source_str };
 
-let K_HINT: u64 = 8;
-
-entry fn start() {
+entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let hint = rs_source_str("type here");
+    let hint: Readable<str> = source_str("type here");
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .placeholder_bound(hint)
         .query_key("input").build();
-    stf_put(K_HINT, hint as f64);
     mount(input);
+    return hint.atom_id();
 }
 
-entry fn probe_hint(_a: u64, _b: f64) {
-    let hint = stf_take(K_HINT) as u64;
-    rs_set_str(hint, "other hint");
-    stf_put(K_HINT, hint as f64);
+entry fn probe_hint(atom: u64, _b: f64) {
+    let hint = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(hint, "other hint");
 }
 "#;
 
@@ -402,7 +395,7 @@ fn placeholder_bound_swaps_through_the_live_atom() {
 
     // The placeholder atom swap must re-resolve the input cleanly (no
     // trap, no stale subtree) and leave the value intact.
-    app.call_rut_entry("probe_hint", 0, 0.0).unwrap();
+    app.call_rut_entry("probe_hint", app.rut_start_answer(), 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_value(&app, id),

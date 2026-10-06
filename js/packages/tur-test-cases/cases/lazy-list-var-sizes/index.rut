@@ -1,27 +1,23 @@
 // lazy-list-var-sizes: the boa "Variable width + height LazyList" —
 // items with DIFFERENT main-axis extents (no itemExtent: every visible
 // item is measured and anchored). The indigo toggle flips the axis at
-// runtime: the list rides a one-item Each over the axis atom, so the
-// flip re-mounts a fresh LazyList (the rebuild-on-change idiom). Rows
-// show a colored width-bar (cross-axis sizes clamp to the viewport, so
-// "different widths" lives INSIDE the row) + the h/bar labels on a
-// zebra fill.
+// runtime: the tap mutation toggles the axis source and rewrites the
+// one-item list, so the Each re-mounts a fresh LazyList (the
+// rebuild-on-change idiom); the axis branches are Conditions over the
+// typed handle. Rows show a colored width-bar (cross-axis sizes clamp to
+// the viewport, so "different widths" lives INSIDE the row) + the h/bar
+// labels on a zebra fill.
 //
 // Deterministic per-index sizes via the boa sine-hash (math_sin is the
 // engine's only trig row — exactly what the hash needs).
-use tur::{ ALIGN_CENTER, ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL,
-    CURSOR_POINTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, mount,
-    rs_get_bool, rs_list_new, rs_list_push, rs_set_bool, rs_set_value, rs_source_bool,
-    rs_source_value, stf_put, stf_take, str_parse_f64 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion,
-    PointerInteract, Row, SizedBox, Text };
+use tur::{ ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL, CURSOR_POINTER,
+    CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, mount, str_parse_f64 };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion, MutationCtx,
+    PointerInteract, Readable, Row, SizedBox, Text, list_new, list_push, mutate, source_bool,
+    source_f64, source_value };
 
 
 let ITEM_COUNT: f64 = 2000.0;
-
-let K_AXIS: u64 = 1; // the axis bool atom (true = vertical)
-let K_ITEMS: u64 = 2; // the one-item list that re-mounts the list
-let K_COUNT: u64 = 3; // the item-count atom
 
 // The palette (the hsl(65,55) sweep's table twin), as "r,g,b" slots.
 let BAR_HUES: str = "217,87,87|217,126,87|203,164,63|132,180,91|71,171,139|70,163,196|79,134,198|110,110,214|146,104,219|180,104,219|204,102,175|197,102,119";
@@ -32,20 +28,19 @@ let LABEL: u64 = 0xCBD5E1FFu64;
 let LABEL_FAINT: u64 = 0x64748BFFu64;
 
 entry fn start() {
-    let axis = rs_source_bool(true);
-    stf_put(K_AXIS, axis as f64);
-    let items = rs_source_value(one_list());
-    stf_put(K_ITEMS, items as f64);
-    let count = rs_source_f64();
-    rs_set_f64(count, ITEM_COUNT);
-    stf_put(K_COUNT, count as f64);
+    let axis = source_bool(true);
+    let items = source_value(one_list());
+    let count = source_f64(ITEM_COUNT);
+    let b_flip = mutate(fn (ctx: MutationCtx) {
+        ctx.set_bool(axis, !ctx.get_bool(axis));
+        ctx.set_value(items, one_list());
+    });
 
     let toggle = MouseRegion()
         .cursor(CURSOR_POINTER)
         .child(
             PointerInteract()
-                .ids(axis, items)
-                .on_tap(b_flip)
+                .on_click(b_flip)
                 .query_key("var-sizes-toggle")
                 .child(
                     Container()
@@ -67,7 +62,9 @@ entry fn start() {
     let list_host = Container()
         .radius(8.0)
         .color(0x0B1220FFu64)
-        .child(Each(items).item_builder(list_of).build())
+        .child(Each(items).item_builder(fn (_i: u64, _s: str) -> View {
+            return list_of(axis, count);
+        }).build())
         .build();
 
     let col = Column()
@@ -83,32 +80,34 @@ entry fn start() {
 // A fresh one-item list — rewriting it re-invokes the Each builder (the
 // list re-mounts with the axis read fresh).
 fn one_list() -> opaque {
-    let fresh = rs_list_new();
-    rs_list_push(fresh, "list");
+    let fresh = list_new();
+    list_push(fresh, "list");
     return fresh;
 }
 
-// The Each branch: one LazyList keyed by the current axis.
-fn list_of(_i: u64, _s: str) -> opaque {
-    let axis = stf_take(K_AXIS);
-    stf_put(K_AXIS, axis);
-    let count = stf_take(K_COUNT);
-    stf_put(K_COUNT, count);
-    if (rs_get_bool(axis as u64)) {
-        return LazyList()
-            .item_builder(item)
-            .count(count as u64)
-            .overscan(2)
-            .axis(AXIS_VERTICAL)
-            .query_key("var-sizes-v")
-            .build();
-    }
-    return LazyList()
-        .item_builder(item)
-        .count(count as u64)
-        .overscan(2)
-        .axis(AXIS_HORIZONTAL)
-        .query_key("var-sizes-h")
+// The Each branch: one LazyList keyed by the live axis — a Condition
+// over the handle picks the orientation (the branch factories capture
+// the count handle; they read nothing at build time).
+fn list_of(axis: Readable<bool>, count: Readable<f64>) -> opaque {
+    return Condition(axis)
+        .then_build(fn () -> View {
+            return LazyList()
+                .item_builder(vertical_row)
+                .count(count)
+                .overscan(2)
+                .axis(AXIS_VERTICAL)
+                .query_key("var-sizes-v")
+                .build();
+        })
+        .else_build(fn () -> View {
+            return LazyList()
+                .item_builder(horizontal_row)
+                .count(count)
+                .overscan(2)
+                .axis(AXIS_HORIZONTAL)
+                .query_key("var-sizes-h")
+                .build();
+        })
         .build();
 }
 
@@ -140,18 +139,15 @@ fn zebra_fill(i: u64) -> u64 {
     return ZEBRA_A;
 }
 
-// One item — a vertical row or a horizontal column, per the live axis.
-fn item(i: u64) -> opaque {
-    let main = main_size(i);
-    let cross = cross_size(i);
-    let bar_color = pal(BAR_HUES, (i * 5) % 12);
-    let zebra = zebra_fill(i);
-    let axis = stf_take(K_AXIS);
-    stf_put(K_AXIS, axis);
-    if (rs_get_bool(axis as u64)) {
-        return vertical_item(i, main, cross, bar_color, zebra);
-    }
-    return horizontal_item(i, main, cross, bar_color, zebra);
+// One vertical item — the per-index sizing + palette folded, then the
+// row renderer.
+fn vertical_row(i: u64) -> opaque {
+    return vertical_item(i, main_size(i), cross_size(i), pal(BAR_HUES, (i * 5) % 12), zebra_fill(i));
+}
+
+// One horizontal item — the same fold for the axis-flipped list.
+fn horizontal_row(i: u64) -> opaque {
+    return horizontal_item(i, main_size(i), cross_size(i), pal(BAR_HUES, (i * 5) % 12), zebra_fill(i));
 }
 
 // The i'th '|'-separated slot of a data string.
@@ -249,11 +245,4 @@ fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) ->
         .alignment(ALIGN_TOP_CENTER)
         .child(line)
         .build();
-}
-
-// The flip: toggle the axis atom + rewrite the one-item list (the Each
-// re-mounts the LazyList with the fresh axis).
-fn b_flip(axis: u64, items: u64, _n: f64) {
-    rs_set_bool(axis, !rs_get_bool(axis));
-    rs_set_value(items, one_list());
 }

@@ -1,19 +1,18 @@
 // container-update-clear-prop: the checkbox's color prop is bound to a
-// brush atom — toggling clears it (a Nil brush fails the decode and the
+// brush source — toggling clears it (a Nil brush fails the decode and the
 // prop resolves to absent) while the border stays.
-use tur::{ BORDER_CENTER, mount, rs_list_new, rs_set_brush, rs_source_value, stf_put, stf_take };
-use tur_kit::{ Container, PointerInteract };
+use tur::{ BORDER_CENTER, ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, PointerInteract, Readable, mutate, source_f64 };
 
-
-let K_CHECKED: u64 = 1;
-let K_COLOR: u64 = 2;
 
 entry fn start() -> u64 {
-    let checked = rs_source_value(rs_list_new());
-    let color = rs_source_value(rs_list_new());
-    stf_put(K_CHECKED, checked as f64);
-    stf_put(K_COLOR, color as f64);
-    rs_set_brush(color, 0x22C35EFFu64);
+    let color: Readable<f64> = source_f64(0.0);
+
+    // The toggle: clear the brush (a 0 write lands Nil — the decode fails
+    // and the color prop resolves to absent; the border stays).
+    let b_toggle = mutate(fn (ctx: MutationCtx) {
+        ctx.set_brush(color, 0);
+    });
 
     let mut outer = Container().width_height(200.0, 100.0).padding(20.0);
 
@@ -23,15 +22,12 @@ entry fn start() -> u64 {
         .color_bound(color)
         .border(0xE2E8F0FFu64, 2.0, BORDER_CENTER)
         .query_key("checkbox");
-    outer.child(PointerInteract().id(checked).on_tap(b_toggle).query_key("rut/gesture").child(checkbox.build()).build());
+    outer.child(PointerInteract().on_click(b_toggle).query_key("rut/gesture").child(checkbox.build()).build());
+
+    // The checked state: the brush seed (the ctx face at boot — the
+    // channels seed before the first flush).
+    MutationCtx.over(ctx_bridge()).set_brush(color, 0x22C35EFFu64);
 
     mount(outer.build());
-    return checked;
-}
-
-fn b_toggle(_a: u64, _b: u64, _n: f64) {
-    // Uncheck: clear the color (the brush atom gets Nil).
-    let color = stf_take(K_COLOR) as u64;
-    rs_set_brush(color, 0);
-    stf_put(K_COLOR, color as f64);
+    return color.atom_id();
 }

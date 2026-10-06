@@ -43,7 +43,7 @@ mod async_caps;
 mod derive;
 mod mutation;
 
-pub use mutation::{CtxBridge, mutation_of};
+pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
 /// opaques from `entry fn(index)` calls).
@@ -148,9 +148,14 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("ctx_get_f64", vec![TY_OPAQUE, TY_U64], TY_F64),
         row("ctx_get_str", vec![TY_OPAQUE, TY_U64], TY_STR),
         row("ctx_get_bool", vec![TY_OPAQUE, TY_U64], TY_BOOL),
+        row("ctx_get_value", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
+        row("ctx_get_opaque", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
         row("ctx_set_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
         row("ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
         row("ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
+        row("ctx_set_value", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx_set_brush", vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL),
+        row("ctx_set_opaque", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
         row("ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
         row("mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
@@ -545,55 +550,12 @@ pub enum Intent {
         b: u64,
         seq: f64,
     },
-    /// A key event from the Focusable's `onKeyDown` mutation.
-    Key {
-        entry: &'static str,
-        cb: OpaqueRef,
-        id: u64,
-        key: String,
-        code: String,
-        modifiers: u64,
-        kind: u64,
-    },
-    /// A pointer event from the PointerInteract down/move/up/context-menu
-    /// mutations: `(cb, id, local_x, local_y, global_x, global_y, button)`.
-    Pointer {
-        entry: &'static str,
-        cb: OpaqueRef,
-        id: u64,
-        lx: f64,
-        ly: f64,
-        gx: f64,
-        gy: f64,
-        button: u64,
-    },
-    /// The two-id pointer variant (the two-id gesture rail):
-    /// `(cb, id_a, id_b, positions...)`.
-    Pointer2 {
-        entry: &'static str,
-        cb: OpaqueRef,
-        a: u64,
-        b: u64,
-        lx: f64,
-        ly: f64,
-        gx: f64,
-        gy: f64,
-        button: u64,
-    },
-    /// A raw value payload (animation `onTick(eased)`, `watch(atom, cb)`
-    /// change deliveries).
+    /// A raw value payload (`watch(atom, cb)` change deliveries).
     Value {
         entry: &'static str,
         cb: OpaqueRef,
         a: u64,
         value: crate::core::edgy::Value,
-    },
-    /// A bytes payload (net-stream chunks): `cb(id, data: bytes)`.
-    Bytes {
-        entry: &'static str,
-        cb: OpaqueRef,
-        a: u64,
-        data: Vec<u8>,
     },
 }
 
@@ -602,31 +564,22 @@ impl Intent {
     /// the drain-log handle).
     pub fn entry(&self) -> &'static str {
         match self {
-            Intent::Click { entry, .. }
-            | Intent::Key { entry, .. }
-            | Intent::Pointer { entry, .. }
-            | Intent::Pointer2 { entry, .. }
-            | Intent::Value { entry, .. }
-            | Intent::Bytes { entry, .. } => entry,
+            Intent::Click { entry, .. } | Intent::Value { entry, .. } => entry,
         }
     }
 }
 
 /// The infra dispatch-entry names (engine constants - the kit modules
 /// declare the matching `entry fn`s; see the kit's scope-law note). The
-/// `tur_kit` prelude owns these shapes; other kits declare their own
-/// (`__tur_acb_val` in tur-animation's kit, `__tur_ncb_bytes` in the net
-/// kit).
+/// `tur_kit` prelude owns these shapes; other kits declare their own.
+/// (The M2 sweep retired the legacy pointer/key shapes — the gesture,
+/// input, focus, mouse-region and lifecycle pads store sealed mutations
+/// now; the click shape survives for `rs_watch` deliveries and the
+/// lifecycle `before_destroy` fn rail.)
 pub mod cb_entries {
-    /// The `(cb, a, b, n)` click shape - taps, focus/blur, enter/exit,
-    /// on-input, lifecycle, watch deliveries.
+    /// The `(cb, a, b, n)` click shape - watch deliveries +
+    /// `before_destroy`.
     pub const CLICK: &str = "__tur_cb_click";
-    /// The `(cb, id, key, code, mods, kind)` key shape.
-    pub const KEY: &str = "__tur_cb_key";
-    /// The single-id pointer shape.
-    pub const PTR1: &str = "__tur_cb_ptr1";
-    /// The two-id pointer shape.
-    pub const PTR2: &str = "__tur_cb_ptr2";
     /// The `(cb) -> view` zero-arg branch-builder shape (Condition
     /// then/else + Switch cases — invoked at activation).
     pub const BUILD0: &str = "__tur_cb_build0";
@@ -652,8 +605,23 @@ pub mod mutation_entries {
     /// The pointer mutation: `(cb, h, lx, ly, gx, gy, btn)` — the entry
     /// constructs the typed `PointerEvent`.
     pub const MPTR: &str = "__tur_cb_mptr";
-    /// The typed-arg/typed-ret mutation: `(cb, h, a) -> f64`.
+    /// The typed-arg mutation: `(cb, h, a)` — ticks and `ctx.run_f64`.
     pub const MF64: &str = "__tur_cb_mf64";
+    /// The region enter/exit mutations: `(cb, h, lx, ly, gx, gy)` — the
+    /// entries construct `EnterEvent` / `ExitEvent`.
+    pub const MENTER: &str = "__tur_cb_menter";
+    pub const MEXIT: &str = "__tur_cb_mexit";
+    /// The key mutation: `(cb, h, key, code, modifiers)`.
+    pub const MKEY: &str = "__tur_cb_mkey";
+    /// The input mutation: `(cb, h, value, enter)`.
+    pub const MINPUT: &str = "__tur_cb_minput";
+    /// The payload-less events: `(cb, h)` — the entries construct
+    /// `FocusEvent` / `BlurEvent` / `MountEvent`.
+    pub const MFOCUS: &str = "__tur_cb_mfocus";
+    pub const MBLUR: &str = "__tur_cb_mblur";
+    pub const MMOUNT: &str = "__tur_cb_mmount";
+    /// The bytes mutation: `(cb, h, data)` — net-stream chunks.
+    pub const MBYTES: &str = "__tur_cb_mbytes";
     /// The derive format fns: `(cb, h) -> T` — the entry constructs the
     /// read-only `DeriveCtx`.
     pub const DERIVE_F64: &str = "__tur_cb_derive_f64";
@@ -669,8 +637,21 @@ pub mod seal_tags {
     pub const MUT_NIL: u64 = 0;
     /// `mutate_seal`: the pointer-event mutation (drags, context menus).
     pub const MUT_PTR: u64 = 1;
-    /// `mutate_seal`: the typed-arg/typed-ret mutation (`ctx.run_f64`).
+    /// `mutate_seal`: the typed-arg mutation (ticks, `ctx.run_f64`).
     pub const MUT_F64: u64 = 2;
+    /// `mutate_seal`: the region enter/exit mutations.
+    pub const MUT_ENTER: u64 = 3;
+    pub const MUT_EXIT: u64 = 4;
+    /// `mutate_seal`: the key event mutation.
+    pub const MUT_KEY: u64 = 5;
+    /// `mutate_seal`: the input event mutation.
+    pub const MUT_INPUT: u64 = 6;
+    /// `mutate_seal`: the payload-less event mutations.
+    pub const MUT_FOCUS: u64 = 7;
+    pub const MUT_BLUR: u64 = 8;
+    pub const MUT_MOUNT: u64 = 9;
+    /// `mutate_seal`: the bytes mutation (net-stream chunks).
+    pub const MUT_BYTES: u64 = 10;
     /// `derive_seal` tags: the value kind (the entry's return type).
     pub const DRV_F64: u64 = 0;
     pub const DRV_STR: u64 = 1;
@@ -1146,46 +1127,6 @@ impl RutRuntime {
                 b,
                 seq,
             } => vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *seq)),
-            Intent::Key {
-                entry,
-                cb,
-                id,
-                key,
-                code,
-                modifiers,
-                kind,
-            } => vm.call::<_, ()>(
-                entry,
-                (
-                    cb.clone(),
-                    *id,
-                    key.as_str(),
-                    code.as_str(),
-                    *modifiers,
-                    *kind,
-                ),
-            ),
-            Intent::Pointer {
-                entry,
-                cb,
-                id,
-                lx,
-                ly,
-                gx,
-                gy,
-                button,
-            } => vm.call::<_, ()>(entry, (cb.clone(), *id, *lx, *ly, *gx, *gy, *button)),
-            Intent::Pointer2 {
-                entry,
-                cb,
-                a,
-                b,
-                lx,
-                ly,
-                gx,
-                gy,
-                button,
-            } => vm.call::<_, ()>(entry, (cb.clone(), *a, *b, *lx, *ly, *gx, *gy, *button)),
             Intent::Value {
                 entry,
                 cb,
@@ -1198,9 +1139,6 @@ impl RutRuntime {
                     _ => 0.0,
                 };
                 vm.call::<_, ()>(entry, (cb.clone(), *a, n))
-            }
-            Intent::Bytes { entry, cb, a, data } => {
-                vm.call::<_, ()>(entry, (cb.clone(), *a, data.clone()))
             }
         }
     }

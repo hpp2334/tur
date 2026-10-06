@@ -74,11 +74,14 @@ use tur::{
   lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
   lazy_grid_qkey, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
   lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
-  mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child, pi_id, pi_ids,
-  pi_new, pi_on_click, pi_on_context_menu, pi_on_down, pi_on_move, pi_on_tap, pi_on_up,
+  mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child,
+  pi_mut_down, pi_mut_move, pi_mut_up,
+  pi_new, pi_on_click, pi_on_context_menu,
   pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_left_bound, pos_new,
   pos_right, pos_top, pos_top_bound,
-  pos_width, rs_derive2_cb, rs_derive_cb, rs_watch_cb, scroll_axis, scroll_build, scroll_child,
+  pos_width, rs_derive2_cb, rs_derive_cb, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
+  rs_source_value, rs_value_get, rs_value_item, rs_value_len, rs_watch_cb, scroll_axis,
+  scroll_build, scroll_child,
   scroll_new, scroll_offset, scroll_qkey,
   sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
   span_add, spans_new, stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
@@ -91,10 +94,11 @@ use tur::{
   va_app_atom, va_bind, va_build,
   va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
   va_source_handle,
-  // M1 — the mutation rail (source / derive / mutate + the ctx rows).
-  ctx_bridge, ctx_get_bool, ctx_get_f64, ctx_get_str, ctx_run_f64, ctx_run_nil, ctx_set_bool,
-  ctx_set_f64, ctx_set_str, derive_seal, mutate_seal, pi_mut_down, pi_mut_move, pi_mut_up,
-  rs_set_f64,
+  // the mutation rail (source / derive / mutate + the ctx rows).
+  ctx_bridge, ctx_get_bool, ctx_get_f64, ctx_get_opaque, ctx_get_str, ctx_get_value,
+  ctx_run_f64, ctx_run_nil, ctx_set_bool, ctx_set_brush, ctx_set_f64, ctx_set_opaque,
+  ctx_set_str, ctx_set_value, derive_seal, mutate_seal,
+  rs_source_bool, rs_source_f64, rs_source_str, rs_set_f64,
 };
 
 // The async launch rail's typed surface (the `futures` package rides the
@@ -231,21 +235,31 @@ let TAG_BOOL: u64 = 2;
 let SEAL_NIL: u64 = 0;
 let SEAL_PTR: u64 = 1;
 let SEAL_F64: u64 = 2;
+let SEAL_ENTER: u64 = 3;
+let SEAL_EXIT: u64 = 4;
+let SEAL_KEY: u64 = 5;
+let SEAL_INPUT: u64 = 6;
+let SEAL_FOCUS: u64 = 7;
+let SEAL_BLUR: u64 = 8;
+let SEAL_MOUNT: u64 = 9;
+let SEAL_BYTES: u64 = 10;
 
 // The typed handle: `h` is the store-bridge marker the ctx rows route
-// through; `atom` is the raw id. `source` mints it writable, `derive`
-// derived.
+// through; `atom` is the raw id; `derived` selects the bind row for the
+// reactive props (a derived atom's channel resolves through the derive
+// rail). `source_*` mints it writable, `derive_*` derived.
 pub class Readable<T> {
   h: opaque;
   atom: u64;
+  derived: bool;
 }
 
 impl<T> Readable<T> {
   [constructor] pub fn of(h: opaque, atom: u64) -> Self {
-    return Self { h: h, atom: atom };
+    return Self { h: h, atom: atom, derived: false };
   }
-  // The raw atom id — the engine rows' crossing (bound props ride it
-  // until M2 unifies the props over Readable).
+  // The raw atom id — the engine rows' crossing (the kit's bound props
+  // lower through it; user code passes the handle itself).
   pub fn atom_id(self) -> u64 {
     return self.atom;
   }
@@ -292,6 +306,24 @@ impl MutationCtx {
   pub fn set_bool(self, s: Readable<bool>, v: bool) {
     ctx_set_bool(self.h, s.atom, v);
   }
+  // The structured-value rail (the list/map atoms).
+  pub fn get_value(self, r: Readable<opaque>) -> opaque {
+    return ctx_get_value(self.h, r.atom);
+  }
+  pub fn set_value(self, s: Readable<opaque>, v: opaque) {
+    ctx_set_value(self.h, s.atom, v);
+  }
+  // The host-box rail (opaques are just values — the controller slot).
+  pub fn get_opaque(self, r: Readable<opaque>) -> opaque {
+    return ctx_get_opaque(self.h, r.atom);
+  }
+  pub fn set_opaque(self, s: Readable<opaque>, v: opaque) {
+    ctx_set_opaque(self.h, s.atom, v);
+  }
+  // The brush-atom write (the animated color channels; 0 clears).
+  pub fn set_brush(self, s: Readable<f64>, packed: u64) {
+    ctx_set_brush(self.h, s.atom, packed);
+  }
   // Composition for side effect (boa's `ctx.set(navigateToRoot)` shape —
   // the nil arg is spelled at the call site: `ctx.run(m, nil)`). The
   // composed invocation QUEUES — a mutation body runs inside a face call
@@ -305,7 +337,7 @@ impl MutationCtx {
   // invocation's payload; the target's return lands in the flush's
   // invocation result (composition reads effects through sources — there
   // is no synchronous return across the VM boundary).
-  pub fn run_f64(self, m: Mutation<f64, f64>, a: f64) {
+  pub fn run_f64(self, m: Mutation<f64, nil>, a: f64) {
     ctx_run_f64(self.h, m.atom, a);
   }
 }
@@ -327,6 +359,9 @@ impl DeriveCtx {
   }
   pub fn get_bool(self, r: Readable<bool>) -> bool {
     return ctx_get_bool(self.h, r.atom);
+  }
+  pub fn get_value(self, r: Readable<opaque>) -> opaque {
+    return ctx_get_value(self.h, r.atom);
   }
 }
 
@@ -360,6 +395,21 @@ impl TaskCtx {
   pub fn set_bool(self, s: Readable<bool>, v: bool) {
     self.m.set_bool(s, v);
   }
+  pub fn get_value(self, r: Readable<opaque>) -> opaque {
+    return self.m.get_value(r);
+  }
+  pub fn set_value(self, s: Readable<opaque>, v: opaque) {
+    self.m.set_value(s, v);
+  }
+  pub fn get_opaque(self, r: Readable<opaque>) -> opaque {
+    return self.m.get_opaque(r);
+  }
+  pub fn set_opaque(self, s: Readable<opaque>, v: opaque) {
+    self.m.set_opaque(s, v);
+  }
+  pub fn set_brush(self, s: Readable<f64>, packed: u64) {
+    self.m.set_brush(s, packed);
+  }
 }
 
 // Mint a source atom (`boa: source(...)`). The mints are PER KIND with
@@ -370,29 +420,35 @@ impl TaskCtx {
 pub fn source_f64(v: f64) -> Readable<f64> {
   let atom = rs_source_f64();
   rs_set_f64(atom, v);
-  return Readable<f64> { h: ctx_bridge(), atom: atom };
+  return Readable<f64> { h: ctx_bridge(), atom: atom, derived: false };
 }
 
 pub fn source_str(v: str) -> Readable<str> {
-  return Readable<str> { h: ctx_bridge(), atom: rs_source_str(v) };
+  return Readable<str> { h: ctx_bridge(), atom: rs_source_str(v), derived: false };
 }
 
 pub fn source_bool(v: bool) -> Readable<bool> {
-  return Readable<bool> { h: ctx_bridge(), atom: rs_source_bool(v) };
+  return Readable<bool> { h: ctx_bridge(), atom: rs_source_bool(v), derived: false };
+}
+
+// Mint a structured-value source (a list/map atom — `list_new()` + the
+// value helpers below build the payload).
+pub fn source_value(v: opaque) -> Readable<opaque> {
+  return Readable<opaque> { h: ctx_bridge(), atom: rs_source_value(v), derived: false };
 }
 
 // Mint a derived atom whose fn reads through the ctx — dependencies
 // auto-track (boa's `derive((ctx) => ctx.get(x$))`). Per kind, same law.
 pub fn derive_str(f: fn(DeriveCtx) -> str) -> Readable<str> {
-  return Readable<str> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_STR) };
+  return Readable<str> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_STR), derived: true };
 }
 
 pub fn derive_f64(f: fn(DeriveCtx) -> f64) -> Readable<f64> {
-  return Readable<f64> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_F64) };
+  return Readable<f64> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_F64), derived: true };
 }
 
 pub fn derive_bool(f: fn(DeriveCtx) -> bool) -> Readable<bool> {
-  return Readable<bool> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_BOOL) };
+  return Readable<bool> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_BOOL), derived: true };
 }
 
 // Call-site law: a minted readable whose METHODS are used (atom_id …)
@@ -417,9 +473,47 @@ pub fn mutate_ev(f: fn(MutationCtx, PointerEvent)) -> Mutation<PointerEvent, nil
   return Mutation<PointerEvent, nil>.of(mutate_seal(opaque(f), SEAL_PTR));
 }
 
-// The typed-arg / typed-ret mutation (`ctx.run_f64`'s target).
-pub fn mutate_f64(f: fn(MutationCtx, f64) -> f64) -> Mutation<f64, f64> {
-  return Mutation<f64, f64>.of(mutate_seal(opaque(f), SEAL_F64));
+// The typed-arg mutation (the anim ticks; `ctx.run_f64`'s target). No
+// return crosses the queue (composition reads its effects through
+// sources) — the fn's body writes, it does not answer.
+pub fn mutate_f64(f: fn(MutationCtx, f64)) -> Mutation<f64, nil> {
+  return Mutation<f64, nil>.of(mutate_seal(opaque(f), SEAL_F64));
+}
+
+// ---- the typed-event mints (the M2 callback surfaces) ----------------------
+// One mint per event shape (fn types are arity- and shape-strict; the
+// event class rides the name, per the per-kind mint law).
+
+pub fn mutate_enter(f: fn(MutationCtx, EnterEvent)) -> Mutation<EnterEvent, nil> {
+  return Mutation<EnterEvent, nil>.of(mutate_seal(opaque(f), SEAL_ENTER));
+}
+
+pub fn mutate_exit(f: fn(MutationCtx, ExitEvent)) -> Mutation<ExitEvent, nil> {
+  return Mutation<ExitEvent, nil>.of(mutate_seal(opaque(f), SEAL_EXIT));
+}
+
+pub fn mutate_key(f: fn(MutationCtx, KeydownEvent)) -> Mutation<KeydownEvent, nil> {
+  return Mutation<KeydownEvent, nil>.of(mutate_seal(opaque(f), SEAL_KEY));
+}
+
+pub fn mutate_input(f: fn(MutationCtx, InputEvent)) -> Mutation<InputEvent, nil> {
+  return Mutation<InputEvent, nil>.of(mutate_seal(opaque(f), SEAL_INPUT));
+}
+
+pub fn mutate_focus(f: fn(MutationCtx, FocusEvent)) -> Mutation<FocusEvent, nil> {
+  return Mutation<FocusEvent, nil>.of(mutate_seal(opaque(f), SEAL_FOCUS));
+}
+
+pub fn mutate_blur(f: fn(MutationCtx, BlurEvent)) -> Mutation<BlurEvent, nil> {
+  return Mutation<BlurEvent, nil>.of(mutate_seal(opaque(f), SEAL_BLUR));
+}
+
+pub fn mutate_mount(f: fn(MutationCtx, MountEvent)) -> Mutation<MountEvent, nil> {
+  return Mutation<MountEvent, nil>.of(mutate_seal(opaque(f), SEAL_MOUNT));
+}
+
+pub fn mutate_bytes(f: fn(MutationCtx, bytes)) -> Mutation<bytes, nil> {
+  return Mutation<bytes, nil>.of(mutate_seal(opaque(f), SEAL_BYTES));
 }
 
 // The async launch rail: the future binds its handle params at the launch
@@ -486,6 +580,85 @@ impl PointerEvent {
   }
 }
 
+// The region pair (MouseRegion's onEnter / onExit) — positions only.
+pub class EnterEvent {
+  local: Point;
+  global: Point;
+}
+
+impl EnterEvent {
+  [constructor] pub fn of(local: Point, global: Point) -> Self {
+    return Self { local: local, global: global };
+  }
+}
+
+pub class ExitEvent {
+  local: Point;
+  global: Point;
+}
+
+impl ExitEvent {
+  [constructor] pub fn of(local: Point, global: Point) -> Self {
+    return Self { local: local, global: global };
+  }
+}
+
+// The input event (the editable's every keystroke / IME commit): the
+// fresh text + whether Enter delivered it.
+pub class InputEvent {
+  value: str;
+  enter: bool;
+}
+
+impl InputEvent {
+  [constructor] pub fn of(value: str, enter: bool) -> Self {
+    return Self { value: value, enter: enter };
+  }
+}
+
+// The key event (Focusable's onKeyDown): the platform key + code and the
+// modifier bitmask (bit0 shift / bit1 ctrl / bit2 alt / bit3 meta).
+pub class KeydownEvent {
+  key: str;
+  code: str;
+  modifiers: u64;
+}
+
+impl KeydownEvent {
+  [constructor] pub fn of(key: str, code: str, modifiers: u64) -> Self {
+    return Self { key: key, code: code, modifiers: modifiers };
+  }
+}
+
+// The payload-less events (the focus lifecycle + mount). They are TYPED
+// so a handler's fn signature names its surface; the fields are empty.
+pub class FocusEvent {
+}
+
+impl FocusEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
+pub class BlurEvent {
+}
+
+impl BlurEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
+pub class MountEvent {
+}
+
+impl MountEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
 // ---- the mutation rail's dispatch entries (the fire half) -----------------
 //
 // The sealed mutation's Rust closure face-calls these with the sealed fn
@@ -504,9 +677,49 @@ entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64
   f(MutationCtx.over(h), PointerEvent.of(Point.at(lx, ly), Point.at(gx, gy), mouse_button_of(btn)));
 }
 
-entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) -> f64 {
-  let f = opaque.downcast<fn(MutationCtx, f64) -> f64>(cb);
-  return f(MutationCtx.over(h), a);
+entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) {
+  let f = opaque.downcast<fn(MutationCtx, f64)>(cb);
+  f(MutationCtx.over(h), a);
+}
+
+entry fn __tur_cb_menter(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
+  let f = opaque.downcast<fn(MutationCtx, EnterEvent)>(cb);
+  f(MutationCtx.over(h), EnterEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+}
+
+entry fn __tur_cb_mexit(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
+  let f = opaque.downcast<fn(MutationCtx, ExitEvent)>(cb);
+  f(MutationCtx.over(h), ExitEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+}
+
+entry fn __tur_cb_mkey(cb: opaque, h: opaque, key: str, code: str, mods: u64) {
+  let f = opaque.downcast<fn(MutationCtx, KeydownEvent)>(cb);
+  f(MutationCtx.over(h), KeydownEvent.of(key, code, mods));
+}
+
+entry fn __tur_cb_minput(cb: opaque, h: opaque, value: str, enter: bool) {
+  let f = opaque.downcast<fn(MutationCtx, InputEvent)>(cb);
+  f(MutationCtx.over(h), InputEvent.of(value, enter));
+}
+
+entry fn __tur_cb_mfocus(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, FocusEvent)>(cb);
+  f(MutationCtx.over(h), FocusEvent.of());
+}
+
+entry fn __tur_cb_mblur(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, BlurEvent)>(cb);
+  f(MutationCtx.over(h), BlurEvent.of());
+}
+
+entry fn __tur_cb_mmount(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, MountEvent)>(cb);
+  f(MutationCtx.over(h), MountEvent.of());
+}
+
+entry fn __tur_cb_mbytes(cb: opaque, h: opaque, data: bytes) {
+  let f = opaque.downcast<fn(MutationCtx, bytes)>(cb);
+  f(MutationCtx.over(h), data);
 }
 
 entry fn __tur_cb_derive_f64(cb: opaque, h: opaque) -> f64 {
@@ -618,8 +831,8 @@ impl Expanded {
     flexi_flex(self.spec, v);
     return self;
   }
-  pub fn flex_bound(mut self, atom: u64) -> Self {
-    flexi_flex_bound(self.spec, atom);
+  pub fn flex_bound(mut self, r: Readable<f64>) -> Self {
+    flexi_flex_bound(self.spec, r.atom);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -649,8 +862,8 @@ impl Flexible {
     flexi_flex(self.spec, v);
     return self;
   }
-  pub fn flex_bound(mut self, atom: u64) -> Self {
-    flexi_flex_bound(self.spec, atom);
+  pub fn flex_bound(mut self, r: Readable<f64>) -> Self {
+    flexi_flex_bound(self.spec, r.atom);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -722,12 +935,12 @@ impl Positioned {
   // The reactive anchors (drag-to-move writes the live atom; a bound
   // anchor's 0 is a real coordinate, unlike the authoring rows' 0 =
   // absent idiom).
-  pub fn left_bound(mut self, atom: u64) -> Self {
-    pos_left_bound(self.spec, atom);
+  pub fn left_bound(mut self, r: Readable<f64>) -> Self {
+    pos_left_bound(self.spec, r.atom);
     return self;
   }
-  pub fn top_bound(mut self, atom: u64) -> Self {
-    pos_top_bound(self.spec, atom);
+  pub fn top_bound(mut self, r: Readable<f64>) -> Self {
+    pos_top_bound(self.spec, r.atom);
     return self;
   }
   pub fn right(mut self, v: f64) -> Self {
@@ -785,22 +998,22 @@ impl Container {
     box_color(self.spec, packed);
     return self;
   }
-  pub fn color_bound(mut self, atom: u64) -> Self {
-    box_color_bound(self.spec, atom);
+  pub fn color_bound(mut self, r: Readable<f64>) -> Self {
+    box_color_bound(self.spec, r.atom);
     return self;
   }
-  pub fn width_bound(mut self, atom: u64) -> Self {
-    box_width_bound(self.spec, atom);
+  pub fn width_bound(mut self, r: Readable<f64>) -> Self {
+    box_width_bound(self.spec, r.atom);
     return self;
   }
-  pub fn height_bound(mut self, atom: u64) -> Self {
-    box_height_bound(self.spec, atom);
+  pub fn height_bound(mut self, r: Readable<f64>) -> Self {
+    box_height_bound(self.spec, r.atom);
     return self;
   }
   // The reactive corner radius (animated radius rides a derive of the
   // progress atom).
-  pub fn radius_bound(mut self, atom: u64) -> Self {
-    box_radius_bound(self.spec, atom);
+  pub fn radius_bound(mut self, r: Readable<f64>) -> Self {
+    box_radius_bound(self.spec, r.atom);
     return self;
   }
   pub fn border(mut self, packed: u64, width: f64, position: u64) -> Self {
@@ -818,16 +1031,16 @@ impl Container {
   // The reactive shadow channels — per-state piece glows (the jigsaw drag
   // states) and eased blur (the implicit-animations shadow) ride atoms, not
   // rebuilds. The bound dy wins over the static offset's y.
-  pub fn shadow_color_bound(mut self, atom: u64) -> Self {
-    box_shadow_color_bound(self.spec, atom);
+  pub fn shadow_color_bound(mut self, r: Readable<f64>) -> Self {
+    box_shadow_color_bound(self.spec, r.atom);
     return self;
   }
-  pub fn shadow_blur_bound(mut self, atom: u64) -> Self {
-    box_shadow_blur_bound(self.spec, atom);
+  pub fn shadow_blur_bound(mut self, r: Readable<f64>) -> Self {
+    box_shadow_blur_bound(self.spec, r.atom);
     return self;
   }
-  pub fn shadow_dy_bound(mut self, atom: u64) -> Self {
-    box_shadow_dy_bound(self.spec, atom);
+  pub fn shadow_dy_bound(mut self, r: Readable<f64>) -> Self {
+    box_shadow_dy_bound(self.spec, r.atom);
     return self;
   }
   pub fn alignment(mut self, v: u64) -> Self {
@@ -892,12 +1105,15 @@ impl Text {
     text_text(self.spec, v);
     return self;
   }
-  pub fn text_bound(mut self, atom: u64) -> Self {
-    text_bind(self.spec, atom);
-    return self;
-  }
-  pub fn text_bound_derived(mut self, atom: u64) -> Self {
-    text_bind_derived(self.spec, atom);
+  // The ONE reactive text prop (a prop never has a twin): the handle's
+  // kind selects the bind row — a source binds directly, a derived binds
+  // through the derive rail.
+  pub fn text_bound(mut self, r: Readable<str>) -> Self {
+    if (r.derived) {
+      text_bind_derived(self.spec, r.atom);
+    } else {
+      text_bind(self.spec, r.atom);
+    }
     return self;
   }
   pub fn font_size(mut self, v: f64) -> Self {
@@ -1005,19 +1221,19 @@ impl Input {
     input_obscure(self.spec, v);
     return self;
   }
-  // The reactive reveal toggle: masking rides a live bool atom (the
-  // `text_bound` law — bindings are methods).
-  pub fn obscure_bound(mut self, atom: u64) -> Self {
-    input_obscure_bound(self.spec, atom);
+  // The reactive reveal toggle: masking rides a live bool (the bound
+  // props take the handle).
+  pub fn obscure_bound(mut self, r: Readable<bool>) -> Self {
+    input_obscure_bound(self.spec, r.atom);
     return self;
   }
   pub fn obscure_char(mut self, v: str) -> Self {
     input_obscure_char(self.spec, v);
     return self;
   }
-  // The reactive placeholder twin: the hint rides a live str atom.
-  pub fn placeholder_bound(mut self, atom: u64) -> Self {
-    input_placeholder_bound(self.spec, atom);
+  // The reactive placeholder: the hint rides a live str.
+  pub fn placeholder_bound(mut self, r: Readable<str>) -> Self {
+    input_placeholder_bound(self.spec, r.atom);
     return self;
   }
   pub fn multiline(mut self, v: bool) -> Self {
@@ -1028,12 +1244,12 @@ impl Input {
     input_font_family(self.spec, v);
     return self;
   }
-  // The on-input rail: every user edit delivers `cb` — a fn value with
-  // the click shape — `(id, 0, seq)`; the handler reads the fresh text
-  // via `tctrl_text`. Bind `.controller(...)` first — the row installs
-  // through the builder's shared controller.
-  pub fn on_input(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
-    input_on_input(self.spec, opaque(cb), id);
+  // The on-input rail: every user edit enqueues the sealed mutation with
+  // the typed `InputEvent` (the fresh value + the enter flag). Bind
+  // `.controller(...)` first — the row installs through the builder's
+  // shared controller.
+  pub fn on_input(mut self, m: Mutation<InputEvent, nil>) -> Self {
+    input_on_input(self.spec, m.atom);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1054,17 +1270,6 @@ class PointerInteract {
 impl PointerInteract {
   [constructor] pub fn builder() -> Self {
     return Self { spec: pi_new() };
-  }
-  // The single-id rail: pointer callbacks deliver `(id, lx, ly, gx, gy, btn)`.
-  pub fn id(mut self, v: u64) -> Self {
-    pi_id(self.spec, v);
-    return self;
-  }
-  // The two-id rail: pointer callbacks deliver `(a, b, lx, ly, gx, gy, btn)`;
-  // taps deliver the `(a, b, seq)` click shape either way.
-  pub fn ids(mut self, a: u64, b: u64) -> Self {
-    pi_ids(self.spec, a, b);
-    return self;
   }
   // ---- the mutation surface (boa's names, snake_cased) ------------------
   //
@@ -1093,38 +1298,6 @@ impl PointerInteract {
     pi_on_context_menu(self.spec, m.atom);
     return self;
   }
-  // ---- the legacy fn-value rails (M2 deletes them with the corpus sweep)
-  pub fn on_tap(mut self, cb: fn(u64, u64, f64)) -> Self {
-    pi_on_tap(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_down(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_down(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_move(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_move(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_up(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_up(self.spec, opaque(cb));
-    return self;
-  }
-  // The two-id twins: over `.ids(a, b)` the pointer callbacks deliver
-  // `(a, b, lx, ly, gx, gy, btn)` (taps stay the `(a, b, seq)` click
-  // shape either way — use `on_tap` for that).
-  pub fn on_down2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_down(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_move2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_move(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_up2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_up(self.spec, opaque(cb));
-    return self;
-  }
   pub fn behavior(mut self, v: u64) -> Self {
     pi_behavior(self.spec, v);
     return self;
@@ -1150,20 +1323,20 @@ impl MouseRegion {
   [constructor] pub fn builder() -> Self {
     return Self { spec: mr_new() };
   }
-  pub fn on_enter(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
-    mr_on_enter(self.spec, opaque(cb), id);
+  pub fn on_enter(mut self, m: Mutation<EnterEvent, nil>) -> Self {
+    mr_on_enter(self.spec, m.atom);
     return self;
   }
-  pub fn on_exit(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
-    mr_on_exit(self.spec, opaque(cb), id);
+  pub fn on_exit(mut self, m: Mutation<ExitEvent, nil>) -> Self {
+    mr_on_exit(self.spec, m.atom);
     return self;
   }
   pub fn cursor(mut self, v: u64) -> Self {
     mr_cursor(self.spec, v);
     return self;
   }
-  pub fn cursor_bound(mut self, atom: u64) -> Self {
-    mr_cursor_bound(self.spec, atom);
+  pub fn cursor_bound(mut self, r: Readable<str>) -> Self {
+    mr_cursor_bound(self.spec, r.atom);
     return self;
   }
   pub fn behavior(mut self, v: u64) -> Self {
@@ -1187,16 +1360,16 @@ impl Focusable {
   [constructor] pub fn builder() -> Self {
     return Self { spec: focus_new() };
   }
-  pub fn on_key_down(mut self, cb: fn(u64, str, str, u64, u64), id: u64) -> Self {
-    focus_on_key_down(self.spec, opaque(cb), id);
+  pub fn on_key_down(mut self, m: Mutation<KeydownEvent, nil>) -> Self {
+    focus_on_key_down(self.spec, m.atom);
     return self;
   }
-  pub fn on_focus(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
-    focus_on_focus(self.spec, opaque(cb), id);
+  pub fn on_focus(mut self, m: Mutation<FocusEvent, nil>) -> Self {
+    focus_on_focus(self.spec, m.atom);
     return self;
   }
-  pub fn on_blur(mut self, cb: fn(u64, u64, f64), id: u64) -> Self {
-    focus_on_blur(self.spec, opaque(cb), id);
+  pub fn on_blur(mut self, m: Mutation<BlurEvent, nil>) -> Self {
+    focus_on_blur(self.spec, m.atom);
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
@@ -1251,8 +1424,8 @@ impl LazyList {
     lazy_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn count(mut self, atom: u64) -> Self {
-    lazy_count(self.spec, atom);
+  pub fn count(mut self, r: Readable<f64>) -> Self {
+    lazy_count(self.spec, r.atom);
     return self;
   }
   pub fn axis(mut self, v: u64) -> Self {
@@ -1288,8 +1461,8 @@ impl LazyGrid {
     lazy_grid_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn count(mut self, atom: u64) -> Self {
-    lazy_grid_count(self.spec, atom);
+  pub fn count(mut self, r: Readable<f64>) -> Self {
+    lazy_grid_count(self.spec, r.atom);
     return self;
   }
   pub fn axis(mut self, v: u64) -> Self {
@@ -1399,8 +1572,8 @@ impl Table {
     table_columns(self.spec, cols.spec);
     return self;
   }
-  pub fn rows_atom(mut self, atom: u64) -> Self {
-    table_rows_atom(self.spec, atom);
+  pub fn rows_atom(mut self, r: Readable<opaque>) -> Self {
+    table_rows_atom(self.spec, r.atom);
     return self;
   }
   pub fn row_builder(mut self, cb: fn(u64, u64) -> View) -> Self {
@@ -1437,12 +1610,14 @@ impl Switch {
   [constructor] pub fn builder() -> Self {
     return Self { spec: switch_new() };
   }
-  pub fn value_source(mut self, atom: u64) -> Self {
-    switch_value_source(self.spec, atom);
-    return self;
-  }
-  pub fn value_derived(mut self, atom: u64) -> Self {
-    switch_value_derived(self.spec, atom);
+  // The ONE reactive value prop: the handle's kind selects the row
+  // (source binds directly, a derived through the derive rail).
+  pub fn value(mut self, r: Readable<str>) -> Self {
+    if (r.derived) {
+      switch_value_derived(self.spec, r.atom);
+    } else {
+      switch_value_source(self.spec, r.atom);
+    }
     return self;
   }
   // Appends one case — the historical `cases` prop's crossing (`case` is
@@ -1475,8 +1650,8 @@ class Condition {
 }
 
 impl Condition {
-  [constructor] pub fn builder(atom: u64) -> Self {
-    return Self { spec: cond_new(atom) };
+  [constructor] pub fn builder(r: Readable<bool>) -> Self {
+    return Self { spec: cond_new(r.atom) };
   }
   pub fn then(mut self, branch: View) -> Self {
     cond_then(self.spec, branch);
@@ -1512,8 +1687,8 @@ class Each {
 }
 
 impl Each {
-  [constructor] pub fn builder(atom: u64) -> Self {
-    return Self { spec: each_new(atom) };
+  [constructor] pub fn builder(r: Readable<opaque>) -> Self {
+    return Self { spec: each_new(r.atom) };
   }
   pub fn item_builder(mut self, cb: fn(u64, str) -> View) -> Self {
     each_builder(self.spec, opaque(cb));
@@ -1615,8 +1790,8 @@ impl Lifecycle {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lc_new() };
   }
-  pub fn on_mount(mut self, cb: fn(u64, u64, f64)) -> Self {
-    lc_on_mount(self.spec, opaque(cb));
+  pub fn on_mount(mut self, m: Mutation<MountEvent, nil>) -> Self {
+    lc_on_mount(self.spec, m.atom);
     return self;
   }
   pub fn before_destroy(mut self, cb: fn(u64, u64, f64)) -> Self {
@@ -1671,8 +1846,8 @@ impl CompositedFollower {
     ct_follower_target_anchor(self.spec, v);
     return self;
   }
-  pub fn target_anchor_bound(mut self, atom: u64) -> Self {
-    ct_follower_target_anchor_bound(self.spec, atom);
+  pub fn target_anchor_bound(mut self, r: Readable<f64>) -> Self {
+    ct_follower_target_anchor_bound(self.spec, r.atom);
     return self;
   }
   pub fn follower_anchor(mut self, v: u64) -> Self {
@@ -1693,6 +1868,36 @@ impl CompositedFollower {
 }
 
 // ---- shared helpers ----------------------------------------------------------------
+
+// The structured-value data ops (the list/map builders the case code
+// folds into sources; the STATE writes go through the ctx, never these).
+pub fn list_new() -> opaque {
+  return rs_list_new();
+}
+
+pub fn list_push(l: opaque, item: str) {
+  rs_list_push(l, item);
+}
+
+pub fn map_new() -> opaque {
+  return rs_map_new();
+}
+
+pub fn map_set(m: opaque, key: str, value: str) {
+  rs_map_set(m, key, value);
+}
+
+pub fn value_len(v: opaque) -> u64 {
+  return rs_value_len(v);
+}
+
+pub fn value_item(v: opaque, index: u64) -> str {
+  return rs_value_item(v, index);
+}
+
+pub fn value_get(v: opaque, key: str) -> str {
+  return rs_value_get(v, key);
+}
 
 // Mint a LayerLink (the JS `createLayerLink` twin) for the composited
 // target/follower pair.

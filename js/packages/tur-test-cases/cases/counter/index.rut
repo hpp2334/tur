@@ -1,56 +1,55 @@
 // counter: a reactive count label between -/+ pill buttons — the full
-// interactive loop (button → intent entry → atom write → re-render),
+// interactive loop (button → mutation queue → ctx.set → re-render),
 // dressed to the boa design: the slate page, the 36px "Count: N" readout
-// (a derive over the count atom) and the centered 100×44 indigo pill row.
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount, rs_derive, rs_get_f64,
-    rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container, PointerInteract, Row, SizedBox, Text };
+// (a derive over the count source) and the centered 100×44 indigo pill
+// row.
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
+use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row,
+    SizedBox, Text, derive_str, mutate, source_f64 };
 
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    let label = rs_derive(fmt_count, count);
+    let count: Readable<f64> = source_f64(0.0);
+    let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"Count: {ctx.get_f64(count) as u64}";
+    });
+
+    // The named mutations (boa's named `mutate(...)` values); the source
+    // rides by capture.
+    let b_inc = mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
+    });
+    let b_dec = mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(count, ctx.get_f64(count) - 1.0);
+    });
 
     let col = Column()
         .main_alignment(MAIN_ALIGN_CENTER)
         .cross_alignment(CROSS_ALIGN_CENTER)
-        .child(Text().text_bound_derived(label).query_key("count").font_size(36.0).color(0x1E293BFFu64).build())
+        .child(Text().text_bound(label).query_key("count").font_size(36.0).color(0x1E293BFFu64).build())
         .child(
             Row()
                 .main_alignment(MAIN_ALIGN_CENTER)
-                .child(button(count, ts_dec, "-1", "dec"))
+                .child(button(b_dec, "-1", "dec"))
                 .child(SizedBox(12.0, 0.0).build())
-                .child(button(count, ts_inc, "+1", "inc"))
+                .child(button(b_inc, "+1", "inc"))
                 .build(),
         )
         .build();
 
     // The boa page: the slate fill centers the column in the pane.
     mount(Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col).build());
-    return count;
+    return count.atom_id();
 }
 
-// A 100x44 indigo pill with a centered label.
-fn button(count: u64, cb: fn(u64, u64, f64), text: str, key: str) -> opaque {
-    let b = Container()
+// A 100x44 indigo pill with a centered label; the pad takes the mutation.
+fn button(b: Mutation<nil, nil>, text: str, key: str) -> opaque {
+    let face = Container()
         .width_height(100.0, 44.0)
         .radius(8.0)
         .color(0x6366F1FFu64)
         .alignment(ALIGN_CENTER)
         .query_key(key)
         .child(Text().text(text).font_size(18.0).color(0xFFFFFFFFu64).build());
-    return PointerInteract().ids(count, count).on_tap(cb).child(b.build()).build();
-}
-
-// "Count: N" off the live count atom.
-fn fmt_count(v: f64) -> str {
-    return f"Count: {v as u64}";
-}
-
-fn ts_inc(count: u64, _b: u64, _n: f64) {
-    rs_set_f64(count, rs_get_f64(count) + 1.0);
-}
-
-fn ts_dec(count: u64, _b: u64, _n: f64) {
-    rs_set_f64(count, rs_get_f64(count) - 1.0);
+    return PointerInteract().on_click(b).child(face.build()).build();
 }

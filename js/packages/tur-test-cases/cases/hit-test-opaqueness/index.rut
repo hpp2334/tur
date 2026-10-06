@@ -3,16 +3,21 @@
 // PointerInteract catches invisible hits; a translucent MouseRegion joins
 // the path without blocking. The beneath-target's down count renders into
 // the `beneath-downs` Text (the test parses it).
-use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mem_get, mem_new, mem_set, mount, rs_set_str, rs_source_str,
-    st_put, st_take };
-use tur_kit::{ Container, MouseRegion, PointerInteract, Positioned, SizedBox, Stack, Text };
+use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mount };
+use tur_kit::{ Container, MouseRegion, MutationCtx, PointerEvent, PointerInteract, Positioned,
+    Readable, SizedBox, Stack, Text, mutate_ev, source_f64, source_str };
 
-
-let K_COUNT: u64 = 7;
 
 entry fn start() -> u64 {
-    let downs = rs_source_str("0");
-    st_put(K_COUNT, mem_new(0.0));
+    let downs: Readable<str> = source_str("0");
+    let count: Readable<f64> = source_f64(0.0);
+
+    // The down count rides its own source (the mutation captures both
+    // handles — no id rail, no stash).
+    let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
+        ctx.set_str(downs, f"{ctx.get_f64(count) as u64}");
+    });
 
     let mut stack = Stack().alignment(ALIGN_TOP_LEFT);
 
@@ -20,7 +25,7 @@ entry fn start() -> u64 {
     let target = Container()
         .width_height(400.0, 600.0)
         .child(Text().text_bound(downs).query_key("beneath-downs").build());
-    stack.child(PointerInteract().id(downs).on_down(g_down).query_key("rut/gesture").child(target.build()).build());
+    stack.child(PointerInteract().on_pointer_down(g_down).query_key("rut/gesture").child(target.build()).build());
 
     // A decoration-less full-size Container — transparent.
     let plain = Container().width_height(400.0, 600.0).query_key("plain");
@@ -36,13 +41,5 @@ entry fn start() -> u64 {
     stack.child(Positioned().left(200.0).width(200.0).height(600.0).child(region).build());
 
     mount(stack.build());
-    return downs;
-}
-
-fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let cell = st_take(K_COUNT);
-    let n = mem_get(cell) + 1.0;
-    mem_set(cell, n);
-    st_put(K_COUNT, cell);
-    rs_set_str(downs, f"{n as u64}");
+    return downs.atom_id();
 }

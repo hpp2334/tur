@@ -4,22 +4,16 @@
 // compile-session prelude next to the rows, so plugin sets without the
 // Http capability never see (or compile) this module.
 //
-// Callback law (as everywhere in the kit): `net_stream`'s chunk handler
-// is a FN VALUE (`fn(id: u64, chunk: bytes)`); the kit seals it into an
-// opaque box rut-side and hands the row only the box. The engine fires it
-// through this kit's own dispatch entry — the scope law: the kit that
-// seals the callback owns the entry that downcasts it.
+// Handler law (the mutation rail): `net_stream`'s chunk handler is a
+// SEALED MUTATION — `mutate_bytes(fn (ctx: MutationCtx, chunk: bytes) {
+// ... })`; each chunk enqueues the invocation and the flush's mutation
+// pass delivers it with the task-scoped ctx.
 
-use tur::{ net_stream_cb };
+use tur::{ net_stream_mut };
+use tur_kit::{ Mutation, mutate_bytes };
 
-// The net kit's dispatch entry: `(id, chunk)` per streamed chunk.
-entry fn __tur_ncb_bytes(cb: opaque, id: u64, data: bytes) {
-  let f = opaque.downcast<fn(u64, bytes)>(cb);
-  f(id, data);
-}
-
-// Stream a response body: `on_chunk` fires once per chunk (the returned
-// task's `task_cancel` wire-aborts the download).
-pub fn net_stream(id: u64, url: str, method: str, on_chunk: fn(u64, bytes)) -> opaque {
-  return net_stream_cb(id, url, method, opaque(on_chunk));
+// Stream a response body: the chunk mutation fires once per chunk (the
+// returned task's `task_cancel` wire-aborts the download).
+pub fn net_stream(url: str, method: str, on_chunk: Mutation<bytes, nil>) -> opaque {
+  return net_stream_mut(url, method, on_chunk.atom);
 }

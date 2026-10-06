@@ -1,60 +1,47 @@
 // drag-with-lift: the jigsaw piece mechanic — pointer-down drives a lift
-// animation (forward on down, reverse on up). The last gesture phase
-// renders into the `last-event` Text.
-use tur::{ anim_forward, anim_reverse, mount, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take, stf_put, stf_take };
-use tur_kit::{ Column, Container, PointerInteract, Text };
+// animation (forward on down, reverse on up). The controller is CAPTURED
+// by the drag mutations (opaques are just values — no stash); the last
+// gesture phase renders into the `last-event` Text.
+use tur::{ anim_forward, anim_reverse, ctx_bridge, mount };
+use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text,
+    mutate, mutate_ev, source_str };
 use tur_anim_kit::{ anim_ctrl };
 
 
-let K_PHASE: u64 = 1;
-let K_CTRL: u64 = 2;
-
 entry fn start() -> u64 {
-    let phase = rs_source_str("");
-    stf_put(K_PHASE, phase as f64);
-    let lift = rs_source_f64();
-    let ctrl = anim_ctrl(lift, 180.0, "linear", 0, a_tick, a_end);
-    st_put(K_CTRL, ctrl);
+    let phase: Readable<str> = source_str("");
+
+    // The bare lift controller (no channels to drive — the mechanics ride
+    // forward/reverse).
+    let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
+
+    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        anim_forward(ctrl);
+        ctx.set_str(phase, "down");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_str(phase, "move");
+    });
+    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        anim_reverse(ctrl);
+        ctx.set_str(phase, "up");
+    });
 
     let b = Container()
         .width_height(80.0, 40.0)
         .query_key("lift-target")
         .child(Text().text("piece").build());
-    let pad = PointerInteract().id(phase).on_down(g_down).on_move(g_move).on_up(g_up).query_key("rut/gesture").child(b.build()).build();
+    let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build();
 
     let phase_t = Text().text_bound(phase).query_key("last-event").build();
     let root = Column().child(pad).child(phase_t);
     mount(root.build());
-    return phase;
+    return phase.atom_id();
 }
 
-fn a_tick(_atom: u64, _t: f64) {
-}
-
-fn a_end(_atom: u64, _v: f64) {
-}
-
-// The `__resetDrag` seam (the lift keeps settling; only the transcript clears).
-entry fn reset(_a: u64, _b: f64) {
-    let phase = stf_take(K_PHASE) as u64;
-    rs_set_str(phase, "");
-    stf_put(K_PHASE, phase as f64);
-}
-
-fn g_down(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let ctrl = st_take(K_CTRL);
-    anim_forward(ctrl);
-    st_put(K_CTRL, ctrl);
-    rs_set_str(phase, "down");
-}
-
-fn g_move(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    rs_set_str(phase, "move");
-}
-
-fn g_up(phase: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let ctrl = st_take(K_CTRL);
-    anim_reverse(ctrl);
-    st_put(K_CTRL, ctrl);
-    rs_set_str(phase, "up");
+// The `__resetDrag` seam (the lift keeps settling; only the transcript
+// clears). The atom id rides the entry arg.
+entry fn reset(atom: u64, _b: f64) {
+    let phase = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(phase, "");
 }

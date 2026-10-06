@@ -2,19 +2,27 @@
 // overlay must not steal pointer/wheel input from the scrollable beneath;
 // the opaque anchored pill still consumes clicks. The counters render into
 // bound Texts (`beneath-downs` / `pill-clicks`).
-use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mem_get, mem_new, mem_set, mount, rs_set_str,
-    rs_source_str, st_put, st_take };
-use tur_kit::{ Column, Container, PointerInteract, Positioned, ScrollView, Stack, Text };
+use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
+use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Positioned,
+    Readable, ScrollView, Stack, Text, mutate, mutate_ev, source_f64, source_str };
 
-
-let K_DOWNS: u64 = 7;
-let K_CLICKS: u64 = 8;
 
 entry fn start() -> u64 {
-    let downs = rs_source_str("0");
-    let clicks = rs_source_str("0");
-    st_put(K_DOWNS, mem_new(0.0));
-    st_put(K_CLICKS, mem_new(0.0));
+    let downs: Readable<str> = source_str("0");
+    let clicks: Readable<str> = source_str("0");
+    let down_n: Readable<f64> = source_f64(0.0);
+    let click_n: Readable<f64> = source_f64(0.0);
+
+    // The counters ride their own sources (the mutations capture the
+    // handles — no id rail, no stash).
+    let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set_f64(down_n, ctx.get_f64(down_n) + 1.0);
+        ctx.set_str(downs, f"{ctx.get_f64(down_n) as u64}");
+    });
+    let pill_click = mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(click_n, ctx.get_f64(click_n) + 1.0);
+        ctx.set_str(clicks, f"{ctx.get_f64(click_n) as u64}");
+    });
 
     let mut stack = Stack();
 
@@ -26,7 +34,7 @@ entry fn start() -> u64 {
         .child(box_h(300.0))
         .child(box_h(300.0));
     let scroller = ScrollView().axis(AXIS_VERTICAL).child(content.build()).query_key("sv").build();
-    stack.child(PointerInteract().id(downs).on_down(g_down).child(scroller).build());
+    stack.child(PointerInteract().on_pointer_down(g_down).child(scroller).build());
 
     // The invisible full-size overlay: no decoration, no gesture.
     let overlay = Container().width_height(400.0, 600.0).query_key("overlay");
@@ -34,7 +42,7 @@ entry fn start() -> u64 {
 
     // The floating pill, anchored bottom-right.
     let pill_box = Container().width_height(64.0, 28.0).query_key("pill");
-    let pill = PointerInteract().ids(clicks, clicks).on_tap(pill_click).child(pill_box.build()).build();
+    let pill = PointerInteract().on_click(pill_click).child(pill_box.build()).build();
     stack.child(Positioned().right(8.0).bottom(8.0).child(pill).build());
 
     // Counter readouts (the test parses these).
@@ -44,23 +52,7 @@ entry fn start() -> u64 {
     stack.child(clicks_t.build());
 
     mount(stack.build());
-    return downs;
-}
-
-fn g_down(downs: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    let cell = st_take(K_DOWNS);
-    let n = mem_get(cell) + 1.0;
-    mem_set(cell, n);
-    st_put(K_DOWNS, cell);
-    rs_set_str(downs, f"{n as u64}");
-}
-
-fn pill_click(clicks: u64, _b: u64, _n: f64) {
-    let cell = st_take(K_CLICKS);
-    let n = mem_get(cell) + 1.0;
-    mem_set(cell, n);
-    st_put(K_CLICKS, cell);
-    rs_set_str(clicks, f"{n as u64}");
+    return down_n.atom_id();
 }
 
 fn box_h(h: f64) -> opaque {

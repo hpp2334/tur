@@ -7,8 +7,8 @@
 // palette-string twin: module lets are literals-only in this build, so
 // the name lists and the avatar palette ride pipe-joined strings).
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN,
-    mount, rs_set_f64, rs_source_f64, str_parse_f64 };
-use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Text };
+    mount, str_parse_f64 };
+use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Text, source_f64 };
 
 
 let ITEM_COUNT: f64 = 10000.0;
@@ -27,8 +27,7 @@ let ZEBRA: u64 = 0xF8FAFCFFu64;
 let WHITE: u64 = 0xFFFFFFFFu64;
 
 entry fn start() {
-    let count = rs_source_f64();
-    rs_set_f64(count, ITEM_COUNT);
+    let count = source_f64(ITEM_COUNT);
 
     let list = LazyList()
         .item_builder(row)

@@ -41,9 +41,10 @@ fn reactive_resize_repositions_descendant() {
     );
 
     // Change the reactive width WITHOUT a gesture (no extra mark_dirty), then
-    // re-render — exactly the divider-drag path.
+    // re-render — exactly the divider-drag path. The atom id rides the
+    // entry's u64 slot; the new width the f64 slot.
     let width_atom = app.rut_start_answer();
-    app.call_rut_entry("set_width", 300, 0.0).unwrap();
+    app.call_rut_entry("set_width", width_atom, 300.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // width$ = 300:

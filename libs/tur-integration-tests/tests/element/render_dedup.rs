@@ -86,25 +86,26 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur::{ mount, rs_list_new, rs_set_brush, rs_source_value };
-use tur_kit::{ Container };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
 
 entry fn start() -> u64 {
-    let color = rs_source_value(rs_list_new());
-    rs_set_brush(color, 0xFF0000FFu64);
+    let color: Readable<f64> = source_f64(0.0);
+    MutationCtx.over(ctx_bridge()).set_brush(color, 0xFF0000FFu64);
 
     let b = Container().width_height(100.0, 50.0).color_bound(color);
     mount(b.build());
-    return color;
+    return color.atom_id();
 }
 
 entry fn do_set(color: u64, v: f64) {
     // 0 clears the brush (Nil — the prop resolves absent); the container
     // repaints unpainted (the batch differs either way).
+    let write = MutationCtx.over(ctx_bridge());
     if (v == 0.0) {
-        rs_set_brush(color, 0);
+        write.set_brush(Readable<f64>.of(ctx_bridge(), color), 0);
     } else {
-        rs_set_brush(color, 0x00FF00FFu64);
+        write.set_brush(Readable<f64>.of(ctx_bridge(), color), 0x00FF00FFu64);
     }
 }
 "#,

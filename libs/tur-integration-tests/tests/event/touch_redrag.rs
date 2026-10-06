@@ -21,7 +21,10 @@ fn tile_events(app: &TurTestApp, idx: u32) -> String {
 }
 
 fn reset_drag(app: &TurTestApp) {
-    let _ = app.call_rut_entry("reset", 0, 0.0);
+    // The phase atom rides the entry arg (the probe's handle binds at the
+    // call site).
+    let phase = app.rut_start_answer();
+    let _ = app.call_rut_entry("reset", phase, 0.0);
 }
 
 /// Drive a touch down → moves → up sequence with explicit, increasing

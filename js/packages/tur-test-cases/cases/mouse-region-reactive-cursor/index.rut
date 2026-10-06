@@ -1,32 +1,34 @@
 // mouse-region-reactive-cursor: the cursor resolves from a str atom each
-// layout — flipping the atom re-resolves the cursor on hover.
-use tur::{ mount, rs_set_str, rs_source_str };
-use tur_kit::{ Column, Container, MouseRegion, Text };
+// layout — flipping the atom re-resolves the cursor on hover. The
+// enter/exit rails are (empty) mutations; the `set_cursor` probe writes
+// the raw atom id the entry rail hands it through the guarded ctx row.
+use tur::{ ctx_bridge, ctx_set_str, mount };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCtx, Readable, Text,
+    mutate_enter, mutate_exit, source_str };
 
 
 entry fn start() -> u64 {
-    let cursor = rs_source_str("pointer");
-    let state = rs_source_str("");
+    let cursor: Readable<str> = source_str("pointer");
+    let state = source_str("");
+    let b_enter = mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) {
+    });
+    let b_exit = mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) {
+    });
     let mut col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());
-    col.child(MouseRegion().on_enter(mr_enter, state).on_exit(mr_exit, state).cursor_bound(cursor).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(0).child(b.build()).build());
     let ct = Text().text_bound(cursor).query_key("cursor-atom");
     col.child(ct.build());
     mount(col.build());
-    return cursor;
+    return cursor.atom_id();
 }
 
 entry fn set_cursor(cursor: u64, code: f64) {
     // code indexes the standard keyword table (the test passes the enum
-    // position of the cursor it wants).
+    // position of the cursor it wants). The entry rail crosses the raw
+    // cursor-atom id; the guarded ctx write row sets the source.
     let name = cursor_name(code as u64);
-    rs_set_str(cursor, name);
-}
-
-fn mr_enter(_state: u64, _b: u64, _n: f64) {
-}
-
-fn mr_exit(_state: u64, _b: u64, _n: f64) {
+    ctx_set_str(ctx_bridge(), cursor, name);
 }
 
 // The standard CSS keyword for a cursor code (the el_mouse_region_bound

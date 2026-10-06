@@ -234,23 +234,19 @@ fn container_with_shadow() {
 // ---------------------------------------------------------------------------
 
 const RADIUS_BOUND_RUT: &str = r#"
-use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Container };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
 
-let K_R: u64 = 3;
-
-entry fn start() {
-    let r = rs_source_f64();
-    rs_set_f64(r, 8.0);
+entry fn start() -> u64 {
+    let r: Readable<f64> = source_f64(8.0);
     let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
-    stf_put(K_R, r as f64);
     mount(card);
+    return r.atom_id();
 }
 
-entry fn probe_r(_a: u64, b: f64) {
-    let r = stf_take(K_R) as u64;
-    rs_set_f64(r, b);
-    stf_put(K_R, r as f64);
+entry fn probe_r(atom: u64, b: f64) {
+    let r = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(r, b);
 }
 "#;
 
@@ -268,7 +264,7 @@ fn radius_bound_resolves_through_the_live_atom() {
 
     // The atom swap re-resolves the radius through layout (the subscribe
     // → relayout rail; painting carries the reactive value).
-    app.call_rut_entry("probe_r", 0, 20.0).unwrap();
+    app.call_rut_entry("probe_r", app.rut_start_answer(), 20.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(box_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();

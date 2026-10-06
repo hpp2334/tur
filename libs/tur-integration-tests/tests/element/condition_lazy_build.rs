@@ -18,43 +18,39 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
-use tur::{ mount, rs_get_f64, rs_set_bool, rs_set_f64, rs_source_bool, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Condition, Column, Text };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Condition, Column, MutationCtx, Readable, Text, source_bool, source_f64 };
 
-let K_OPEN: u64 = 1;
-let K_SEED: u64 = 2;
-
-entry fn start() {
-    let open = rs_source_bool(false);
-    let seed = rs_source_f64();
-    rs_set_f64(seed, 1.0);
-    let runs = rs_source_f64();
+entry fn start() -> u64 {
+    let open: Readable<bool> = source_bool(false);
+    let seed: Readable<f64> = source_f64(1.0);
+    let runs: Readable<f64> = source_f64(0.0);
     let root = Column().query_key("cb/root").child(
         Condition(open)
             .then_build(fn () -> View {
-                rs_set_f64(runs, rs_get_f64(runs) + 1.0);
-                return Text().text(f"modal {rs_get_f64(seed) as u64}").query_key("cb/then").build();
+                let write = MutationCtx.over(ctx_bridge());
+                write.set_f64(runs, write.get_f64(runs) + 1.0);
+                return Text().text(f"modal {write.get_f64(seed) as u64}").query_key("cb/then").build();
             })
             .else_build(fn () -> View {
                 return Text().text("closed").query_key("cb/else").build();
             })
             .build(),
     ).build();
-    stf_put(K_OPEN, open as f64);
-    stf_put(K_SEED, seed as f64);
     mount(root);
+    return open.atom_id();
 }
 
-entry fn probe_open(a: u64, _b: f64) {
-    let open = stf_take(K_OPEN) as u64;
-    rs_set_bool(open, a != 0);
-    stf_put(K_OPEN, open as f64);
+// The open atom mints first, the seed second — the probe entries address
+// them by the start answer's order.
+entry fn probe_open(atom: u64, _b: f64) {
+    let open = Readable<bool>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_bool(open, _b != 0.0);
 }
 
-entry fn probe_seed(_a: u64, b: f64) {
-    let seed = stf_take(K_SEED) as u64;
-    rs_set_f64(seed, b);
-    stf_put(K_SEED, seed as f64);
+entry fn probe_seed(atom: u64, b: f64) {
+    let seed = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(seed, b);
 }
 "#;
 
@@ -63,6 +59,8 @@ fn inactive_branch_rows_never_run_and_activation_invokes() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(COND_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
+    let open_atom = app.rut_start_answer();
+    let seed_atom = open_atom + 1; // the seed mints right after open
 
     // Boot with `open = false`: the ELSE branch is mounted and the THEN
     // branch's rows never ran — its marker is absent (a pre-built branch
@@ -76,7 +74,7 @@ fn inactive_branch_rows_never_run_and_activation_invokes() {
 
     // Activation: the then builder runs NOW — reads live state, mounts
     // the fresh marker, and the else branch unmounts.
-    app.call_rut_entry("probe_open", 1, 1.0).unwrap();
+    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "then"]).as_deref(), Some("modal 1"));
     assert_eq!(app.query_text(&["cb", "else"]), None);
@@ -87,20 +85,22 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(COND_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
+    let open_atom = app.rut_start_answer();
+    let seed_atom = open_atom + 1; // the seed mints right after open
 
     // Open → close → change the seed while dormant → open again. The
     // rebuilt branch must read the NEW seed ("modal 2"): the builder is
     // re-invoked at re-activation, not cloned from a boot-time pre-build.
-    app.call_rut_entry("probe_open", 1, 1.0).unwrap();
+    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "then"]).as_deref(), Some("modal 1"));
 
-    app.call_rut_entry("probe_open", 0, 0.0).unwrap();
+    app.call_rut_entry("probe_open", open_atom, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "else"]).as_deref(), Some("closed"));
 
-    app.call_rut_entry("probe_seed", 0, 2.0).unwrap();
-    app.call_rut_entry("probe_open", 1, 1.0).unwrap();
+    app.call_rut_entry("probe_seed", seed_atom, 2.0).unwrap();
+    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         app.query_text(&["cb", "then"]).as_deref(),
@@ -114,17 +114,16 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str, stf_put, stf_take };
-use tur_kit::{ Column, Switch, Text };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Column, MutationCtx, Readable, Switch, Text, source_str };
 
-let K_TAB: u64 = 4;
-
-entry fn start() {
-    let tab = rs_source_str("b");
-    let label = rs_source_str("idle");
-    let v = Switch().value_source(tab)
+entry fn start() -> u64 {
+    let tab: Readable<str> = source_str("b");
+    let label: Readable<str> = source_str("idle");
+    let v = Switch().value(tab)
         .case_build("a", fn () -> View {
-            rs_set_str(label, "built-a");
+            let write = MutationCtx.over(ctx_bridge());
+            write.set_str(label, "built-a");
             return Text().text("A").query_key("sw/a").build();
         })
         .fallback(Text().text("fallback").query_key("sw/fb").build())
@@ -133,18 +132,19 @@ entry fn start() {
         .child(v)
         .child(Text().text_bound(label).query_key("sw/label").build())
         .build();
-    stf_put(K_TAB, tab as f64);
     mount(root);
+    return tab.atom_id();
 }
 
-entry fn probe_tab(a: u64, _b: f64) {
-    let tab = stf_take(K_TAB) as u64;
-    if (a != 0) {
-        rs_set_str(tab, "a");
+// The flag rides the f64 slot; the atom the u64 slot.
+entry fn probe_tab(atom: u64, flag: f64) {
+    let tab = Readable<str>.of(ctx_bridge(), atom);
+    let write = MutationCtx.over(ctx_bridge());
+    if (flag != 0.0) {
+        write.set_str(tab, "a");
     } else {
-        rs_set_str(tab, "b");
+        write.set_str(tab, "b");
     }
-    stf_put(K_TAB, tab as f64);
 }
 "#;
 
@@ -153,6 +153,7 @@ fn switch_case_build_invokes_only_when_the_key_activates() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(SWITCH_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
+    let tab_atom = app.rut_start_answer();
 
     // Boot with tab "b": no case matches, the fallback mounts, and the
     // "a" case's rows never ran (its label side effect stayed "idle").
@@ -165,14 +166,14 @@ fn switch_case_build_invokes_only_when_the_key_activates() {
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("idle"));
 
     // Activate "a": the case builder runs now — marker + side effect.
-    app.call_rut_entry("probe_tab", 1, 0.0).unwrap();
+    app.call_rut_entry("probe_tab", tab_atom, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "a"]).as_deref(), Some("A"));
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("built-a"));
     assert_eq!(app.query_text(&["sw", "fb"]), None);
 
     // Back to "b": the fallback remounts.
-    app.call_rut_entry("probe_tab", 0, 0.0).unwrap();
+    app.call_rut_entry("probe_tab", tab_atom, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "fb"]).as_deref(), Some("fallback"));
     assert_eq!(app.query_text(&["sw", "a"]), None);

@@ -78,19 +78,20 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 fn id_module(value: &str) -> String {
     format!(
         r#"
-use tur::{{ mount, rs_set_str, rs_source_str }};
-use tur_kit::{{ Text }};
+use tur::{{ ctx_bridge, mount }};
+use tur_kit::{{ MutationCtx, Readable, Text, source_str }};
 
 
 entry fn start() -> u64 {{
-    let atom = rs_source_str("{value}");
+    let atom: Readable<str> = source_str("{value}");
     let mut txt = Text().text_bound(atom).query_key("id").build();
     mount(txt);
-    return atom;
+    return atom.atom_id();
 }}
 
 entry fn set_value(atom: u64, _b: f64) {{
-    rs_set_str(atom, "A2");
+    let r = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(r, "A2");
 }}
 "#
     )
@@ -159,12 +160,12 @@ fn instances_have_isolated_element_trees() {
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::{ mount, rs_source_str };
-use tur_kit::{ Text };
+use tur::mount;
+use tur_kit::{ Readable, Text, source_str };
 
 
 entry fn start() {
-    let atom = rs_source_str("only-in-A");
+    let atom: Readable<str> = source_str("only-in-A");
     let mut txt = Text().text_bound(atom).query_key("a_only").build();
     mount(txt);
 }
@@ -204,13 +205,13 @@ fn headless_instance_runs_rut_without_rendering() {
 
     // The module boots; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur::{ mount, rs_source_str };
-use tur_kit::{ Text };
+        r#"use tur::mount;
+use tur_kit::{ Readable, Text, source_str };
 
 
 
 entry fn start() {
-    let atom = rs_source_str("42");
+    let atom: Readable<str> = source_str("42");
     let mut txt = Text().text_bound(atom).query_key("val").build();
     mount(txt);
 }
@@ -243,13 +244,13 @@ fn build_headless_runs_engine_on_worker() {
 
     // The module boots via the worker RPC path.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur::{ mount, rs_source_str };
-use tur_kit::{ Text };
+        r#"use tur::mount;
+use tur_kit::{ Readable, Text, source_str };
 
 
 
 entry fn start() {
-    let atom = rs_source_str("7");
+    let atom: Readable<str> = source_str("7");
     let mut txt = Text().text_bound(atom).query_key("val").build();
     mount(txt);
 }
@@ -280,11 +281,11 @@ fn many_instances_share_one_runtime() {
             .expect("app");
         futures::executor::block_on(app.load_rut_module(format!(
             r#"
-use tur::{{ mount, rs_source_str }};
-use tur_kit::{{ Text }};
+use tur::{{ mount }};
+use tur_kit::{{ Readable, Text, source_str }};
 
 entry fn start() {{
-    let atom = rs_source_str("{i}");
+    let atom: Readable<str> = source_str("{i}");
     let mut txt = Text().text_bound(atom).query_key("idx").build();
     mount(txt);
 }}
@@ -541,18 +542,19 @@ fn reactive_stores_are_isolated_per_instance() {
     // "A2" — the write lands in A's own store.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::{ mount, rs_set_str, rs_source_str };
-use tur_kit::{ Text };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ MutationCtx, Readable, Text, source_str };
 
 entry fn start() -> u64 {
-    let atom = rs_source_str("from-A");
+    let atom: Readable<str> = source_str("from-A");
     let mut txt = Text().text_bound(atom).query_key("id").build();
     mount(txt);
-    return atom;
+    return atom.atom_id();
 }
 
 entry fn flip(atom: u64, _b: f64) {
-    rs_set_str(atom, "A2");
+    let r = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(r, "A2");
 }
 "#,
     ))

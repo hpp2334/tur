@@ -38,19 +38,19 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// bound label; the `sync` probe mirrors the controller text into the label
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Input, Text };
+use tur::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
+use tur_kit::{ Column, Input, MutationCtx, Readable, Text, source_str };
 
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     st_put(7, ctrl);
-    let label = rs_source_str("");
+    let label: Readable<str> = source_str("");
     let undo = undo_new();
     let input = Input().controller(ctrl).undo(undo).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
     let txt = Text().text_bound(label).query_key("child-text").build();
     mount(Column().child(input).child(txt).build());
-    return label;
+    return label.atom_id();
 }
 
 // Test probe: mirror the controller text into the bound label (entries
@@ -59,7 +59,8 @@ entry fn start() -> u64 {
 entry fn sync(label: u64, _b: f64) {
     let ctrl = st_take(7);
     st_put(7, ctrl);
-    rs_set_str(label, tctrl_text(ctrl));
+    let r = Readable<str>.of(ctx_bridge(), label);
+    MutationCtx.over(ctx_bridge()).set_str(r, tctrl_text(ctrl));
 }
 "#;
 

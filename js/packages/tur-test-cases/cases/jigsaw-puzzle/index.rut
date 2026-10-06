@@ -11,35 +11,35 @@
 //     fill rides a Positioned four-edge child in the root stack — the
 //     Condition lives INSIDE it so the stretch sizes against the stack).
 //   * Game feel (the boa lift): grabbing a piece eases it up to LIFT_MAX
-//     (1.1) over 180ms (one shared easeOut controller; the tick writes
-//     the dragged piece's bound scale atom, the just-released piece
-//     settles back) and every piece carries a STATE SHADOW through the
-//     bound shadow rows: loose black soft → dragging hard → placed hue
-//     glow. Shuffle re-shuffles the targets and re-deals the tray.
+//     (1.1) over 180ms (one shared easeOut controller; the tick mutation
+//     writes the dragged piece's bound scale source, the just-released
+//     piece settles back) and every piece carries a STATE SHADOW through
+//     the bound shadow rows: loose black soft → dragging hard → placed
+//     hue glow. Shuffle re-shuffles the targets and re-deals the tray.
 //
-// Mechanics (the rails this case rides — no engine code was touched):
-//   * Each piece is a `Positioned` whose left/top are the Phase-6 BOUND
-//     anchors (`left_bound` / `top_bound`) over per-piece f64 atoms —
-//     dragging writes the atoms, the Stack re-lays-out, the piece follows.
-//   * One `PointerInteract` per piece with `.ids(i, i)` — the piece index
-//     rides the two-id rail into SHARED callbacks (no per-piece closures);
-//     atoms and scratch state cross through the stash slots.
-//   * Piece labels are bound str atoms (re-set by deal()); the placed
-//     badge is the one derive (over the count atom). Everything mutates
-//     through atoms — the whole tree is ONE chained build (the kit law).
+// Mechanics (the new idiom — no engine code, no stash):
+//   * All per-piece state rides ARRAYS OF SOURCES bundled in one `Pieces`
+//     struct (the plan's `shadow_c[i]` shape): left/top (the drag rail),
+//     the target slot, a brush, the label str, the shadow channels, the
+//     lift scale, the placed flag — plus the drag scratch. Every drag
+//     mutation captures the struct + its piece index (no id rails).
+//   * Each piece is a `Positioned` whose left/top are BOUND anchors
+//     (`left_bound` / `top_bound`) — dragging writes the sources, the
+//     Stack re-lays-out, the piece follows.
+//   * The lift controller's tick/end are mutations (`mutate_f64` /
+//     `mutate`) capturing the struct — no stash round-trip.
 //   * Drag deltas are frame-formulated (x0 + (gx - g0x)) — absolute, no
 //     read-modify-write drift, frame-independent of the stack's offset.
 //   * Not `Each`: the 9 pieces mount ONCE (a rebuild per move event would
 //     drop pointer capture mid-drag).
 use tur::{
     ALIGN_CENTER, ALIGN_TOP_LEFT, BORDER_INSIDE, CROSS_ALIGN_CENTER, CURSOR_POINTER,
-    MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, anim_forward, anim_reverse, mount, rs_get_f64,
-    rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64,
-    rs_source_str, rs_source_value, st_put, st_take, stf_put, stf_take, rs_list_new,
+    MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, anim_forward, anim_reverse, ctx_bridge, mount,
 };
 use tur_kit::{
-    Condition, Container, MouseRegion, PointerInteract, Positioned, Row, SizedBox, Stack, Text,
-    rs_derive,
+    Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent,
+    PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, derive_str, mutate,
+    mutate_f64, source_bool, source_f64, source_str,
 };
 use tur_anim_kit::{ Transform, anim_ctrl };
 
@@ -95,77 +95,93 @@ let SHADOW_LOOSE: u64 = 0x0000006Eu64; // black @110
 let SHADOW_DRAG: u64 = 0x000000B4u64; // black @180
 let LIFT_MAX: f64 = 1.1;
 
-// ---- stash slots (the case's side channel — atoms + scratch) ------------------
+// ---- the per-piece state (arrays of sources in one bundle) ---------------------
 
-let K_SEED: u64 = 1; // the LCG state
-let K_DRAG: u64 = 2; // the dragged piece id (-1 = none)
-let K_GX0: u64 = 3; // grab point (global)
-let K_GY0: u64 = 4;
-let K_LAST: u64 = 5; // the just-released piece (the settle keeps animating it)
-let K_LIFT: u64 = 6; // the shared lift controller
-let K_LIFTV: u64 = 7; // the lift progress atom
-let K_X0: u64 = 8; // the piece's position at grab
-let K_Y0: u64 = 9;
-let K_COUNT: u64 = 10; // placed count (f64 atom — the badge derive's dep)
-let K_SOLVED: u64 = 11; // the win banner's bool atom
-let K_PX0: u64 = 20; // piece i left atom (20..29)
-let K_PY0: u64 = 30; // piece i top atom (30..39)
-let K_SL0: u64 = 40; // piece i target slot atom (40..49 — read by the snap math)
-let K_BR0: u64 = 50; // piece i brush atom (50..59)
-let K_LB0: u64 = 60; // piece i label str atom (60..69)
-let K_OK0: u64 = 70; // piece i placed flag (70..79)
-let K_DK0: u64 = 80; // the deal deck (80..89)
-let K_SC0: u64 = 100; // piece i shadow COLOR atom (100..109)
-let K_SB0: u64 = 110; // piece i shadow BLUR atom (110..119)
-let K_SD0: u64 = 120; // piece i shadow DY atom (120..129)
-let K_SX0: u64 = 130; // piece i LIFT SCALE atom (130..139)
-let K_TMP: u64 = 90;
+struct Pieces {
+    px: [Readable<f64>]; // left anchors (the drag rail)
+    py: [Readable<f64>]; // top anchors
+    sl: [Readable<f64>]; // target slots (the snap math reads them)
+    br: [Readable<f64>]; // fill brushes (bright on deal, dim when placed)
+    lb: [Readable<str>]; // labels (re-set by deal)
+    ok: [Readable<bool>]; // placed flags
+    sc: [Readable<f64>]; // shadow colors (the state shadow)
+    sb: [Readable<f64>]; // shadow blurs
+    sd: [Readable<f64>]; // shadow dys
+    sx: [Readable<f64>]; // lift scales
+    drag: Readable<f64>; // the dragged piece (-1 = none)
+    last: Readable<f64>; // the just-released piece (the settle keeps animating it)
+    gx0: Readable<f64>; // grab point (global)
+    gy0: Readable<f64>;
+    x0: Readable<f64>; // the piece's position at grab
+    y0: Readable<f64>;
+}
+
+// Nine fresh f64 sources (the per-piece channel mint).
+fn m9() -> [Readable<f64>] {
+    return [
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+    ];
+}
 
 entry fn start() -> u64 {
-    // Per-piece atoms: left/top (the drag rail), the target slot (read by
-    // the snap math), a brush (re-set bright/dim on deal/place), the label
-    // str (re-set by deal()), the shadow channels (color/blur/dy — the
-    // state shadow) and the lift scale.
-    let mut i: u64 = 0;
-    while (i < 9) {
-        let px = rs_source_f64();
-        let py = rs_source_f64();
-        let sl = rs_source_f64();
-        let br = rs_source_value(rs_list_new());
-        let lb = rs_source_str("?");
-        let sc = rs_source_value(rs_list_new());
-        let sb = rs_source_f64();
-        let sd = rs_source_f64();
-        let sx = rs_source_f64();
-        stf_put(K_PX0 + i, px as f64);
-        stf_put(K_PY0 + i, py as f64);
-        stf_put(K_SL0 + i, sl as f64);
-        stf_put(K_BR0 + i, br as f64);
-        stf_put(K_LB0 + i, lb as f64);
-        stf_put(K_OK0 + i, 0.0);
-        stf_put(K_SC0 + i, sc as f64);
-        stf_put(K_SB0 + i, sb as f64);
-        stf_put(K_SD0 + i, sd as f64);
-        stf_put(K_SX0 + i, sx as f64);
-        i = i + 1;
-    }
-    stf_put(K_COUNT, rs_source_f64() as f64);
-    stf_put(K_SOLVED, rs_source_bool(false) as f64);
-    stf_put(K_SEED, 20261006.0);
-    stf_put(K_DRAG, -1.0);
-    stf_put(K_LAST, -1.0);
-    stf_put(K_TMP, 0.0);
+    let p = Pieces {
+        px: m9(),
+        py: m9(),
+        sl: m9(),
+        br: m9(),
+        lb: [
+            source_str("?"), source_str("?"), source_str("?"), source_str("?"), source_str("?"),
+            source_str("?"), source_str("?"), source_str("?"), source_str("?"),
+        ],
+        ok: [
+            source_bool(false), source_bool(false), source_bool(false), source_bool(false),
+            source_bool(false), source_bool(false), source_bool(false), source_bool(false),
+            source_bool(false),
+        ],
+        sc: m9(),
+        sb: m9(),
+        sd: m9(),
+        sx: m9(),
+        drag: source_f64(-1.0),
+        last: source_f64(-1.0),
+        gx0: source_f64(0.0),
+        gy0: source_f64(0.0),
+        x0: source_f64(0.0),
+        y0: source_f64(0.0),
+    };
+    let count: Readable<f64> = source_f64(0.0);
+    let solved: Readable<bool> = source_bool(false);
+    let seed: Readable<f64> = source_f64(20261006.0); // the LCG state
 
     // The shared lift controller (the boa dragScale$): one 180ms easeOut
-    // ease over the K_LIFTV atom; the tick routes the eased value into the
-    // dragged / just-released piece's bound scale atom.
-    let liftv = rs_source_f64();
-    rs_set_f64(liftv, 0.0);
-    stf_put(K_LIFTV, liftv as f64);
-    let lift = anim_ctrl(liftv, 180.0, "easeOut", 1, lift_tick, lift_end);
-    st_put(K_LIFT, lift);
+    // ease; the tick mutation routes the eased value into the dragged /
+    // just-released piece's bound scale source.
+    let a_lift_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+        let scale: f64 = 1.0 + v * (LIFT_MAX - 1.0);
+        let d = ctx.get_f64(p.drag);
+        let l = ctx.get_f64(p.last);
+        if (d >= 0.0) {
+            ctx.set_f64(p.sx[d as i32], scale);
+        }
+        if (l >= 0.0 && l != d) {
+            ctx.set_f64(p.sx[l as i32], scale);
+        }
+    });
+    let a_lift_end = mutate(fn (ctx: MutationCtx) {
+        let l = ctx.get_f64(p.last);
+        if (l >= 0.0) {
+            ctx.set_f64(p.sx[l as i32], 1.0);
+        }
+    });
+    let lift = anim_ctrl(180.0, "easeOut", 1, a_lift_tick, a_lift_end);
 
-    deal();
+    // The initial deal (the ctx face at boot — the channels seed before
+    // the first flush) and the Shuffle tap's mutation.
+    deal(MutationCtx.over(ctx_bridge()), p, count, solved, seed);
+    let b_shuffle = mutate(fn (ctx: MutationCtx) {
+        deal(ctx, p, count, solved, seed);
+    });
 
     // ---- the play area (board + ghosts + tray + pieces + bar) ----
 
@@ -175,8 +191,8 @@ entry fn start() -> u64 {
         .child(board_bg())
         .children([ghost(0), ghost(1), ghost(2), ghost(3), ghost(4), ghost(5), ghost(6), ghost(7), ghost(8)])
         .child(tray_bg())
-        .children([piece(0), piece(1), piece(2), piece(3), piece(4), piece(5), piece(6), piece(7), piece(8)])
-        .child(top_bar())
+        .children([piece(0, p, count, solved, lift), piece(1, p, count, solved, lift), piece(2, p, count, solved, lift), piece(3, p, count, solved, lift), piece(4, p, count, solved, lift), piece(5, p, count, solved, lift), piece(6, p, count, solved, lift), piece(7, p, count, solved, lift), piece(8, p, count, solved, lift)])
+        .child(top_bar(b_shuffle, count))
         .build();
 
     // The win overlay: the four-edge Positioned is a DIRECT stack child so
@@ -189,7 +205,7 @@ entry fn start() -> u64 {
         .right(0.0)
         .bottom(0.0)
         .child(
-            Condition(peek(K_SOLVED) as u64)
+            Condition(solved)
                 .then_build(win_banner)
                 .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
                 .build(),
@@ -206,65 +222,59 @@ entry fn start() -> u64 {
             .child(win)
             .build(),
     );
-    return peek(K_COUNT) as u64;
+    return count.atom_id();
 }
 
 // ---- the deal (boot + Shuffle share it) ----------------------------------------
 
 // Re-shuffle the targets, re-deal the pieces to the tray in id order, and
-// reset every placed/counter/solved atom. The deck lives in stash cells
-// (rut arrays are immutable); Fisher-Yates over the LCG below.
-fn deal() {
-    let mut i: u64 = 0;
+// reset every placed/counter/solved source. The deck is a value array
+// (rut index writes); Fisher-Yates over the LCG below.
+fn deal(ctx: MutationCtx, p: Pieces, count: Readable<f64>, solved: Readable<bool>,
+        seed: Readable<f64>) {
+    let mut deck: [f64] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    let mut i: i32 = 0;
     while (i < 9) {
-        stf_put(K_DK0 + i, i as f64);
+        deck[i] = i as f64;
         i = i + 1;
     }
-    let mut j: u64 = 0;
+    let mut j: i32 = 0;
     while (j < 8) {
-        let k = j + (rnd() as u64 % (9 - j));
-        let a = peek(K_DK0 + j);
-        let b = peek(K_DK0 + k);
-        stf_put(K_DK0 + j, b);
-        stf_put(K_DK0 + k, a);
+        let k = j + (rnd(ctx, seed) as i32 % (9 - j));
+        let a = deck[j];
+        deck[j] = deck[k];
+        deck[k] = a;
         j = j + 1;
     }
-    let mut p: u64 = 0;
-    while (p < 9) {
-        let s = peek(K_DK0 + p) as u64;
-        rs_set_f64(peek(K_SL0 + p) as u64, s as f64);
-        rs_set_str(peek(K_LB0 + p) as u64, fmt_slot(s as f64));
-        rs_set_brush(peek(K_BR0 + p) as u64, bright(s));
-        rs_set_f64(peek(K_PX0 + p) as u64, tray_x(p));
-        rs_set_f64(peek(K_PY0 + p) as u64, tray_y(p));
-        stf_put(K_OK0 + p, 0.0);
+    let mut b: u64 = 0;
+    while (b < 9) {
+        let s = deck[b as i32] as u64;
+        ctx.set_f64(p.sl[b as i32], s as f64);
+        ctx.set_str(p.lb[b as i32], fmt_slot(s as f64));
+        ctx.set_brush(p.br[b as i32], bright(s));
+        ctx.set_f64(p.px[b as i32], tray_x(b));
+        ctx.set_f64(p.py[b as i32], tray_y(b));
+        ctx.set_bool(p.ok[b as i32], false);
         // The state shadow resets to loose; the lift scale to 1.
-        rs_set_brush(peek(K_SC0 + p) as u64, SHADOW_LOOSE);
-        rs_set_f64(peek(K_SB0 + p) as u64, 10.0);
-        rs_set_f64(peek(K_SD0 + p) as u64, 4.0);
-        rs_set_f64(peek(K_SX0 + p) as u64, 1.0);
-        p = p + 1;
+        ctx.set_brush(p.sc[b as i32], SHADOW_LOOSE);
+        ctx.set_f64(p.sb[b as i32], 10.0);
+        ctx.set_f64(p.sd[b as i32], 4.0);
+        ctx.set_f64(p.sx[b as i32], 1.0);
+        b = b + 1;
     }
-    rs_set_f64(peek(K_COUNT) as u64, 0.0);
-    rs_set_bool(peek(K_SOLVED) as u64, false);
-    stf_put(K_DRAG, -1.0);
-    stf_put(K_LAST, -1.0);
+    ctx.set_f64(count, 0.0);
+    ctx.set_bool(solved, false);
+    ctx.set_f64(p.drag, -1.0);
+    ctx.set_f64(p.last, -1.0);
 }
 
 // Park-Miller in f64 (48271 × 2^31 < 2^53 — exact). Fixed boot seed: deals
 // are deterministic per session, shuffles advance the state.
-fn rnd() -> f64 {
-    let s = stf_take(K_SEED);
+fn rnd(ctx: MutationCtx, seed: Readable<f64>) -> f64 {
+    let s = ctx.get_f64(seed);
     let n = (s * 48271.0) % 2147483647.0;
-    stf_put(K_SEED, n);
+    ctx.set_f64(seed, n);
     return n;
-}
-
-// Read a stash slot without consuming it.
-fn peek(slot: u64) -> f64 {
-    let v = stf_take(slot);
-    stf_put(slot, v);
-    return v;
 }
 
 // ---- the geometry ---------------------------------------------------------------
@@ -322,144 +332,99 @@ fn dim(s: u64) -> u64 {
     return DIM8;
 }
 
-// ---- the drag state machine (shared across all 9 pieces — `.ids(i, i)`) --------
-
-fn p_down(i: u64, _b: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    let ok = stf_take(K_OK0 + i);
-    if (ok > 0.5) {
-        stf_put(K_OK0 + i, ok);
-        return;
-    }
-    stf_put(K_OK0 + i, ok);
-    // A new grab interrupts the previous settle — park that piece at rest.
-    let prev_last = peek(K_LAST);
-    if (prev_last >= 0.0 && prev_last != i as f64) {
-        rs_set_f64(peek(K_SX0 + prev_last as u64) as u64, 1.0);
-    }
-    stf_put(K_DRAG, i as f64);
-    stf_put(K_LAST, i as f64);
-    stf_put(K_GX0, gx);
-    stf_put(K_GY0, gy);
-    stf_put(K_X0, rs_get_f64(peek(K_PX0 + i) as u64));
-    stf_put(K_Y0, rs_get_f64(peek(K_PY0 + i) as u64));
-    // The lift: ease up to LIFT_MAX; the shadow hardens.
-    let lift = st_take(K_LIFT);
-    anim_forward(lift);
-    st_put(K_LIFT, lift);
-    rs_set_brush(peek(K_SC0 + i) as u64, SHADOW_DRAG);
-    rs_set_f64(peek(K_SB0 + i) as u64, 28.0);
-    rs_set_f64(peek(K_SD0 + i) as u64, 12.0);
-}
-
-fn p_move(i: u64, _b: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    if (peek(K_DRAG) != i as f64) {
-        return;
-    }
-    let nx = peek(K_X0) + (gx - peek(K_GX0));
-    let ny = peek(K_Y0) + (gy - peek(K_GY0));
-    rs_set_f64(peek(K_PX0 + i) as u64, nx);
-    rs_set_f64(peek(K_PY0 + i) as u64, ny);
-}
-
-fn p_up(i: u64, _b: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
-    if (peek(K_DRAG) != i as f64) {
-        return;
-    }
-    stf_put(K_DRAG, -1.0);
-    let nx = rs_get_f64(peek(K_PX0 + i) as u64);
-    let ny = rs_get_f64(peek(K_PY0 + i) as u64);
-    let s = rs_get_f64(peek(K_SL0 + i) as u64) as u64;
-    let tx = slot_x(s);
-    let ty = slot_y(s);
-    let d2 = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
-    if (d2 >= SNAP_T2) {
-        // Off-target: back to the loose shadow; the piece settles at rest.
-        rs_set_brush(peek(K_SC0 + i) as u64, SHADOW_LOOSE);
-        rs_set_f64(peek(K_SB0 + i) as u64, 10.0);
-        rs_set_f64(peek(K_SD0 + i) as u64, 4.0);
-        let lift = st_take(K_LIFT);
-        anim_reverse(lift);
-        st_put(K_LIFT, lift);
-        return; // the piece stays where it was dropped
-    }
-    // Snap + lock: pin to the slot, dim the fill, swap in the OWN-HUE GLOW
-    // (the boa pieceRgb shadow — the resolved look), count it, maybe solve.
-    rs_set_f64(peek(K_PX0 + i) as u64, tx);
-    rs_set_f64(peek(K_PY0 + i) as u64, ty);
-    stf_put(K_OK0 + i, 1.0);
-    rs_set_brush(peek(K_BR0 + i) as u64, dim(s));
-    rs_set_brush(peek(K_SC0 + i) as u64, glow(s));
-    rs_set_f64(peek(K_SB0 + i) as u64, 18.0);
-    rs_set_f64(peek(K_SD0 + i) as u64, 4.0);
-    let count = rs_get_f64(peek(K_COUNT) as u64) + 1.0;
-    rs_set_f64(peek(K_COUNT) as u64, count);
-    if (count >= 9.0) {
-        rs_set_bool(peek(K_SOLVED) as u64, true);
-    }
-    let lift = st_take(K_LIFT);
-    anim_reverse(lift);
-    st_put(K_LIFT, lift);
-}
-
-// The lift tick: the eased 0..1 maps to 1..LIFT_MAX and rides the
-// dragged AND just-released pieces' bound scale atoms (the boa gate:
-// dragId == id || lastDragId == id reads the shared dragScale$).
-fn lift_tick(_id: u64, v: f64) {
-    let scale: f64 = 1.0 + v * (LIFT_MAX - 1.0);
-    let drag = peek(K_DRAG);
-    let last = peek(K_LAST);
-    if (drag >= 0.0) {
-        rs_set_f64(peek(K_SX0 + drag as u64) as u64, scale);
-    }
-    if (last >= 0.0 && last != drag) {
-        rs_set_f64(peek(K_SX0 + last as u64) as u64, scale);
-    }
-}
-
-// The settle end: the released piece rests at exactly 1.0.
-fn lift_end(_id: u64, _v: f64) {
-    let last = peek(K_LAST);
-    if (last >= 0.0) {
-        rs_set_f64(peek(K_SX0 + last as u64) as u64, 1.0);
-    }
-}
-
-// Shuffle tap: re-deal (deal() resets every game atom; the derives follow).
-fn b_shuffle(_a: u64, _b: u64, _n: f64) {
-    deal();
-}
+// ---- the drag state machine (per-piece mutations over the bundle) ----------------
 
 // ---- the label formats ------------------------------------------------------------
 
 // The piece label: its target slot, 1-based (crossed to the ghost's static
-// text too; deal() re-sets the bound labels on every re-deal).
+// text too; deal re-sets the bound labels on every re-deal).
 fn fmt_slot(v: f64) -> str {
     let n = v as u64 + 1;
     return f"{n}";
 }
 
-// The badge: "N / 9 placed" — the one derive, over the count atom.
-fn fmt_count(v: f64) -> str {
-    let n = v as u64;
-    return f"{n} / 9 placed";
-}
-
 // ---- the view helpers --------------------------------------------------------------
 
-fn piece(i: u64) -> View {
+fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: opaque) -> View {
+    // Grab: placed pieces stop answering; a new grab interrupts the
+    // previous settle (parking that piece at rest), then the lift runs and
+    // the shadow hardens.
+    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        if (ctx.get_bool(p.ok[i as i32])) {
+            return;
+        }
+        let prev = ctx.get_f64(p.last);
+        if (prev >= 0.0 && prev != i as f64) {
+            ctx.set_f64(p.sx[prev as i32], 1.0);
+        }
+        ctx.set_f64(p.drag, i as f64);
+        ctx.set_f64(p.last, i as f64);
+        ctx.set_f64(p.gx0, ev.global.x);
+        ctx.set_f64(p.gy0, ev.global.y);
+        ctx.set_f64(p.x0, ctx.get_f64(p.px[i as i32]));
+        ctx.set_f64(p.y0, ctx.get_f64(p.py[i as i32]));
+        anim_forward(lift);
+        ctx.set_brush(p.sc[i as i32], SHADOW_DRAG);
+        ctx.set_f64(p.sb[i as i32], 28.0);
+        ctx.set_f64(p.sd[i as i32], 12.0);
+    });
+    // Follow: frame-formulated from the grab anchor (absolute — no drift).
+    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        if (ctx.get_f64(p.drag) != i as f64) {
+            return;
+        }
+        ctx.set_f64(p.px[i as i32], ctx.get_f64(p.x0) + (ev.global.x - ctx.get_f64(p.gx0)));
+        ctx.set_f64(p.py[i as i32], ctx.get_f64(p.y0) + (ev.global.y - ctx.get_f64(p.gy0)));
+    });
+    // Release: within SNAP_T² of the target the piece snaps + locks (dim
+    // fill, own-hue glow, counted, maybe solved); otherwise it settles
+    // back to the loose shadow where it was dropped.
+    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        if (ctx.get_f64(p.drag) != i as f64) {
+            return;
+        }
+        ctx.set_f64(p.drag, -1.0);
+        let nx = ctx.get_f64(p.px[i as i32]);
+        let ny = ctx.get_f64(p.py[i as i32]);
+        let s = ctx.get_f64(p.sl[i as i32]) as u64;
+        let tx = slot_x(s);
+        let ty = slot_y(s);
+        let d2 = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+        if (d2 >= SNAP_T2) {
+            ctx.set_brush(p.sc[i as i32], SHADOW_LOOSE);
+            ctx.set_f64(p.sb[i as i32], 10.0);
+            ctx.set_f64(p.sd[i as i32], 4.0);
+            anim_reverse(lift);
+            return; // the piece stays where it was dropped
+        }
+        ctx.set_f64(p.px[i as i32], tx);
+        ctx.set_f64(p.py[i as i32], ty);
+        ctx.set_bool(p.ok[i as i32], true);
+        ctx.set_brush(p.br[i as i32], dim(s));
+        ctx.set_brush(p.sc[i as i32], glow(s));
+        ctx.set_f64(p.sb[i as i32], 18.0);
+        ctx.set_f64(p.sd[i as i32], 4.0);
+        let c = ctx.get_f64(count) + 1.0;
+        ctx.set_f64(count, c);
+        if (c >= 9.0) {
+            ctx.set_bool(solved, true);
+        }
+        anim_reverse(lift);
+    });
+
     let face = Container()
         .width_height(PIECE, PIECE)
-        .color_bound(peek(K_BR0 + i) as u64)
+        .color_bound(p.br[i as i32])
         .radius(14.0)
         .border(0xFFFFFFFFu64, 2.0, BORDER_INSIDE)
-        .shadow_color_bound(peek(K_SC0 + i) as u64)
-        .shadow_blur_bound(peek(K_SB0 + i) as u64)
-        .shadow_dy_bound(peek(K_SD0 + i) as u64)
+        .shadow_color_bound(p.sc[i as i32])
+        .shadow_blur_bound(p.sb[i as i32])
+        .shadow_dy_bound(p.sd[i as i32])
         .alignment(ALIGN_CENTER)
         .query_key(f"jw/piece-{i}")
         .child(
             Text()
-                .text_bound(peek(K_LB0 + i) as u64)
+                .text_bound(p.lb[i as i32])
                 .font_size(28.0)
                 .color(0xFFFFFFFFu64)
                 .query_key(f"jw/piece-{i}-label")
@@ -467,24 +432,23 @@ fn piece(i: u64) -> View {
         )
         .build();
     let pad = PointerInteract()
-        .ids(i, i)
-        .on_down2(p_down)
-        .on_move2(p_move)
-        .on_up2(p_up)
+        .on_pointer_down(b_down)
+        .on_pointer_move(b_move)
+        .on_pointer_up(b_up)
         .query_key(f"jw/pad-{i}")
         .child(face)
         .build();
     // The boa lift: the pad rides a Transform whose scale is the piece's
-    // bound atom (the shared controller eases it 1 → 1.1 on grab, back on
-    // release).
+    // bound source (the shared controller eases it 1 → 1.1 on grab, back
+    // on release).
     return Positioned()
-        .left_bound(peek(K_PX0 + i) as u64)
-        .top_bound(peek(K_PY0 + i) as u64)
+        .left_bound(p.px[i as i32])
+        .top_bound(p.py[i as i32])
         .width(PIECE)
         .height(PIECE)
         .child(
             Transform(1.0, 0.0, 0.0, 0.0)
-                .scale_bound(peek(K_SX0 + i) as u64)
+                .scale_bound(p.sx[i as i32])
                 .child(pad)
                 .build(),
         )
@@ -555,7 +519,13 @@ fn tray_bg() -> View {
         .build();
 }
 
-fn top_bar() -> View {
+// The top bar: the Shuffle pill (its mutation re-deals) + the badge (the
+// derive over the count source).
+fn top_bar(b_shuffle: Mutation<nil, nil>, count: Readable<f64>) -> View {
+    let badge: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        let n = ctx.get_f64(count) as u64;
+        return f"{n} / 9 placed";
+    });
     let pill = Container()
         .padding(10.0)
         .radius(20.0)
@@ -577,7 +547,7 @@ fn top_bar() -> View {
         .border(0x334155FFu64, 1.0, BORDER_INSIDE)
         .child(
             Text()
-                .text_bound_derived(rs_derive(fmt_count, peek(K_COUNT) as u64))
+                .text_bound(badge)
                 .font_size(14.0)
                 .color(0xE2E8F0FFu64)
                 .query_key("jw/counter")
@@ -597,7 +567,7 @@ fn top_bar() -> View {
                         .cursor(CURSOR_POINTER)
                         .child(
                             PointerInteract()
-                                .on_tap(b_shuffle)
+                                .on_click(b_shuffle)
                                 .query_key("jw/shuffle")
                                 .child(pill)
                                 .build(),

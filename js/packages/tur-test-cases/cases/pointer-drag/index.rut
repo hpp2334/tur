@@ -1,12 +1,27 @@
 // pointer-drag: a gesture pad reporting down/move/up — the phase label
-// and the last position ride two bound atoms (both cross in the intents).
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, mount, rs_set_str, rs_source_str };
-use tur_kit::{ Column, Container, PointerInteract, Text };
+// and the last position ride two bound sources; the drag mutations
+// receive the typed `PointerEvent` (state by capture, data by argument).
+use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, mount };
+use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text,
+    mutate_ev, source_str };
 
 
 entry fn start() -> u64 {
-    let phase = rs_source_str("idle");
-    let pos = rs_source_str("0,0");
+    let phase: Readable<str> = source_str("idle");
+    let pos: Readable<str> = source_str("0,0");
+
+    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set_str(phase, "down");
+    });
+    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set_str(phase, "move");
+    });
+    let b_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set_str(phase, "up");
+    });
 
     let mut col = Column().cross_alignment(CROSS_ALIGN_START);
 
@@ -16,26 +31,11 @@ entry fn start() -> u64 {
         .alignment(ALIGN_CENTER)
         .child(Text().text_bound(phase).query_key("drag-phase").build());
 
-    col.child(PointerInteract().ids(phase, pos).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b.build()).build());
+    col.child(PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build());
 
     let pos_t = Text().text_bound(pos).query_key("drag-pos");
     col.child(pos_t.build());
 
     mount(col.build());
-    return phase;
-}
-
-fn g_down(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    rs_set_str(pos, f"{gx as u64},{gy as u64}");
-    rs_set_str(phase, "down");
-}
-
-fn g_move(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    rs_set_str(pos, f"{gx as u64},{gy as u64}");
-    rs_set_str(phase, "move");
-}
-
-fn g_up(phase: u64, pos: u64, _lx: f64, _ly: f64, gx: f64, gy: f64, _btn: u64) {
-    rs_set_str(pos, f"{gx as u64},{gy as u64}");
-    rs_set_str(phase, "up");
+    return phase.atom_id();
 }

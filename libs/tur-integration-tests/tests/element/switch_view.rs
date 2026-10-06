@@ -8,31 +8,34 @@ use tur_integration_tests::TurTestApp;
 /// A switch bound to a str atom with two cases + a fallback; `set_key`
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
-use tur::{ mount, rs_set_str, rs_source_str };
-use tur_kit::{ Switch, Text };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ MutationCtx, Readable, Switch, Text, source_str };
 
 
 entry fn start() -> u64 {
-    let key = rs_source_str("a");
+    let key: Readable<str> = source_str("a");
 
-    let mut sw = Switch().value_source(key);
+    let mut sw = Switch().value(key);
     sw.cases("a", Text().text("AAA").query_key("case_a").build());
     sw.cases("b", Text().text("BBB").query_key("case_b").build());
     sw.fallback(Text().text("FALL").query_key("case_fallback").build());
     mount(sw.build());
-    return key;
+    return key.atom_id();
 }
 
-entry fn set_key(key: u64, _b: f64) {
-    rs_set_str(key, "b");
+entry fn set_key(atom: u64, _b: f64) {
+    let key = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(key, "b");
 }
 
-entry fn set_key_raw(key: u64, _b: f64) {
-    rs_set_str(key, "zzz");
+entry fn set_key_raw(atom: u64, _b: f64) {
+    let key = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(key, "zzz");
 }
 
-entry fn reemit(key: u64, _b: f64) {
-    rs_set_str(key, "a");
+entry fn reemit(atom: u64, _b: f64) {
+    let key = Readable<str>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_str(key, "a");
 }
 "#;
 
@@ -116,8 +119,8 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 /// dep as f64 (`entry fn d(dep: f64) -> str`), so the source is a numeric
 /// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
-use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Switch, Text };
+use tur::{ ctx_bridge, mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ MutationCtx, Readable, Switch, Text };
 use tur_kit::{ rs_derive };
 
 fn d(v: f64) -> str {
@@ -135,7 +138,9 @@ entry fn start() -> u64 {
     rs_set_f64(key, 0.0);
     let derived = rs_derive(d, key);
 
-    let mut sw = Switch().value_derived(derived);
+    // The unified value prop over the derived handle (the kind rides the
+    // handle: a derived binds through the derive rail).
+    let mut sw = Switch().value(Readable<str>.of(ctx_bridge(), derived));
     sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
     sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
     sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
@@ -143,8 +148,9 @@ entry fn start() -> u64 {
     return key;
 }
 
-entry fn set_key(key: u64, _b: f64) {
-    rs_set_f64(key, 1.0);
+entry fn set_key(atom: u64, _b: f64) {
+    let key = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(key, 1.0);
 }
 "#;
 

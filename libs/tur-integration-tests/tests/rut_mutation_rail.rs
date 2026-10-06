@@ -68,7 +68,7 @@ entry fn start() -> u64 {
         ctx.set_f64(n, ctx.get_f64(n) + 1.0);
     });
     let col = Column()
-        .child(Text().text_bound_derived(label.atom_id()).query_key("rut/text").build())
+        .child(Text().text_bound(label).query_key("rut/text").build())
         .child(PointerInteract().on_click(bump).query_key("rut/pad").child(Text().text("tap").build()).build());
     mount(col.build());
     return n.atom_id();
@@ -145,7 +145,7 @@ entry fn start() -> u64 {
         .query_key("rut/pad")
         .child(Text().text("pad").build())
         .build();
-    mount(Column().child(Text().text_bound(log.atom_id()).query_key("rut/text").build()).child(pad).build());
+    mount(Column().child(Text().text_bound(log).query_key("rut/text").build()).child(pad).build());
     return log.atom_id();
 }
 "#;
@@ -194,11 +194,10 @@ entry fn start() -> u64 {
     // The typed-arg target: the arg crosses the queue; its "return"
     // lands through the source write (composition reads effects through
     // sources — there is no synchronous return across the VM boundary).
-    let add_one = mutate_f64(fn (ctx: MutationCtx, x: f64) -> f64 {
+    let add_one = mutate_f64(fn (ctx: MutationCtx, x: f64) {
         let r = x + 1.0;
         ctx.set_f64(out, r);
         ctx.set_str(res, f"r={r as u64}");
-        return r;
     });
 
     // The nil-arg target (the plan's b_root shape).
@@ -225,8 +224,8 @@ entry fn start() -> u64 {
         .build();
     mount(
         Column()
-            .child(Text().text_bound(res.atom_id()).query_key("rut/text").build())
-            .child(Text().text_bound(log.atom_id()).query_key("rut/log").build())
+            .child(Text().text_bound(res).query_key("rut/text").build())
+            .child(Text().text_bound(log).query_key("rut/log").build())
             .child(pad)
             .build(),
     );
@@ -310,9 +309,9 @@ entry fn start() -> u64 {
         .build();
     mount(
         Column()
-            .child(Text().text_bound(mirror.atom_id()).query_key("rut/text").build())
-            .child(Text().text_bound_derived(badge.atom_id()).query_key("rut/badge").build())
-            .child(Text().text_bound(readback.atom_id()).query_key("rut/readback").build())
+            .child(Text().text_bound(mirror).query_key("rut/text").build())
+            .child(Text().text_bound(badge).query_key("rut/badge").build())
+            .child(Text().text_bound(readback).query_key("rut/readback").build())
             .child(pad)
             .child(snap)
             .build(),
@@ -387,7 +386,7 @@ entry fn start() -> u64 {
         .query_key("rut/pad")
         .child(Text().text("drag").build())
         .build();
-    mount(Column().child(Text().text_bound(log.atom_id()).query_key("rut/text").build()).child(pad).build());
+    mount(Column().child(Text().text_bound(log).query_key("rut/text").build()).child(pad).build());
     return log.atom_id();
 }
 "#;
@@ -489,7 +488,7 @@ entry fn start() -> u64 {
     let label: Readable<str> = source_str("launched");
     let busy: Readable<bool> = source_bool(false);
     spawn(work(TaskCtx.mint(), label, busy));
-    let col = Column().child(Text().text_bound(label.atom_id()).query_key("rut/text").build());
+    let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
     return busy.atom_id();
 }

@@ -4,12 +4,14 @@
 // Single-file port of the boa TSX original (a 6-file case: index/landing/
 // explorer/state/theme/ui — the explorer view is inlined here).
 //
-// Host surface: `net_request` (the async capability row) rides the rut
-// weave (`launch_future` + `await`), exactly like the countdown ticker.
-// GitHub's REST API is CORS-friendly, so the wasm build fetches it
-// directly. Degradation: an empty response body (the net row completes
-// empty on transport failure) becomes a visible error banner; a JSON
-// error payload (404 / rate limit) surfaces the API's own message.
+// Host surface: `net_request` (the async capability row) rides the spawn
+// rail — the async journeys take their handles as PARAMETERS (the `Gh`
+// bundle of sources) and a task-scoped ctx minted at the launch site; the
+// tap mutations capture the bundle. GitHub's REST API is CORS-friendly,
+// so the wasm build fetches it directly. Degradation: an empty response
+// body (the net row completes empty on transport failure) becomes a
+// visible error banner; a JSON error payload (404 / rate limit) surfaces
+// the API's own message.
 //
 // JSON: the engine ships no parse row, so the two payloads the case
 // reads (the repo meta object + the contents array of flat objects) are
@@ -21,33 +23,31 @@
 // `f32` by the default-width rule (annotate `: f64` when handing them to
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
-use futures::launch_future;
 use tur::{
     ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH,
     CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
-    net_request, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_set_bool, rs_set_str,
-    rs_set_value, rs_source_bool, rs_source_f64, rs_source_str, rs_source_value, rs_value_item,
-    st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,
-    undo_new,
+    net_request, spawn, str_parse_f64, tctrl_new, tctrl_set_text, undo_new,
 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, PointerInteract, Row, ScrollView, SizedBox, Switch, Text };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Mutation,
+    MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, TaskCtx, Text,
+    list_new, list_push, mutate, source_bool, source_str, source_value };
 
 
-// The scalar-stash keys (atom ids + the text controller ride them).
-let K_MODE: u64 = 1;
-let K_ERR: u64 = 2;
-let K_ERRHAS: u64 = 3;
-let K_REPO: u64 = 4;
-let K_DESC: u64 = 5;
-let K_STATS: u64 = 6;
-let K_PATH: u64 = 7;
-let K_SEL: u64 = 8;
-let K_FILES: u64 = 9;
-let K_EMPTY: u64 = 10;
-let K_BUSY: u64 = 11;
-let K_CTRL: u64 = 20;
-let K_UNDO: u64 = 21;
-let K_ICO_GH: u64 = 22;
+// The state bundle (the sources every journey reads and writes — handles
+// bind at the launch site, captures stay rut-side).
+struct Gh {
+    mode: Readable<str>;
+    err: Readable<str>;
+    err_has: Readable<bool>;
+    repo_full: Readable<str>;
+    desc: Readable<str>;
+    stats: Readable<str>;
+    path: Readable<str>;
+    selected: Readable<str>;
+    files: Readable<opaque>;
+    is_empty: Readable<bool>;
+    busy: Readable<bool>;
+}
 
 // The octocat brand mark (the boa state.ts GitHub glyph, rasterised
 // through the image rail).
@@ -87,40 +87,40 @@ let C_LBRACKET: u32 = 91;
 let C_RBRACKET: u32 = 93;
 
 entry fn start() -> u64 {
-    let mode = rs_source_str("landing");
-    let err = rs_source_str("");
-    let err_has = rs_source_bool(false);
-    let repo_full = rs_source_str("");
-    let desc = rs_source_str("");
-    let stats = rs_source_str("");
-    let path = rs_source_str("");
-    let selected = rs_source_str("");
-    let files = rs_source_value(rs_list_new());
-    let is_empty = rs_source_bool(false);
-    let busy = rs_source_bool(false);
-    stf_put(K_MODE, mode as f64);
-    stf_put(K_ERR, err as f64);
-    stf_put(K_ERRHAS, err_has as f64);
-    stf_put(K_REPO, repo_full as f64);
-    stf_put(K_DESC, desc as f64);
-    stf_put(K_STATS, stats as f64);
-    stf_put(K_PATH, path as f64);
-    stf_put(K_SEL, selected as f64);
-    stf_put(K_FILES, files as f64);
-    stf_put(K_EMPTY, is_empty as f64);
-    stf_put(K_BUSY, busy as f64);
+    let s = Gh {
+        mode: source_str("landing"),
+        err: source_str(""),
+        err_has: source_bool(false),
+        repo_full: source_str(""),
+        desc: source_str(""),
+        stats: source_str(""),
+        path: source_str(""),
+        selected: source_str(""),
+        files: source_value(list_new()),
+        is_empty: source_bool(false),
+        busy: source_bool(false),
+    };
     let ctrl = tctrl_new();
     // The boa landing boots with the draft pre-filled.
     tctrl_set_text(ctrl, "facebook/react");
-    st_put(K_CTRL, ctrl);
-    st_put(K_UNDO, undo_new());
-    stf_put(K_ICO_GH, img_res_svg(SVG_GITHUB) as f64);
+    let undo = undo_new();
+    let gh = img_res_svg(SVG_GITHUB);
+
+    // The quick-pick chips: pre-fill the field and open directly (each
+    // captures its literal name — no id rails).
+    let b_sug0 = sug_mutation(ctrl, s, "facebook/react");
+    let b_sug1 = sug_mutation(ctrl, s, "tailwindlabs/tailwindcss");
+    let b_sug2 = sug_mutation(ctrl, s, "vuejs/core");
+    // The Browse tap: read the draft, validate the owner/name shape, launch.
+    let b_browse = mutate(fn (ctx: MutationCtx) {
+        open_draft(ctx, s, tctrl_text(ctrl));
+    });
 
     let body = Switch()
-        .value_source(mode)
+        .value(s.mode)
         .query_key("gh-body")
-        .cases("landing", landing_view())
-        .cases("explorer", explorer_view())
+        .cases("landing", landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2))
+        .cases("explorer", explorer_view(s))
         .build();
     let page = Container().color(PAGE_BG).padding(22.0).child(body).build();
     let root = Column()
@@ -128,13 +128,14 @@ entry fn start() -> u64 {
         .child(Expanded().flex(1.0).child(page).build())
         .build();
     mount(root);
-    return mode;
+    return s.mode.atom_id();
 }
 
 // ---- shared chrome ---------------------------------------------------------
 
-// A compact pill button (the boa Button/IconButton composite).
-fn pill(key: str, label: str, cb: fn(u64, u64, f64), a: u64, bg: u64, fg: u64) -> opaque {
+// A compact pill button (the boa Button/IconButton composite); the
+// mutation rides by parameter.
+fn pill(key: str, label: str, m: Mutation<nil, nil>, bg: u64, fg: u64) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(8.0)
@@ -142,35 +143,28 @@ fn pill(key: str, label: str, cb: fn(u64, u64, f64), a: u64, bg: u64, fg: u64) -
         .child(Text().text(label).font_size(13.0).color(fg).build())
         .build();
     return PointerInteract()
-        .ids(a, a)
-        .on_tap(cb)
+        .on_click(m)
         .query_key(key)
         .child(face)
         .build();
 }
 
 // The error banner row (a visible failure state on landing + explorer).
-fn error_banner() -> opaque {
-    let err = stf_take(K_ERR) as u64;
-    let err_has = stf_take(K_ERRHAS) as u64;
-    stf_put(K_ERR, err as f64);
-    stf_put(K_ERRHAS, err_has as f64);
+fn error_banner(s: Gh) -> opaque {
     let banner = Container()
         .padding(10.0)
         .radius(8.0)
         .color(DANGER_SOFT)
-        .child(Text().text_bound(err).font_size(12.0).color(DANGER).query_key("gh-err").build())
+        .child(Text().text_bound(s.err).font_size(12.0).color(DANGER).query_key("gh-err").build())
         .build();
-    return Condition(err_has).then(banner).else_branch(SizedBox(0.0, 0.0).build()).build();
+    return Condition(s.err_has).then(banner).else_branch(SizedBox(0.0, 0.0).build()).build();
 }
 
 // ---- landing ---------------------------------------------------------------
 
-fn landing_view() -> opaque {
-    let err_has = stf_take(K_ERRHAS) as u64;
-    stf_put(K_ERRHAS, err_has as f64);
-    let ctrl = st_take(K_CTRL);
-    let undo = st_take(K_UNDO);
+fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Mutation<nil, nil>,
+                b_sug0: Mutation<nil, nil>, b_sug1: Mutation<nil, nil>,
+                b_sug2: Mutation<nil, nil>) -> opaque {
     // The boa Field: the "Repository" caption over the bordered input.
     let field = Column()
         .cross_alignment(CROSS_ALIGN_STRETCH)
@@ -196,8 +190,6 @@ fn landing_view() -> opaque {
                 .build(),
         )
         .build();
-    st_put(K_CTRL, ctrl);
-    st_put(K_UNDO, undo);
     // Fixed 360 card (the boa card capped at `min(440, vw - 44)`; the
     // playground's viewer pane is ~390 of content — 440 overflows it).
     let card = Container()
@@ -210,7 +202,7 @@ fn landing_view() -> opaque {
             Column()
                 .cross_alignment(CROSS_ALIGN_START)
                 .main_axis_size(MAIN_SIZE_MIN)
-                .child(brand_mark())
+                .child(brand_mark(gh))
                 .child(SizedBox(0.0, 18.0).build())
                 .child(Text().text("Browse a public repo").font_size(18.0).color(TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
@@ -218,13 +210,13 @@ fn landing_view() -> opaque {
                 .child(SizedBox(0.0, 20.0).build())
                 .child(field)
                 .child(SizedBox(0.0, 8.0).build())
-                .child(error_banner())
+                .child(error_banner(s))
                 .child(SizedBox(0.0, 8.0).build())
-                .child(Row().main_alignment(MAIN_ALIGN_END).child(pill("gh-browse", "Browse", b_browse, 0, ACCENT, ACCENT_FG)).build())
+                .child(Row().main_alignment(MAIN_ALIGN_END).child(pill("gh-browse", "Browse", b_browse, ACCENT, ACCENT_FG)).build())
                 .child(SizedBox(0.0, 22.0).build())
                 .child(Text().text("Try one of these").font_size(11.0).color(TEXT_SUBTLE).build())
                 .child(SizedBox(0.0, 8.0).build())
-                .child(suggestion_row())
+                .child(suggestion_row(b_sug0, b_sug1, b_sug2))
                 .build(),
         )
         .build();
@@ -233,9 +225,7 @@ fn landing_view() -> opaque {
 
 // The 40x40 rounded brand mark (the boa octocat badge, an inline SVG
 // through the image rail).
-fn brand_mark() -> opaque {
-    let gh = stf_take(K_ICO_GH) as u64;
-    stf_put(K_ICO_GH, gh as f64);
+fn brand_mark(gh: u64) -> opaque {
     let mark = Container()
         .width_height(40.0, 40.0)
         .radius(10.0)
@@ -246,45 +236,69 @@ fn brand_mark() -> opaque {
     return mark;
 }
 
-fn suggestion_row() -> opaque {
+fn suggestion_row(b_sug0: Mutation<nil, nil>, b_sug1: Mutation<nil, nil>,
+                  b_sug2: Mutation<nil, nil>) -> opaque {
     // Stacked (the boa mobile variant) — the three chips overflow the
     // 360 card's content width in a row. The boa quick-pick set (all
     // under jsDelivr's 50 MB tree cap).
     return Column()
         .cross_alignment(CROSS_ALIGN_START)
         .main_axis_size(MAIN_SIZE_MIN)
-        .child(pill("gh-sug-0", "facebook/react", b_sug, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-0", "facebook/react", b_sug0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .child(SizedBox(0.0, 6.0).build())
-        .child(pill("gh-sug-1", "tailwindlabs/tailwindcss", b_sug, 1, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-1", "tailwindlabs/tailwindcss", b_sug1, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .child(SizedBox(0.0, 6.0).build())
-        .child(pill("gh-sug-2", "vuejs/core", b_sug, 2, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+        .child(pill("gh-sug-2", "vuejs/core", b_sug2, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .build();
 }
 
 // ---- explorer --------------------------------------------------------------
 
-fn explorer_view() -> opaque {
-    let repo_full = stf_take(K_REPO) as u64;
-    let desc = stf_take(K_DESC) as u64;
-    let path = stf_take(K_PATH) as u64;
-    let stats = stf_take(K_STATS) as u64;
-    let selected = stf_take(K_SEL) as u64;
-    let is_empty = stf_take(K_EMPTY) as u64;
-    let busy = stf_take(K_BUSY) as u64;
-    stf_put(K_REPO, repo_full as f64);
-    stf_put(K_DESC, desc as f64);
-    stf_put(K_PATH, path as f64);
-    stf_put(K_STATS, stats as f64);
-    stf_put(K_SEL, selected as f64);
-    stf_put(K_EMPTY, is_empty as f64);
-    stf_put(K_BUSY, busy as f64);
+fn explorer_view(s: Gh) -> opaque {
+    // Back: up one directory, or back to the landing when at the root.
+    let b_back = mutate(fn (ctx: MutationCtx) {
+        let cur = ctx.get_str(s.path);
+        if (cur == "") {
+            go_landing(ctx, s);
+            return;
+        }
+        let n = cur.len();
+        let mut sep: i32 = -1;
+        let mut k = 0;
+        while (k < n) {
+            if (cur.code_at(k) == C_SLASH) {
+                sep = k;
+            }
+            k = k + 1;
+        }
+        if (sep < 0) {
+            ctx.set_str(s.path, "");
+        } else {
+            ctx.set_str(s.path, cur.slice(0, sep));
+        }
+        ctx.set_str(s.selected, "");
+        spawn(fetch_dir(TaskCtx.mint(), s));
+    });
+    // The crumb tap: back to the repo ROOT listing (the boa
+    // navigateToRoot); the handles bind at the launch site.
+    let b_root = mutate(fn (ctx: MutationCtx) {
+        ctx.set_str(s.path, "");
+        ctx.set_str(s.selected, "");
+        spawn(fetch_dir(TaskCtx.mint(), s));
+    });
+    // Re-fetch the current directory.
+    let b_refresh = mutate(fn (_ctx: MutationCtx) {
+        spawn(fetch_dir(TaskCtx.mint(), s));
+    });
     let list = ScrollView()
         .axis(AXIS_VERTICAL)
         .child(
             Column()
                 .cross_alignment(CROSS_ALIGN_STRETCH)
                 .main_axis_size(MAIN_SIZE_MIN)
-                .child(Each(files).item_builder(item_file).build())
+                .child(Each(s.files).item_builder(fn (i: u64, f: str) -> View {
+                    return item_file(i, f, s);
+                }).build())
                 .build(),
         )
         .build();
@@ -312,8 +326,7 @@ fn explorer_view() -> opaque {
                 .cross_alignment(CROSS_ALIGN_CENTER)
                 .child(
                     PointerInteract()
-                        .ids(path, selected)
-                        .on_tap(b_back)
+                        .on_click(b_back)
                         .query_key("gh-back")
                         .child(
                             Container()
@@ -328,19 +341,19 @@ fn explorer_view() -> opaque {
                 .child(SizedBox(10.0, 0.0).build())
                 // The repo crumb (the boa RepoCrumb): a clickable chip that
                 // navigates back to the repo root. 13px accent, padding 4 —
-                // no invented weight. The path + selection atoms ride the
-                // ids rail into the handler (no stash round-trip).
+                // no invented weight. The crumb keeps the PARSED draft
+                // identity (the crumb source is never overwritten by the
+                // API's full_name). The key rides the TEXT (the tests read
+                // the label through it; taps still hit the pad beneath).
                 .child(
                     MouseRegion()
                         .cursor(CURSOR_POINTER)
                         .child(
                             PointerInteract()
-                                .ids(path, selected)
-                                .on_tap(b_root)
-                                .query_key("gh-crumb")
+                                .on_click(b_root)
                                 .child(
                                     Container().padding(4.0).child(
-                                        Text().text_bound(repo_full).font_size(13.0).color(ACCENT).build(),
+                                        Text().text_bound(s.repo_full).font_size(13.0).color(ACCENT).query_key("gh-crumb").build(),
                                     ).build(),
                                 )
                                 .build(),
@@ -348,20 +361,20 @@ fn explorer_view() -> opaque {
                         .build(),
                 )
                 .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text_bound(path).font_size(13.0).color(TEXT_SUBTLE).query_key("gh-path").build())
+                .child(Text().text_bound(s.path).font_size(13.0).color(TEXT_SUBTLE).query_key("gh-path").build())
                 .build(),
         )
         .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text_bound(desc).font_size(12.0).color(TEXT_MUTED).query_key("gh-desc").build())
+        .child(Text().text_bound(s.desc).font_size(12.0).color(TEXT_MUTED).query_key("gh-desc").build())
         .child(SizedBox(0.0, 8.0).build())
-        .child(error_banner())
+        .child(error_banner(s))
         .child(SizedBox(0.0, 8.0).build())
         .child(
             Row()
                 .cross_alignment(CROSS_ALIGN_CENTER)
-                .child(pill("gh-refresh", "Refresh", b_refresh, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+                .child(pill("gh-refresh", "Refresh", b_refresh, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
-                .child(Text().text_bound(stats).font_size(12.0).color(TEXT_MUTED).query_key("gh-stats").build())
+                .child(Text().text_bound(s.stats).font_size(12.0).color(TEXT_MUTED).query_key("gh-stats").build())
                 .build(),
         )
         .child(SizedBox(0.0, 8.0).build())
@@ -371,10 +384,10 @@ fn explorer_view() -> opaque {
                 // The file list (the boa fileListView): busy → "Loading…" in
                 // the list area; else empty → the empty state; else the list.
                 .child(
-                    Condition(busy)
+                    Condition(s.busy)
                         .then(loading)
                         .else_branch(
-                            Condition(is_empty).then(empty).else_branch(list).build(),
+                            Condition(s.is_empty).then(empty).else_branch(list).build(),
                         )
                         .build(),
                 )
@@ -383,15 +396,16 @@ fn explorer_view() -> opaque {
         .child(
             Container()
                 .padding(6.0)
-                .child(Text().text_bound(selected).font_size(12.0).color(TEXT_SUBTLE).query_key("gh-selected").build())
+                .child(Text().text_bound(s.selected).font_size(12.0).color(TEXT_SUBTLE).query_key("gh-selected").build())
                 .build(),
         )
         .build();
 }
 
-// One listing row: icon square + name + size (dirs sort first — the two
-// array passes below order them).
-fn item_file(i: u64, s: str) -> opaque {
+// One listing row: icon square + name + size. The row tap captures the
+// row string + the bundle (a directory descends — a fresh contents fetch;
+// a file fills the selection footer).
+fn item_file(i: u64, s: str, g: Gh) -> opaque {
     let is_dir = s.starts_with(0, "d|");
     let n = s.len();
     let mut name = "";
@@ -413,6 +427,31 @@ fn item_file(i: u64, s: str) -> opaque {
     if (!is_dir) {
         icon = FILE_ICON;
     }
+    let b_tap = mutate(fn (ctx: MutationCtx) {
+        if (s.starts_with(0, "d|")) {
+            let dname = s.slice(2, s.len());
+            let cur = ctx.get_str(g.path);
+            let mut next = dname;
+            if (cur != "") {
+                next = f"{cur}/{dname}";
+            }
+            ctx.set_str(g.path, next);
+            ctx.set_str(g.selected, "");
+            spawn(fetch_dir(TaskCtx.mint(), g));
+            return;
+        }
+        let rn = s.len();
+        let mut k = 2;
+        while (k < rn) {
+            if (s.code_at(k) == C_PIPE) {
+                break;
+            }
+            k = k + 1;
+        }
+        let fname = s.slice(2, k);
+        let size = fmt_size(s.slice(k + 1, rn));
+        ctx.set_str(g.selected, f"{fname} — {size}");
+    });
     let row = Row()
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Container().width_height(14.0, 14.0).radius(3.0).color(icon).build())
@@ -429,8 +468,7 @@ fn item_file(i: u64, s: str) -> opaque {
         .child(row)
         .build();
     return PointerInteract()
-        .ids(i, i)
-        .on_tap(b_row)
+        .on_click(b_tap)
         .query_key("gh-row")
         .child(card)
         .build();
@@ -438,277 +476,120 @@ fn item_file(i: u64, s: str) -> opaque {
 
 // ---- actions ---------------------------------------------------------------
 
-// The Browse tap: read the draft, validate the owner/name shape, launch.
-fn b_browse(_a: u64, _b: u64, _n: f64) {
-    let ctrl = st_take(K_CTRL);
-    let draft = tctrl_text(ctrl);
-    st_put(K_CTRL, ctrl);
-    open_draft(draft);
+// A quick-pick chip's mutation: pre-fill the field and open directly.
+fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Mutation<nil, nil> {
+    return mutate(fn (ctx: MutationCtx) {
+        tctrl_set_text(ctrl, name);
+        open_draft(ctx, s, name);
+    });
 }
 
-// A quick-pick chip: pre-fill the field and open directly.
-fn b_sug(a: u64, _b: u64, _n: f64) {
-    let ctrl = st_take(K_CTRL);
-    let mut name = "facebook/react";
-    if (a == 1) {
-        name = "tailwindlabs/tailwindcss";
-    } else if (a == 2) {
-        name = "vuejs/core";
-    }
-    tctrl_set_text(ctrl, name);
-    st_put(K_CTRL, ctrl);
-    open_draft(name);
-}
-
-// Back: up one directory, or back to the landing when at the root.
-fn b_back(_a: u64, _b: u64, _n: f64) {
-    let path = stf_take(K_PATH) as u64;
-    let selected = stf_take(K_SEL) as u64;
-    let cur = rs_get_str(path);
-    if (cur == "") {
-        stf_put(K_PATH, path as f64);
-        stf_put(K_SEL, selected as f64);
-        go_landing();
-        return;
-    }
-    let n = cur.len();
-    let mut sep: i32 = -1;
-    let mut k = 0;
-    while (k < n) {
-        if (cur.code_at(k) == C_SLASH) {
-            sep = k;
-        }
-        k = k + 1;
-    }
-    if (sep < 0) {
-        rs_set_str(path, "");
-    } else {
-        rs_set_str(path, cur.slice(0, sep));
-    }
-    rs_set_str(selected, "");
-    stf_put(K_PATH, path as f64);
-    stf_put(K_SEL, selected as f64);
-    launch_future(fetch_dir());
-}
-
-// The crumb tap: back to the repo ROOT listing (the boa navigateToRoot).
-fn b_root(_a: u64, _b: u64, _n: f64) {
-    let path = stf_take(K_PATH) as u64;
-    let selected = stf_take(K_SEL) as u64;
-    rs_set_str(path, "");
-    rs_set_str(selected, "");
-    stf_put(K_PATH, path as f64);
-    stf_put(K_SEL, selected as f64);
-    launch_future(fetch_dir());
-}
-
-// Re-fetch the current directory.
-fn b_refresh(_a: u64, _b: u64, _n: f64) {
-    launch_future(fetch_dir());
-}
-
-// A listing-row tap: a directory descends (a fresh contents fetch); a
-// file fills the selection footer.
-fn b_row(a: u64, _b: u64, _n: f64) {
-    let files = stf_take(K_FILES) as u64;
-    stf_put(K_FILES, files as f64);
-    let v = rs_get_value(files);
-    let s = rs_value_item(v, a);
-    if (s.starts_with(0, "d|")) {
-        let name = s.slice(2, s.len());
-        let path = stf_take(K_PATH) as u64;
-        let selected = stf_take(K_SEL) as u64;
-        let cur = rs_get_str(path);
-        let mut next = name;
-        if (cur != "") {
-            next = f"{cur}/{name}";
-        }
-        rs_set_str(path, next);
-        rs_set_str(selected, "");
-        stf_put(K_PATH, path as f64);
-        stf_put(K_SEL, selected as f64);
-        launch_future(fetch_dir());
-        return;
-    }
-    let n = s.len();
-    let mut k = 2;
-    while (k < n) {
-        if (s.code_at(k) == C_PIPE) {
-            break;
-        }
-        k = k + 1;
-    }
-    let name = s.slice(2, k);
-    let size = fmt_size(s.slice(k + 1, n));
-    let selected = stf_take(K_SEL) as u64;
-    rs_set_str(selected, f"{name} — {size}");
-    stf_put(K_SEL, selected as f64);
-}
-
-fn open_draft(draft: str) {
+// The draft rail shared by Browse + the chips: validate the owner/name
+// shape, then launch the repo journey (the handles bind at the launch
+// site).
+fn open_draft(ctx: MutationCtx, s: Gh, draft: str) {
     let full = parse_repo(draft);
-    let err = stf_take(K_ERR) as u64;
-    let err_has = stf_take(K_ERRHAS) as u64;
     if (full == "") {
-        rs_set_str(err, "Enter a repo as \"owner/name\" — e.g. facebook/react");
-        rs_set_bool(err_has, true);
-        stf_put(K_ERR, err as f64);
-        stf_put(K_ERRHAS, err_has as f64);
+        ctx.set_str(s.err, "Enter a repo as \"owner/name\" — e.g. facebook/react");
+        ctx.set_bool(s.err_has, true);
         return;
     }
-    rs_set_str(err, "");
-    rs_set_bool(err_has, false);
-    stf_put(K_ERR, err as f64);
-    stf_put(K_ERRHAS, err_has as f64);
-    let repo_full = stf_take(K_REPO) as u64;
-    rs_set_str(repo_full, full);
-    stf_put(K_REPO, repo_full as f64);
-    launch_future(open_repo());
+    ctx.set_str(s.err, "");
+    ctx.set_bool(s.err_has, false);
+    ctx.set_str(s.repo_full, full);
+    spawn(open_repo(TaskCtx.mint(), s));
 }
 
-fn go_landing() {
-    let mode = stf_take(K_MODE) as u64;
-    let err = stf_take(K_ERR) as u64;
-    let err_has = stf_take(K_ERRHAS) as u64;
-    let desc = stf_take(K_DESC) as u64;
-    let stats = stf_take(K_STATS) as u64;
-    let path = stf_take(K_PATH) as u64;
-    let selected = stf_take(K_SEL) as u64;
-    let is_empty = stf_take(K_EMPTY) as u64;
-    let busy = stf_take(K_BUSY) as u64;
-    rs_set_str(mode, "landing");
-    rs_set_str(err, "");
-    rs_set_bool(err_has, false);
-    rs_set_str(desc, "");
-    rs_set_str(stats, "");
-    rs_set_str(path, "");
-    rs_set_str(selected, "");
-    rs_set_bool(is_empty, false);
-    rs_set_bool(busy, false);
-    stf_put(K_MODE, mode as f64);
-    stf_put(K_ERR, err as f64);
-    stf_put(K_ERRHAS, err_has as f64);
-    stf_put(K_DESC, desc as f64);
-    stf_put(K_STATS, stats as f64);
-    stf_put(K_PATH, path as f64);
-    stf_put(K_SEL, selected as f64);
-    stf_put(K_EMPTY, is_empty as f64);
-    stf_put(K_BUSY, busy as f64);
+fn go_landing(ctx: MutationCtx, s: Gh) {
+    ctx.set_str(s.mode, "landing");
+    ctx.set_str(s.err, "");
+    ctx.set_bool(s.err_has, false);
+    ctx.set_str(s.desc, "");
+    ctx.set_str(s.stats, "");
+    ctx.set_str(s.path, "");
+    ctx.set_str(s.selected, "");
+    ctx.set_bool(s.is_empty, false);
+    ctx.set_bool(s.busy, false);
 }
 
 // The repo-meta journey: land straight on the explorer chrome with the
 // list area showing "Loading…" (boa's shape — no full-pane loading), GET
 // the repo, surface its error payload or seed the explorer and fetch the
-// root listing. The crumb keeps the PARSED draft identity (the boa
-// repo$) — the API's full_name never overwrites it.
-async fn open_repo() -> str {
-    let repo_full = stf_take(K_REPO) as u64;
-    let full = rs_get_str(repo_full);
-    stf_put(K_REPO, repo_full as f64);
-    set_busy(true);
+// root listing. The crumb keeps the PARSED draft identity (boa's repo$) —
+// the API's full_name never overwrites it.
+async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
+    ctx.set_bool(s.busy, true);
+    let full = ctx.get_str(s.repo_full);
     let url = f"https://api.github.com/repos/{full}";
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
-        set_busy(false);
-        fail("Network request failed — the browser may be offline.", false);
+        ctx.set_bool(s.busy, false);
+        fail(ctx, s, "Network request failed — the browser may be offline.", false);
         return "";
     }
     let meta = body.decode();
     let name = json_get_str(meta, "full_name");
     if (name == "") {
-        set_busy(false);
+        ctx.set_bool(s.busy, false);
         let msg = json_get_str(meta, "message");
         if (msg == "") {
-            fail("Unexpected response from the GitHub API.", false);
+            fail(ctx, s, "Unexpected response from the GitHub API.", false);
         } else {
-            fail(f"{msg} — check the name (owner/repo).", false);
+            fail(ctx, s, f"{msg} — check the name (owner/repo).", false);
         }
         return "";
     }
-    let desc = stf_take(K_DESC) as u64;
-    let stats = stf_take(K_STATS) as u64;
-    let path = stf_take(K_PATH) as u64;
-    let selected = stf_take(K_SEL) as u64;
-    rs_set_str(desc, json_get_str(meta, "description"));
-    rs_set_str(stats, fmt_stats(meta));
-    rs_set_str(path, "");
-    rs_set_str(selected, "");
-    stf_put(K_DESC, desc as f64);
-    stf_put(K_STATS, stats as f64);
-    stf_put(K_PATH, path as f64);
-    stf_put(K_SEL, selected as f64);
-    await fetch_dir();
+    ctx.set_str(s.desc, json_get_str(meta, "description"));
+    ctx.set_str(s.stats, fmt_stats(meta));
+    ctx.set_str(s.path, "");
+    ctx.set_str(s.selected, "");
+    await fetch_dir(ctx, s);
     return "";
 }
 
 // The directory journey: GET .../contents[/path], fill the display list
 // (dirs first), flip the empty flag, settle on the explorer. The list
-// area shows "Loading…" while the fetch rides (the busy atom).
-async fn fetch_dir() -> str {
-    set_mode("explorer");
-    set_busy(true);
-    let repo_full = stf_take(K_REPO) as u64;
-    let path = stf_take(K_PATH) as u64;
-    let full = rs_get_str(repo_full);
-    let dir = rs_get_str(path);
-    stf_put(K_REPO, repo_full as f64);
-    stf_put(K_PATH, path as f64);
+// area shows "Loading…" while the fetch rides (the busy source).
+async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
+    ctx.set_str(s.mode, "explorer");
+    ctx.set_bool(s.busy, true);
+    let full = ctx.get_str(s.repo_full);
+    let dir = ctx.get_str(s.path);
     let mut url = f"https://api.github.com/repos/{full}/contents";
     if (dir != "") {
         url = f"https://api.github.com/repos/{full}/contents/{dir}";
     }
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
-        set_busy(false);
-        fail("Network request failed — the browser may be offline.", true);
+        ctx.set_bool(s.busy, false);
+        fail(ctx, s, "Network request failed — the browser may be offline.", true);
         return "";
     }
     let text = body.decode();
-    let fresh = rs_list_new();
+    let fresh = list_new();
     let ndirs = json_contents(text, fresh, true);
     let nfiles = json_contents(text, fresh, false);
     if (ndirs < 0 || nfiles < 0) {
-        set_busy(false);
-        fail("Unexpected file-list response from the GitHub API.", true);
+        ctx.set_bool(s.busy, false);
+        fail(ctx, s, "Unexpected file-list response from the GitHub API.", true);
         return "";
     }
-    let files = stf_take(K_FILES) as u64;
-    let is_empty = stf_take(K_EMPTY) as u64;
-    rs_set_value(files, fresh);
-    rs_set_bool(is_empty, ndirs + nfiles == 0);
-    stf_put(K_FILES, files as f64);
-    stf_put(K_EMPTY, is_empty as f64);
-    set_busy(false);
-    set_mode("explorer");
+    ctx.set_value(s.files, fresh);
+    ctx.set_bool(s.is_empty, ndirs + nfiles == 0);
+    ctx.set_bool(s.busy, false);
+    ctx.set_str(s.mode, "explorer");
     return "";
-}
-
-// The busy atom: the explorer's list-area "Loading…" rail.
-fn set_busy(v: bool) {
-    let busy = stf_take(K_BUSY) as u64;
-    stf_put(K_BUSY, busy as f64);
-    rs_set_bool(busy, v);
-}
-
-fn set_mode(mode: str) {
-    let atom = stf_take(K_MODE) as u64;
-    rs_set_str(atom, mode);
-    stf_put(K_MODE, atom as f64);
 }
 
 // The failure rail: the message lands on the banner; `explorer` keeps the
 // listing visible under it, anything else falls back to the landing.
-fn fail(msg: str, stay: bool) {
-    let err = stf_take(K_ERR) as u64;
-    let err_has = stf_take(K_ERRHAS) as u64;
-    rs_set_str(err, msg);
-    rs_set_bool(err_has, true);
-    stf_put(K_ERR, err as f64);
-    stf_put(K_ERRHAS, err_has as f64);
+fn fail(ctx: TaskCtx, s: Gh, msg: str, stay: bool) {
+    ctx.set_str(s.err, msg);
+    ctx.set_bool(s.err_has, true);
     if (stay) {
-        set_mode("explorer");
+        ctx.set_str(s.mode, "explorer");
     } else {
-        set_mode("landing");
+        ctx.set_str(s.mode, "landing");
     }
 }
 
@@ -978,10 +859,10 @@ fn json_contents(t: str, out: opaque, dirs_only: bool) -> i32 {
         if (is_dir == dirs_only) {
             let name = json_get_str(item, "name");
             if (is_dir) {
-                rs_list_push(out, f"d|{name}");
+                list_push(out, f"d|{name}");
             } else {
                 let size = json_get_str(item, "size");
-                rs_list_push(out, f"f|{name}|{size}");
+                list_push(out, f"f|{name}|{size}");
             }
             count = count + 1;
         }

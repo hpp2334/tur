@@ -49,35 +49,36 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
-use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str, st_put, st_take };
-use tur_kit::{ Column, Container, Text };
+use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_str, st_put, st_take };
+use tur_kit::{ Column, Container, MutationCtx, Readable, Text, mutate, mutate_f64, source_f64,
+    source_str };
 use tur_anim_kit::{ anim_ctrl };
 
 
 let CTRL: u64 = 7;
 
 entry fn start() -> u64 {
-    let label = rs_source_str("");
-    let width = rs_source_f64();
-    rs_set_f64(width, 100.0);
+    let label: Readable<str> = source_str("");
+    let width: Readable<f64> = source_f64(100.0);
 
     let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
 
-    let ctrl = anim_ctrl(width, 200.0, "linear", 0, a_tick, a_end);
+    // The tick mutation captures the width source (the eased 0..1 maps to
+    // 100..200); the controller rides the stash only because the do_*
+    // control entries cannot capture it.
+    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+        ctx.set_f64(width, 100.0 + (200.0 - 100.0) * v);
+    });
+    let a_end = mutate(fn (_ctx: MutationCtx) {
+    });
+    let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     st_put(CTRL, ctrl);
 
     let col = Column()
         .child(b.build())
         .child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
-    return label;
-}
-
-fn a_tick(id: u64, v: f64) {
-    rs_set_f64(id, 100.0 + (200.0 - 100.0) * v);
-}
-
-fn a_end(_id: u64, _v: f64) {
+    return label.atom_id();
 }
 
 entry fn do_forward(_a: u64, _b: f64) {
@@ -481,29 +482,26 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur::{ anim_forward, mount, rs_set_f64, rs_source_f64, st_put, st_take, stf_put };
-use tur_kit::{ Container };
+use tur::{ anim_forward, mount, st_put, st_take };
+use tur_kit::{ Container, MutationCtx, Readable, mutate, mutate_f64, source_f64 };
 use tur_anim_kit::{ Transform, anim_ctrl };
 
 let TAU: f64 = 6.283185307179586;
 let K_CTRL: u64 = 6;
 
 entry fn start() -> u64 {
-    let angle = rs_source_f64();
-    rs_set_f64(angle, 0.0);
+    let angle: Readable<f64> = source_f64(0.0);
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
     let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
-    let ctrl = anim_ctrl(angle, 200.0, "linear", 0, a_tick, a_end);
+    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+        ctx.set_f64(angle, TAU * v);
+    });
+    let a_end = mutate(fn (_ctx: MutationCtx) {
+    });
+    let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     st_put(K_CTRL, ctrl);
     mount(xf);
-    return angle;
-}
-
-fn a_tick(id: u64, v: f64) {
-    rs_set_f64(id, TAU * v);
-}
-
-fn a_end(_id: u64, _v: f64) {
+    return angle.atom_id();
 }
 
 entry fn do_forward(_a: u64, _b: f64) {
@@ -592,53 +590,46 @@ fn static_transform_path_unchanged() {
 /// their atoms the same way (each in its own app — the rut qkey
 /// `rut/transform` matches the first transform).
 const BOUND_SCALE_RUT: &str = r#"
-use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Container };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
 use tur_anim_kit::{ Transform };
 
-let K_S: u64 = 3;
-
-entry fn start() {
-    let s = rs_source_f64();
-    rs_set_f64(s, 2.0);
+entry fn start() -> u64 {
+    let s: Readable<f64> = source_f64(2.0);
     let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    stf_put(K_S, s as f64);
     mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
+    return s.atom_id();
 }
 
-entry fn probe_s(_a: u64, b: f64) {
-    let s = stf_take(K_S) as u64;
-    rs_set_f64(s, b);
-    stf_put(K_S, s as f64);
+entry fn probe_s(atom: u64, b: f64) {
+    let s = Readable<f64>.of(ctx_bridge(), atom);
+    MutationCtx.over(ctx_bridge()).set_f64(s, b);
 }
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
-use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
-use tur_kit::{ Container };
+use tur::{ ctx_bridge, mount };
+use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
 use tur_anim_kit::{ Transform };
 
-let K_TX: u64 = 3;
-let K_TY: u64 = 4;
-
-entry fn start() {
-    let tx = rs_source_f64();
-    let ty = rs_source_f64();
-    rs_set_f64(tx, 10.0);
-    rs_set_f64(ty, 20.0);
+entry fn start() -> u64 {
+    let tx: Readable<f64> = source_f64(10.0);
+    let ty: Readable<f64> = source_f64(20.0);
     let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    stf_put(K_TX, tx as f64);
-    stf_put(K_TY, ty as f64);
     mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
+    return tx.atom_id();
 }
 
-entry fn probe_t(_a: u64, b: f64) {
-    let tx = stf_take(K_TX) as u64;
-    rs_set_f64(tx, b);
-    stf_put(K_TX, tx as f64);
-    let ty = stf_take(K_TY) as u64;
-    rs_set_f64(ty, b * 2.0);
-    stf_put(K_TY, ty as f64);
+// The ty atom mints right after tx — the test drives it at tx+1 (the
+// probe takes the pair's head and writes both).
+entry fn probe_t(atom: u64, b: f64) {
+    // The tx/ty pair mints in order (atom, atom+1) — one entry drives
+    // both channels (ty reads 2× the arg, the test's b×2 expectation).
+    let write = MutationCtx.over(ctx_bridge());
+    let tx = Readable<f64>.of(ctx_bridge(), atom);
+    let ty = Readable<f64>.of(ctx_bridge(), atom + 1);
+    write.set_f64(tx, b);
+    write.set_f64(ty, b * 2.0);
 }
 "#;
 
@@ -652,7 +643,8 @@ fn scale_and_translate_bounds_follow_their_atoms() {
         let t = el.cast::<TransformElement>().unwrap();
         assert_eq!(t.painted_scale(), 2.0, "the atom's initial scale");
     });
-    app.call_rut_entry("probe_s", 0, 3.5).unwrap();
+    let s_atom = app.rut_start_answer();
+    app.call_rut_entry("probe_s", s_atom, 3.5).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();
@@ -667,7 +659,7 @@ fn scale_and_translate_bounds_follow_their_atoms() {
         let t = el.cast::<TransformElement>().unwrap();
         assert_eq!(t.painted_translate(), (10.0, 20.0), "the atoms' initial offsets");
     });
-    app.call_rut_entry("probe_t", 0, 30.0).unwrap();
+    app.call_rut_entry("probe_t", app.rut_start_answer(), 30.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();

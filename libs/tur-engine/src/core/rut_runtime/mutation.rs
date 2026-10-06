@@ -15,7 +15,8 @@
 
 use std::rc::Rc;
 
-use crate::core::edgy::mutation::{MutationHandle, ValueArgs};
+use crate::core::edgy::mutation::MutationHandle;
+pub use crate::core::edgy::mutation::ValueArgs;
 use crate::core::edgy::reactive::Mutation;
 use crate::core::edgy::reactive::AtomId;
 use crate::core::edgy::value::Value;
@@ -117,6 +118,72 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_bool: {e}")))
     });
 
+    // ctx_get_value / ctx_set_value — the structured-value rail (the
+    // list/map atoms' ctx face; the write side is guarded like the
+    // scalars').
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_get_value", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+        let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
+        Ok(Opaque::alloc(vm, super::RutValue(value))?.handle().clone())
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_set_value", (Opaque<CtxBridge>, u64, Opaque<super::RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: Opaque<super::RutValue>| {
+        let value = v.with(|v| v.0.clone())?;
+        checked_writable(&h, atom)
+            .and_then(|()| {
+                h.store
+                    .bridge()
+                    .set_source(super::source_of::<Value>(atom), value)
+            })
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_value: {e}")))
+    });
+
+    // ctx_set_brush(h, atom, packed) — the brush-atom write (the animated
+    // color channels; 0 clears), guarded like the other writes.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_set_brush", (Opaque<CtxBridge>, u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, color: u64| {
+        let value = if color == 0 {
+            Value::Nil
+        } else {
+            let c = crate::core::rut_runtime::color_of(color);
+            Value::opaque(Rc::new(c) as Rc<dyn std::any::Any>)
+        };
+        checked_writable(&h, atom)
+            .and_then(|()| {
+                h.store
+                    .bridge()
+                    .set_source(super::source_of::<Value>(atom), value)
+            })
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_brush: {e}")))
+    });
+
+    // ctx_get_opaque / ctx_set_opaque — the host-box rail (opaques are
+    // just values): a Rust-held opaque (the animation controller slot)
+    // rides a source atom as `Value::Opaque`, guarded like the other
+    // writes.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_get_opaque", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+        let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
+        let any = match value.as_opaque() {
+            Some(a) => a,
+            None => return Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "ctx_get_opaque: the atom holds no opaque")),
+        };
+        match any.clone().downcast::<rut_vm::OpaqueRef>() {
+            Ok(o) => Ok((*o).clone()),
+            Err(_) => Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "ctx_get_opaque: the opaque is not a host box")),
+        }
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_set_opaque", (Opaque<CtxBridge>, u64, rut_vm::OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, o: rut_vm::OpaqueRef| {
+        checked_writable(&h, atom)
+            .and_then(|()| {
+                h.store
+                    .bridge()
+                    .set_source(super::source_of::<Value>(atom), Value::opaque(Rc::new(o) as Rc<dyn std::any::Any>))
+            })
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_opaque: {e}")))
+    });
+
     // ctx_run_nil(h, atom) — compose by QUEUEING the invocation: a
     // mutation body runs inside a face call (the VM is mid-`call`, borrow
     // held), so a nested synchronous invocation would re-borrow the VM —
@@ -143,20 +210,27 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // mutate_seal(cb, tag) -> atom — mint a mutation whose closure
     // face-calls the kit dispatch entry named by the tag with the sealed
-    // fn box, the bridge marker, and the queued payload.
+    // fn box, the bridge marker, and the queued payload. Each tag is one
+    // payload shape; the kit's entry constructs the ctx (+ the typed
+    // event) and calls the user's fn (one entry per shape — the kit owns
+    // the shapes, the engine owns the queue law).
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "mutate_seal", (OpaqueRef, u64) -> u64, move |vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, tag: u64| {
         let marker = Opaque::alloc(vm, CtxBridge)?.handle().clone();
         let h2 = h.clone();
         let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
+            // The payload decoders (each tag's crossing shape).
+            let num = |i: usize| match args.get(i) {
+                Some(Value::Num(n)) => *n,
+                _ => 0.0,
+            };
+            let text = |i: usize| match args.get(i) {
+                Some(Value::Str(s)) => s.to_string(),
+                _ => String::new(),
+            };
             match tag {
                 seal_tags::MUT_PTR => {
-                    // The pointer crossing: [local.x, local.y, global.x,
-                    // global.y, button] (the gesture queue's payload).
-                    let num = |i: usize| match args.get(i) {
-                        Some(Value::Num(n)) => *n,
-                        _ => 0.0,
-                    };
+                    // [local.x, local.y, global.x, global.y, button].
                     let button = num(4) as u64;
                     let _ = h2.face.call::<_, ()>(
                         &h2,
@@ -164,21 +238,76 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                         (cb.clone(), marker.clone(), num(0), num(1), num(2), num(3), button),
                     );
                 }
-                seal_tags::MUT_F64 => {
-                    let a = match args.first() {
-                        Some(Value::Num(n)) => *n,
-                        _ => 0.0,
+                seal_tags::MUT_ENTER | seal_tags::MUT_EXIT => {
+                    // [local.x, local.y, global.x, global.y] — the region
+                    // crossing (the entry picks Enter vs Exit by its name).
+                    let entry = if tag == seal_tags::MUT_ENTER {
+                        mutation_entries::MENTER
+                    } else {
+                        mutation_entries::MEXIT
                     };
-                    match h2.face.call::<_, f64>(
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        entry,
+                        (cb.clone(), marker.clone(), num(0), num(1), num(2), num(3)),
+                    );
+                }
+                seal_tags::MUT_KEY => {
+                    // [key, code, modifiers].
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        mutation_entries::MKEY,
+                        (cb.clone(), marker.clone(), text(0), text(1), num(2) as u64),
+                    );
+                }
+                seal_tags::MUT_INPUT => {
+                    // [value, enter].
+                    let enter = match args.get(1) {
+                        Some(Value::Bool(b)) => *b,
+                        _ => false,
+                    };
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        mutation_entries::MINPUT,
+                        (cb.clone(), marker.clone(), text(0), enter),
+                    );
+                }
+                seal_tags::MUT_BYTES => {
+                    // [bytes].
+                    let data = match args.first() {
+                        Some(Value::Bytes(b)) => b.to_vec(),
+                        _ => Vec::new(),
+                    };
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        mutation_entries::MBYTES,
+                        (cb.clone(), marker.clone(), data),
+                    );
+                }
+                seal_tags::MUT_F64 => {
+                    // [a] — the typed-arg mutation (ticks, `ctx.run_f64`'s
+                    // target). No synchronous return: composition reads
+                    // its effects through sources.
+                    let a = num(0);
+                    let _ = h2.face.call::<_, ()>(
                         &h2,
                         mutation_entries::MF64,
                         (cb.clone(), marker.clone(), a),
-                    ) {
-                        Ok(v) => return Ok(Value::Num(v)),
-                        // Reported by the face (error rail); the flush
-                        // never aborts.
-                        Err(_) => return Ok(Value::Nil),
-                    }
+                    );
+                }
+                seal_tags::MUT_FOCUS | seal_tags::MUT_BLUR | seal_tags::MUT_MOUNT => {
+                    // The payload-less events — the entry constructs the
+                    // typed event (FocusEvent / BlurEvent / MountEvent).
+                    let entry = match tag {
+                        seal_tags::MUT_FOCUS => mutation_entries::MFOCUS,
+                        seal_tags::MUT_BLUR => mutation_entries::MBLUR,
+                        _ => mutation_entries::MMOUNT,
+                    };
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        entry,
+                        (cb.clone(), marker.clone()),
+                    );
                 }
                 _ => {
                     let _ = h2.face.call::<_, ()>(

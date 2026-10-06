@@ -1,51 +1,32 @@
 // complex-animation: "Animated Card Studio" — the controller-driven
 // animation showcase (the boa-era twin, ported to the kit's fluent
-// idiom). One explicit AnimationController (Rust-held, stashed) ticks
-// the eased progress into the `a_tick` entry, which maps it into the
+// idiom). One explicit AnimationController (the swap slot rides a value
+// source; the boot controller lands there in the mount seed) ticks the
+// eased progress into the a_tick mutation, which maps it into the
 // animated channels: card width (120 → 280), card radius (8 → 40, the
 // bound-radius row), card hue (indigo → coral via the color tween) and
 // the inner white square's ROTATION (the bound-angle row:
 // Transform().rotate_bound(progress) — the angle re-resolves through the
 // live atom and the subtree NEVER re-mounts; no rebuild channel), the
 // orbiting dot (Positioned bounds over math_sin/math_cos riding boa's
-// 140/80 center) and the % readout. The transport (play / pause /
-// resume / reverse / stop), the speed selector (0.5x–4x, in-place), the
-// curve selector (recreates the controller mid-flight and seeks it to
-// the DISPLAYED eased progress — boa's `ctx.get(progress$)`) and the
-// loop toggle (infinite repeat; the label swaps "Loop" ↔ "Loop ✓" with
-// white text when on) are intent entries over the scalar stash — the
-// boa interactions, names + ids, never closures.
+// 140/80 center) and the % readout (a derive over the progress source).
+// The transport (play / pause / resume / reverse / stop), the speed
+// selector (0.5x–4x, in-place; one named typed mutation composed from the
+// chip pads via ctx.run_f64), the curve selector (recreates the
+// controller mid-flight and seeks it to the DISPLAYED eased progress —
+// boa's `ctx.get(progress$)`) and the loop toggle (infinite repeat; the
+// label swaps "Loop" ↔ "Loop ✓" with white text when on) are mutations
+// over the handles they capture — the boa interactions, no ids, no stash.
+// The boot brush seeds ride the root Lifecycle's on_mount.
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
-    anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status,
-    anim_stop, color_tween_lerp, math_cos, math_sin, mount, rs_get_bool, rs_get_f64,
-    rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64,
-    rs_source_str, st_put, st_take, stf_put, stf_take, tween_lerp };
-use tur_kit::{ Column, Condition, Container, PointerInteract, Positioned, Row, SizedBox, Stack, Text };
+    anim_pause, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop,
+    color_tween_lerp, math_cos, math_sin, mount, tween_lerp };
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Mutation,
+    MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, derive_str,
+    list_new, mutate, mutate_f64, mutate_mount, source_bool, source_f64, source_str,
+    source_value };
 use tur_anim_kit::{ Transform, anim_ctrl };
 
-
-let K_CTRL: u64 = 1;
-let K_PROGRESS: u64 = 2;
-let K_CURVE: u64 = 3;
-let K_LOOPB: u64 = 4;
-let K_WIDTH: u64 = 5;
-let K_HUE: u64 = 6;
-let K_PCT: u64 = 8;
-let K_STATUS: u64 = 9;
-let K_BADGE: u64 = 10;
-let K_SP0: u64 = 11;
-let K_SP1: u64 = 12;
-let K_SP2: u64 = 13;
-let K_SP3: u64 = 14;
-let K_CV0: u64 = 15;
-let K_CV1: u64 = 16;
-let K_CV2: u64 = 17;
-let K_CV3: u64 = 18;
-let K_LP: u64 = 19;
-let K_LOOPON: u64 = 20;
-let K_ORBIT_X: u64 = 21;
-let K_ORBIT_Y: u64 = 22;
-let K_RADIUS: u64 = 23;
 
 // The tween endpoints (the boa card: width 120→280, radius 8→40,
 // indigo→coral; the orbit rides a radius-80 circle).
@@ -69,73 +50,144 @@ let CURVE_ON: u64 = 0x0D9488FFu64;
 let LOOP_ON: u64 = 0xDB2777FFu64;
 
 entry fn start() -> u64 {
-    let progress = rs_source_f64();
-    let width = rs_source_f64();
-    let hue = rs_source_f64();
-    let pct = rs_source_str("0%");
-    let status = rs_source_str("STOPPED");
-    let badge = rs_source_f64();
-    let loop_on = rs_source_bool(false);
-    let sp0 = rs_source_f64();
-    let sp1 = rs_source_f64();
-    let sp2 = rs_source_f64();
-    let sp3 = rs_source_f64();
-    let cv0 = rs_source_f64();
-    let cv1 = rs_source_f64();
-    let cv2 = rs_source_f64();
-    let cv3 = rs_source_f64();
-    let lp = rs_source_f64();
-    let orbit_x = rs_source_f64();
-    let orbit_y = rs_source_f64();
-    let radius = rs_source_f64();
+    let progress: Readable<f64> = source_f64(0.0);
+    let width: Readable<f64> = source_f64(W_MIN);
+    let hue: Readable<f64> = source_f64(0.0);
+    let pct: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        let v = ctx.get_f64(progress);
+        return f"{((v * 100.0) + 0.5) as u64}%";
+    });
+    let status: Readable<str> = source_str("STOPPED");
+    let badge: Readable<f64> = source_f64(0.0);
+    let loop_on: Readable<bool> = source_bool(false);
+    let sp0: Readable<f64> = source_f64(0.0);
+    let sp1: Readable<f64> = source_f64(0.0);
+    let sp2: Readable<f64> = source_f64(0.0);
+    let sp3: Readable<f64> = source_f64(0.0);
+    let cv0: Readable<f64> = source_f64(0.0);
+    let cv1: Readable<f64> = source_f64(0.0);
+    let cv2: Readable<f64> = source_f64(0.0);
+    let cv3: Readable<f64> = source_f64(0.0);
+    let lp: Readable<f64> = source_f64(0.0);
+    let orbit_x: Readable<f64> = source_f64(ORBIT_CX + ORBIT_R);
+    let orbit_y: Readable<f64> = source_f64(ORBIT_CY);
+    let radius: Readable<f64> = source_f64(R_MIN);
+    let curve_idx: Readable<f64> = source_f64(3.0); // easeInOut — the boa boot curve
+    let loop_flag: Readable<bool> = source_bool(false);
 
-    rs_set_f64(width, W_MIN);
-    rs_set_f64(radius, R_MIN);
-    rs_set_f64(orbit_x, ORBIT_CX + ORBIT_R);
-    rs_set_f64(orbit_y, ORBIT_CY);
-    rs_set_brush(badge, SLATE);
-    rs_set_brush(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
+    // The tick: eased progress → the animated channels (the progress atom
+    // IS the bound angle's source — Transform().rotate_bound reads it
+    // reactively; the tick just advances it; no list rewrite, no
+    // re-mount).
+    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+        ctx.set_f64(width, tween_lerp(W_MIN, W_MAX, v));
+        ctx.set_f64(radius, tween_lerp(R_MIN, R_MAX, v));
+        ctx.set_brush(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
+        ctx.set_f64(progress, v);
+        ctx.set_f64(orbit_x, ORBIT_CX + ORBIT_R * math_cos(TAU * v));
+        ctx.set_f64(orbit_y, ORBIT_CY + ORBIT_R * math_sin(TAU * v));
+    });
 
-    // The stash: atom ids + the controller state cross into the entries
-    // as plain scalars (entries cannot capture locals).
-    stf_put(K_PROGRESS, progress as f64);
-    stf_put(K_WIDTH, width as f64);
-    stf_put(K_HUE, hue as f64);
-    stf_put(K_PCT, pct as f64);
-    stf_put(K_STATUS, status as f64);
-    stf_put(K_BADGE, badge as f64);
-    stf_put(K_SP0, sp0 as f64);
-    stf_put(K_SP1, sp1 as f64);
-    stf_put(K_SP2, sp2 as f64);
-    stf_put(K_SP3, sp3 as f64);
-    stf_put(K_CV0, cv0 as f64);
-    stf_put(K_CV1, cv1 as f64);
-    stf_put(K_CV2, cv2 as f64);
-    stf_put(K_CV3, cv3 as f64);
-    stf_put(K_LP, lp as f64);
-    stf_put(K_LOOPON, loop_on as f64);
-    stf_put(K_ORBIT_X, orbit_x as f64);
-    stf_put(K_ORBIT_Y, orbit_y as f64);
-    stf_put(K_RADIUS, radius as f64);
-    stf_put(K_CURVE, 3.0); // easeInOut — the boa boot curve
-    stf_put(K_LOOPB, 0.0);
-    let ctrl = anim_ctrl(progress, 2400.0, "easeInOut", 1 as u64, a_tick, a_end);
-    st_put(K_CTRL, ctrl);
+    // The controller slot: every mutation reads the LIVE controller
+    // through it (the curve/loop swaps replace it). The placeholder here
+    // is never driven — the mount seed lands the real boot controller
+    // before any interaction (the host-box rail: opaques are just
+    // values).
+    let controller: Readable<opaque> = source_value(list_new());
 
-    paint_speed(1.0);
-    paint_curve(3.0);
-    paint_loop();
+    // The end: status → the badge label + the fill brush.
+    let a_end = mutate(fn (ctx: MutationCtx) {
+        sync(ctx, ctx.get_opaque(controller), status, badge);
+    });
+
+    // The boot controller.
+    let ctrl = anim_ctrl(2400.0, "easeInOut", 1, a_tick, a_end);
+
+    // The transport mutations (the controller rides the slot).
+    let b_play = mutate(fn (ctx: MutationCtx) {
+        let c = ctx.get_opaque(controller);
+        anim_forward(c);
+        sync(ctx, c, status, badge);
+    });
+    let b_pause = mutate(fn (ctx: MutationCtx) {
+        let c = ctx.get_opaque(controller);
+        anim_pause(c);
+        sync(ctx, c, status, badge);
+    });
+    let b_resume = mutate(fn (ctx: MutationCtx) {
+        let c = ctx.get_opaque(controller);
+        anim_resume(c);
+        sync(ctx, c, status, badge);
+    });
+    let b_reverse = mutate(fn (ctx: MutationCtx) {
+        let c = ctx.get_opaque(controller);
+        anim_reverse(c);
+        sync(ctx, c, status, badge);
+    });
+    let b_stop = mutate(fn (ctx: MutationCtx) {
+        let c = ctx.get_opaque(controller);
+        anim_stop(c);
+        sync(ctx, c, status, badge);
+    });
+
+    // The speed rail: one named typed mutation carries the chip index;
+    // each chip pad composes it with its own arg (the composition shape).
+    let b_speed = mutate_f64(fn (ctx: MutationCtx, idx: f64) {
+        let c = ctx.get_opaque(controller);
+        anim_speed(c, speed_factor(idx));
+        paint_speed(ctx, sp0, sp1, sp2, sp3, idx);
+    });
+    let b_speed0 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_speed, 0.0); });
+    let b_speed1 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_speed, 1.0); });
+    let b_speed2 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_speed, 2.0); });
+    let b_speed3 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_speed, 3.0); });
+
+    // The curve rail: same shape — retimes via the recreate-and-seek (a
+    // fresh controller over the same progress atom, seeked to the
+    // displayed eased progress, swapped into the slot).
+    let b_curve = mutate_f64(fn (ctx: MutationCtx, idx: f64) {
+        ctx.set_f64(curve_idx, idx);
+        recreate(ctx, controller, curve_idx, loop_flag, progress, status, badge, a_tick, a_end);
+        paint_curve(ctx, cv0, cv1, cv2, cv3, idx);
+    });
+    let b_curve0 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_curve, 0.0); });
+    let b_curve1 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_curve, 1.0); });
+    let b_curve2 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_curve, 2.0); });
+    let b_curve3 = mutate(fn (ctx: MutationCtx) { ctx.run_f64(b_curve, 3.0); });
+
+    // The loop toggle: flip the flag (mirror it into the chip's state
+    // atom), swap in an infinite controller, repaint the chip.
+    let b_loop = mutate(fn (ctx: MutationCtx) {
+        let next = !ctx.get_bool(loop_flag);
+        ctx.set_bool(loop_flag, next);
+        ctx.set_bool(loop_on, next);
+        recreate(ctx, controller, curve_idx, loop_flag, progress, status, badge, a_tick, a_end);
+        paint_loop(ctx, lp, next);
+    });
+
+    // The mount seed: the boot controller lands in the slot, then the
+    // boot brush paints (the badge, the indigo card, the selected chips —
+    // the f64/str channels seed at their mints above). The lifecycle
+    // surface delivers the typed `MountEvent`.
+    let seed = mutate_mount(fn (ctx: MutationCtx, _ev: MountEvent) {
+        ctx.set_opaque(controller, ctrl);
+        ctx.set_brush(badge, SLATE);
+        ctx.set_brush(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
+        paint_speed(ctx, sp0, sp1, sp2, sp3, 1.0);
+        paint_curve(ctx, cv0, cv1, cv2, cv3, 3.0);
+        paint_loop(ctx, lp, ctx.get_bool(loop_flag));
+    });
 
     let mut col = Column()
         .main_alignment(MAIN_ALIGN_CENTER)
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text("Animated Card Studio").font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
         .child(SizedBox(0.0, 4.0).build())
-        .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(status_badge()).child(gap(12.0)).child(
+        .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(status_badge(status, badge)).child(gap(12.0)).child(
             Text().text_bound(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
         ).build())
         .child(SizedBox(0.0, 32.0).build())
-        .child(stage())
+        .child(stage(orbit_x, orbit_y, width, hue, radius, progress))
         .child(SizedBox(0.0, 32.0).build())
         .child(Row().main_axis_size(MAIN_SIZE_MIN).child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
             .child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0))
@@ -156,11 +208,14 @@ entry fn start() -> u64 {
             .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
             .child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0))
             .child(chip(cv3, "easeInOut", b_curve3, "cas-c3")).child(gap(12.0))
-            .child(loop_chip()).build())
+            .child(loop_chip(lp, loop_on, b_loop)).build())
         .child(SizedBox(0.0, 16.0).build())
         .child(Text().text("Controls: pause mid-play, change speed/curve, resume").font_size(10.0).color(0x94A3B8FFu64).build());
-    mount(Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col.build()).build());
-    return progress;
+    // The root Lifecycle fires the seed at mount (a transparent
+    // pass-through around the unchanged page chain).
+    let page = Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col.build()).build();
+    mount(Lifecycle().on_mount(seed).child(page).build());
+    return progress.atom_id();
 }
 
 // ---- the animated stage --------------------------------------------------------
@@ -168,11 +223,7 @@ entry fn start() -> u64 {
 // The boa stage: a 360×200 canvas with the card at (100, 20) and the
 // orbiting dot riding its bound anchors (the tick writes
 // cx + r·cos / cy + r·sin of the eased progress).
-fn stage() -> opaque {
-    let orbit_x = stf_take(K_ORBIT_X) as u64;
-    stf_put(K_ORBIT_X, orbit_x as f64);
-    let orbit_y = stf_take(K_ORBIT_Y) as u64;
-    stf_put(K_ORBIT_Y, orbit_y as f64);
+fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, hue: Readable<f64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
     let dot = Positioned()
         .left_bound(orbit_x)
         .top_bound(orbit_y)
@@ -188,7 +239,7 @@ fn stage() -> opaque {
         .build();
     return Stack()
         .child(SizedBox(360.0, 200.0).build())
-        .child(Positioned().left(100.0).top(20.0).child(card()).build())
+        .child(Positioned().left(100.0).top(20.0).child(card(width, hue, radius, progress)).build())
         .child(dot)
         .build();
 }
@@ -198,155 +249,58 @@ fn stage() -> opaque {
 // Transform().rotate_bound(progress) re-resolves the angle through the
 // live atom (the subscribe → relayout rail) and the subtree never
 // re-mounts. Boa's square is opaque — no opacity channel.
-fn card() -> opaque {
-    let width = stf_take(K_WIDTH) as u64;
-    stf_put(K_WIDTH, width as f64);
-    let hue = stf_take(K_HUE) as u64;
-    stf_put(K_HUE, hue as f64);
-    let radius = stf_take(K_RADIUS) as u64;
-    stf_put(K_RADIUS, radius as f64);
-    let progress = stf_take(K_PROGRESS) as u64;
-    stf_put(K_PROGRESS, progress as f64);
+fn card(width: Readable<f64>, hue: Readable<f64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
-    let mut c = Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
+    return Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
         .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
         .alignment(ALIGN_CENTER)
-        .query_key("cas-card");
-    c.child(spin);
-    return c.build();
+        .query_key("cas-card")
+        .child(spin)
+        .build();
 }
 
 // The loop chip: the fill rides its brush atom; the label swaps
 // "Loop" ↔ "Loop ✓" (white when on) through the state atom — boa's
 // derive-driven label, case-side.
-fn loop_chip() -> opaque {
-    let lp = stf_take(K_LP) as u64;
-    stf_put(K_LP, lp as f64);
-    let loop_on = stf_take(K_LOOPON) as u64;
-    stf_put(K_LOOPON, loop_on as f64);
-    let mut b = Container().padding(6.0).radius(6.0).color_bound(lp).query_key("cas-loop");
-    b.child(
-        Condition(loop_on)
-            .then_build(fn () -> View { return Text().text("Loop ✓").font_size(10.0).color(0xFFFFFFFFu64).build(); })
-            .else_build(fn () -> View { return Text().text("Loop").font_size(10.0).color(0x475569FFu64).build(); })
-            .build(),
-    );
-    return PointerInteract().on_tap(b_loop).child(b.build()).build();
+fn loop_chip(lp: Readable<f64>, loop_on: Readable<bool>, b_loop: Mutation<nil, nil>) -> opaque {
+    return PointerInteract().on_click(b_loop).child(
+        Container().padding(6.0).radius(6.0).color_bound(lp).query_key("cas-loop").child(
+            Condition(loop_on)
+                .then_build(fn () -> View { return Text().text("Loop ✓").font_size(10.0).color(0xFFFFFFFFu64).build(); })
+                .else_build(fn () -> View { return Text().text("Loop").font_size(10.0).color(0x475569FFu64).build(); })
+                .build(),
+        ).build(),
+    ).build();
 }
 
 // The status badge: the label bound to the status atom, the fill bound to
 // the badge brush atom.
-fn status_badge() -> opaque {
-    let status = stf_take(K_STATUS) as u64;
-    stf_put(K_STATUS, status as f64);
-    let badge = stf_take(K_BADGE) as u64;
-    stf_put(K_BADGE, badge as f64);
-    let mut b = Container().padding(6.0).radius(999.0).color_bound(badge);
-    b.child(Text().text_bound(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build());
-    return b.build();
+fn status_badge(status: Readable<str>, badge: Readable<f64>) -> opaque {
+    return Container().padding(6.0).radius(999.0).color_bound(badge).child(
+        Text().text_bound(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
+    ).build();
 }
 
-// ---- transport entries ---------------------------------------------------------
+// ---- controller swaps -----------------------------------------------------------
 
-fn b_play(_a: u64, _b: u64, _n: f64) {
-    let c = st_take(K_CTRL);
-    anim_forward(c);
-    st_put(K_CTRL, c);
-    sync(c);
-}
-
-fn b_pause(_a: u64, _b: u64, _n: f64) {
-    let c = st_take(K_CTRL);
-    anim_pause(c);
-    st_put(K_CTRL, c);
-    sync(c);
-}
-
-fn b_resume(_a: u64, _b: u64, _n: f64) {
-    let c = st_take(K_CTRL);
-    anim_resume(c);
-    st_put(K_CTRL, c);
-    sync(c);
-}
-
-fn b_reverse(_a: u64, _b: u64, _n: f64) {
-    let c = st_take(K_CTRL);
-    anim_reverse(c);
-    st_put(K_CTRL, c);
-    sync(c);
-}
-
-fn b_stop(_a: u64, _b: u64, _n: f64) {
-    let c = st_take(K_CTRL);
-    anim_stop(c);
-    st_put(K_CTRL, c);
-    sync(c);
-}
-
-// Speed retimes the controller in place (no recreate).
-fn b_speed0(_a: u64, _b: u64, _n: f64) { speed_to(0.5, 0.0); }
-fn b_speed1(_a: u64, _b: u64, _n: f64) { speed_to(1.0, 1.0); }
-fn b_speed2(_a: u64, _b: u64, _n: f64) { speed_to(2.0, 2.0); }
-fn b_speed3(_a: u64, _b: u64, _n: f64) { speed_to(4.0, 3.0); }
-
-fn speed_to(factor: f64, idx: f64) {
-    let c = st_take(K_CTRL);
-    anim_speed(c, factor);
-    st_put(K_CTRL, c);
-    paint_speed(idx);
-}
-
-// Curve + loop: the boa recreate-and-seek — a fresh controller over the
-// same progress atom, seeked to the frozen value, swapped into the stash.
-fn b_curve0(_a: u64, _b: u64, _n: f64) { curve_to(0.0); }
-fn b_curve1(_a: u64, _b: u64, _n: f64) { curve_to(1.0); }
-fn b_curve2(_a: u64, _b: u64, _n: f64) { curve_to(2.0); }
-fn b_curve3(_a: u64, _b: u64, _n: f64) { curve_to(3.0); }
-
-fn b_loop(_a: u64, _b: u64, _n: f64) {
-    let prev = stf_take(K_LOOPB);
-    let next = prev <= 0.5;
-    stf_put(K_LOOPB, flag(next));
-    let loop_on = stf_take(K_LOOPON) as u64;
-    stf_put(K_LOOPON, loop_on as f64);
-    rs_set_bool(loop_on, next);
-    recreate();
-    paint_loop();
-}
-
-fn curve_to(idx: f64) {
-    stf_put(K_CURVE, idx);
-    recreate();
-    paint_curve(idx);
-}
-
-// Swap in a fresh controller (the stashed curve idx + loop flag) seeked
-// to the DISPLAYED eased progress — boa's `ctx.get(progress$)` — so a
+// Swap in a fresh controller (the live curve idx + loop flag) seeked to
+// the DISPLAYED eased progress — boa's `ctx.get(progress$)` — so a
 // mid-play curve switch continues from the value on screen.
-fn recreate() {
-    let prev = st_take(K_CTRL);
-    let progress = stf_take(K_PROGRESS) as u64;
-    stf_put(K_PROGRESS, progress as f64);
-    let t = rs_get_f64(progress);
-    let next = make_ctrl();
+fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<f64>, loop_flag: Readable<bool>, progress: Readable<f64>, status: Readable<str>, badge: Readable<f64>, tick: Mutation<f64, nil>, end: Mutation<nil, nil>) {
+    let t = ctx.get_f64(progress);
+    let next = make_ctrl(tick, end, ctx.get_f64(curve_idx), ctx.get_bool(loop_flag));
     anim_seek(next, t);
-    st_put(K_CTRL, next);
-    sync(next);
+    ctx.set_opaque(controller, next);
+    sync(ctx, next, status, badge);
 }
 
-fn make_ctrl() -> opaque {
-    let progress = stf_take(K_PROGRESS) as u64;
-    stf_put(K_PROGRESS, progress as f64);
-    let idx = stf_take(K_CURVE);
-    stf_put(K_CURVE, idx);
-    let looping = stf_take(K_LOOPB) > 0.5;
-    stf_put(K_LOOPB, flag(looping));
+fn make_ctrl(tick: Mutation<f64, nil>, end: Mutation<nil, nil>, curve: f64, looping: bool) -> opaque {
     let mut repeat: u64 = 1;
     if (looping) {
         repeat = 18446744073709551615.0 as u64; // the infinite crossing
     }
-    return anim_ctrl(progress, 2400.0, curve_name(idx), repeat, a_tick, a_end);
+    return anim_ctrl(2400.0, curve_name(curve), repeat, tick, end);
 }
 
 fn curve_name(idx: f64) -> str {
@@ -356,56 +310,18 @@ fn curve_name(idx: f64) -> str {
     return "easeInOut";
 }
 
-fn flag(b: bool) -> f64 {
-    if (b) { return 1.0; }
-    return 0.0;
-}
-
-// ---- the tick: progress → the animated channels --------------------------------
-
-fn a_tick(_id: u64, v: f64) {
-    let width = stf_take(K_WIDTH) as u64;
-    stf_put(K_WIDTH, width as f64);
-    rs_set_f64(width, tween_lerp(W_MIN, W_MAX, v));
-    let radius = stf_take(K_RADIUS) as u64;
-    stf_put(K_RADIUS, radius as f64);
-    rs_set_f64(radius, tween_lerp(R_MIN, R_MAX, v));
-    let hue = stf_take(K_HUE) as u64;
-    stf_put(K_HUE, hue as f64);
-    rs_set_brush(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
-    let pct = stf_take(K_PCT) as u64;
-    stf_put(K_PCT, pct as f64);
-    rs_set_str(pct, f"{((v * 100.0) + 0.5) as u64}%");
-    // The rotation channel: the progress atom IS the bound angle's source
-    // (Transform().rotate_bound reads it reactively) — the tick just
-    // advances it; no list rewrite, no re-mount.
-    let progress = stf_take(K_PROGRESS) as u64;
-    stf_put(K_PROGRESS, progress as f64);
-    rs_set_f64(progress, v);
-    // The orbit: (cx + r·cos, cy + r·sin) of a full turn.
-    let orbit_x = stf_take(K_ORBIT_X) as u64;
-    stf_put(K_ORBIT_X, orbit_x as f64);
-    let orbit_y = stf_take(K_ORBIT_Y) as u64;
-    stf_put(K_ORBIT_Y, orbit_y as f64);
-    rs_set_f64(orbit_x, ORBIT_CX + ORBIT_R * math_cos(TAU * v));
-    rs_set_f64(orbit_y, ORBIT_CY + ORBIT_R * math_sin(TAU * v));
-}
-
-fn a_end(_id: u64, _v: f64) {
-    let c = st_take(K_CTRL);
-    st_put(K_CTRL, c);
-    sync(c);
+fn speed_factor(idx: f64) -> f64 {
+    if (idx < 0.5) { return 0.5; }
+    if (idx < 1.5) { return 1.0; }
+    if (idx < 2.5) { return 2.0; }
+    return 4.0;
 }
 
 // Status → the badge label (uppercased, the boa badge) + the fill brush.
-fn sync(c: opaque) {
+fn sync(ctx: MutationCtx, c: opaque, status: Readable<str>, badge: Readable<f64>) {
     let s = anim_status(c);
-    let status = stf_take(K_STATUS) as u64;
-    stf_put(K_STATUS, status as f64);
-    rs_set_str(status, upper(s));
-    let badge = stf_take(K_BADGE) as u64;
-    stf_put(K_BADGE, badge as f64);
-    rs_set_brush(badge, badge_color(s));
+    ctx.set_str(status, upper(s));
+    ctx.set_brush(badge, badge_color(s));
 }
 
 fn upper(s: str) -> str {
@@ -426,42 +342,22 @@ fn badge_color(s: str) -> u64 {
 
 // ---- the chip paint helpers (the selected-state brushes) -----------------------
 
-fn paint_speed(sel: f64) {
-    let sp0 = stf_take(K_SP0) as u64;
-    stf_put(K_SP0, sp0 as f64);
-    let sp1 = stf_take(K_SP1) as u64;
-    stf_put(K_SP1, sp1 as f64);
-    let sp2 = stf_take(K_SP2) as u64;
-    stf_put(K_SP2, sp2 as f64);
-    let sp3 = stf_take(K_SP3) as u64;
-    stf_put(K_SP3, sp3 as f64);
-    rs_set_brush(sp0, chip_color(sel == 0.0));
-    rs_set_brush(sp1, chip_color(sel == 1.0));
-    rs_set_brush(sp2, chip_color(sel == 2.0));
-    rs_set_brush(sp3, chip_color(sel == 3.0));
+fn paint_speed(ctx: MutationCtx, sp0: Readable<f64>, sp1: Readable<f64>, sp2: Readable<f64>, sp3: Readable<f64>, sel: f64) {
+    ctx.set_brush(sp0, chip_color(sel == 0.0));
+    ctx.set_brush(sp1, chip_color(sel == 1.0));
+    ctx.set_brush(sp2, chip_color(sel == 2.0));
+    ctx.set_brush(sp3, chip_color(sel == 3.0));
 }
 
-fn paint_curve(sel: f64) {
-    let cv0 = stf_take(K_CV0) as u64;
-    stf_put(K_CV0, cv0 as f64);
-    let cv1 = stf_take(K_CV1) as u64;
-    stf_put(K_CV1, cv1 as f64);
-    let cv2 = stf_take(K_CV2) as u64;
-    stf_put(K_CV2, cv2 as f64);
-    let cv3 = stf_take(K_CV3) as u64;
-    stf_put(K_CV3, cv3 as f64);
-    rs_set_brush(cv0, curve_chip_color(sel == 0.0));
-    rs_set_brush(cv1, curve_chip_color(sel == 1.0));
-    rs_set_brush(cv2, curve_chip_color(sel == 2.0));
-    rs_set_brush(cv3, curve_chip_color(sel == 3.0));
+fn paint_curve(ctx: MutationCtx, cv0: Readable<f64>, cv1: Readable<f64>, cv2: Readable<f64>, cv3: Readable<f64>, sel: f64) {
+    ctx.set_brush(cv0, curve_chip_color(sel == 0.0));
+    ctx.set_brush(cv1, curve_chip_color(sel == 1.0));
+    ctx.set_brush(cv2, curve_chip_color(sel == 2.0));
+    ctx.set_brush(cv3, curve_chip_color(sel == 3.0));
 }
 
-fn paint_loop() {
-    let lp = stf_take(K_LP) as u64;
-    stf_put(K_LP, lp as f64);
-    let on = stf_take(K_LOOPB) > 0.5;
-    stf_put(K_LOOPB, flag(on));
-    rs_set_brush(lp, loop_color(on));
+fn paint_loop(ctx: MutationCtx, lp: Readable<f64>, on: bool) {
+    ctx.set_brush(lp, loop_color(on));
 }
 
 fn chip_color(sel: bool) -> u64 {
@@ -483,17 +379,21 @@ fn loop_color(on: bool) -> u64 {
 
 // A transport pill (the boa Button): a PointerInteract pad over a colored
 // label.
-fn pill(label: str, color: u64, cb: fn(u64, u64, f64), key: str) -> opaque {
-    let mut b = Container().padding(8.0).radius(6.0).color(color).query_key(key);
-    b.child(Text().text(label).font_size(11.0).color(0xFFFFFFFFu64).build());
-    return PointerInteract().on_tap(cb).child(b.build()).build();
+fn pill(label: str, color: u64, cb: Mutation<nil, nil>, key: str) -> opaque {
+    return PointerInteract().on_click(cb).child(
+        Container().padding(8.0).radius(6.0).color(color).query_key(key).child(
+            Text().text(label).font_size(11.0).color(0xFFFFFFFFu64).build(),
+        ).build(),
+    ).build();
 }
 
 // A selectable chip (speed / curve / loop): the fill rides its brush atom.
-fn chip(atom: u64, label: str, cb: fn(u64, u64, f64), key: str) -> opaque {
-    let mut b = Container().padding(6.0).radius(6.0).color_bound(atom).query_key(key);
-    b.child(Text().text(label).font_size(10.0).color(0x475569FFu64).build());
-    return PointerInteract().on_tap(cb).child(b.build()).build();
+fn chip(atom: Readable<f64>, label: str, cb: Mutation<nil, nil>, key: str) -> opaque {
+    return PointerInteract().on_click(cb).child(
+        Container().padding(6.0).radius(6.0).color_bound(atom).query_key(key).child(
+            Text().text(label).font_size(10.0).color(0x475569FFu64).build(),
+        ).build(),
+    ).build();
 }
 
 fn gap(w: f64) -> opaque {
