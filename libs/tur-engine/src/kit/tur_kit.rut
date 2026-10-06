@@ -934,8 +934,8 @@ impl Positioned {
     return self;
   }
   // The reactive anchors (drag-to-move writes the live atom; a bound
-  // anchor's 0 is a real coordinate, unlike the authoring rows' 0 =
-  // absent idiom).
+  // anchor's 0 is a real coordinate, same as the static rows — anchors
+  // are verbatim, absence is never calling the row).
   pub fn left_bound(mut self, r: Readable<f64>) -> Self {
     pos_left_bound(self.spec, r.atom);
     return self;
