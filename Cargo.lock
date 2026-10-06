@@ -3391,6 +3391,7 @@ dependencies = [
  "libc",
  "libtest-mimic",
  "minifb",
+ "parley",
  "pollster",
  "raw-window-handle",
  "thiserror 2.0.18",

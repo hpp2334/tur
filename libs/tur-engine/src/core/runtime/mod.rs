@@ -950,8 +950,10 @@ impl TurRuntimeBuilder {
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
+        // `load_font_stack` = loader presets + the last-resort platform-
+        // symbol face (⌘ & friends) — see `core::fonts`.
         let mut font_context = FontContext::new();
-        font_loader.load_preset_fonts(&mut font_context);
+        crate::core::fonts::load_font_stack(&mut font_context, font_loader.as_ref());
 
         // Create the engine-internal main-thread channel + root the drain
         // on the main loop. `build()` runs on the main thread, so

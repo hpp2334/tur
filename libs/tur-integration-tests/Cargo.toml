@@ -18,6 +18,7 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 tur-playground = { workspace = true }
+parley = { workspace = true }
 image = { workspace = true }
 libtest-mimic = "0.8"
 minifb = "0.28"

@@ -42,6 +42,7 @@ mod text_demo;
 mod text_huge_document;
 mod text_input;
 mod text_input_programmatic_refresh;
+mod text_symbol_fallback;
 mod transform;
 mod va_input_forwarding;
 mod vsync_source;
