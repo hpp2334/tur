@@ -47,20 +47,20 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# master (13eb863) on 2026-10-02. Same nightly pin as this workspace
+# master (442a979) on 2026-10-06. Same nightly pin as this workspace
 # (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f", default-features = false }
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092" }
 # The playground's syntax highlighting tokenizes rut source directly (the
 # `pg_highlight` row) — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "442a97979b2aa4b0935a3416bb69db87b8272092" }
 
 
 num-derive = "0.4"
