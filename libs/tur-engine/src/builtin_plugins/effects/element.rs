@@ -166,6 +166,29 @@ pub struct TransformElement {
     pub(crate) painting: TransformPainting,
 }
 
+impl TransformElement {
+    /// The resolved paint rotate in radians (layout fills it; tests read
+    /// it back — the `OpacityElement::painted_value` pattern). The
+    /// reactive twins (`el_transform_angle_bound` & co) resolve through
+    /// layout, so painting carries the live value.
+    pub fn painted_rotate(&self) -> f64 {
+        self.painting.rotate.unwrap_or(0.0)
+    }
+
+    /// The resolved uniform paint scale (defaults to 1.0).
+    pub fn painted_scale(&self) -> f64 {
+        self.painting.scale_x.or(self.painting.scale).unwrap_or(1.0)
+    }
+
+    /// The resolved paint translate offsets.
+    pub fn painted_translate(&self) -> (f64, f64) {
+        (
+            self.painting.translate_x.unwrap_or(0.0),
+            self.painting.translate_y.unwrap_or(0.0),
+        )
+    }
+}
+
 /// Resolved paint props (filled during layout). Paint reads them directly.
 #[derive(Default, Clone)]
 pub struct TransformPainting {

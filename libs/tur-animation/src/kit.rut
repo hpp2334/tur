@@ -1,9 +1,9 @@
 // tur_anim_kit.rut — the animation family's kit wrappers (the authored
 // surface over the `tur` host pkg's animation rows: `el_opacity` /
-// `el_opacity_bound` / `el_transform`). Owned by the plugin that owns the
-// rows (the layering law applied to the kit itself): tur-animation
-// registers this prelude alongside its rows, so engine plugin sets without
-// animation never see (or need) these classes.
+// `el_opacity_bound` / `el_transform` / the bound transform twins). Owned
+// by the plugin that owns the rows (the layering law applied to the kit
+// itself): tur-animation registers this prelude alongside its rows, so
+// engine plugin sets without animation never see (or need) these classes.
 //
 // Construction law (as everywhere in the kit): build with the class call
 // form — `Opacity(0.5)` / `Transform(scale, rotate, tx, ty)` — over each
@@ -11,7 +11,7 @@
 // valid — byte-identical lowering), and CHAIN it:
 // `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
 // statement runs.
-use tur::{ anim_ctrl_cb, anim_ctrl_cb_e, anim_ctrl_cb_t, anim_ctrl_cb_te, el_opacity, el_opacity_bound, el_transform };
+use tur::{ anim_ctrl_cb, anim_ctrl_cb_e, anim_ctrl_cb_t, anim_ctrl_cb_te, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
 
 // The animation kit's dispatch entry (the scope law: this kit seals the
 // tick/end fn values, so THIS module owns the entry that downcasts them —
@@ -78,18 +78,61 @@ class Transform {
   rotate: f64;
   tx: f64;
   ty: f64;
+  // The bound channels (0 = static): at most ONE rides a live f64 atom —
+  // the row set is one bound twin per channel, so each `*_bound` method
+  // CLEARS the other atoms (last-bind-wins, never a silent combo).
+  scale_atom: u64;
+  rotate_atom: u64;
+  tx_atom: u64;
+  ty_atom: u64;
   kid: ?opaque;
 }
 
 impl Transform {
   [constructor] pub fn builder(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
-    return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, kid: nil };
+    return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, scale_atom: 0, rotate_atom: 0, tx_atom: 0, ty_atom: 0, kid: nil };
+  }
+  // Bind the rotation channel to an f64 atom (radians — the onTick rail's
+  // consumer): the angle re-resolves through the subscribe → relayout
+  // rail and the subtree NEVER re-mounts (no rebuild channel).
+  pub fn rotate_bound(mut self, atom: u64) -> Self {
+    self.rotate_atom = atom;
+    self.scale_atom = 0;
+    self.tx_atom = 0;
+    self.ty_atom = 0;
+    return self;
+  }
+  // The symmetric-cheap twin: the uniform scale rides an f64 atom.
+  pub fn scale_bound(mut self, atom: u64) -> Self {
+    self.scale_atom = atom;
+    self.rotate_atom = 0;
+    self.tx_atom = 0;
+    self.ty_atom = 0;
+    return self;
+  }
+  // The translate twin: each offset rides its own f64 atom (an orbit
+  // writes cx + r·cos / cy + r·sin independently).
+  pub fn translate_bound(mut self, tx_atom: u64, ty_atom: u64) -> Self {
+    self.tx_atom = tx_atom;
+    self.ty_atom = ty_atom;
+    self.scale_atom = 0;
+    self.rotate_atom = 0;
+    return self;
   }
   pub fn child(mut self, c: opaque) -> Self {
     self.kid = c;
     return self;
   }
   pub fn build(self) -> opaque {
+    if (self.rotate_atom != 0) {
+      return el_transform_angle_bound(self.scale, self.rotate_atom, self.tx, self.ty, self.kid);
+    }
+    if (self.scale_atom != 0) {
+      return el_transform_scale_bound(self.scale_atom, self.rotate, self.tx, self.ty, self.kid);
+    }
+    if (self.tx_atom != 0 || self.ty_atom != 0) {
+      return el_transform_translate_bound(self.scale, self.rotate, self.tx_atom, self.ty_atom, self.kid);
+    }
     return el_transform(self.scale, self.rotate, self.tx, self.ty, self.kid);
   }
 }

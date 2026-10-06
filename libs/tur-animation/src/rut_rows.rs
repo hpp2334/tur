@@ -51,6 +51,28 @@ pub fn install(
             vec![TY_F64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
             TY_OPAQUE,
         ),
+        // The bound twins: one channel rides a live f64 atom (the
+        // Val-backed bind machinery — `Val::Reactive` in the view field,
+        // subscribed by the element, resolved by layout into `painting`);
+        // the other channels stay static. Slot positions match `el_transform`
+        // exactly — a bound channel crosses as a u64 atom id. A rotating
+        // showcase never re-mounts: the atom swap re-resolves the angle
+        // through the subscribe → relayout rail.
+        row(
+            "el_transform_angle_bound",
+            vec![TY_F64, TY_U64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
+        row(
+            "el_transform_scale_bound",
+            vec![TY_U64, TY_F64, TY_F64, TY_F64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
+        row(
+            "el_transform_translate_bound",
+            vec![TY_F64, TY_F64, TY_U64, TY_U64, TY_OPAQUE],
+            TY_OPAQUE,
+        ),
         row("anim_ctrl_cb", vec![TY_U64, TY_F64, TY_STR, TY_U64], TY_OPAQUE),
         row(
             "anim_ctrl_cb_t",
@@ -123,6 +145,42 @@ pub fn install(
             Some(tur_engine::core::view::Val::Static(rotate)),
             Some(tur_engine::core::view::Val::Static(tx)),
             Some(tur_engine::core::view::Val::Static(ty)),
+            child,
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    // The bound twins (`Val::Reactive` on the bound channel — the
+    // `el_opacity_bound` law): the element subscribes the atom, layout
+    // re-resolves `painting`, and the subtree never re-mounts.
+    rut_vm::pkg_fn!(pkg, "el_transform_angle_bound", (f64, u64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate_atom: u64, tx: f64, ty: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(TransformView::new_rut(
+            Some(tur_engine::core::view::Val::Static(scale)),
+            Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(rotate_atom))),
+            Some(tur_engine::core::view::Val::Static(tx)),
+            Some(tur_engine::core::view::Val::Static(ty)),
+            child,
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "el_transform_scale_bound", (u64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale_atom: u64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(TransformView::new_rut(
+            Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(scale_atom))),
+            Some(tur_engine::core::view::Val::Static(rotate)),
+            Some(tur_engine::core::view::Val::Static(tx)),
+            Some(tur_engine::core::view::Val::Static(ty)),
+            child,
+        ));
+        Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
+    });
+    rut_vm::pkg_fn!(pkg, "el_transform_translate_bound", (f64, f64, u64, u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate: f64, tx_atom: u64, ty_atom: u64, child: Opaque<RutView>| {
+        let child = child.with(|v| v.0.clone())?;
+        let view = Rc::new(TransformView::new_rut(
+            Some(tur_engine::core::view::Val::Static(scale)),
+            Some(tur_engine::core::view::Val::Static(rotate)),
+            Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(tx_atom))),
+            Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(ty_atom))),
             child,
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())

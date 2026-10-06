@@ -13,7 +13,8 @@
 
 use std::time::Duration;
 
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::builtin_plugins::effects::TransformElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Read the bound box's laid-out width (the tick target).
@@ -441,6 +442,239 @@ fn animation_started_from_handler_schedules_next_frame() {
     );
 }
 
+// ---- el_transform_angle_bound — rotation without rebuilds ----------------------
+//
+// The `el_transform` row was static-only, so complex-animation spun its
+// inner square through a per-frame REBUILD channel (a one-item Each
+// re-mounting a fresh Transform every tick). The bound rows close that
+// wall: the rotation channel rides a live f64 atom (`Val::Reactive` — the
+// radius_bound machinery; the view field was already subscribed and
+// layout-resolved) and the angle re-resolves through the subscribe →
+// relayout rail while the element identity stays put.
+
+/// Count `tur_transform` elements in the tree (a rebuild channel would
+/// keep re-mounting the spin under fresh ids).
+fn transform_count(app: &TurTestApp) -> usize {
+    let tree = app.element_tree();
+    let want = ElementKind::new("tur_transform");
+    tree.element_ids()
+        .iter()
+        .filter(|id| {
+            tree.get_element(**id)
+                .map(|n| n.kind() == Some(want.clone()))
+                .unwrap_or(false)
+        })
+        .count()
+}
+
+/// The transform element's painted rotate (radians; layout resolves it).
+fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
+    app.with_element(id, |el| {
+        el.cast::<TransformElement>()
+            .map(|t| t.painted_rotate())
+            .unwrap_or(f64::NAN)
+    })
+    .unwrap_or(f64::NAN)
+}
+
+/// The bound-angle scaffold: a keyed square under
+/// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
+/// `TAU·v` into the atom across a 200ms linear run.
+const BOUND_ANGLE_RUT: &str = r#"
+use tur::{ anim_forward, mount, rs_set_f64, rs_source_f64, st_put, st_take, stf_put };
+use tur_kit::{ Container };
+use tur_anim_kit::{ Transform, anim_ctrl };
+
+let TAU: f64 = 6.283185307179586;
+let K_CTRL: u64 = 6;
+
+entry fn start() -> u64 {
+    let angle = rs_source_f64();
+    rs_set_f64(angle, 0.0);
+    let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
+    let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
+    let ctrl = anim_ctrl(angle, 200.0, "linear", 0, a_tick, a_end);
+    st_put(K_CTRL, ctrl);
+    mount(xf);
+    return angle;
+}
+
+fn a_tick(id: u64, v: f64) {
+    rs_set_f64(id, TAU * v);
+}
+
+fn a_end(_id: u64, _v: f64) {
+}
+
+entry fn do_forward(_a: u64, _b: f64) {
+    let c = st_take(K_CTRL);
+    anim_forward(c);
+    st_put(K_CTRL, c);
+}
+"#;
+
+#[test]
+fn bound_angle_animates_without_rebuild() {
+    let mut app = TurTestApp::new(300.0, 300.0).unwrap();
+    app.load_rut_module(BOUND_ANGLE_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    let square = ElementNodeId::new(app.query_element(&["bt", "square"]).unwrap().as_u64());
+    assert_eq!(painted_rotate(&app, xf), 0.0, "the atom boots at angle 0");
+    assert_eq!(transform_count(&app), 1);
+
+    // Play: the controller ticks TAU·v into the atom; halfway through the
+    // linear 200ms run the bound angle is ~π — with the element identity
+    // UNMOVED (the old rebuild channel re-mounted a fresh Transform per
+    // tick, churning the id).
+    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    app.wait_for_timeout(Duration::from_millis(100));
+    let mid = painted_rotate(&app, xf);
+    assert!(
+        (mid - std::f64::consts::PI).abs() < 0.2,
+        "at t=0.5 the bound angle should be ~π, got {mid}"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64()),
+        xf,
+        "the transform element identity survives the tick (no rebuild)"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["bt", "square"]).unwrap().as_u64()),
+        square,
+        "the child identity survives too"
+    );
+    assert_eq!(transform_count(&app), 1, "no duplicate transform mounted");
+
+    // Completion: the eased value lands at 1 → a full turn, identity intact.
+    app.wait_for_timeout(Duration::from_millis(150));
+    let end = painted_rotate(&app, xf);
+    assert!(
+        (end - std::f64::consts::TAU).abs() < 0.05,
+        "at completion the bound angle is a full turn, got {end}"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64()),
+        xf,
+        "identity still stable after completion"
+    );
+}
+
+/// The static path — `el_transform` with all-static channels — unchanged.
+const STATIC_TRANSFORM_RUT: &str = r#"
+use tur::{ mount };
+use tur_kit::{ Container };
+use tur_anim_kit::{ Transform };
+
+entry fn start() {
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.7, 12.0, 0.0).child(square).build());
+}
+"#;
+
+#[test]
+fn static_transform_path_unchanged() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(STATIC_TRANSFORM_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_rotate(), 0.7, "the static angle paints verbatim");
+        assert_eq!(t.painted_scale(), 1.0, "the static scale paints verbatim");
+        let (tx, ty) = t.painted_translate();
+        assert_eq!((tx, ty), (12.0, 0.0), "the static translate paints verbatim");
+    });
+}
+
+/// The symmetric-cheap twins: `scale_bound` and `translate_bound` ride
+/// their atoms the same way (each in its own app — the rut qkey
+/// `rut/transform` matches the first transform).
+const BOUND_SCALE_RUT: &str = r#"
+use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur_kit::{ Container };
+use tur_anim_kit::{ Transform };
+
+let K_S: u64 = 3;
+
+entry fn start() {
+    let s = rs_source_f64();
+    rs_set_f64(s, 2.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    stf_put(K_S, s as f64);
+    mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
+}
+
+entry fn probe_s(_a: u64, b: f64) {
+    let s = stf_take(K_S) as u64;
+    rs_set_f64(s, b);
+    stf_put(K_S, s as f64);
+}
+"#;
+
+const BOUND_TRANSLATE_RUT: &str = r#"
+use tur::{ mount, rs_set_f64, rs_source_f64, stf_put, stf_take };
+use tur_kit::{ Container };
+use tur_anim_kit::{ Transform };
+
+let K_TX: u64 = 3;
+let K_TY: u64 = 4;
+
+entry fn start() {
+    let tx = rs_source_f64();
+    let ty = rs_source_f64();
+    rs_set_f64(tx, 10.0);
+    rs_set_f64(ty, 20.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    stf_put(K_TX, tx as f64);
+    stf_put(K_TY, ty as f64);
+    mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
+}
+
+entry fn probe_t(_a: u64, b: f64) {
+    let tx = stf_take(K_TX) as u64;
+    rs_set_f64(tx, b);
+    stf_put(K_TX, tx as f64);
+    let ty = stf_take(K_TY) as u64;
+    rs_set_f64(ty, b * 2.0);
+    stf_put(K_TY, ty as f64);
+}
+"#;
+
+#[test]
+fn scale_and_translate_bounds_follow_their_atoms() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(BOUND_SCALE_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_scale(), 2.0, "the atom's initial scale");
+    });
+    app.call_rut_entry("probe_s", 0, 3.5).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_scale(), 3.5, "scale follows the atom");
+    });
+
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(BOUND_TRANSLATE_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_translate(), (10.0, 20.0), "the atoms' initial offsets");
+    });
+    app.call_rut_entry("probe_t", 0, 30.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_translate(), (30.0, 60.0), "translate follows the atoms");
+    });
+}
+
 // ---- the corpus complex-animation case ("Animated Card Studio") ---------------
 
 /// The studio card's laid-out width (the width-bound tween target).
@@ -491,10 +725,18 @@ fn complex_animation_case_runs_the_card_studio() {
     assert_eq!(studio_card_width(&app), 120.0, "the card boots at W_MIN");
 
     // Play: the width + % readout advance with the tick (easeInOut 2400ms;
-    // halfway through, the eased value is 0.5 → width 200).
+    // halfway through, the eased value is 0.5 → width 200). The spin rides
+    // the bound row — the transform element is NEVER re-mounted while
+    // playing (the rebuild channel is gone).
+    let xf = app.query_element(&["rut", "transform"]).unwrap();
     tap_studio(&mut app, "cas-play");
     assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("FORWARD"));
     app.wait_for_timeout(Duration::from_millis(1200));
+    assert_eq!(
+        app.query_element(&["rut", "transform"]),
+        Some(xf),
+        "the spinning square stays under ONE transform element while playing (no per-tick rebuild)"
+    );
     let w = studio_card_width(&app);
     assert!(
         w > 150.0 && w < 250.0,

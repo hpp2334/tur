@@ -4,9 +4,9 @@
 // the eased progress into the `a_tick` entry, which maps it into the
 // animated channels: card width (120 → 280), card radius (8 → 40, the
 // bound-radius row), card hue (indigo → coral via the color tween), the
-// inner square's opacity pulse + ROTATION (the rebuild channel: the tick
-// rewrites a one-item list whose Each re-mounts the square under a fresh
-// Transform — the el_transform row takes static angles only), the
+// inner square's opacity pulse + ROTATION (the bound-angle row:
+// Transform().rotate_bound(progress) — the angle re-resolves through the
+// live atom and the subtree NEVER re-mounts; no rebuild channel), the
 // orbiting dot (Positioned bounds over math_sin/math_cos) and the %
 // readout. The transport (play / pause / resume / reverse / stop), the
 // speed selector (0.5x–4x, in-place), the curve selector (recreates the
@@ -16,10 +16,9 @@
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
     anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status,
     anim_stop, anim_value, color_tween_lerp, math_cos, math_sin, mount, rs_get_bool,
-    rs_set_brush, rs_set_f64, rs_set_str, rs_set_value, rs_list_new, rs_list_push,
-    rs_source_bool, rs_source_f64, rs_source_str, rs_source_value, st_put, st_take, stf_put,
-    stf_take, tween_lerp };
-use tur_kit::{ Column, Container, Each, PointerInteract, Positioned, Row, SizedBox, Stack, Text };
+    rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64, rs_source_str,
+    st_put, st_take, stf_put, stf_take, tween_lerp };
+use tur_kit::{ Column, Container, PointerInteract, Positioned, Row, SizedBox, Stack, Text };
 use tur_anim_kit::{ Opacity, Transform, anim_ctrl };
 
 
@@ -42,7 +41,6 @@ let K_CV1: u64 = 16;
 let K_CV2: u64 = 17;
 let K_CV3: u64 = 18;
 let K_LP: u64 = 19;
-let K_SPIN: u64 = 20; // the one-item list re-mounting the spinning square
 let K_ORBIT_X: u64 = 21;
 let K_ORBIT_Y: u64 = 22;
 let K_RADIUS: u64 = 23;
@@ -86,7 +84,6 @@ entry fn start() -> u64 {
     let cv2 = rs_source_f64();
     let cv3 = rs_source_f64();
     let lp = rs_source_f64();
-    let spin = rs_source_value(rs_list_new());
     let orbit_x = rs_source_f64();
     let orbit_y = rs_source_f64();
     let radius = rs_source_f64();
@@ -98,7 +95,6 @@ entry fn start() -> u64 {
     rs_set_f64(orbit_y, ORBIT_CY);
     rs_set_brush(badge, SLATE);
     rs_set_brush(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
-    rs_set_value(spin, spin_list(0.0));
 
     // The stash: atom ids + the controller state cross into the entries
     // as plain scalars (entries cannot capture locals).
@@ -118,7 +114,6 @@ entry fn start() -> u64 {
     stf_put(K_CV2, cv2 as f64);
     stf_put(K_CV3, cv3 as f64);
     stf_put(K_LP, lp as f64);
-    stf_put(K_SPIN, spin as f64);
     stf_put(K_ORBIT_X, orbit_x as f64);
     stf_put(K_ORBIT_Y, orbit_y as f64);
     stf_put(K_RADIUS, radius as f64);
@@ -200,9 +195,9 @@ fn stage() -> opaque {
 
 // The card: width + hue + radius ride their atoms (the tick's write
 // targets); the inner white square pulses its opacity with the progress
-// and SPINS through the rebuild channel (a one-item Each re-mounting it
-// under a fresh Transform every tick — the el_transform row takes
-// static angles only, so the rotation re-mounts instead of binding).
+// and SPINS through the bound row — Transform().rotate_bound(progress)
+// re-resolves the angle through the live atom (the subscribe → relayout
+// rail) and the subtree never re-mounts.
 fn card() -> opaque {
     let width = stf_take(K_WIDTH) as u64;
     stf_put(K_WIDTH, width as f64);
@@ -212,35 +207,17 @@ fn card() -> opaque {
     stf_put(K_INNER, inner as f64);
     let radius = stf_take(K_RADIUS) as u64;
     stf_put(K_RADIUS, radius as f64);
-    let spin = stf_take(K_SPIN) as u64;
-    stf_put(K_SPIN, spin as f64);
-    let square = Each(spin).item_builder(spun_square).build();
-    let pulse = Opacity(0.35).bound(inner).child(square).build();
+    let progress = stf_take(K_PROGRESS) as u64;
+    stf_put(K_PROGRESS, progress as f64);
+    let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
+    let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
+    let pulse = Opacity(0.35).bound(inner).child(spin).build();
     let mut c = Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
         .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
         .alignment(ALIGN_CENTER)
         .query_key("cas-card");
     c.child(pulse);
     return c.build();
-}
-
-// The Each branch: the inner square under a Transform rotated by the
-// LIVE progress (a fresh view per tick — the rebuild channel).
-fn spun_square(_i: u64, _s: str) -> opaque {
-    let progress = stf_take(K_PROGRESS) as u64;
-    stf_put(K_PROGRESS, progress as f64);
-    let angle = rs_get_f64(progress) * TAU;
-    let box_inner = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
-    return Transform(1.0, angle, 0.0, 0.0).child(box_inner).build();
-}
-
-// A fresh one-item list carrying the eased progress (rewriting it
-// re-invokes the spin Each).
-fn spin_list(v: f64) -> opaque {
-    let fresh = rs_list_new();
-    let tag = f"spin {v}";
-    rs_list_push(fresh, tag);
-    return fresh;
 }
 
 // The status badge: the label bound to the status atom, the fill bound to
@@ -381,14 +358,12 @@ fn a_tick(_id: u64, v: f64) {
     let pct = stf_take(K_PCT) as u64;
     stf_put(K_PCT, pct as f64);
     rs_set_str(pct, f"{(v * 100.0) as u64}%");
-    // The rotation channel: a fresh one-item list re-mounts the spinning
-    // square (which reads the progress atom at build time).
-    let spin = stf_take(K_SPIN) as u64;
-    stf_put(K_SPIN, spin as f64);
+    // The rotation channel: the progress atom IS the bound angle's source
+    // (Transform().rotate_bound reads it reactively) — the tick just
+    // advances it; no list rewrite, no re-mount.
     let progress = stf_take(K_PROGRESS) as u64;
     stf_put(K_PROGRESS, progress as f64);
     rs_set_f64(progress, v);
-    rs_set_value(spin, spin_list(v));
     // The orbit: (cx + r·cos, cy + r·sin) of a full turn.
     let orbit_x = stf_take(K_ORBIT_X) as u64;
     stf_put(K_ORBIT_X, orbit_x as f64);
