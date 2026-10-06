@@ -31,10 +31,11 @@ Every case is a **single `index.rut` module** with:
   `app.call_rut_entry(name, a, b)` (the engine→rut event rail). Probes
   replace the JS era's `eval_js` state pokes. `entry` = a deliberate
   embedder/test contract — element callbacks are NOT entries.
-- **no JS anywhere** — a rut case never touches a JS realm. State lives in
-  atoms (`rs_source_str` / `rs_source_f64` / `rs_source_bool` / value
-  atoms) whose ids cross into entries as plain `u64`s. Tests read state
-  back through **dev-tool tree queries** (`query_element`,
+- **no JS anywhere** — a rut case never touches a JS realm. State lives
+  in source atoms minted through the kit (`source_f64` / `source_str` /
+  `source_bool` / `source_value` — the `rs_*` rows are the substrate case
+  code never calls) whose ids cross into entries as plain `u64`s. Tests
+  read state back through **dev-tool tree queries** (`query_element`,
   `dev_tool_element_tree`, `query_text`) or bound atoms — never by
   evaluating script.
 
@@ -45,14 +46,17 @@ Every case is a **single `index.rut` module** with:
 - **Query keys**: give every element a test needs to find a query key via
   the element's chainable `.query_key("key")` method; tests locate it with
   `app.query_element(&["key"])`.
-- **Callbacks are fn values** — plain `fn`s (conventionally prefixed by
-  their role: `ts_` test-seam actions, `g_` gesture, `f_` focus, `a_`
-  animation, `on_` watch / chunk deliveries), passed to the kit by name
-  or as anonymous fn literals (`PointerInteract().on_tap(b_toggle)`,
-  `Each(items).item_builder(fn(i: u64, item: str) -> View { … })`). The
-  kit checks the arity/types at compile time; the pump fires the callback
-  through the infra dispatch entries with the same payload shapes as
-  always.
+- **Handlers are mutations** — `on_click(mutate(fn (ctx: MutationCtx) {
+  … }))` over the boa triad `source_*` / `derive_*` / `mutate` (round 5).
+  State rides by capture, writes flow through `ctx.set_*`, reads through
+  `ctx.get_*`, composition through `ctx.run*`; the flush's mutation pass
+  invokes them — never synchronously inside the dispatch. `on_tap`, the
+  `2` twins and `.ids()`/`.id()` are GONE. The remaining fn values are
+  the SUBSTRATE: view-builder callbacks stay plain `fn`s (conventionally
+  prefixed by their role — `Each(items).item_builder(fn (i: u64, item:
+  str) -> View { … })`), sealed into opaque boxes at the kit boundary
+  (compile-time arity/type-checked) and fired through the infra dispatch
+  entries. See the round-5 section below for the full architecture note.
 - **Determinism**: cases run under the harness's virtual clock. Time-based
   behavior (tickers, animations) rides `anim_ctrl` durations so tests can
   advance time deterministically.
@@ -99,39 +103,44 @@ the kit now — the boa cases lean on it heavily.
 ### Example
 
 ```rut
-use tur::{ mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str };
-use tur_kit::{ Column, Container, PointerInteract, Text };
+use tur::{ ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
+use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable,
+    Text, derive_str, mutate, source_f64 };
 
 entry fn start() -> u64 {
-    let count = rs_source_f64();
-    let label = rs_source_str("Count: 0");
+    let count: Readable<f64> = source_f64(0.0);
+    let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"Count: {ctx.get_f64(count) as u64}";
+    });
+
+    // The named mutations (boa's named `mutate(...)` values); the source
+    // rides by capture — no ids, no stash.
+    let b_inc = mutate(fn (ctx: MutationCtx) {
+        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
+    });
+
     let col = Column()
+        .main_alignment(MAIN_ALIGN_CENTER)
         .query_key("col")
-        .child(Text().text_bound(label).query_key("count").build())
-        .child(button(count, label, ts_inc, "+1"));
+        .child(Text().text_bound(label).query_key("count").font_size(36.0).build())
+        .child(button(b_inc, "+1", "inc"));
     mount(col.build());
-    return count;
+    return count.atom_id();
 }
 
-// A pill button: a PointerInteract pad (the tap delivers `(a, b, seq)`)
-// wrapping a styled label — the el_button composite, authored from families.
-// The callback is a FN VALUE (compile-time arity/type checked at the kit).
-fn button(count: u64, label: u64, cb: fn(u64, u64, f64), text: str) -> opaque {
+// A pill button: a PointerInteract pad taking the MUTATION. Handlers are
+// mutations; view-builder callbacks (item_builder & co) stay plain fns.
+fn button(b: Mutation<nil, nil>, text: str, key: str) -> opaque {
     return PointerInteract()
-        .ids(count, label)
-        .on_tap(cb)
+        .on_click(b)
         .child(
             Container()
                 .color(0x6366F1FFu64)
+                .query_key(key)
                 .child(Text().text(text).build())
                 .build(),
         )
         .build();
-}
-
-fn ts_inc(count: u64, label: u64, _n: f64) {
-    rs_set_f64(count, rs_get_f64(count) + 1.0);
-    rs_set_str(label, f"Count: {rs_get_f64(count) as u64}");
 }
 ```
 
@@ -139,10 +148,14 @@ The test side:
 
 ```rust
 let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-app.load_rut_bundle("counter").unwrap();
+app.load_bundle("counter").unwrap();
+app.wait_for_timeout(Duration::ZERO);
 assert_eq!(app.query_text(&["count"]).as_deref(), Some("Count: 0"));
-let atom = app.rut_start_answer();
-app.call_rut_entry("ts_inc", atom, 0.0).unwrap();
+
+// Drive the on_click pad: locate it by query key, click its center.
+let pi = ElementNodeId::new(app.query_element(&["inc"]).unwrap().as_u64());
+let (cx, cy) = app.get_element_absolute_bounds(pi).unwrap().center();
+app.click(cx, cy);
 app.wait_for_timeout(Duration::ZERO);
 assert_eq!(app.query_text(&["count"]).as_deref(), Some("Count: 1"));
 ```
@@ -250,16 +263,121 @@ verdicts; use a synthetic `WheelEvent` or raw CDP at real coordinates), and
 never sees it — type with per-char `press`. Real trusted wheel/keys work in
 both playgrounds.
 
+### Round 5 — the mutation rail + the case-corpus idiom sweep (2026-10-06)
+
+Round 5 ran the `round5b-mutation-rail` plan in five commits: the rut pin
+bump 3165f93 → 442a979 (ef3cf26), the mutation rail (c17ea9b), the corpus
+idiom sweep (36c4b04), the remaining round-5 case fixes (545bd46), and
+gates + fresh-wasm browser verification (bf95b40) — closing the round-5
+operator audit (19 showcase cases × both playgrounds, rut 8080 vs the boa
+reference 8081, plus the playground chrome; the audit drove every case's
+journey and m4 re-drove the fixed set on fresh, byte-verified wasm).
+
+**The mutation rail (architecture note).** boa's reactive triad is
+COMPLETE: `source_*` mints a typed `Source<T>` handle, `derive_*` mints a
+`Readable<T>` (sources ∪ derives — one class), and `mutate` seals a
+`Mutation` box over a `MutationCtx`. **`on_click(mutate(...))` is the
+handler surface** — `on_tap`, the `2` twins and `.ids()`/`.id()` are gone
+— and every other callback prop rides the same sealed-mutation surface
+(`on_input`, `on_enter`/`on_exit`, `on_key_down`, `on_focus`/`on_blur`,
+`on_mount`, the anim `on_tick`/`on_end` twins, `net_stream`'s
+`on_chunk`). State flows by capture, event data by typed argument
+(`PointerEvent` with nested `Point`s), writes flow through `ctx.set_*`,
+reads through `ctx.get_*` (tracked — a derive's `ctx.get` records its
+deps), composition through `ctx.run*`. Mutations are invoked at the
+flush's MUTATION PASS — never synchronously inside the gesture dispatch.
+Async journeys take their handles as parameters over a task-scoped
+`TaskCtx` from `spawn` — the stash rails (`st_*`/`stf_*`/`peek`) and the
+raw `rs_*` rows never appear in case code. Documented walls (the m1
+spike, settled against rut 442a979): ctx reads/writes spell per kind
+(`ctx.get_f64`/`ctx.set_f64`, … — the element type is an OUTPUT, so no
+generic inference), `mutate` is arity-split (`mutate` nil-arg /
+`mutate_ev` PointerEvent / `mutate_f64` typed arg), `spawn` is
+call-shaped (`spawn(work(TaskCtx.mint(), handles…))`), and `ctx.run*`
+QUEUES the composed invocation (drained at the next mutation pass —
+effects read through sources; there is no synchronous return).
+
+#### The 19-case journey ledger (both audit parts)
+
+| # | case | round-5 audit verdict | what changed (round 5) | journey status |
+|---|------|-----------------------|------------------------|----------------|
+| 1 | complex-animation | MINOR — all 5 flagged deltas confirmed + the curve-switch addendum (boa seeks the DISPLAYED value, tur re-eased from raw) | rewritten to boa parity (opaque inner square, center-orbit at boa's (140,80), "Loop ✓" in white, 4/32/32 spacers, rounded % readout, curve-switch seeks the DISPLAYED value); transport/speed/curve/loop are mutations, the % readout a derive (m2) | ✅ PASS — Play/Pause (pixel-frozen stage)/Resume/Reverse/Stop, speed-chip highlight, looping wrap past 100% without COMPLETED, completed card exactly 280px |
+| 2 | implicit-animations | MINOR — box animated size (boa's is fixed), no shadow anywhere, subtitle text | rewritten: FIXED 150×160 card (only radius/color/shadow animate), the shadow present (bound blur 16↔32), boa's "AnimatedContainer · AnimatedOpacity · AnimatedPositioned" subtitle; the toggle is one mutation (m2) | ✅ PASS — both ends + slide 30↔160, Compact 0.45 whole-card opacity parity |
+| 3 | jigsaw-puzzle | MAJOR — no shadows/glow, no lift, an invented cyan snap-highlight, Solved! banner top-left without a scrim | rewritten: drag shadow + placed pieces glowing their own hue, the 180ms lift controller (held at LIFT_MAX while dragged — the `a_lift_end` fix), Solved! full-viewer scrim with the banner viewer-centered (the Positioned verbatim-edge fix); drag = `on_pointer_down/move/up` mutations, captures replace `.ids()` (m2) | ✅ PASS — full solve incl. glow/lift/Solved! scrim; post-solve Shuffle absorbed |
+| 4 | countdown | MINOR — pill states collapsed 4→2, urgent-red missing, 96px display | m3: the four-state pill (Ready/Running/Paused/Done), the urgent-red display ≤10s while running (a Condition over the urgent source), 72px display | ✅ PASS — full flow incl. Done + Restart |
+| 5 | counter | PASS | swept onto `on_click(mutate(...))` (m2) | ✅ PASS — 12 − 2 = 10, every click registered |
+| 6 | todolist | MAJOR on the BOA side — the stuck boot-modal (Appendix A #1); tur effectively PASS | boa's boot-modal bug deliberately not ported; swept onto captured controllers + source arrays (m2) | ✅ PASS — check → 2 done, remove-confirm quoting the task, add appends ("4 items · 2 done") |
+| 7 | table-reactive | MAJOR — tur implemented a DIFFERENT case (an add-row probe); boa's body also broken | full boa port (m3): async 300ms fake load, sortable PLANET/MOONS/GRAVITY headers both directions with active-fill + ^/v markers, a Loading… → "Loaded 8 rows" status derive, WORKING rows (boa's empty body = Appendix A #2) | ✅ PASS — 8 rows render, MOONS/GRAVITY sorts both directions |
+| 8 | table-basic | PASS | no interactive surface; boa's Saturn notes clip = Appendix A #5 (the round-4 verdict stands) | static — audit boot renders, no regression |
+| 9 | password-input | MINOR — a tur-only Show/Hide pill; column alignment | m3: the invented pill dropped — boa masks permanently, the value echo is the truth channel (static `.obscure(true)`, the readout a direct column child); the start-aligned column stands as a recorded styling note | ✅ PASS — static mask, caret, live readout ("hunter2x") |
+| 10 | github-viewer | MINOR — crumb not clickable, the crumb read "react/react", full-pane loading, folder-nav untestable (GitHub rate limit) | finished (m2): crumb tap, list-area loading, the crumb = the parsed draft identity ("facebook/react") | ✅ PASS live (quota reset) — browse → explorer → descend into packages → crumb tap back to root → Back to the re-prefilled landing |
+| 11 | grid-aspect | MINOR — column counts (boa under-divides); tur's deliberate second grid + captions + ScrollView | design divergence recorded — tur's ceil is the Flutter parity, boa's under-divide = Appendix A #6; swept only | static — audit boot renders, no regression |
+| 12 | grid-basic | MINOR — column counts; boa's 4th row clips with no scroll | recorded (the same grid-math split, Appendix A #6); swept only | static — audit boot renders, no regression |
+| 13 | grid-gallery | MINOR — tile labels centered vs top-left; column counts | m3: labels top-left (boa's alignment-less Container child). The journeys FOUND + FIXED a real bug (m4): the VM binds a mutation box's capture cell per CALL SITE, so the loop's one tile call shared one cell across every pad (every tap answered the last index) — unrolled literal tile calls + the nine mode grids pre-built eagerly, pinned red→green by the tile-tap journey | ✅ PASS — chips reshape/re-column, the ring follows the tapped tile |
+| 14 | lazy-grid-basic | PASS | swept only | ✅ the viewer wheel-sanity case — 6000px + 15000px deep + return smooth, correct windowing, both-end clamping |
+| 15 | lazy-grid-gallery | MINOR — "6000" vs boa's "6,000"; column counts; boa-side label uncertainty at depth | m3: the subtitle now "6,000 tiles" (the toLocaleString twin); column counts stay the recorded grid-math split | ✅ PASS — "6,000 tiles" verified |
+| 16 | lazy-grid-scroll | MAJOR — tur implemented a DIFFERENT case (600 zebra cells) | full boa port (m3): 5000 cells over the (i·37)%360 hue ramp @ 50/45, fixed 60px rows, 6px gaps — new `lazy_grid_item_extent`/`lazy_grid_spacing` rows + `LazyGrid.item_extent()`/`.spacing()` kit methods (TDD red-first pitch test) | ✅ PASS — hue ramp, deep windowing, pixel-identical top return |
+| 17 | lazy-list-var-sizes | MINOR — the 12-slot palette twin vs boa's continuous hsl | sanctioned deliberate twin (per source, recorded); swept only | audit journeys (deep + horizontal) — the sanctioned twin stands |
+| 18 | lazy-list-virtualized | PASS — one shared NOTE: huge wheel deltas desync names from subtitles on BOTH engines (Appendix A #7); the palette twin | tur replicates the reference bit-for-bit; swept only | audit journeys (deep + huge-jump + top return) — bit-for-bit with boa |
+| 19 | text-demo | PASS | swept only | audit journeys (overflow + maxLines cycles) — section-for-section pixel-equivalent |
+
+Playground chrome (the audit's third block): **A** — the sidebar
+case-list wheel is parity (both scroll; 1:1 px mapping; both-end
+clamping; no viewer misrouting). **B** — the REAL tur gap the audit
+measured (the editor pane frozen: no wheel translation, no caret-follow)
+is CLOSED — the multiline-Input scrolling engine work rode the sweep (m2,
++7 tests) and the m4 browser journey verified wheel translates the view
+and ArrowDown caret-follow scrolls past the viewport bottom. **C** —
+viewer-pane wheel sanity PASS (lazy-grid-basic, #14 above).
+
+**Follow-ups** (what the phase ledgers say remains open):
+
+- Per-keystroke editor highlighting stays the recorded phase-D decision
+  (highlight at case load + after a successful Run, never per keystroke —
+  typed text inherits the caret span's ink); the rut-semantic classifier
+  crate (new at the 442a979 pin, not taken this round) is the future
+  optional dep that could revisit it.
+- The highlight palette carries the seven `code.*` rows the lexical
+  tokenizer can distinguish — boa's property/parameter palette rows are
+  deferred.
+- The VM's per-CALL-SITE mutation capture cell (a loop-built pad shares
+  one cell across every tap) is documented at the workaround site
+  (grid-gallery's unrolled literal tiles — jigsaw's `piece()` law);
+  revisit when the VM binds capture cells per closure.
+- The ctx surface spells per kind (`ctx.get_f64`/`ctx.set_f64`, …;
+  `mutate`/`mutate_ev`/`mutate_f64`) and `ctx.run*` composes by queued
+  invocation — the settled, boa-legible shape. A generic `ctx.get<T>` /
+  single-name `mutate` returns only if the VM ever grows return-position
+  generic inference, fn-value asyncs, and re-entrancy.
+
 ### Appendix A — boa reference defects (do not port; "match boa's designs, not boa's bugs")
 
 1. **todolist** boots with a stuck "Remove task?" modal + scrim on every
    fresh load; Cancel doesn't dismiss it, locking the viewer (re-confirmed in
-   the re-audit).
+   the re-audit; round 5: the modal is UNDISMISSABLE — Cancel, backdrop,
+   Remove, and Escape all dead across two independent boots — with an EMPTY
+   body, no task name).
 2. **table-reactive**'s async body never populates — the table stays empty
-   (re-confirmed; rut's body populates and adds rows).
+   (re-confirmed in round 5: headers sort but no rows and no loading
+   indicator ever render, even after sort clicks; rut's ported rows
+   populate and sort — m3).
 3. **jigsaw-puzzle**'s placed-counter stays "0 / 9" after correct drops.
 4. **github-viewer**'s error banner renders empty (a pink strip, no text) —
    compare rut's full-message banner.
 5. **table-basic**'s Saturn row clips its third notes line ("its ring
    system" cut off after "its ring") — rut's intrinsic row extents show
    all three lines (re-confirmed in round 4).
+6. **Grid column math under-divides** — boa floors its column count,
+   violating its own `maxCrossAxisExtent` (grid-basic 3 × ~141px at max
+   140; grid-aspect 2 × ~223px at max 160; grid-gallery Normal 186 > 150
+   and Sparse a single 381px-wide column at max 220). Boa is
+   self-consistent with its own floor comment, but its overflowing last
+   rows clip at the pane bottom with no scroll path; tur's ceil is the
+   Flutter parity — the recorded design divergence (grid column-math
+   untouched, m3).
+7. **Huge-jump wheel desync (shared)** — one huge single-event wheel
+   delta (~30,000px) desyncs lazy-list-virtualized's row NAMES from its
+   sequential, index-true subtitles on BOTH engines identically (name
+   runs stay internally consistent but sit at a varying offset;
+   normal-magnitude wheels ≤ 600px/event keep identity perfect on both).
+   Shared engine behavior — recorded, not a tur delta.
