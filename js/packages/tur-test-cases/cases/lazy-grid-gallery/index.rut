@@ -1,7 +1,7 @@
 // lazy-grid-gallery: "Lazy Grid Gallery" — the massive virtualized palette
 // (the full boa restyle). 6,000 tiles; only the visible window + overscan
 // mounts, so scrolling stays smooth no matter how deep. The flush-left
-// header (title + the "6000 tiles · only the visible rows mount — scroll
+// header (title + the "6,000 tiles · only the visible rows mount — scroll
 // to explore" subtitle) sits above the Square/Wide/Tall aspect chips and
 // the Normal/Dense density chips and an Expanded, rounded panel holding
 // the grid.
@@ -62,7 +62,7 @@ entry fn start() {
         .query_key("gallery/col")
         .child(Text().text("Lazy Grid Gallery").font_size(18.0).color(TITLE_FG).query_key("gallery/header").build())
         .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text("6000 tiles · only the visible rows mount — scroll to explore").font_size(12.0).color(SUB_FG).build())
+        .child(Text().text("6,000 tiles · only the visible rows mount — scroll to explore").font_size(12.0).color(SUB_FG).build())
         .child(SizedBox(0.0, 12.0).build())
         .child(
             Row()

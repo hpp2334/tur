@@ -182,29 +182,32 @@ fn lazy_grid_gallery_header_sits_above_the_full_width_grid() {
     assert_eq!(gw, cw, "the Expanded grid fills the column's width");
 }
 
-/// table-reactive's header must sit left-aligned above its rows — the band's
-/// leading edge matches the rows', and the main-axis stack stays contiguous.
+/// table-reactive (the boa port): the Table element's header band — the
+/// three sortable header cells — sits at the table's top, flush-left, and
+/// the first body row starts below it. (The pre-port pin — a full-width
+/// 32px band under `CROSS_ALIGN_STRETCH` — described the old add-row
+/// design; the boa port replaced it with the real header. The boot state
+/// is Loading — the header renders above an empty body, boa's shape.)
 #[test]
 fn table_reactive_header_sits_left_aligned_above_rows() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_bundle("table-reactive").unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // query_element is a pre-order DFS — the first match is item 0's row.
-    let (hx, hy, hw, hh) = rect(&app, &["table", "head"]);
-    let (rx, ry, _, _) = rect(&app, &["table", "row0"]);
-    let (cx, cy, cw, _) = rect(&app, &["table", "col"]);
-    assert_eq!(hy, cy, "the header is the column's first child");
-    assert_eq!(hh, 32.0, "the header band keeps its 32px height");
-    assert_eq!(hx, cx, "the header band is left-aligned with the rows");
-    assert_eq!(
-        hw, cw,
-        "the header band spans the table's full width (Stretch)"
+    // The boot state is Loading — the header renders above an empty
+    // body, boa's shape. hdr/name is the leading (flex-2) column.
+    let (hx, hy, hw, hh) = rect(&app, &["hdr", "name"]);
+    let (tx, ty, tw, _) = rect(&app, &["table-reactive"]);
+    assert_eq!(hy, ty, "the header band is the table's first row");
+    assert_eq!(hx, tx, "the header cell sits flush-left in the table");
+    assert_eq!(hw, tw / 2.0, "the flex-2 header column takes half the width");
+
+    // After the 300ms fake fetch the rows flow in BELOW the header —
+    // the header band is never displaced by the loaded body.
+    app.wait_for_timeout(std::time::Duration::from_millis(350));
+    let (_, ry, _, _) = rect(&app, &["tr", "row0", "c0"]);
+    assert!(
+        ry >= hy + hh,
+        "the first row starts below the header band ({ry} vs {hy}+{hh})"
     );
-    assert_eq!(
-        ry,
-        hy + hh,
-        "the first row starts where the header band ends"
-    );
-    assert_eq!(rx, cx, "the rows sit flush left under the band");
 }

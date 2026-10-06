@@ -278,3 +278,104 @@ entry fn start() {
         widths[2]
     );
 }
+
+// ===========================================================================
+// The table-reactive corpus case: the 300ms fake load, the sortable
+// PLANET/MOONS/GRAVITY headers (both directions), the active-state label
+// markers, and the "Loaded N rows" status line. (boa's empty body is its
+// own defect — Appendix A; the rows WORK here.)
+// ===========================================================================
+
+/// The concatenated span text of the first TextElement under `qk` (the
+/// keyed cell wraps its Text — the countdown get_text pattern, extended
+/// to walk a short subtree).
+fn case_text(app: &TurTestApp, qk: &[&str]) -> String {
+    use tur_engine::builtin_plugins::text::elements::TextElement;
+    let id = app
+        .query_element(qk)
+        .unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
+    let tree = app.element_tree();
+    let mut stack = vec![id];
+    while let Some(id) = stack.pop() {
+        let text = app
+            .with_element(id, |e| {
+                e.cast::<TextElement>()
+                    .map(|t| {
+                        t.spans()
+                            .iter()
+                            .map(|s| s.text.as_str())
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        if !text.is_empty() {
+            return text;
+        }
+        let node = tree.get_element(id).unwrap();
+        for c in &node.children {
+            stack.push(ElementNodeId::new(c.as_u64()));
+        }
+    }
+    panic!("no text under {qk:?}");
+}
+
+fn click_case(app: &mut TurTestApp, qk: &[&str]) {
+    let id = app
+        .query_element(qk)
+        .unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
+    let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+}
+
+fn build_table_reactive() -> TurTestApp {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_bundle("table-reactive").unwrap();
+    app
+}
+
+#[test]
+fn table_reactive_loads_rows_after_the_fake_delay() {
+    let mut app = build_table_reactive();
+
+    // Boot: the header + status render, the body is empty (boa's shape).
+    assert_eq!(case_text(&app, &["tr", "status"]), "Loading…");
+    assert!(app.query_element(&["tr", "row0", "c0"]).is_none());
+
+    // The 300ms fake fetch elapses: 8 rows flow in, moons-ascending
+    // (the boot sort state).
+    app.wait_for_timeout(std::time::Duration::from_millis(350));
+    assert_eq!(
+        case_text(&app, &["tr", "status"]),
+        "Loaded 8 rows · click a header to sort"
+    );
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
+    assert_eq!(case_text(&app, &["tr", "row1", "c0"]), "Venus");
+}
+
+#[test]
+fn table_reactive_headers_sort_both_ways() {
+    let mut app = build_table_reactive();
+    app.wait_for_timeout(std::time::Duration::from_millis(350));
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
+
+    // PLANET: ascending — the active header carries the ^ marker.
+    click_case(&mut app, &["hdr", "name"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Earth");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET ^");
+
+    // PLANET again: the direction flips — v, Venus first.
+    click_case(&mut app, &["hdr", "name"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Venus");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET v");
+
+    // GRAVITY: a new key resets to ascending (Mercury 3.7 wins the tie
+    // over Mars — ties keep their order).
+    click_case(&mut app, &["hdr", "gravity"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
+    assert_eq!(case_text(&app, &["hdr", "gravity"]), "GRAVITY (m/s²) ^");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET");
+}

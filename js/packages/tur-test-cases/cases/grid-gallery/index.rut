@@ -2,8 +2,8 @@
 // boa port). The header (title + a live subtitle "tile #i · 1:1 ·
 // maxExtent 150") sits above aspect chips (1:1 / 16:9 / 9:16), density
 // chips (Dense / Normal / Sparse), and a styled scrollable tile grid with
-// centered labels; tapping a tile paints its white selection ring and
-// re-derives the subtitle.
+// top-left labels (boa's alignment-less Container child); tapping a tile
+// paints its white selection ring and re-derives the subtitle.
 //
 // Reactivity: the Grid's max_cross / aspect rows are static per build, so
 // the chips re-key ONE Switch over the COMBINED mode string
@@ -18,7 +18,7 @@
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
+use tur::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
 use tur_kit::{
     Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Mutation, MutationCtx,
     PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, Text, derive_str, mutate,
@@ -164,9 +164,10 @@ fn gallery_grid(aspect: f64, max_cross: f64, rings: [Readable<f64>], sel: Readab
     return grid.build();
 }
 
-// One tile: the hue face with a centered label, wrapped in the selection
-// ring (the tile's own brush source — white when selected, cleared
-// otherwise). The tap captures the ring array + the selection source.
+// One tile: the hue face with a top-left label (boa's tile — the Text is
+// an alignment-less Container child), wrapped in the selection ring (the
+// tile's own brush source — white when selected, cleared otherwise). The
+// tap captures the ring array + the selection source.
 fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
     let i: u64 = ii[0] as u64;
     let b_tap = mutate(fn (ctx: MutationCtx) {
@@ -178,7 +179,6 @@ fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
     let face = Container()
         .color(hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0))
         .radius(5.0)
-        .alignment(ALIGN_CENTER)
         .child(Text().text(f"{i}").font_size(13.0).color(LABEL_FG).build())
         .build();
     let framed = Container()

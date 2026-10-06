@@ -71,8 +71,9 @@ use tur::{
   input_qkey, input_size, input_undo,
   lazy_axis,
   lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
-  lazy_grid_builder, lazy_grid_count, lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan,
-  lazy_grid_qkey, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
+  lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
+  lazy_grid_new, lazy_grid_overscan,
+  lazy_grid_qkey, lazy_grid_spacing, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
   lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
   mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child,
   pi_mut_down, pi_mut_move, pi_mut_up,
@@ -1479,6 +1480,19 @@ impl LazyGrid {
   }
   pub fn aspect(mut self, v: f64) -> Self {
     lazy_grid_aspect(self.spec, v);
+    return self;
+  }
+  // The FIXED main-axis cell extent (the boa `mainAxisExtent`): when set
+  // it overrides the aspect math — every cell is exactly `v` tall along
+  // the main axis regardless of the cross size.
+  pub fn item_extent(mut self, v: f64) -> Self {
+    lazy_grid_item_extent(self.spec, v);
+    return self;
+  }
+  // The cell gaps (the boa `crossAxisSpacing` / `mainAxisSpacing` pair):
+  // the pitch grows to cell + gap on each axis.
+  pub fn spacing(mut self, cross: f64, main: f64) -> Self {
+    lazy_grid_spacing(self.spec, cross, main);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

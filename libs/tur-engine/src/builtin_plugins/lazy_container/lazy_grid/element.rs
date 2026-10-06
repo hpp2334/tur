@@ -452,7 +452,9 @@ impl ElementOnWheel for LazyGridElement {
 impl LazyGridView {
     /// Rut-rail constructor (the `lazy_*` rows): an entry-builder item
     /// face (the guarded flush-time VM call) + static config + the query
-    /// key (the rows' `lazy_qkey` crossing).
+    /// key (the rows' `lazy_qkey` crossing). The extent/spacing props are
+    /// the fixed-row + gap knobs (`lazy_grid_item_extent` /
+    /// `lazy_grid_spacing`); absent → the aspect math / zero gaps.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_rut(
         entry: RutEntryBuilder,
@@ -461,6 +463,9 @@ impl LazyGridView {
         overscan: Option<u64>,
         max_cross_axis_extent: f64,
         child_aspect_ratio: Option<f64>,
+        main_axis_extent: Option<f64>,
+        cross_axis_spacing: Option<f64>,
+        main_axis_spacing: Option<f64>,
         query_key: Option<Vec<String>>,
     ) -> Self {
         LazyGridView {
@@ -469,9 +474,9 @@ impl LazyGridView {
             overscan: overscan.map(Val::Static),
             max_cross_axis_extent: Val::Static(max_cross_axis_extent),
             child_aspect_ratio: child_aspect_ratio.map(Val::Static),
-            main_axis_extent: None,
-            cross_axis_spacing: None,
-            main_axis_spacing: None,
+            main_axis_extent: main_axis_extent.map(Val::Static),
+            cross_axis_spacing: cross_axis_spacing.map(Val::Static),
+            main_axis_spacing: main_axis_spacing.map(Val::Static),
             builder: entry,
             query_key,
         }

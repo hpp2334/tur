@@ -46,6 +46,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("lazy_grid_overscan", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("lazy_grid_max_cross", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("lazy_grid_aspect", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        row("lazy_grid_item_extent", vec![TY_OPAQUE, TY_F64], TY_NIL),
+        row("lazy_grid_spacing", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
         row("lazy_grid_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("lazy_grid_build", vec![TY_OPAQUE], TY_OPAQUE),
     ]);
@@ -71,6 +73,9 @@ pub(crate) struct LazyGridSpec {
     overscan: Option<u64>,
     max_cross: Option<f64>,
     aspect: Option<f64>,
+    item_extent: Option<f64>,
+    cross_spacing: Option<f64>,
+    main_spacing: Option<f64>,
     query_key: Option<Vec<String>>,
 }
 
@@ -131,7 +136,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "lazy_grid_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
-        let spec = LazyGridSpec { builder: None, count: None, axis: None, overscan: None, max_cross: None, aspect: None, query_key: None };
+        let spec = LazyGridSpec { builder: None, count: None, axis: None, overscan: None, max_cross: None, aspect: None, item_extent: None, cross_spacing: None, main_spacing: None, query_key: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
@@ -155,6 +160,19 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "lazy_grid_aspect", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.aspect = if v > 0.0 { Some(v) } else { None })
     });
+    // lazy_grid_item_extent — the FIXED main-axis cell extent (the boa
+    // `mainAxisExtent`): overrides the aspect math (cell_main = extent).
+    rut_vm::pkg_fn!(pkg, "lazy_grid_item_extent", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
+        b.with_mut(vm, |_vm, s| s.item_extent = if v > 0.0 { Some(v) } else { None })
+    });
+    // lazy_grid_spacing — the cross/main cell gaps (the boa
+    // `crossAxisSpacing` / `mainAxisSpacing` pair).
+    rut_vm::pkg_fn!(pkg, "lazy_grid_spacing", (Opaque<LazyGridSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cross: f64, main: f64| {
+        b.with_mut(vm, |_vm, s| {
+            s.cross_spacing = if cross > 0.0 { Some(cross) } else { None };
+            s.main_spacing = if main > 0.0 { Some(main) } else { None };
+        })
+    });
     rut_vm::pkg_fn!(pkg, "lazy_grid_qkey", (Opaque<LazyGridSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, key: &str| {
         let key = qkey_of(key);
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
@@ -168,6 +186,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 Some(s.overscan.unwrap_or(0)),
                 s.max_cross.expect("lazy_grid_build: no max cross extent"),
                 s.aspect,
+                s.item_extent,
+                s.cross_spacing,
+                s.main_spacing,
                 s.query_key.clone(),
             )) as Rc<dyn crate::core::view::View>
         })?;

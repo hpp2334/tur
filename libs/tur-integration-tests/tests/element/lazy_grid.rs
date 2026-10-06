@@ -1,5 +1,5 @@
 use tur_engine::builtin_plugins::lazy_container::LazyGridElement;
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Build a 10,000-item virtualized grid inline: 400x600 viewport,
@@ -260,6 +260,97 @@ fn lazy_grid_scroll_clamps_at_content_end() {
         "scroll should clamp at max extent ({max_extent}), got {scroll}"
     );
     assert!(scroll > 0.0);
+}
+
+// ===========================================================================
+// The boa lazy-grid-scroll surface: a FIXED main extent + cross/main gaps.
+// `item_extent` overrides the aspect math (cell_main = extent); `spacing`
+// insets the pitch — stride = extent + main gap, cross pitch = cell + gap.
+// ===========================================================================
+
+/// 400×600 viewport, maxCross 120 → 4 columns of (400 − 3·6)/4 = 95.5px,
+/// fixed 60px rows, 6px gaps: cell 1 at x = 95.5+6, cell 4 at y = 60+6.
+#[test]
+fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur::mount;
+use tur_kit::{ Container, Expanded, LazyGrid };
+
+
+fn cell(i: u64) -> opaque {
+    return Container().color(0xC8C8C8FFu64).build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source_f64(5000.0);
+    let grid = LazyGrid()
+        .item_builder(cell)
+        .count(count)
+        .max_cross(120.0)
+        .item_extent(60.0)
+        .spacing(6.0, 6.0)
+        .overscan(2)
+        .query_key("lg")
+        .build();
+    mount(Expanded().flex(1.0).child(grid).build());
+    return count.atom_id();
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    let cell_of = |app: &TurTestApp, logical: u64| -> (f64, f64, f64, f64) {
+        let child_ids: Vec<_> = {
+            let tree = app.element_tree();
+            tree.get_element(id).unwrap().children.to_vec()
+        };
+        let mut found: Option<NodeId> = None;
+        for child_id in child_ids {
+            let index = with_lg(app, id, move |lg| lg.visible_index_of(child_id));
+            if index == Some(logical) {
+                found = Some(child_id);
+                break;
+            }
+        }
+        let child = found.expect("cell should be mounted");
+        let tree = app.element_tree();
+        let node = tree.get_element(ElementNodeId::new(child.as_u64())).unwrap();
+        (
+            node.computed_layout.offset.x,
+            node.computed_layout.offset.y,
+            node.computed_layout.size.width,
+            node.computed_layout.size.height,
+        )
+    };
+
+    // Cell 0: 95.5×60 at the origin (the fixed extent overrides the aspect).
+    let (x0, y0, w0, h0) = cell_of(&app, 0);
+    assert!(
+        (x0 - 0.0).abs() < 0.5 && (y0 - 0.0).abs() < 0.5,
+        "cell 0 sits at the origin, got ({x0}, {y0})"
+    );
+    assert!(
+        (w0 - 95.5).abs() < 0.5 && (h0 - 60.0).abs() < 0.5,
+        "cell 0 is (400-18)/4 = 95.5 wide and the fixed 60 tall, got {w0}×{h0}"
+    );
+
+    // Cell 1: one cross pitch right (cell + 6px gap).
+    let (x1, _, _, _) = cell_of(&app, 1);
+    assert!(
+        (x1 - 101.5).abs() < 0.5,
+        "cell 1 x = 95.5 + 6, got {x1}"
+    );
+
+    // Cell 4: one main pitch down (extent + 6px gap).
+    let (_, y4, _, _) = cell_of(&app, 4);
+    assert!(
+        (y4 - 66.0).abs() < 0.5,
+        "cell 4 y = 60 + 6, got {y4}"
+    );
 }
 
 /// Horizontal axis: cross axis = height → 6 rows of cells, scroll along x.

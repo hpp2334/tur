@@ -243,3 +243,70 @@ fn countdown_edit_while_ticking_stops_the_clock() {
         "the clock must stay stopped after edit"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The four-state status pill (the round-5 nit: Ready / Running / Paused /
+// Done — the pre-fix pill was binary Ready/Running) + the 72px display.
+// ---------------------------------------------------------------------------
+
+fn pill_text(app: &TurTestApp) -> String {
+    get_text(app, &["status-label"])
+}
+
+#[test]
+fn countdown_pill_boots_ready() {
+    let app = build_countdown();
+    assert_eq!(pill_text(&app), "Ready");
+}
+
+#[test]
+fn countdown_pill_runs_then_pauses_then_resets() {
+    let mut app = build_countdown();
+
+    click_qk(&mut app, &["btn-start"]);
+    assert_eq!(pill_text(&app), "Running");
+
+    // Two ticks in (remaining 58 ≠ initial 60): pausing shows Paused.
+    advance_seconds(&mut app, 2);
+    click_qk(&mut app, &["btn-pause"]);
+    assert_eq!(pill_text(&app), "Paused", "a stopped mid-run clock is Paused");
+
+    click_qk(&mut app, &["btn-reset"]);
+    assert_eq!(pill_text(&app), "Ready", "reset restores remaining == initial");
+}
+
+#[test]
+fn countdown_pill_done_when_drained() {
+    let mut app = build_countdown();
+
+    // Edit to 2 seconds, then run it dry.
+    click_qk(&mut app, &["btn-edit"]);
+    let input_id = find_input_id(&app);
+    focus_input(&mut app, input_id);
+    app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("Backspace");
+    app.send_key("2");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    click_qk(&mut app, &["btn-confirm"]);
+
+    click_qk(&mut app, &["btn-start"]);
+    advance_seconds(&mut app, 2);
+
+    assert_eq!(get_text(&app, &["display"]), "0:00");
+    assert_eq!(pill_text(&app), "Done");
+}
+
+#[test]
+fn countdown_display_is_72px_not_96px() {
+    let app = build_countdown();
+    let id = app
+        .query_element(&["display"])
+        .unwrap_or_else(|| panic!("display not found"));
+    let el = app.dev_tool_get_element(id).unwrap();
+    assert!(
+        el.size.1 < 105.0,
+        "the 72px display lays out well under the old 96px line height, got {}",
+        el.size.1
+    );
+}

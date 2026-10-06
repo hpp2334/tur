@@ -6,24 +6,28 @@
 // generation passed as parameters. State rides typed Readable handles
 // captured by the mutations — no ids, no stash.
 //
-// The boa design: a light slate page with the 96px display centered in
-// the pane, a "● Ready/Running" status pill, a big emerald Start that
-// swaps to an amber Pause (a Condition on the running atom; the Start
-// label re-derives to "Restart" once drained), ghost Edit/Reset buttons,
-// and a scrim modal. The modal rides `then_build(...)` — the branch
-// builder runs at ACTIVATION over the text controller the edit mutation
-// re-seeded with the live `initial` (minted once at boot, next to its
-// undo stack).
+// The boa design: a light slate page with the 72px display centered in
+// the pane (red while urgent — ticking at or below 10s), a four-state
+// "● Ready/Running/Paused/Done" status pill (green dot while running,
+// faint at Done, muted at Ready, amber while Paused), a big emerald Start
+// that swaps to an amber Pause (a Condition on the running atom; the
+// Start label re-derives to "Restart" once drained), ghost Edit/Reset
+// buttons, and a scrim modal. The modal rides `then_build(...)` — the
+// branch builder runs at ACTIVATION over the text controller the edit
+// mutation re-seeded with the live `initial` (minted once at boot, next
+// to its undo stack). The pill's dot + label and the display tint ride
+// brush/str/bool sources repainted by the mutations (sync_chrome) and
+// the ticker's Done write — the corpus's brush law.
 use futures::{ sleep };
 use tur::{
     ALIGN_CENTER, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_POINTER,
-    HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, mem_get, mem_new, mem_set,
-    mount, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
+    HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, mem_get, mem_new,
+    mem_set, mount, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
 };
 use tur_kit::{
     Column, Condition, Container, DeriveCtx, Input, MouseRegion, Mutation, MutationCtx,
     PointerInteract, Readable, Row, SizedBox, Stack, TaskCtx, Text, derive_str, mutate, spawn,
-    source_bool, source_f64,
+    source_bool, source_f64, source_str,
 };
 
 
@@ -39,6 +43,7 @@ let START: u64 = 0x10B981FFu64;
 let START_SHADOW: u64 = 0x10B9815Au64;
 let PAUSE: u64 = 0xF59E0BFFu64;
 let PAUSE_SHADOW: u64 = 0xF59E0B5Au64;
+let URGENT: u64 = 0xEF4444FFu64;
 let BACKDROP: u64 = 0x0F172A6Eu64;
 
 entry fn start() -> u64 {
@@ -47,12 +52,21 @@ entry fn start() -> u64 {
     let running: Readable<bool> = source_bool(false);
     let editing: Readable<bool> = source_bool(false);
 
-    let display: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    // The chrome: the four-state pill's dot + label and the display's
+    // urgent tint — sources the mutations repaint (see sync_chrome).
+    let dot: Readable<f64> = source_f64(0.0);
+    let pill: Readable<str> = source_str("Ready");
+    let urgent: Readable<bool> = source_bool(false);
+
+    let display_str: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
         return fmt_display(ctx.get_f64(remaining));
     });
     let start_label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
         return fmt_start_label(ctx.get_f64(remaining));
     });
+
+    // Seed the chrome to the boot state (Ready — remaining == initial).
+    sync_chrome(MutationCtx.over(ctx_bridge()), running, remaining, initial, dot, pill, urgent);
 
     // The generation guard: the mem cell holds the live generation; the
     // ticker pins its own and exits when superseded.
@@ -70,13 +84,15 @@ entry fn start() -> u64 {
             return;
         }
         ctx.set_bool(running, true);
-        spawn(ticker(TaskCtx.mint(), gen_bump(cell), cell, running, remaining));
+        spawn(ticker(TaskCtx.mint(), gen_bump(cell), cell, running, remaining, dot, pill, urgent));
+        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Pause: stop the clock and supersede any live ticker.
     let b_pause = mutate(fn (ctx: MutationCtx) {
         ctx.set_bool(running, false);
         gen_bump(cell);
+        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Reset: stop the clock and restore the initial time.
@@ -84,6 +100,7 @@ entry fn start() -> u64 {
         ctx.set_bool(running, false);
         gen_bump(cell);
         ctx.set_f64(remaining, ctx.get_f64(initial));
+        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Open the editor: stop the clock, supersede any live ticker, mark
@@ -95,6 +112,7 @@ entry fn start() -> u64 {
         gen_bump(cell);
         ctx.set_bool(editing, true);
         tctrl_set_text(ctrl, f"{ctx.get_f64(initial) as u64}");
+        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Cancel: close the modal.
@@ -108,6 +126,7 @@ entry fn start() -> u64 {
         ctx.set_f64(initial, v);
         ctx.set_f64(remaining, v);
         ctx.set_bool(editing, false);
+        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Clicks inside the card stop at the card (the scrim's cancel never
@@ -125,11 +144,16 @@ entry fn start() -> u64 {
         .else_build(fn () -> View { return start_pad(start_label, b_start); })
         .build();
 
-    // The status pill: a green dot + "Running" while ticking, muted +
-    // "Ready" otherwise.
-    let status = Condition(running)
-        .then_build(fn () -> View { return chip_status(true); })
-        .else_build(fn () -> View { return chip_status(false); })
+    // The status pill: the dot + label ride their sources — Running
+    // (green) / Done (faint) / Ready (muted) / Paused (amber).
+    let status = chip_status(dot, pill);
+
+    // The display: 72px, red while urgent (ticking at or below 10s),
+    // slate otherwise — the Condition swaps the tinted twin; both bind
+    // the same derive.
+    let display = Condition(urgent)
+        .then_build(fn () -> View { return display_text(URGENT, display_str); })
+        .else_build(fn () -> View { return display_text(TEXT, display_str); })
         .build();
 
     // The edit modal overlays the pane while `editing` is set.
@@ -143,7 +167,7 @@ entry fn start() -> u64 {
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text("COUNTDOWN").font_size(11.0).color(TEXT_FAINT).build())
         .child(SizedBox(0.0, 10.0).build())
-        .child(Text().text_bound(display).font_size(96.0).color(TEXT).query_key("display").build())
+        .child(display)
         .child(SizedBox(0.0, 12.0).build())
         .child(status)
         .child(SizedBox(0.0, 36.0).build())
@@ -223,14 +247,10 @@ fn ghost_button(key: str, label: str, cb: Mutation<nil, nil>) -> opaque {
         .build();
 }
 
-// The "● Ready/Running" pill: a dot + label in a bordered capsule.
-fn chip_status(running: bool) -> opaque {
-    let mut dot: u64 = TEXT_MUTED;
-    let mut label: str = "Ready";
-    if (running) {
-        dot = START;
-        label = "Running";
-    }
+// The "● Ready/Running/Paused/Done" pill: the dot + label ride their
+// sources — the four states are painted by the mutations (sync_chrome)
+// and the ticker's Done write.
+fn chip_status(dot: Readable<f64>, label: Readable<str>) -> opaque {
     return Container()
         .padding(6.0)
         .radius(999.0)
@@ -240,12 +260,18 @@ fn chip_status(running: bool) -> opaque {
             Row()
                 .main_axis_size(MAIN_SIZE_MIN)
                 .cross_alignment(CROSS_ALIGN_CENTER)
-                .child(Container().width_height(7.0, 7.0).radius(999.0).color(dot).build())
+                .child(Container().width_height(7.0, 7.0).radius(999.0).color_bound(dot).build())
                 .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text(label).font_size(11.0).color(TEXT_MUTED).build())
+                .child(Text().text_bound(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
                 .build(),
         )
         .build();
+}
+
+// The 72px display twin (the tint is the Condition's branch — boa's
+// displayColor$ derive, spelled as two static tints over one bound text).
+fn display_text(color: u64, disp: Readable<str>) -> View {
+    return Text().text_bound(disp).font_size(72.0).color(color).query_key("display").build();
 }
 
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
@@ -335,6 +361,56 @@ fn edit_modal(ctrl: opaque, undo: opaque, b_confirm: Mutation<nil, nil>, b_cance
         .build();
 }
 
+// ---- the pill + display chrome (the four states, the urgent red) -----------
+
+// The status pill's dot color: Running green, Done faint, Ready muted,
+// else Paused amber (boa's statusColor$).
+fn pill_color(running: bool, r: f64, init: f64) -> u64 {
+    if (running) {
+        return START;
+    }
+    if (r == 0.0) {
+        return TEXT_FAINT;
+    }
+    if (r == init) {
+        return TEXT_MUTED;
+    }
+    return PAUSE;
+}
+
+// The status pill's label (boa's statusLabel$).
+fn pill_text(running: bool, r: f64, init: f64) -> str {
+    if (running) {
+        return "Running";
+    }
+    if (r == 0.0) {
+        return "Done";
+    }
+    if (r == init) {
+        return "Ready";
+    }
+    return "Paused";
+}
+
+// Urgent: ticking at or below 10 s (boa's isUrgent$).
+fn urgent_of(running: bool, r: f64) -> bool {
+    return running && r > 0.0 && r <= 10.0;
+}
+
+// Repaint the pill + display tint after any state write (every chrome
+// mutation's tail; the ticker writes its Done state directly — TaskCtx
+// and MutationCtx are distinct faces).
+fn sync_chrome(ctx: MutationCtx, running: Readable<bool>, remaining: Readable<f64>,
+               initial: Readable<f64>, dot: Readable<f64>, pill: Readable<str>,
+               urgent: Readable<bool>) {
+    let run = ctx.get_bool(running);
+    let r = ctx.get_f64(remaining);
+    let init = ctx.get_f64(initial);
+    ctx.set_brush(dot, pill_color(run, r, init));
+    ctx.set_str(pill, pill_text(run, r, init));
+    ctx.set_bool(urgent, urgent_of(run, r));
+}
+
 // ---- the display + label derives ----------------------------------------------
 
 // "m:ss" display format.
@@ -360,8 +436,11 @@ fn fmt_start_label(v: f64) -> str {
 
 // `g` pins the generation: a stale loop (superseded by a later start /
 // pause / edit / reset) exits without ticking. The handles and the mem
-// cell ride as parameters; the ctx is task-scoped.
-async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, remaining: Readable<f64>) -> str {
+// cell ride as parameters; the ctx is task-scoped. The chrome rides the
+// task too: ticks re-derive the urgent tint, and the drained exit writes
+// the Done state.
+async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, remaining: Readable<f64>,
+                dot: Readable<f64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
     while (ctx.get_bool(running)) {
         await sleep(1000);
         if (mem_get(cell) != g) {
@@ -374,9 +453,13 @@ async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, rem
         if (r <= 1.0) {
             ctx.set_f64(remaining, 0.0);
             ctx.set_bool(running, false);
+            ctx.set_str(pill, "Done");
+            ctx.set_brush(dot, TEXT_FAINT);
+            ctx.set_bool(urgent, false);
             return "";
         }
         ctx.set_f64(remaining, r - 1.0);
+        ctx.set_bool(urgent, urgent_of(ctx.get_bool(running), r - 1.0));
     }
     return "";
 }
