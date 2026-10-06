@@ -1072,6 +1072,16 @@ impl ReactiveBridgeStore {
         self.store.read_only().read(readable)
     }
 
+    /// The atom's seed kind: `true` for a source (writable), `false` for a
+    /// derived / mutation atom (or an unknown id). The rut rail's write
+    /// guard (`ctx_set_*`) rejects non-sources before touching the KV.
+    pub(crate) fn is_source(&self, id: AtomId) -> bool {
+        matches!(
+            self.store.shared.seeds.borrow().get(&id),
+            Some(Seed::Source(_))
+        )
+    }
+
     /// The bridge's own store (the **engine store** when the bridge came
     /// from `PluginRegisterContext::reactive` / `TurInstanceContext::reactive`),
     /// as a read-only face. The engine-atom pattern captures this in a

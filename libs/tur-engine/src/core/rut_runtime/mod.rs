@@ -41,6 +41,9 @@ use rut_vm::interp::{CallArgs, Ret, Vm};
 
 mod async_caps;
 mod derive;
+mod mutation;
+
+pub use mutation::{CtxBridge, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
 /// opaques from `entry fn(index)` calls).
@@ -139,6 +142,19 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("rs_watch_cb", vec![TY_U64, TY_OPAQUE, TY_U64], TY_OPAQUE),
         row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
         row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
+        // M1 — the mutation rail: the ctx read/write/compose rows + the
+        // mutation/derive sealers (the write-side twin of the C8 face).
+        row("ctx_bridge", vec![], TY_OPAQUE),
+        row("ctx_get_f64", vec![TY_OPAQUE, TY_U64], TY_F64),
+        row("ctx_get_str", vec![TY_OPAQUE, TY_U64], TY_STR),
+        row("ctx_get_bool", vec![TY_OPAQUE, TY_U64], TY_BOOL),
+        row("ctx_set_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
+        row("ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
+        row("ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
+        row("ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
+        row("mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
+        row("derive_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
         // the opaque stash (cross-entry hand-off)
         row("st_put", vec![TY_U64, TY_OPAQUE], TY_NIL),
         row("st_take", vec![TY_U64], TY_OPT_OPAQUE),
@@ -430,6 +446,8 @@ fn install_tur_pkg(
     async_caps::install(&mut pkg, handles);
     // C8 — derived atoms + watch (the guarded flush-time VM call).
     derive::install(&mut pkg, handles);
+    // M1 — the mutation rail (the ctx rows + the sealers).
+    mutation::install(&mut pkg, handles);
 
     // Plugin extensions (the element families + capability crates) — AFTER
     // the engine rows, so an extension may lean on them.
@@ -622,6 +640,41 @@ pub mod cb_entries {
     pub const STR1: &str = "__tur_cb_str1";
     /// The `(cb, a, b) -> str` two-dep derive-format shape.
     pub const STR2: &str = "__tur_cb_str2";
+}
+
+/// The mutation rail's dispatch-entry names (M1) — kit-owned shapes, same
+/// scope law as [`cb_entries`]: the kit (`tur_kit.rut`) declares the
+/// matching `entry fn`s that construct the ctx + event and call the
+/// user's typed fn.
+pub mod mutation_entries {
+    /// The nil-arg mutation: `(cb, h)` — the click surface.
+    pub const MNIL: &str = "__tur_cb_mnil";
+    /// The pointer mutation: `(cb, h, lx, ly, gx, gy, btn)` — the entry
+    /// constructs the typed `PointerEvent`.
+    pub const MPTR: &str = "__tur_cb_mptr";
+    /// The typed-arg/typed-ret mutation: `(cb, h, a) -> f64`.
+    pub const MF64: &str = "__tur_cb_mf64";
+    /// The derive format fns: `(cb, h) -> T` — the entry constructs the
+    /// read-only `DeriveCtx`.
+    pub const DERIVE_F64: &str = "__tur_cb_derive_f64";
+    pub const DERIVE_STR: &str = "__tur_cb_derive_str";
+    pub const DERIVE_BOOL: &str = "__tur_cb_derive_bool";
+}
+
+/// The seal tags — the row→entry selectors the sealers bake into their
+/// closures. The kit spells the same numbers as its own consts (the kit
+/// cannot name Rust items; one law, two spellings).
+pub mod seal_tags {
+    /// `mutate_seal`: the nil-arg mutation (clicks).
+    pub const MUT_NIL: u64 = 0;
+    /// `mutate_seal`: the pointer-event mutation (drags, context menus).
+    pub const MUT_PTR: u64 = 1;
+    /// `mutate_seal`: the typed-arg/typed-ret mutation (`ctx.run_f64`).
+    pub const MUT_F64: u64 = 2;
+    /// `derive_seal` tags: the value kind (the entry's return type).
+    pub const DRV_F64: u64 = 0;
+    pub const DRV_STR: u64 = 1;
+    pub const DRV_BOOL: u64 = 2;
 }
 
 /// The flush-time VM face — view factories / deriveds minted by rows reach

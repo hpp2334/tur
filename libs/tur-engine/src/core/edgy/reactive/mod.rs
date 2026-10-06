@@ -159,6 +159,12 @@ impl Mutation {
     pub(crate) fn id(&self) -> AtomId {
         self.0
     }
+
+    /// Rebuild a mutation handle from its raw id — the rut rail's crossing
+    /// (the ids ARE the atoms; see [`crate::core::rut_runtime::mutation_of`]).
+    pub(crate) fn from_id(id: AtomId) -> Self {
+        Mutation(id)
+    }
 }
 
 /// Read-only reference to either a [`Source<T>`] or a [`Derived<T>`].  Used by

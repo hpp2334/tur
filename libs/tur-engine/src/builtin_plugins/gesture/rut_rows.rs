@@ -59,12 +59,21 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("pi_new", vec![], TY_OPAQUE),
         row("pi_id", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pi_ids", vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL),
+        // The M1 mutation surface: the gesture pads store SEALED mutations
+        // (`mutate` / `mutate_ev` mint them); the dispatch enqueues the
+        // invocation and the flush's mutation pass invokes the closure
+        // with the ctx (the plan's queued law). The legacy fn-box rows
+        // (pi_on_tap / pi_on_down / pi_on_move / pi_on_up) stay until the
+        // M2 corpus sweep deletes their callers.
+        row("pi_on_click", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("pi_mut_down", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("pi_mut_move", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("pi_mut_up", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("pi_on_context_menu", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pi_on_tap", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
-        row("pi_on_click", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_on_down", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_on_move", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_on_up", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
-        row("pi_on_context_menu", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("pi_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("pi_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("pi_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
@@ -390,12 +399,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let m = tap_mutation(&h, a, bb, cb);
         b.with_mut(vm, |_vm, s| s.on_click = m)
     });
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_click", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
-        let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
-        let m = pointer_mutation(&h, a, bb, two, 0, cb);
-        b.with_mut(vm, |_vm, s| s.on_click = m)
-    });
+    // The legacy fn-box pointer rows (the corpus drags ride them until the
+    // M2 sweep deletes their kit callers).
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "pi_on_down", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
         let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
@@ -414,11 +419,28 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let m = pointer_mutation(&h, a, bb, two, 0, cb);
         b.with_mut(vm, |_vm, s| s.on_pointer_up = m)
     });
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_on_context_menu", (Opaque<PiSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, cb: OpaqueRef| {
-        let (a, bb, two) = b.with(|s| (s.id_a, s.id_b, s.two_ids))?;
-        let m = pointer_mutation(&h, a, bb, two, 2, cb);
-        b.with_mut(vm, |_vm, s| s.on_context_menu = m)
+    // The M1 mutation surface: the pad stores the SEALED mutation (the
+    // atom id is the crossing — the closure the flush's mutation pass
+    // invokes carries the kit adapter + the ctx wiring).
+    rut_vm::pkg_fn!(pkg, "pi_on_click", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+        let m = MutationHandle::<PointerInteractEvent>::new(crate::core::rut_runtime::mutation_of(atom));
+        b.with_mut(vm, |_vm, s| s.on_click = Some(m))
+    });
+    rut_vm::pkg_fn!(pkg, "pi_mut_down", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+        let m = MutationHandle::<PointerInteractEvent>::new(crate::core::rut_runtime::mutation_of(atom));
+        b.with_mut(vm, |_vm, s| s.on_pointer_down = Some(m))
+    });
+    rut_vm::pkg_fn!(pkg, "pi_mut_move", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+        let m = MutationHandle::<PointerInteractEvent>::new(crate::core::rut_runtime::mutation_of(atom));
+        b.with_mut(vm, |_vm, s| s.on_pointer_move = Some(m))
+    });
+    rut_vm::pkg_fn!(pkg, "pi_mut_up", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+        let m = MutationHandle::<PointerInteractEvent>::new(crate::core::rut_runtime::mutation_of(atom));
+        b.with_mut(vm, |_vm, s| s.on_pointer_up = Some(m))
+    });
+    rut_vm::pkg_fn!(pkg, "pi_on_context_menu", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+        let m = MutationHandle::<PointerInteractEvent>::new(crate::core::rut_runtime::mutation_of(atom));
+        b.with_mut(vm, |_vm, s| s.on_context_menu = Some(m))
     });
     rut_vm::pkg_fn!(pkg, "pi_behavior", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.behavior = Some(Val::Static(behavior_of(v))))

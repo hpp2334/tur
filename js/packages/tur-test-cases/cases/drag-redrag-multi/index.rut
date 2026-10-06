@@ -27,9 +27,9 @@ entry fn start() -> u64 {
     // Tile 0 at (10, 10); tile 1 at (150, 100). The tile index rides the
     // gesture's second id slot (100 + index).
     let b0 = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key("tile-0");
-    stack.child(Positioned().left(10.0).top(10.0).child(PointerInteract().ids(0, 100).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b0.build()).build()).build());
+    stack.child(Positioned().left(10.0).top(10.0).child(PointerInteract().ids(0, 100).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b0.build()).build()).build());
     let b1 = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key("tile-1");
-    stack.child(Positioned().left(150.0).top(100.0).child(PointerInteract().ids(1, 101).on_click2(g_down).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b1.build()).build()).build());
+    stack.child(Positioned().left(150.0).top(100.0).child(PointerInteract().ids(1, 101).on_down2(g_down).on_move2(g_move).on_up2(g_up).query_key("rut/gesture").child(b1.build()).build()).build());
 
     // Transcript readouts.
     let t0t = Text().text_bound(t0).query_key("tile-events-0");

@@ -17,7 +17,7 @@ entry fn start() -> u64 {
         .padding(4.0)
         .query_key("switch")
         .child(thumb(on));
-    col.child(PointerInteract().id(on).on_click(b_toggle).query_key("rut/gesture").child(track.build()).build());
+    col.child(PointerInteract().id(on).on_tap(b_toggle).query_key("rut/gesture").child(track.build()).build());
     mount(SizedBox(400.0, 200.0).child(col.build()).build());
     return on;
 }
@@ -37,7 +37,7 @@ fn thumb_align() -> u64 {
     return 3;
 }
 
-fn b_toggle(_a: u64, _lx: f64, _ly: f64, _gx: f64, _gy: f64, _btn: u64) {
+fn b_toggle(_a: u64, _b: u64, _n: f64) {
     let on = stf_take(K_ON) as u64;
     rs_set_bool(on, !rs_get_bool(on));
     stf_put(K_ON, on as f64);

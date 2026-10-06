@@ -12,16 +12,18 @@
 // lowering), and CHAIN it: `let c = X().prop(..).child(..);` — never
 // `let mut c` + `c.prop(..);` statement runs.
 //
-// Callback law: every callback-taking method takes a FN VALUE — a named
-// `fn` reference or an anonymous fn literal (`fn(a: u64, _b: u64) { … }`,
-// captures legal). The kit seals the value into an opaque box
-// (`opaque(cb)`) rut-side and hands the ROW only the box; the engine's
-// intent drain fires it back through the infra dispatch entries below
-// (`__tur_cb_*` — they recover the fn with `opaque.downcast` and call
-// it). The arity/type check happens at THIS boundary, at compile time —
-// a callback whose signature doesn't match its pad is a compile error,
-// never a runtime name lookup. Nothing callable crosses the boundary as
-// a string. `View` is the user-facing alias for built views.
+// Handler law: GESTURE handlers are MUTATIONS over the MutationCtx —
+// `on_click(mutate(fn (ctx: MutationCtx) { ctx.set(x, v); }))` (the
+// triad: source / derive / mutate, M1). The kit seals the user fn into an
+// opaque box and hands the ROW only the box; the flush's mutation pass
+// invokes it through the dispatch entries below with a fresh ctx (queued
+// — never synchronously inside the gesture dispatch). The remaining
+// fn-value callback props (on_tap / on_input / on_enter …) keep the
+// sealing law — a named `fn` or anonymous literal, sealed into an opaque
+// box, fired back through the dispatch entries — until the M2 sweep
+// converts them to their typed events. The arity/type check happens at
+// THIS boundary, at compile time. Nothing callable crosses the boundary
+// as a string. `View` is the user-facing alias for built views.
 //
 // Reactive bindings are methods (`text_bound(atom)`, `color_bound(atom)`),
 // not constructor variants. Flags are the `u64` consts the `tur` pkg
@@ -89,7 +91,17 @@ use tur::{
   va_app_atom, va_bind, va_build,
   va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
   va_source_handle,
+  // M1 — the mutation rail (source / derive / mutate + the ctx rows).
+  ctx_bridge, ctx_get_bool, ctx_get_f64, ctx_get_str, ctx_run_f64, ctx_run_nil, ctx_set_bool,
+  ctx_set_f64, ctx_set_str, derive_seal, mutate_seal, pi_mut_down, pi_mut_move, pi_mut_up,
+  rs_set_f64,
 };
+
+// The async launch rail's typed surface (the `futures` package rides the
+// same run chain the kit compiles in).
+use core::{ Future };
+use futures::{ launch_future };
+
 
 // The user-facing view alias: built views cross kit signatures as `View`
 // (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
@@ -184,6 +196,332 @@ pub fn rs_derive2(fmt: fn(f64, f64) -> str, da: u64, db: u64) -> u64 {
 // the click shape); `report` crosses as the callback's first argument.
 pub fn rs_watch(atom: u64, cb: fn(u64, u64, f64), report: u64) -> opaque {
   return rs_watch_cb(atom, opaque(cb), report);
+}
+
+// ---- the mutation rail (M1): source / derive / mutate + the ctxs ---------
+//
+// Boa's reactive triad, typed: `source(v)` mints a `Readable<T>` (the
+// typed handle — sources and derives are ONE class, boa's
+// sources-are-readables), `derive(fn (ctx: DeriveCtx) -> T)` mints a
+// derived `Readable<T>` (dependency auto-tracking through the ctx
+// reads), and `mutate(fn (ctx: MutationCtx) { ... })` mints the queued
+// mutation the gesture pads store — invoked at the flush's mutation pass
+// with a fresh `MutationCtx`, never synchronously inside the gesture
+// dispatch.
+//
+// The reads and writes spell PER TYPE (`ctx.get_f64(n)` / `ctx.set_f64(n,
+// v)` — the engine's rows are typed, and rut 442a979 cannot route a
+// generic body through typed rows: `opaque.downcast<T>` does not
+// monomorphize, and method-generic args do not infer). The mints are per
+// kind for the same law (`source_f64(0.0)` / `derive_str(fn …)` — the
+// kind rides the name, exactly like the engine's own `rs_source_*` rows).
+// `ctx.run(m, nil)` composes for side effect and `ctx.run_f64(m, a)`
+// carries a typed arg — both QUEUE the invocation (rut's no-reentrancy
+// law: a mutation body runs inside a face call, so a nested synchronous
+// invocation would re-borrow the VM; composition reads its effects
+// through sources). Writing a derived atom is a checked error (the
+// ctx_set_* rows reject it through the error rail) — the write-side law.
+
+// The derive-seal tags (the dispatch entry's return kind) and the
+// mutate-seal tags (the payload shape) — mirroring
+// `rut_runtime::seal_tags` (one law, two spellings).
+let TAG_F64: u64 = 0;
+let TAG_STR: u64 = 1;
+let TAG_BOOL: u64 = 2;
+let SEAL_NIL: u64 = 0;
+let SEAL_PTR: u64 = 1;
+let SEAL_F64: u64 = 2;
+
+// The typed handle: `h` is the store-bridge marker the ctx rows route
+// through; `atom` is the raw id. `source` mints it writable, `derive`
+// derived.
+pub class Readable<T> {
+  h: opaque;
+  atom: u64;
+}
+
+impl<T> Readable<T> {
+  [constructor] pub fn of(h: opaque, atom: u64) -> Self {
+    return Self { h: h, atom: atom };
+  }
+  // The raw atom id — the engine rows' crossing (bound props ride it
+  // until M2 unifies the props over Readable).
+  pub fn atom_id(self) -> u64 {
+    return self.atom;
+  }
+}
+
+// The typed mutation handle (`mutate` mints it; `ctx.run` composes).
+pub class Mutation<A, R> {
+  atom: u64;
+}
+
+impl<A, R> Mutation<A, R> {
+  [constructor] pub fn of(atom: u64) -> Self {
+    return Self { atom: atom };
+  }
+  pub fn atom_id(self) -> u64 {
+    return self.atom;
+  }
+}
+
+// The mutations' ctx (boa's `StoreCtx`): read, write, compose — per type.
+pub class MutationCtx {
+  h: opaque;
+}
+
+impl MutationCtx {
+  [constructor] pub fn over(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn get_f64(self, r: Readable<f64>) -> f64 {
+    return ctx_get_f64(self.h, r.atom);
+  }
+  pub fn get_str(self, r: Readable<str>) -> str {
+    return ctx_get_str(self.h, r.atom);
+  }
+  pub fn get_bool(self, r: Readable<bool>) -> bool {
+    return ctx_get_bool(self.h, r.atom);
+  }
+  pub fn set_f64(self, s: Readable<f64>, v: f64) {
+    ctx_set_f64(self.h, s.atom, v);
+  }
+  pub fn set_str(self, s: Readable<str>, v: str) {
+    ctx_set_str(self.h, s.atom, v);
+  }
+  pub fn set_bool(self, s: Readable<bool>, v: bool) {
+    ctx_set_bool(self.h, s.atom, v);
+  }
+  // Composition for side effect (boa's `ctx.set(navigateToRoot)` shape —
+  // the nil arg is spelled at the call site: `ctx.run(m, nil)`). The
+  // composed invocation QUEUES — a mutation body runs inside a face call
+  // (the VM is mid-call), so rut's no-reentrancy law defers the nested
+  // invocation to the next mutation pass.
+  pub fn run(self, m: Mutation<nil, nil>, a: nil) {
+    let _ = a;
+    ctx_run_nil(self.h, m.atom);
+  }
+  // Typed-arg composition, same queue law: the arg crosses as the
+  // invocation's payload; the target's return lands in the flush's
+  // invocation result (composition reads effects through sources — there
+  // is no synchronous return across the VM boundary).
+  pub fn run_f64(self, m: Mutation<f64, f64>, a: f64) {
+    ctx_run_f64(self.h, m.atom, a);
+  }
+}
+
+// The derives' ctx (boa's `ReadonlyStoreCtx`): reads only.
+pub class DeriveCtx {
+  h: opaque;
+}
+
+impl DeriveCtx {
+  [constructor] pub fn over(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn get_f64(self, r: Readable<f64>) -> f64 {
+    return ctx_get_f64(self.h, r.atom);
+  }
+  pub fn get_str(self, r: Readable<str>) -> str {
+    return ctx_get_str(self.h, r.atom);
+  }
+  pub fn get_bool(self, r: Readable<bool>) -> bool {
+    return ctx_get_bool(self.h, r.atom);
+  }
+}
+
+// The task-scoped ctx: a suspended task's own handle — the mutation
+// pass's ctx is pass-scoped and must never leak into a task, so `spawn`
+// call sites mint one. Its `get`/`set` work across `await`s; composition
+// is deferred (the M1 spike: a task spawns a fresh task instead).
+pub class TaskCtx {
+  m: MutationCtx;
+}
+
+impl TaskCtx {
+  [constructor] pub fn mint() -> Self {
+    return Self { m: MutationCtx.over(ctx_bridge()) };
+  }
+  pub fn get_f64(self, r: Readable<f64>) -> f64 {
+    return self.m.get_f64(r);
+  }
+  pub fn get_str(self, r: Readable<str>) -> str {
+    return self.m.get_str(r);
+  }
+  pub fn get_bool(self, r: Readable<bool>) -> bool {
+    return self.m.get_bool(r);
+  }
+  pub fn set_f64(self, s: Readable<f64>, v: f64) {
+    self.m.set_f64(s, v);
+  }
+  pub fn set_str(self, s: Readable<str>, v: str) {
+    self.m.set_str(s, v);
+  }
+  pub fn set_bool(self, s: Readable<bool>, v: bool) {
+    self.m.set_bool(s, v);
+  }
+}
+
+// Mint a source atom (`boa: source(...)`). The mints are PER KIND with
+// concrete signatures — rut 442a979's checker cannot resolve a
+// generic-class return through a call-site binding (the generic form
+// loses the method table and the kind inference), so the kind rides the
+// name, exactly like the engine's own `rs_source_*` rows.
+pub fn source_f64(v: f64) -> Readable<f64> {
+  let atom = rs_source_f64();
+  rs_set_f64(atom, v);
+  return Readable<f64> { h: ctx_bridge(), atom: atom };
+}
+
+pub fn source_str(v: str) -> Readable<str> {
+  return Readable<str> { h: ctx_bridge(), atom: rs_source_str(v) };
+}
+
+pub fn source_bool(v: bool) -> Readable<bool> {
+  return Readable<bool> { h: ctx_bridge(), atom: rs_source_bool(v) };
+}
+
+// Mint a derived atom whose fn reads through the ctx — dependencies
+// auto-track (boa's `derive((ctx) => ctx.get(x$))`). Per kind, same law.
+pub fn derive_str(f: fn(DeriveCtx) -> str) -> Readable<str> {
+  return Readable<str> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_STR) };
+}
+
+pub fn derive_f64(f: fn(DeriveCtx) -> f64) -> Readable<f64> {
+  return Readable<f64> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_F64) };
+}
+
+pub fn derive_bool(f: fn(DeriveCtx) -> bool) -> Readable<bool> {
+  return Readable<bool> { h: ctx_bridge(), atom: derive_seal(opaque(f), TAG_BOOL) };
+}
+
+// Call-site law: a minted readable whose METHODS are used (atom_id …)
+// binds with an explicit annotation (`let n: Readable<f64> =
+// source_f64(0.0);`) — rut 442a979's checker resolves generic-class
+// methods on a binding only when the binding spells the type. Reads and
+// writes through the ctx methods need no annotation (the value crosses
+// as a typed parameter).
+
+
+// Mint a nil-arg mutation — the click surface (boa's
+// `onClick(mutate((ctx) => ...))`). The engine invokes the fn at the
+// flush's mutation pass with a fresh `MutationCtx`.
+pub fn mutate(f: fn(MutationCtx)) -> Mutation<nil, nil> {
+  return Mutation<nil, nil>.of(mutate_seal(opaque(f), SEAL_NIL));
+}
+
+// The event-arg mutation — the drag surface. Fn types are arity-strict
+// (rut has no overloads), so the event arity carries its own name; the
+// M1 event is the typed `PointerEvent`.
+pub fn mutate_ev(f: fn(MutationCtx, PointerEvent)) -> Mutation<PointerEvent, nil> {
+  return Mutation<PointerEvent, nil>.of(mutate_seal(opaque(f), SEAL_PTR));
+}
+
+// The typed-arg / typed-ret mutation (`ctx.run_f64`'s target).
+pub fn mutate_f64(f: fn(MutationCtx, f64) -> f64) -> Mutation<f64, f64> {
+  return Mutation<f64, f64>.of(mutate_seal(opaque(f), SEAL_F64));
+}
+
+// The async launch rail: the future binds its handle params at the launch
+// site (`spawn(work(TaskCtx.mint(), src, ...))` — async fns have no fn
+// values in this build, so the launch IS the call) and the ctx is
+// task-scoped (minted at the launch site — `TaskCtx.mint()`).
+pub class Task {
+  h: ?opaque;
+}
+
+impl Task {
+  [constructor] pub fn of(h: ?opaque) -> Self {
+    return Self { h: h };
+  }
+}
+
+pub fn spawn<T>(f: Future<T>) -> Task {
+  return Task.of(opaque(launch_future<T>(f)));
+}
+
+// ---- the event value prelude (M1: the gesture family) ---------------------
+
+enum MouseButton {
+  Left,
+  Right,
+  Middle,
+  None,
+}
+
+// The engine's button crossing code → the enum (0 primary, 1 middle,
+// 2 the context menu's right button).
+pub fn mouse_button_of(v: u64) -> MouseButton {
+  if (v == 1) {
+    return MouseButton.Middle;
+  }
+  if (v == 2) {
+    return MouseButton.Right;
+  }
+  return MouseButton.Left;
+}
+
+class Point {
+  x: f64;
+  y: f64;
+}
+
+impl Point {
+  [constructor] pub fn at(x: f64, y: f64) -> Self {
+    return Self { x: x, y: y };
+  }
+}
+
+// One typed event for the whole gesture family (boa's single
+// `PointerInteractEvent`): nested Points, reads spell `ev.global.x`.
+class PointerEvent {
+  local: Point;
+  global: Point;
+  button: MouseButton;
+}
+
+impl PointerEvent {
+  [constructor] pub fn of(local: Point, global: Point, button: MouseButton) -> Self {
+    return Self { local: local, global: global, button: button };
+  }
+}
+
+// ---- the mutation rail's dispatch entries (the fire half) -----------------
+//
+// The sealed mutation's Rust closure face-calls these with the sealed fn
+// box + the bridge marker + the payload; the entry constructs the ctx
+// (+ the typed event) — rut-side, per the layering law — and calls the
+// user's typed fn. One entry per payload shape; the arities are the
+// mutation pass's contract (`mutation_entries` in rut_runtime).
+
+entry fn __tur_cb_mnil(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx)>(cb);
+  f(MutationCtx.over(h));
+}
+
+entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(MutationCtx, PointerEvent)>(cb);
+  f(MutationCtx.over(h), PointerEvent.of(Point.at(lx, ly), Point.at(gx, gy), mouse_button_of(btn)));
+}
+
+entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) -> f64 {
+  let f = opaque.downcast<fn(MutationCtx, f64) -> f64>(cb);
+  return f(MutationCtx.over(h), a);
+}
+
+entry fn __tur_cb_derive_f64(cb: opaque, h: opaque) -> f64 {
+  let f = opaque.downcast<fn(DeriveCtx) -> f64>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_str(cb: opaque, h: opaque) -> str {
+  let f = opaque.downcast<fn(DeriveCtx) -> str>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_bool(cb: opaque, h: opaque) -> bool {
+  let f = opaque.downcast<fn(DeriveCtx) -> bool>(cb);
+  return f(DeriveCtx.over(h));
 }
 
 // ---- flex (Column / Row) ------------------------------------------------
@@ -728,12 +1066,36 @@ impl PointerInteract {
     pi_ids(self.spec, a, b);
     return self;
   }
-  pub fn on_tap(mut self, cb: fn(u64, u64, f64)) -> Self {
-    pi_on_tap(self.spec, opaque(cb));
+  // ---- the mutation surface (boa's names, snake_cased) ------------------
+  //
+  // Handlers are MUTATIONS over the MutationCtx (`on_click(mutate(...))`);
+  // the gesture dispatch enqueues the invocation and the flush's mutation
+  // pass invokes the fn with a fresh ctx — never synchronously. State
+  // binds by closure (the mutation captures its sources), events flow by
+  // the typed `PointerEvent` argument — no id args.
+  pub fn on_click(mut self, m: Mutation<nil, nil>) -> Self {
+    pi_on_click(self.spec, m.atom);
     return self;
   }
-  pub fn on_click(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_click(self.spec, opaque(cb));
+  pub fn on_pointer_down(mut self, m: Mutation<PointerEvent, nil>) -> Self {
+    pi_mut_down(self.spec, m.atom);
+    return self;
+  }
+  pub fn on_pointer_move(mut self, m: Mutation<PointerEvent, nil>) -> Self {
+    pi_mut_move(self.spec, m.atom);
+    return self;
+  }
+  pub fn on_pointer_up(mut self, m: Mutation<PointerEvent, nil>) -> Self {
+    pi_mut_up(self.spec, m.atom);
+    return self;
+  }
+  pub fn on_context_menu(mut self, m: Mutation<PointerEvent, nil>) -> Self {
+    pi_on_context_menu(self.spec, m.atom);
+    return self;
+  }
+  // ---- the legacy fn-value rails (M2 deletes them with the corpus sweep)
+  pub fn on_tap(mut self, cb: fn(u64, u64, f64)) -> Self {
+    pi_on_tap(self.spec, opaque(cb));
     return self;
   }
   pub fn on_down(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
@@ -748,17 +1110,9 @@ impl PointerInteract {
     pi_on_up(self.spec, opaque(cb));
     return self;
   }
-  pub fn on_context_menu(mut self, cb: fn(u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_context_menu(self.spec, opaque(cb));
-    return self;
-  }
   // The two-id twins: over `.ids(a, b)` the pointer callbacks deliver
   // `(a, b, lx, ly, gx, gy, btn)` (taps stay the `(a, b, seq)` click
   // shape either way — use `on_tap` for that).
-  pub fn on_click2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_click(self.spec, opaque(cb));
-    return self;
-  }
   pub fn on_down2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
     pi_on_down(self.spec, opaque(cb));
     return self;
@@ -769,10 +1123,6 @@ impl PointerInteract {
   }
   pub fn on_up2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
     pi_on_up(self.spec, opaque(cb));
-    return self;
-  }
-  pub fn on_context_menu2(mut self, cb: fn(u64, u64, f64, f64, f64, f64, u64)) -> Self {
-    pi_on_context_menu(self.spec, opaque(cb));
     return self;
   }
   pub fn behavior(mut self, v: u64) -> Self {

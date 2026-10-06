@@ -107,54 +107,56 @@ impl ElementTrace for PointerInteractElement {
 
 impl ElementOnGesture for PointerInteractElement {
     fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
+        // The button crossing code (0 primary, 1 middle, 2 the secondary/
+        // right button — the `MouseButton` kit enum's decode).
+        let button_of = |button: crate::core::layout::MouseButton| match button {
+            crate::core::layout::MouseButton::Middle => 1,
+            crate::core::layout::MouseButton::Right => 2,
+            _ => 0,
+        };
         let (mutation, payload) = match event {
-            ComposedGestureEvent::PointerDown { local, global, .. } => {
+            ComposedGestureEvent::PointerDown { local, global, button, .. } => {
                 let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent {
                     local: *local,
                     global: *global,
+                    button: button_of(*button),
                 };
                 (m, ev)
             }
-            ComposedGestureEvent::PointerDoubleDown { local, global, .. }
-            | ComposedGestureEvent::PointerTripleDown { local, global, .. } => {
+            ComposedGestureEvent::PointerDoubleDown { local, global, button, .. }
+            | ComposedGestureEvent::PointerTripleDown { local, global, button, .. } => {
                 let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent {
                     local: *local,
                     global: *global,
+                    button: button_of(*button),
                 };
                 (m, ev)
             }
             ComposedGestureEvent::PointerMove { local, global, .. } => {
                 let m = self.view.on_pointer_move;
-                let ev = PointerInteractEvent {
-                    local: *local,
-                    global: *global,
-                };
+                let ev = PointerInteractEvent { local: *local, global: *global, button: 0 };
                 (m, ev)
             }
-            ComposedGestureEvent::PointerUp { local, global, .. } => {
+            ComposedGestureEvent::PointerUp { local, global, button, .. } => {
                 let m = self.view.on_pointer_up;
                 let ev = PointerInteractEvent {
                     local: *local,
                     global: *global,
+                    button: button_of(*button),
                 };
                 (m, ev)
             }
             ComposedGestureEvent::Click { local, global, .. } => {
                 let m = self.view.on_click;
-                let ev = PointerInteractEvent {
-                    local: *local,
-                    global: *global,
-                };
+                let ev = PointerInteractEvent { local: *local, global: *global, button: 0 };
                 (m, ev)
             }
             ComposedGestureEvent::ContextMenu { local, global, .. } => {
                 let m = self.view.on_context_menu;
-                let ev = PointerInteractEvent {
-                    local: *local,
-                    global: *global,
-                };
+                // The context menu gesture IS the secondary button.
+                let ev = PointerInteractEvent { local: *local, global: *global, button: 2 };
                 (m, ev)
             }
         };
@@ -166,24 +168,28 @@ impl ElementOnGesture for PointerInteractElement {
 
 // ---------------------------------------------------------------------------
 // PointerInteractEvent — callback argument for click / drag events.
-// Carries both local (element-relative) and global (canvas-relative) coords.
+// Carries both local (element-relative) and global (canvas-relative) coords
+// plus the button crossing code (0 primary; 2 the context menu's right
+// button — the `MouseButton` kit enum's decode).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct PointerInteractEvent {
     pub local: Offset,
     pub global: Offset,
+    pub button: u64,
 }
 
 impl MutationPayload for PointerInteractEvent {
     /// Native crossing (the rut rail): `[local.x, local.y, global.x,
-    /// global.y]` — realm-free.
+    /// global.y, button]` — realm-free.
     fn to_value_args(&self) -> Vec<Value> {
         vec![
             Value::Num(self.local.x),
             Value::Num(self.local.y),
             Value::Num(self.global.x),
             Value::Num(self.global.y),
+            Value::Num(self.button as f64),
         ]
     }
 }

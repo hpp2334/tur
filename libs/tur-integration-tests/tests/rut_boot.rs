@@ -848,20 +848,33 @@ fn rut_container_full_surface_and_sizedbox() {
 
 /// A gesture pad and a focusable box, both reporting through the intent
 /// rail. Both ids ARE the label atom (the callbacks' first argument), so
-/// every callback appends to the same transcript.
+/// every callback appends to the same transcript. The context menu rides
+/// the M1 mutation rail (`mutate_ev` over the typed `PointerEvent`).
 const GESTURE_RUT: &str = r#"
 use tur::{ focus_request, mount, rs_get_str, rs_set_str, rs_source_str };
-use tur_kit::{ Column, Focusable, PointerInteract, Text };
+use tur_kit::{
+    Column, Focusable, MouseButton, MutationCtx, PointerEvent, PointerInteract, Text, mutate_ev,
+};
 
 
 entry fn start() -> u64 {
     let label = rs_source_str("");
 
-    let pad = PointerInteract().id(label).on_click(g_click).on_down(g_down).on_move(g_move).on_up(g_up).on_context_menu(g_menu).query_key("rut/gesture").child(Text().text("pad").build()).build();
+    let pad = PointerInteract().id(label).on_tap(g_tap).on_down(g_down).on_move(g_move).on_up(g_up).query_key("rut/gesture").child(Text().text("pad").build()).build();
+    let menu = PointerInteract().on_context_menu(mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+        let mut b = "other";
+        if (ev.button == MouseButton.Right) {
+            b = "right";
+        }
+        let t = rs_get_str(label);
+        rs_set_str(label, f"{t}|menu-{b}");
+        let _ = ctx;
+    })).query_key("rut/menu").child(Text().text("menu").build()).build();
     let foc = Focusable().on_key_down(f_key, label).on_focus(f_focus, label).on_blur(f_blur, label).child(Text().text("focus me").build()).build();
 
     let col = Column()
         .child(pad)
+        .child(menu)
         .child(foc)
         .child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
@@ -870,6 +883,10 @@ entry fn start() -> u64 {
 
 fn say(label: u64, line: str) {
     rs_set_str(label, f"{rs_get_str(label)}|{line}");
+}
+
+fn g_tap(a: u64, _b: u64, n: f64) {
+    say(a, f"tap {n as u64}");
 }
 
 fn g_down(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
@@ -882,14 +899,6 @@ fn g_move(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
 
 fn g_up(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
     say(id, f"up {lx as u64},{ly as u64} g{gx as u64},{gy as u64} b{btn}");
-}
-
-fn g_click(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
-    say(id, f"click {lx as u64},{ly as u64} b{btn}");
-}
-
-fn g_menu(id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
-    say(id, f"menu b{btn}");
 }
 
 fn f_key(id: u64, key: str, code: str, mods: u64, kind: u64) {
@@ -921,11 +930,11 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     let root = app.dev_tool_element_tree().unwrap();
     let column = app.dev_tool_get_element(root.children[0]).unwrap();
     let pad = app.dev_tool_get_element(column.children[0]).unwrap();
-    let foc = app.dev_tool_get_element(column.children[1]).unwrap();
+    let foc = app.dev_tool_get_element(column.children[2]).unwrap();
 
     // Full pointer sequence over the pad: down → move → up, plus the
-    // synthesized tap-click. Local coordinates equal global minus the
-    // pad's origin; each intent carries all four numbers.
+    // synthesized tap. Local coordinates equal global minus the pad's
+    // origin; each intent carries all four numbers.
     let (px, py) = (pad.absolute.0 + 10.0, pad.absolute.1 + 6.0);
     app.pointer_down(px, py);
     app.pointer_move(px + 5.0, py + 3.0);
@@ -946,23 +955,29 @@ fn rut_gesture_focus_key_payloads_realm_free() {
             ))
             && transcript.contains("|move 15,9 g")
             && transcript.contains("|up 15,9 g")
-            && transcript.contains("|click 15,9 b0"),
+            && transcript.contains("|tap 1"),
         "pointer intents carried the full position record: {transcript}"
     );
 
-    // Right-click on the pad → the context-menu intent (button 2).
-    app.right_click(px + 4.0, py + 4.0);
+    // Right-click on the menu pad → the mutation rail's context-menu
+    // invocation; the typed event decodes the right button.
+    let menu = app.dev_tool_get_element(column.children[1]).unwrap();
+    let (mx, my) = (
+        menu.absolute.0 + menu.size.0 / 2.0,
+        menu.absolute.1 + menu.size.1 / 2.0,
+    );
+    app.right_click(mx, my);
     app.wait_for_timeout(Duration::ZERO);
     assert!(
-        rut_bound_text(&app).contains("|menu b2"),
-        "the context-menu intent fired: {}",
+        rut_bound_text(&app).contains("|menu-right"),
+        "the context-menu mutation fired: {}",
         rut_bound_text(&app)
     );
 
     // Programmatic focus (the entry rail drives `focus_request` with the
     // focusable's tree node id), then a shifted keydown: the key record
     // crosses (id, key, code, mods, kind) realm-free.
-    let foc_node = column.children[1].as_u64();
+    let foc_node = column.children[2].as_u64();
     app.call_rut_entry("do_focus", foc_node, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert!(

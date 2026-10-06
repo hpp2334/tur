@@ -40,6 +40,16 @@ pub trait MutationPayload: 'static {
     }
 }
 
+/// A pre-encoded native-arg payload — the ctx.run rail's crossing (the
+/// composition queues the invocation with its args).
+pub struct ValueArgs(pub Vec<Value>);
+
+impl MutationPayload for ValueArgs {
+    fn to_value_args(&self) -> Vec<Value> {
+        self.0.clone()
+    }
+}
+
 impl Default for PendingMutationInvocationQueue {
     fn default() -> Self {
         Self::new()
