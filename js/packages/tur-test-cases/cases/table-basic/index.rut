@@ -1,14 +1,15 @@
 // table-basic: the Table element showcase (the boa design) — shared
-// column geometry (a fixed 150px name column, a flex-1 notes column, a
+// column geometry (a 150px extent name column, a flex-1 notes column, a
 // flex-2 min-120 distance column) over 6 planets, a
 // PLANET/NOTES/DISTANCE header, alternating stripes and notes that WRAP
 // in the flex column.
 //
-// Sanctioned-surface note: the kit's Table class exposes no stripe/divider
-// rows, so the stripes are cell-painted (odd rows tint their cells) — the
-// same look, authored case-side. Row extents stay intrinsic so the
-// wrapped notes are never clipped. (Module lets are literals-only in this
-// build, so the planet data rides pipe-joined strings.)
+// The stripes are DECLARATIVE — `stripes(even, odd)` paints them from the
+// element itself (transparent even rows let the #0b1220 frame show
+// through, the same look the cell-painted adaptation used to author).
+// Row extents stay intrinsic so the wrapped notes are never clipped.
+// (Module lets are literals-only in this build, so the planet data rides
+// pipe-joined strings.)
 use tur::{ mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
 use tur_kit::{ Container, Expanded, Table, TableCols, Text };
 
@@ -32,16 +33,17 @@ entry fn start() {
     }
     let rows_atom = rs_source_value(rows);
 
-    // Per-column geometry: fixed 150 / flex 1 / flex 2 (min 120) — the
+    // Per-column geometry: extent 150 / flex 1 / flex 2 (min 120) — the
     // widths resolve against the table width once, and the header + every
     // row lay their cells on the same boundaries.
-    let cols = TableCols().fixed(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
+    let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
 
     let table = Table()
         .columns(cols)
         .rows_atom(rows_atom)
         .header_builder(header_cell)
         .row_builder(planet_cell)
+        .stripes(0x00000000u64, STRIPE)
         .query_key("table-basic")
         .build();
 
@@ -81,8 +83,8 @@ fn header_cell(col: u64) -> opaque {
         .build();
 }
 
-// One body cell (called per (row, col)): the striped padded field. Odd
-// rows tint their cell — the case-side stripe.
+// One body cell (called per (row, col)): the padded field. The stripes
+// are the element's (`.stripes` above) — cells stay untinted.
 fn planet_cell(row: u64, col: u64) -> opaque {
     let mut text = "";
     if (col == 0) {
@@ -92,9 +94,5 @@ fn planet_cell(row: u64, col: u64) -> opaque {
     } else {
         text = slot(P_DIST, row);
     }
-    let label = Text().text(text).font_size(14.0).color(CELL_FG).build();
-    if (row % 2 == 1) {
-        return Container().padding(8.0).color(STRIPE).child(label).build();
-    }
-    return Container().padding(8.0).child(label).build();
+    return Container().padding(8.0).child(Text().text(text).font_size(14.0).color(CELL_FG).build()).build();
 }

@@ -81,10 +81,11 @@ use tur::{
   span_add, spans_new, stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
   switch_build, switch_case, switch_case_build, switch_fallback, switch_new, switch_qkey,
   switch_value_derived,
-  switch_value_source, table_build, table_columns, table_header_builder, table_new, table_qkey,
-  table_row_builder, table_rows_atom, text_bind, text_bind_derived, text_build, text_clip,
-  text_color, text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey,
-  text_selectable, text_size, text_spans, text_text, text_weight, va_app_atom, va_bind, va_build,
+  switch_value_source, table_build, table_col_extent, table_columns, table_header_builder,
+  table_new, table_qkey, table_row_builder, table_rows_atom, table_stripe, text_bind,
+  text_bind_derived, text_build, text_clip, text_color, text_ellipsis, text_max_lines, text_new,
+  text_overflow_visible, text_qkey, text_selectable, text_size, text_spans, text_text, text_weight,
+  va_app_atom, va_bind, va_build,
   va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
   va_source_handle,
 };
@@ -1011,6 +1012,13 @@ impl TableCols {
     col_flex(self.spec, f, min);
     return self;
   }
+  // The extent-vocabulary twin of `fixed` (the grid `.main_extent` /
+  // lazy `.item_extent` naming): appends a column whose extent (fixed
+  // main-axis size) is w — it takes no flex share.
+  pub fn extent(mut self, w: f64) -> Self {
+    table_col_extent(self.spec, w);
+    return self;
+  }
 }
 
 class Table {
@@ -1035,6 +1043,13 @@ impl Table {
   }
   pub fn header_builder(mut self, cb: fn(u64) -> View) -> Self {
     table_header_builder(self.spec, opaque(cb));
+    return self;
+  }
+  // Declarative row stripes painted by the element itself (never the
+  // cells): `even` fills even body rows, `odd` fills odd ones. Pass
+  // 0x00000000 for "keep the frame showing through" on a parity.
+  pub fn stripes(mut self, even: u64, odd: u64) -> Self {
+    table_stripe(self.spec, even, odd);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

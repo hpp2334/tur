@@ -54,6 +54,7 @@ impl ElementLayout for TableElement {
             .read_val_opt(self.view.row_spacing.as_ref())
             .unwrap_or(0.0);
         self.painting.stripe = cx.read_val_opt(self.view.stripe_color.as_ref());
+        self.painting.stripe_even = cx.read_val_opt(self.view.stripe_even_color.as_ref());
         self.painting.divider = cx.read_val_opt(self.view.divider_color.as_ref());
         self.painting.divider_thickness = cx
             .read_val_opt(self.view.divider_thickness.as_ref())

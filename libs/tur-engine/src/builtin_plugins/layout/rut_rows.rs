@@ -131,11 +131,13 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("table_rows_atom", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("table_row_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("table_header_builder", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        row("table_stripe", vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL),
         row("table_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("table_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("cols_new", vec![], TY_OPAQUE),
         row("col_fixed", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("col_flex", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
+        row("table_col_extent", vec![TY_OPAQUE, TY_F64], TY_NIL),
     ]);
     let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
     cx.consts.extend(vec![
@@ -234,6 +236,8 @@ pub(crate) struct TableSpec {
     rows: Option<AnyReadable>,
     build: Option<RutEntryBuilder>,
     build_header: Option<RutEntryBuilder>,
+    stripe_color: Option<Val<Brush>>,
+    stripe_even_color: Option<Val<Brush>>,
     query_key: Option<Vec<String>>,
 }
 
@@ -579,6 +583,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             rows: None,
             build: None,
             build_header: None,
+            stripe_color: None,
+            stripe_even_color: None,
             query_key: None,
         };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
@@ -607,6 +613,15 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.build_header = Some(entry))
     });
+    // table_stripe — declarative row stripes painted by the ELEMENT per
+    // row parity (`i % 2`): `even` under even body rows, `odd` under odd.
+    // A fully-transparent color paints nothing (the frame shows through).
+    rut_vm::pkg_fn!(pkg, "table_stripe", (Opaque<TableSpec>, u64, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, even: u64, odd: u64| {
+        b.with_mut(vm, |_vm, s| {
+            s.stripe_even_color = Some(Val::Static(Brush::SolidColor(color_of(even))));
+            s.stripe_color = Some(Val::Static(Brush::SolidColor(color_of(odd))));
+        })
+    });
     rut_vm::pkg_fn!(pkg, "table_qkey", (Opaque<TableSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, key: &str| {
         let key = qkey_of(key);
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
@@ -620,6 +635,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 build,
                 s.build_header.clone(),
             );
+            view.stripe_color = s.stripe_color.clone();
+            view.stripe_even_color = s.stripe_even_color.clone();
             view.query_key = s.query_key.clone();
             Rc::new(view) as Rc<dyn View>
         })?;
@@ -642,6 +659,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                 flex: Some(flex),
                 min_width: if min > 0.0 { Some(min) } else { None },
             });
+        })
+    });
+    // table_col_extent — the extent-vocabulary twin of `col_fixed` (the
+    // grid_main_extent / lazy_item_extent naming): appends a column whose
+    // extent (fixed main-axis size) is `w`; it takes no flex share.
+    rut_vm::pkg_fn!(pkg, "table_col_extent", (Opaque<RutCols>, f64) -> (), |vm: &mut rut_vm::interp::Vm, c: Opaque<RutCols>, w: f64| {
+        c.with_mut(vm, |_vm, c| {
+            c.0.push(TableColumnDef { width: Some(w), flex: None, min_width: None });
         })
     });
 }

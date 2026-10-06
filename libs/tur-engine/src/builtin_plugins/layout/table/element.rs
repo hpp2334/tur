@@ -63,7 +63,12 @@ pub struct TableView {
     pub(crate) header_extent: Option<Val<f64>>,
     pub(crate) row_extent: Option<Val<f64>>,
     pub(crate) row_spacing: Option<Val<f64>>,
+    /// The odd-row stripe (`i % 2 == 1`).
     pub(crate) stripe_color: Option<Val<Brush>>,
+    /// The even-row stripe (`i % 2 == 0`) — the `table_stripe` row's other
+    /// half. A fully-transparent color paints nothing (the frame shows
+    /// through), the odd-only-zebra idiom.
+    pub(crate) stripe_even_color: Option<Val<Brush>>,
     pub(crate) divider_color: Option<Val<Brush>>,
     pub(crate) divider_thickness: Option<Val<f64>>,
     pub(crate) query_key: Option<Vec<String>>,
@@ -219,7 +224,10 @@ impl View for TableView {
 /// Resolved chrome values needed by paint, filled during layout.
 #[derive(Default, Clone)]
 pub(crate) struct TablePainting {
+    /// The odd-row stripe.
     pub(crate) stripe: Option<Brush>,
+    /// The even-row stripe.
+    pub(crate) stripe_even: Option<Brush>,
     pub(crate) divider: Option<Brush>,
     pub(crate) divider_thickness: f64,
     /// The painted chrome width (the table's own laid-out width).
@@ -273,6 +281,9 @@ impl ElementSubscribe for TableElement {
         if let Some(v) = self.view.stripe_color.as_ref() {
             cx.subscribe_val(v);
         }
+        if let Some(v) = self.view.stripe_even_color.as_ref() {
+            cx.subscribe_val(v);
+        }
         if let Some(v) = self.view.divider_color.as_ref() {
             cx.subscribe_val(v);
         }
@@ -324,6 +335,7 @@ impl TableView {
             row_extent: None,
             row_spacing: None,
             stripe_color: None,
+            stripe_even_color: None,
             divider_color: None,
             divider_thickness: None,
             query_key: Some(vec!["rut".to_string(), "table".to_string()]),

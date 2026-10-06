@@ -14,7 +14,9 @@ impl ElementRender for TableElement {
     // transparent; the cells' own contents absorb.
     fn hit_test_self(&self, _position: Offset, _layout: &ComputedLayout) -> HitTestSelf {
         let p = &self.painting;
-        let has_chrome = p.stripe.is_some() || p.divider.is_some() && p.divider_thickness > 0.0;
+        let has_chrome = p.stripe.is_some()
+            || p.stripe_even.is_some()
+            || p.divider.is_some() && p.divider_thickness > 0.0;
         if has_chrome {
             HitTestSelf::Opaque
         } else {
@@ -31,19 +33,21 @@ impl ElementRender for TableElement {
     ) {
         let p = &self.painting;
 
-        // Chrome first (under the cells): odd-row stripes, then the
+        // Chrome first (under the cells): per-parity row stripes, then the
         // horizontal dividers (under the header + between body rows).
-        if let Some(brush) = &p.stripe {
-            for (i, top) in self.row_tops.iter().enumerate() {
-                if i % 2 == 1 {
-                    let h = self.row_heights.get(i).copied().unwrap_or(0.0);
-                    if h > 0.0 {
-                        canvas.fill_geometry(
-                            Offset::new(0.0, *top),
-                            &Geometry::Rect(Size::new(p.width, h)),
-                            brush,
-                        );
-                    }
+        for (i, top) in self.row_tops.iter().enumerate() {
+            let brush = match i % 2 {
+                0 => p.stripe_even.as_ref(),
+                _ => p.stripe.as_ref(),
+            };
+            if let Some(brush) = brush {
+                let h = self.row_heights.get(i).copied().unwrap_or(0.0);
+                if h > 0.0 {
+                    canvas.fill_geometry(
+                        Offset::new(0.0, *top),
+                        &Geometry::Rect(Size::new(p.width, h)),
+                        brush,
+                    );
                 }
             }
         }
