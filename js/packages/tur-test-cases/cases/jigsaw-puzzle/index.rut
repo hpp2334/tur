@@ -169,9 +169,16 @@ entry fn start() -> u64 {
         }
     });
     let a_lift_end = mutate(fn (ctx: MutationCtx) {
-        let l = ctx.get_f64(p.last);
-        if (l >= 0.0) {
-            ctx.set_f64(p.sx[l as i32], 1.0);
+        // The controller end parks the scale EXACTLY at rest — but only
+        // for a piece that is no longer held (the reverse's completion).
+        // Boa's dragScale$ stays at LIFT_MAX for the whole grab: the
+        // forward ease completing mid-drag must not drop the piece back
+        // while the pointer is still down (the release settles it).
+        if (ctx.get_f64(p.drag) < 0.0) {
+            let l = ctx.get_f64(p.last);
+            if (l >= 0.0) {
+                ctx.set_f64(p.sx[l as i32], 1.0);
+            }
         }
     });
     let lift = anim_ctrl(180.0, "easeOut", 1, a_lift_tick, a_lift_end);

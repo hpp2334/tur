@@ -69,4 +69,21 @@ fn gallery_grid_stays_mounted_across_chip_rekeys() {
         "the grid survives the round-trip"
     );
     assert_eq!(app.query_text(&["gallery", "extent"]).as_deref(), Some("maxExtent 150"));
+
+    // A TILE TAP selects the tapped tile (the audit's gallery journey):
+    // tap tile 4 (row 1, col 1 of the 3-col 1:1 grid) — the subtitle's
+    // selection fragment must read #4 and the ring must move with it.
+    let grid = app.query_element(&["gallery", "grid"]).unwrap();
+    let grid = tur_engine::core::element::ElementNodeId::new(grid.as_u64());
+    let g = app.get_element_absolute_bounds(grid).unwrap();
+    let cell_w = (g.right - g.left) / 3.0;
+    let tile4 = (g.left + cell_w * 1.5, g.top + cell_w * 1.5);
+    app.click(tile4.0, tile4.1);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.query_text(&["gallery", "subtitle"]).as_deref(),
+        Some("tile #4"),
+        "the tile tap selects the tapped tile, got {:?}",
+        app.query_text(&["gallery", "subtitle"])
+    );
 }

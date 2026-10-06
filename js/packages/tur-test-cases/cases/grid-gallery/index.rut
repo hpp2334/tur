@@ -89,21 +89,36 @@ entry fn start() -> u64 {
         return f"maxExtent {ctx.get_f64(maxext) as u64}";
     });
 
-    // The reactive grid: one Switch over the combined mode string — nine
-    // lazy cases, each rebuilding the grid with its literal knobs (the
-    // aspect × density matrix, kept FLAT — see the header note). The ring
-    // array rides by capture into the branch factories.
+    // The reactive grid: one Switch over the combined mode string — the
+    // aspect × density matrix, kept FLAT (see the header note). The nine
+    // grids build EAGERLY here (direct calls from start()'s body) and the
+    // Switch re-keys over the pre-built views: a mutation box's capture
+    // cell binds per CALL SITE, so the per-tile tap closures only get
+    // their own index when the tile calls are unrolled literals in a
+    // direct body — the lazy case_build indirection shared one cell (and
+    // a loop shares it across every pad: each tap answering with the last
+    // index). The ring/selection state rides the shared sources, so a
+    // re-key re-mounts the pre-built grid with the live handles.
+    let g_1_95 = gallery_grid(1.0, 95.0, rings, sel);
+    let g_1_150 = gallery_grid(1.0, 150.0, rings, sel);
+    let g_1_220 = gallery_grid(1.0, 220.0, rings, sel);
+    let g_16_95 = gallery_grid(1.7777778, 95.0, rings, sel);
+    let g_16_150 = gallery_grid(1.7777778, 150.0, rings, sel);
+    let g_16_220 = gallery_grid(1.7777778, 220.0, rings, sel);
+    let g_9_95 = gallery_grid(0.5625, 95.0, rings, sel);
+    let g_9_150 = gallery_grid(0.5625, 150.0, rings, sel);
+    let g_9_220 = gallery_grid(0.5625, 220.0, rings, sel);
     let grid_switch = Switch()
         .value(mode)
-        .case_build("1:1/95", fn () -> View { return gallery_grid(1.0, 95.0, rings, sel); })
-        .case_build("1:1/150", fn () -> View { return gallery_grid(1.0, 150.0, rings, sel); })
-        .case_build("1:1/220", fn () -> View { return gallery_grid(1.0, 220.0, rings, sel); })
-        .case_build("16:9/95", fn () -> View { return gallery_grid(1.7777778, 95.0, rings, sel); })
-        .case_build("16:9/150", fn () -> View { return gallery_grid(1.7777778, 150.0, rings, sel); })
-        .case_build("16:9/220", fn () -> View { return gallery_grid(1.7777778, 220.0, rings, sel); })
-        .case_build("9:16/95", fn () -> View { return gallery_grid(0.5625, 95.0, rings, sel); })
-        .case_build("9:16/150", fn () -> View { return gallery_grid(0.5625, 150.0, rings, sel); })
-        .case_build("9:16/220", fn () -> View { return gallery_grid(0.5625, 220.0, rings, sel); })
+        .cases("1:1/95", g_1_95)
+        .cases("1:1/150", g_1_150)
+        .cases("1:1/220", g_1_220)
+        .cases("16:9/95", g_16_95)
+        .cases("16:9/150", g_16_150)
+        .cases("16:9/220", g_16_220)
+        .cases("9:16/95", g_9_95)
+        .cases("9:16/150", g_9_150)
+        .cases("9:16/220", g_9_220)
         .build();
     let panel = Container()
         .color(PANEL_BG)
@@ -149,25 +164,50 @@ fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<s
         .build();
 }
 
-// The 27-tile gallery grid under one (aspect, max_cross) mode.
+// The 27-tile gallery grid under one (aspect, max_cross) mode. The tile
+// calls are UNROLLED literals (jigsaw's piece() law): the VM binds a
+// closure's capture cell per CALL SITE, so a single call inside the loop
+// would share one cell across every pad (each tap answering with the
+// last index) — a literal per tile gives each pad its own index.
 fn gallery_grid(aspect: f64, max_cross: f64, rings: [Readable<f64>], sel: Readable<f64>) -> View {
     let mut grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
-    let mut i: i32 = 0;
-    while (i < 27) {
-        // The loop scalar rides a one-slot array into the tile (the
-        // capture law: a loop-carried scalar capture trips the VM's
-        // null-reference guard — the array form is sound).
-        let ii: [f64] = [i as f64];
-        grid.child(tile(ii, rings, sel));
-        i = i + 1;
-    }
+    grid.child(tile([0.0], rings, sel));
+    grid.child(tile([1.0], rings, sel));
+    grid.child(tile([2.0], rings, sel));
+    grid.child(tile([3.0], rings, sel));
+    grid.child(tile([4.0], rings, sel));
+    grid.child(tile([5.0], rings, sel));
+    grid.child(tile([6.0], rings, sel));
+    grid.child(tile([7.0], rings, sel));
+    grid.child(tile([8.0], rings, sel));
+    grid.child(tile([9.0], rings, sel));
+    grid.child(tile([10.0], rings, sel));
+    grid.child(tile([11.0], rings, sel));
+    grid.child(tile([12.0], rings, sel));
+    grid.child(tile([13.0], rings, sel));
+    grid.child(tile([14.0], rings, sel));
+    grid.child(tile([15.0], rings, sel));
+    grid.child(tile([16.0], rings, sel));
+    grid.child(tile([17.0], rings, sel));
+    grid.child(tile([18.0], rings, sel));
+    grid.child(tile([19.0], rings, sel));
+    grid.child(tile([20.0], rings, sel));
+    grid.child(tile([21.0], rings, sel));
+    grid.child(tile([22.0], rings, sel));
+    grid.child(tile([23.0], rings, sel));
+    grid.child(tile([24.0], rings, sel));
+    grid.child(tile([25.0], rings, sel));
+    grid.child(tile([26.0], rings, sel));
     return grid.build();
 }
 
 // One tile: the hue face with a top-left label (boa's tile — the Text is
 // an alignment-less Container child), wrapped in the selection ring (the
 // tile's own brush source — white when selected, cleared otherwise). The
-// tap captures the ring array + the selection source.
+// tap captures the ring array + the selection source. The index rides the
+// one-slot array param — each call site passes a DISTINCT literal (the
+// capture law: the VM binds a closure's cell per call site, so a loop
+// would point every pad at the last iteration's cell).
 fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
     let i: u64 = ii[0] as u64;
     let b_tap = mutate(fn (ctx: MutationCtx) {

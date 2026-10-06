@@ -214,7 +214,8 @@ pub(crate) struct StackSpec {
     query_key: Option<Vec<String>>,
 }
 
-/// The positioned spec (`0 = absent` per anchor — the JS Positioned twins).
+/// The positioned spec (anchors/edges verbatim — absence is the kit
+/// never calling the row, not a 0 sentinel).
 pub(crate) struct PositionedSpec {
     left: Option<Val<f64>>,
     top: Option<Val<f64>>,
@@ -462,23 +463,27 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "pos_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, PositionedSpec { left: None, top: None, right: None, bottom: None, width: None, height: None, child: None })?.handle().clone())
     });
+    // The static edge/size props store their value VERBATIM (Flutter
+    // parity: `Positioned(left: 0, top: 0, right: 0, bottom: 0)` is
+    // Positioned.fill — an explicit 0 edge is a real coordinate, and the
+    // four-edge overlay stretches). Absence is the kit never calling the
+    // row, not a 0 sentinel.
     rut_vm::pkg_fn!(pkg, "pos_left", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.left = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.left = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "pos_top", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.top = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.top = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "pos_right", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.right = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.right = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "pos_bottom", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.bottom = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.bottom = Some(Val::Static(v)))
     });
     // pos_left_bound / pos_top_bound — the reactive anchors (drag-to-move
-    // rides a live atom). Unlike the authoring rows above (whose 0 =
-    // ABSENT idiom keeps `width_height(0, h)` meaningful), a BOUND anchor
-    // is present VERBATIM: 0 is a real coordinate — a piece parked at the
-    // origin stays put (the box_width_bound law).
+    // rides a live atom). A BOUND anchor is present VERBATIM like the
+    // static rows: 0 is a real coordinate — a piece parked at the origin
+    // stays put (the box_width_bound law).
     rut_vm::pkg_fn!(pkg, "pos_left_bound", (Opaque<PositionedSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| s.left = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
@@ -486,10 +491,10 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.top = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "pos_width", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.width = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.width = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "pos_height", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
-        b.with_mut(vm, |_vm, s| s.height = (v != 0.0).then_some(Val::Static(v)))
+        b.with_mut(vm, |_vm, s| s.height = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "pos_child", (Opaque<PositionedSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;

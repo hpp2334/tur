@@ -23,6 +23,7 @@
 
 use std::time::Duration;
 
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
@@ -375,6 +376,34 @@ fn jigsaw_lift(app: &TurTestApp, piece: u64) -> f64 {
     .unwrap()
 }
 
+/// The boa `dragScale$` semantics: the lift eases up on grab and STAYS at
+/// LIFT_MAX for the whole grab — only the RELEASE (the controller's
+/// reverse) settles it back. A long hold must not sink the piece back to
+/// rest scale mid-drag.
+#[test]
+fn jigsaw_lift_stays_up_while_held() {
+    let mut app = jigsaw_app();
+    let from = center(&app, &["jw", "piece-0"]);
+    app.pointer_down(from.0, from.1);
+    app.wait_for_timeout(Duration::from_millis(16));
+    app.pointer_move(from.0 + 8.0, from.1 + 8.0);
+    app.wait_for_timeout(Duration::ZERO);
+    // Hold well past the 180ms forward ease.
+    app.wait_for_timeout(Duration::from_millis(400));
+    let held = jigsaw_lift(&app, 0);
+    assert!(
+        (held - 1.1).abs() < 0.02,
+        "the lift stays at LIFT_MAX while the piece is held (boa dragScale$); got {held}"
+    );
+    app.pointer_up(from.0 + 8.0, from.1 + 8.0);
+    app.wait_for_timeout(Duration::from_millis(300));
+    let released = jigsaw_lift(&app, 0);
+    assert!(
+        (released - 1.0).abs() < 0.02,
+        "the release settles the lift back to 1; got {released}"
+    );
+}
+
 #[test]
 fn jigsaw_game_drags_snaps_counts_and_solves() {
     let mut app = jigsaw_app();
@@ -504,6 +533,50 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     assert!(
         app.query_element(&["jw", "banner"]).is_some(),
         "the Solved! banner shows at 9 / 9"
+    );
+
+    // The end screen is FULL-VIEWER (boa parity): the win overlay — the
+    // four-edge Positioned wrapping the Condition — must FILL the viewer
+    // and CENTER the banner, not shrink to the banner's natural size at
+    // the top-left (the round-5 audit's resolved-state MAJOR).
+    let tree = app.element_tree();
+    let root = tree.root_element().unwrap();
+    let stack_id =
+        tur_engine::core::element::ElementNodeId::new(root.children[0].as_u64());
+    let stack = tree.get_element(stack_id).unwrap();
+    assert_eq!(stack.kind().unwrap(), ElementKind::new("tur_stack"));
+    let win_id = tur_engine::core::element::ElementNodeId::new(
+        (*stack.children.last().unwrap()).as_u64(),
+    );
+    let win = tree.get_element(win_id).unwrap();
+    assert_eq!(
+        win.kind().unwrap(),
+        ElementKind::new("tur_positioned"),
+        "the win overlay is the stack's last child"
+    );
+    let (vw, vh) = (400.0, 600.0);
+    assert_eq!(win.computed_layout.size.width, vw, "the overlay fills the width");
+    assert_eq!(win.computed_layout.size.height, vh, "the overlay fills the height");
+    assert_eq!(win.computed_layout.offset.x, 0.0, "anchored at the origin x");
+    assert_eq!(win.computed_layout.offset.y, 0.0, "anchored at the origin y");
+    // The scrim (the banner card's parent Container) fills too…
+    let banner_id = app.query_element(&["jw", "banner"]).unwrap();
+    let banner = tree
+        .get_element(tur_engine::core::element::ElementNodeId::new(banner_id.as_u64()))
+        .unwrap();
+    let scrim_id = tur_engine::core::element::ElementNodeId::new(
+        banner.parent.expect("the banner's scrim parent").as_u64(),
+    );
+    let scrim = tree.get_element(scrim_id).unwrap();
+    assert_eq!(scrim.computed_layout.size.width, vw, "the scrim fills the width");
+    assert_eq!(scrim.computed_layout.size.height, vh, "the scrim fills the height");
+    // …and the banner card sits centered in the viewer.
+    let b = center(&app, &["jw", "banner"]);
+    assert!(
+        (b.0 - vw / 2.0).abs() < 1.0 && (b.1 - vh / 2.0).abs() < 1.0,
+        "the Solved! banner is viewer-centered: {b:?} vs ({}, {})",
+        vw / 2.0,
+        vh / 2.0
     );
 }
 
