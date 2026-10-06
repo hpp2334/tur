@@ -25,8 +25,9 @@
 //! Verdicts (see the phase-5 commit body for the full table): both engine
 //! shapes lay out Flutter-correct headlessly — the defect is case-authoring
 //! (default cross alignment under a shrink-wrap header band). The corpus
-//! pins at the bottom pin the REPAIRED cases: a header band under
-//! `CROSS_ALIGN_STRETCH` fills the column and sits left-aligned above its
+//! pins at the bottom pin the REPAIRED cases: the gallery's flush-left
+//! header block above its full-width grid (the boa restyle — the band
+//! became a title), and table-reactive's header band flush-left above its
 //! rows.
 
 use tur_integration_tests::TurTestApp;
@@ -155,34 +156,29 @@ fn unset_width_child_does_not_corrupt_sibling_placement() {
 
 // ── Corpus pins: the repaired evidence cases ────────────────────────────
 
-/// lazy-grid-gallery's header must be a full-width 40-tall band above the
-/// grid (the repaired equivalent of the audit's "proper 400×40 band").
+/// lazy-grid-gallery (the boa restyle): the header is the flush-left title
+/// Text now — it sits at the column's leading edge ABOVE the Expanded grid,
+/// which starts below the header block (title + subtitle + chips intervene)
+/// and fills the column's width. (The pre-restyle pin — a full-width 40px
+/// band under `CROSS_ALIGN_STRETCH` — described a header design the boa
+/// port replaced; the surviving intent is flush-left header, full-width
+/// grid.)
 #[test]
-fn lazy_grid_gallery_header_is_a_band_above_the_grid() {
+fn lazy_grid_gallery_header_sits_above_the_full_width_grid() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_bundle("lazy-grid-gallery").unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let (hx, hy, hw, hh) = rect(&app, &["gallery", "header"]);
+    let (hx, hy, _, hh) = rect(&app, &["gallery", "header"]);
     let (gx, gy, gw, _) = rect(&app, &["gallery", "grid"]);
     let (cx, _, cw, _) = rect(&app, &["gallery", "col"]);
-    assert_eq!(hh, 40.0, "the header band keeps its 40px height");
-    assert_eq!(
-        hx, cx,
-        "the header band starts at the column's leading edge"
+    assert_eq!(hx, cx, "the title sits at the column's leading edge");
+    assert_eq!(gx, cx, "the grid is flush with the title");
+    assert!(
+        gy >= hy + hh,
+        "the grid starts below the header block \
+         (title + subtitle + chip rows intervene)"
     );
-    assert_eq!(
-        hw, cw,
-        "the header band spans the column's full width — \
-         `width_height(0, h)` is unset width, and Stretch is what makes \
-         it a band instead of a shrink-wrapped label chip"
-    );
-    assert_eq!(
-        gy,
-        hy + hh,
-        "the grid starts directly below the header band"
-    );
-    assert_eq!(gx, cx, "the grid is flush with the band");
     assert_eq!(gw, cw, "the Expanded grid fills the column's width");
 }
 
