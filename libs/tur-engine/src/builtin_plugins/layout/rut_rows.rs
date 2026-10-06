@@ -24,7 +24,7 @@ use crate::core::layout::{
     Alignment, Axis, BorderPosition, ClipBehavior, CrossAxisAlignment, FlexFit, MainAxisAlignment,
     MainAxisSize, StackFit,
 };
-use crate::core::render::brush::Brush;
+use crate::core::render::brush::{Brush, Color};
 use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
 use crate::core::view::{Val, View};
 
@@ -86,6 +86,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("box_height_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_color_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_radius_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("box_shadow_color_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("box_shadow_blur_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("box_shadow_dy_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("box_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
         row("box_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("box_build", vec![TY_OPAQUE], TY_OPAQUE),
@@ -410,6 +413,15 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     rut_vm::pkg_fn!(pkg, "box_radius_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, r_atom: u64| {
         b.with_mut(vm, |_vm, s| s.border_radius = Some(Val::Reactive(readable_of::<f64>(r_atom))))
+    });
+    rut_vm::pkg_fn!(pkg, "box_shadow_color_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, color_atom: u64| {
+        b.with_mut(vm, |_vm, s| s.shadow_color = Some(Val::Reactive(readable_of::<Color>(color_atom))))
+    });
+    rut_vm::pkg_fn!(pkg, "box_shadow_blur_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, blur_atom: u64| {
+        b.with_mut(vm, |_vm, s| s.shadow_blur = Some(Val::Reactive(readable_of::<f64>(blur_atom))))
+    });
+    rut_vm::pkg_fn!(pkg, "box_shadow_dy_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, dy_atom: u64| {
+        b.with_mut(vm, |_vm, s| s.shadow_dy = Some(Val::Reactive(readable_of::<f64>(dy_atom))))
     });
     rut_vm::pkg_fn!(pkg, "box_child", (Opaque<ContainerView>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;

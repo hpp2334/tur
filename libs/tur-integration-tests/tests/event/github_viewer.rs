@@ -188,3 +188,96 @@ fn github_viewer_selects_a_file() {
         Some("README.md — 2.6 KB"),
     );
 }
+
+#[test]
+fn github_viewer_crumb_keeps_the_parsed_draft_identity() {
+    // The round-5 audit caught the crumb reading "react/react": open_repo
+    // used to overwrite the crumb atom with the API's `full_name`. Boa's
+    // repo$ keeps the PARSED draft identity — the API name never wins, so
+    // even a poisoned payload can't bend the crumb.
+    let mut app = build();
+    let poisoned = "{\"full_name\":\"WRONG/WRONG\",\"description\":\"x\",\"stargazers_count\":1,\"forks_count\":1,\"open_issues_count\":1,\"language\":\"Rust\"}";
+    app.set_http_responses(vec![
+        text_response(200, poisoned),
+        text_response(200, ROOT_CONTENTS),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    let ok = wait_for(&app, || {
+        app.query_text(&["gh-crumb"]).is_some_and(|t| !t.is_empty())
+    });
+    assert!(ok, "the explorer should open");
+    assert_eq!(
+        app.query_text(&["gh-crumb"]).as_deref(),
+        Some("facebook/react"),
+        "the crumb is the parsed draft, not the API full_name"
+    );
+    // The stats still parse FROM the payload (the poisoned language).
+    assert!(
+        app.query_text(&["gh-stats"]).unwrap().starts_with("Rust"),
+        "the metadata itself still comes from the API: {:?}",
+        app.query_text(&["gh-stats"])
+    );
+}
+
+#[test]
+fn github_viewer_crumb_navigates_to_the_root() {
+    // Descend into `packages`, then click the crumb chip: the path resets
+    // and a fresh ROOT listing loads (the boa navigateToRoot).
+    let mut app = build();
+    app.set_http_responses(vec![
+        text_response(200, META),
+        text_response(200, ROOT_CONTENTS),
+        text_response(200, PACKAGES_CONTENTS),
+        text_response(200, ROOT_CONTENTS),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    wait_for(&app, || {
+        app.query_text(&["gh-crumb"]).as_deref() == Some("facebook/react")
+    });
+    click_qk(&mut app, &["gh-row"]);
+    wait_for(&app, || {
+        app.query_text(&["gh-path"]).as_deref() == Some("packages")
+    });
+    click_qk(&mut app, &["gh-crumb"]);
+    let ok = wait_for(&app, || {
+        app.query_text(&["gh-path"]).as_deref() == Some("")
+    });
+    assert!(ok, "the crumb tap returns to the root listing");
+    // The root listing re-loaded (the README row is back under the
+    // packages-less root view).
+    assert!(
+        app.query_element(&["gh-row"]).is_some(),
+        "the root listing rendered after the crumb navigation"
+    );
+    // Settled: the busy "Loading…" rail is not on screen.
+    assert!(
+        app.query_element(&["gh-loading"]).is_none(),
+        "the list-area loading rail clears when the fetch settles"
+    );
+}
+
+#[test]
+fn github_viewer_has_no_full_pane_loading_mode() {
+    // The round-4 shape swapped the whole body to a "Loading…" pane on
+    // open; boa goes straight to the explorer chrome with the loading
+    // state in the LIST AREA. The "loading" mode is gone — the explorer
+    // is the only non-landing body.
+    let mut app = build();
+    app.set_http_responses(vec![
+        text_response(200, META),
+        text_response(200, ROOT_CONTENTS),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    let ok = wait_for(&app, || {
+        app.query_element(&["gh-crumb"]).is_some()
+    });
+    assert!(ok, "the explorer chrome mounts");
+    assert!(
+        app.query_element(&["gh-loading"]).is_none(),
+        "no loading rail once the fetch settles"
+    );
+    assert!(
+        app.query_element(&["gh-row"]).is_some(),
+        "the listing renders"
+    );
+}

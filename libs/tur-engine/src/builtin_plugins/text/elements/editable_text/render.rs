@@ -1,7 +1,7 @@
 use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
 
-use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
+use crate::builtin_plugins::text::elements::text_shared::paint_helpers::paint_selection_at;
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, HitTestSelf, PaintContext};
 use crate::core::text::text_layout;
@@ -50,13 +50,18 @@ impl ElementRender for EditableTextElement {
             return;
         };
 
+        // Multiline fields paint through their vertical scroll offset — the
+        // text layout is content-relative, the canvas is viewport-relative.
+        let scroll_y = self.scroll_y.get();
+        let paint_origin = Offset::new(0.0, -scroll_y);
+
         if is_focused && has_selection {
             let (a, b) = if sel_anchor < sel_end {
                 (sel_anchor, sel_end)
             } else {
                 (sel_end, sel_anchor)
             };
-            paint_helpers::paint_selection(canvas, layout_data, a, b);
+            paint_selection_at(canvas, layout_data, a, b, scroll_y);
         }
 
         // Hide the placeholder text when the input is focused and empty —
@@ -65,7 +70,7 @@ impl ElementRender for EditableTextElement {
         // anchored at the right position.
         let suppress_text_fill = is_focused && text_is_empty;
         if !suppress_text_fill {
-            canvas.fill_text_layout(Offset::ZERO, layout_data);
+            canvas.fill_text_layout(paint_origin, layout_data);
         }
 
         // The composition underline's byte math targets the composition-
@@ -76,7 +81,7 @@ impl ElementRender for EditableTextElement {
             let comp_start_byte = composing_start;
             let comp_end_byte = composing_start + comp.len();
             if comp_start_byte != comp_end_byte {
-                paint_composition_underline(canvas, layout_data, comp_start_byte, comp_end_byte);
+                paint_composition_underline(canvas, layout_data, comp_start_byte, comp_end_byte, scroll_y);
             }
         }
 
@@ -94,6 +99,7 @@ impl ElementRender for EditableTextElement {
                     layout_data,
                     cursor_pos,
                     cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
+                    scroll_y,
                 );
             }
         }
@@ -105,6 +111,7 @@ fn paint_composition_underline(
     layout_data: &text_layout::TextLayoutData,
     start_byte: usize,
     end_byte: usize,
+    scroll_y: f64,
 ) {
     let start_line = layout_data.line_index_for_byte(start_byte);
     let end_line = layout_data.line_index_for_byte(end_byte);
@@ -133,7 +140,7 @@ fn paint_composition_underline(
         let line_info = &layout_data.line_infos[line_idx];
 
         // Local coordinates — the canvas transform positions the text box.
-        let underline_y = line_info.top as f64 + line_info.height as f64 - 2.0;
+        let underline_y = line_info.top as f64 + line_info.height as f64 - 2.0 - scroll_y;
 
         canvas.fill_geometry(
             Offset::new(x_start as f64, underline_y),
@@ -148,6 +155,7 @@ fn paint_cursor(
     layout_data: &text_layout::TextLayoutData,
     cursor_byte: usize,
     cursor_color: Color,
+    scroll_y: f64,
 ) {
     let (cursor_x, _) = layout_data.cursor_xy_at(cursor_byte);
     let line_idx = layout_data.line_index_for_byte(cursor_byte);
@@ -155,7 +163,7 @@ fn paint_cursor(
 
     // Local coordinates — the canvas transform positions the text box.
     canvas.fill_geometry(
-        Offset::new(cursor_x as f64, line_info.top as f64),
+        Offset::new(cursor_x as f64, line_info.top as f64 - scroll_y),
         &Geometry::Rect(Size::new(2.0, line_info.height as f64)),
         &Brush::SolidColor(cursor_color),
     );

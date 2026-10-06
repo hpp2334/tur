@@ -390,6 +390,14 @@ impl AnyElement {
         self
     }
 
+    /// Chainable wheel-dispatch install (the constructor-level
+    /// [`AnyElement::with_wheel`] twin, for elements built through
+    /// `with_full_interactivity` + the chain builders).
+    pub fn with_wheel_dispatch<E: ElementOnWheel + 'static>(mut self) -> Self {
+        self.on_wheel = Some(wheel_dispatch::<E>);
+        self
+    }
+
     pub fn kind(&self) -> ElementKind {
         self.inner.kind()
     }

@@ -76,6 +76,17 @@ pub fn ensure_caret_visible(cx: &mut SubsystemFlushContext<'_>) {
             return;
         };
         let Some(scroll_id) = nearest_scroll_ancestor(&tree, focused) else {
+            // No ScrollView ancestor: a multiline editable scrolls ITSELF
+            // (the playground's bare-Input editor). `reveal_cursor` is a
+            // no-op for anything else.
+            if let Some(node) = tree.get_element(focused)
+                && let Some(ref element) = node.element
+                && let Some(editable) = element.cast::<EditableTextElement>()
+                && editable.reveal_cursor()
+            {
+                drop(tree);
+                cx.request_paint();
+            }
             return;
         };
         // Absolute Y of the caret and of the scroll viewport, obtained by

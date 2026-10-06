@@ -48,6 +48,7 @@
 use tur::{
   box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
   box_height_bound, box_new, box_padding, box_qkey, box_radius, box_radius_bound, box_shadow,
+  box_shadow_blur_bound, box_shadow_color_bound, box_shadow_dy_bound,
   box_size, box_width, box_width_bound,
   col_fixed, col_flex, cols_new, cond_build, cond_else, cond_else_build, cond_new, cond_qkey,
   cond_then, cond_then_build, ct_follower_build,
@@ -474,6 +475,21 @@ impl Container {
   }
   pub fn shadow(mut self, packed: u64, blur: f64, dx: f64, dy: f64) -> Self {
     box_shadow(self.spec, packed, blur, dx, dy);
+    return self;
+  }
+  // The reactive shadow channels — per-state piece glows (the jigsaw drag
+  // states) and eased blur (the implicit-animations shadow) ride atoms, not
+  // rebuilds. The bound dy wins over the static offset's y.
+  pub fn shadow_color_bound(mut self, atom: u64) -> Self {
+    box_shadow_color_bound(self.spec, atom);
+    return self;
+  }
+  pub fn shadow_blur_bound(mut self, atom: u64) -> Self {
+    box_shadow_blur_bound(self.spec, atom);
+    return self;
+  }
+  pub fn shadow_dy_bound(mut self, atom: u64) -> Self {
+    box_shadow_dy_bound(self.spec, atom);
     return self;
   }
   pub fn alignment(mut self, v: u64) -> Self {

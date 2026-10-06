@@ -235,7 +235,30 @@ impl ElementLayout for EditableTextElement {
 
         self.cached_layout = Some(Arc::new(layout_data));
 
-        constraints.constrain(Size::new(width as f64, height as f64))
+        let constrained = constraints.constrain(Size::new(width as f64, height as f64));
+
+        // ── Multiline scroll state ─────────────────────────────────────────
+        // The full (unclamped) layout height is the content; the constrained
+        // height is the viewport. Their difference is the scrollable excess.
+        // A programmatic text replacement (revision bump) resets the scroll
+        // to the top — the playground loads a new case source into the same
+        // editor and must open at line 1.
+        let revision = self.controller().revision();
+        if self.seen_revision.get() != revision {
+            self.seen_revision.set(revision);
+            self.scroll_y.set(0.0);
+        }
+        let max_scroll = if self.resolved_multiline {
+            (height as f64 - constrained.height).max(0.0)
+        } else {
+            0.0
+        };
+        self.max_scroll_y.set(max_scroll);
+        if self.scroll_y.get() > max_scroll {
+            self.scroll_y.set(max_scroll);
+        }
+
+        constrained
     }
 }
 

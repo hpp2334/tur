@@ -28,6 +28,10 @@ pub struct ContainerView {
     pub alignment: Option<Val<Alignment>>,
     /// shadowOffset is `[x, y]` — parsed at factory time (not reactive).
     pub shadow_offset: Option<(f64, f64)>,
+    /// Reactive shadow offset-y (the jigsaw drag states animate `[0,4] →
+    /// [0,12]`); when bound it wins over the static tuple's y. The x stays
+    /// factory-static (no consumer animates it).
+    pub shadow_dy: Option<Val<f64>>,
     pub query_key: Option<Vec<String>>,
     pub children: Vec<Rc<dyn View>>,
 }
@@ -64,6 +68,7 @@ impl View for ContainerView {
 pub struct ContainerPainting {
     pub(crate) shadow_blur: Option<f64>,
     pub(crate) shadow_color: Option<Color>,
+    pub(crate) shadow_dy: Option<f64>,
     pub(crate) color: Option<Brush>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: Option<f64>,
@@ -126,6 +131,17 @@ impl ContainerElement {
     pub fn shadow_offset(&self) -> Option<(f64, f64)> {
         self.view.shadow_offset
     }
+    /// Paint accessors (the `OpacityElement::painted_value` pattern) — the
+    /// reactive shadow channels as last resolved by layout.
+    pub fn painted_shadow_color(&self) -> Option<Color> {
+        self.painting.shadow_color
+    }
+    pub fn painted_shadow_blur(&self) -> Option<f64> {
+        self.painting.shadow_blur
+    }
+    pub fn painted_shadow_dy(&self) -> Option<f64> {
+        self.painting.shadow_dy
+    }
     pub fn border_position(&self) -> BorderPosition {
         match &self.view.border_position {
             Some(Val::Static(v)) => *v,
@@ -173,6 +189,9 @@ impl ElementSubscribe for ContainerElement {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.shadow_blur.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.shadow_dy.as_ref() {
             cx.subscribe_val(v);
         }
     }

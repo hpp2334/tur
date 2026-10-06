@@ -3,23 +3,25 @@
 // idiom). One explicit AnimationController (Rust-held, stashed) ticks
 // the eased progress into the `a_tick` entry, which maps it into the
 // animated channels: card width (120 → 280), card radius (8 → 40, the
-// bound-radius row), card hue (indigo → coral via the color tween), the
-// inner square's opacity pulse + ROTATION (the bound-angle row:
+// bound-radius row), card hue (indigo → coral via the color tween) and
+// the inner white square's ROTATION (the bound-angle row:
 // Transform().rotate_bound(progress) — the angle re-resolves through the
 // live atom and the subtree NEVER re-mounts; no rebuild channel), the
-// orbiting dot (Positioned bounds over math_sin/math_cos) and the %
-// readout. The transport (play / pause / resume / reverse / stop), the
-// speed selector (0.5x–4x, in-place), the curve selector (recreates the
-// controller mid-flight and seeks it to the frozen progress) and the
-// loop toggle (infinite repeat) are intent entries over the scalar
-// stash — the boa interactions, names + ids, never closures.
+// orbiting dot (Positioned bounds over math_sin/math_cos riding boa's
+// 140/80 center) and the % readout. The transport (play / pause /
+// resume / reverse / stop), the speed selector (0.5x–4x, in-place), the
+// curve selector (recreates the controller mid-flight and seeks it to
+// the DISPLAYED eased progress — boa's `ctx.get(progress$)`) and the
+// loop toggle (infinite repeat; the label swaps "Loop" ↔ "Loop ✓" with
+// white text when on) are intent entries over the scalar stash — the
+// boa interactions, names + ids, never closures.
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
     anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status,
-    anim_stop, anim_value, color_tween_lerp, math_cos, math_sin, mount, rs_get_bool,
-    rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64, rs_source_str,
-    st_put, st_take, stf_put, stf_take, tween_lerp };
-use tur_kit::{ Column, Container, PointerInteract, Positioned, Row, SizedBox, Stack, Text };
-use tur_anim_kit::{ Opacity, Transform, anim_ctrl };
+    anim_stop, color_tween_lerp, math_cos, math_sin, mount, rs_get_bool, rs_get_f64,
+    rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool, rs_source_f64,
+    rs_source_str, st_put, st_take, stf_put, stf_take, tween_lerp };
+use tur_kit::{ Column, Condition, Container, PointerInteract, Positioned, Row, SizedBox, Stack, Text };
+use tur_anim_kit::{ Transform, anim_ctrl };
 
 
 let K_CTRL: u64 = 1;
@@ -28,7 +30,6 @@ let K_CURVE: u64 = 3;
 let K_LOOPB: u64 = 4;
 let K_WIDTH: u64 = 5;
 let K_HUE: u64 = 6;
-let K_INNER: u64 = 7;
 let K_PCT: u64 = 8;
 let K_STATUS: u64 = 9;
 let K_BADGE: u64 = 10;
@@ -41,6 +42,7 @@ let K_CV1: u64 = 16;
 let K_CV2: u64 = 17;
 let K_CV3: u64 = 18;
 let K_LP: u64 = 19;
+let K_LOOPON: u64 = 20;
 let K_ORBIT_X: u64 = 21;
 let K_ORBIT_Y: u64 = 22;
 let K_RADIUS: u64 = 23;
@@ -51,8 +53,8 @@ let W_MIN: f64 = 120.0;
 let W_MAX: f64 = 280.0;
 let R_MIN: f64 = 8.0;
 let R_MAX: f64 = 40.0;
-let ORBIT_CX: f64 = 150.0;
-let ORBIT_CY: f64 = 90.0;
+let ORBIT_CX: f64 = 140.0;
+let ORBIT_CY: f64 = 80.0;
 let ORBIT_R: f64 = 80.0;
 let TAU: f64 = 6.283185307179586;
 let HUE_MIN: u64 = 0x6366F1FFu64;
@@ -70,11 +72,10 @@ entry fn start() -> u64 {
     let progress = rs_source_f64();
     let width = rs_source_f64();
     let hue = rs_source_f64();
-    let inner = rs_source_f64();
     let pct = rs_source_str("0%");
     let status = rs_source_str("STOPPED");
     let badge = rs_source_f64();
-    let looping = rs_source_bool(false);
+    let loop_on = rs_source_bool(false);
     let sp0 = rs_source_f64();
     let sp1 = rs_source_f64();
     let sp2 = rs_source_f64();
@@ -89,7 +90,6 @@ entry fn start() -> u64 {
     let radius = rs_source_f64();
 
     rs_set_f64(width, W_MIN);
-    rs_set_f64(inner, 0.35);
     rs_set_f64(radius, R_MIN);
     rs_set_f64(orbit_x, ORBIT_CX + ORBIT_R);
     rs_set_f64(orbit_y, ORBIT_CY);
@@ -101,7 +101,6 @@ entry fn start() -> u64 {
     stf_put(K_PROGRESS, progress as f64);
     stf_put(K_WIDTH, width as f64);
     stf_put(K_HUE, hue as f64);
-    stf_put(K_INNER, inner as f64);
     stf_put(K_PCT, pct as f64);
     stf_put(K_STATUS, status as f64);
     stf_put(K_BADGE, badge as f64);
@@ -114,6 +113,7 @@ entry fn start() -> u64 {
     stf_put(K_CV2, cv2 as f64);
     stf_put(K_CV3, cv3 as f64);
     stf_put(K_LP, lp as f64);
+    stf_put(K_LOOPON, loop_on as f64);
     stf_put(K_ORBIT_X, orbit_x as f64);
     stf_put(K_ORBIT_Y, orbit_y as f64);
     stf_put(K_RADIUS, radius as f64);
@@ -130,13 +130,13 @@ entry fn start() -> u64 {
         .main_alignment(MAIN_ALIGN_CENTER)
         .cross_alignment(CROSS_ALIGN_CENTER)
         .child(Text().text("Animated Card Studio").font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
-        .child(SizedBox(0.0, 8.0).build())
+        .child(SizedBox(0.0, 4.0).build())
         .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(status_badge()).child(gap(12.0)).child(
             Text().text_bound(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
         ).build())
-        .child(SizedBox(0.0, 28.0).build())
+        .child(SizedBox(0.0, 32.0).build())
         .child(stage())
-        .child(SizedBox(0.0, 28.0).build())
+        .child(SizedBox(0.0, 32.0).build())
         .child(Row().main_axis_size(MAIN_SIZE_MIN).child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
             .child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0))
             .child(pill("Resume", 0x0EA5E9FFu64, b_resume, "cas-resume")).child(gap(6.0))
@@ -156,7 +156,7 @@ entry fn start() -> u64 {
             .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
             .child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0))
             .child(chip(cv3, "easeInOut", b_curve3, "cas-c3")).child(gap(12.0))
-            .child(chip(lp, "Loop", b_loop, "cas-loop")).build())
+            .child(loop_chip()).build())
         .child(SizedBox(0.0, 16.0).build())
         .child(Text().text("Controls: pause mid-play, change speed/curve, resume").font_size(10.0).color(0x94A3B8FFu64).build());
     mount(Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col.build()).build());
@@ -194,30 +194,45 @@ fn stage() -> opaque {
 }
 
 // The card: width + hue + radius ride their atoms (the tick's write
-// targets); the inner white square pulses its opacity with the progress
-// and SPINS through the bound row — Transform().rotate_bound(progress)
-// re-resolves the angle through the live atom (the subscribe → relayout
-// rail) and the subtree never re-mounts.
+// targets); the inner white square SPINS through the bound row —
+// Transform().rotate_bound(progress) re-resolves the angle through the
+// live atom (the subscribe → relayout rail) and the subtree never
+// re-mounts. Boa's square is opaque — no opacity channel.
 fn card() -> opaque {
     let width = stf_take(K_WIDTH) as u64;
     stf_put(K_WIDTH, width as f64);
     let hue = stf_take(K_HUE) as u64;
     stf_put(K_HUE, hue as f64);
-    let inner = stf_take(K_INNER) as u64;
-    stf_put(K_INNER, inner as f64);
     let radius = stf_take(K_RADIUS) as u64;
     stf_put(K_RADIUS, radius as f64);
     let progress = stf_take(K_PROGRESS) as u64;
     stf_put(K_PROGRESS, progress as f64);
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
-    let pulse = Opacity(0.35).bound(inner).child(spin).build();
     let mut c = Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
         .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
         .alignment(ALIGN_CENTER)
         .query_key("cas-card");
-    c.child(pulse);
+    c.child(spin);
     return c.build();
+}
+
+// The loop chip: the fill rides its brush atom; the label swaps
+// "Loop" ↔ "Loop ✓" (white when on) through the state atom — boa's
+// derive-driven label, case-side.
+fn loop_chip() -> opaque {
+    let lp = stf_take(K_LP) as u64;
+    stf_put(K_LP, lp as f64);
+    let loop_on = stf_take(K_LOOPON) as u64;
+    stf_put(K_LOOPON, loop_on as f64);
+    let mut b = Container().padding(6.0).radius(6.0).color_bound(lp).query_key("cas-loop");
+    b.child(
+        Condition(loop_on)
+            .then_build(fn () -> View { return Text().text("Loop ✓").font_size(10.0).color(0xFFFFFFFFu64).build(); })
+            .else_build(fn () -> View { return Text().text("Loop").font_size(10.0).color(0x475569FFu64).build(); })
+            .build(),
+    );
+    return PointerInteract().on_tap(b_loop).child(b.build()).build();
 }
 
 // The status badge: the label bound to the status atom, the fill bound to
@@ -293,6 +308,9 @@ fn b_loop(_a: u64, _b: u64, _n: f64) {
     let prev = stf_take(K_LOOPB);
     let next = prev <= 0.5;
     stf_put(K_LOOPB, flag(next));
+    let loop_on = stf_take(K_LOOPON) as u64;
+    stf_put(K_LOOPON, loop_on as f64);
+    rs_set_bool(loop_on, next);
     recreate();
     paint_loop();
 }
@@ -304,10 +322,13 @@ fn curve_to(idx: f64) {
 }
 
 // Swap in a fresh controller (the stashed curve idx + loop flag) seeked
-// to the old one's frozen value.
+// to the DISPLAYED eased progress — boa's `ctx.get(progress$)` — so a
+// mid-play curve switch continues from the value on screen.
 fn recreate() {
     let prev = st_take(K_CTRL);
-    let t = anim_value(prev);
+    let progress = stf_take(K_PROGRESS) as u64;
+    stf_put(K_PROGRESS, progress as f64);
+    let t = rs_get_f64(progress);
     let next = make_ctrl();
     anim_seek(next, t);
     st_put(K_CTRL, next);
@@ -352,12 +373,9 @@ fn a_tick(_id: u64, v: f64) {
     let hue = stf_take(K_HUE) as u64;
     stf_put(K_HUE, hue as f64);
     rs_set_brush(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
-    let inner = stf_take(K_INNER) as u64;
-    stf_put(K_INNER, inner as f64);
-    rs_set_f64(inner, 0.35 + 0.65 * v);
     let pct = stf_take(K_PCT) as u64;
     stf_put(K_PCT, pct as f64);
-    rs_set_str(pct, f"{(v * 100.0) as u64}%");
+    rs_set_str(pct, f"{((v * 100.0) + 0.5) as u64}%");
     // The rotation channel: the progress atom IS the bound angle's source
     // (Transform().rotate_bound reads it reactively) — the tick just
     // advances it; no list rewrite, no re-mount.

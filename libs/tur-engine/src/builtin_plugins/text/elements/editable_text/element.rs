@@ -157,10 +157,14 @@ impl View for EditableTextView {
                 layout_key: None,
                 shape_count: Cell::new(0),
                 blink_task: None,
+                scroll_y: Cell::new(0.0),
+                max_scroll_y: Cell::new(0.0),
+                seen_revision: Cell::new(0),
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
-            .with_focusable::<EditableTextElement>(),
+            .with_focusable::<EditableTextElement>()
+            .with_wheel_dispatch::<EditableTextElement>(),
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
@@ -237,6 +241,16 @@ pub struct EditableTextElement {
     /// aborted, which drops the pending `Sleep` and halts the loop
     /// immediately.
     pub(crate) blink_task: Option<TaskHandle>,
+    /// Vertical scroll offset for multiline fields (the playground text
+    /// editor). `0.0` for single-line inputs — they never scroll.
+    pub(crate) scroll_y: Cell<f64>,
+    /// Content height minus viewport height, refreshed each layout — the
+    /// wheel's clamp ceiling.
+    pub(crate) max_scroll_y: Cell<f64>,
+    /// The controller revision the current scroll belongs to. A programmatic
+    /// text replacement (the playground loads a new case source into the
+    /// same editor) bumps the revision and resets the scroll to the top.
+    pub(crate) seen_revision: Cell<u64>,
 }
 
 impl Drop for EditableTextElement {
@@ -262,10 +276,75 @@ impl crate::core::elements::ElementCursorRect for EditableTextElement {
         let line_info = &layout_data.line_infos[line_idx];
         Some((
             cursor_x as f64,
-            line_info.top as f64,
+            line_info.top as f64 - self.scroll_y.get(),
             2.0,
             line_info.height as f64,
         ))
+    }
+}
+
+impl crate::core::elements::ElementOnWheel for EditableTextElement {
+    fn on_wheel(
+        &mut self,
+        cx: &mut crate::core::elements::ElementOnWheelContext,
+        event: &crate::core::elements::WheelEvent,
+    ) -> f64 {
+        // Single-line fields don't scroll — hand the whole delta to any
+        // enclosing scrollable (the overscroll contract).
+        if !self.resolved_multiline {
+            return event.delta_y;
+        }
+        let max = self.max_scroll_y.get();
+        let next = (self.scroll_y.get() + event.delta_y).clamp(0.0, max);
+        let consumed = next - self.scroll_y.get();
+        self.scroll_y.set(next);
+        if consumed.abs() > 0.001 {
+            cx.request_paint();
+        }
+        event.delta_y - consumed
+    }
+}
+
+impl EditableTextElement {
+    /// Test/dev-tool accessors for the vertical scroll state.
+    pub fn scroll_y(&self) -> f64 {
+        self.scroll_y.get()
+    }
+
+    pub fn max_scroll_y(&self) -> f64 {
+        self.max_scroll_y.get()
+    }
+
+    /// Translate the scroll so the caret's line is visible (the vertical
+    /// caret-follow). A no-op for single-line fields. Called after every
+    /// cursor move — keys, clicks, selection drags, IME commit — and from
+    /// the `CaretVisibilitySubsystem` (the paste path). Returns whether the
+    /// offset moved.
+    pub(crate) fn reveal_cursor(&self) -> bool {
+        if !self.resolved_multiline {
+            return false;
+        }
+        let Some(layout_data) = self.cached_layout.as_ref() else {
+            return false;
+        };
+        let line_idx = layout_data.line_index_for_byte(self.cursor_position());
+        let line_info = &layout_data.line_infos[line_idx];
+        let top = line_info.top as f64;
+        let bottom = top + line_info.height as f64;
+        // Viewport height = full layout height minus the scrollable excess.
+        let viewport = (layout_data._height as f64 - self.max_scroll_y.get()).max(0.0);
+        let max = self.max_scroll_y.get();
+        let mut y = self.scroll_y.get();
+        if top < y {
+            y = top;
+        }
+        if bottom > y + viewport {
+            y = bottom - viewport;
+        }
+        let y = y.clamp(0.0, max);
+        let moved = (y - self.scroll_y.get()).abs() > 0.001;
+        self.scroll_y.set(y);
+        moved
     }
 }
 
@@ -760,9 +839,16 @@ impl EditableTextElement {
         // multiple VISUAL lines whose continuations must be independently
         // clickable. `line_index_at_y` clamps, so for a genuinely
         // single-visual-line layout this degenerates to a line-0 x lookup.
+        // A scrolled multiline field adds its offset back — the click's
+        // local y is viewport-relative, the layout is content-relative.
         self.cached_layout
             .as_ref()
-            .map(|ld| ld.byte_index_at_xy(local_position.x as f32, local_position.y as f32))
+            .map(|ld| {
+                ld.byte_index_at_xy(
+                    local_position.x as f32,
+                    (local_position.y + self.scroll_y.get()) as f32,
+                )
+            })
             .unwrap_or(0)
     }
 }
@@ -1023,6 +1109,7 @@ impl ElementOnGesture for EditableTextElement {
                     c.set_cursor_position(byte_pos);
                     c.set_selection(byte_pos, byte_pos);
                     drop(c);
+                    self.reveal_cursor();
                     cx.request_paint();
                 }
             }
@@ -1035,6 +1122,7 @@ impl ElementOnGesture for EditableTextElement {
                     c.set_selection(anchor, byte_pos);
                     c.set_cursor_position(byte_pos);
                     drop(c);
+                    self.reveal_cursor();
                     cx.request_paint();
                 }
             }
@@ -1105,6 +1193,7 @@ impl ElementOnKeyboard for EditableTextElement {
 
         if changed {
             cx.request_paint();
+            self.reveal_cursor();
 
             let c = self.controller();
             let new_text = c.text();
@@ -1173,6 +1262,7 @@ impl ElementOnIme for EditableTextElement {
                     let m_cursor = c.on_cursor_change();
                     let text_end = text.clone();
                     drop(c);
+                    self.reveal_cursor();
                     if let Some(m) = m_end {
                         cx.push_event(m, CompositionEndEvent { text: text_end });
                     }

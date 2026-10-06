@@ -24,12 +24,13 @@
 use futures::launch_future;
 use tur::{
     ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH,
-    CROSS_ALIGN_START, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount, net_request, rs_get_str,
-    rs_get_value, rs_list_new, rs_list_push, rs_set_bool, rs_set_str, rs_set_value,
-    rs_source_bool, rs_source_f64, rs_source_str, rs_source_value, rs_value_item, st_put, st_take,
-    stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
+    CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
+    net_request, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_set_bool, rs_set_str,
+    rs_set_value, rs_source_bool, rs_source_f64, rs_source_str, rs_source_value, rs_value_item,
+    st_put, st_take, stf_put, stf_take, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text,
+    undo_new,
 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, PointerInteract, Row, ScrollView, SizedBox, Switch, Text };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, PointerInteract, Row, ScrollView, SizedBox, Switch, Text };
 
 
 // The scalar-stash keys (atom ids + the text controller ride them).
@@ -43,6 +44,7 @@ let K_PATH: u64 = 7;
 let K_SEL: u64 = 8;
 let K_FILES: u64 = 9;
 let K_EMPTY: u64 = 10;
+let K_BUSY: u64 = 11;
 let K_CTRL: u64 = 20;
 let K_UNDO: u64 = 21;
 let K_ICO_GH: u64 = 22;
@@ -95,6 +97,7 @@ entry fn start() -> u64 {
     let selected = rs_source_str("");
     let files = rs_source_value(rs_list_new());
     let is_empty = rs_source_bool(false);
+    let busy = rs_source_bool(false);
     stf_put(K_MODE, mode as f64);
     stf_put(K_ERR, err as f64);
     stf_put(K_ERRHAS, err_has as f64);
@@ -105,6 +108,7 @@ entry fn start() -> u64 {
     stf_put(K_SEL, selected as f64);
     stf_put(K_FILES, files as f64);
     stf_put(K_EMPTY, is_empty as f64);
+    stf_put(K_BUSY, busy as f64);
     let ctrl = tctrl_new();
     // The boa landing boots with the draft pre-filled.
     tctrl_set_text(ctrl, "facebook/react");
@@ -116,7 +120,6 @@ entry fn start() -> u64 {
         .value_source(mode)
         .query_key("gh-body")
         .cases("landing", landing_view())
-        .cases("loading", loading_view())
         .cases("explorer", explorer_view())
         .build();
     let page = Container().color(PAGE_BG).padding(22.0).child(body).build();
@@ -258,15 +261,6 @@ fn suggestion_row() -> opaque {
         .build();
 }
 
-// ---- loading ---------------------------------------------------------------
-
-fn loading_view() -> opaque {
-    return Container()
-        .alignment(ALIGN_CENTER)
-        .child(Text().text("Loading…").font_size(13.0).color(TEXT_SUBTLE).query_key("gh-loading").build())
-        .build();
-}
-
 // ---- explorer --------------------------------------------------------------
 
 fn explorer_view() -> opaque {
@@ -276,12 +270,14 @@ fn explorer_view() -> opaque {
     let stats = stf_take(K_STATS) as u64;
     let selected = stf_take(K_SEL) as u64;
     let is_empty = stf_take(K_EMPTY) as u64;
+    let busy = stf_take(K_BUSY) as u64;
     stf_put(K_REPO, repo_full as f64);
     stf_put(K_DESC, desc as f64);
     stf_put(K_PATH, path as f64);
     stf_put(K_STATS, stats as f64);
     stf_put(K_SEL, selected as f64);
     stf_put(K_EMPTY, is_empty as f64);
+    stf_put(K_BUSY, busy as f64);
     let list = ScrollView()
         .axis(AXIS_VERTICAL)
         .child(
@@ -291,6 +287,10 @@ fn explorer_view() -> opaque {
                 .child(Each(files).item_builder(item_file).build())
                 .build(),
         )
+        .build();
+    let loading = Container()
+        .alignment(ALIGN_CENTER)
+        .child(Text().text("Loading…").font_size(13.0).color(TEXT_SUBTLE).query_key("gh-loading").build())
         .build();
     let empty = Container()
         .alignment(ALIGN_CENTER)
@@ -310,9 +310,43 @@ fn explorer_view() -> opaque {
         .child(
             Row()
                 .cross_alignment(CROSS_ALIGN_CENTER)
-                .child(pill("gh-back", "Back", b_back, 0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
+                .child(
+                    PointerInteract()
+                        .ids(path, selected)
+                        .on_tap(b_back)
+                        .query_key("gh-back")
+                        .child(
+                            Container()
+                                .padding(9.0)
+                                .radius(8.0)
+                                .color(SUBTLE_BUTTON)
+                                .child(Text().text("Back").font_size(13.0).color(SUBTLE_BUTTON_FG).build())
+                                .build(),
+                        )
+                        .build(),
+                )
                 .child(SizedBox(10.0, 0.0).build())
-                .child(Text().text_bound(repo_full).font_size(13.0).font_weight(600.0).color(ACCENT).query_key("gh-crumb").build())
+                // The repo crumb (the boa RepoCrumb): a clickable chip that
+                // navigates back to the repo root. 13px accent, padding 4 —
+                // no invented weight. The path + selection atoms ride the
+                // ids rail into the handler (no stash round-trip).
+                .child(
+                    MouseRegion()
+                        .cursor(CURSOR_POINTER)
+                        .child(
+                            PointerInteract()
+                                .ids(path, selected)
+                                .on_tap(b_root)
+                                .query_key("gh-crumb")
+                                .child(
+                                    Container().padding(4.0).child(
+                                        Text().text_bound(repo_full).font_size(13.0).color(ACCENT).build(),
+                                    ).build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                )
                 .child(SizedBox(6.0, 0.0).build())
                 .child(Text().text_bound(path).font_size(13.0).color(TEXT_SUBTLE).query_key("gh-path").build())
                 .build(),
@@ -331,7 +365,21 @@ fn explorer_view() -> opaque {
                 .build(),
         )
         .child(SizedBox(0.0, 8.0).build())
-        .child(Expanded().flex(1.0).child(Condition(is_empty).then(empty).else_branch(list).build()).build())
+        .child(
+            Expanded()
+                .flex(1.0)
+                // The file list (the boa fileListView): busy → "Loading…" in
+                // the list area; else empty → the empty state; else the list.
+                .child(
+                    Condition(busy)
+                        .then(loading)
+                        .else_branch(
+                            Condition(is_empty).then(empty).else_branch(list).build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
         .child(
             Container()
                 .padding(6.0)
@@ -443,6 +491,17 @@ fn b_back(_a: u64, _b: u64, _n: f64) {
     launch_future(fetch_dir());
 }
 
+// The crumb tap: back to the repo ROOT listing (the boa navigateToRoot).
+fn b_root(_a: u64, _b: u64, _n: f64) {
+    let path = stf_take(K_PATH) as u64;
+    let selected = stf_take(K_SEL) as u64;
+    rs_set_str(path, "");
+    rs_set_str(selected, "");
+    stf_put(K_PATH, path as f64);
+    stf_put(K_SEL, selected as f64);
+    launch_future(fetch_dir());
+}
+
 // Re-fetch the current directory.
 fn b_refresh(_a: u64, _b: u64, _n: f64) {
     launch_future(fetch_dir());
@@ -516,6 +575,7 @@ fn go_landing() {
     let path = stf_take(K_PATH) as u64;
     let selected = stf_take(K_SEL) as u64;
     let is_empty = stf_take(K_EMPTY) as u64;
+    let busy = stf_take(K_BUSY) as u64;
     rs_set_str(mode, "landing");
     rs_set_str(err, "");
     rs_set_bool(err_has, false);
@@ -524,6 +584,7 @@ fn go_landing() {
     rs_set_str(path, "");
     rs_set_str(selected, "");
     rs_set_bool(is_empty, false);
+    rs_set_bool(busy, false);
     stf_put(K_MODE, mode as f64);
     stf_put(K_ERR, err as f64);
     stf_put(K_ERRHAS, err_has as f64);
@@ -532,24 +593,30 @@ fn go_landing() {
     stf_put(K_PATH, path as f64);
     stf_put(K_SEL, selected as f64);
     stf_put(K_EMPTY, is_empty as f64);
+    stf_put(K_BUSY, busy as f64);
 }
 
-// The repo-meta journey: mode → loading, GET the repo, surface its error
-// payload or seed the explorer and fetch the root listing.
+// The repo-meta journey: land straight on the explorer chrome with the
+// list area showing "Loading…" (boa's shape — no full-pane loading), GET
+// the repo, surface its error payload or seed the explorer and fetch the
+// root listing. The crumb keeps the PARSED draft identity (the boa
+// repo$) — the API's full_name never overwrites it.
 async fn open_repo() -> str {
-    set_mode("loading");
     let repo_full = stf_take(K_REPO) as u64;
     let full = rs_get_str(repo_full);
     stf_put(K_REPO, repo_full as f64);
+    set_busy(true);
     let url = f"https://api.github.com/repos/{full}";
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
+        set_busy(false);
         fail("Network request failed — the browser may be offline.", false);
         return "";
     }
     let meta = body.decode();
     let name = json_get_str(meta, "full_name");
     if (name == "") {
+        set_busy(false);
         let msg = json_get_str(meta, "message");
         if (msg == "") {
             fail("Unexpected response from the GitHub API.", false);
@@ -562,7 +629,6 @@ async fn open_repo() -> str {
     let stats = stf_take(K_STATS) as u64;
     let path = stf_take(K_PATH) as u64;
     let selected = stf_take(K_SEL) as u64;
-    rs_set_str(repo_full, name);
     rs_set_str(desc, json_get_str(meta, "description"));
     rs_set_str(stats, fmt_stats(meta));
     rs_set_str(path, "");
@@ -576,8 +642,11 @@ async fn open_repo() -> str {
 }
 
 // The directory journey: GET .../contents[/path], fill the display list
-// (dirs first), flip the empty flag, settle on the explorer.
+// (dirs first), flip the empty flag, settle on the explorer. The list
+// area shows "Loading…" while the fetch rides (the busy atom).
 async fn fetch_dir() -> str {
+    set_mode("explorer");
+    set_busy(true);
     let repo_full = stf_take(K_REPO) as u64;
     let path = stf_take(K_PATH) as u64;
     let full = rs_get_str(repo_full);
@@ -590,6 +659,7 @@ async fn fetch_dir() -> str {
     }
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
+        set_busy(false);
         fail("Network request failed — the browser may be offline.", true);
         return "";
     }
@@ -598,6 +668,7 @@ async fn fetch_dir() -> str {
     let ndirs = json_contents(text, fresh, true);
     let nfiles = json_contents(text, fresh, false);
     if (ndirs < 0 || nfiles < 0) {
+        set_busy(false);
         fail("Unexpected file-list response from the GitHub API.", true);
         return "";
     }
@@ -607,8 +678,16 @@ async fn fetch_dir() -> str {
     rs_set_bool(is_empty, ndirs + nfiles == 0);
     stf_put(K_FILES, files as f64);
     stf_put(K_EMPTY, is_empty as f64);
+    set_busy(false);
     set_mode("explorer");
     return "";
+}
+
+// The busy atom: the explorer's list-area "Loading…" rail.
+fn set_busy(v: bool) {
+    let busy = stf_take(K_BUSY) as u64;
+    stf_put(K_BUSY, busy as f64);
+    rs_set_bool(busy, v);
 }
 
 fn set_mode(mode: str) {

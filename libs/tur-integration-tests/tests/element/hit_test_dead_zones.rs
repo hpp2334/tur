@@ -317,11 +317,15 @@ fn double_build_is_rejected_at_compile_time() {
 //
 // The Phase-9 rewrite turned the fixture case into the full 3×3 game:
 // bound `left`/`top` atoms per piece (the drag rail), `.ids(i, i)` shared
-// callbacks, a snap highlight (a Condition branch), the "N / 9 placed"
-// derive badge, Shuffle (a stash-cell Fisher-Yates re-deal), and the
-// Solved! overlay. This pins the whole loop headlessly — the drag rail
-// (down → move → up on a Positioned-in-Stack piece), snap + non-snap, the
-// placed lock, the re-deal, and the solve.
+// callbacks, the "N / 9 placed" derive badge, Shuffle (a stash-cell
+// Fisher-Yates re-deal), and the Solved! overlay. The round-5 parity pass
+// replaced the invented cyan snap-highlight with the boa game feel: a
+// per-piece STATE SHADOW through the bound shadow rows (loose black soft
+// → dragging hard → placed own-hue glow) and the 180ms lift (a shared
+// easeOut controller over a per-piece bound scale). This pins the whole
+// loop headlessly — the drag rail (down → move → up on a
+// Positioned-in-Stack piece), the shadow/lift state changes, snap +
+// non-snap, the placed lock, the re-deal, and the solve.
 
 fn jigsaw_app() -> TurTestApp {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
@@ -340,16 +344,54 @@ fn jigsaw_target(app: &TurTestApp, piece: u64) -> u64 {
         - 1
 }
 
+// The piece face's painted (shadow_color, shadow_blur, shadow_dy) — the
+// state-shadow rails.
+fn jigsaw_shadow(
+    app: &TurTestApp,
+    piece: u64,
+) -> (Option<tur_engine::core::render::brush::Color>, Option<f64>, Option<f64>) {
+    let id = tur_engine::core::element::ElementNodeId::new(
+        app.query_element(&["jw", &format!("piece-{piece}")]).unwrap().as_u64(),
+    );
+    app.with_element(id, |e| {
+        let c = e.cast::<tur_engine::builtin_plugins::layout::ContainerElement>().unwrap();
+        (c.painted_shadow_color(), c.painted_shadow_blur(), c.painted_shadow_dy())
+    })
+    .unwrap()
+}
+
+// The piece lift scale — the Transform wrapping the pad (the pad's parent).
+fn jigsaw_lift(app: &TurTestApp, piece: u64) -> f64 {
+    let pad = tur_engine::core::element::ElementNodeId::new(
+        app.query_element(&["jw", &format!("pad-{piece}")]).unwrap().as_u64(),
+    );
+    let xf = {
+        let tree = app.element_tree();
+        tree.get_element(pad)
+            .and_then(|n| n.parent)
+            .map(|p| tur_engine::core::element::ElementNodeId::new(p.as_u64()))
+            .expect("the pad's lift Transform")
+    };
+    app.with_element(xf, |e| {
+        e.cast::<tur_engine::builtin_plugins::effects::TransformElement>()
+            .map(|t| t.painted_scale())
+    })
+    .unwrap()
+    .unwrap()
+}
+
 #[test]
 fn jigsaw_game_drags_snaps_counts_and_solves() {
     let mut app = jigsaw_app();
 
-    // Boot: counter seeds at 0, no highlight, 9 pieces + 9 ghosts.
+    // Boot: counter seeds at 0, 9 pieces + 9 ghosts, piece 0 at rest — the
+    // loose soft shadow, scale 1.
     assert_eq!(label(&app, &["jw", "counter"]), "0 / 9 placed", "seed count");
-    assert!(
-        app.query_element(&["jw", "snap-hl"]).is_none(),
-        "no highlight at rest"
-    );
+    let (sc, sb, sd) = jigsaw_shadow(&app, 0);
+    assert_eq!(sc, Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0x6E)), "loose shadow color");
+    assert_eq!(sb, Some(10.0), "loose shadow blur");
+    assert_eq!(sd, Some(4.0), "loose shadow dy");
+    assert!((jigsaw_lift(&app, 0) - 1.0).abs() < 0.001, "at rest scale 1");
 
     // WRONG slot: the piece follows the drag, nothing snaps, nothing counts.
     let target0 = jigsaw_target(&app, 0);
@@ -368,26 +410,40 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
         "the piece stays where it was dropped: {dropped:?} vs {wrong_center:?}"
     );
 
-    // CORRECT slot: the highlight shows within threshold mid-drag, hides on
-    // release, the piece pins to the slot center, the badge counts it.
+    // CORRECT slot: the grab HARDENS the shadow (drag state) and lifts the
+    // piece; the release pins to the slot center, swaps in the own-hue
+    // GLOW, settles the scale back to 1, and the badge counts it.
     let to = center(&app, &["jw", &format!("ghost-{target0}")]);
     app.pointer_down(dropped.0, dropped.1);
-    app.wait_for_timeout(Duration::ZERO);
+    app.wait_for_timeout(Duration::from_millis(16));
     app.pointer_move(to.0 + 10.0, to.1 + 10.0);
     app.wait_for_timeout(Duration::from_millis(16));
+    let (sc, sb, sd) = jigsaw_shadow(&app, 0);
+    assert_eq!(sc, Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0xB4)), "dragging shadow color");
+    assert_eq!(sb, Some(28.0), "dragging shadow blur");
+    assert_eq!(sd, Some(12.0), "dragging shadow dy");
     assert!(
-        app.query_element(&["jw", "snap-hl"]).is_some(),
-        "snap highlight shows within threshold"
+        jigsaw_lift(&app, 0) > 1.001,
+        "the lift eased the piece above scale 1 mid-drag"
     );
     app.pointer_move(to.0, to.1);
     app.wait_for_timeout(Duration::from_millis(16));
     app.pointer_up(to.0, to.1);
-    app.wait_for_timeout(Duration::from_millis(16));
+    // The 180ms settle rides the virtual clock.
+    app.wait_for_timeout(Duration::from_millis(300));
 
     assert_eq!(label(&app, &["jw", "counter"]), "1 / 9 placed", "snap counts");
+    let (sc, sb, sd) = jigsaw_shadow(&app, 0);
+    let glow = [0xD14747, 0xD1B347, 0x83D147, 0x47D178, 0x47BFD1, 0x4753D1, 0xA847D1, 0xD1478F, 0xD16C47][target0 as usize];
+    let want = tur_engine::core::render::brush::Color::rgba(
+        (glow >> 16) as u8, (glow >> 8) as u8, glow as u8, 0x8C,
+    );
+    assert_eq!(sc, Some(want), "placed pieces glow their own hue");
+    assert_eq!(sb, Some(18.0), "placed glow blur");
+    assert_eq!(sd, Some(4.0), "placed glow dy");
     assert!(
-        app.query_element(&["jw", "snap-hl"]).is_none(),
-        "highlight hides on release"
+        (jigsaw_lift(&app, 0) - 1.0).abs() < 0.001,
+        "the released piece settled back to scale 1"
     );
     let snapped = center(&app, &["jw", "piece-0"]);
     assert!(
