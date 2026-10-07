@@ -2616,6 +2616,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rut-semantic"
+version = "0.1.0"
+source = "git+https://github.com/hpp2334/rut?rev=442a97979b2aa4b0935a3416bb69db87b8272092#442a97979b2aa4b0935a3416bb69db87b8272092"
+dependencies = [
+ "rut-ast",
+ "rut-lexer",
+ "rut-parser",
+]
+
+[[package]]
 name = "rut-std"
 version = "0.1.0"
 source = "git+https://github.com/hpp2334/rut?rev=442a97979b2aa4b0935a3416bb69db87b8272092#442a97979b2aa4b0935a3416bb69db87b8272092"
@@ -3454,6 +3464,7 @@ dependencies = [
  "rut-core",
  "rut-lexer",
  "rut-parser",
+ "rut-semantic",
  "rut-vm",
  "tur-engine",
 ]

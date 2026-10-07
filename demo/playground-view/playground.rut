@@ -13,8 +13,12 @@
 // `counter` (the boa INITIAL_CASE): the editor loads its source, the
 // viewer renders and the status settles to ready without a tap.
 //
-// Editor highlighting: `pg_highlight` tokenizes the source (rut-lexer,
-// Rust-side) and `pg_apply_highlight` writes the colored spans into the
+// Editor highlighting: `pg_highlight` classifies the source through the
+// upstream rut-semantic classifier (Rust-side — token classes plus AST
+// name classes: fn/method names and call callees blue, types violet,
+// keywords teal, true/false/nil brown, strings / comments / numbers in the
+// boa palette; broken source degrades to token classes — never a wrong
+// color) and `pg_apply_highlight` writes the colored spans into the
 // editor controller — at case load + after a successful Run, matching the
 // boa buildHighlightSpans rail. NOT per keystroke (the recorded phase-D
 // decision): typed text inherits the caret span's color, so the

@@ -12,3 +12,4 @@ rut-vm = { workspace = true }
 rut-core = { workspace = true }
 rut-lexer = { workspace = true }
 rut-parser = { workspace = true }
+rut-semantic = { workspace = true }

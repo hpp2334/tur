@@ -1,19 +1,23 @@
-//! The playground's syntax highlighting — tokenize rut source into a flat
-//! colored span run for the editor controller (the boa
-//! `buildHighlightSpans` rail, lexical only).
+//! The playground's syntax highlighting — semantic classes for rut source
+//! as a flat colored span run for the editor controller (the boa
+//! `buildHighlightSpans` rail, now over the upstream `rut-semantic`
+//! classifier instead of token-text classes alone).
 //!
-//! The pipeline mirrors the boa reference (READ ONLY
-//! `tur-boa/.../cases/compile.ts`): lex → per-token colors → span runs,
-//! zero-width runs skipped (an empty-content span creates an empty parley
-//! style range and panics text layout — the trap the boa code comments).
-//! Colors are the boa tokens' `code.*` palette (light theme, AA on
-//! `code.bg`), restated as packed `0xRRGGBBAA` (the kit color law).
+//! The pipeline: `rut_semantic::classify_source` (normalize → lex →
+//! best-effort parse → token + AST name classes → comment gap scan; broken
+//! source degrades to token classes — never a wrong color) → the palette
+//! table below → the tiling fill. The legend deliberately leaves
+//! structural punctuation (commas, semicolons, braces, dots) unclassified
+//! and has no literal class, so the fill colors the gap bytes: whitespace
+//! stretches plain, punctuation operators, and tur's contextual item
+//! keyword `entry` (`entry fn` — outside upstream's reserved table)
+//! keyword teal. The runs join back to exactly the normalized source
+//! (`set_spans` replaces the document; CRLF normalization stays free).
 //!
-//! rut-lexer is a mode-stack tokenizer that SKIPS comments and whitespace —
-//! they are the gaps between tokens — so the builder scans each gap for
-//! `//` / `/* */` runs itself. `f"..."` interpolation holes are fully
-//! lexed token streams with absolute spans inside the literal: the literal
-//! colors as a string and the hole tokens overlay their own colors.
+//! Zero-width runs are skipped (an empty-content span creates an empty
+//! parley style range and panics text layout — the trap the boa code
+//! comments). Colors are the boa tokens' `code.*` palette (light theme, AA
+//! on `code.bg`), restated as packed `0xRRGGBBAA` (the kit color law).
 //!
 //! Metric note (phase-4 P0): a "wide inter-word gaps in comments" report
 //! measured out clean — the per-comment runs shape with the same monospace
@@ -23,7 +27,7 @@
 //! `editor_comment_spans_keep_uniform_monospace_advances` in the
 //! playground gate.
 
-use rut_lexer::token::{FPart, Tok};
+use rut_semantic::TokenType;
 
 use tur_engine::builtin_plugins::text::controller::SpanData;
 use tur_engine::core::rut_runtime::color_of;
@@ -36,89 +40,56 @@ const CODE_NUMBER: u64 = 0xB35900FF; // code.number
 const CODE_COMMENT: u64 = 0x8A94A3FF; // code.comment — ink.500
 const CODE_OPERATOR: u64 = 0x5E6878FF; // code.operator — ink.600
 const CODE_LITERAL: u64 = 0x92400EFF; // code.literal (true / false / nil)
+const CODE_FUNCTION: u64 = 0x1D4ED8FF; // code.function — fn + method names
+const CODE_TYPE: u64 = 0x6D28D9FF; // code.type — type/class/enum names
 
-/// The `pg_highlight` payload: the tokenized source as a flat colored span
-/// run (text + color only), sealed for the rut realm as an opaque.
+/// The `pg_highlight` payload: the classified source as a flat colored
+/// span run (text + color only), sealed for the rut realm as an opaque.
 pub struct PgSpans(pub Vec<SpanData>);
 
-/// Tokenize `src` into the colored span run the editor controller renders
+/// Classify `src` into the colored span run the editor controller renders
 /// (text + color only; every other style inherits the element's defaults).
 /// The join of the answer's texts is the CRLF-normalized source — spans
-/// index the normalized text (rut-lexer's contract), and applying the run
-/// normalizes the editor content for free.
+/// index the normalized text (`classify_source`'s contract, normalized
+/// identically here), and applying the run normalizes the editor content
+/// for free.
 pub fn highlight_spans(src: &str) -> Vec<SpanData> {
-    let src = rut_lexer::lexer::normalize(src);
-    let (toks, _diags) = rut_lexer::lexer::lex(&src);
+    let norm = rut_lexer::lexer::normalize(src);
+    let classes = rut_semantic::classify_source(src, rut_parser::Mode::Impl);
     let mut b = Builder {
-        src: &src,
+        src: &norm,
         spans: Vec::new(),
         pos: 0,
     };
     let mut pos = 0usize;
-    for t in &toks {
-        if matches!(t.tok, Tok::Eof) {
-            continue; // the tail gap after the last real token closes the run
-        }
-        let lo = t.span.lo as usize;
-        let hi = t.span.hi as usize;
+    for (span, ty) in &classes {
+        let lo = span.lo as usize;
+        let hi = span.hi as usize;
         b.gap(pos, lo);
-        match &t.tok {
-            Tok::FStr(fstr) => {
-                // The literal colors as a string; the hole tokens (absolute
-                // spans inside it) overlay their own colors.
-                let mut cursor = lo;
-                for part in &fstr.parts {
-                    let FPart::Hole(hole) = part else {
-                        continue;
-                    };
-                    for h in hole {
-                        if matches!(h.tok, Tok::Eof) {
-                            continue; // the hole's sentinel, span = the literal
-                        }
-                        let hlo = h.span.lo as usize;
-                        let hhi = h.span.hi as usize;
-                        if hlo < cursor || hhi > hi || hlo > hhi {
-                            continue; // outside the literal — never happen
-                        }
-                        b.emit(cursor, hlo, CODE_STRING);
-                        b.emit(hlo, hhi, classify(&h.tok));
-                        cursor = hhi;
-                    }
-                }
-                b.emit(cursor, hi, CODE_STRING);
-            }
-            _ => b.emit(lo, hi, classify(&t.tok)),
-        }
+        b.emit(lo, hi, classify(*ty, &norm[lo..hi]));
         pos = hi.max(pos);
     }
-    b.gap(pos, src.len());
+    b.gap(pos, norm.len());
     b.spans
 }
 
-/// One token kind → its palette color.
-fn classify(tok: &Tok) -> u64 {
-    match tok {
-        Tok::Int(..) | Tok::Float(..) => CODE_NUMBER,
-        Tok::Str(_) | Tok::RawStr(_) => CODE_STRING,
-        Tok::Bool(_) => CODE_LITERAL,
-        Tok::Ident(w) => classify_word(w),
-        // Punctuation & operators (everything lexical left over).
-        _ => CODE_OPERATOR,
-    }
-}
-
-/// Keywords are `Ident`s matched by text (the parser's law). `true` /
-/// `false` lex as `Tok::Bool` and `nil` stays an `Ident`, so the literal
-/// trio is special-cased here. `entry` is the contextual item keyword
-/// (`entry fn`); the rest of the keyword set is the parser's canonical
-/// `RESERVED_KW` table (shared, not restated).
-fn classify_word(w: &str) -> u64 {
-    if matches!(w, "true" | "false" | "nil") {
-        CODE_LITERAL
-    } else if w == "entry" || rut_parser::is_reserved_kw(w) {
-        CODE_KEYWORD
-    } else {
-        CODE_FG
+/// One legend class → its palette color. Keywords whose text is a literal
+/// keep the literal brown (`true` / `false` / `nil` classify as keywords —
+/// the legend has no literal class). `Variable` / `Parameter` /
+/// `Property` stay plain ink (distinct colors deferred — one table row
+/// each, later).
+fn classify(ty: TokenType, text: &str) -> u64 {
+    match ty {
+        TokenType::Keyword if matches!(text, "true" | "false" | "nil") => CODE_LITERAL,
+        TokenType::Keyword => CODE_KEYWORD,
+        TokenType::Number => CODE_NUMBER,
+        TokenType::String => CODE_STRING,
+        TokenType::Comment => CODE_COMMENT,
+        TokenType::Operator => CODE_OPERATOR,
+        TokenType::EnumMember => CODE_LITERAL,
+        TokenType::Function | TokenType::Method => CODE_FUNCTION,
+        TokenType::Type | TokenType::Enum | TokenType::Class | TokenType::Interface => CODE_TYPE,
+        TokenType::Variable | TokenType::Parameter | TokenType::Property => CODE_FG,
     }
 }
 
@@ -160,35 +131,28 @@ impl<'a> Builder<'a> {
         self.pos = hi;
     }
 
-    /// The token gap `[lo, hi)` — whitespace plus the comments the lexer
-    /// skips. Comment runs color as comments, the whitespace between them
-    /// stays plain.
+    /// The unclassified gap `[lo, hi)`: whitespace stays plain, structural
+    /// punctuation colors as an operator (the legend leaves it out — the
+    /// boa look survives), and the contextual item keyword `entry` keeps
+    /// its keyword ink.
     fn gap(&mut self, lo: usize, hi: usize) {
-        if lo >= hi {
-            return;
-        }
         let bytes = self.src.as_bytes();
         let mut i = lo;
-        let mut plain_start = lo;
         while i < hi {
-            if bytes[i] == b'/' && i + 1 < hi && (bytes[i + 1] == b'/' || bytes[i + 1] == b'*') {
-                if plain_start < i {
-                    self.emit(plain_start, i, CODE_FG);
-                }
-                let end = if bytes[i + 1] == b'/' {
-                    self.src[i..hi].find('\n').map_or(hi, |j| i + j)
-                } else {
-                    self.src[i..hi].find("*/").map_or(hi, |j| i + j + 2)
-                };
-                self.emit(i, end, CODE_COMMENT);
-                i = end;
-                plain_start = end;
-            } else {
-                i += 1;
+            let ws = bytes[i].is_ascii_whitespace();
+            let mut j = i + 1;
+            while j < hi && bytes[j].is_ascii_whitespace() == ws {
+                j += 1;
             }
-        }
-        if plain_start < hi {
-            self.emit(plain_start, hi, CODE_FG);
+            let color = if ws {
+                CODE_FG
+            } else if j - i == 5 && &self.src[i..j] == "entry" {
+                CODE_KEYWORD
+            } else {
+                CODE_OPERATOR
+            };
+            self.emit(i, j, color);
+            i = j;
         }
     }
 }
@@ -215,6 +179,8 @@ mod tests {
     const COMMENT: [u8; 3] = [0x8A, 0x94, 0xA3]; // ink.500 — code.comment
     const OP: [u8; 3] = [0x5E, 0x68, 0x78]; // ink.600 — code.operator
     const LITERAL: [u8; 3] = [0x92, 0x40, 0x0E]; // code.literal
+    const FUNCTION: [u8; 3] = [0x1D, 0x4E, 0xD8]; // code.function
+    const TYPE: [u8; 3] = [0x6D, 0x28, 0xD9]; // code.type
 
     #[test]
     fn keyword_string_comment_classify() {
@@ -246,8 +212,9 @@ mod tests {
         assert_eq!(
             rgbs(&spans),
             vec![
-                ("f".into(), FG),
-                ("(".into(), OP),
+                // A top-level call is part of no item — the callee rides
+                // the operator gap together with the paren.
+                ("f(".into(), OP),
                 ("12.5".into(), NUM),
                 (",".into(), OP),
                 (" ".into(), FG),
@@ -272,7 +239,7 @@ mod tests {
         assert_eq!(at("entry"), KW);
         assert_eq!(at("fn"), KW);
         assert_eq!(at("return"), KW);
-        assert_eq!(at("str"), FG, "primitive type names are ordinary words");
+        assert_eq!(at("str"), TYPE, "primitive type names classify as types");
         assert_eq!(at("nil"), LITERAL);
         assert_eq!(at("->"), OP);
         // The runs join back to the source.
@@ -282,20 +249,29 @@ mod tests {
 
     #[test]
     fn string_raw_string_and_fstring_holes() {
-        let spans = highlight_spans("f\"x {name} y\" + r\"raw\"");
+        let spans = highlight_spans("let x = f\"x {name} y\" + r\"raw\";\n");
         assert_eq!(
             rgbs(&spans),
             vec![
-                // The literal's prologue colors as a string (through the `{`)…
+                ("let".into(), KW),
+                (" x ".into(), FG),
+                ("=".into(), OP),
+                (" ".into(), FG),
+                // The literal's prologue colors as a string (through the
+                // `{`)…
                 ("f\"x {".into(), STR),
-                // …the hole's tokens overlay their own colors…
+                // …the hole's identifier classifies (a variable — plain)…
                 ("name".into(), FG),
-                // …and the tail after the hole stays string.
-                ("} y\"".into(), STR),
+                // …the hole's closing brace rides the operator gap, and the
+                // tail after it stays string.
+                ("}".into(), OP),
+                (" y\"".into(), STR),
                 (" ".into(), FG),
                 ("+".into(), OP),
                 (" ".into(), FG),
                 ("r\"raw\"".into(), STR),
+                (";".into(), OP),
+                ("\n".into(), FG),
             ]
         );
     }
@@ -347,5 +323,74 @@ mod tests {
             rut_lexer::lexer::normalize(src).len(),
             "runs tile the source"
         );
+    }
+
+    /// The color of the first run whose text contains `needle` — for names
+    /// that merge with an adjacent plain gap (a `let` binding always does:
+    /// `let full` colors as one plain stretch).
+    fn at(got: &[(String, [u8; 3])], needle: &str) -> [u8; 3] {
+        got.iter()
+            .find(|(t, _)| t.contains(needle))
+            .unwrap_or_else(|| panic!("no span with `{needle}` in {got:?}"))
+            .1
+    }
+
+    #[test]
+    fn fn_decl_call_and_binding_roles_color() {
+        let spans =
+            highlight_spans("fn greet(n: u64) -> str {\n    let full = hi(n);\n}\n");
+        let got = rgbs(&spans);
+        assert_eq!(at(&got, "greet"), FUNCTION, "the fn decl name");
+        assert_eq!(at(&got, "hi"), FUNCTION, "the call callee");
+        assert_eq!(at(&got, "full"), FG, "the let binding stays plain");
+        assert_eq!(at(&got, "u64"), TYPE, "the primitive param type");
+        assert_eq!(at(&got, "str"), TYPE, "the return type");
+        // Exact runs: the param and the call arg sit between punctuation,
+        // so they never merge — both plain.
+        let exact = |text: &str| {
+            got.iter()
+                .find(|(t, _)| t == text)
+                .unwrap_or_else(|| panic!("no exact span `{text}` in {got:?}"))
+                .1
+        };
+        assert_eq!(exact("n"), FG, "the param + the call arg stay plain");
+        assert_eq!(exact("fn"), KW);
+    }
+
+    #[test]
+    fn method_call_names_color_function() {
+        let spans = highlight_spans("fn go(s: str) {\n    s.draw();\n}\n");
+        let got = rgbs(&spans);
+        let exact = |text: &str| {
+            got.iter()
+                .find(|(t, _)| t == text)
+                .unwrap_or_else(|| panic!("no exact span `{text}` in {got:?}"))
+                .1
+        };
+        assert_eq!(exact("go"), FUNCTION, "the fn decl name");
+        assert_eq!(exact("draw"), FUNCTION, "the method-call name");
+        assert_eq!(exact("s"), FG, "the param stays plain");
+        assert_eq!(exact("str"), TYPE, "the primitive param type");
+    }
+
+    #[test]
+    fn capitalized_path_segs_follow_the_type_convention() {
+        let spans = highlight_spans("fn go(c: Color) {\n    let r = Color.Red;\n}\n");
+        let got = rgbs(&spans);
+        // The value position has no resolution yet — capitalized prefix
+        // segs read as types, a capitalized last seg as an enum member.
+        assert!(
+            got.iter().all(|(t, c)| t != "Color" || *c == TYPE),
+            "every `Color` run colors as a type: {got:?}"
+        );
+        let exact = |text: &str| {
+            got.iter()
+                .find(|(t, _)| t == text)
+                .unwrap_or_else(|| panic!("no exact span `{text}` in {got:?}"))
+                .1
+        };
+        assert_eq!(exact("Red"), LITERAL, "the capitalized member");
+        assert_eq!(exact("c"), FG, "the param stays plain");
+        assert_eq!(exact("go"), FUNCTION);
     }
 }

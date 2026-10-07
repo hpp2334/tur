@@ -11,8 +11,9 @@
 //!   `0` on failure.
 //! - `pg_compile_diags() -> str` — the string-diagnostics path: the last
 //!   compile's parse report (empty when the last compile succeeded).
-//! - `pg_highlight(src) -> opaque` — tokenize rut source (rut-lexer) into
-//!   the editor's colored span run, sealed as an opaque ([`PgSpans`]).
+//! - `pg_highlight(src) -> opaque` — classify rut source (rut-semantic:
+//!   token + AST name classes) into the editor's colored span run, sealed
+//!   as an opaque ([`PgSpans`]).
 //! - `pg_apply_highlight(ctrl, spans) -> nil` — write the run into an
 //!   editor controller (the `tctrl_*` refresh law: mark the mounted
 //!   editable dirty + request a frame). The apply preserves the caret: it

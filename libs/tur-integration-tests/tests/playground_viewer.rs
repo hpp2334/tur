@@ -666,6 +666,8 @@ const CODE_FG_PLAIN: u64 = 0x1F_25_30_FF; // ink.800 — code.fg
 const CODE_KEYWORD: u64 = 0x00_6E_58_FF; // teal.700
 const CODE_STRING: u64 = 0x3F_7D_3F_FF; // code.string
 const CODE_COMMENT: u64 = 0x8A_94_A3_FF; // ink.500
+const CODE_FUNCTION: u64 = 0x1D_4E_D8_FF; // code.function
+const CODE_TYPE: u64 = 0x6D_28_D9_FF; // code.type
 
 /// The editor controller's spans as `(text, packed color)` pairs — the
 /// highlighting probe (the zero-width/empty-span law is asserted too: an
@@ -702,7 +704,7 @@ fn joined(spans: &[(String, u64)]) -> String {
 /// A minimal fixture: one editor Input on a realm-minted controller; the
 /// `highlight` probe runs the case-load rail (`pg_highlight` +
 /// `pg_apply_highlight`) over a baked-in source — a keyword, an f-string
-/// with a hole, and a comment.
+/// with a hole, a comment, and the fn/call/method/param roles.
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
 use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
 use tur_kit::{ Column, Input };
@@ -720,7 +722,7 @@ entry fn start() -> u64 {
 
 // The case-load rail over a known small source.
 entry fn highlight(_a: u64, _b: f64) {
-    let src = "entry fn start() {\n    let s = f\"x {s}\"; // t\n}\n";
+    let src = "entry fn start() {\n    let s = f\"x {s}\"; // t\n    helper(1);\n    s.draw();\n}\nfn helper(n: u64) {\n}\n";
     let ctrl = st_take(K_CTRL);
     pg_apply_highlight(ctrl, pg_highlight(src));
     st_put(K_CTRL, ctrl);
@@ -744,7 +746,7 @@ fn pg_highlight_rows_color_the_controller_spans() {
     // trap), no lost text.
     assert_eq!(
         joined(&spans),
-        "entry fn start() {\n    let s = f\"x {s}\"; // t\n}\n",
+        "entry fn start() {\n    let s = f\"x {s}\"; // t\n    helper(1);\n    s.draw();\n}\nfn helper(n: u64) {\n}\n",
         "the colored runs tile the source"
     );
     let has = |text: &str, color: u64| spans.iter().any(|(t, c)| t == text && *c == color);
@@ -753,9 +755,17 @@ fn pg_highlight_rows_color_the_controller_spans() {
     // The f-string: the prologue + tail color as the string, the hole's
     // identifier overlays plain.
     assert!(has("f\"x {", CODE_STRING), "the f-string prologue");
-    assert!(has("}\"", CODE_STRING), "the f-string tail");
+    assert!(has("\"", CODE_STRING), "the f-string tail");
     assert!(has("s", CODE_FG_PLAIN), "the hole identifier stays plain");
     assert!(has("// t", CODE_COMMENT), "the comment");
+    // The semantic classes ride the real load rail: the fn decl name and
+    // the call callee color as functions, the method-call name joins them
+    // (the same code.function ink), the primitive type name reads as a
+    // type, and the param stays plain.
+    assert!(has("helper", CODE_FUNCTION), "the fn decl + call callee: {spans:?}");
+    assert!(has("draw", CODE_FUNCTION), "the method-call name");
+    assert!(has("u64", CODE_TYPE), "the primitive type name");
+    assert!(has("n", CODE_FG_PLAIN), "the param stays plain");
 }
 
 #[test]
