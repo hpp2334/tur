@@ -569,7 +569,7 @@ fn h_generic_ctx_spelling_runs_the_triad() {
         "ctx.set<f64> wrote through the generic method"
     );
     assert_eq!(
-        rut_text_at(&app, "rut/tag"),
+        rut_text_at(&app, "tag"),
         "step 2",
         "ctx.run<f64> composed a typed-arg mutation"
     );
