@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell, Ref, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -159,7 +159,7 @@ impl View for EditableTextView {
                 blink_task: None,
                 scroll_y: Cell::new(0.0),
                 max_scroll_y: Cell::new(0.0),
-                seen_revision: Cell::new(0),
+                seen_replace_epoch: Cell::new(0),
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
@@ -247,10 +247,12 @@ pub struct EditableTextElement {
     /// Content height minus viewport height, refreshed each layout — the
     /// wheel's clamp ceiling.
     pub(crate) max_scroll_y: Cell<f64>,
-    /// The controller revision the current scroll belongs to. A programmatic
-    /// text replacement (the playground loads a new case source into the
-    /// same editor) bumps the revision and resets the scroll to the top.
-    pub(crate) seen_revision: Cell<u64>,
+    /// The controller replacement epoch the current scroll belongs to. A
+    /// programmatic text replacement (`tctrl_set_text` — the playground
+    /// loads a new case source into the same editor) advances the epoch and
+    /// resets the scroll to the top. Typing / undo / span writes never touch
+    /// the epoch, so they keep the scroll where the user left it.
+    pub(crate) seen_replace_epoch: Cell<u64>,
 }
 
 impl Drop for EditableTextElement {

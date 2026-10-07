@@ -15,8 +15,8 @@ pub use undo_controller::{TextEditingValue, UndoController};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::core::element::NodeId;
 use crate::core::edgy::mutation::MutationHandle;
+use crate::core::element::NodeId;
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 
@@ -33,6 +33,13 @@ pub struct TextEditingController {
     /// `EditableTextElement` layout memo (keyed on the revision) can skip
     /// re-shaping the whole document on cursor-only changes.
     revision: u64,
+    /// Replacement epoch — bumped by the programmatic full-replacement rail
+    /// (`set_spans`, i.e. the `tctrl_set_text` row) ONLY. Typing, undo, and
+    /// highlight span writes ride the other mutators and never touch it.
+    /// The multiline scroll reset keys off THIS, not the revision: a scrolled
+    /// editor must keep its scroll while the user types or undo runs, and
+    /// reopen at the top only when a new document is loaded into it.
+    replace_epoch: u64,
     /// Memoized join of `spans`, keyed by `revision`. `text()` is called
     /// several times per keystroke and once per painted frame; the join is
     /// O(document) so it is derived once per content change instead.
@@ -82,6 +89,7 @@ impl TextEditingController {
             composing_text: None,
             composing_start: 0,
             revision: 0,
+            replace_epoch: 0,
             cached_text: RefCell::new(None),
             undo_recorder: None,
             suppress_undo: false,
@@ -117,6 +125,14 @@ impl TextEditingController {
     /// unchanged content skips re-shaping.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Current replacement epoch (see the field doc). The multiline scroll
+    /// reset compares against the epoch it last saw: a mismatch means a
+    /// programmatic document replacement happened and the view reopens at
+    /// the top.
+    pub fn replace_epoch(&self) -> u64 {
+        self.replace_epoch
     }
 
     /// Bump the content revision (rendered text / span styles changed).
@@ -190,6 +206,11 @@ impl TextEditingController {
         if new_text != self.text() {
             self.maybe_push_undo();
         }
+        // The replacement rail ALWAYS advances the epoch — even when the
+        // content is unchanged (re-selecting the same case / Reset). This is
+        // the multiline scroll reset's only trigger: a programmatic document
+        // replacement reopens the view at the top.
+        self.replace_epoch = self.replace_epoch.wrapping_add(1);
         // Bump the revision only when the *rendered content* differs: a
         // no-op re-highlight (identical spans) stays free — the element's
         // layout memo keeps its hit and the document is not re-shaped.
