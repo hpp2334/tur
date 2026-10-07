@@ -24,11 +24,7 @@ use tur::{
     HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, mem_get, mem_new,
     mem_set, mount, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
 };
-use tur_kit::{
-    Column, Condition, Container, DeriveCtx, Input, MouseRegion, Handler, MutationCtx,
-    PointerInteract, Readable, Row, SizedBox, Stack, TaskCtx, Text, derive_str, mutate, spawn,
-    source_bool, source_f64, source_str,
-};
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Stack, TaskCtx, Text, derive, mutate, source, spawn };
 
 
 // The light-slate palette (the boa countdown).
@@ -47,21 +43,21 @@ let URGENT: u64 = 0xEF4444FFu64;
 let BACKDROP: u64 = 0x0F172A6Eu64;
 
 entry fn start() -> u64 {
-    let remaining = source_f64(60.0);
-    let initial = source_f64(60.0);
-    let running = source_bool(false);
-    let editing = source_bool(false);
+    let remaining = source<f64>(60.0);
+    let initial = source<f64>(60.0);
+    let running = source<bool>(false);
+    let editing = source<bool>(false);
 
     // The chrome: the four-state pill's dot + label and the display's
     // urgent tint — sources the mutations repaint (see sync_chrome).
-    let dot = source_f64(0.0);
-    let pill = source_str("Ready");
-    let urgent = source_bool(false);
+    let dot: Readable<u64> = source<u64>(0);
+    let pill = source<str>("Ready");
+    let urgent = source<bool>(false);
 
-    let display_str = derive_str(fn (ctx: DeriveCtx) -> str {
+    let display_str = derive<str>(fn (ctx: DeriveCtx) -> str {
         return fmt_display(ctx.get<f64>(remaining));
     });
-    let start_label = derive_str(fn (ctx: DeriveCtx) -> str {
+    let start_label = derive<str>(fn (ctx: DeriveCtx) -> str {
         return fmt_start_label(ctx.get<f64>(remaining));
     });
 
@@ -79,7 +75,7 @@ entry fn start() -> u64 {
 
     // Start: guard against double-start, set running, launch the ticker
     // with a fresh generation.
-    let b_start = mutate(fn (ctx: MutationCtx) {
+    let b_start = mutate(fn (ctx: MutationCtx, _e: nil) {
         if (ctx.get<bool>(running)) {
             return;
         }
@@ -89,14 +85,14 @@ entry fn start() -> u64 {
     });
 
     // Pause: stop the clock and supersede any live ticker.
-    let b_pause = mutate(fn (ctx: MutationCtx) {
+    let b_pause = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
         gen_bump(cell);
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Reset: stop the clock and restore the initial time.
-    let b_reset = mutate(fn (ctx: MutationCtx) {
+    let b_reset = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
         gen_bump(cell);
         ctx.set<f64>(remaining, ctx.get<f64>(initial));
@@ -107,7 +103,7 @@ entry fn start() -> u64 {
     // editing, and pre-seed the modal's controller with the live
     // `initial` (the branch builds fresh at activation, over the seeded
     // controller).
-    let b_edit = mutate(fn (ctx: MutationCtx) {
+    let b_edit = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
         gen_bump(cell);
         ctx.set<bool>(editing, true);
@@ -116,12 +112,12 @@ entry fn start() -> u64 {
     });
 
     // Cancel: close the modal.
-    let b_cancel = mutate(fn (ctx: MutationCtx) {
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(editing, false);
     });
 
     // Confirm: parse the field, apply it to initial + remaining, close.
-    let b_confirm = mutate(fn (ctx: MutationCtx) {
+    let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
         let v = str_parse_f64(tctrl_text(ctrl));
         ctx.set<f64>(initial, v);
         ctx.set<f64>(remaining, v);
@@ -131,7 +127,7 @@ entry fn start() -> u64 {
 
     // Clicks inside the card stop at the card (the scrim's cancel never
     // sees them).
-    let b_swallow = mutate(fn (_ctx: MutationCtx) {
+    let b_swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
 
     let edit_button = ghost_button("btn-edit", "Edit", b_edit);
@@ -193,7 +189,7 @@ entry fn start() -> u64 {
 // ---- the styled pieces -------------------------------------------------------
 
 // The big rounded primary button (the boa PrimaryButton).
-fn pad(key: str, label: str, bg: u64, shade: u64, cb: Handler<nil>) -> opaque {
+fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> opaque {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
@@ -210,7 +206,7 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: Handler<nil>) -> opaque {
 }
 
 // The Start pad: the label rides the derive ("Restart" once drained).
-fn start_pad(label: Readable<str>, cb: Handler<nil>) -> opaque {
+fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> opaque {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
@@ -227,7 +223,7 @@ fn start_pad(label: Readable<str>, cb: Handler<nil>) -> opaque {
 }
 
 // The bordered ghost button (the boa GhostButton).
-fn ghost_button(key: str, label: str, cb: Handler<nil>) -> opaque {
+fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> opaque {
     let face = Container()
         .padding(10.0)
         .radius(10.0)
@@ -250,7 +246,7 @@ fn ghost_button(key: str, label: str, cb: Handler<nil>) -> opaque {
 // The "● Ready/Running/Paused/Done" pill: the dot + label ride their
 // sources — the four states are painted by the mutations (sync_chrome)
 // and the ticker's Done write.
-fn chip_status(dot: Readable<f64>, label: Readable<str>) -> opaque {
+fn chip_status(dot: Readable<u64>, label: Readable<str>) -> opaque {
     return Container()
         .padding(6.0)
         .radius(999.0)
@@ -277,7 +273,7 @@ fn display_text(color: u64, disp: Readable<str>) -> View {
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
 // swallows its own taps. Runs at ACTIVATION over the controller the edit
 // mutation re-seeded.
-fn edit_modal(ctrl: opaque, undo: opaque, b_confirm: Handler<nil>, b_cancel: Handler<nil>, b_swallow: Handler<nil>) -> opaque {
+fn edit_modal(ctrl: opaque, undo: opaque, b_confirm: Mutation<nil>, b_cancel: Mutation<nil>, b_swallow: Mutation<nil>) -> opaque {
     let field = Input()
         .controller(ctrl)
         .undo(undo)
@@ -401,12 +397,12 @@ fn urgent_of(running: bool, r: f64) -> bool {
 // mutation's tail; the ticker writes its Done state directly — TaskCtx
 // and MutationCtx are distinct faces).
 fn sync_chrome(ctx: MutationCtx, running: Readable<bool>, remaining: Readable<f64>,
-               initial: Readable<f64>, dot: Readable<f64>, pill: Readable<str>,
+               initial: Readable<f64>, dot: Readable<u64>, pill: Readable<str>,
                urgent: Readable<bool>) {
     let run = ctx.get<bool>(running);
     let r = ctx.get<f64>(remaining);
     let init = ctx.get<f64>(initial);
-    ctx.set_brush(dot, pill_color(run, r, init));
+    ctx.set<u64>(dot, pill_color(run, r, init));
     ctx.set<str>(pill, pill_text(run, r, init));
     ctx.set<bool>(urgent, urgent_of(run, r));
 }
@@ -440,7 +436,7 @@ fn fmt_start_label(v: f64) -> str {
 // task too: ticks re-derive the urgent tint, and the drained exit writes
 // the Done state.
 async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, remaining: Readable<f64>,
-                dot: Readable<f64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
+                dot: Readable<u64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
     while (ctx.get<bool>(running)) {
         await sleep(1000);
         if (mem_get(cell) != g) {
@@ -454,7 +450,7 @@ async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, rem
             ctx.set<f64>(remaining, 0.0);
             ctx.set<bool>(running, false);
             ctx.set<str>(pill, "Done");
-            ctx.set_brush(dot, TEXT_FAINT);
+            ctx.set<u64>(dot, TEXT_FAINT);
             ctx.set<bool>(urgent, false);
             return "";
         }

@@ -235,17 +235,17 @@ fn container_with_shadow() {
 
 const RADIUS_BOUND_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceF64,  Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
-    let r: Readable<f64> = source_f64(8.0);
+    let r: Readable<f64> = source<f64>(8.0);
     let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
     mount(card);
     return r.atom_id();
 }
 
 entry fn probe_r(atom: u64, b: f64) {
-    let r = SourceF64.of(ctx_bridge(), atom, false);
+    let r = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(r, b);
 }
 "#;

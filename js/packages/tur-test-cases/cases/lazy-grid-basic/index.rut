@@ -6,7 +6,7 @@
 // between-tile gap re-forms as 2+2 of pane background (the sanctioned
 // case-side stand-in; the outer edges sit 2px in where boa's sit flush).
 use tur::mount;
-use tur_kit::{ Container, LazyGrid, Text, source_f64 };
+use tur_kit::{ Container, LazyGrid, Source, Text, source };
 
 
 fn cell(i: u64) -> opaque {
@@ -18,7 +18,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() {
-    let count = source_f64(500.0);
+    let count = source<f64>(500.0);
     let grid = LazyGrid()
         .item_builder(cell)
         .count(count)

@@ -14,10 +14,7 @@ use tur::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS
     CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END,
     MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg, mount,
     tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Handler, Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, MouseRegion,
-    Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox,
-    Stack, Text, list_new, list_push, mutate, source_bool, source_f64, source_value, value_item,
-    value_len };
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Text, list_new, list_push, mutate, source, value_item, value_len };
 
 
 // The boa light palette (Notion / Linear-style).
@@ -44,12 +41,12 @@ let SVG_PLUS: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='
 
 entry fn start() -> u64 {
     // The board state (all rides by capture — no stash).
-    let tasks = source_value(seed_tasks());
-    let n = source_f64(0.0);
-    let done = source_f64(0.0);
-    let add_open = source_bool(false);
-    let rm_open = source_bool(false);
-    let rm_tgt = source_f64(0.0);
+    let tasks = source<opaque>(seed_tasks());
+    let n = source<f64>(0.0);
+    let done = source<f64>(0.0);
+    let add_open = source<bool>(false);
+    let rm_open = source<bool>(false);
+    let rm_tgt = source<f64>(0.0);
 
     // The icon resources (inline SVG through the image rail; plain u64
     // resource ids — the builders take them as params).
@@ -57,7 +54,7 @@ entry fn start() -> u64 {
 
     // Seed the counters, then hand the header derive its deps.
     recount(MutationCtx.over(ctx_bridge()), tasks, n, done);
-    let count = derive_str(fn (ctx: DeriveCtx) -> str {
+    let count = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"{ctx.get<f64>(n) as u64} items · {ctx.get<f64>(done) as u64} done";
     });
 
@@ -184,7 +181,7 @@ fn item_done(s: str) -> bool {
 // The indigo New Task pill (plus glyph + label); its mutation opens the
 // add modal.
 fn add_button(add_open: Readable<bool>, ico: [u64]) -> opaque {
-    let b_open = mutate(fn (ctx: MutationCtx) {
+    let b_open = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(add_open, true);
     });
     let face = Container()
@@ -263,7 +260,7 @@ fn row_spacer(i: u64) -> opaque {
 // bordered empty square otherwise. The tap captures the row index.
 fn checkbox(i: u64, done: bool, tasks: Readable<opaque>, n: Readable<f64>,
             done_count: Readable<f64>, ico: [u64]) -> opaque {
-    let b_toggle = mutate(fn (ctx: MutationCtx) {
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
         toggle_task(ctx, tasks, i);
         recount(ctx, tasks, n, done_count);
     });
@@ -323,7 +320,7 @@ fn title_block(title: str, desc: str, done: bool) -> opaque {
 // The X button (opens the remove-confirm modal for this row — the index
 // rides the capture).
 fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> opaque {
-    let b_rm = mutate(fn (ctx: MutationCtx) {
+    let b_rm = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(rm_tgt, i as f64);
         ctx.set<bool>(rm_open, true);
     });
@@ -350,7 +347,7 @@ fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u
 
 // The modal shell: a scrim (tap = dismiss) around a card that swallows
 // its own taps (both handlers ride by parameter).
-fn modal_shell(scrim_tap: Handler<nil>, swallow: Handler<nil>, card: opaque) -> opaque {
+fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: opaque) -> opaque {
     let inner = PointerInteract()
         .behavior(HIT_TEST_OPAQUE)
         .on_click(swallow)
@@ -365,7 +362,7 @@ fn modal_shell(scrim_tap: Handler<nil>, swallow: Handler<nil>, card: opaque) -> 
 }
 
 // A standard modal button (the boa Button).
-fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Handler<nil>) -> opaque {
+fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(7.0)
@@ -424,12 +421,12 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
     let dctrl = tctrl_new();
     let undo2 = undo_new();
 
-    let b_cancel = mutate(fn (ctx: MutationCtx) {
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(add_open, false);
     });
     // Add Task: the non-empty title appends a fresh open task, then the
     // modal closes (the composed close is an inline write).
-    let b_submit = mutate(fn (ctx: MutationCtx) {
+    let b_submit = mutate(fn (ctx: MutationCtx, _e: nil) {
         let title = trim(tctrl_text(ctrl));
         if (title == "") {
             return;
@@ -468,7 +465,7 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
                 .build(),
         )
         .build();
-    let swallow = mutate(fn (_ctx: MutationCtx) {
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     return modal_shell(b_cancel, swallow, card);
 }
@@ -485,11 +482,11 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
     let q: str = "\"";
     let said = f"{q}{title}{q} will be permanently removed.";
 
-    let b_cancel = mutate(fn (ctx: MutationCtx) {
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(rm_open, false);
     });
     // Remove for real: rebuild the list without the target, recount, close.
-    let b_confirm = mutate(fn (ctx: MutationCtx) {
+    let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
         let old = ctx.get<opaque>(tasks);
         let fresh = list_new();
         let count = value_len(old);
@@ -531,7 +528,7 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
                 .build(),
         )
         .build();
-    let swallow = mutate(fn (_ctx: MutationCtx) {
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     return modal_shell(b_cancel, swallow, card);
 }

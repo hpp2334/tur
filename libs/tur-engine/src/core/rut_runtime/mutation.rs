@@ -138,24 +138,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_value: {e}")))
     });
 
-    // ctx_set_brush(h, atom, packed) — the brush-atom write (the animated
-    // color channels; 0 clears), guarded like the other writes.
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_brush", (Opaque<CtxBridge>, u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, color: u64| {
-        let value = if color == 0 {
-            Value::Nil
-        } else {
-            let c = crate::core::rut_runtime::color_of(color);
-            Value::opaque(Rc::new(c) as Rc<dyn std::any::Any>)
-        };
-        checked_writable(&h, atom)
-            .and_then(|()| {
-                h.store
-                    .bridge()
-                    .set_source(super::source_of::<Value>(atom), value)
-            })
-            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_brush: {e}")))
-    });
+    // ctx_set_brush died with the brush wart: brush atoms are plain u64
+    // sources now (the packed color rides the boxed write lane, the
+    // `FromValue for Brush` decode reads the packed number).
 
     // ctx_get_opaque / ctx_set_opaque — the host-box rail (opaques are
     // just values): a Rust-held opaque (the animation controller slot)
@@ -204,6 +189,46 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "ctx_run_f64", (Opaque<CtxBridge>, u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, a: f64| {
         let m = MutationHandle::<ValueArgs>::new(mutation_of(atom));
         h.mutation_queue.borrow_mut().push(m, ValueArgs(vec![Value::Num(a)]));
+        h.dirty.set(true);
+        Ok(())
+    });
+
+    // ---- the boxed rail's ctx face (the GENERIC lane) ---------------------
+    //
+    // ctx_get_box(h, atom, stamp) — the TRACKED read through the box: the
+    // atom's native value re-seals as a rut erasure box so the kit's
+    // generic `Source<T>.get()` recovers it with `unopaque<T>`. The stamp
+    // picks the number lane's width (the KV's one collapse — see
+    // [`super::STAMP_NUM_U64`]); every other kind stamps by its variant.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_get_box", (Opaque<CtxBridge>, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, stamp: u64| {
+        let value = h.store.read_only().read(super::readable_of::<Value>(atom));
+        super::seal_box(vm, &value, stamp)
+    });
+    // ctx_set_box(h, atom, box) — the guarded generic write: the box
+    // decodes into the same native variant the typed rows store (the
+    // write-side law applies — only source atoms accept writes).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_set_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: OpaqueRef| {
+        let value = super::boxed_to_value(vm, &v)?;
+        checked_writable(&h, atom)
+            .and_then(|()| {
+                h.store
+                    .bridge()
+                    .set_source(super::source_of::<Value>(atom), value)
+            })
+            .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_box: {e}")))
+    });
+    // ctx_run_box(h, atom, box) — the GENERIC composition row: the arg
+    // crosses boxed (the kit's `mutate<A>` sealed the fixed-type wrapper
+    // whose tag lands here); the payload decodes in the drain's MUT_BOX
+    // branch and the wrapper recovers A with `unopaque<A>`.
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "ctx_run_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, b: OpaqueRef| {
+        let m = MutationHandle::<ValueArgs>::new(mutation_of(atom));
+        h.mutation_queue
+            .borrow_mut()
+            .push(m, ValueArgs(vec![Value::opaque(Rc::new(b) as Rc<dyn std::any::Any>)]));
         h.dirty.set(true);
         Ok(())
     });
@@ -295,6 +320,24 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                         (cb.clone(), marker.clone(), a),
                     );
                 }
+                seal_tags::MUT_BOX => {
+                    // [box] — the generic composition lane: the kit's
+                    // `invoke` crossed the arg as the erasure box; the
+                    // entry hands it to the sealed fixed-type wrapper,
+                    // which recovers A with `unopaque<A>`.
+                    let b = match args.first() {
+                        Some(Value::Opaque(a)) => a.downcast_ref::<OpaqueRef>().cloned(),
+                        _ => None,
+                    };
+                    let Some(b) = b else {
+                        return Err("ctx.run: the boxed payload is missing".to_string());
+                    };
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        mutation_entries::MBOX,
+                        (cb.clone(), marker.clone(), b),
+                    );
+                }
                 seal_tags::MUT_FOCUS | seal_tags::MUT_BLUR | seal_tags::MUT_MOUNT => {
                     // The payload-less events — the entry constructs the
                     // typed event (FocusEvent / BlurEvent / MountEvent).
@@ -341,6 +384,41 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                     .face
                     .call::<_, bool>(&h2, mutation_entries::DERIVE_BOOL, (cb.clone(), marker.clone()))
                     .map(Value::Bool),
+                seal_tags::DRV_BOX => {
+                    // The generic lane: the kit's wrapper calls the user
+                    // derive fn and returns the result boxed; the kit's
+                    // probe entries recover the kind + the typed value
+                    // (the closure has no VM, so the unbox runs rut-side).
+                    h2.face
+                        .call::<_, OpaqueRef>(
+                            &h2,
+                            mutation_entries::DERIVE_BOX,
+                            (cb.clone(), marker.clone()),
+                        )
+                        .and_then(|boxed| {
+                            h2.face
+                                .call::<_, u64>(&h2, mutation_entries::DERIVE_KIND, (boxed.clone(),))
+                                .and_then(|kind| match kind {
+                                    mutation_entries::BOX_KIND_STR => h2
+                                        .face
+                                        .call::<_, String>(&h2, mutation_entries::UNBOX_STR, (boxed,))
+                                        .map(|s| Value::str(s.as_str())),
+                                    mutation_entries::BOX_KIND_BOOL => h2
+                                        .face
+                                        .call::<_, bool>(&h2, mutation_entries::UNBOX_BOOL, (boxed,))
+                                        .map(Value::Bool),
+                                    mutation_entries::BOX_KIND_U64 => h2
+                                        .face
+                                        .call::<_, u64>(&h2, mutation_entries::UNBOX_U64, (boxed,))
+                                        .map(|n| Value::Num(n as f64)),
+                                    mutation_entries::BOX_KIND_F64 => h2
+                                        .face
+                                        .call::<_, f64>(&h2, mutation_entries::UNBOX_F64, (boxed,))
+                                        .map(Value::Num),
+                                    _ => Ok(Value::Nil),
+                                })
+                        })
+                }
                 _ => h2
                     .face
                     .call::<_, f64>(&h2, mutation_entries::DERIVE_F64, (cb.clone(), marker.clone()))

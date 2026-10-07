@@ -28,25 +28,23 @@ use tur::{
     CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
     net_request, spawn, str_parse_f64, tctrl_new, tctrl_set_text, undo_new,
 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Handler,
-    MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, TaskCtx, Text,
-    list_new, list_push, mutate, source_bool, source_str, source_value };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, TaskCtx, Text, list_new, list_push, mutate, source };
 
 
 // The state bundle (the sources every journey reads and writes — handles
 // bind at the launch site, captures stay rut-side).
 struct Gh {
-    mode: SourceStr;
-    err: SourceStr;
-    err_has: SourceBool;
-    repo_full: SourceStr;
-    desc: SourceStr;
-    stats: SourceStr;
-    path: SourceStr;
-    selected: SourceStr;
-    files: SourceValue;
-    is_empty: SourceBool;
-    busy: SourceBool;
+    mode: Source<str>;
+    err: Source<str>;
+    err_has: Source<bool>;
+    repo_full: Source<str>;
+    desc: Source<str>;
+    stats: Source<str>;
+    path: Source<str>;
+    selected: Source<str>;
+    files: Source<opaque>;
+    is_empty: Source<bool>;
+    busy: Source<bool>;
 }
 
 // The octocat brand mark (the boa state.ts GitHub glyph, rasterised
@@ -88,17 +86,17 @@ let C_RBRACKET: u32 = 93;
 
 entry fn start() -> u64 {
     let s = Gh {
-        mode: source_str("landing"),
-        err: source_str(""),
-        err_has: source_bool(false),
-        repo_full: source_str(""),
-        desc: source_str(""),
-        stats: source_str(""),
-        path: source_str(""),
-        selected: source_str(""),
-        files: source_value(list_new()),
-        is_empty: source_bool(false),
-        busy: source_bool(false),
+        mode: source<str>("landing"),
+        err: source<str>(""),
+        err_has: source<bool>(false),
+        repo_full: source<str>(""),
+        desc: source<str>(""),
+        stats: source<str>(""),
+        path: source<str>(""),
+        selected: source<str>(""),
+        files: source<opaque>(list_new()),
+        is_empty: source<bool>(false),
+        busy: source<bool>(false),
     };
     let ctrl = tctrl_new();
     // The boa landing boots with the draft pre-filled.
@@ -112,7 +110,7 @@ entry fn start() -> u64 {
     let b_sug1 = sug_mutation(ctrl, s, "tailwindlabs/tailwindcss");
     let b_sug2 = sug_mutation(ctrl, s, "vuejs/core");
     // The Browse tap: read the draft, validate the owner/name shape, launch.
-    let b_browse = mutate(fn (ctx: MutationCtx) {
+    let b_browse = mutate(fn (ctx: MutationCtx, _e: nil) {
         open_draft(ctx, s, tctrl_text(ctrl));
     });
 
@@ -135,7 +133,7 @@ entry fn start() -> u64 {
 
 // A compact pill button (the boa Button/IconButton composite); the
 // mutation rides by parameter.
-fn pill(key: str, label: str, m: Handler<nil>, bg: u64, fg: u64) -> opaque {
+fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(8.0)
@@ -162,9 +160,9 @@ fn error_banner(s: Gh) -> opaque {
 
 // ---- landing ---------------------------------------------------------------
 
-fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Handler<nil>,
-                b_sug0: Handler<nil>, b_sug1: Handler<nil>,
-                b_sug2: Handler<nil>) -> opaque {
+fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Mutation<nil>,
+                b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
+                b_sug2: Mutation<nil>) -> opaque {
     // The boa Field: the "Repository" caption over the bordered input.
     let field = Column()
         .cross_alignment(CROSS_ALIGN_STRETCH)
@@ -236,8 +234,8 @@ fn brand_mark(gh: u64) -> opaque {
     return mark;
 }
 
-fn suggestion_row(b_sug0: Handler<nil>, b_sug1: Handler<nil>,
-                  b_sug2: Handler<nil>) -> opaque {
+fn suggestion_row(b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
+                  b_sug2: Mutation<nil>) -> opaque {
     // Stacked (the boa mobile variant) — the three chips overflow the
     // 360 card's content width in a row. The boa quick-pick set (all
     // under jsDelivr's 50 MB tree cap).
@@ -256,7 +254,7 @@ fn suggestion_row(b_sug0: Handler<nil>, b_sug1: Handler<nil>,
 
 fn explorer_view(s: Gh) -> opaque {
     // Back: up one directory, or back to the landing when at the root.
-    let b_back = mutate(fn (ctx: MutationCtx) {
+    let b_back = mutate(fn (ctx: MutationCtx, _e: nil) {
         let cur = ctx.get<str>(s.path);
         if (cur == "") {
             go_landing(ctx, s);
@@ -281,13 +279,13 @@ fn explorer_view(s: Gh) -> opaque {
     });
     // The crumb tap: back to the repo ROOT listing (the boa
     // navigateToRoot); the handles bind at the launch site.
-    let b_root = mutate(fn (ctx: MutationCtx) {
+    let b_root = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(s.path, "");
         ctx.set<str>(s.selected, "");
         spawn(fetch_dir(TaskCtx.mint(), s));
     });
     // Re-fetch the current directory.
-    let b_refresh = mutate(fn (_ctx: MutationCtx) {
+    let b_refresh = mutate(fn (_ctx: MutationCtx, _e: nil) {
         spawn(fetch_dir(TaskCtx.mint(), s));
     });
     let list = ScrollView()
@@ -427,7 +425,7 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
     if (!is_dir) {
         icon = FILE_ICON;
     }
-    let b_tap = mutate(fn (ctx: MutationCtx) {
+    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         if (s.starts_with(0, "d|")) {
             let dname = s.slice(2, s.len());
             let cur = ctx.get<str>(g.path);
@@ -477,8 +475,8 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
 // ---- actions ---------------------------------------------------------------
 
 // A quick-pick chip's mutation: pre-fill the field and open directly.
-fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Handler<nil> {
-    return mutate(fn (ctx: MutationCtx) {
+fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
         tctrl_set_text(ctrl, name);
         open_draft(ctx, s, name);
     });

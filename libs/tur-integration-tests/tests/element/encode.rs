@@ -10,11 +10,11 @@ use tur_integration_tests::TurTestApp;
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
 use tur::{ ctx_bridge, decode_utf8, encode_utf8, mount };
-use tur_kit::{ Column, MutationCtx, Readable, Text, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
+    let label: Readable<str> = source<str>("");
 
     let ascii = decode_utf8(encode_utf8("hello world"));
     let unicode = decode_utf8(encode_utf8("héllo 世界 🚀"));

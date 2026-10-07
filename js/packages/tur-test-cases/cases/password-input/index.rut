@@ -9,12 +9,11 @@
 // Phase-2 note: this case is typed in the playground VIEWER too — the
 // va-child keyboard rail forwards real keys into the focused child input.
 use tur::{ CROSS_ALIGN_START, mount, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Column, Container, Input, InputEvent, MutationCtx, Readable, SizedBox, Text,
-    mutate_input, source_str };
+use tur_kit::{ Column, Container, Input, InputEvent, Mutation, MutationCtx, Readable, SizedBox, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let value: Readable<str> = source_str("value: \"hunter2\"");
+    let value: Readable<str> = source<str>("value: \"hunter2\"");
     let ctrl = tctrl_new();
     tctrl_set_text(ctrl, "hunter2");
     let undo = undo_new();
@@ -22,7 +21,7 @@ entry fn start() -> u64 {
     // The on-input rail: the typed event carries the fresh true text; the
     // controller is captured (the readout wraps it as value: "…").
     let q: str = "\"";
-    let b_value = mutate_input(fn (ctx: MutationCtx, ev: InputEvent) {
+    let b_value = mutate<InputEvent>(fn (ctx: MutationCtx, ev: InputEvent) {
         ctx.set<str>(value, f"value: {q}{ev.value}{q}");
     });
 

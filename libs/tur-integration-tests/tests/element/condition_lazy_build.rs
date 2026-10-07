@@ -19,12 +19,12 @@ use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceF64,  Condition, Column, MutationCtx, Readable, Text, source_bool, source_f64 };
+use tur_kit::{ Column, Condition, Mutation, MutationCtx, Readable, Source, Text, source };
 
 entry fn start() -> u64 {
-    let open: Readable<bool> = source_bool(false);
-    let seed: Readable<f64> = source_f64(1.0);
-    let runs: Readable<f64> = source_f64(0.0);
+    let open: Readable<bool> = source<bool>(false);
+    let seed: Readable<f64> = source<f64>(1.0);
+    let runs: Readable<f64> = source<f64>(0.0);
     let root = Column().query_key("cb/root").child(
         Condition(open)
             .then_build(fn () -> View {
@@ -44,12 +44,12 @@ entry fn start() -> u64 {
 // The open atom mints first, the seed second — the probe entries address
 // them by the start answer's order.
 entry fn probe_open(atom: u64, _b: f64) {
-    let open = SourceBool.of(ctx_bridge(), atom, false);
+    let open = Source<bool>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<bool>(open, _b != 0.0);
 }
 
 entry fn probe_seed(atom: u64, b: f64) {
-    let seed = SourceF64.of(ctx_bridge(), atom, false);
+    let seed = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(seed, b);
 }
 "#;
@@ -115,11 +115,11 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 
 const SWITCH_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Column, MutationCtx, Readable, Switch, Text, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Switch, Text, source };
 
 entry fn start() -> u64 {
-    let tab: Readable<str> = source_str("b");
-    let label: Readable<str> = source_str("idle");
+    let tab: Readable<str> = source<str>("b");
+    let label: Readable<str> = source<str>("idle");
     let v = Switch().value(tab)
         .case_build("a", fn () -> View {
             let write = MutationCtx.over(ctx_bridge());
@@ -138,7 +138,7 @@ entry fn start() -> u64 {
 
 // The flag rides the f64 slot; the atom the u64 slot.
 entry fn probe_tab(atom: u64, flag: f64) {
-    let tab = SourceStr.of(ctx_bridge(), atom, false);
+    let tab = Source<str>.of(ctx_bridge(), atom, false, 1);
     let write = MutationCtx.over(ctx_bridge());
     if (flag != 0.0) {
         write.set<str>(tab, "a");

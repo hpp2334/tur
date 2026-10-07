@@ -8,7 +8,7 @@
 // the name lists and the avatar palette ride pipe-joined strings).
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN,
     mount, str_parse_f64 };
-use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Text, source_f64 };
+use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Source, Text, source };
 
 
 let ITEM_COUNT: f64 = 10000.0;
@@ -27,7 +27,7 @@ let ZEBRA: u64 = 0xF8FAFCFFu64;
 let WHITE: u64 = 0xFFFFFFFFu64;
 
 entry fn start() {
-    let count = source_f64(ITEM_COUNT);
+    let count = source<f64>(ITEM_COUNT);
 
     let list = LazyList()
         .item_builder(row)

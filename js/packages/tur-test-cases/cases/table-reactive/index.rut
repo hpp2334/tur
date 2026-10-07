@@ -18,11 +18,7 @@
 // mutations repaint).
 use futures::{ sleep };
 use tur::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, mount, spawn, str_parse_f64 };
-use tur_kit::{
-    Column, Container, DeriveCtx, Expanded, MouseRegion, Handler, MutationCtx, PointerInteract,
-    Readable, SizedBox, Table, TableCols, TaskCtx, Text, derive_str, list_new, list_push, mutate,
-    source_bool, source_f64, source_str, source_value, value_item, value_len,
-};
+use tur_kit::{ Column, Container, DeriveCtx, Expanded, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, derive, list_new, list_push, mutate, source, value_item, value_len };
 
 
 // The boa palette (dark slate table on the #0b1220 frame).
@@ -35,30 +31,30 @@ let CELL_FG: u64 = 0xCBD5E1FFu64;
 let STATUS_FG: u64 = 0x64748BFFu64;
 
 entry fn start() -> u64 {
-    let sort_key: Readable<str> = source_str("moons");
-    let sort_dir: Readable<f64> = source_f64(1.0);
-    let rows: Readable<opaque> = source_value(list_new());
-    let loaded: Readable<bool> = source_bool(false);
-    let count: Readable<f64> = source_f64(0.0);
+    let sort_key: Readable<str> = source<str>("moons");
+    let sort_dir: Readable<f64> = source<f64>(1.0);
+    let rows: Readable<opaque> = source<opaque>(list_new());
+    let loaded: Readable<bool> = source<bool>(false);
+    let count: Readable<f64> = source<f64>(0.0);
 
     // The header chrome: per-column active fills (painted brushes) + live
     // labels (the ^/v marker rides a derive over the sort state). The
     // boot state is MOONS ascending (boa's `source<SortKey>("moons")`).
-    let fills: [Readable<f64>] = [source_f64(0.0), source_f64(0.0), source_f64(0.0)];
+    let fills: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
     paint_header(MutationCtx.over(ctx_bridge()), fills, 1);
     let labels: [Readable<str>] = [
         hdr_label("name", "PLANET", sort_key, sort_dir),
         hdr_label("moons", "MOONS", sort_key, sort_dir),
         hdr_label("gravity", "GRAVITY (m/s²)", sort_key, sort_dir),
     ];
-    let taps: [Handler<nil>] = [
+    let taps: [Mutation<nil>] = [
         sort_mutation("name", fills, sort_key, sort_dir, rows),
         sort_mutation("moons", fills, sort_key, sort_dir, rows),
         sort_mutation("gravity", fills, sort_key, sort_dir, rows),
     ];
 
     // The status line (boa's derive over the load state).
-    let status: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    let status: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         if (!ctx.get<bool>(loaded)) {
             return "Loading…";
         }
@@ -98,8 +94,8 @@ entry fn start() -> u64 {
 // One header cell (built once per column — reactive content flows through
 // the bound label + the painted fill): pointer cursor, tap = sort, the
 // active column highlighted with its direction marker.
-fn header_cell(col: u64, fills: [Readable<f64>], labels: [Readable<str>],
-               taps: [Handler<nil>]) -> opaque {
+fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
+               taps: [Mutation<nil>]) -> opaque {
     let i: i32 = col as i32;
     return MouseRegion()
         .cursor(CURSOR_POINTER)
@@ -139,7 +135,7 @@ fn hdr_key(col: u64) -> str {
 // The live header label: the bare label unless active, then the direction
 // marker (boa's HeaderCell text derive).
 fn hdr_label(key: str, label: str, sort_key: Readable<str>, sort_dir: Readable<f64>) -> Readable<str> {
-    return derive_str(fn (ctx: DeriveCtx) -> str {
+    return derive<str>(fn (ctx: DeriveCtx) -> str {
         if (ctx.get<str>(sort_key) != key) {
             return label;
         }
@@ -152,14 +148,14 @@ fn hdr_label(key: str, label: str, sort_key: Readable<str>, sort_dir: Readable<f
 
 // The header fills: the active column #334155, the rest #0f172a (boa's
 // HeaderCell color derive, written by the sort mutations).
-fn paint_header(ctx: MutationCtx, fills: [Readable<f64>], on: u64) {
+fn paint_header(ctx: MutationCtx, fills: [Source<u64>], on: u64) {
     let mut i: u64 = 0;
     while (i < 3) {
         let mut c: u64 = HDR_OFF;
         if (i == on) {
             c = HDR_ON;
         }
-        ctx.set_brush(fills[i as i32], c);
+        ctx.set<u64>(fills[i as i32], c);
         i += 1;
     }
 }
@@ -168,9 +164,9 @@ fn paint_header(ctx: MutationCtx, fills: [Readable<f64>], on: u64) {
 
 // One column's tap: same key flips the direction, a new key resets to
 // ascending; then the sorted view is recomputed and the active fill moves.
-fn sort_mutation(key: str, fills: [Readable<f64>], sort_key: Readable<str>, sort_dir: Readable<f64>,
-                 rows: Readable<opaque>) -> Handler<nil> {
-    return mutate(fn (ctx: MutationCtx) {
+fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_dir: Readable<f64>,
+                 rows: Readable<opaque>) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
         if (ctx.get<str>(sort_key) == key) {
             ctx.set<f64>(sort_dir, -ctx.get<f64>(sort_dir));
         } else {

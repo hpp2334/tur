@@ -50,26 +50,25 @@ fn label(app: &TurTestApp) -> String {
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
 use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_str, st_put, st_take };
-use tur_kit::{ SourceF64,  Column, Container, MutationCtx, Readable, Text, mutate, mutate_f64, source_f64,
-    source_str };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 use tur_anim_kit::{ anim_ctrl };
 
 
 let CTRL: u64 = 7;
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
-    let width: Readable<f64> = source_f64(100.0);
+    let label: Readable<str> = source<str>("");
+    let width: Readable<f64> = source<f64>(100.0);
 
     let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
 
     // The tick mutation captures the width source (the eased 0..1 maps to
     // 100..200); the controller rides the stash only because the do_*
     // control entries cannot capture it.
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
         ctx.set<f64>(width, 100.0 + (200.0 - 100.0) * v);
     });
-    let a_end = mutate(fn (_ctx: MutationCtx) {
+    let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     st_put(CTRL, ctrl);
@@ -483,20 +482,20 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
 use tur::{ anim_forward, mount, st_put, st_take };
-use tur_kit::{ Container, MutationCtx, Readable, mutate, mutate_f64, source_f64 };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform, anim_ctrl };
 
 let TAU: f64 = 6.283185307179586;
 let K_CTRL: u64 = 6;
 
 entry fn start() -> u64 {
-    let angle: Readable<f64> = source_f64(0.0);
+    let angle: Readable<f64> = source<f64>(0.0);
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
     let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
         ctx.set<f64>(angle, TAU * v);
     });
-    let a_end = mutate(fn (_ctx: MutationCtx) {
+    let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     st_put(K_CTRL, ctrl);
@@ -562,7 +561,7 @@ fn bound_angle_animates_without_rebuild() {
 /// The static path — `el_transform` with all-static channels — unchanged.
 const STATIC_TRANSFORM_RUT: &str = r#"
 use tur::{ mount };
-use tur_kit::{ Container };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
 entry fn start() {
@@ -595,30 +594,30 @@ fn static_transform_path_unchanged() {
 /// `rut/transform` matches the first transform).
 const BOUND_SCALE_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
 entry fn start() -> u64 {
-    let s: Readable<f64> = source_f64(2.0);
+    let s: Readable<f64> = source<f64>(2.0);
     let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
     mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
     return s.atom_id();
 }
 
 entry fn probe_s(atom: u64, b: f64) {
-    let s = SourceF64.of(ctx_bridge(), atom, false);
+    let s = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(s, b);
 }
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
 entry fn start() -> u64 {
-    let tx: Readable<f64> = source_f64(10.0);
-    let ty: Readable<f64> = source_f64(20.0);
+    let tx: Readable<f64> = source<f64>(10.0);
+    let ty: Readable<f64> = source<f64>(20.0);
     let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
     mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
     return tx.atom_id();
@@ -630,8 +629,8 @@ entry fn probe_t(atom: u64, b: f64) {
     // The tx/ty pair mints in order (atom, atom+1) — one entry drives
     // both channels (ty reads 2× the arg, the test's b×2 expectation).
     let write = MutationCtx.over(ctx_bridge());
-    let tx = SourceF64.of(ctx_bridge(), atom, false);
-    let ty = SourceF64.of(ctx_bridge(), atom + 1, false);
+    let tx = Source<f64>.of(ctx_bridge(), atom, false, 1);
+    let ty = Source<f64>.of(ctx_bridge(), atom + 1, false, 1);
     write.set<f64>(tx, b);
     write.set<f64>(ty, b * 2.0);
 }

@@ -3,16 +3,15 @@
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the guarded ctx row.
 use tur::{ ctx_bridge, ctx_set_str, mount };
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCtx, Readable, Text,
-    mutate_enter, mutate_exit, source_str };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let cursor: Readable<str> = source_str("pointer");
-    let state = source_str("");
-    let b_enter = mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) {
+    let cursor: Readable<str> = source<str>("pointer");
+    let state = source<str>("");
+    let b_enter = mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) {
     });
-    let b_exit = mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) {
+    let b_exit = mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) {
     });
     let mut col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());

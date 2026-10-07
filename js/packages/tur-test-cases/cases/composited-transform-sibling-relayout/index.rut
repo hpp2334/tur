@@ -2,13 +2,12 @@
 // height flip forces the common Stack to relayout — the follower must keep
 // painting at the tracked (100, 80).
 use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, MutationCtx, PointerInteract,
-    Positioned, Readable, SizedBox, Stack, mutate, source_f64 };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mutate, source };
 
 
 entry fn start() -> u64 {
-    let tall: Readable<f64> = source_f64(10.0);
-    let b_tall = mutate(fn (ctx: MutationCtx) {
+    let tall: Readable<f64> = source<f64>(10.0);
+    let b_tall = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(tall, 120.0);
     });
     let link = ct_link_new();

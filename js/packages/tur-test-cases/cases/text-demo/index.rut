@@ -11,10 +11,7 @@
 // structural-swap trick the boa explorer used for its download button).
 use tur::{ BORDER_INSIDE, CURSOR_POINTER, CROSS_ALIGN_END, CROSS_ALIGN_START, CROSS_ALIGN_STRETCH,
     MAIN_SIZE_MIN, SPAN_ITALIC, SPAN_UNDERLINE, mount };
-use tur_kit::{ Handler,
-    Column, Container, DeriveCtx, MouseRegion, MutationCtx, PointerInteract, Readable, Row,
-    ScrollView, SizedBox, Spans, Switch, Text, derive_str, mutate, source_f64, source_str,
-};
+use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Spans, Switch, Text, derive, mutate, source };
 
 
 // The boa palette (slate text on a soft page, indigo accent).
@@ -32,19 +29,19 @@ let AMBER: u64 = 0xD97706FFu64;
 let BROWN: str = "The quick brown fox jumps over the lazy dog.";
 
 entry fn start() -> u64 {
-    let maxlines: Readable<f64> = source_f64(2.0);
-    let mode: Readable<str> = source_str("2");
+    let maxlines: Readable<f64> = source<f64>(2.0);
+    let mode: Readable<str> = source<str>("2");
 
     // The caption + button label ride derives over the maxLines source.
-    let caption: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    let caption: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"maxLines = {ctx.get<f64>(maxlines) as u64}  ·  width = 100px";
     });
-    let btn_label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    let btn_label: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"cycle maxLines (now {ctx.get<f64>(maxlines) as u64})";
     });
 
     // The tap: cycle 2 → 1 → 3 → 2 and mirror onto the cards' mode string.
-    let b_cycle = mutate(fn (ctx: MutationCtx) {
+    let b_cycle = mutate(fn (ctx: MutationCtx, _e: nil) {
         let cur = ctx.get<f64>(maxlines);
         let mut next: f64 = 2.0;
         if (cur == 2.0) {
@@ -227,7 +224,7 @@ fn cards_row(max_lines: u64) -> opaque {
 
 // The indigo pill button that cycles maxLines (2 → 1 → 3 → 2); the
 // mutation + the label derive ride by parameter.
-fn cycle_button(b_cycle: Handler<nil>, btn_label: Readable<str>) -> opaque {
+fn cycle_button(b_cycle: Mutation<nil>, btn_label: Readable<str>) -> opaque {
     let pill = Container()
         .padding(10.0)
         .radius(8.0)

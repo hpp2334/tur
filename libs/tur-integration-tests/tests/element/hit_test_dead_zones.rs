@@ -74,12 +74,11 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 
 const SCROLL_BTN_RUT: &str = r#"
 use tur::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, MutationCtx, PointerInteract, Readable,
-    ScrollView, SizedBox, Text, derive_str, mutate, source_f64 };
+use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mutate, source };
 
 entry fn start() -> u64 {
-    let taps: Readable<f64> = source_f64(0.0);
-    let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    let taps: Readable<f64> = source<f64>(0.0);
+    let label: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         return fmt_taps(ctx.get<f64>(taps));
     });
     // text-demo's cycle-button shape: MouseRegion(cursor) wrapping the
@@ -91,7 +90,7 @@ entry fn start() -> u64 {
         .color(0x4F46E5FFu64)
         .child(Text().text_bound(label).font_size(13.0).query_key("dz/scroll-label").build())
         .build();
-    let b_tap = mutate(fn (ctx: MutationCtx) {
+    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         // The derive re-renders the label through fmt_taps.
         ctx.set<f64>(taps, ctx.get<f64>(taps) + 1.0);
     });
@@ -177,24 +176,23 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
 use tur::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable,
-    SizedBox, Stack, Text, mutate_ev, source_str };
+use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
 
 entry fn start() -> u64 {
-    let piece: Readable<str> = source_str("idle");
+    let piece: Readable<str> = source<str>("idle");
     let b = Container()
         .width_height(80.0, 80.0)
         .color(0x6366F1FFu64)
         .query_key("dz/piece")
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
-    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "down");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "moving");
     });
-    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "up");
     });
     let pad = PointerInteract()
@@ -218,24 +216,23 @@ entry fn start() -> u64 {
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
 use tur::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable,
-    SizedBox, Stack, Text, mutate_ev, source_str };
+use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
 
 entry fn start() -> u64 {
-    let piece: Readable<str> = source_str("idle");
+    let piece: Readable<str> = source<str>("idle");
     let b = Container()
         .width_height(80.0, 80.0)
         .color(0x6366F1FFu64)
         .query_key("dz/piece")
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
-    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "down");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "moving");
     });
-    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "up");
     });
     let pad = PointerInteract()

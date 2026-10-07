@@ -314,11 +314,11 @@ entry fn busy(_a: u64, _b: f64) {
     futures::executor::block_on(ui_app.load_rut_module(
         r#"
 use tur::mount;
-use tur_kit::{ Readable, Text, source_str };
+use tur_kit::{ Mutation, Readable, Source, Text, source };
 
 
 entry fn start() {
-    let atom: Readable<str> = source_str("42");
+    let atom: Readable<str> = source<str>("42");
     let txt = Text().text_bound(atom).build();
     mount(txt);
 }

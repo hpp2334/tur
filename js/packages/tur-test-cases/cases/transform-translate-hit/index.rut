@@ -3,17 +3,16 @@
 // The click flips the hit source; the Condition mounts the red
 // confirmation box (the branch swap adds one container node).
 use tur::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Condition, Container, MutationCtx, PointerInteract, Readable, SizedBox, Stack,
-    Text, mutate, source_bool };
+use tur_kit::{ Condition, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Stack, Text, mutate, source };
 use tur_anim_kit::{ Transform };
 
 
 entry fn start() {
-    let hit: Readable<bool> = source_bool(false);
+    let hit: Readable<bool> = source<bool>(false);
 
     // The tap: flip the hit source (the mutation captures the handle —
     // no id rail, no stash).
-    let b_hit = mutate(fn (ctx: MutationCtx) {
+    let b_hit = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(hit, true);
     });
 

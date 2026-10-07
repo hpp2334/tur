@@ -9,7 +9,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.load_rut_module(
         r#"
 use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ SourceF64,  Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
 fn cell(i: u64) -> opaque {
@@ -18,7 +18,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(10000.0);
+    let count: Readable<f64> = source<f64>(10000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
@@ -148,7 +148,7 @@ fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
 
@@ -158,7 +158,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(100.0);
+    let count: Readable<f64> = source<f64>(100.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
@@ -168,7 +168,7 @@ entry fn start() -> u64 {
 
 // The test drives count changes through the entry rail.
 entry fn set_count(atom: u64, n: f64) {
-    let count = SourceF64.of(ctx_bridge(), atom, false);
+    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
 "#,
@@ -276,7 +276,7 @@ fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
     app.load_rut_module(
         r#"
 use tur::mount;
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
 fn cell(i: u64) -> opaque {
@@ -284,7 +284,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(5000.0);
+    let count: Readable<f64> = source<f64>(5000.0);
     let grid = LazyGrid()
         .item_builder(cell)
         .count(count)
@@ -356,7 +356,7 @@ fn lazy_grid_horizontal_axis() {
     app.load_rut_module(
         r#"
 use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {
     let b = Container().width_height(100.0, 100.0).color(0xB4B4DCFFu64);
@@ -364,7 +364,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(1000.0);
+    let count: Readable<f64> = source<f64>(1000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
@@ -446,7 +446,7 @@ fn lazy_grid_column_count_ceils_max_extent_division() {
     app.load_rut_module(
         r#"
 use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {
     let b = Container().width_height(145.0, 145.0).color(0xC8C8C8FFu64);
@@ -454,7 +454,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(12.0);
+    let count: Readable<f64> = source<f64>(12.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
@@ -498,7 +498,7 @@ fn lazy_grid_exact_multiple_stays_at_exact_count() {
     app.load_rut_module(
         r#"
 use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {
     let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);
@@ -506,7 +506,7 @@ fn cell(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(6.0);
+    let count: Readable<f64> = source<f64>(6.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
@@ -516,7 +516,7 @@ entry fn start() -> u64 {
 
 // The test drives count changes through the entry rail.
 entry fn set_count(atom: u64, n: f64) {
-    let count = SourceF64.of(ctx_bridge(), atom, false);
+    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
 "#,

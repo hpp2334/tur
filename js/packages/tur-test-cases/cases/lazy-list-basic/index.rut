@@ -1,6 +1,6 @@
 // lazy-list-basic: a 20-row virtualized vertical list (50px rows).
 use tur::mount;
-use tur_kit::{ Container, LazyList, source_f64 };
+use tur_kit::{ Container, LazyList, Source, source };
 
 
 fn row(i: u64) -> opaque {
@@ -14,7 +14,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() {
-    let count = source_f64(20.0);
+    let count = source<f64>(20.0);
     let list = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("lazy-list-basic").build();
     mount(list);
 }

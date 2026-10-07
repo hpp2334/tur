@@ -31,7 +31,7 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
 use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
-use tur_kit::{ SourceValue,  SourceF64,  Column, Container, Table, TableCols };
+use tur_kit::{ Column, Container, Readable, Table, TableCols };
 
 
 fn cell(key: str) -> opaque {
@@ -62,7 +62,7 @@ fn rows_of(n: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let rows = SourceValue.of(ctx_bridge(), rs_source_value(rows_of({ROWS_PLACEHOLDER})), false);
+    let rows = Source<opaque>.of(ctx_bridge(), rs_source_value(rows_of({ROWS_PLACEHOLDER})), false, 1);
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
@@ -139,7 +139,7 @@ fn fills_for(
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
 use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Readable, Container, Table, TableCols };
+use tur_kit::{ Container, Readable, Table, TableCols };
 
 
 fn body_cell(_row: u64, _col: u64) -> opaque {
@@ -157,7 +157,7 @@ fn rows_of(n: u64) -> opaque {
 }
 
 entry fn start() {
-    let rows: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(rows_of(4)), false);
+    let rows: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(rows_of(4)), false, 1);
     let cols = TableCols().extent(300.0);
     let t = Table()
         .columns(cols)
@@ -214,7 +214,7 @@ fn column_extent_honored_in_layout() {
     app.load_rut_module(
         r#"
 use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Readable, Container, Table, TableCols };
+use tur_kit::{ Container, Readable, Table, TableCols };
 
 
 fn body_cell(_row: u64, _col: u64) -> opaque {
@@ -224,7 +224,7 @@ fn body_cell(_row: u64, _col: u64) -> opaque {
 entry fn start() {
     let rows = rs_list_new();
     rs_list_push(rows, "a");
-    let rows_atom: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(rows), false);
+    let rows_atom: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(rows), false, 1);
     let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
     let t = Table()
         .columns(cols)

@@ -2,13 +2,12 @@
 // source; the button (20, 540) flips it to BottomRight — the follower
 // relocates to the target's bottom-right (160, 120).
 use tur::{ ALIGN_TOP_LEFT, ct_link_new, mount };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, MutationCtx, PointerInteract,
-    Positioned, Readable, SizedBox, Stack, mutate, source_f64 };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mutate, source };
 
 
 entry fn start() -> u64 {
-    let anchor: Readable<f64> = source_f64(0.0);
-    let b_flip = mutate(fn (ctx: MutationCtx) {
+    let anchor: Readable<f64> = source<f64>(0.0);
+    let b_flip = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(anchor, 8.0);
     });
     let link = ct_link_new();

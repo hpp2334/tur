@@ -24,7 +24,7 @@ use tur_integration_tests::TurTestApp;
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
 use tur::{ AXIS_VERTICAL, ctx_bridge, mount, tctrl_new, tctrl_push_span };
-use tur_kit::{ SourceF64,  Container, Input, MutationCtx, Readable, ScrollView, source_f64 };
+use tur_kit::{ Container, Input, Mutation, MutationCtx, Readable, ScrollView, Source, source };
 
 
 entry fn start() -> u64 {
@@ -35,7 +35,7 @@ entry fn start() -> u64 {
         i += 1;
     }
 
-    let width: Readable<f64> = source_f64(400.0);
+    let width: Readable<f64> = source<f64>(400.0);
 
     let input = Input().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
     let wrap = Container().width_bound(width).child(input).build();
@@ -45,7 +45,7 @@ entry fn start() -> u64 {
 }
 
 entry fn set_width(atom: u64, v: f64) {
-    let width = SourceF64.of(ctx_bridge(), atom, false);
+    let width = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(width, v);
 }
 "##;

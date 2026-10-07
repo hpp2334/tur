@@ -707,7 +707,7 @@ fn joined(spans: &[(String, u64)]) -> String {
 /// with a hole, a comment, and the fn/call/method/param roles.
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
 use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
 
 let K_CTRL: u64 = 2;
 
@@ -862,14 +862,14 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
 /// edit delivers the named entry with the row's id crossing.
 const INPUT_ON_INPUT_MODULE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, InputEvent, MutationCtx, Readable, Text, mutate_input, source_str };
+use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 entry fn start() -> u64 {
-    let text: Readable<str> = source_str("cold");
+    let text: Readable<str> = source<str>("cold");
     let ctrl = tctrl_new();
     // The edit intent: a mutation over the typed InputEvent (the row id
     // is gone — the handler names the source by capture).
-    let b_edit = mutate_input(fn (ctx: MutationCtx, _ev: InputEvent) {
+    let b_edit = mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) {
         ctx.set<str>(text, "edit");
     });
     let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
@@ -1201,7 +1201,7 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
 
 const SPACING_ROWS_MODULE: &str = r#"
 use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
 
 let K_CTRL: u64 = 2;
 

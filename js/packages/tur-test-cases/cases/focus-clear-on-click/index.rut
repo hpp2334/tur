@@ -2,17 +2,16 @@
 // clicking the button clears focus (the gesture handler's outside-click
 // path).
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
-    source_str };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let clicks: Readable<f64> = source_f64(0.0);
-    let label: Readable<str> = source_str("clicks: 0");
+    let clicks: Readable<f64> = source<f64>(0.0);
+    let label: Readable<str> = source<str>("clicks: 0");
     let ctrl = tctrl_new();
     let undo = undo_new();
 
-    let b_click = mutate(fn (ctx: MutationCtx) {
+    let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(clicks, ctx.get<f64>(clicks) + 1.0);
         ctx.set<str>(label, f"clicks: {ctx.get<f64>(clicks) as u64}");
     });

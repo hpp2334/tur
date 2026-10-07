@@ -66,12 +66,109 @@ pub fn readable_of<T>(atom: u64) -> Readable<T> {
 /// `0xRRGGBBAA` packed color → engine `Color` (the packed-color crossing
 /// every styled row family shares).
 pub fn color_of(packed: u64) -> Color {
-    Color::rgba(
-        ((packed >> 24) & 0xFF) as u8,
-        ((packed >> 16) & 0xFF) as u8,
-        ((packed >> 8) & 0xFF) as u8,
-        (packed & 0xFF) as u8,
-    )
+    Color::from_packed(packed)
+}
+
+/// The boxed rail's number stamps (`rs_box_stamp` / `ctx_get_box`): the
+/// KV holds ONE number variant, so the mint reports the box's integer- vs
+/// float-ness and the read re-stamps the recovered box to match.
+pub const STAMP_NUM_F64: u64 = 1;
+pub const STAMP_NUM_U64: u64 = 2;
+
+/// Open a rut erasure box (or unwrap a host box) into the native KV
+/// value — the boxed rail's decode, shared by `rs_source_box` and
+/// `ctx_set_box`. The payload kind picks the KV variant; a box holding
+/// an opaque unwraps the structured lane's `RutValue` host box (lists /
+/// maps land in the KV as native values, the shape the bound-prop rows
+/// read) and rides the raw host-box lane otherwise (the controller-slot
+/// shape, readable through `ctx_get_opaque`).
+pub(crate) fn boxed_to_value(vm: &Vm, h: &OpaqueRef) -> Result<Value, rut_vm::Trap> {
+    match rut_vm::rut_box_payload(vm, h) {
+        Ok((_, v)) => match v {
+            rut_vm::Value::Nil => Ok(Value::Nil),
+            rut_vm::Value::I64(n) => Ok(Value::Num(n as u64 as f64)),
+            rut_vm::Value::F64(f) => Ok(Value::Num(f)),
+            rut_vm::Value::Bool(b) => Ok(Value::Bool(b)),
+            rut_vm::Value::Str(s) => Ok(Value::str(s)),
+            rut_vm::Value::Bytes(b) => Ok(Value::Bytes(Rc::from(b.into_boxed_slice()))),
+            rut_vm::Value::Opaque(inner) => match Opaque::<RutValue>::from_handle(&inner) {
+                Ok(rv) => Ok(rv.with(|v| v.0.clone())?),
+                Err(_) => Ok(Value::opaque(Rc::new(inner) as Rc<dyn std::any::Any>)),
+            },
+            other => Err(rut_vm::Trap::new(
+                rut_vm::TrapKind::Invalid,
+                format!(
+                    "the boxed lane carries scalars / strings / bytes / opaques — got {}",
+                    other.kind_name()
+                ),
+            )),
+        },
+        // A raw host payload box: the structured-value lane first, else
+        // the raw host-box lane.
+        Err(_) => match Opaque::<RutValue>::from_handle(h) {
+            Ok(rv) => Ok(rv.with(|v| v.0.clone())?),
+            Err(_) => Ok(Value::opaque(Rc::new(h.clone()) as Rc<dyn std::any::Any>)),
+        },
+    }
+}
+
+/// Seal a rut value the kit handed back as an opaque into a rut erasure
+/// box stamped `opaque` — the box-in-box: the entry owns one reference to
+/// the inner slot and `unopaque<opaque>` recovers it verbatim (the
+/// mint→crossing ownership law, `opaque_handle_take`'s shape).
+fn seal_opaque_box(vm: &mut Vm, owned: OpaqueRef) -> Result<OpaqueRef, rut_vm::Trap> {
+    let slot = rut_vm::Slot { r: owned.ptr() };
+    std::mem::forget(owned);
+    vm.seal_opaque(slot, TY_OPAQUE)
+}
+
+/// Seal a native KV value back into a rut erasure box the calling rut
+/// code can `unopaque<T>` — the boxed rail's encode, `ctx_get_box`'s
+/// body. `stamp` picks the number lane's width (`STAMP_NUM_F64` /
+/// `STAMP_NUM_U64`); every other kind stamps by its KV variant.
+pub(crate) fn seal_box(vm: &mut Vm, value: &Value, stamp: u64) -> Result<OpaqueRef, rut_vm::Trap> {
+    use rut_core::types::{TY_BOOL, TY_BYTES, TY_NIL, TY_STR};
+    match value {
+        Value::Nil => vm.seal_opaque(rut_vm::Slot::null(), TY_NIL),
+        Value::Bool(b) => vm.seal_opaque(rut_vm::Slot::bool(*b), TY_BOOL),
+        Value::Num(n) => {
+            if stamp == STAMP_NUM_U64 {
+                vm.seal_opaque(rut_vm::Slot::int(*n as i64), TY_U64)
+            } else {
+                vm.seal_opaque(rut_vm::Slot::float(*n), TY_F64)
+            }
+        }
+        Value::Str(s) => {
+            let slot = vm.alloc_str_cell(s.to_string())?;
+            vm.seal_opaque(slot, TY_STR)
+        }
+        Value::Bytes(b) => {
+            let slot = vm.alloc_bytes_cell(b.to_vec())?;
+            vm.seal_opaque(slot, TY_BYTES)
+        }
+        // Opaques and structured values cross box-in-box: the recovered
+        // opaque is the inner handle (controllers) or the minted
+        // `RutValue` host box (lists / maps — the value ops' currency).
+        Value::Opaque(any) => {
+            let inner = any
+                .downcast_ref::<OpaqueRef>()
+                .ok_or_else(|| {
+                    rut_vm::Trap::new(
+                        rut_vm::TrapKind::Invalid,
+                        "ctx_get_box: the atom holds a host value that does not cross the boxed lane",
+                    )
+                })?
+                .clone();
+            seal_opaque_box(vm, inner)
+        }
+        Value::List(_) | Value::Map(_) => {
+            let host: Opaque<RutValue> = Opaque::alloc(vm, RutValue(value.clone()))?;
+            let handle = host.handle().clone();
+            std::mem::forget(host);
+            let slot = rut_vm::Slot { r: handle.ptr() };
+            vm.seal_opaque(slot, TY_OPAQUE)
+        }
+    }
 }
 
 /// A materialized view (`Rc<dyn View>`) sealed in an opaque box.
@@ -142,6 +239,16 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("rs_watch_cb", vec![TY_U64, TY_OPAQUE, TY_U64], TY_OPAQUE),
         row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
         row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
+        // the boxed rail — the GENERIC source lane: an erased rut value
+        // crosses as an opaque box, the engine decodes it into the same
+        // native KV variant the typed rows write (the box's payload kind
+        // picks the variant; `rs_box_stamp` reports the number lane so
+        // the read can re-stamp u64 vs f64 boxes losslessly).
+        row("rs_source_box", vec![TY_OPAQUE], TY_U64),
+        row("rs_box_stamp", vec![TY_OPAQUE], TY_U64),
+        row("ctx_get_box", vec![TY_OPAQUE, TY_U64, TY_U64], TY_OPAQUE),
+        row("ctx_set_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx_run_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
         // M1 — the mutation rail: the ctx read/write/compose rows + the
         // mutation/derive sealers (the write-side twin of the C8 face).
         row("ctx_bridge", vec![], TY_OPAQUE),
@@ -154,7 +261,6 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
         row("ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
         row("ctx_set_value", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx_set_brush", vec![TY_OPAQUE, TY_U64, TY_U64], TY_NIL),
         row("ctx_set_opaque", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
         row("ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
         row("ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
@@ -342,6 +448,34 @@ fn install_tur_pkg(
         let s: Source<Value> = h.store.bridge().decl_source(value);
         Ok(s.id().0 as u64)
     });
+
+    // ---- the boxed rail (the GENERIC source lane) -------------------------
+    //
+    // `source<T>(v)` boxes v (`opaque(v)`) and mints through here: the
+    // engine opens the box (`rut_box_payload` — the one read path host
+    // code has into a rut seal box) and stores the SAME native KV variant
+    // the typed rows write, so every existing engine-side read (bound
+    // props, `ScalarRead`, the structured rails) keeps working unchanged.
+    // Host boxes decode too: a `RutValue` (the structured lane) unwraps
+    // to its native value, any other host box rides the opaque lane
+    // (the controller-slot shape).
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "rs_source_box", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
+        let value = boxed_to_value(vm, &v)?;
+        let s: Source<Value> = h.store.bridge().decl_source(value);
+        Ok(s.id().0 as u64)
+    });
+    // The number lane's stamp (the one KV collapse): `1` — the box held
+    // an f64 (reads re-stamp f64), `2` — a u64 / i64 (reads re-stamp the
+    // integer width), `0` — not a number (the read stamps by KV kind).
+    rut_vm::pkg_fn!(pkg, "rs_box_stamp", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
+        Ok(match rut_vm::rut_box_payload(vm, &v) {
+            Ok((_, rut_vm::Value::F64(_))) => STAMP_NUM_F64,
+            Ok((_, rut_vm::Value::I64(_))) => STAMP_NUM_U64,
+            _ => 0,
+        })
+    });
+
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "rs_set_value", (u64, Opaque<RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, v: Opaque<RutValue>| {
         let value = v.with(|v| v.0.clone())?;
@@ -622,11 +756,30 @@ pub mod mutation_entries {
     pub const MMOUNT: &str = "__tur_cb_mmount";
     /// The bytes mutation: `(cb, h, data)` — net-stream chunks.
     pub const MBYTES: &str = "__tur_cb_mbytes";
+    /// The boxed composition mutation: `(cb, h, box)` — the generic
+    /// lane; the entry hands the box to the kit's fixed-type wrapper.
+    pub const MBOX: &str = "__tur_cb_mbox";
     /// The derive format fns: `(cb, h) -> T` — the entry constructs the
     /// read-only `DeriveCtx`.
     pub const DERIVE_F64: &str = "__tur_cb_derive_f64";
     pub const DERIVE_STR: &str = "__tur_cb_derive_str";
     pub const DERIVE_BOOL: &str = "__tur_cb_derive_bool";
+    /// The boxed derive: `(cb, h) -> box` — the generic lane (the kit's
+    /// wrapper returns the user fn's result boxed).
+    pub const DERIVE_BOX: &str = "__tur_cb_derive_box";
+    /// The box kind probes + typed unboxes the boxed derive drives (the
+    /// drain closure holds no VM, so the unbox runs rut-side).
+    pub const DERIVE_KIND: &str = "__tur_cb_derive_kind";
+    pub const UNBOX_F64: &str = "__tur_cb_unbox_f64";
+    pub const UNBOX_STR: &str = "__tur_cb_unbox_str";
+    pub const UNBOX_BOOL: &str = "__tur_cb_unbox_bool";
+    pub const UNBOX_U64: &str = "__tur_cb_unbox_u64";
+    /// The box kind probe's answers (`__tur_cb_derive_kind`).
+    pub const BOX_KIND_NIL: u64 = 0;
+    pub const BOX_KIND_F64: u64 = 1;
+    pub const BOX_KIND_STR: u64 = 2;
+    pub const BOX_KIND_BOOL: u64 = 3;
+    pub const BOX_KIND_U64: u64 = 4;
 }
 
 /// The seal tags — the row→entry selectors the sealers bake into their
@@ -652,10 +805,17 @@ pub mod seal_tags {
     pub const MUT_MOUNT: u64 = 9;
     /// `mutate_seal`: the bytes mutation (net-stream chunks).
     pub const MUT_BYTES: u64 = 10;
+    /// `mutate_seal`: the boxed composition mutation — the GENERIC lane
+    /// (`ctx.run<A>`'s crossing; the kit's fixed-type wrapper recovers A).
+    pub const MUT_BOX: u64 = 11;
     /// `derive_seal` tags: the value kind (the entry's return type).
     pub const DRV_F64: u64 = 0;
     pub const DRV_STR: u64 = 1;
     pub const DRV_BOOL: u64 = 2;
+    /// `derive_seal`: the boxed derive — the GENERIC lane (the kit's
+    /// wrapper returns the user fn's result boxed; the kit's probe
+    /// entries recover kind + value).
+    pub const DRV_BOX: u64 = 3;
 }
 
 /// The flush-time VM face — view factories / deriveds minted by rows reach

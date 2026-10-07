@@ -9,11 +9,11 @@ use tur_integration_tests::TurTestApp;
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceF64,  MutationCtx, Readable, Switch, Text, source_str };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, Switch, Text, source };
 
 
 entry fn start() -> u64 {
-    let key: Readable<str> = source_str("a");
+    let key: Readable<str> = source<str>("a");
 
     let mut sw = Switch().value(key);
     sw.cases("a", Text().text("AAA").query_key("case_a").build());
@@ -24,17 +24,17 @@ entry fn start() -> u64 {
 }
 
 entry fn set_key(atom: u64, _b: f64) {
-    let key = SourceStr.of(ctx_bridge(), atom, false);
+    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(key, "b");
 }
 
 entry fn set_key_raw(atom: u64, _b: f64) {
-    let key = SourceStr.of(ctx_bridge(), atom, false);
+    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(key, "zzz");
 }
 
 entry fn reemit(atom: u64, _b: f64) {
-    let key = SourceStr.of(ctx_bridge(), atom, false);
+    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(key, "a");
 }
 "#;
@@ -120,8 +120,8 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 /// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
 use tur::{ ctx_bridge, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ MutationCtx, Readable, Switch, Text };
-use tur_kit::{ rs_derive };
+use tur_kit::{ MutationCtx, Readable, Source, Switch, Text, source };
+use tur_kit::{ MutationCtx, Readable, Source, rs_derive, source };
 
 fn d(v: f64) -> str {
     if (v == 1.0) {
@@ -140,7 +140,7 @@ entry fn start() -> u64 {
 
     // The unified value prop over the derived handle (the kind rides the
     // handle: a derived binds through the derive rail).
-    let mut sw = Switch().value(SourceStr.of(ctx_bridge(), derived, false));
+    let mut sw = Switch().value(Source<str>.of(ctx_bridge(), derived, false, 1));
     sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
     sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
     sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
@@ -149,7 +149,7 @@ entry fn start() -> u64 {
 }
 
 entry fn set_key(atom: u64, _b: f64) {
-    let key = SourceF64.of(ctx_bridge(), atom, false);
+    let key = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(key, 1.0);
 }
 "#;

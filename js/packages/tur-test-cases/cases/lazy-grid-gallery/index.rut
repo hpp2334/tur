@@ -21,11 +21,7 @@
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
 use tur::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
-use tur_kit::{
-    Column, Container, Each, Expanded, LazyGrid, MouseRegion, Handler, MutationCtx,
-    PointerInteract, Readable, Row, SizedBox, Text, list_new, list_push, mutate, source_bool,
-    source_f64, source_value,
-};
+use tur_kit::{ Column, Container, Each, Expanded, LazyGrid, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, list_push, mutate, source };
 
 
 // The boa palette (the deep-slate gallery chrome).
@@ -38,15 +34,15 @@ let CHIP_OFF: u64 = 0x1E293BFFu64;
 let CHIP_FG: u64 = 0xE2E8F0FFu64;
 
 entry fn start() {
-    let aspect: Readable<f64> = source_f64(1.0);
-    let dense: Readable<bool> = source_bool(false);
-    let count: Readable<f64> = source_f64(6000.0);
-    let items: Readable<opaque> = source_value(one_list());
+    let aspect: Readable<f64> = source<f64>(1.0);
+    let dense: Readable<bool> = source<bool>(false);
+    let count: Readable<f64> = source<f64>(6000.0);
+    let items: Readable<opaque> = source<opaque>(one_list());
 
     // The five chip brushes (Square / Wide / Tall / Normal / Dense),
     // seeded to the boot state (Square + Normal).
-    let chips: [Readable<f64>] = [
-        source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
+    let chips: [Source<u64>] = [
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
     ];
     paint_chips(MutationCtx.over(ctx_bridge()), aspect, dense, chips);
 
@@ -145,7 +141,7 @@ fn tile(i: u64) -> opaque {
 // ---- the chips -----------------------------------------------------------------
 
 // A pill chip: the fill rides its brush source (indigo when active).
-fn chip(r: Readable<f64>, key: str, label: str, m: Handler<nil>) -> opaque {
+fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> opaque {
     let face = Container()
         .padding(7.0)
         .radius(7.0)
@@ -162,9 +158,9 @@ fn chip(r: Readable<f64>, key: str, label: str, m: Handler<nil>) -> opaque {
 
 // An aspect tap's mutation: write the value, repaint the chips, remount
 // the grid.
-fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
-                   items: Readable<opaque>, v: f64) -> Handler<nil> {
-    return mutate(fn (ctx: MutationCtx) {
+fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u64>],
+                   items: Readable<opaque>, v: f64) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(aspect, v);
         paint_chips(ctx, aspect, dense, chips);
         ctx.set<opaque>(items, one_list());
@@ -172,9 +168,9 @@ fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readabl
 }
 
 // A density tap's mutation (the mirror twin over the bool).
-fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
-                  items: Readable<opaque>, d: bool) -> Handler<nil> {
-    return mutate(fn (ctx: MutationCtx) {
+fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u64>],
+                  items: Readable<opaque>, d: bool) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(dense, d);
         paint_chips(ctx, aspect, dense, chips);
         ctx.set<opaque>(items, one_list());
@@ -183,14 +179,14 @@ fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable
 
 // The five chip brushes over the live state (boa: derive-driven pills).
 fn paint_chips(ctx: MutationCtx, aspect: Readable<f64>, dense: Readable<bool>,
-               chips: [Readable<f64>]) {
+               chips: [Source<u64>]) {
     let a = ctx.get<f64>(aspect);
     let d = ctx.get<bool>(dense);
-    ctx.set_brush(chips[0], chip_color(a > 0.5 && a < 1.5));
-    ctx.set_brush(chips[1], chip_color(a > 1.5));
-    ctx.set_brush(chips[2], chip_color(a < 0.5));
-    ctx.set_brush(chips[3], chip_color(!d));
-    ctx.set_brush(chips[4], chip_color(d));
+    ctx.set<u64>(chips[0], chip_color(a > 0.5 && a < 1.5));
+    ctx.set<u64>(chips[1], chip_color(a > 1.5));
+    ctx.set<u64>(chips[2], chip_color(a < 0.5));
+    ctx.set<u64>(chips[3], chip_color(!d));
+    ctx.set<u64>(chips[4], chip_color(d));
 }
 
 fn chip_color(on: bool) -> u64 {

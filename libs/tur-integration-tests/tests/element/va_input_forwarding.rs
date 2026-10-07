@@ -39,13 +39,13 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
 use tur::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ SourceF64,  Column, Input, MutationCtx, Readable, Text, source_str };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     st_put(7, ctrl);
-    let label: Readable<str> = source_str("");
+    let label: Readable<str> = source<str>("");
     let undo = undo_new();
     let input = Input().controller(ctrl).undo(undo).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
     let txt = Text().text_bound(label).query_key("child-text").build();
@@ -59,7 +59,7 @@ entry fn start() -> u64 {
 entry fn sync(label: u64, _b: f64) {
     let ctrl = st_take(7);
     st_put(7, ctrl);
-    let r = SourceStr.of(ctx_bridge(), label, false);
+    let r = Source<str>.of(ctx_bridge(), label, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(r, tctrl_text(ctrl));
 }
 "#;
@@ -262,7 +262,7 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 /// host) overflows, keyed for the offset probe.
 const WHEEL_CHILD_SRC: &str = r#"
 use tur::{ AXIS_VERTICAL, mount };
-use tur_kit::{ Column, Container, ScrollView, Text };
+use tur_kit::{ Column, Container, MutationCtx, Readable, ScrollView, Source, Text, source };
 
 
 entry fn start() -> u64 {

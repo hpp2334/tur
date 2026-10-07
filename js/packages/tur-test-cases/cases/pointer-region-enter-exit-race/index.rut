@@ -2,22 +2,21 @@
 // moving A->B in a single event must land on "B" (exit-before-enter).
 // The four handlers are mutations over the shared hover source.
 use tur::mount;
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCtx, Readable, Text,
-    mutate_enter, mutate_exit, source_str };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let hover: Readable<str> = source_str("");
-    let b_a_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
+    let hover: Readable<str> = source<str>("");
+    let b_a_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
         ctx.set<str>(hover, "A");
     });
-    let b_a_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
+    let b_a_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
         ctx.set<str>(hover, "");
     });
-    let b_b_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
+    let b_b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
         ctx.set<str>(hover, "B");
     });
-    let b_b_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
+    let b_b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
         ctx.set<str>(hover, "");
     });
     let mut col = Column();

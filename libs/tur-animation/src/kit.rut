@@ -13,40 +13,48 @@
 // statement runs.
 //
 // Handler law (the mutation rail): the controller's tick / end are SEALED
-// MUTATIONS — `mutate_f64(fn (ctx: MutationCtx, v: f64) { ... })` ticks
-// (boa wraps onTick in mutate), `mutate(fn (ctx: MutationCtx) { ... })`
-// ends. Nullable class params (the `kid: ?opaque` field pattern) let one
-// kit fn serve every combo: the kit branches to the row's 0 = absent by
-// null-check.
+// MUTATIONS — `mutate<f64>(fn (ctx: MutationCtx, v: f64) { ... })` ticks
+// (boa wraps onTick in mutate), `mutate(fn (ctx: MutationCtx, _e: nil)
+// { ... })` ends. The params are the generic `Mutation<A>` interface; the
+// controller seals each under ITS payload shape at install (the f64 tick
+// crossing is raw, the payload-less end is nil). Nullable params (the
+// `kid: ?opaque` field pattern) let one kit fn serve every combo: the kit
+// branches to the row's 0 = absent by null-check.
 use tur::{ anim_ctrl_mut, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
-use tur_kit::{ MutF64, MutNil, MutationCtx, Readable, mutate, mutate_f64 };
+use tur_kit::{ Mutation, MutationCtx, Readable, mutate };
+
+// The seal tags the controller installs under — the kit spells the same
+// numbers as its own consts (rut_runtime::seal_tags; one law, two
+// spellings, exactly as tur_kit mirrors them).
+let SEAL_NIL: u64 = 0;
+let SEAL_F64: u64 = 2;
 
 // The animation controller — the authored face over the `anim_ctrl_mut`
-// row. The tick is `Handler<f64>` (`mutate_f64`; the eased progress
-// crosses as the invocation payload) and the end is `Handler<nil>`;
-// either may be nil (the controller then only drives its bound channels —
-// polled through `anim_value`). The tick mutation CAPTURES the channels
-// it drives — no id rail, no stash.
-pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?MutF64, on_end: ?MutNil) -> opaque {
+// row. The tick is `Mutation<f64>` (the eased progress crosses as the
+// invocation payload) and the end is `Mutation<nil>`; either may be nil
+// (the controller then only drives its bound channels — polled through
+// `anim_value`). The tick mutation CAPTURES the channels it drives — no
+// id rail, no stash.
+pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64>, on_end: ?Mutation<nil>) -> opaque {
   let mut tick: u64 = 0;
   if (on_tick != nil) {
-    tick = on_tick.atom_id();
+    tick = on_tick.seal(SEAL_F64);
   }
   let mut end: u64 = 0;
   if (on_end != nil) {
-    end = on_end.atom_id();
+    end = on_end.seal(SEAL_NIL);
   }
   return anim_ctrl_mut(duration_ms, curve, repeat, tick, end);
 }
 
 // The tick-only twin — `anim_ctrl_tick(dur, curve, repeat, tick)`.
-pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: MutF64) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.atom_id(), 0);
+pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutation<f64>) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.seal(SEAL_F64), 0);
 }
 
 // The end-only twin — `anim_ctrl_end(dur, curve, repeat, end)`.
-pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: MutNil) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.atom_id());
+pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil>) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.seal(SEAL_NIL));
 }
 
 // The bare controller (no callbacks — polled through `anim_value`).

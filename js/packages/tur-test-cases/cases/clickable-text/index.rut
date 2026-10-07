@@ -3,12 +3,12 @@
 // MutationCtx (the triad: source / derive / mutate); the source binds by
 // capture — no ids, no stash.
 use tur::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let content: Readable<str> = source_str("before");
-    let b_click = mutate(fn (ctx: MutationCtx) {
+    let content: Readable<str> = source<str>("before");
+    let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(content, "after");
     });
     let col = Column().cross_alignment(CROSS_ALIGN_START);

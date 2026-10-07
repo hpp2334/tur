@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ SourceBool,  SourceStr,  SourceF64,  Column, Input };
+use tur_kit::{ Column, Input, MutationCtx, Readable, Source, source };
 
 
 entry fn start() {
@@ -27,7 +27,7 @@ entry fn start() {
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ Input, MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -297,12 +297,12 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Input, MutationCtx, Readable, source_bool };
+use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let obscure: Readable<bool> = source_bool(true);
+    let obscure: Readable<bool> = source<bool>(true);
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .obscure_bound(obscure)
         .query_key("input").build();
@@ -311,7 +311,7 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_obscure(atom: u64, b: f64) {
-    let obscure = SourceBool.of(ctx_bridge(), atom, false);
+    let obscure = Source<bool>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<bool>(obscure, b != 0.0);
 }
 "#;
@@ -363,12 +363,12 @@ fn obscure_bound_toggles_masking_reactively() {
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Input, MutationCtx, Readable, source_str };
+use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let hint: Readable<str> = source_str("type here");
+    let hint: Readable<str> = source<str>("type here");
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .placeholder_bound(hint)
         .query_key("input").build();
@@ -377,7 +377,7 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_hint(atom: u64, _b: f64) {
-    let hint = SourceStr.of(ctx_bridge(), atom, false);
+    let hint = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(hint, "other hint");
 }
 "#;

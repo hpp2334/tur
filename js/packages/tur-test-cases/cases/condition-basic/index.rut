@@ -2,11 +2,11 @@
 // branches swapped by the engine — no rut during flush). The condition
 // rides a typed bool source handle.
 use tur::mount;
-use tur_kit::{ Condition, Container, Text, source_bool };
+use tur_kit::{ Condition, Container, Source, Text, source };
 
 
 entry fn start() {
-    let when = source_bool(true);
+    let when = source<bool>(true);
     let then_box = Container()
         .width_height(200.0, 100.0)
         .color(0x303030FF)

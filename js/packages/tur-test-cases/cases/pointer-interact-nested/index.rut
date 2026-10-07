@@ -3,33 +3,32 @@
 // derived readables over the two counter pairs; every tap is a mutation
 // capturing its counter (no ids, no stash).
 use tur::{ CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
-use tur_kit::{ Column, Container, DeriveCtx, MutationCtx, PointerInteract, Readable, Row, Text,
-    derive_str, mutate, source_f64 };
+use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mutate, source };
 
 
 entry fn start() -> u64 {
-    let outer_o: Readable<f64> = source_f64(0.0);
-    let inner_o = source_f64(0.0);
-    let outer_t = source_f64(0.0);
-    let inner_t = source_f64(0.0);
-    let d_o = derive_str(fn (ctx: DeriveCtx) -> str {
+    let outer_o: Readable<f64> = source<f64>(0.0);
+    let inner_o = source<f64>(0.0);
+    let outer_t = source<f64>(0.0);
+    let inner_t = source<f64>(0.0);
+    let d_o = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"opaque:{ctx.get<f64>(outer_o) as u64}/{ctx.get<f64>(inner_o) as u64}";
     });
-    let d_t = derive_str(fn (ctx: DeriveCtx) -> str {
+    let d_t = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"translucent:{ctx.get<f64>(outer_t) as u64}/{ctx.get<f64>(inner_t) as u64}";
     });
 
     // The named mutations — each captures its own counter.
-    let b_outer_o = mutate(fn (ctx: MutationCtx) {
+    let b_outer_o = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(outer_o, ctx.get<f64>(outer_o) + 1.0);
     });
-    let b_inner_o = mutate(fn (ctx: MutationCtx) {
+    let b_inner_o = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(inner_o, ctx.get<f64>(inner_o) + 1.0);
     });
-    let b_outer_t = mutate(fn (ctx: MutationCtx) {
+    let b_outer_t = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(outer_t, ctx.get<f64>(outer_t) + 1.0);
     });
-    let b_inner_t = mutate(fn (ctx: MutationCtx) {
+    let b_inner_t = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(inner_t, ctx.get<f64>(inner_t) + 1.0);
     });
 

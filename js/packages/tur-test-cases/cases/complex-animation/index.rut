@@ -21,10 +21,7 @@
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
     anim_pause, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop,
     color_tween_lerp, math_cos, math_sin, mount, tween_lerp };
-use tur_kit::{ MutF64, MutNil,  Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Handler,
-    MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, derive_str,
-    list_new, mutate, mutate_f64, mutate_mount, source_bool, source_f64, source_str,
-    source_value };
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, list_new, mutate, source };
 use tur_anim_kit::{ Transform, anim_ctrl };
 
 
@@ -50,39 +47,39 @@ let CURVE_ON: u64 = 0x0D9488FFu64;
 let LOOP_ON: u64 = 0xDB2777FFu64;
 
 entry fn start() -> u64 {
-    let progress: Readable<f64> = source_f64(0.0);
-    let width: Readable<f64> = source_f64(W_MIN);
-    let hue: Readable<f64> = source_f64(0.0);
-    let pct: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
+    let progress: Readable<f64> = source<f64>(0.0);
+    let width: Readable<f64> = source<f64>(W_MIN);
+    let hue: Readable<u64> = source<u64>(0);
+    let pct: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         let v = ctx.get<f64>(progress);
         return f"{((v * 100.0) + 0.5) as u64}%";
     });
-    let status: Readable<str> = source_str("STOPPED");
-    let badge: Readable<f64> = source_f64(0.0);
-    let loop_on: Readable<bool> = source_bool(false);
-    let sp0: Readable<f64> = source_f64(0.0);
-    let sp1: Readable<f64> = source_f64(0.0);
-    let sp2: Readable<f64> = source_f64(0.0);
-    let sp3: Readable<f64> = source_f64(0.0);
-    let cv0: Readable<f64> = source_f64(0.0);
-    let cv1: Readable<f64> = source_f64(0.0);
-    let cv2: Readable<f64> = source_f64(0.0);
-    let cv3: Readable<f64> = source_f64(0.0);
-    let lp: Readable<f64> = source_f64(0.0);
-    let orbit_x: Readable<f64> = source_f64(ORBIT_CX + ORBIT_R);
-    let orbit_y: Readable<f64> = source_f64(ORBIT_CY);
-    let radius: Readable<f64> = source_f64(R_MIN);
-    let curve_idx: Readable<f64> = source_f64(3.0); // easeInOut — the boa boot curve
-    let loop_flag: Readable<bool> = source_bool(false);
+    let status: Readable<str> = source<str>("STOPPED");
+    let badge: Readable<u64> = source<u64>(0);
+    let loop_on: Readable<bool> = source<bool>(false);
+    let sp0: Readable<u64> = source<u64>(0);
+    let sp1: Readable<u64> = source<u64>(0);
+    let sp2: Readable<u64> = source<u64>(0);
+    let sp3: Readable<u64> = source<u64>(0);
+    let cv0: Readable<u64> = source<u64>(0);
+    let cv1: Readable<u64> = source<u64>(0);
+    let cv2: Readable<u64> = source<u64>(0);
+    let cv3: Readable<u64> = source<u64>(0);
+    let lp: Readable<u64> = source<u64>(0);
+    let orbit_x: Readable<f64> = source<f64>(ORBIT_CX + ORBIT_R);
+    let orbit_y: Readable<f64> = source<f64>(ORBIT_CY);
+    let radius: Readable<f64> = source<f64>(R_MIN);
+    let curve_idx: Readable<f64> = source<f64>(3.0); // easeInOut — the boa boot curve
+    let loop_flag: Readable<bool> = source<bool>(false);
 
     // The tick: eased progress → the animated channels (the progress atom
     // IS the bound angle's source — Transform().rotate_bound reads it
     // reactively; the tick just advances it; no list rewrite, no
     // re-mount).
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
         ctx.set<f64>(width, tween_lerp(W_MIN, W_MAX, v));
         ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, v));
-        ctx.set_brush(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
+        ctx.set<u64>(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
         ctx.set<f64>(progress, v);
         ctx.set<f64>(orbit_x, ORBIT_CX + ORBIT_R * math_cos(TAU * v));
         ctx.set<f64>(orbit_y, ORBIT_CY + ORBIT_R * math_sin(TAU * v));
@@ -93,10 +90,10 @@ entry fn start() -> u64 {
     // is never driven — the mount seed lands the real boot controller
     // before any interaction (the host-box rail: opaques are just
     // values).
-    let controller: Readable<opaque> = source_value(list_new());
+    let controller: Readable<opaque> = source<opaque>(list_new());
 
     // The end: status → the badge label + the fill brush.
-    let a_end = mutate(fn (ctx: MutationCtx) {
+    let a_end: ?Mutation<nil> = mutate(fn (ctx: MutationCtx, _e: nil) {
         sync(ctx, ctx.get<opaque>(controller), status, badge);
     });
 
@@ -104,27 +101,27 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(2400.0, "easeInOut", 1, a_tick, a_end);
 
     // The transport mutations (the controller rides the slot).
-    let b_play = mutate(fn (ctx: MutationCtx) {
+    let b_play = mutate(fn (ctx: MutationCtx, _e: nil) {
         let c = ctx.get<opaque>(controller);
         anim_forward(c);
         sync(ctx, c, status, badge);
     });
-    let b_pause = mutate(fn (ctx: MutationCtx) {
+    let b_pause = mutate(fn (ctx: MutationCtx, _e: nil) {
         let c = ctx.get<opaque>(controller);
         anim_pause(c);
         sync(ctx, c, status, badge);
     });
-    let b_resume = mutate(fn (ctx: MutationCtx) {
+    let b_resume = mutate(fn (ctx: MutationCtx, _e: nil) {
         let c = ctx.get<opaque>(controller);
         anim_resume(c);
         sync(ctx, c, status, badge);
     });
-    let b_reverse = mutate(fn (ctx: MutationCtx) {
+    let b_reverse = mutate(fn (ctx: MutationCtx, _e: nil) {
         let c = ctx.get<opaque>(controller);
         anim_reverse(c);
         sync(ctx, c, status, badge);
     });
-    let b_stop = mutate(fn (ctx: MutationCtx) {
+    let b_stop = mutate(fn (ctx: MutationCtx, _e: nil) {
         let c = ctx.get<opaque>(controller);
         anim_stop(c);
         sync(ctx, c, status, badge);
@@ -132,32 +129,32 @@ entry fn start() -> u64 {
 
     // The speed rail: one named typed mutation carries the chip index;
     // each chip pad composes it with its own arg (the composition shape).
-    let b_speed = mutate_f64(fn (ctx: MutationCtx, idx: f64) {
+    let b_speed = mutate<f64>(fn (ctx: MutationCtx, idx: f64) {
         let c = ctx.get<opaque>(controller);
         anim_speed(c, speed_factor(idx));
         paint_speed(ctx, sp0, sp1, sp2, sp3, idx);
     });
-    let b_speed0 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_speed, 0.0); });
-    let b_speed1 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_speed, 1.0); });
-    let b_speed2 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_speed, 2.0); });
-    let b_speed3 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_speed, 3.0); });
+    let b_speed0 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 0.0); });
+    let b_speed1 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 1.0); });
+    let b_speed2 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 2.0); });
+    let b_speed3 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 3.0); });
 
     // The curve rail: same shape — retimes via the recreate-and-seek (a
     // fresh controller over the same progress atom, seeked to the
     // displayed eased progress, swapped into the slot).
-    let b_curve = mutate_f64(fn (ctx: MutationCtx, idx: f64) {
+    let b_curve = mutate<f64>(fn (ctx: MutationCtx, idx: f64) {
         ctx.set<f64>(curve_idx, idx);
         recreate(ctx, controller, curve_idx, loop_flag, progress, status, badge, a_tick, a_end);
         paint_curve(ctx, cv0, cv1, cv2, cv3, idx);
     });
-    let b_curve0 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_curve, 0.0); });
-    let b_curve1 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_curve, 1.0); });
-    let b_curve2 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_curve, 2.0); });
-    let b_curve3 = mutate(fn (ctx: MutationCtx) { ctx.run<f64>(b_curve, 3.0); });
+    let b_curve0 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 0.0); });
+    let b_curve1 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 1.0); });
+    let b_curve2 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 2.0); });
+    let b_curve3 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 3.0); });
 
     // The loop toggle: flip the flag (mirror it into the chip's state
     // atom), swap in an infinite controller, repaint the chip.
-    let b_loop = mutate(fn (ctx: MutationCtx) {
+    let b_loop = mutate(fn (ctx: MutationCtx, _e: nil) {
         let next = !ctx.get<bool>(loop_flag);
         ctx.set<bool>(loop_flag, next);
         ctx.set<bool>(loop_on, next);
@@ -169,10 +166,10 @@ entry fn start() -> u64 {
     // boot brush paints (the badge, the indigo card, the selected chips —
     // the f64/str channels seed at their mints above). The lifecycle
     // surface delivers the typed `MountEvent`.
-    let seed = mutate_mount(fn (ctx: MutationCtx, _ev: MountEvent) {
+    let seed = mutate<MountEvent>(fn (ctx: MutationCtx, _ev: MountEvent) {
         ctx.set<opaque>(controller, ctrl);
-        ctx.set_brush(badge, SLATE);
-        ctx.set_brush(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
+        ctx.set<u64>(badge, SLATE);
+        ctx.set<u64>(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
         paint_speed(ctx, sp0, sp1, sp2, sp3, 1.0);
         paint_curve(ctx, cv0, cv1, cv2, cv3, 3.0);
         paint_loop(ctx, lp, ctx.get<bool>(loop_flag));
@@ -223,7 +220,7 @@ entry fn start() -> u64 {
 // The boa stage: a 360×200 canvas with the card at (100, 20) and the
 // orbiting dot riding its bound anchors (the tick writes
 // cx + r·cos / cy + r·sin of the eased progress).
-fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, hue: Readable<f64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
+fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
     let dot = Positioned()
         .left_bound(orbit_x)
         .top_bound(orbit_y)
@@ -249,7 +246,7 @@ fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, h
 // Transform().rotate_bound(progress) re-resolves the angle through the
 // live atom (the subscribe → relayout rail) and the subtree never
 // re-mounts. Boa's square is opaque — no opacity channel.
-fn card(width: Readable<f64>, hue: Readable<f64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
+fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> opaque {
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
     return Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
@@ -263,7 +260,7 @@ fn card(width: Readable<f64>, hue: Readable<f64>, radius: Readable<f64>, progres
 // The loop chip: the fill rides its brush atom; the label swaps
 // "Loop" ↔ "Loop ✓" (white when on) through the state atom — boa's
 // derive-driven label, case-side.
-fn loop_chip(lp: Readable<f64>, loop_on: Readable<bool>, b_loop: Handler<nil>) -> opaque {
+fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) -> opaque {
     return PointerInteract().on_click(b_loop).child(
         Container().padding(6.0).radius(6.0).color_bound(lp).query_key("cas-loop").child(
             Condition(loop_on)
@@ -276,7 +273,7 @@ fn loop_chip(lp: Readable<f64>, loop_on: Readable<bool>, b_loop: Handler<nil>) -
 
 // The status badge: the label bound to the status atom, the fill bound to
 // the badge brush atom.
-fn status_badge(status: Readable<str>, badge: Readable<f64>) -> opaque {
+fn status_badge(status: Readable<str>, badge: Readable<u64>) -> opaque {
     return Container().padding(6.0).radius(999.0).color_bound(badge).child(
         Text().text_bound(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
     ).build();
@@ -287,7 +284,7 @@ fn status_badge(status: Readable<str>, badge: Readable<f64>) -> opaque {
 // Swap in a fresh controller (the live curve idx + loop flag) seeked to
 // the DISPLAYED eased progress — boa's `ctx.get(progress$)` — so a
 // mid-play curve switch continues from the value on screen.
-fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<f64>, loop_flag: Readable<bool>, progress: Readable<f64>, status: Readable<str>, badge: Readable<f64>, tick: MutF64, end: MutNil) {
+fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<f64>, loop_flag: Readable<bool>, progress: Readable<f64>, status: Readable<str>, badge: Readable<u64>, tick: ?Mutation<f64>, end: ?Mutation<nil>) {
     let t = ctx.get<f64>(progress);
     let next = make_ctrl(tick, end, ctx.get<f64>(curve_idx), ctx.get<bool>(loop_flag));
     anim_seek(next, t);
@@ -295,7 +292,7 @@ fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<
     sync(ctx, next, status, badge);
 }
 
-fn make_ctrl(tick: MutF64, end: MutNil, curve: f64, looping: bool) -> opaque {
+fn make_ctrl(tick: ?Mutation<f64>, end: ?Mutation<nil>, curve: f64, looping: bool) -> opaque {
     let mut repeat: u64 = 1;
     if (looping) {
         repeat = 18446744073709551615.0 as u64; // the infinite crossing
@@ -318,10 +315,10 @@ fn speed_factor(idx: f64) -> f64 {
 }
 
 // Status → the badge label (uppercased, the boa badge) + the fill brush.
-fn sync(ctx: MutationCtx, c: opaque, status: Readable<str>, badge: Readable<f64>) {
+fn sync(ctx: MutationCtx, c: opaque, status: Readable<str>, badge: Readable<u64>) {
     let s = anim_status(c);
     ctx.set<str>(status, upper(s));
-    ctx.set_brush(badge, badge_color(s));
+    ctx.set<u64>(badge, badge_color(s));
 }
 
 fn upper(s: str) -> str {
@@ -342,22 +339,22 @@ fn badge_color(s: str) -> u64 {
 
 // ---- the chip paint helpers (the selected-state brushes) -----------------------
 
-fn paint_speed(ctx: MutationCtx, sp0: Readable<f64>, sp1: Readable<f64>, sp2: Readable<f64>, sp3: Readable<f64>, sel: f64) {
-    ctx.set_brush(sp0, chip_color(sel == 0.0));
-    ctx.set_brush(sp1, chip_color(sel == 1.0));
-    ctx.set_brush(sp2, chip_color(sel == 2.0));
-    ctx.set_brush(sp3, chip_color(sel == 3.0));
+fn paint_speed(ctx: MutationCtx, sp0: Readable<u64>, sp1: Readable<u64>, sp2: Readable<u64>, sp3: Readable<u64>, sel: f64) {
+    ctx.set<u64>(sp0, chip_color(sel == 0.0));
+    ctx.set<u64>(sp1, chip_color(sel == 1.0));
+    ctx.set<u64>(sp2, chip_color(sel == 2.0));
+    ctx.set<u64>(sp3, chip_color(sel == 3.0));
 }
 
-fn paint_curve(ctx: MutationCtx, cv0: Readable<f64>, cv1: Readable<f64>, cv2: Readable<f64>, cv3: Readable<f64>, sel: f64) {
-    ctx.set_brush(cv0, curve_chip_color(sel == 0.0));
-    ctx.set_brush(cv1, curve_chip_color(sel == 1.0));
-    ctx.set_brush(cv2, curve_chip_color(sel == 2.0));
-    ctx.set_brush(cv3, curve_chip_color(sel == 3.0));
+fn paint_curve(ctx: MutationCtx, cv0: Readable<u64>, cv1: Readable<u64>, cv2: Readable<u64>, cv3: Readable<u64>, sel: f64) {
+    ctx.set<u64>(cv0, curve_chip_color(sel == 0.0));
+    ctx.set<u64>(cv1, curve_chip_color(sel == 1.0));
+    ctx.set<u64>(cv2, curve_chip_color(sel == 2.0));
+    ctx.set<u64>(cv3, curve_chip_color(sel == 3.0));
 }
 
-fn paint_loop(ctx: MutationCtx, lp: Readable<f64>, on: bool) {
-    ctx.set_brush(lp, loop_color(on));
+fn paint_loop(ctx: MutationCtx, lp: Readable<u64>, on: bool) {
+    ctx.set<u64>(lp, loop_color(on));
 }
 
 fn chip_color(sel: bool) -> u64 {
@@ -379,7 +376,7 @@ fn loop_color(on: bool) -> u64 {
 
 // A transport pill (the boa Button): a PointerInteract pad over a colored
 // label.
-fn pill(label: str, color: u64, cb: Handler<nil>, key: str) -> opaque {
+fn pill(label: str, color: u64, cb: Mutation<nil>, key: str) -> opaque {
     return PointerInteract().on_click(cb).child(
         Container().padding(8.0).radius(6.0).color(color).query_key(key).child(
             Text().text(label).font_size(11.0).color(0xFFFFFFFFu64).build(),
@@ -388,7 +385,7 @@ fn pill(label: str, color: u64, cb: Handler<nil>, key: str) -> opaque {
 }
 
 // A selectable chip (speed / curve / loop): the fill rides its brush atom.
-fn chip(atom: Readable<f64>, label: str, cb: Handler<nil>, key: str) -> opaque {
+fn chip(atom: Readable<u64>, label: str, cb: Mutation<nil>, key: str) -> opaque {
     return PointerInteract().on_click(cb).child(
         Container().padding(6.0).radius(6.0).color_bound(atom).query_key(key).child(
             Text().text(label).font_size(10.0).color(0x475569FFu64).build(),

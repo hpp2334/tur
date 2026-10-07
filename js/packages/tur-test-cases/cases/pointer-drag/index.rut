@@ -2,23 +2,22 @@
 // and the last position ride two bound sources; the drag mutations
 // receive the typed `PointerEvent` (state by capture, data by argument).
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text,
-    mutate_ev, source_str };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let phase: Readable<str> = source_str("idle");
-    let pos: Readable<str> = source_str("0,0");
+    let phase: Readable<str> = source<str>("idle");
+    let pos: Readable<str> = source<str>("0,0");
 
-    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
         ctx.set<str>(phase, "down");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
         ctx.set<str>(phase, "move");
     });
-    let b_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
         ctx.set<str>(phase, "up");
     });

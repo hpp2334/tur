@@ -4,8 +4,7 @@
 // transcripts render into `tile-events-0` / `tile-events-1` (each tile's
 // mutation captures its own transcript source).
 use tur::{ ALIGN_TOP_LEFT, anim_forward, anim_reverse, mount };
-use tur_kit::{ Container, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable,
-    SizedBox, Stack, Text, mutate_ev, source_str };
+use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mutate, source };
 use tur_anim_kit::{ anim_ctrl };
 
 
@@ -18,9 +17,9 @@ entry fn start() -> u64 {
         .child(SizedBox(300.0, 200.0).child(Container().build()).build());
 
     // Tile 0 at (10, 10); tile 1 at (150, 100).
-    let t0: Readable<str> = source_str("");
+    let t0: Readable<str> = source<str>("");
     stack.child(Positioned().left(10.0).top(10.0).child(tile(ctrl, t0, "tile-0")).build());
-    let t1: Readable<str> = source_str("");
+    let t1: Readable<str> = source<str>("");
     stack.child(Positioned().left(150.0).top(100.0).child(tile(ctrl, t1, "tile-1")).build());
 
     // Transcript readouts.
@@ -37,14 +36,14 @@ entry fn start() -> u64 {
 // transcript source (state by capture — no id rails). The transcript
 // ACCUMULATES (the test checks down+move are present).
 fn tile(ctrl: opaque, transcript: Readable<str>, key: str) -> opaque {
-    let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_forward(ctrl);
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} down");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} move");
     });
-    let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_reverse(ctrl);
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} up");
     });

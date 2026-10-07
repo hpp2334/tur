@@ -3,20 +3,19 @@
 // the drag mutations; the transcript source renders "dsx,dsy,dlx,dly" for
 // the test to parse.
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceStr,  SourceF64,  Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text, mutate_ev,
-    source_f64, source_str };
+use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let info: Readable<str> = source_str("0,0,0,0");
-    let sx: Readable<f64> = source_f64(0.0);
-    let sy: Readable<f64> = source_f64(0.0);
-    let lx: Readable<f64> = source_f64(0.0);
-    let ly: Readable<f64> = source_f64(0.0);
+    let info: Readable<str> = source<str>("0,0,0,0");
+    let sx: Readable<f64> = source<f64>(0.0);
+    let sy: Readable<f64> = source<f64>(0.0);
+    let lx: Readable<f64> = source<f64>(0.0);
+    let ly: Readable<f64> = source<f64>(0.0);
 
     // The anchor press: from-start + from-last are both 0 (the anchors
     // seed BEFORE the emit reads).
-    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         let gx = ev.global.x;
         let gy = ev.global.y;
         ctx.set<f64>(sx, gx);
@@ -25,7 +24,7 @@ entry fn start() -> u64 {
         ctx.set<f64>(ly, gy);
         ctx.set<str>(info, f"{gx - ctx.get<f64>(sx)},{gy - ctx.get<f64>(sy)},{gx - ctx.get<f64>(lx)},{gy - ctx.get<f64>(ly)}");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         let gx = ev.global.x;
         let gy = ev.global.y;
         ctx.set<str>(info, f"{gx - ctx.get<f64>(sx)},{gy - ctx.get<f64>(sy)},{gx - ctx.get<f64>(lx)},{gy - ctx.get<f64>(ly)}");
@@ -48,6 +47,6 @@ entry fn start() -> u64 {
 // the engine stops delivering moves once the pointer is up, so no further
 // deltas land. The atom id rides the entry arg.
 entry fn reset(atom: u64, _b: f64) {
-    let info = SourceStr.of(ctx_bridge(), atom, false);
+    let info = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(info, "0,0,0,0");
 }

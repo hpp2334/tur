@@ -15,16 +15,16 @@ use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceF64,  Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     // The channels mint in order: color, blur, dy (the probe entries
     // address them by the start answer + offset).
-    let color: Readable<f64> = source_f64(0.0);
-    let blur: Readable<f64> = source_f64(10.0);
-    let dy: Readable<f64> = source_f64(4.0);
+    let color: Readable<u64> = source<u64>(0);
+    let blur: Readable<f64> = source<f64>(10.0);
+    let dy: Readable<f64> = source<f64>(4.0);
     // The boot glow (the ctx face at start).
-    MutationCtx.over(ctx_bridge()).set_brush(color, 0xFF0000FFu64);
+    MutationCtx.over(ctx_bridge()).set<u64>(color, 0xFF0000FFu64);
     let card = Container()
         .width_height(60.0, 40.0)
         .color(0x222222FFu64)
@@ -40,22 +40,22 @@ entry fn start() -> u64 {
 // Re-tint the glow (the placed-piece hue swap) — a brush write only; the
 // element must repaint without remounting.
 entry fn retint(atom: u64, _b: f64) {
-    let color = SourceF64.of(ctx_bridge(), atom, false);
-    MutationCtx.over(ctx_bridge()).set_brush(color, 0x00FF00FFu64);
+    let color = Source<u64>.of(ctx_bridge(), atom, false, 1);
+    MutationCtx.over(ctx_bridge()).set<u64>(color, 0x00FF00FFu64);
 }
 
 entry fn resteepen(atom: u64, _b: f64) {
-    let dy = SourceF64.of(ctx_bridge(), atom, false);
+    let dy = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(dy, 12.0);
 }
 "#;
 
 const STATIC_SHADOW_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Container, Readable, source_f64 };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
-    let dy: Readable<f64> = source_f64(12.0);
+    let dy: Readable<f64> = source<f64>(12.0);
     let card = Container()
         .width_height(60.0, 40.0)
         .color(0x222222FFu64)

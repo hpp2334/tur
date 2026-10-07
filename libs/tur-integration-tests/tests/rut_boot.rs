@@ -8,9 +8,9 @@ use tur_integration_tests::TurTestApp;
 
 const HELLO_RUT: &str = r#"
 use tur::{ mount };
-use tur_kit::{ SourceValue,  SourceStr,  SourceF64,  Column, Text };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
-use tur_kit::{ Column, PointerInteract, Text };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() {
     let col = Column()
@@ -23,9 +23,9 @@ entry fn start() {
 /// The `entry fn stop` cleanup contract: stop runs on reload, and the new
 /// module's tree replaces the old one.
 const HELLO_RUT_V2: &str = r#"use tur::{ mount };
-use tur_kit::{ Text };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
-use tur_kit::{ Text };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 
 entry fn start() {
@@ -90,18 +90,18 @@ fn rut_module_mounts_a_tree() {
 /// existing reactive flush re-renders the Text.
 const COUNTER_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Column, MutationCtx, Readable, Text, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let atom: Readable<str> = source_str("Count: 0");
+    let atom: Readable<str> = source<str>("Count: 0");
     let col = Column().child(Text().text_bound(atom).query_key("rut/text").build());
     mount(col.build());
     return atom.atom_id();
 }
 
 entry fn on_event(atom: u64, n: f64) {
-    let r = SourceStr.of(ctx_bridge(), atom, false);
+    let r = Source<str>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<str>(r, f"Count: {n}");
 }
 "#;
@@ -140,14 +140,13 @@ fn rut_reactive_atom_rebinds_text() {
 /// which mutates the bound atom — the full interactive loop, all rut.
 /// The button's `id` IS the atom id (the callback's first argument).
 const BUTTON_RUT: &str = r#"use tur::mount;
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
-    source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let atom: Readable<str> = source_str("taps: 0");
-    let n: Readable<f64> = source_f64(0.0);
-    let b_click = mutate(fn (ctx: MutationCtx) {
+    let atom: Readable<str> = source<str>("taps: 0");
+    let n: Readable<f64> = source<f64>(0.0);
+    let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
         ctx.set<str>(atom, f"taps: {ctx.get<f64>(n) as u64}");
     });
@@ -191,18 +190,17 @@ fn rut_button_click_mutates_bound_text() {
 /// JS counter case. Callbacks receive (count_atom, label_atom, seq).
 const COUNTER_APP_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
-    source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("Count: 0");
-    let count: Readable<f64> = source_f64(0.0);
+    let label: Readable<str> = source<str>("Count: 0");
+    let count: Readable<f64> = source<f64>(0.0);
     // The inc/dec mutations capture both handles (the show twin inlines).
-    let b_inc = mutate(fn (ctx: MutationCtx) {
+    let b_inc = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
         ctx.set<str>(label, f"Count: {ctx.get<f64>(count) as u64}");
     });
-    let b_dec = mutate(fn (ctx: MutationCtx) {
+    let b_dec = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(count, ctx.get<f64>(count) - 1.0);
         ctx.set<str>(label, f"Count: {ctx.get<f64>(count) as u64}");
     });
@@ -251,14 +249,13 @@ fn rut_counter_app_full_journey() {
 /// button — all authored in rut.
 const CONDITION_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Column, Condition, Container, Expanded, MutationCtx, PointerInteract, Positioned,
-    Readable, Stack, Text, mutate, source_bool, source_str };
+use tur_kit::{ Column, Condition, Container, Expanded, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Source, Stack, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
-    let on: Readable<bool> = source_bool(true);
-    let on_label: Readable<str> = source_str("ON");
-    let off_label: Readable<str> = source_str("OFF");
-    let b_toggle = mutate(fn (ctx: MutationCtx) {
+    let on: Readable<bool> = source<bool>(true);
+    let on_label: Readable<str> = source<str>("ON");
+    let off_label: Readable<str> = source<str>("OFF");
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(on, !ctx.get<bool>(on));
     });
     let col = Column()
@@ -330,9 +327,9 @@ fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f
 /// content — the long-list pattern every real app needs.
 const SCROLL_RUT: &str = r#"
 use tur::{ AXIS_VERTICAL, mount, rs_source_f64 };
-use tur_kit::{ Column, Expanded, ScrollView, Text };
+use tur_kit::{ Column, Expanded, Mutation, MutationCtx, Readable, ScrollView, Source, TaskCtx, Text, mutate, source };
 
-use tur_kit::{ Column, PointerInteract, Expanded, ScrollView, Text };
+use tur_kit::{ Column, Expanded, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
     let mut col = Column();
@@ -391,7 +388,7 @@ const LIST_MAP_RUT: &str = r#"
 use tur::{ mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
     rs_set_str, rs_set_value, rs_source_str, rs_source_value, rs_value_get, rs_value_item,
     rs_value_len };
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 
 // The string join: read the list atom back through the substrate rows
@@ -416,7 +413,7 @@ entry fn start() -> u64 {
     rs_map_set(map, "role", "demo");
     let meta = rs_source_value(map);
 
-    let label_r: Readable<str> = source_str("");
+    let label_r: Readable<str> = source<str>("");
     let label = label_r.atom_id();
     join_into(items, label);
     // The map round-trips through entries too: read a key back and append it.
@@ -426,7 +423,7 @@ entry fn start() -> u64 {
     rs_set_str(label, f"{cur} ({role})");
 
     // The push pad (a mutation whose body drives the substrate rows).
-    let b_push = mutate(fn (_ctx: MutationCtx) {
+    let b_push = mutate(fn (_ctx: MutationCtx, _e: nil) {
         // Set/read round trip: read the atom's list back, rebuild the whole
         // value with one more item, write it, re-join into the label.
         let v = rs_get_value(items);
@@ -511,7 +508,7 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
 use tur::{ mount, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_new };
-use tur_kit::{ Column, Input, Readable, Text, source_str };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -521,7 +518,7 @@ entry fn start() -> u64 {
     tctrl_set_text(ctrl, "seed");
     tctrl_select(ctrl, 0, 4);
     tctrl_paste(ctrl, "SEEDED");
-    let label: Readable<str> = source_str(tctrl_text(ctrl));
+    let label: Readable<str> = source<str>(tctrl_text(ctrl));
 
     let col = Column()
         .child(Input().controller(ctrl).undo(undo).placeholder("type here").width_height(220.0, 32.0).query_key("rut/input").build())
@@ -603,7 +600,7 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 /// builder entry authors each row.
 const EACH_RUT: &str = r#"
 use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
-use tur_kit::{ Column, Each, MutationCtx, PointerInteract, Readable, Text, mutate };
+use tur_kit::{ Column, Each, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 fn item_row(i: u64, item: str) -> opaque {
     let col = Column()
@@ -615,10 +612,10 @@ entry fn start() -> u64 {
     let list = rs_list_new();
     rs_list_push(list, "alpha");
     rs_list_push(list, "beta");
-    let atom: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(list), false);
+    let atom: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(list), false, 1);
 
     // The push pad: the mutation drives the substrate rows.
-    let b_push = mutate(fn (_ctx: MutationCtx) {
+    let b_push = mutate(fn (_ctx: MutationCtx, _e: nil) {
         let fresh = rs_list_new();
         rs_list_push(fresh, "alpha");
         rs_list_push(fresh, "beta");
@@ -704,7 +701,7 @@ fn rut_each_maps_a_list_atom_and_rebuilds_on_change() {
 /// the remount path.
 const LAZY_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Column, Expanded, LazyList, Readable, Text, source_f64 };
+use tur_kit::{ Column, Expanded, LazyList, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 fn lazy_row(i: u64) -> opaque {
     let col = Column().child(Text().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
@@ -712,7 +709,7 @@ fn lazy_row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(300.0);
+    let count: Readable<f64> = source<f64>(300.0);
     let scroller = LazyList().item_builder(lazy_row).count(count).item_extent(20.0).query_key("rut/lazy").build();
     let root = Column().child(Expanded().flex(1.0).child(scroller).build());
     mount(root.build());
@@ -769,9 +766,9 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
 /// the tree geometry; a second box (SizedBox) pins the exact size.
 const CONTAINER_FULL_RUT: &str = r#"
 use tur::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, mount };
-use tur_kit::{ Column, Container, SizedBox, Text };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, SizedBox, Source, TaskCtx, Text, mutate, source };
 
-use tur_kit::{ Column, PointerInteract, Container, SizedBox, Text };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() {
     let styled = Container()
@@ -847,36 +844,32 @@ fn rut_container_full_surface_and_sizedbox() {
 /// carries the transcript; every handler captures it — no id rails.
 const GESTURE_RUT: &str = r#"
 use tur::{ focus_request, mount };
-use tur_kit::{
-    BlurEvent, Column, FocusEvent, Focusable, KeydownEvent, MouseButton, MutationCtx,
-    PointerEvent, PointerInteract, Readable, Text, mutate, mutate_blur, mutate_ev, mutate_focus,
-    mutate_key, source_f64, source_str,
-};
+use tur_kit::{ BlurEvent, Column, FocusEvent, Focusable, KeydownEvent, MouseButton, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
-    let seq: Readable<f64> = source_f64(0.0);
+    let label: Readable<str> = source<str>("");
+    let seq: Readable<f64> = source<f64>(0.0);
 
     // The drag pads: the typed event carries local + global points and
     // the button enum (0 primary / 1 middle / 2 secondary — the code
     // decodes through comparisons; enums carry no cast).
-    let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|down {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
-    let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|move {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
-    let b_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|up {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
     // The synthesized tap: the click mutation appends `tap N` (the
     // sequence rides its own source — no rail payload).
-    let b_tap = mutate(fn (ctx: MutationCtx) {
+    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(seq, ctx.get<f64>(seq) + 1.0);
         ctx.set<str>(label, f"{ctx.get<str>(label)}|tap {ctx.get<f64>(seq) as u64}");
     });
-    let menu = PointerInteract().on_context_menu(mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
+    let menu = PointerInteract().on_context_menu(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         let mut b = "other";
         if (ev.button == MouseButton.Right) {
             b = "right";
@@ -887,13 +880,13 @@ entry fn start() -> u64 {
     // The focus rail: the typed events name their surface (the keydown
     // record crosses key/code/modifiers; kind is always down=0 on this
     // surface). Focus/blur are payload-less.
-    let b_key = mutate_key(fn (ctx: MutationCtx, ev: KeydownEvent) {
+    let b_key = mutate<KeydownEvent>(fn (ctx: MutationCtx, ev: KeydownEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|key {ev.key}/{ev.code} m{ev.modifiers} k0");
     });
-    let b_focus = mutate_focus(fn (ctx: MutationCtx, _ev: FocusEvent) {
+    let b_focus = mutate<FocusEvent>(fn (ctx: MutationCtx, _ev: FocusEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|focused");
     });
-    let b_blur = mutate_blur(fn (ctx: MutationCtx, _ev: BlurEvent) {
+    let b_blur = mutate<BlurEvent>(fn (ctx: MutationCtx, _ev: BlurEvent) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|blurred");
     });
 
@@ -1011,8 +1004,7 @@ fn rut_gesture_focus_key_payloads_realm_free() {
 /// curve helper answers at start.
 const ANIM_RUT: &str = r#"
 use tur::{ anim_forward, color_tween_lerp, curve_eval, mount, tween_lerp };
-use tur_kit::{ Column, MutationCtx, Readable, Text, mutate, mutate_f64, source_f64,
-    source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
 
@@ -1025,21 +1017,21 @@ entry fn start() -> u64 {
     let cl = color_tween_lerp(0x000000FFu64, 0xFFFFFFFFu64, 0.5);
     let record: str = f"tw{tw} cv{cv} cl{cl}";
 
-    let alpha: Readable<f64> = source_f64(0.0);
+    let alpha: Readable<f64> = source<f64>(0.0);
 
     // The tick/end mutations capture the alpha source (boa wraps onTick
     // in mutate); the controller drives the Opacity through the bound
     // handle.
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, t: f64) {
         ctx.set<f64>(alpha, t);
     });
-    let a_end = mutate(fn (ctx: MutationCtx) {
+    let a_end: ?Mutation<nil> = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(alpha, 1.0);
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     anim_forward(ctrl);
 
-    let label: Readable<str> = source_str(record);
+    let label: Readable<str> = source<str>(record);
 
     let col = Column()
         .child(Opacity(0.0).bound(alpha).child(Text().text("fade").build()).build())
@@ -1089,7 +1081,7 @@ fn rut_animation_controller_ticks_into_opacity() {
 /// (`launch_future` + `await`; the pump's `run_ready` drives it).
 const ASYNC_RUT: &str = r#"
 use tur::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, spawn };
-use tur_kit::{ Column, Readable, TaskCtx, Text, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 // The async boundary: the handles ride by parameter; the ctx is
 // task-scoped (minted at the launch site) and works across awaits.
@@ -1105,7 +1097,7 @@ async fn work(ctx: TaskCtx, label: Readable<str>) -> str {
 }
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
+    let label: Readable<str> = source<str>("");
     spawn(work(TaskCtx.mint(), label));
     let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
@@ -1152,16 +1144,16 @@ fn rut_async_clipboard_and_net_request() {
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
 use tur::{ clipboard_write, mount, spawn, task_cancel };
-use tur_kit::{ Column, MutationCtx, Readable, TaskCtx, Text, mutate_bytes, source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_net_kit::{ net_stream };
 
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
+    let label: Readable<str> = source<str>("");
 
     // The chunk handler: a mutation over the typed bytes payload (the
     // transcript accumulates the chunk lengths).
-    let b_chunk = mutate_bytes(fn (ctx: MutationCtx, data: bytes) {
+    let b_chunk = mutate<bytes>(fn (ctx: MutationCtx, data: bytes) {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|{data.len() as u64}");
     });
     let task = net_stream("https://example.test/stream", "GET", b_chunk);
@@ -1232,15 +1224,14 @@ fn rut_net_stream_chunks_cross_as_records() {
 const VAPP_RUT: &str = r#"
 use tur::{ mount, st_put, st_take, va_controller, va_create_source, va_destroy, va_error,
     va_status };
-use tur_kit::{ Column, Lifecycle, MountEvent, MutationCtx, Readable, Text, VirtualApp, mutate,
-    mutate_mount, source_str };
+use tur_kit::{ Column, Lifecycle, MountEvent, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, VirtualApp, mutate, source };
 
 
 let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
-    let label: Readable<str> = source_str("");
-    let src = va_create_source("use tur::{ mount };\nuse tur_kit::{ Text };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
+    let label: Readable<str> = source<str>("");
+    let src = va_create_source("use tur::{ mount };\nuse tur_kit::{ Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
     let ctrl = va_controller(src);
     // The controller rides the opaque stash only because the poll /
     // destroy entries cannot capture it (an entry binds no module state);
@@ -1249,7 +1240,7 @@ entry fn start() -> u64 {
 
     // The lifecycle surfaces: on_mount is a mutation over the typed
     // MountEvent; before_destroy keeps the fn rail (the teardown leg).
-    let b_mount = mutate_mount(fn (_ctx: MutationCtx, _ev: MountEvent) {
+    let b_mount = mutate<MountEvent>(fn (_ctx: MutationCtx, _ev: MountEvent) {
     });
 
     let col = Column()
@@ -1392,8 +1383,8 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 const DERIVED_RUT: &str = r#"
 use tur::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str,
     rs_watch_start };
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate };
-use tur_kit::{ rs_derive, rs_derive2, rs_watch };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, TaskCtx, mutate, rs_derive, rs_derive2, rs_watch, source };
 
 
 entry fn start() -> u64 {
@@ -1407,10 +1398,10 @@ entry fn start() -> u64 {
     rs_watch_start(watch);
 
     // The unified text prop: rebuilt handles over the substrate atoms.
-    let dr = SourceStr.of(ctx_bridge(), d, false);
-    let d2r = SourceStr.of(ctx_bridge(), d2, false);
-    let hitsr = SourceStr.of(ctx_bridge(), hits, false);
-    let b_inc = mutate(fn (_ctx: MutationCtx) {
+    let dr = Source<str>.of(ctx_bridge(), d, false, 1);
+    let d2r = Source<str>.of(ctx_bridge(), d2, false, 1);
+    let hitsr = Source<str>.of(ctx_bridge(), hits, false, 1);
+    let b_inc = mutate(fn (_ctx: MutationCtx, _e: nil) {
         rs_set_f64(count, rs_get_f64(count) + 1.0);
     });
 
@@ -1449,17 +1440,17 @@ fn on_count(report: u64, watched: u64, _n: f64) {
 /// derive beside it keeps materializing).
 const DERIVED_NO_MOUNT_RUT: &str = r#"
 use tur::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate };
-use tur_kit::{ rs_derive };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, TaskCtx, mutate, rs_derive, source };
 
 entry fn start() -> u64 {
     let count = rs_source_f64();
     let bad = rs_derive(bad, count);
     let good = rs_derive(good, count);
 
-    let badr = SourceStr.of(ctx_bridge(), bad, false);
-    let goodr = SourceStr.of(ctx_bridge(), good, false);
-    let b_inc = mutate(fn (_ctx: MutationCtx) {
+    let badr = Source<str>.of(ctx_bridge(), bad, false, 1);
+    let goodr = Source<str>.of(ctx_bridge(), good, false, 1);
+    let b_inc = mutate(fn (_ctx: MutationCtx, _e: nil) {
         rs_set_f64(count, rs_get_f64(count) + 1.0);
     });
 

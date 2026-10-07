@@ -42,7 +42,7 @@ fn identical_frames_render_once() {
     app.load_rut_module(
         r#"
 use tur::{ mount };
-use tur_kit::{ SourceF64,  Container };
+use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 
 entry fn start() {
@@ -87,11 +87,11 @@ fn changed_content_reapplies() {
     app.load_rut_module(
         r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
-    let color: Readable<f64> = source_f64(0.0);
-    MutationCtx.over(ctx_bridge()).set_brush(color, 0xFF0000FFu64);
+    let color: Readable<u64> = source<u64>(0);
+    MutationCtx.over(ctx_bridge()).set<u64>(color, 0xFF0000FFu64);
 
     let b = Container().width_height(100.0, 50.0).color_bound(color);
     mount(b.build());
@@ -99,13 +99,14 @@ entry fn start() -> u64 {
 }
 
 entry fn do_set(color: u64, v: f64) {
-    // 0 clears the brush (Nil — the prop resolves absent); the container
-    // repaints unpainted (the batch differs either way).
+    // 0 clears the brush (the decode refuses 0 — the prop resolves
+    // absent); the container repaints unpainted (the batch differs
+    // either way).
     let write = MutationCtx.over(ctx_bridge());
     if (v == 0.0) {
-        write.set_brush(SourceF64.of(ctx_bridge(), color, false), 0);
+        write.set<u64>(Source<u64>.of(ctx_bridge(), color, false, 1), 0);
     } else {
-        write.set_brush(SourceF64.of(ctx_bridge(), color, false), 0x00FF00FFu64);
+        write.set<u64>(Source<u64>.of(ctx_bridge(), color, false, 1), 0x00FF00FFu64);
     }
 }
 "#,
@@ -150,8 +151,8 @@ fn attach_resets_dedup() {
     app.load_rut_module(
         r#"
 use tur::{ mount };
-use tur_kit::{ Container };
-use tur_kit::{ Container };
+use tur_kit::{ Container, MutationCtx, Readable, Source, source };
+use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 
 

@@ -3,23 +3,22 @@
 // the opaque anchored pill still consumes clicks. The counters render into
 // bound Texts (`beneath-downs` / `pill-clicks`).
 use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Positioned,
-    Readable, ScrollView, Stack, Text, mutate, mutate_ev, source_f64, source_str };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, ScrollView, Source, Stack, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let downs: Readable<str> = source_str("0");
-    let clicks: Readable<str> = source_str("0");
-    let down_n: Readable<f64> = source_f64(0.0);
-    let click_n: Readable<f64> = source_f64(0.0);
+    let downs: Readable<str> = source<str>("0");
+    let clicks: Readable<str> = source<str>("0");
+    let down_n: Readable<f64> = source<f64>(0.0);
+    let click_n: Readable<f64> = source<f64>(0.0);
 
     // The counters ride their own sources (the mutations capture the
     // handles — no id rail, no stash).
-    let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let g_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<f64>(down_n, ctx.get<f64>(down_n) + 1.0);
         ctx.set<str>(downs, f"{ctx.get<f64>(down_n) as u64}");
     });
-    let pill_click = mutate(fn (ctx: MutationCtx) {
+    let pill_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(click_n, ctx.get<f64>(click_n) + 1.0);
         ctx.set<str>(clicks, f"{ctx.get<f64>(click_n) as u64}");
     });

@@ -12,9 +12,7 @@
 // engine's only trig row — exactly what the hash needs).
 use tur::{ ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL, CURSOR_POINTER,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, mount, str_parse_f64 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion, MutationCtx,
-    PointerInteract, Readable, Row, SizedBox, Text, list_new, list_push, mutate, source_bool,
-    source_f64, source_value };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, list_push, mutate, source };
 
 
 let ITEM_COUNT: f64 = 2000.0;
@@ -28,10 +26,10 @@ let LABEL: u64 = 0xCBD5E1FFu64;
 let LABEL_FAINT: u64 = 0x64748BFFu64;
 
 entry fn start() {
-    let axis = source_bool(true);
-    let items = source_value(one_list());
-    let count = source_f64(ITEM_COUNT);
-    let b_flip = mutate(fn (ctx: MutationCtx) {
+    let axis = source<bool>(true);
+    let items = source<opaque>(one_list());
+    let count = source<f64>(ITEM_COUNT);
+    let b_flip = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(axis, !ctx.get<bool>(axis));
         ctx.set<opaque>(items, one_list());
     });

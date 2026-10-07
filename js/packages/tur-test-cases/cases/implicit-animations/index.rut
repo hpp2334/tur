@@ -14,9 +14,7 @@
 // writes — the animation rows end-to-end with no per-channel controllers.
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, anim_forward,
     anim_reverse, color_tween_lerp, mount, tween_lerp };
-use tur_kit::{ Column, Condition, Container, Expanded, Lifecycle, MountEvent, MutationCtx,
-    PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, mutate, mutate_f64,
-    mutate_mount, source_bool, source_f64 };
+use tur_kit::{ Column, Condition, Container, Expanded, Lifecycle, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, mutate, source };
 use tur_anim_kit::{ Opacity, anim_ctrl };
 
 
@@ -35,29 +33,29 @@ let BLUE: u64 = 0x0EA5E9FFu64; // compact — the sky-blue state
 let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
 
 entry fn start() -> u64 {
-    let expanded: Readable<bool> = source_bool(false);
-    let progress: Readable<f64> = source_f64(0.0);
-    let color: Readable<f64> = source_f64(0.0);
-    let blur: Readable<f64> = source_f64(B_MIN);
-    let radius: Readable<f64> = source_f64(R_MIN);
-    let left: Readable<f64> = source_f64(X_MIN);
-    let fade: Readable<f64> = source_f64(A_MIN);
+    let expanded: Readable<bool> = source<bool>(false);
+    let progress: Readable<f64> = source<f64>(0.0);
+    let color: Readable<u64> = source<u64>(0);
+    let blur: Readable<f64> = source<f64>(B_MIN);
+    let radius: Readable<f64> = source<f64>(R_MIN);
+    let left: Readable<f64> = source<f64>(X_MIN);
+    let fade: Readable<f64> = source<f64>(A_MIN);
 
     // The tick: eased progress → every animated channel (the channels
     // ride by capture).
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
+    let a_tick = mutate<f64>(fn (ctx: MutationCtx, t: f64) {
         ctx.set<f64>(blur, tween_lerp(B_MIN, B_MAX, t));
         ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, t));
         ctx.set<f64>(left, tween_lerp(X_MIN, X_MAX, t));
         ctx.set<f64>(fade, tween_lerp(A_MIN, A_MAX, t));
-        ctx.set_brush(color, color_tween_lerp(BLUE, INDIGO, t));
+        ctx.set<u64>(color, color_tween_lerp(BLUE, INDIGO, t));
     });
     let ctrl = anim_ctrl(600.0, "easeInOut", 1, a_tick, nil);
 
     // The toggle: flip the state atom, then retarget the shared
     // controller — forward plays toward the expanded state, reverse back
     // to compact.
-    let b_toggle = mutate(fn (ctx: MutationCtx) {
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(expanded, !ctx.get<bool>(expanded));
         if (ctx.get<bool>(expanded)) {
             anim_forward(ctrl);
@@ -69,8 +67,8 @@ entry fn start() -> u64 {
     // The boot brush seed (the compact sky-blue state; the f64 channels
     // seed at their mints above). The lifecycle surface delivers the
     // typed `MountEvent`.
-    let seed = mutate_mount(fn (ctx: MutationCtx, _ev: MountEvent) {
-        ctx.set_brush(color, BLUE);
+    let seed = mutate<MountEvent>(fn (ctx: MutationCtx, _ev: MountEvent) {
+        ctx.set<u64>(color, BLUE);
     });
 
     // The Compact↔Expanded label rides the state atom (a Condition swap).

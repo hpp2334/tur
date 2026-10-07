@@ -4,17 +4,16 @@
 // the path without blocking. The beneath-target's down count renders into
 // the `beneath-downs` Text (the test parses it).
 use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mount };
-use tur_kit::{ Container, MouseRegion, MutationCtx, PointerEvent, PointerInteract, Positioned,
-    Readable, SizedBox, Stack, Text, mutate_ev, source_f64, source_str };
+use tur_kit::{ Container, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mutate, source };
 
 
 entry fn start() -> u64 {
-    let downs: Readable<str> = source_str("0");
-    let count: Readable<f64> = source_f64(0.0);
+    let downs: Readable<str> = source<str>("0");
+    let count: Readable<f64> = source<f64>(0.0);
 
     // The down count rides its own source (the mutation captures both
     // handles — no id rail, no stash).
-    let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
+    let g_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
         ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
     });

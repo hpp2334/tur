@@ -51,22 +51,21 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
 
 const RAIL_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ SourceF64,  Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
-    source_str };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(0.0);
-    let label: Readable<str> = source_str("idle");
+    let count: Readable<f64> = source<f64>(0.0);
+    let label: Readable<str> = source<str>("idle");
     // The named mutation — the kit seals it into an opaque box on
     // registration; only the box crosses to Rust.
-    let b_named = mutate(fn (ctx: MutationCtx) {
+    let b_named = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
         ctx.set<str>(label, f"named {ctx.get<f64>(count) as u64}");
     });
     let named = PointerInteract().on_click(b_named)
         .child(Text().text("named").query_key("rail/named").build()).build();
     // The anonymous mutation literal — the boa `mutate(() => ...)` twin.
-    let literal = PointerInteract().on_click(mutate(fn (ctx: MutationCtx) {
+    let literal = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(count, ctx.get<f64>(count) + 10.0);
         ctx.set<str>(label, "literal");
     })).child(Text().text("literal").query_key("rail/literal").build()).build();
@@ -101,12 +100,12 @@ fn fn_value_callbacks_fire_through_the_infra_dispatch() {
 
 const WRONG_ARITY_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Column, MutationCtx, PointerInteract, Text, mutate };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 entry fn start() {
     // A nil-arg mutation handed to the typed-arg pad — the shapes
     // disagree (the kit boundary's check rejects it at compile time).
-    let m = mutate(fn (ctx: MutationCtx) {
+    let m = mutate(fn (ctx: MutationCtx, _e: nil) {
         let _ = ctx;
     });
     mount(PointerInteract().on_pointer_down(m).child(Text().text("x").build()).build());
@@ -128,13 +127,13 @@ fn wrong_arity_callback_fails_to_compile() {
 
 const EACH_RAIL_RUT: &str = r#"
 use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Column, Each, Readable, Text };
+use tur_kit::{ Column, Each, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 entry fn start() {
     let list = rs_list_new();
     rs_list_push(list, "alpha");
     rs_list_push(list, "beta");
-    let items: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(list), false);
+    let items: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(list), false, 1);
     mount(Column().query_key("rail/each").child(
         Each(items).item_builder(fn (i: u64, item: str) -> View {
             return Text().text(f"{i}:{item}").query_key(f"rail/item-{i}").build();
@@ -171,15 +170,15 @@ fn each_item_builder_takes_a_fn_value() {
 
 const ANIM_RAIL_RUT: &str = r#"
 use tur::{ anim_forward, mount };
-use tur_kit::{ Column, MutationCtx, Readable, Text, mutate_f64, source_f64 };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 use tur_anim_kit::{ anim_ctrl_tick };
 
 entry fn start() {
-    let progress: Readable<f64> = source_f64(0.0);
-    let box_r: Readable<f64> = source_f64(0.0);
+    let progress: Readable<f64> = source<f64>(0.0);
+    let box_r: Readable<f64> = source<f64>(0.0);
     // The tick is a MUTATION over the ctx (the eased value is the
     // invocation payload; the channel rides by capture).
-    let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, t: f64) {
         ctx.set<f64>(box_r, t);
         let _ = progress;
     });

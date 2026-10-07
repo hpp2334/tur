@@ -240,7 +240,7 @@ fn lazy_list_virtualizes_large_item_count() {
     app.load_rut_module(
         r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ SourceF64,  Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 fn row(i: u64) -> opaque {
@@ -252,7 +252,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(10000.0);
+    let count: Readable<f64> = source<f64>(10000.0);
     mount(LazyList().item_builder(row).count(count).item_extent(50.0).build());
     return count.atom_id();
 }
@@ -318,7 +318,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 
@@ -331,7 +331,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(10000.0);
+    let count: Readable<f64> = source<f64>(10000.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(56.0).overscan(2).query_key("ll").build();
     let lg = lg;
     mount(lg);
@@ -791,7 +791,7 @@ fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 
@@ -801,7 +801,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(20.0);
+    let count: Readable<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
@@ -809,7 +809,7 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = SourceF64.of(ctx_bridge(), atom, false);
+    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,
@@ -839,7 +839,7 @@ fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 
@@ -849,7 +849,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(20.0);
+    let count: Readable<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
@@ -857,7 +857,7 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = SourceF64.of(ctx_bridge(), atom, false);
+    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,
@@ -912,7 +912,7 @@ fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 
@@ -922,7 +922,7 @@ fn row(i: u64) -> opaque {
 }
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(20.0);
+    let count: Readable<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
@@ -930,7 +930,7 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = SourceF64.of(ctx_bridge(), atom, false);
+    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
     MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,

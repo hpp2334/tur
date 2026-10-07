@@ -79,28 +79,33 @@ use tur::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     va_app_set, va_controller, va_create_source, va_destroy, va_error, va_source_handle,
     va_status, va_status_atom };
 use tur_anim_kit::{ anim_ctrl_end };
-use tur_kit::{ SourceF64,  Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent,
-    MouseRegion, Handler, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row,
-    ScrollView, SizedBox, Stack, Switch, TaskCtx, Text, VirtualApp, mutate, mutate_enter,
-    mutate_exit, mutate_input, mutate_ev, rs_derive, rs_watch };
+use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Switch, TaskCtx, Text, VirtualApp, mutate, rs_derive, rs_watch };
 
 // The handle rebuilders: the raw substrate atom ids cross the stash slots
 // (the module's state rail); the kit's bound props take the typed
-// handles.
+// handles. The stamp spells the boxed rail's f64 number lane (1 — the
+// kit's STAMP_NUM_F64; only the numeric lane reads it, and these raw
+// atoms are str/bool/opaque lanes).
 fn sr(atom: u64) -> Readable<str> {
-    return SourceStr.of(ctx_bridge(), atom, false);
+    return Source<str>.of(ctx_bridge(), atom, false, 1);
 }
 
 fn fr(atom: u64) -> Readable<f64> {
-    return SourceF64.of(ctx_bridge(), atom, false);
+    return Source<f64>.of(ctx_bridge(), atom, false, 1);
 }
 
 fn br(atom: u64) -> Readable<bool> {
-    return SourceBool.of(ctx_bridge(), atom, false);
+    return Source<bool>.of(ctx_bridge(), atom, false, 1);
+}
+
+// The brush lane (the packed color rides the u64 number width now; the
+// stamp spells the boxed rail's u64 lane — the kit's STAMP_NUM_U64).
+fn bru(atom: u64) -> Readable<u64> {
+    return Source<u64>.of(ctx_bridge(), atom, false, 2);
 }
 
 fn op(atom: u64) -> Readable<opaque> {
-    return SourceValue.of(ctx_bridge(), atom, false);
+    return Source<opaque>.of(ctx_bridge(), atom, false, 1);
 }
 
 // ---- design tokens ---------------------------------------------------------
@@ -296,10 +301,10 @@ entry fn start() -> u64 {
 
     // The timers (animation controllers — the wasm-safe rail): the ago
     // clock starts now; the debounce waits for the first edit.
-    let clock = anim_ctrl_end(1000.0, "linear", 0, mutate(fn (_ctx: MutationCtx) { on_clock_end(); }));
+    let clock = anim_ctrl_end(1000.0, "linear", 0, mutate(fn (_ctx: MutationCtx, _e: nil) { on_clock_end(); }));
     st_put(K_CLOCK, clock);
     anim_forward(clock);
-    st_put(K_DEBOUNCE, anim_ctrl_end(500.0, "linear", 0, mutate(fn (_ctx: MutationCtx) { on_debounce_end(); })));
+    st_put(K_DEBOUNCE, anim_ctrl_end(500.0, "linear", 0, mutate(fn (_ctx: MutationCtx, _e: nil) { on_debounce_end(); })));
 
     // The phase-E rails: the sidebar width (the divider's atom — the clamp
     // lives in the drag intent; the boa seed is 200), the divider's drag
@@ -457,11 +462,11 @@ fn build_ui() {
     let reset_icon = stf_take(K_RESETICON) as u64;
     stf_put(K_RESETICON, reset_icon as f64);
     let run = MouseRegion()
-        .on_enter(mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) { run_hover_on(run_h); }))
-        .on_exit(mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) { run_hover_off(run_h); }))
+        .on_enter(mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { run_hover_on(run_h); }))
+        .on_exit(mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { run_hover_off(run_h); }))
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx) { run_case(); })).query_key("run")
-            .child(Container().padding(6.0).radius(6.0).color_bound(fr(run_h))
+        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { run_case(); })).query_key("run")
+            .child(Container().padding(6.0).radius(6.0).color_bound(bru(run_h))
                 .child(Row().main_axis_size(MAIN_SIZE_MIN)
                     .child(Image(run_icon).width(10.0).height(10.0).build())
                     .child(SizedBox(4.0, 0.0).build())
@@ -471,11 +476,11 @@ fn build_ui() {
             .build())
         .build();
     let reset = MouseRegion()
-        .on_enter(mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) { reset_hover_on(reset_h); }))
-        .on_exit(mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) { reset_hover_off(reset_h); }))
+        .on_enter(mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { reset_hover_on(reset_h); }))
+        .on_exit(mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { reset_hover_off(reset_h); }))
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx) { reset_case(); })).query_key("reset")
-            .child(Container().padding(6.0).radius(6.0).color_bound(fr(reset_h))
+        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { reset_case(); })).query_key("reset")
+            .child(Container().padding(6.0).radius(6.0).color_bound(bru(reset_h))
                 .child(Row().main_axis_size(MAIN_SIZE_MIN)
                     .child(Image(reset_icon).width(12.0).height(12.0).build())
                     .child(SizedBox(4.0, 0.0).build())
@@ -514,7 +519,7 @@ fn build_ui() {
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
         .width_height(0.0, 480.0)
-        .multiline(true).on_input(mutate_input(fn (_ctx: MutationCtx, _ev: InputEvent) { on_edit(); }))
+        .multiline(true).on_input(mutate<InputEvent>(fn (_ctx: MutationCtx, _ev: InputEvent) { on_edit(); }))
         .query_key("editor").build();
     let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
         .child(Column().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
@@ -577,10 +582,10 @@ fn build_ui() {
     stf_put(K_DIVBAR, div_bar as f64);
     let divider = MouseRegion().cursor(CURSOR_COL_RESIZE)
         .child(PointerInteract()
-            .on_pointer_down(mutate_ev(fn (_ctx: MutationCtx, ev: PointerEvent) { div_down(ev.global.x); }))
-            .on_pointer_move(mutate_ev(fn (_ctx: MutationCtx, ev: PointerEvent) { div_move(ev.global.x); }))
-            .on_pointer_up(mutate_ev(fn (_ctx: MutationCtx, _ev: PointerEvent) { div_up(); })).query_key("divider")
-            .child(Container().width(8.0).color_bound(fr(div_bar)).build())
+            .on_pointer_down(mutate<PointerEvent>(fn (_ctx: MutationCtx, ev: PointerEvent) { div_down(ev.global.x); }))
+            .on_pointer_move(mutate<PointerEvent>(fn (_ctx: MutationCtx, ev: PointerEvent) { div_move(ev.global.x); }))
+            .on_pointer_up(mutate<PointerEvent>(fn (_ctx: MutationCtx, _ev: PointerEvent) { div_up(); })).query_key("divider")
+            .child(Container().width(8.0).color_bound(bru(div_bar)).build())
             .build())
         .build();
 
@@ -595,10 +600,10 @@ fn build_ui() {
     stf_put(K_EDIVBAR, ediv_bar as f64);
     let edivider = MouseRegion().cursor(CURSOR_COL_RESIZE)
         .child(PointerInteract()
-            .on_pointer_down(mutate_ev(fn (_ctx: MutationCtx, ev: PointerEvent) { ediv_down(ev.global.x); }))
-            .on_pointer_move(mutate_ev(fn (_ctx: MutationCtx, ev: PointerEvent) { ediv_move(ev.global.x); }))
-            .on_pointer_up(mutate_ev(fn (_ctx: MutationCtx, _ev: PointerEvent) { ediv_up(); })).query_key("divider2")
-            .child(Container().width(8.0).color_bound(fr(ediv_bar)).build())
+            .on_pointer_down(mutate<PointerEvent>(fn (_ctx: MutationCtx, ev: PointerEvent) { ediv_down(ev.global.x); }))
+            .on_pointer_move(mutate<PointerEvent>(fn (_ctx: MutationCtx, ev: PointerEvent) { ediv_move(ev.global.x); }))
+            .on_pointer_up(mutate<PointerEvent>(fn (_ctx: MutationCtx, _ev: PointerEvent) { ediv_up(); })).query_key("divider2")
+            .child(Container().width(8.0).color_bound(bru(ediv_bar)).build())
             .build())
         .build();
     let edivider_slot = Switch().value(sr(layout))
@@ -616,7 +621,7 @@ fn build_ui() {
     let sbar_left = Container().padding(4.0)
         .child(Row().main_axis_size(MAIN_SIZE_MIN)
             .child(SizedBox(8.0, 0.0).build())
-            .child(Container().width_height(6.0, 6.0).radius(999.0).color_bound(fr(dot))
+            .child(Container().width_height(6.0, 6.0).radius(999.0).color_bound(bru(dot))
                 .query_key("status-dot").build())
             .child(SizedBox(6.0, 0.0).build())
             .child(state_label(state))
@@ -737,7 +742,7 @@ fn state_label(state: u64) -> opaque {
 // Condition (both branches carry the `autorun` query key; only one
 // mounts).
 fn auto_toggle(autorun: u64) -> opaque {
-    let on = PointerInteract().on_click(mutate(fn (_ctx: MutationCtx) { b_autorun(); })).query_key("autorun")
+    let on = PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { b_autorun(); })).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
             .child(Stack().fit(STACK_FIT_EXPAND)
                 .child(Positioned().top(2.0).left(14.0)
@@ -747,7 +752,7 @@ fn auto_toggle(autorun: u64) -> opaque {
                 .build())
             .build())
         .build();
-    let off = PointerInteract().on_click(mutate(fn (_ctx: MutationCtx) { b_autorun(); })).query_key("autorun")
+    let off = PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { b_autorun(); })).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
             .child(Stack().fit(STACK_FIT_EXPAND)
                 .child(Positioned().top(2.0).left(2.0)
@@ -792,13 +797,13 @@ fn edited_pill(edited: u64) -> opaque {
 // A layout tab — the segmented control's option. The selected option's
 // fill is the tray's selected ink (the brush atoms; 0 = transparent); a
 // MouseRegion delivers the hover lift (the index crosses as the id).
-fn tab_button(label: str, m: Handler<nil>, key: str, brush: u64, idx: u64) -> opaque {
+fn tab_button(label: str, m: Mutation<nil>, key: str, brush: u64, idx: u64) -> opaque {
     return MouseRegion()
-        .on_enter(mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) { tab_enter(idx); }))
-        .on_exit(mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) { tab_exit(idx); }))
+        .on_enter(mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { tab_enter(idx); }))
+        .on_exit(mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { tab_exit(idx); }))
         .cursor(CURSOR_POINTER)
         .child(PointerInteract().on_click(m).query_key(key)
-            .child(Container().padding(6.0).radius(4.0).color_bound(fr(brush))
+            .child(Container().padding(6.0).radius(4.0).color_bound(bru(brush))
                 .child(Text().text(label).font_size(11.0).color(TEXT_SECONDARY).build())
                 .build())
             .build())
@@ -809,9 +814,9 @@ fn tab_button(label: str, m: Handler<nil>, key: str, brush: u64, idx: u64) -> op
 // cluster): a tray with the three tabs.
 fn layout_tabs(split_brush: u64, edit_brush: u64, view_brush: u64) -> opaque {
     let tray = Row().main_axis_size(MAIN_SIZE_MIN)
-        .child(tab_button("Split", mutate(fn (_ctx: MutationCtx) { set_layout("split"); }), "tab-split", split_brush, 0))
-        .child(tab_button("Edit", mutate(fn (_ctx: MutationCtx) { set_layout("edit"); }), "tab-edit", edit_brush, 1))
-        .child(tab_button("View", mutate(fn (_ctx: MutationCtx) { set_layout("view"); }), "tab-view", view_brush, 2))
+        .child(tab_button("Split", mutate(fn (_ctx: MutationCtx, _e: nil) { set_layout("split"); }), "tab-split", split_brush, 0))
+        .child(tab_button("Edit", mutate(fn (_ctx: MutationCtx, _e: nil) { set_layout("edit"); }), "tab-edit", edit_brush, 1))
+        .child(tab_button("View", mutate(fn (_ctx: MutationCtx, _e: nil) { set_layout("view"); }), "tab-view", view_brush, 2))
         .build();
     return Container().radius(6.0).color(BG_HOVER).padding(2.0).child(tray).build();
 }
@@ -836,20 +841,20 @@ fn side_item(i: u64, name: str) -> opaque {
         .child(Row().main_axis_size(MAIN_SIZE_MIN)
             // The reserved 3px bar (never clips — boa's trick): teal when
             // selected, transparent otherwise, so the label never shifts.
-            .child(Container().width_height(3.0, 20.0).radius(2.0).color_bound(fr(bar)).build())
+            .child(Container().width_height(3.0, 20.0).radius(2.0).color_bound(bru(bar)).build())
             .child(SizedBox(8.0, 0.0).build())
             .child(Expanded().flex(1.0)
-                .child(Container().radius(5.0).padding(7.0).color_bound(fr(bg))
+                .child(Container().radius(5.0).padding(7.0).color_bound(bru(bg))
                     .child(Text().text(name).color(TEXT_BODY).font_size(13.0).build())
                     .build())
                 .build())
             .build())
         .build();
     let item = MouseRegion()
-        .on_enter(mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) { row_enter(i); }))
-        .on_exit(mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) { row_exit(i); }))
+        .on_enter(mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { row_enter(i); }))
+        .on_exit(mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { row_exit(i); }))
         .cursor(CURSOR_POINTER)
-        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx) { case_tap(i); })).child(row).build())
+        .child(PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { case_tap(i); })).child(row).build())
         .build();
     // Initial paint from the live selection/hover indices: the boot
     // selection (`counter` — the boa INITIAL_CASE) runs before the Each

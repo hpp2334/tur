@@ -13,8 +13,9 @@
 // `let mut c` + `c.prop(..);` statement runs.
 //
 // Handler law: GESTURE handlers are MUTATIONS over the MutationCtx —
-// `on_click(mutate(fn (ctx: MutationCtx) { ctx.set(x, v); }))` (the
-// triad: source / derive / mutate, M1). The kit seals the user fn into an
+// `on_click(mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set(x, v); }))`
+// (the triad: source / derive / mutate, M1; A = nil is the click shape —
+// one fn-type law for every payload). The kit seals the user fn into an
 // opaque box and hands the ROW only the box; the flush's mutation pass
 // invokes it through the dispatch entries below with a fresh ctx (queued
 // — never synchronously inside the gesture dispatch). The remaining
@@ -96,10 +97,8 @@ use tur::{
   va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
   va_source_handle,
   // the mutation rail (source / derive / mutate + the ctx rows).
-  ctx_bridge, ctx_get_bool, ctx_get_f64, ctx_get_opaque, ctx_get_str, ctx_get_value,
-  ctx_run_f64, ctx_run_nil, ctx_set_bool, ctx_set_brush, ctx_set_f64, ctx_set_opaque,
-  ctx_set_str, ctx_set_value, derive_seal, mutate_seal,
-  rs_source_bool, rs_source_f64, rs_source_str, rs_set_f64,
+  ctx_bridge, ctx_run_box, ctx_get_box, ctx_set_box, derive_seal, mutate_seal,
+  rs_box_stamp, rs_source_box,
 };
 
 // The async launch rail's typed surface (the `futures` package rides the
@@ -203,42 +202,42 @@ pub fn rs_watch(atom: u64, cb: fn(u64, u64, f64), report: u64) -> opaque {
   return rs_watch_cb(atom, opaque(cb), report);
 }
 
-// ---- the mutation rail (M1): source / derive / mutate + the ctxs ---------
+// ---- the mutation rail (M1 + the generic unification): source / derive /
+// mutate + the ctxs ---------------------------------------------------------
 //
-// Boa's reactive triad, typed: `source(v)` mints a `Readable<T>` (the
-// typed handle — sources and derives are ONE class, boa's
-// sources-are-readables), `derive(fn (ctx: DeriveCtx) -> T)` mints a
-// derived `Readable<T>` (dependency auto-tracking through the ctx
-// reads), and `mutate(fn (ctx: MutationCtx) { ... })` mints the queued
-// mutation the gesture pads store — invoked at the flush's mutation pass
+// Boa's reactive triad, typed and GENERIC: `source<T>(v)` mints a
+// `Readable<T>`, `derive<T>(fn (ctx: DeriveCtx) -> T)` mints a derived
+// `Readable<T>` (dependency auto-tracking through the ctx reads), and
+// `mutate<A>(fn (ctx: MutationCtx, a: A) { ... })` mints the queued
+// mutation the handler pads store — invoked at the flush's mutation pass
 // with a fresh `MutationCtx`, never synchronously inside the gesture
-// dispatch.
+// dispatch. The kind NEVER rides a method or constructor name — the
+// angle-bracket type argument at the call site is the whole law (the
+// per-kind minters and classes of the earlier spikes are gone).
 //
-// The ctx methods are GENERIC — `ctx.get<T>(r)` / `ctx.set<T>(s, v)` /
-// `ctx.run<A>(m, a)` — angle-bracket type args at the call site (the
-// user-surface law: the kind NEVER rides a method name). The mechanism
-// is the reactive INTERFACES: `Readable<T>` / `Writable<T>` /
-// `Mutation<A>` / `Handler<E>`, satisfied structurally by per-kind
-// source classes and per-shape mutation classes whose inherent members
-// call the engine's typed rows — the generic ctx bodies are one-liners
-// that dispatch through the vtable (verified against rut 442a979: no
-// satisfaction-inversion, so the element type is spelled at the call;
-// the value lanes share `Readable<opaque>` and the class picks the
-// row). The mints are per kind (`source_f64(0.0)` / `derive_str(fn …)`)
-// because construction is static — the kind rides the CLASS and the
-// mint name, never a method name. `ctx.run<A>(m, a)` QUEUES the
-// invocation (rut's no-reentrancy law: a mutation body runs inside a
-// face call, so a nested synchronous invocation would re-borrow the VM;
-// composition reads its effects through sources). Writing a derived
-// atom is a checked error (the put members reject it through the error
-// rail) — the write-side law.
+// The mechanism is the boxed rail: the kit boxes the value or fn
+// (`opaque(..)` — the erasure box), the engine rows decode the box into
+// the SAME native KV variant the typed rows store (so every existing
+// engine-side read keeps working), and the recovery is `unopaque<T>` —
+// the erasure inverse — inside the generic bodies (rut monomorphizes
+// generics per instantiation, so T is concrete there; the dispatch
+// entries recover the SEALED fns through fixed-type wrappers the mints
+// build — one wrapper type per rail, never a per-kind spelling).
+// `ctx.run<A>(m, a)` QUEUES the invocation (rut's no-reentrancy law: a
+// mutation body runs inside a face call, so a nested synchronous
+// invocation would re-borrow the VM; composition reads its effects
+// through sources). Writing a derived atom is a checked error (the put
+// rejects it through the error rail) — the write-side law.
 
 // The derive-seal tags (the dispatch entry's return kind) and the
 // mutate-seal tags (the payload shape) — mirroring
-// `rut_runtime::seal_tags` (one law, two spellings).
+// `rut_runtime::seal_tags` (one law, two spellings). The BOX tags are
+// the generic lanes: the wrapper returns / receives an erased box and
+// the kit's probe entries recover the kind + the typed value.
 let TAG_F64: u64 = 0;
 let TAG_STR: u64 = 1;
 let TAG_BOOL: u64 = 2;
+let TAG_BOX: u64 = 3;
 let SEAL_NIL: u64 = 0;
 let SEAL_PTR: u64 = 1;
 let SEAL_F64: u64 = 2;
@@ -250,6 +249,13 @@ let SEAL_FOCUS: u64 = 7;
 let SEAL_BLUR: u64 = 8;
 let SEAL_MOUNT: u64 = 9;
 let SEAL_BYTES: u64 = 10;
+let SEAL_BOX: u64 = 11;
+
+// The boxed rail's number stamps (the engine's `rs_box_stamp` answers —
+// the KV holds ONE number variant, so the mint reports the width and the
+// read re-stamps the recovered box to match).
+let STAMP_NUM_F64: u64 = 1;
+let STAMP_NUM_U64: u64 = 2;
 
 // The reactive INTERFACES (the plan's hierarchy — the kind rides the
 // CLASS, never the method name): any type with the members satisfies
@@ -269,136 +275,38 @@ interface Writable<T> {
 }
 
 // A RUNNABLE mutation (nil / typed-arg shapes): `ctx.run<A>`'s param.
-// Event mutations (mutate_ev & friends) do not satisfy it — the type
-// system forbids composing a gesture handler.
+// `seal(tag)` is the pad-facing install half — the pad method knows its
+// payload shape and seals the USER fn under that shape's tag (the tag is
+// data spelled at the pad, never a type-directed dispatch).
 interface Mutation<A> {
   fn atom_id(self) -> u64;
+  fn seal(self, tag: u64) -> u64;
   fn invoke(self, h: opaque, a: A) -> nil;
 }
 
-// The pads' param — any sealed mutation (runnable or event shape).
-interface Handler<E> {
-  fn atom_id(self) -> u64;
-}
-
-// The per-kind source classes: `h` is the store-bridge marker the rows
+// The ONE generic source class: `h` is the store-bridge marker the rows
 // route through; `atom` the raw id; `derived` selects the bind row for
 // the reactive props (a derived atom's channel resolves through the
-// derive rail). `source_*` mints writable, `derive_*` derived — ONE
-// class per kind, both mints share it.
-pub class SourceF64 {
+// derive rail); `stamp` the number lane's width (the boxed rail's one
+// KV collapse — see `source<T>`). `source<T>` mints writable,
+// `derive<T>` derived — ONE class, both mints share it. The reads and
+// writes ride the boxed rows; `unopaque<T>` recovers the typed value.
+pub class Source<T> {
   h: opaque;
   atom: u64;
   derived: bool;
+  stamp: u64;
 }
 
-impl SourceF64 {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool) -> Self {
-    return Self { h: h, atom: atom, derived: derived };
+impl<T> Source<T> {
+  [constructor] pub fn of(h: opaque, atom: u64, derived: bool, stamp: u64) -> Self {
+    return Self { h: h, atom: atom, derived: derived, stamp: stamp };
   }
-  pub fn get(self) -> f64 {
-    return ctx_get_f64(self.h, self.atom);
+  pub fn get(self) -> T {
+    return unopaque<T>(ctx_get_box(self.h, self.atom, self.stamp));
   }
-  pub fn put(self, v: f64) -> nil {
-    ctx_set_f64(self.h, self.atom, v);
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-  pub fn is_derived(self) -> bool {
-    return self.derived;
-  }
-}
-
-pub class SourceStr {
-  h: opaque;
-  atom: u64;
-  derived: bool;
-}
-
-impl SourceStr {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool) -> Self {
-    return Self { h: h, atom: atom, derived: derived };
-  }
-  pub fn get(self) -> str {
-    return ctx_get_str(self.h, self.atom);
-  }
-  pub fn put(self, v: str) -> nil {
-    ctx_set_str(self.h, self.atom, v);
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-  pub fn is_derived(self) -> bool {
-    return self.derived;
-  }
-}
-
-pub class SourceBool {
-  h: opaque;
-  atom: u64;
-  derived: bool;
-}
-
-impl SourceBool {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool) -> Self {
-    return Self { h: h, atom: atom, derived: derived };
-  }
-  pub fn get(self) -> bool {
-    return ctx_get_bool(self.h, self.atom);
-  }
-  pub fn put(self, v: bool) -> nil {
-    ctx_set_bool(self.h, self.atom, v);
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-  pub fn is_derived(self) -> bool {
-    return self.derived;
-  }
-}
-
-// The structured-value lane (list/map atoms).
-pub class SourceValue {
-  h: opaque;
-  atom: u64;
-  derived: bool;
-}
-
-impl SourceValue {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool) -> Self {
-    return Self { h: h, atom: atom, derived: derived };
-  }
-  pub fn get(self) -> opaque {
-    return ctx_get_value(self.h, self.atom);
-  }
-  pub fn put(self, v: opaque) -> nil {
-    ctx_set_value(self.h, self.atom, v);
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-  pub fn is_derived(self) -> bool {
-    return self.derived;
-  }
-}
-
-// The host-box lane (opaques are just values — the controller slot).
-pub class SourceOpaque {
-  h: opaque;
-  atom: u64;
-  derived: bool;
-}
-
-impl SourceOpaque {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool) -> Self {
-    return Self { h: h, atom: atom, derived: derived };
-  }
-  pub fn get(self) -> opaque {
-    return ctx_get_opaque(self.h, self.atom);
-  }
-  pub fn put(self, v: opaque) -> nil {
-    ctx_set_opaque(self.h, self.atom, v);
+  pub fn put(self, v: T) -> nil {
+    ctx_set_box(self.h, self.atom, opaque(v));
   }
   pub fn atom_id(self) -> u64 {
     return self.atom;
@@ -434,48 +342,41 @@ pub fn sv<T>(v: T) -> StaticValue<T> {
   return StaticValue<T>.of(v);
 }
 
-// The per-shape mutation classes (runnable shapes carry `invoke`; the
-// event shapes carry only `atom_id` — they satisfy Handler, never
-// Mutation). All bodies QUEUE the composed invocation (the VM's
-// no-reentrancy law: a mutation body runs inside a face call).
-pub class MutNil {
-  atom: u64;
+// The ONE generic mutation class. `f` is the USER fn's box (the pad
+// seals stamp its exact per-A type — the entries downcast it verbatim);
+// `run_atom` is the composition atom, sealed eagerly from the fixed-type
+// wrapper `wrap` (the drain's BOX lane hands it the boxed arg and the
+// wrapper recovers A with `unopaque<A>`). Bodies QUEUE the invocation
+// (the VM's no-reentrancy law: a mutation body runs inside a face call).
+pub class MutationOf<A> {
+  f: opaque;
+  wrap: opaque;
+  run_atom: u64;
 }
 
-impl MutNil {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
+impl<A> MutationOf<A> {
+  [constructor] pub fn of(f: opaque, wrap: opaque, run_atom: u64) -> Self {
+    return Self { f: f, wrap: wrap, run_atom: run_atom };
   }
   pub fn atom_id(self) -> u64 {
-    return self.atom;
+    return self.run_atom;
   }
-  pub fn invoke(self, h: opaque, _a: nil) -> nil {
-    ctx_run_nil(h, self.atom);
+  // The pad-facing install: seal the USER fn under the pad's payload
+  // shape (the tag is the pad method's own const).
+  pub fn seal(self, tag: u64) -> u64 {
+    return mutate_seal(self.f, tag);
   }
-}
-
-pub class MutF64 {
-  atom: u64;
-}
-
-impl MutF64 {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-  pub fn invoke(self, h: opaque, a: f64) -> nil {
-    ctx_run_f64(h, self.atom, a);
+  // Composition QUEUES the boxed invocation (the drain's BOX lane).
+  pub fn invoke(self, h: opaque, a: A) -> nil {
+    ctx_run_box(h, self.run_atom, opaque(a));
   }
 }
 
 // The mutations' ctx (boa's `StoreCtx`): read, write, compose — GENERIC
 // (`ctx.get<T>` / `ctx.set<T>` / `ctx.run<A>`; angle-bracket type args at
-// the call site — rut 442a979 has no satisfaction-inversion, so the
-// element type is spelled; the value lanes share `Readable<opaque>`,
-// the class's vtable picks the row). The per-kind knowledge lives in the
-// classes; the ctx bodies are three one-liners.
+// the call site — the user-surface law; the kind never rides a method
+// name). The per-kind knowledge lives in the handles; the ctx bodies are
+// three one-liners.
 pub class MutationCtx {
   h: opaque;
 }
@@ -489,12 +390,6 @@ impl MutationCtx {
   }
   pub fn set<T>(self, s: Writable<T>, v: T) -> nil {
     s.put(v);
-  }
-  // The brush-atom write (the animated color channels; 0 clears) — a
-  // named extra, not a per-type twin: the packed crossing is its own
-  // concept.
-  pub fn set_brush(self, s: Readable<f64>, packed: u64) -> nil {
-    ctx_set_brush(self.h, s.atom_id(), packed);
   }
   // Composition QUEUES (the VM's no-reentrancy law: a mutation body runs
   // inside a face call; effects read through sources — boa's
@@ -536,223 +431,50 @@ impl TaskCtx {
   pub fn set<T>(self, s: Writable<T>, v: T) -> nil {
     s.put(v);
   }
-  pub fn set_brush(self, s: Readable<f64>, packed: u64) -> nil {
-    ctx_set_brush(self.h, s.atom_id(), packed);
-  }
 }
 
-// Mint a source atom (`boa: source(...)`). The mints are PER KIND with
-// concrete signatures — the kind rides the CLASS (SourceF64 …), never
-// the method name; rut's rows are per-kind and construction is static
-// (a generic mint cannot pick the class by a runtime tag). The minted
-// binding infers the concrete class — no annotation needed.
-pub fn source_f64(v: f64) -> SourceF64 {
-  let atom = rs_source_f64();
-  rs_set_f64(atom, v);
-  return SourceF64.of(ctx_bridge(), atom, false);
-}
-
-pub fn source_str(v: str) -> SourceStr {
-  return SourceStr.of(ctx_bridge(), rs_source_str(v), false);
-}
-
-pub fn source_bool(v: bool) -> SourceBool {
-  return SourceBool.of(ctx_bridge(), rs_source_bool(v), false);
-}
-
-// Mint a structured-value source (a list/map atom — `list_new()` + the
-// value helpers below build the payload).
-pub fn source_value(v: opaque) -> SourceValue {
-  return SourceValue.of(ctx_bridge(), rs_source_value(v), false);
+// Mint a source atom (`boa: source<T>(value)`): the value crosses boxed,
+// the engine decodes it into the same native KV variant the typed rows
+// store (existing engine-side reads unchanged), and the stamp records
+// the number lane's width so `get` re-stamps the recovered box
+// losslessly (u64 brush atoms vs f64 counts — the KV's one collapse).
+// The mint answers the CONCRETE class: it satisfies `Readable<T>` and
+// `Writable<T>` both (the iface objects track no concrete origin, so the
+// write face must flow unboxed); `let r: Readable<T> = source<T>(..)`
+// coerces at the annotation as usual.
+pub fn source<T>(v: T) -> Source<T> {
+  let b = opaque(v);
+  let atom = rs_source_box(b);
+  let stamp = rs_box_stamp(b);
+  return Source<T>.of(ctx_bridge(), atom, false, stamp);
 }
 
 // Mint a derived atom whose fn reads through the ctx — dependencies
-// auto-track (boa's `derive((ctx) => ctx.get(x$))`). Per kind, same law.
-pub fn derive_str(f: fn(DeriveCtx) -> str) -> SourceStr {
-  return SourceStr.of(ctx_bridge(), derive_seal(opaque(f), TAG_STR), true);
+// auto-track (boa's `derive<T>((ctx) => ctx.get(x$))`). The fixed-type
+// wrapper calls the user fn and returns the result boxed; the drain's
+// BOX lane recovers kind + value through the kit's probe entries.
+pub fn derive<T>(f: fn(DeriveCtx) -> T) -> Source<T> {
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    return opaque(f(ctx));
+  };
+  return Source<T>.of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), true, STAMP_NUM_F64);
 }
 
-pub fn derive_f64(f: fn(DeriveCtx) -> f64) -> SourceF64 {
-  return SourceF64.of(ctx_bridge(), derive_seal(opaque(f), TAG_F64), true);
-}
-
-pub fn derive_bool(f: fn(DeriveCtx) -> bool) -> SourceBool {
-  return SourceBool.of(ctx_bridge(), derive_seal(opaque(f), TAG_BOOL), true);
-}
-
-// Mint a nil-arg mutation — the click surface (boa's
-// `onClick(mutate((ctx) => ...))`). The engine invokes the fn at the
-// flush's mutation pass with a fresh `MutationCtx`.
-pub fn mutate(f: fn(MutationCtx)) -> MutNil {
-  return MutNil.of(mutate_seal(opaque(f), SEAL_NIL));
-}
-
-// The event-arg mutation — the drag surface. Fn types are arity-strict
-// (rut has no overloads), so the event arity carries its own mint; the
-// event shapes satisfy `Handler<E>` only (never runnable).
-pub fn mutate_ev(f: fn(MutationCtx, PointerEvent)) -> MutPtr {
-  return MutPtr.of(mutate_seal(opaque(f), SEAL_PTR));
-}
-
-// The typed-arg mutation (the anim ticks; `ctx.run<f64>`'s target). No
-// return crosses the queue (composition reads its effects through
-// sources) — the fn's body writes, it does not answer.
-pub fn mutate_f64(f: fn(MutationCtx, f64)) -> MutF64 {
-  return MutF64.of(mutate_seal(opaque(f), SEAL_F64));
-}
-
-// ---- the typed-event mints (the M2 callback surfaces) ----------------------
-// One mint per event shape (fn types are arity- and shape-strict; the
-// event class rides the mint, per the per-kind law). Event mutations
-// satisfy `Handler<E>` (atom-only) — composing them is a type error.
-
-pub class MutPtr {
-  atom: u64;
-}
-
-impl MutPtr {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutEnter {
-  atom: u64;
-}
-
-impl MutEnter {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutExit {
-  atom: u64;
-}
-
-impl MutExit {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutKey {
-  atom: u64;
-}
-
-impl MutKey {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutInput {
-  atom: u64;
-}
-
-impl MutInput {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutFocus {
-  atom: u64;
-}
-
-impl MutFocus {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutBlur {
-  atom: u64;
-}
-
-impl MutBlur {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutMount {
-  atom: u64;
-}
-
-impl MutMount {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub class MutBytes {
-  atom: u64;
-}
-
-impl MutBytes {
-  [constructor] pub fn of(atom: u64) -> Self {
-    return Self { atom: atom };
-  }
-  pub fn atom_id(self) -> u64 {
-    return self.atom;
-  }
-}
-
-pub fn mutate_enter(f: fn(MutationCtx, EnterEvent)) -> MutEnter {
-  return MutEnter.of(mutate_seal(opaque(f), SEAL_ENTER));
-}
-
-pub fn mutate_exit(f: fn(MutationCtx, ExitEvent)) -> MutExit {
-  return MutExit.of(mutate_seal(opaque(f), SEAL_EXIT));
-}
-
-pub fn mutate_key(f: fn(MutationCtx, KeydownEvent)) -> MutKey {
-  return MutKey.of(mutate_seal(opaque(f), SEAL_KEY));
-}
-
-pub fn mutate_input(f: fn(MutationCtx, InputEvent)) -> MutInput {
-  return MutInput.of(mutate_seal(opaque(f), SEAL_INPUT));
-}
-
-pub fn mutate_focus(f: fn(MutationCtx, FocusEvent)) -> MutFocus {
-  return MutFocus.of(mutate_seal(opaque(f), SEAL_FOCUS));
-}
-
-pub fn mutate_blur(f: fn(MutationCtx, BlurEvent)) -> MutBlur {
-  return MutBlur.of(mutate_seal(opaque(f), SEAL_BLUR));
-}
-
-pub fn mutate_mount(f: fn(MutationCtx, MountEvent)) -> MutMount {
-  return MutMount.of(mutate_seal(opaque(f), SEAL_MOUNT));
-}
-
-pub fn mutate_bytes(f: fn(MutationCtx, bytes)) -> MutBytes {
-  return MutBytes.of(mutate_seal(opaque(f), SEAL_BYTES));
+// Mint a mutation (`boa: mutate<A>((ctx, a) => ...)`): the engine
+// invokes the fn at the flush's mutation pass with a fresh
+// `MutationCtx`. The class stores the user fn's box (the pads seal it
+// under their payload shape) and an eagerly-sealed composition atom over
+// the fixed-type wrapper (what `ctx.run<A>` drains). A = nil is the
+// arity-1-looks-like `fn (ctx: MutationCtx, _e: nil)` click shape — one
+// fn-type law for every payload. The mint answers the INTERFACE: the
+// box records its itable at the mint's own boxing site (the fill was
+// proved there — the kit's table), and the itable rides the value.
+pub fn mutate<A>(f: fn(MutationCtx, A)) -> Mutation<A> {
+  let wrap = fn (ctx: MutationCtx, b: opaque) {
+    f(ctx, unopaque<A>(b));
+  };
+  let run_atom = mutate_seal(opaque(wrap), SEAL_BOX);
+  return MutationOf<A>.of(opaque(f), opaque(wrap), run_atom);
 }
 
 // The async launch rail: the future binds its handle params at the launch
@@ -907,8 +629,8 @@ impl MountEvent {
 // mutation pass's contract (`mutation_entries` in rut_runtime).
 
 entry fn __tur_cb_mnil(cb: opaque, h: opaque) {
-  let f = opaque.downcast<fn(MutationCtx)>(cb);
-  f(MutationCtx.over(h));
+  let f = opaque.downcast<fn(MutationCtx, nil)>(cb);
+  f(MutationCtx.over(h), nil);
 }
 
 entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
@@ -919,6 +641,14 @@ entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64
 entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) {
   let f = opaque.downcast<fn(MutationCtx, f64)>(cb);
   f(MutationCtx.over(h), a);
+}
+
+// The boxed composition lane: the drain hands the erasure box the kit's
+// `invoke` built; the SEALED box is the mint's fixed-type wrapper, which
+// recovers A and calls the user fn. One entry for every A.
+entry fn __tur_cb_mbox(cb: opaque, h: opaque, b: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, opaque)>(cb);
+  f(MutationCtx.over(h), b);
 }
 
 entry fn __tur_cb_menter(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
@@ -974,6 +704,51 @@ entry fn __tur_cb_derive_str(cb: opaque, h: opaque) -> str {
 entry fn __tur_cb_derive_bool(cb: opaque, h: opaque) -> bool {
   let f = opaque.downcast<fn(DeriveCtx) -> bool>(cb);
   return f(DeriveCtx.over(h));
+}
+
+// ---- the boxed derive lane (the GENERIC surface) ---------------------------
+//
+// The mint seals the fixed-type wrapper (`fn(DeriveCtx) -> opaque`, the
+// user fn captured); the drain calls it, then recovers kind + value
+// through these probes (the drain closure holds no VM, so the unbox runs
+// rut-side). The kinds are the drain's contract — `BOX_KIND_*` in
+// rut_runtime (one law, two spellings).
+
+entry fn __tur_cb_derive_box(cb: opaque, h: opaque) -> opaque {
+  let f = opaque.downcast<fn(DeriveCtx) -> opaque>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_kind(b: opaque) -> u64 {
+  if (opaque.downcast<f64>(b) != nil) {
+    return 1;
+  }
+  if (opaque.downcast<str>(b) != nil) {
+    return 2;
+  }
+  if (opaque.downcast<bool>(b) != nil) {
+    return 3;
+  }
+  if (opaque.downcast<u64>(b) != nil) {
+    return 4;
+  }
+  return 0;
+}
+
+entry fn __tur_cb_unbox_f64(b: opaque) -> f64 {
+  return unopaque<f64>(b);
+}
+
+entry fn __tur_cb_unbox_str(b: opaque) -> str {
+  return unopaque<str>(b);
+}
+
+entry fn __tur_cb_unbox_bool(b: opaque) -> bool {
+  return unopaque<bool>(b);
+}
+
+entry fn __tur_cb_unbox_u64(b: opaque) -> u64 {
+  return unopaque<u64>(b);
 }
 
 // ---- flex (Column / Row) ------------------------------------------------
@@ -1237,7 +1012,7 @@ impl Container {
     box_color(self.spec, packed);
     return self;
   }
-  pub fn color_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn color_bound(mut self, r: Readable<u64>) -> Self {
     box_color_bound(self.spec, r.atom_id());
     return self;
   }
@@ -1270,7 +1045,7 @@ impl Container {
   // The reactive shadow channels — per-state piece glows (the jigsaw drag
   // states) and eased blur (the implicit-animations shadow) ride atoms, not
   // rebuilds. The bound dy wins over the static offset's y.
-  pub fn shadow_color_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn shadow_color_bound(mut self, r: Readable<u64>) -> Self {
     box_shadow_color_bound(self.spec, r.atom_id());
     return self;
   }
@@ -1487,8 +1262,8 @@ impl Input {
   // the typed `InputEvent` (the fresh value + the enter flag). Bind
   // `.controller(...)` first — the row installs through the builder's
   // shared controller.
-  pub fn on_input(mut self, m: Handler<InputEvent>) -> Self {
-    input_on_input(self.spec, m.atom_id());
+  pub fn on_input(mut self, m: Mutation<InputEvent>) -> Self {
+    input_on_input(self.spec, m.seal(SEAL_INPUT));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1517,24 +1292,24 @@ impl PointerInteract {
   // pass invokes the fn with a fresh ctx — never synchronously. State
   // binds by closure (the mutation captures its sources), events flow by
   // the typed `PointerEvent` argument — no id args.
-  pub fn on_click(mut self, m: Handler<nil>) -> Self {
-    pi_on_click(self.spec, m.atom_id());
+  pub fn on_click(mut self, m: Mutation<nil>) -> Self {
+    pi_on_click(self.spec, m.seal(SEAL_NIL));
     return self;
   }
-  pub fn on_pointer_down(mut self, m: Handler<PointerEvent>) -> Self {
-    pi_mut_down(self.spec, m.atom_id());
+  pub fn on_pointer_down(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_down(self.spec, m.seal(SEAL_PTR));
     return self;
   }
-  pub fn on_pointer_move(mut self, m: Handler<PointerEvent>) -> Self {
-    pi_mut_move(self.spec, m.atom_id());
+  pub fn on_pointer_move(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_move(self.spec, m.seal(SEAL_PTR));
     return self;
   }
-  pub fn on_pointer_up(mut self, m: Handler<PointerEvent>) -> Self {
-    pi_mut_up(self.spec, m.atom_id());
+  pub fn on_pointer_up(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_up(self.spec, m.seal(SEAL_PTR));
     return self;
   }
-  pub fn on_context_menu(mut self, m: Handler<PointerEvent>) -> Self {
-    pi_on_context_menu(self.spec, m.atom_id());
+  pub fn on_context_menu(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_on_context_menu(self.spec, m.seal(SEAL_PTR));
     return self;
   }
   pub fn behavior(mut self, v: u64) -> Self {
@@ -1562,12 +1337,12 @@ impl MouseRegion {
   [constructor] pub fn builder() -> Self {
     return Self { spec: mr_new() };
   }
-  pub fn on_enter(mut self, m: Handler<EnterEvent>) -> Self {
-    mr_on_enter(self.spec, m.atom_id());
+  pub fn on_enter(mut self, m: Mutation<EnterEvent>) -> Self {
+    mr_on_enter(self.spec, m.seal(SEAL_ENTER));
     return self;
   }
-  pub fn on_exit(mut self, m: Handler<ExitEvent>) -> Self {
-    mr_on_exit(self.spec, m.atom_id());
+  pub fn on_exit(mut self, m: Mutation<ExitEvent>) -> Self {
+    mr_on_exit(self.spec, m.seal(SEAL_EXIT));
     return self;
   }
   pub fn cursor(mut self, v: u64) -> Self {
@@ -1599,16 +1374,16 @@ impl Focusable {
   [constructor] pub fn builder() -> Self {
     return Self { spec: focus_new() };
   }
-  pub fn on_key_down(mut self, m: Handler<KeydownEvent>) -> Self {
-    focus_on_key_down(self.spec, m.atom_id());
+  pub fn on_key_down(mut self, m: Mutation<KeydownEvent>) -> Self {
+    focus_on_key_down(self.spec, m.seal(SEAL_KEY));
     return self;
   }
-  pub fn on_focus(mut self, m: Handler<FocusEvent>) -> Self {
-    focus_on_focus(self.spec, m.atom_id());
+  pub fn on_focus(mut self, m: Mutation<FocusEvent>) -> Self {
+    focus_on_focus(self.spec, m.seal(SEAL_FOCUS));
     return self;
   }
-  pub fn on_blur(mut self, m: Handler<BlurEvent>) -> Self {
-    focus_on_blur(self.spec, m.atom_id());
+  pub fn on_blur(mut self, m: Mutation<BlurEvent>) -> Self {
+    focus_on_blur(self.spec, m.seal(SEAL_BLUR));
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
@@ -2042,8 +1817,8 @@ impl Lifecycle {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lc_new() };
   }
-  pub fn on_mount(mut self, m: Handler<MountEvent>) -> Self {
-    lc_on_mount(self.spec, m.atom_id());
+  pub fn on_mount(mut self, m: Mutation<MountEvent>) -> Self {
+    lc_on_mount(self.spec, m.seal(SEAL_MOUNT));
     return self;
   }
   pub fn before_destroy(mut self, cb: fn(u64, u64, f64)) -> Self {

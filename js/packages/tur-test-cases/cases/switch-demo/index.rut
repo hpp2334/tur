@@ -4,13 +4,12 @@
 // (reads live in ctx bodies, so the static subtree takes the initial
 // state).
 use tur::mount;
-use tur_kit::{ Column, Container, MutationCtx, PointerInteract, Readable, SizedBox, mutate,
-    source_bool };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, mutate, source };
 
 
 entry fn start() -> u64 {
-    let on: Readable<bool> = source_bool(true);
-    let b_toggle = mutate(fn (ctx: MutationCtx) {
+    let on: Readable<bool> = source<bool>(true);
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(on, !ctx.get<bool>(on));
     });
     let mut col = Column();
