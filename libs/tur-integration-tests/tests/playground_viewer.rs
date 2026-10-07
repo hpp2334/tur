@@ -870,7 +870,7 @@ entry fn start() -> u64 {
     // The edit intent: a mutation over the typed InputEvent (the row id
     // is gone — the handler names the source by capture).
     let b_edit = mutate_input(fn (ctx: MutationCtx, _ev: InputEvent) {
-        ctx.set_str(text, "edit");
+        ctx.set<str>(text, "edit");
     });
     let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
         .on_input(b_edit).query_key("input").build();

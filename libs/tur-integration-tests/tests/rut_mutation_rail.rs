@@ -62,10 +62,10 @@ use tur_kit::{ Column, DeriveCtx, MutationCtx, PointerInteract, Readable, Text, 
 entry fn start() -> u64 {
     let n: Readable<f64> = source_f64(0.0);
     let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"{ctx.get_f64(n) as u64} clicks";
+        return f"{ctx.get<f64>(n) as u64} clicks";
     });
     let bump = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(n, ctx.get_f64(n) + 1.0);
+        ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
     });
     let col = Column()
         .child(Text().text_bound(label).query_key("rut/text").build())
@@ -114,17 +114,17 @@ entry fn start() -> u64 {
     let n: Readable<f64> = source_f64(0.0);
 
     let m_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        let t = ctx.get_str(log);
-        ctx.set_str(log, f"{t}|down");
+        let t = ctx.get<str>(log);
+        ctx.set<str>(log, f"{t}|down");
     });
     let m_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        let t = ctx.get_str(log);
-        ctx.set_str(log, f"{t}|up");
+        let t = ctx.get<str>(log);
+        ctx.set<str>(log, f"{t}|up");
     });
     let m_click = mutate(fn (ctx: MutationCtx) {
-        let t = ctx.get_str(log);
-        ctx.set_str(log, f"{t}|click");
-        ctx.set_f64(n, ctx.get_f64(n) + 1.0);
+        let t = ctx.get<str>(log);
+        ctx.set<str>(log, f"{t}|click");
+        ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
     });
 
     // The store-write observer: every write to `n` delivers here, after
@@ -196,14 +196,14 @@ entry fn start() -> u64 {
     // sources — there is no synchronous return across the VM boundary).
     let add_one = mutate_f64(fn (ctx: MutationCtx, x: f64) {
         let r = x + 1.0;
-        ctx.set_f64(out, r);
-        ctx.set_str(res, f"r={r as u64}");
+        ctx.set<f64>(out, r);
+        ctx.set<str>(res, f"r={r as u64}");
     });
 
     // The nil-arg target (the plan's b_root shape).
     let mark = mutate(fn (ctx: MutationCtx) {
-        let t = ctx.get_str(log);
-        ctx.set_str(log, f"{t}|marked");
+        let t = ctx.get<str>(log);
+        ctx.set<str>(log, f"{t}|marked");
     });
 
     let compose = mutate(fn (ctx: MutationCtx) {
@@ -211,8 +211,8 @@ entry fn start() -> u64 {
         // mutation body runs inside a face call — the VM is mid-call — so
         // the nested invocation drains at the next mutation pass). The
         // arg crosses; the target's effect pins.
-        ctx.run_f64(add_one, 21.0);
-        ctx.run(mark, nil);
+        ctx.run<f64>(add_one, 21.0);
+        ctx.run<nil>(mark, nil);
     });
 
 
@@ -279,21 +279,21 @@ entry fn start() -> u64 {
 
     // The derive: a first-class readable over the source.
     let badge: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"n={ctx.get_f64(n) as u64}";
+        return f"n={ctx.get<f64>(n) as u64}";
     });
 
     // The toggle: the negated read (boa's ctx.set(expanded$, !ctx.get(expanded$)));
     // the str mirror rides along (text_bound renders str atoms).
     let b_toggle = mutate(fn (ctx: MutationCtx) {
-        let v = ctx.get_bool(expanded);
-        ctx.set_bool(expanded, !v);
+        let v = ctx.get<bool>(expanded);
+        ctx.set<bool>(expanded, !v);
         let nv = !v;
-        ctx.set_str(mirror, f"expanded={nv}");
+        ctx.set<str>(mirror, f"expanded={nv}");
     });
 
     // A mutation reading a DERIVE through the same ctx.
     let snapshot = mutate(fn (ctx: MutationCtx) {
-        ctx.set_str(readback, ctx.get_str(badge));
+        ctx.set<str>(readback, ctx.get<str>(badge));
     });
 
     let snap = PointerInteract()
@@ -354,26 +354,26 @@ entry fn start() -> u64 {
     let log: Readable<str> = source_str("");
 
     let m_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        let t = ctx.get_str(log);
+        let t = ctx.get<str>(log);
         let gx = ev.global.x;
         let gy = ev.global.y;
-        ctx.set_str(log, f"{t}|d{gx as u64},{gy as u64}");
+        ctx.set<str>(log, f"{t}|d{gx as u64},{gy as u64}");
     });
     let m_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        let t = ctx.get_str(log);
+        let t = ctx.get<str>(log);
         let gx = ev.global.x;
         let gy = ev.global.y;
         let lx = ev.local.x;
         let ly = ev.local.y;
-        ctx.set_str(log, f"{t}|m{(gx - lx) as u64},{(gy - ly) as u64}");
+        ctx.set<str>(log, f"{t}|m{(gx - lx) as u64},{(gy - ly) as u64}");
     });
     let m_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        let t = ctx.get_str(log);
+        let t = ctx.get<str>(log);
         let mut b = "l";
         if (ev.button == MouseButton.Right) {
             b = "r";
         }
-        ctx.set_str(log, f"{t}|u{b}");
+        ctx.set<str>(log, f"{t}|u{b}");
     });
     // (The context menu's right-button decode is pinned by the rut_boot
     // gesture fixture's menu pad — on one pad the recognizer serves the
@@ -475,12 +475,12 @@ use tur::{ clipboard_read, clipboard_write, mount, spawn };
 use tur_kit::{ Column, Readable, TaskCtx, Text, source_bool, source_str };
 
 async fn work(ctx: TaskCtx, label: Readable<str>, busy: Readable<bool>) -> str {
-    ctx.set_bool(busy, true);
-    let t = ctx.get_str(label);
+    ctx.set<bool>(busy, true);
+    let t = ctx.get<str>(label);
     await clipboard_write("from spawn");
     let clip = await clipboard_read();
-    ctx.set_str(label, f"{t}|{clip}");
-    ctx.set_bool(busy, false);
+    ctx.set<str>(label, f"{t}|{clip}");
+    ctx.set<bool>(busy, false);
     return "";
 }
 
@@ -515,5 +515,62 @@ fn spawn_task_reads_and_writes_through_its_ctx_across_awaits() {
         done,
         "the task's ctx writes landed across the awaits: {:?}",
         rut_bound_text(&app)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// (h) — the GENERIC ctx spelling: `ctx.get<T>` / `ctx.set<T>` /
+// `ctx.run<A>` — angle-bracket type args, never per-type method names
+// (the user-settled surface law). Red until the ctx methods go generic.
+// ---------------------------------------------------------------------------
+
+const GENERIC_RUT: &str = r#"
+use tur::{ mount };
+use tur_kit::{
+    Column, DeriveCtx, MutationCtx, PointerInteract, Text, derive_str, mutate, mutate_f64,
+    source_f64, source_str,
+};
+
+entry fn start() -> u64 {
+    let n = source_f64(0.0);
+    let tag = source_str("");
+    let label = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"{ctx.get<f64>(n) as u64} clicks";
+    });
+    let add_tag = mutate_f64(fn (ctx: MutationCtx, x: f64) {
+        ctx.set<str>(tag, f"step {x as u64}");
+    });
+    let fire = mutate(fn (ctx: MutationCtx) {
+        ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
+        ctx.run<f64>(add_tag, 2.0);
+    });
+    let col = Column()
+        .child(Text().text_bound(label).query_key("rut/text").build())
+        .child(Text().text_bound(tag).query_key("rut/tag").build())
+        .child(PointerInteract().on_click(fire).query_key("rut/pad").child(Text().text("tap").build()).build());
+    mount(col.build());
+    return n.atom_id();
+}
+"#;
+
+#[test]
+fn h_generic_ctx_spelling_runs_the_triad() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(GENERIC_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(rut_bound_text(&app), "0 clicks");
+
+    let (px, py) = element_center(&app, "pad");
+    app.click(px, py);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        rut_bound_text(&app),
+        "1 clicks",
+        "ctx.set<f64> wrote through the generic method"
+    );
+    assert_eq!(
+        rut_text_at(&app, "rut/tag"),
+        "step 2",
+        "ctx.run<f64> composed a typed-arg mutation"
     );
 }

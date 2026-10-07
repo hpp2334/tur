@@ -22,7 +22,7 @@
 // boa reflows in place.
 use tur::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
 use tur_kit::{
-    Column, Container, Each, Expanded, LazyGrid, MouseRegion, Mutation, MutationCtx,
+    Column, Container, Each, Expanded, LazyGrid, MouseRegion, Handler, MutationCtx,
     PointerInteract, Readable, Row, SizedBox, Text, list_new, list_push, mutate, source_bool,
     source_f64, source_value,
 };
@@ -117,14 +117,14 @@ fn one_list() -> opaque {
 fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> opaque {
     let read = MutationCtx.over(ctx_bridge());
     let mut max_cross: f64 = 140.0;
-    if (read.get_bool(dense)) {
+    if (read.get<bool>(dense)) {
         max_cross = 85.0;
     }
     return LazyGrid()
         .item_builder(tile)
         .count(count)
         .max_cross(max_cross)
-        .aspect(read.get_f64(aspect))
+        .aspect(read.get<f64>(aspect))
         .overscan(2)
         .query_key("gallery/grid")
         .build();
@@ -145,7 +145,7 @@ fn tile(i: u64) -> opaque {
 // ---- the chips -----------------------------------------------------------------
 
 // A pill chip: the fill rides its brush source (indigo when active).
-fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque {
+fn chip(r: Readable<f64>, key: str, label: str, m: Handler<nil>) -> opaque {
     let face = Container()
         .padding(7.0)
         .radius(7.0)
@@ -163,29 +163,29 @@ fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque
 // An aspect tap's mutation: write the value, repaint the chips, remount
 // the grid.
 fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
-                   items: Readable<opaque>, v: f64) -> Mutation<nil, nil> {
+                   items: Readable<opaque>, v: f64) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(aspect, v);
+        ctx.set<f64>(aspect, v);
         paint_chips(ctx, aspect, dense, chips);
-        ctx.set_value(items, one_list());
+        ctx.set<opaque>(items, one_list());
     });
 }
 
 // A density tap's mutation (the mirror twin over the bool).
 fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Readable<f64>],
-                  items: Readable<opaque>, d: bool) -> Mutation<nil, nil> {
+                  items: Readable<opaque>, d: bool) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(dense, d);
+        ctx.set<bool>(dense, d);
         paint_chips(ctx, aspect, dense, chips);
-        ctx.set_value(items, one_list());
+        ctx.set<opaque>(items, one_list());
     });
 }
 
 // The five chip brushes over the live state (boa: derive-driven pills).
 fn paint_chips(ctx: MutationCtx, aspect: Readable<f64>, dense: Readable<bool>,
                chips: [Readable<f64>]) {
-    let a = ctx.get_f64(aspect);
-    let d = ctx.get_bool(dense);
+    let a = ctx.get<f64>(aspect);
+    let d = ctx.get<bool>(dense);
     ctx.set_brush(chips[0], chip_color(a > 0.5 && a < 1.5));
     ctx.set_brush(chips[1], chip_color(a > 1.5));
     ctx.set_brush(chips[2], chip_color(a < 0.5));

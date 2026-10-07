@@ -15,8 +15,8 @@ entry fn start() -> u64 {
     // The down count rides its own source (the mutation captures both
     // handles — no id rail, no stash).
     let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
-        ctx.set_str(downs, f"{ctx.get_f64(count) as u64}");
+        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+        ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
     });
 
     let mut stack = Stack().alignment(ALIGN_TOP_LEFT);

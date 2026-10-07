@@ -9,7 +9,7 @@ use tur_integration_tests::TurTestApp;
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ MutationCtx, Readable, Switch, Text, source_str };
+use tur_kit::{ SourceF64,  MutationCtx, Readable, Switch, Text, source_str };
 
 
 entry fn start() -> u64 {
@@ -24,18 +24,18 @@ entry fn start() -> u64 {
 }
 
 entry fn set_key(atom: u64, _b: f64) {
-    let key = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(key, "b");
+    let key = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(key, "b");
 }
 
 entry fn set_key_raw(atom: u64, _b: f64) {
-    let key = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(key, "zzz");
+    let key = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(key, "zzz");
 }
 
 entry fn reemit(atom: u64, _b: f64) {
-    let key = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(key, "a");
+    let key = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(key, "a");
 }
 "#;
 
@@ -140,7 +140,7 @@ entry fn start() -> u64 {
 
     // The unified value prop over the derived handle (the kind rides the
     // handle: a derived binds through the derive rail).
-    let mut sw = Switch().value(Readable<str>.of(ctx_bridge(), derived));
+    let mut sw = Switch().value(SourceStr.of(ctx_bridge(), derived, false));
     sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
     sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
     sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
@@ -149,8 +149,8 @@ entry fn start() -> u64 {
 }
 
 entry fn set_key(atom: u64, _b: f64) {
-    let key = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(key, 1.0);
+    let key = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(key, 1.0);
 }
 "#;
 

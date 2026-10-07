@@ -9,7 +9,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.load_rut_module(
         r#"
 use tur::{ mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid };
+use tur_kit::{ SourceF64,  Container, Expanded, LazyGrid };
 
 
 fn cell(i: u64) -> opaque {
@@ -168,8 +168,8 @@ entry fn start() -> u64 {
 
 // The test drives count changes through the entry rail.
 entry fn set_count(atom: u64, n: f64) {
-    let count = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(count, n);
+    let count = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
 "#,
     )
@@ -520,8 +520,8 @@ entry fn start() -> u64 {
 
 // The test drives count changes through the entry rail.
 entry fn set_count(atom: u64, n: f64) {
-    let count = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(count, n);
+    let count = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
 "#,
     )

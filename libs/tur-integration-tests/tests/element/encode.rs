@@ -19,7 +19,7 @@ entry fn start() -> u64 {
     let ascii = decode_utf8(encode_utf8("hello world"));
     let unicode = decode_utf8(encode_utf8("héllo 世界 🚀"));
     let empty = decode_utf8(encode_utf8(""));
-    MutationCtx.over(ctx_bridge()).set_str(label, f"{ascii}|{unicode}|{empty}|");
+    MutationCtx.over(ctx_bridge()).set<str>(label, f"{ascii}|{unicode}|{empty}|");
 
     let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());

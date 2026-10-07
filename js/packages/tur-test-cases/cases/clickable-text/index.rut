@@ -9,7 +9,7 @@ use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, sou
 entry fn start() -> u64 {
     let content: Readable<str> = source_str("before");
     let b_click = mutate(fn (ctx: MutationCtx) {
-        ctx.set_str(content, "after");
+        ctx.set<str>(content, "after");
     });
     let col = Column().cross_alignment(CROSS_ALIGN_START);
     let t = Text().text_bound(content).query_key("click-text");

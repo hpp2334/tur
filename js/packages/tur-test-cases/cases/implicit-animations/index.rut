@@ -46,10 +46,10 @@ entry fn start() -> u64 {
     // The tick: eased progress → every animated channel (the channels
     // ride by capture).
     let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
-        ctx.set_f64(blur, tween_lerp(B_MIN, B_MAX, t));
-        ctx.set_f64(radius, tween_lerp(R_MIN, R_MAX, t));
-        ctx.set_f64(left, tween_lerp(X_MIN, X_MAX, t));
-        ctx.set_f64(fade, tween_lerp(A_MIN, A_MAX, t));
+        ctx.set<f64>(blur, tween_lerp(B_MIN, B_MAX, t));
+        ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, t));
+        ctx.set<f64>(left, tween_lerp(X_MIN, X_MAX, t));
+        ctx.set<f64>(fade, tween_lerp(A_MIN, A_MAX, t));
         ctx.set_brush(color, color_tween_lerp(BLUE, INDIGO, t));
     });
     let ctrl = anim_ctrl(600.0, "easeInOut", 1, a_tick, nil);
@@ -58,8 +58,8 @@ entry fn start() -> u64 {
     // controller — forward plays toward the expanded state, reverse back
     // to compact.
     let b_toggle = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(expanded, !ctx.get_bool(expanded));
-        if (ctx.get_bool(expanded)) {
+        ctx.set<bool>(expanded, !ctx.get<bool>(expanded));
+        if (ctx.get<bool>(expanded)) {
             anim_forward(ctrl);
         } else {
             anim_reverse(ctrl);

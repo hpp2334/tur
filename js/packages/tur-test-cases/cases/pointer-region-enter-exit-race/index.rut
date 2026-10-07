@@ -9,16 +9,16 @@ use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCt
 entry fn start() -> u64 {
     let hover: Readable<str> = source_str("");
     let b_a_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
-        ctx.set_str(hover, "A");
+        ctx.set<str>(hover, "A");
     });
     let b_a_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
-        ctx.set_str(hover, "");
+        ctx.set<str>(hover, "");
     });
     let b_b_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
-        ctx.set_str(hover, "B");
+        ctx.set<str>(hover, "B");
     });
     let b_b_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
-        ctx.set_str(hover, "");
+        ctx.set<str>(hover, "");
     });
     let mut col = Column();
 

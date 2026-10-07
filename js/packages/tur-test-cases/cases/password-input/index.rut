@@ -23,7 +23,7 @@ entry fn start() -> u64 {
     // controller is captured (the readout wraps it as value: "…").
     let q: str = "\"";
     let b_value = mutate_input(fn (ctx: MutationCtx, ev: InputEvent) {
-        ctx.set_str(value, f"value: {q}{ev.value}{q}");
+        ctx.set<str>(value, f"value: {q}{ev.value}{q}");
     });
 
     let plain = Input()

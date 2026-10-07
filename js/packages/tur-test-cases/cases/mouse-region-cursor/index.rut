@@ -9,10 +9,10 @@ use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, MutationCt
 entry fn start() -> u64 {
     let state: Readable<str> = source_str("");
     let b_enter = mutate_enter(fn (ctx: MutationCtx, _ev: EnterEvent) {
-        ctx.set_str(state, "entered");
+        ctx.set<str>(state, "entered");
     });
     let b_exit = mutate_exit(fn (ctx: MutationCtx, _ev: ExitEvent) {
-        ctx.set_str(state, "exited");
+        ctx.set<str>(state, "exited");
     });
     let mut col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).query_key("mr-state").build());

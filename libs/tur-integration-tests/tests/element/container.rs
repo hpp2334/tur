@@ -235,7 +235,7 @@ fn container_with_shadow() {
 
 const RADIUS_BOUND_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ SourceF64,  Container, MutationCtx, Readable, source_f64 };
 
 entry fn start() -> u64 {
     let r: Readable<f64> = source_f64(8.0);
@@ -245,8 +245,8 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_r(atom: u64, b: f64) {
-    let r = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(r, b);
+    let r = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(r, b);
 }
 "#;
 

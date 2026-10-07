@@ -127,7 +127,7 @@ fn positioned_only_stack_sizes_to_constraints_biggest() {
 
 const BOUND_ANCHORS_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Positioned, Readable, Stack, source_f64 };
+use tur_kit::{ SourceF64,  Container, MutationCtx, Positioned, Readable, Stack, source_f64 };
 
 entry fn start() -> u64 {
     let x: Readable<f64> = source_f64(30.0);
@@ -143,13 +143,13 @@ entry fn start() -> u64 {
 
 // The y atom mints right after x — the probes address the pair by order.
 entry fn probe_x(atom: u64, b: f64) {
-    let x = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(x, b);
+    let x = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(x, b);
 }
 
 entry fn probe_y(atom: u64, b: f64) {
-    let y = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(y, b);
+    let y = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(y, b);
 }
 "#;
 

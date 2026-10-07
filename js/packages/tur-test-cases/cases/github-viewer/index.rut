@@ -28,7 +28,7 @@ use tur::{
     CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
     net_request, spawn, str_parse_f64, tctrl_new, tctrl_set_text, undo_new,
 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Mutation,
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Handler,
     MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, TaskCtx, Text,
     list_new, list_push, mutate, source_bool, source_str, source_value };
 
@@ -36,17 +36,17 @@ use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, Mouse
 // The state bundle (the sources every journey reads and writes — handles
 // bind at the launch site, captures stay rut-side).
 struct Gh {
-    mode: Readable<str>;
-    err: Readable<str>;
-    err_has: Readable<bool>;
-    repo_full: Readable<str>;
-    desc: Readable<str>;
-    stats: Readable<str>;
-    path: Readable<str>;
-    selected: Readable<str>;
-    files: Readable<opaque>;
-    is_empty: Readable<bool>;
-    busy: Readable<bool>;
+    mode: SourceStr;
+    err: SourceStr;
+    err_has: SourceBool;
+    repo_full: SourceStr;
+    desc: SourceStr;
+    stats: SourceStr;
+    path: SourceStr;
+    selected: SourceStr;
+    files: SourceValue;
+    is_empty: SourceBool;
+    busy: SourceBool;
 }
 
 // The octocat brand mark (the boa state.ts GitHub glyph, rasterised
@@ -135,7 +135,7 @@ entry fn start() -> u64 {
 
 // A compact pill button (the boa Button/IconButton composite); the
 // mutation rides by parameter.
-fn pill(key: str, label: str, m: Mutation<nil, nil>, bg: u64, fg: u64) -> opaque {
+fn pill(key: str, label: str, m: Handler<nil>, bg: u64, fg: u64) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(8.0)
@@ -162,9 +162,9 @@ fn error_banner(s: Gh) -> opaque {
 
 // ---- landing ---------------------------------------------------------------
 
-fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Mutation<nil, nil>,
-                b_sug0: Mutation<nil, nil>, b_sug1: Mutation<nil, nil>,
-                b_sug2: Mutation<nil, nil>) -> opaque {
+fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Handler<nil>,
+                b_sug0: Handler<nil>, b_sug1: Handler<nil>,
+                b_sug2: Handler<nil>) -> opaque {
     // The boa Field: the "Repository" caption over the bordered input.
     let field = Column()
         .cross_alignment(CROSS_ALIGN_STRETCH)
@@ -236,8 +236,8 @@ fn brand_mark(gh: u64) -> opaque {
     return mark;
 }
 
-fn suggestion_row(b_sug0: Mutation<nil, nil>, b_sug1: Mutation<nil, nil>,
-                  b_sug2: Mutation<nil, nil>) -> opaque {
+fn suggestion_row(b_sug0: Handler<nil>, b_sug1: Handler<nil>,
+                  b_sug2: Handler<nil>) -> opaque {
     // Stacked (the boa mobile variant) — the three chips overflow the
     // 360 card's content width in a row. The boa quick-pick set (all
     // under jsDelivr's 50 MB tree cap).
@@ -257,7 +257,7 @@ fn suggestion_row(b_sug0: Mutation<nil, nil>, b_sug1: Mutation<nil, nil>,
 fn explorer_view(s: Gh) -> opaque {
     // Back: up one directory, or back to the landing when at the root.
     let b_back = mutate(fn (ctx: MutationCtx) {
-        let cur = ctx.get_str(s.path);
+        let cur = ctx.get<str>(s.path);
         if (cur == "") {
             go_landing(ctx, s);
             return;
@@ -272,18 +272,18 @@ fn explorer_view(s: Gh) -> opaque {
             k = k + 1;
         }
         if (sep < 0) {
-            ctx.set_str(s.path, "");
+            ctx.set<str>(s.path, "");
         } else {
-            ctx.set_str(s.path, cur.slice(0, sep));
+            ctx.set<str>(s.path, cur.slice(0, sep));
         }
-        ctx.set_str(s.selected, "");
+        ctx.set<str>(s.selected, "");
         spawn(fetch_dir(TaskCtx.mint(), s));
     });
     // The crumb tap: back to the repo ROOT listing (the boa
     // navigateToRoot); the handles bind at the launch site.
     let b_root = mutate(fn (ctx: MutationCtx) {
-        ctx.set_str(s.path, "");
-        ctx.set_str(s.selected, "");
+        ctx.set<str>(s.path, "");
+        ctx.set<str>(s.selected, "");
         spawn(fetch_dir(TaskCtx.mint(), s));
     });
     // Re-fetch the current directory.
@@ -430,13 +430,13 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
     let b_tap = mutate(fn (ctx: MutationCtx) {
         if (s.starts_with(0, "d|")) {
             let dname = s.slice(2, s.len());
-            let cur = ctx.get_str(g.path);
+            let cur = ctx.get<str>(g.path);
             let mut next = dname;
             if (cur != "") {
                 next = f"{cur}/{dname}";
             }
-            ctx.set_str(g.path, next);
-            ctx.set_str(g.selected, "");
+            ctx.set<str>(g.path, next);
+            ctx.set<str>(g.selected, "");
             spawn(fetch_dir(TaskCtx.mint(), g));
             return;
         }
@@ -450,7 +450,7 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
         }
         let fname = s.slice(2, k);
         let size = fmt_size(s.slice(k + 1, rn));
-        ctx.set_str(g.selected, f"{fname} — {size}");
+        ctx.set<str>(g.selected, f"{fname} — {size}");
     });
     let row = Row()
         .cross_alignment(CROSS_ALIGN_CENTER)
@@ -477,7 +477,7 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
 // ---- actions ---------------------------------------------------------------
 
 // A quick-pick chip's mutation: pre-fill the field and open directly.
-fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Mutation<nil, nil> {
+fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
         tctrl_set_text(ctrl, name);
         open_draft(ctx, s, name);
@@ -490,26 +490,26 @@ fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Mutation<nil, nil> {
 fn open_draft(ctx: MutationCtx, s: Gh, draft: str) {
     let full = parse_repo(draft);
     if (full == "") {
-        ctx.set_str(s.err, "Enter a repo as \"owner/name\" — e.g. facebook/react");
-        ctx.set_bool(s.err_has, true);
+        ctx.set<str>(s.err, "Enter a repo as \"owner/name\" — e.g. facebook/react");
+        ctx.set<bool>(s.err_has, true);
         return;
     }
-    ctx.set_str(s.err, "");
-    ctx.set_bool(s.err_has, false);
-    ctx.set_str(s.repo_full, full);
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.repo_full, full);
     spawn(open_repo(TaskCtx.mint(), s));
 }
 
 fn go_landing(ctx: MutationCtx, s: Gh) {
-    ctx.set_str(s.mode, "landing");
-    ctx.set_str(s.err, "");
-    ctx.set_bool(s.err_has, false);
-    ctx.set_str(s.desc, "");
-    ctx.set_str(s.stats, "");
-    ctx.set_str(s.path, "");
-    ctx.set_str(s.selected, "");
-    ctx.set_bool(s.is_empty, false);
-    ctx.set_bool(s.busy, false);
+    ctx.set<str>(s.mode, "landing");
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.desc, "");
+    ctx.set<str>(s.stats, "");
+    ctx.set<str>(s.path, "");
+    ctx.set<str>(s.selected, "");
+    ctx.set<bool>(s.is_empty, false);
+    ctx.set<bool>(s.busy, false);
 }
 
 // The repo-meta journey: land straight on the explorer chrome with the
@@ -518,19 +518,19 @@ fn go_landing(ctx: MutationCtx, s: Gh) {
 // root listing. The crumb keeps the PARSED draft identity (boa's repo$) —
 // the API's full_name never overwrites it.
 async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
-    ctx.set_bool(s.busy, true);
-    let full = ctx.get_str(s.repo_full);
+    ctx.set<bool>(s.busy, true);
+    let full = ctx.get<str>(s.repo_full);
     let url = f"https://api.github.com/repos/{full}";
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
-        ctx.set_bool(s.busy, false);
+        ctx.set<bool>(s.busy, false);
         fail(ctx, s, "Network request failed — the browser may be offline.", false);
         return "";
     }
     let meta = body.decode();
     let name = json_get_str(meta, "full_name");
     if (name == "") {
-        ctx.set_bool(s.busy, false);
+        ctx.set<bool>(s.busy, false);
         let msg = json_get_str(meta, "message");
         if (msg == "") {
             fail(ctx, s, "Unexpected response from the GitHub API.", false);
@@ -539,10 +539,10 @@ async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
         }
         return "";
     }
-    ctx.set_str(s.desc, json_get_str(meta, "description"));
-    ctx.set_str(s.stats, fmt_stats(meta));
-    ctx.set_str(s.path, "");
-    ctx.set_str(s.selected, "");
+    ctx.set<str>(s.desc, json_get_str(meta, "description"));
+    ctx.set<str>(s.stats, fmt_stats(meta));
+    ctx.set<str>(s.path, "");
+    ctx.set<str>(s.selected, "");
     await fetch_dir(ctx, s);
     return "";
 }
@@ -551,17 +551,17 @@ async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
 // (dirs first), flip the empty flag, settle on the explorer. The list
 // area shows "Loading…" while the fetch rides (the busy source).
 async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
-    ctx.set_str(s.mode, "explorer");
-    ctx.set_bool(s.busy, true);
-    let full = ctx.get_str(s.repo_full);
-    let dir = ctx.get_str(s.path);
+    ctx.set<str>(s.mode, "explorer");
+    ctx.set<bool>(s.busy, true);
+    let full = ctx.get<str>(s.repo_full);
+    let dir = ctx.get<str>(s.path);
     let mut url = f"https://api.github.com/repos/{full}/contents";
     if (dir != "") {
         url = f"https://api.github.com/repos/{full}/contents/{dir}";
     }
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
-        ctx.set_bool(s.busy, false);
+        ctx.set<bool>(s.busy, false);
         fail(ctx, s, "Network request failed — the browser may be offline.", true);
         return "";
     }
@@ -570,26 +570,26 @@ async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
     let ndirs = json_contents(text, fresh, true);
     let nfiles = json_contents(text, fresh, false);
     if (ndirs < 0 || nfiles < 0) {
-        ctx.set_bool(s.busy, false);
+        ctx.set<bool>(s.busy, false);
         fail(ctx, s, "Unexpected file-list response from the GitHub API.", true);
         return "";
     }
-    ctx.set_value(s.files, fresh);
-    ctx.set_bool(s.is_empty, ndirs + nfiles == 0);
-    ctx.set_bool(s.busy, false);
-    ctx.set_str(s.mode, "explorer");
+    ctx.set<opaque>(s.files, fresh);
+    ctx.set<bool>(s.is_empty, ndirs + nfiles == 0);
+    ctx.set<bool>(s.busy, false);
+    ctx.set<str>(s.mode, "explorer");
     return "";
 }
 
 // The failure rail: the message lands on the banner; `explorer` keeps the
 // listing visible under it, anything else falls back to the landing.
 fn fail(ctx: TaskCtx, s: Gh, msg: str, stay: bool) {
-    ctx.set_str(s.err, msg);
-    ctx.set_bool(s.err_has, true);
+    ctx.set<str>(s.err, msg);
+    ctx.set<bool>(s.err_has, true);
     if (stay) {
-        ctx.set_str(s.mode, "explorer");
+        ctx.set<str>(s.mode, "explorer");
     } else {
-        ctx.set_str(s.mode, "landing");
+        ctx.set<str>(s.mode, "landing");
     }
 }
 

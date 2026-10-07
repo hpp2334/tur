@@ -4,23 +4,23 @@
 // (a derive over the count source) and the centered 100×44 indigo pill
 // row.
 use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
-use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row,
+use tur_kit::{ Column, Container, DeriveCtx, Handler, MutationCtx, PointerInteract, Readable, Row,
     SizedBox, Text, derive_str, mutate, source_f64 };
 
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source_f64(0.0);
     let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"Count: {ctx.get_f64(count) as u64}";
+        return f"Count: {ctx.get<f64>(count) as u64}";
     });
 
     // The named mutations (boa's named `mutate(...)` values); the source
     // rides by capture.
     let b_inc = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
+        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
     });
     let b_dec = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) - 1.0);
+        ctx.set<f64>(count, ctx.get<f64>(count) - 1.0);
     });
 
     let col = Column()
@@ -43,7 +43,7 @@ entry fn start() -> u64 {
 }
 
 // A 100x44 indigo pill with a centered label; the pad takes the mutation.
-fn button(b: Mutation<nil, nil>, text: str, key: str) -> opaque {
+fn button(b: Handler<nil>, text: str, key: str) -> opaque {
     let face = Container()
         .width_height(100.0, 44.0)
         .radius(8.0)

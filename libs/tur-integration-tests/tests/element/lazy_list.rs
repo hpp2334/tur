@@ -240,7 +240,7 @@ fn lazy_list_virtualizes_large_item_count() {
     app.load_rut_module(
         r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, MutationCtx, Readable, Text, source_f64 };
+use tur_kit::{ SourceF64,  Container, LazyList, MutationCtx, Readable, Text, source_f64 };
 
 
 fn row(i: u64) -> opaque {
@@ -809,8 +809,8 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(count, n);
+    let count = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,
     )
@@ -857,8 +857,8 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(count, n);
+    let count = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,
     )
@@ -930,8 +930,8 @@ entry fn start() -> u64 {
 }
 
 entry fn set_count(atom: u64, n: f64) {
-    let count = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(count, n);
+    let count = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
 }
         "#,
     )

@@ -9,7 +9,7 @@ use tur_kit::{ CompositedFollower, CompositedTarget, Container, MutationCtx, Poi
 entry fn start() -> u64 {
     let tall: Readable<f64> = source_f64(10.0);
     let b_tall = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(tall, 120.0);
+        ctx.set<f64>(tall, 120.0);
     });
     let link = ct_link_new();
     let mut stack = Stack()

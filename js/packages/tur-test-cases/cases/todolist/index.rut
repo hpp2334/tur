@@ -14,7 +14,7 @@ use tur::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS
     CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END,
     MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg, mount,
     tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, MouseRegion,
+use tur_kit::{ Handler, Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, MouseRegion,
     Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox,
     Stack, Text, list_new, list_push, mutate, source_bool, source_f64, source_value, value_item,
     value_len };
@@ -44,12 +44,12 @@ let SVG_PLUS: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='
 
 entry fn start() -> u64 {
     // The board state (all rides by capture — no stash).
-    let tasks: Readable<opaque> = source_value(seed_tasks());
-    let n: Readable<f64> = source_f64(0.0);
-    let done: Readable<f64> = source_f64(0.0);
-    let add_open: Readable<bool> = source_bool(false);
-    let rm_open: Readable<bool> = source_bool(false);
-    let rm_tgt: Readable<f64> = source_f64(0.0);
+    let tasks = source_value(seed_tasks());
+    let n = source_f64(0.0);
+    let done = source_f64(0.0);
+    let add_open = source_bool(false);
+    let rm_open = source_bool(false);
+    let rm_tgt = source_f64(0.0);
 
     // The icon resources (inline SVG through the image rail; plain u64
     // resource ids — the builders take them as params).
@@ -57,8 +57,8 @@ entry fn start() -> u64 {
 
     // Seed the counters, then hand the header derive its deps.
     recount(MutationCtx.over(ctx_bridge()), tasks, n, done);
-    let count: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"{ctx.get_f64(n) as u64} items · {ctx.get_f64(done) as u64} done";
+    let count = derive_str(fn (ctx: DeriveCtx) -> str {
+        return f"{ctx.get<f64>(n) as u64} items · {ctx.get<f64>(done) as u64} done";
     });
 
     let header = Row()
@@ -185,7 +185,7 @@ fn item_done(s: str) -> bool {
 // add modal.
 fn add_button(add_open: Readable<bool>, ico: [u64]) -> opaque {
     let b_open = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(add_open, true);
+        ctx.set<bool>(add_open, true);
     });
     let face = Container()
         .padding(10.0)
@@ -324,8 +324,8 @@ fn title_block(title: str, desc: str, done: bool) -> opaque {
 // rides the capture).
 fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> opaque {
     let b_rm = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(rm_tgt, i as f64);
-        ctx.set_bool(rm_open, true);
+        ctx.set<f64>(rm_tgt, i as f64);
+        ctx.set<bool>(rm_open, true);
     });
     let face = Container()
         .width_height(26.0, 26.0)
@@ -350,7 +350,7 @@ fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u
 
 // The modal shell: a scrim (tap = dismiss) around a card that swallows
 // its own taps (both handlers ride by parameter).
-fn modal_shell(scrim_tap: Mutation<nil, nil>, swallow: Mutation<nil, nil>, card: opaque) -> opaque {
+fn modal_shell(scrim_tap: Handler<nil>, swallow: Handler<nil>, card: opaque) -> opaque {
     let inner = PointerInteract()
         .behavior(HIT_TEST_OPAQUE)
         .on_click(swallow)
@@ -365,7 +365,7 @@ fn modal_shell(scrim_tap: Mutation<nil, nil>, swallow: Mutation<nil, nil>, card:
 }
 
 // A standard modal button (the boa Button).
-fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil, nil>) -> opaque {
+fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Handler<nil>) -> opaque {
     let face = Container()
         .padding(9.0)
         .radius(7.0)
@@ -425,7 +425,7 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
     let undo2 = undo_new();
 
     let b_cancel = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(add_open, false);
+        ctx.set<bool>(add_open, false);
     });
     // Add Task: the non-empty title appends a fresh open task, then the
     // modal closes (the composed close is an inline write).
@@ -437,7 +437,7 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
         let desc = trim(tctrl_text(dctrl));
         append_task(ctx, tasks, f"{title}|{desc}|0");
         recount(ctx, tasks, n, done);
-        ctx.set_bool(add_open, false);
+        ctx.set<bool>(add_open, false);
     });
 
     let card = Container()
@@ -478,19 +478,19 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
 fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
                 rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> opaque {
     let read = MutationCtx.over(ctx_bridge());
-    let target = read.get_f64(rm_tgt) as u64;
-    let item = value_item(read.get_value(tasks), target);
+    let target = read.get<f64>(rm_tgt) as u64;
+    let item = value_item(read.get<opaque>(tasks), target);
     let title = item_title(item);
     // Bound-quote locals: f-string braces take no escape sequences.
     let q: str = "\"";
     let said = f"{q}{title}{q} will be permanently removed.";
 
     let b_cancel = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(rm_open, false);
+        ctx.set<bool>(rm_open, false);
     });
     // Remove for real: rebuild the list without the target, recount, close.
     let b_confirm = mutate(fn (ctx: MutationCtx) {
-        let old = ctx.get_value(tasks);
+        let old = ctx.get<opaque>(tasks);
         let fresh = list_new();
         let count = value_len(old);
         let mut k: u64 = 0;
@@ -500,9 +500,9 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
             }
             k = k + 1;
         }
-        ctx.set_value(tasks, fresh);
+        ctx.set<opaque>(tasks, fresh);
         recount(ctx, tasks, n, done);
-        ctx.set_bool(rm_open, false);
+        ctx.set<bool>(rm_open, false);
     });
 
     let card = Container()
@@ -541,7 +541,7 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
 // Checkbox tap helper: flip the row's done flag (rewrite the list source —
 // the Each rebuilds; the derive recount follows).
 fn toggle_task(ctx: MutationCtx, tasks: Readable<opaque>, idx: u64) {
-    let old = ctx.get_value(tasks);
+    let old = ctx.get<opaque>(tasks);
     let count = value_len(old);
     let fresh = list_new();
     let mut k: u64 = 0;
@@ -559,12 +559,12 @@ fn toggle_task(ctx: MutationCtx, tasks: Readable<opaque>, idx: u64) {
         }
         k = k + 1;
     }
-    ctx.set_value(tasks, fresh);
+    ctx.set<opaque>(tasks, fresh);
 }
 
 // The add-modal append (the encoded row arrives prebuilt).
 fn append_task(ctx: MutationCtx, tasks: Readable<opaque>, row: str) {
-    let old = ctx.get_value(tasks);
+    let old = ctx.get<opaque>(tasks);
     let fresh = list_new();
     let count = value_len(old);
     let mut k: u64 = 0;
@@ -573,14 +573,14 @@ fn append_task(ctx: MutationCtx, tasks: Readable<opaque>, row: str) {
         k = k + 1;
     }
     list_push(fresh, row);
-    ctx.set_value(tasks, fresh);
+    ctx.set<opaque>(tasks, fresh);
 }
 
 // ---- the counters -------------------------------------------------------------------
 
 // Recount items + dones off the live list (the header derive's deps).
 fn recount(ctx: MutationCtx, tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>) {
-    let old = ctx.get_value(tasks);
+    let old = ctx.get<opaque>(tasks);
     let count = value_len(old);
     let mut dones: u64 = 0;
     let mut k: u64 = 0;
@@ -590,8 +590,8 @@ fn recount(ctx: MutationCtx, tasks: Readable<opaque>, n: Readable<f64>, done: Re
         }
         k = k + 1;
     }
-    ctx.set_f64(n, count as f64);
-    ctx.set_f64(done, dones as f64);
+    ctx.set<f64>(n, count as f64);
+    ctx.set<f64>(done, dones as f64);
 }
 
 // ASCII trim (the spaces around a draft).

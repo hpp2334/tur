@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ SourceBool,  SourceStr,  SourceF64,  Column, Input };
 
 
 entry fn start() {
@@ -311,8 +311,8 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_obscure(atom: u64, b: f64) {
-    let obscure = Readable<bool>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_bool(obscure, b != 0.0);
+    let obscure = SourceBool.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<bool>(obscure, b != 0.0);
 }
 "#;
 
@@ -377,8 +377,8 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_hint(atom: u64, _b: f64) {
-    let hint = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(hint, "other hint");
+    let hint = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(hint, "other hint");
 }
 "#;
 

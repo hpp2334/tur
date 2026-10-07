@@ -19,34 +19,34 @@
 // kit fn serve every combo: the kit branches to the row's 0 = absent by
 // null-check.
 use tur::{ anim_ctrl_mut, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
-use tur_kit::{ Mutation, MutationCtx, Readable, mutate, mutate_f64 };
+use tur_kit::{ MutF64, MutNil, MutationCtx, Readable, mutate, mutate_f64 };
 
 // The animation controller — the authored face over the `anim_ctrl_mut`
-// row. The tick is `Mutation<f64, nil>` (`mutate_f64`; the eased progress
-// crosses as the invocation payload) and the end is `Mutation<nil, nil>`;
+// row. The tick is `Handler<f64>` (`mutate_f64`; the eased progress
+// crosses as the invocation payload) and the end is `Handler<nil>`;
 // either may be nil (the controller then only drives its bound channels —
 // polled through `anim_value`). The tick mutation CAPTURES the channels
 // it drives — no id rail, no stash.
-pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64, nil>, on_end: ?Mutation<nil, nil>) -> opaque {
+pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?MutF64, on_end: ?MutNil) -> opaque {
   let mut tick: u64 = 0;
   if (on_tick != nil) {
-    tick = on_tick.atom;
+    tick = on_tick.atom_id();
   }
   let mut end: u64 = 0;
   if (on_end != nil) {
-    end = on_end.atom;
+    end = on_end.atom_id();
   }
   return anim_ctrl_mut(duration_ms, curve, repeat, tick, end);
 }
 
 // The tick-only twin — `anim_ctrl_tick(dur, curve, repeat, tick)`.
-pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutation<f64, nil>) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.atom, 0);
+pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: MutF64) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.atom_id(), 0);
 }
 
 // The end-only twin — `anim_ctrl_end(dur, curve, repeat, end)`.
-pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil, nil>) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.atom);
+pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: MutNil) -> opaque {
+  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.atom_id());
 }
 
 // The bare controller (no callbacks — polled through `anim_value`).
@@ -75,7 +75,7 @@ impl Opacity {
   }
   pub fn build(self) -> opaque {
     if (self.r != nil) {
-      return el_opacity_bound(self.r.atom, self.kid);
+      return el_opacity_bound(self.r.atom_id(), self.kid);
     }
     return el_opacity(self.value, self.kid);
   }
@@ -135,19 +135,19 @@ impl Transform {
   }
   pub fn build(self) -> opaque {
     if (self.rotate_r != nil) {
-      return el_transform_angle_bound(self.scale, self.rotate_r.atom, self.tx, self.ty, self.kid);
+      return el_transform_angle_bound(self.scale, self.rotate_r.atom_id(), self.tx, self.ty, self.kid);
     }
     if (self.scale_r != nil) {
-      return el_transform_scale_bound(self.scale_r.atom, self.rotate, self.tx, self.ty, self.kid);
+      return el_transform_scale_bound(self.scale_r.atom_id(), self.rotate, self.tx, self.ty, self.kid);
     }
     if (self.tx_r != nil || self.ty_r != nil) {
       let mut tx_atom: u64 = 0;
       if (self.tx_r != nil) {
-        tx_atom = self.tx_r.atom;
+        tx_atom = self.tx_r.atom_id();
       }
       let mut ty_atom: u64 = 0;
       if (self.ty_r != nil) {
-        ty_atom = self.ty_r.atom;
+        ty_atom = self.ty_r.atom_id();
       }
       return el_transform_translate_bound(self.scale, self.rotate, tx_atom, ty_atom, self.kid);
     }

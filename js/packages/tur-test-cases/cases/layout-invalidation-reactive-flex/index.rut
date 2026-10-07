@@ -4,7 +4,7 @@
 // behavior). The atoms ride the entry args: the pair mints in order, so
 // the b probe addresses a's answer + 1.
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, source_f64 };
+use tur_kit::{ SourceF64,  Container, Expanded, MutationCtx, Readable, Row, source_f64 };
 
 
 entry fn start() -> u64 {
@@ -29,11 +29,11 @@ fn qkey_box(key: str, color: u64) -> opaque {
 // write — no gesture, no extra mark_dirty); the atom id rides the entry
 // arg (the probe's handle binds at the call site).
 entry fn set_flex_a(atom: u64, v: f64) {
-    let flex_a = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(flex_a, v);
+    let flex_a = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(flex_a, v);
 }
 
 entry fn set_flex_b(atom: u64, v: f64) {
-    let flex_b = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(flex_b, v);
+    let flex_b = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(flex_b, v);
 }

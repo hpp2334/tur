@@ -32,8 +32,8 @@ entry fn start() {
     let items = source_value(one_list());
     let count = source_f64(ITEM_COUNT);
     let b_flip = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(axis, !ctx.get_bool(axis));
-        ctx.set_value(items, one_list());
+        ctx.set<bool>(axis, !ctx.get<bool>(axis));
+        ctx.set<opaque>(items, one_list());
     });
 
     let toggle = MouseRegion()

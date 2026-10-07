@@ -11,7 +11,7 @@ use tur_kit::{ Column, Container, MutationCtx, PointerInteract, Readable, SizedB
 entry fn start() -> u64 {
     let on: Readable<bool> = source_bool(true);
     let b_toggle = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(on, !ctx.get_bool(on));
+        ctx.set<bool>(on, !ctx.get<bool>(on));
     });
     let mut col = Column();
     let track = Container()

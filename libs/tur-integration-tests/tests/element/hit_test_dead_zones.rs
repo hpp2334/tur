@@ -80,7 +80,7 @@ use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, MutationCtx, PointerIn
 entry fn start() -> u64 {
     let taps: Readable<f64> = source_f64(0.0);
     let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return fmt_taps(ctx.get_f64(taps));
+        return fmt_taps(ctx.get<f64>(taps));
     });
     // text-demo's cycle-button shape: MouseRegion(cursor) wrapping the
     // PointerInteract pill, at the bottom of a page taller than the
@@ -93,7 +93,7 @@ entry fn start() -> u64 {
         .build();
     let b_tap = mutate(fn (ctx: MutationCtx) {
         // The derive re-renders the label through fmt_taps.
-        ctx.set_f64(taps, ctx.get_f64(taps) + 1.0);
+        ctx.set<f64>(taps, ctx.get<f64>(taps) + 1.0);
     });
     let btn = MouseRegion()
         .cursor(CURSOR_POINTER)
@@ -189,13 +189,13 @@ entry fn start() -> u64 {
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
     let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "down");
+        ctx.set<str>(piece, "down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "moving");
+        ctx.set<str>(piece, "moving");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "up");
+        ctx.set<str>(piece, "up");
     });
     let pad = PointerInteract()
         .on_pointer_down(b_down)
@@ -230,13 +230,13 @@ entry fn start() -> u64 {
         .child(Text().text_bound(piece).query_key("dz/piece-label").build())
         .build();
     let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "down");
+        ctx.set<str>(piece, "down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "moving");
+        ctx.set<str>(piece, "moving");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(piece, "up");
+        ctx.set<str>(piece, "up");
     });
     let pad = PointerInteract()
         .on_pointer_down(b_down)

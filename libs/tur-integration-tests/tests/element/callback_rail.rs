@@ -51,7 +51,7 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
 
 const RAIL_RUT: &str = r#"
 use tur::mount;
-use tur_kit::{ Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
+use tur_kit::{ SourceF64,  Column, MutationCtx, PointerInteract, Readable, Text, mutate, source_f64,
     source_str };
 
 entry fn start() -> u64 {
@@ -60,15 +60,15 @@ entry fn start() -> u64 {
     // The named mutation — the kit seals it into an opaque box on
     // registration; only the box crosses to Rust.
     let b_named = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
-        ctx.set_str(label, f"named {ctx.get_f64(count) as u64}");
+        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+        ctx.set<str>(label, f"named {ctx.get<f64>(count) as u64}");
     });
     let named = PointerInteract().on_click(b_named)
         .child(Text().text("named").query_key("rail/named").build()).build();
     // The anonymous mutation literal — the boa `mutate(() => ...)` twin.
     let literal = PointerInteract().on_click(mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) + 10.0);
-        ctx.set_str(label, "literal");
+        ctx.set<f64>(count, ctx.get<f64>(count) + 10.0);
+        ctx.set<str>(label, "literal");
     })).child(Text().text("literal").query_key("rail/literal").build()).build();
     mount(Column()
         .child(Text().text_bound(label).query_key("rail/text").build())
@@ -134,7 +134,7 @@ entry fn start() {
     let list = rs_list_new();
     rs_list_push(list, "alpha");
     rs_list_push(list, "beta");
-    let items: Readable<opaque> = Readable<opaque>.of(ctx_bridge(), rs_source_value(list));
+    let items: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(list), false);
     mount(Column().query_key("rail/each").child(
         Each(items).item_builder(fn (i: u64, item: str) -> View {
             return Text().text(f"{i}:{item}").query_key(f"rail/item-{i}").build();
@@ -180,7 +180,7 @@ entry fn start() {
     // The tick is a MUTATION over the ctx (the eased value is the
     // invocation payload; the channel rides by capture).
     let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
-        ctx.set_f64(box_r, t);
+        ctx.set<f64>(box_r, t);
         let _ = progress;
     });
     let ctrl = anim_ctrl_tick(50.0, "linear", 0, a_tick);

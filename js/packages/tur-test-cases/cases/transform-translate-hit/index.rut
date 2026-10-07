@@ -14,7 +14,7 @@ entry fn start() {
     // The tap: flip the hit source (the mutation captures the handle —
     // no id rail, no stash).
     let b_hit = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(hit, true);
+        ctx.set<bool>(hit, true);
     });
 
     let mut stack = Stack()

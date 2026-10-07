@@ -79,7 +79,7 @@ fn id_module(value: &str) -> String {
     format!(
         r#"
 use tur::{{ ctx_bridge, mount }};
-use tur_kit::{{ MutationCtx, Readable, Text, source_str }};
+use tur_kit::{{ SourceF64, MutationCtx, Readable, Text, source_str }};
 
 
 entry fn start() -> u64 {{
@@ -90,8 +90,8 @@ entry fn start() -> u64 {{
 }}
 
 entry fn set_value(atom: u64, _b: f64) {{
-    let r = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(r, "A2");
+    let r = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(r, "A2");
 }}
 "#
     )
@@ -553,8 +553,8 @@ entry fn start() -> u64 {
 }
 
 entry fn flip(atom: u64, _b: f64) {
-    let r = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(r, "A2");
+    let r = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(r, "A2");
 }
 "#,
     ))

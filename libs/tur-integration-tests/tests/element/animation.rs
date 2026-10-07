@@ -50,7 +50,7 @@ fn label(app: &TurTestApp) -> String {
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
 use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_str, st_put, st_take };
-use tur_kit::{ Column, Container, MutationCtx, Readable, Text, mutate, mutate_f64, source_f64,
+use tur_kit::{ SourceF64,  Column, Container, MutationCtx, Readable, Text, mutate, mutate_f64, source_f64,
     source_str };
 use tur_anim_kit::{ anim_ctrl };
 
@@ -67,7 +67,7 @@ entry fn start() -> u64 {
     // 100..200); the controller rides the stash only because the do_*
     // control entries cannot capture it.
     let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
-        ctx.set_f64(width, 100.0 + (200.0 - 100.0) * v);
+        ctx.set<f64>(width, 100.0 + (200.0 - 100.0) * v);
     });
     let a_end = mutate(fn (_ctx: MutationCtx) {
     });
@@ -494,7 +494,7 @@ entry fn start() -> u64 {
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
     let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
     let a_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
-        ctx.set_f64(angle, TAU * v);
+        ctx.set<f64>(angle, TAU * v);
     });
     let a_end = mutate(fn (_ctx: MutationCtx) {
     });
@@ -602,8 +602,8 @@ entry fn start() -> u64 {
 }
 
 entry fn probe_s(atom: u64, b: f64) {
-    let s = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(s, b);
+    let s = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(s, b);
 }
 "#;
 
@@ -626,10 +626,10 @@ entry fn probe_t(atom: u64, b: f64) {
     // The tx/ty pair mints in order (atom, atom+1) — one entry drives
     // both channels (ty reads 2× the arg, the test's b×2 expectation).
     let write = MutationCtx.over(ctx_bridge());
-    let tx = Readable<f64>.of(ctx_bridge(), atom);
-    let ty = Readable<f64>.of(ctx_bridge(), atom + 1);
-    write.set_f64(tx, b);
-    write.set_f64(ty, b * 2.0);
+    let tx = SourceF64.of(ctx_bridge(), atom, false);
+    let ty = SourceF64.of(ctx_bridge(), atom + 1, false);
+    write.set<f64>(tx, b);
+    write.set<f64>(ty, b * 2.0);
 }
 "#;
 

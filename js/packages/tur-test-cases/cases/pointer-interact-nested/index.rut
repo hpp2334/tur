@@ -13,24 +13,24 @@ entry fn start() -> u64 {
     let outer_t = source_f64(0.0);
     let inner_t = source_f64(0.0);
     let d_o = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"opaque:{ctx.get_f64(outer_o) as u64}/{ctx.get_f64(inner_o) as u64}";
+        return f"opaque:{ctx.get<f64>(outer_o) as u64}/{ctx.get<f64>(inner_o) as u64}";
     });
     let d_t = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"translucent:{ctx.get_f64(outer_t) as u64}/{ctx.get_f64(inner_t) as u64}";
+        return f"translucent:{ctx.get<f64>(outer_t) as u64}/{ctx.get<f64>(inner_t) as u64}";
     });
 
     // The named mutations — each captures its own counter.
     let b_outer_o = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(outer_o, ctx.get_f64(outer_o) + 1.0);
+        ctx.set<f64>(outer_o, ctx.get<f64>(outer_o) + 1.0);
     });
     let b_inner_o = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(inner_o, ctx.get_f64(inner_o) + 1.0);
+        ctx.set<f64>(inner_o, ctx.get<f64>(inner_o) + 1.0);
     });
     let b_outer_t = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(outer_t, ctx.get_f64(outer_t) + 1.0);
+        ctx.set<f64>(outer_t, ctx.get<f64>(outer_t) + 1.0);
     });
     let b_inner_t = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(inner_t, ctx.get_f64(inner_t) + 1.0);
+        ctx.set<f64>(inner_t, ctx.get<f64>(inner_t) + 1.0);
     });
 
     let mut col = Column().cross_alignment(CROSS_ALIGN_START).main_axis_size(MAIN_SIZE_MIN);

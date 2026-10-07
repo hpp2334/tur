@@ -4,7 +4,7 @@
 // position-gap repro). The `set_width` probe drives the change (the atom
 // id rides the entry arg — the probe's handles bind at the call site).
 use tur::{ MAIN_ALIGN_END, ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, Row, source_f64 };
+use tur_kit::{ SourceF64,  Container, MutationCtx, Readable, Row, source_f64 };
 
 
 entry fn start() -> u64 {
@@ -22,6 +22,6 @@ entry fn start() -> u64 {
 // The `__setWidth(w)` seam: re-wrap the passed atom and write through the
 // ctx face (a direct store write — no gesture, no extra mark_dirty).
 entry fn set_width(atom: u64, w: f64) {
-    let width = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(width, w);
+    let width = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(width, w);
 }

@@ -79,8 +79,8 @@ use tur::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     va_app_set, va_controller, va_create_source, va_destroy, va_error, va_source_handle,
     va_status, va_status_atom };
 use tur_anim_kit::{ anim_ctrl_end };
-use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent,
-    MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row,
+use tur_kit::{ SourceF64,  Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent,
+    MouseRegion, Handler, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row,
     ScrollView, SizedBox, Stack, Switch, TaskCtx, Text, VirtualApp, mutate, mutate_enter,
     mutate_exit, mutate_input, mutate_ev, rs_derive, rs_watch };
 
@@ -88,19 +88,19 @@ use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, 
 // (the module's state rail); the kit's bound props take the typed
 // handles.
 fn sr(atom: u64) -> Readable<str> {
-    return Readable<str>.of(ctx_bridge(), atom);
+    return SourceStr.of(ctx_bridge(), atom, false);
 }
 
 fn fr(atom: u64) -> Readable<f64> {
-    return Readable<f64>.of(ctx_bridge(), atom);
+    return SourceF64.of(ctx_bridge(), atom, false);
 }
 
 fn br(atom: u64) -> Readable<bool> {
-    return Readable<bool>.of(ctx_bridge(), atom);
+    return SourceBool.of(ctx_bridge(), atom, false);
 }
 
 fn op(atom: u64) -> Readable<opaque> {
-    return Readable<opaque>.of(ctx_bridge(), atom);
+    return SourceValue.of(ctx_bridge(), atom, false);
 }
 
 // ---- design tokens ---------------------------------------------------------
@@ -792,7 +792,7 @@ fn edited_pill(edited: u64) -> opaque {
 // A layout tab — the segmented control's option. The selected option's
 // fill is the tray's selected ink (the brush atoms; 0 = transparent); a
 // MouseRegion delivers the hover lift (the index crosses as the id).
-fn tab_button(label: str, m: Mutation<nil, nil>, key: str, brush: u64, idx: u64) -> opaque {
+fn tab_button(label: str, m: Handler<nil>, key: str, brush: u64, idx: u64) -> opaque {
     return MouseRegion()
         .on_enter(mutate_enter(fn (_ctx: MutationCtx, _ev: EnterEvent) { tab_enter(idx); }))
         .on_exit(mutate_exit(fn (_ctx: MutationCtx, _ev: ExitEvent) { tab_exit(idx); }))

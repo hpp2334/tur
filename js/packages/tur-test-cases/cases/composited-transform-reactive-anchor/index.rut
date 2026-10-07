@@ -9,7 +9,7 @@ use tur_kit::{ CompositedFollower, CompositedTarget, Container, MutationCtx, Poi
 entry fn start() -> u64 {
     let anchor: Readable<f64> = source_f64(0.0);
     let b_flip = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(anchor, 8.0);
+        ctx.set<f64>(anchor, 8.0);
     });
     let link = ct_link_new();
     let mut stack = Stack()

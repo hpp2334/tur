@@ -20,7 +20,7 @@
 // (build-then-mutate stays out; repetition is just the loop).
 use tur::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
 use tur_kit::{
-    Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Mutation, MutationCtx,
+    Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Handler, MutationCtx,
     PointerInteract, Readable, Row, ScrollView, SizedBox, Switch, Text, derive_str, mutate,
     source_f64, source_str,
 };
@@ -73,10 +73,10 @@ entry fn start() -> u64 {
 
     // The subtitle fragments (three derives over the state sources).
     let d_tile: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"tile #{ctx.get_f64(sel) as u64}";
+        return f"tile #{ctx.get<f64>(sel) as u64}";
     });
     let d_aspect: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        let v = ctx.get_f64(aspect);
+        let v = ctx.get<f64>(aspect);
         if (v > 1.01) {
             return "16:9";
         }
@@ -86,7 +86,7 @@ entry fn start() -> u64 {
         return "1:1";
     });
     let d_extent: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"maxExtent {ctx.get_f64(maxext) as u64}";
+        return f"maxExtent {ctx.get<f64>(maxext) as u64}";
     });
 
     // The reactive grid: one Switch over the combined mode string — the
@@ -211,9 +211,9 @@ fn gallery_grid(aspect: f64, max_cross: f64, rings: [Readable<f64>], sel: Readab
 fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
     let i: u64 = ii[0] as u64;
     let b_tap = mutate(fn (ctx: MutationCtx) {
-        let prev = ctx.get_f64(sel) as i32;
+        let prev = ctx.get<f64>(sel) as i32;
         ctx.set_brush(rings[prev], 0x00000000u64);
-        ctx.set_f64(sel, ii[0]);
+        ctx.set<f64>(sel, ii[0]);
         ctx.set_brush(rings[ii[0] as i32], RING_ON);
     });
     let face = Container()
@@ -234,7 +234,7 @@ fn tile(ii: [f64], rings: [Readable<f64>], sel: Readable<f64>) -> opaque {
 }
 
 // A pill chip: the fill rides its brush source (indigo when active).
-fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque {
+fn chip(r: Readable<f64>, key: str, label: str, m: Handler<nil>) -> opaque {
     let face = Container()
         .padding(7.0)
         .radius(7.0)
@@ -259,11 +259,11 @@ fn chip(r: Readable<f64>, key: str, label: str, m: Mutation<nil, nil>) -> opaque
 // the aspect value, then repaint the trio.
 fn set_aspect_mutation(aspect: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
                        mode: Readable<str>, chips: [Readable<f64>], key: str, v: f64,
-                       on_idx: u64) -> Mutation<nil, nil> {
+                       on_idx: u64) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
-        ctx.set_str(akey, key);
-        ctx.set_str(mode, f"{key}/{ctx.get_str(dkey)}");
-        ctx.set_f64(aspect, v);
+        ctx.set<str>(akey, key);
+        ctx.set<str>(mode, f"{key}/{ctx.get<str>(dkey)}");
+        ctx.set<f64>(aspect, v);
         paint_chips(ctx, chips, on_idx);
     });
 }
@@ -271,11 +271,11 @@ fn set_aspect_mutation(aspect: Readable<f64>, akey: Readable<str>, dkey: Readabl
 // One density chip's mutation (the mirror twin).
 fn set_density_mutation(maxext: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
                         mode: Readable<str>, chips: [Readable<f64>], key: str, v: f64,
-                        on_idx: u64) -> Mutation<nil, nil> {
+                        on_idx: u64) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
-        ctx.set_str(dkey, key);
-        ctx.set_str(mode, f"{ctx.get_str(akey)}/{key}");
-        ctx.set_f64(maxext, v);
+        ctx.set<str>(dkey, key);
+        ctx.set<str>(mode, f"{ctx.get<str>(akey)}/{key}");
+        ctx.set<f64>(maxext, v);
         paint_chips(ctx, chips, on_idx);
     });
 }

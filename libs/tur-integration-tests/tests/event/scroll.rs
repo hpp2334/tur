@@ -118,7 +118,7 @@ fn wheel_scrolls_the_playground_sidebar_shape() {
     app.load_rut_module(
         r#"
 use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, Expanded, ScrollView, Text };
+use tur_kit::{ SourceF64,  Column, Container, Expanded, ScrollView, Text };
 
 
 entry fn start() -> u64 {
@@ -236,8 +236,8 @@ entry fn start() -> u64 {
 }
 
 entry fn shrink(atom: u64, _b: f64) {
-    let height = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(height, 200.0);
+    let height = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(height, 200.0);
 }
 "#,
     )

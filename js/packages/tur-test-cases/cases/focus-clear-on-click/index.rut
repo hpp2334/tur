@@ -13,8 +13,8 @@ entry fn start() -> u64 {
     let undo = undo_new();
 
     let b_click = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(clicks, ctx.get_f64(clicks) + 1.0);
-        ctx.set_str(label, f"clicks: {ctx.get_f64(clicks) as u64}");
+        ctx.set<f64>(clicks, ctx.get<f64>(clicks) + 1.0);
+        ctx.set<str>(label, f"clicks: {ctx.get<f64>(clicks) as u64}");
     });
 
     let mut col = Column();

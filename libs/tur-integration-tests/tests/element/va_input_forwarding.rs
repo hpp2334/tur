@@ -39,7 +39,7 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
 use tur::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Input, MutationCtx, Readable, Text, source_str };
+use tur_kit::{ SourceF64,  Column, Input, MutationCtx, Readable, Text, source_str };
 
 
 entry fn start() -> u64 {
@@ -59,8 +59,8 @@ entry fn start() -> u64 {
 entry fn sync(label: u64, _b: f64) {
     let ctrl = st_take(7);
     st_put(7, ctrl);
-    let r = Readable<str>.of(ctx_bridge(), label);
-    MutationCtx.over(ctx_bridge()).set_str(r, tctrl_text(ctrl));
+    let r = SourceStr.of(ctx_bridge(), label, false);
+    MutationCtx.over(ctx_bridge()).set<str>(r, tctrl_text(ctrl));
 }
 "#;
 

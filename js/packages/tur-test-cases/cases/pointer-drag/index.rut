@@ -11,16 +11,16 @@ entry fn start() -> u64 {
     let pos: Readable<str> = source_str("0,0");
 
     let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
-        ctx.set_str(phase, "down");
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
-        ctx.set_str(phase, "move");
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "move");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
-        ctx.set_str(phase, "up");
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "up");
     });
 
     let mut col = Column().cross_alignment(CROSS_ALIGN_START);

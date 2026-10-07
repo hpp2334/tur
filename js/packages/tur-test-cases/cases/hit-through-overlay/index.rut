@@ -16,12 +16,12 @@ entry fn start() -> u64 {
     // The counters ride their own sources (the mutations capture the
     // handles — no id rail, no stash).
     let g_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_f64(down_n, ctx.get_f64(down_n) + 1.0);
-        ctx.set_str(downs, f"{ctx.get_f64(down_n) as u64}");
+        ctx.set<f64>(down_n, ctx.get<f64>(down_n) + 1.0);
+        ctx.set<str>(downs, f"{ctx.get<f64>(down_n) as u64}");
     });
     let pill_click = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(click_n, ctx.get_f64(click_n) + 1.0);
-        ctx.set_str(clicks, f"{ctx.get_f64(click_n) as u64}");
+        ctx.set<f64>(click_n, ctx.get<f64>(click_n) + 1.0);
+        ctx.set<str>(clicks, f"{ctx.get<f64>(click_n) as u64}");
     });
 
     let mut stack = Stack();

@@ -15,7 +15,7 @@ use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
 use tur::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, source_f64 };
+use tur_kit::{ SourceF64,  Container, MutationCtx, Readable, source_f64 };
 
 entry fn start() -> u64 {
     // The channels mint in order: color, blur, dy (the probe entries
@@ -40,13 +40,13 @@ entry fn start() -> u64 {
 // Re-tint the glow (the placed-piece hue swap) — a brush write only; the
 // element must repaint without remounting.
 entry fn retint(atom: u64, _b: f64) {
-    let color = Readable<f64>.of(ctx_bridge(), atom);
+    let color = SourceF64.of(ctx_bridge(), atom, false);
     MutationCtx.over(ctx_bridge()).set_brush(color, 0x00FF00FFu64);
 }
 
 entry fn resteepen(atom: u64, _b: f64) {
-    let dy = Readable<f64>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_f64(dy, 12.0);
+    let dy = SourceF64.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<f64>(dy, 12.0);
 }
 "#;
 

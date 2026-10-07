@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 
 const HELLO_RUT: &str = r#"
 use tur::{ mount };
-use tur_kit::{ Column, Text };
+use tur_kit::{ SourceValue,  SourceStr,  SourceF64,  Column, Text };
 
 use tur_kit::{ Column, PointerInteract, Text };
 
@@ -101,8 +101,8 @@ entry fn start() -> u64 {
 }
 
 entry fn on_event(atom: u64, n: f64) {
-    let r = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(r, f"Count: {n}");
+    let r = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(r, f"Count: {n}");
 }
 "#;
 
@@ -148,8 +148,8 @@ entry fn start() -> u64 {
     let atom: Readable<str> = source_str("taps: 0");
     let n: Readable<f64> = source_f64(0.0);
     let b_click = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(n, ctx.get_f64(n) + 1.0);
-        ctx.set_str(atom, f"taps: {ctx.get_f64(n) as u64}");
+        ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
+        ctx.set<str>(atom, f"taps: {ctx.get<f64>(n) as u64}");
     });
     let col = Column()
         .child(Text().text_bound(atom).query_key("rut/text").build())
@@ -199,12 +199,12 @@ entry fn start() -> u64 {
     let count: Readable<f64> = source_f64(0.0);
     // The inc/dec mutations capture both handles (the show twin inlines).
     let b_inc = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
-        ctx.set_str(label, f"Count: {ctx.get_f64(count) as u64}");
+        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+        ctx.set<str>(label, f"Count: {ctx.get<f64>(count) as u64}");
     });
     let b_dec = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) - 1.0);
-        ctx.set_str(label, f"Count: {ctx.get_f64(count) as u64}");
+        ctx.set<f64>(count, ctx.get<f64>(count) - 1.0);
+        ctx.set<str>(label, f"Count: {ctx.get<f64>(count) as u64}");
     });
     let col = Column()
         .child(Text().text_bound(label).query_key("rut/text").build())
@@ -259,7 +259,7 @@ entry fn start() -> u64 {
     let on_label: Readable<str> = source_str("ON");
     let off_label: Readable<str> = source_str("OFF");
     let b_toggle = mutate(fn (ctx: MutationCtx) {
-        ctx.set_bool(on, !ctx.get_bool(on));
+        ctx.set<bool>(on, !ctx.get<bool>(on));
     });
     let col = Column()
         .child(Container().color(0x336699FF).padding(8.0).child(Text().text("boxed").build()).build())
@@ -615,7 +615,7 @@ entry fn start() -> u64 {
     let list = rs_list_new();
     rs_list_push(list, "alpha");
     rs_list_push(list, "beta");
-    let atom: Readable<opaque> = Readable<opaque>.of(ctx_bridge(), rs_source_value(list));
+    let atom: Readable<opaque> = SourceValue.of(ctx_bridge(), rs_source_value(list), false);
 
     // The push pad: the mutation drives the substrate rows.
     let b_push = mutate(fn (_ctx: MutationCtx) {
@@ -862,39 +862,39 @@ entry fn start() -> u64 {
     // the button enum (0 primary / 1 middle / 2 secondary — the code
     // decodes through comparisons; enums carry no cast).
     let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|down {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|down {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|move {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|move {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|up {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|up {ev.local.x as u64},{ev.local.y as u64} g{ev.global.x as u64},{ev.global.y as u64} b{button_code(ev.button)}");
     });
     // The synthesized tap: the click mutation appends `tap N` (the
     // sequence rides its own source — no rail payload).
     let b_tap = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(seq, ctx.get_f64(seq) + 1.0);
-        ctx.set_str(label, f"{ctx.get_str(label)}|tap {ctx.get_f64(seq) as u64}");
+        ctx.set<f64>(seq, ctx.get<f64>(seq) + 1.0);
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|tap {ctx.get<f64>(seq) as u64}");
     });
     let menu = PointerInteract().on_context_menu(mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
         let mut b = "other";
         if (ev.button == MouseButton.Right) {
             b = "right";
         }
-        ctx.set_str(label, f"{ctx.get_str(label)}|menu-{b}");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|menu-{b}");
     })).query_key("rut/menu").child(Text().text("menu").build()).build();
 
     // The focus rail: the typed events name their surface (the keydown
     // record crosses key/code/modifiers; kind is always down=0 on this
     // surface). Focus/blur are payload-less.
     let b_key = mutate_key(fn (ctx: MutationCtx, ev: KeydownEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|key {ev.key}/{ev.code} m{ev.modifiers} k0");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|key {ev.key}/{ev.code} m{ev.modifiers} k0");
     });
     let b_focus = mutate_focus(fn (ctx: MutationCtx, _ev: FocusEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|focused");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|focused");
     });
     let b_blur = mutate_blur(fn (ctx: MutationCtx, _ev: BlurEvent) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|blurred");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|blurred");
     });
 
     let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).on_click(b_tap).query_key("rut/gesture").child(Text().text("pad").build()).build();
@@ -1031,10 +1031,10 @@ entry fn start() -> u64 {
     // in mutate); the controller drives the Opacity through the bound
     // handle.
     let a_tick = mutate_f64(fn (ctx: MutationCtx, t: f64) {
-        ctx.set_f64(alpha, t);
+        ctx.set<f64>(alpha, t);
     });
     let a_end = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(alpha, 1.0);
+        ctx.set<f64>(alpha, 1.0);
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
     anim_forward(ctrl);
@@ -1094,13 +1094,13 @@ use tur_kit::{ Column, Readable, TaskCtx, Text, source_str };
 // The async boundary: the handles ride by parameter; the ctx is
 // task-scoped (minted at the launch site) and works across awaits.
 async fn work(ctx: TaskCtx, label: Readable<str>) -> str {
-    ctx.set_str(label, "launched");
+    ctx.set<str>(label, "launched");
     await clipboard_write("from rut");
     let clip = await clipboard_read();
-    ctx.set_str(label, f"{ctx.get_str(label)}-after-read:{clip}");
+    ctx.set<str>(label, f"{ctx.get<str>(label)}-after-read:{clip}");
     let body = await net_request("https://example.test/api", "GET");
     let text = decode_utf8(body);
-    ctx.set_str(label, f"{ctx.get_str(label)}|{text}");
+    ctx.set<str>(label, f"{ctx.get<str>(label)}|{text}");
     return "";
 }
 
@@ -1162,7 +1162,7 @@ entry fn start() -> u64 {
     // The chunk handler: a mutation over the typed bytes payload (the
     // transcript accumulates the chunk lengths).
     let b_chunk = mutate_bytes(fn (ctx: MutationCtx, data: bytes) {
-        ctx.set_str(label, f"{ctx.get_str(label)}|{data.len() as u64}");
+        ctx.set<str>(label, f"{ctx.get<str>(label)}|{data.len() as u64}");
     });
     let task = net_stream("https://example.test/stream", "GET", b_chunk);
     // The cancel journey takes the task opaque as a PARAM (opaques are
@@ -1177,10 +1177,10 @@ async fn finish(ctx: TaskCtx, task: opaque, label: Readable<str>) -> str {
     // One beat (a quick capability await) so the drive is mid-flight,
     // then wire-abort the stream: whatever chunks landed stay on the
     // label; the rest never arrive.
-    ctx.set_str(label, f"{ctx.get_str(label)}|launched");
+    ctx.set<str>(label, f"{ctx.get<str>(label)}|launched");
     await clipboard_write("beat");
     task_cancel(task);
-    ctx.set_str(label, f"{ctx.get_str(label)}|done");
+    ctx.set<str>(label, f"{ctx.get<str>(label)}|done");
     return "";
 }
 "#;
@@ -1407,9 +1407,9 @@ entry fn start() -> u64 {
     rs_watch_start(watch);
 
     // The unified text prop: rebuilt handles over the substrate atoms.
-    let dr = Readable<str>.of(ctx_bridge(), d);
-    let d2r = Readable<str>.of(ctx_bridge(), d2);
-    let hitsr = Readable<str>.of(ctx_bridge(), hits);
+    let dr = SourceStr.of(ctx_bridge(), d, false);
+    let d2r = SourceStr.of(ctx_bridge(), d2, false);
+    let hitsr = SourceStr.of(ctx_bridge(), hits, false);
     let b_inc = mutate(fn (_ctx: MutationCtx) {
         rs_set_f64(count, rs_get_f64(count) + 1.0);
     });
@@ -1457,8 +1457,8 @@ entry fn start() -> u64 {
     let bad = rs_derive(bad, count);
     let good = rs_derive(good, count);
 
-    let badr = Readable<str>.of(ctx_bridge(), bad);
-    let goodr = Readable<str>.of(ctx_bridge(), good);
+    let badr = SourceStr.of(ctx_bridge(), bad, false);
+    let goodr = SourceStr.of(ctx_bridge(), good, false);
     let b_inc = mutate(fn (_ctx: MutationCtx) {
         rs_set_f64(count, rs_get_f64(count) + 1.0);
     });

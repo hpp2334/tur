@@ -39,14 +39,14 @@ entry fn start() -> u64 {
 fn tile(ctrl: opaque, transcript: Readable<str>, key: str) -> opaque {
     let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_forward(ctrl);
-        ctx.set_str(transcript, f"{ctx.get_str(transcript)} down");
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(transcript, f"{ctx.get_str(transcript)} move");
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} move");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_reverse(ctrl);
-        ctx.set_str(transcript, f"{ctx.get_str(transcript)} up");
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} up");
     });
 
     let b = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key(key);

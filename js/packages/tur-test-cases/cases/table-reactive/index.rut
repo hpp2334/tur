@@ -19,7 +19,7 @@
 use futures::{ sleep };
 use tur::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, mount, spawn, str_parse_f64 };
 use tur_kit::{
-    Column, Container, DeriveCtx, Expanded, MouseRegion, Mutation, MutationCtx, PointerInteract,
+    Column, Container, DeriveCtx, Expanded, MouseRegion, Handler, MutationCtx, PointerInteract,
     Readable, SizedBox, Table, TableCols, TaskCtx, Text, derive_str, list_new, list_push, mutate,
     source_bool, source_f64, source_str, source_value, value_item, value_len,
 };
@@ -51,7 +51,7 @@ entry fn start() -> u64 {
         hdr_label("moons", "MOONS", sort_key, sort_dir),
         hdr_label("gravity", "GRAVITY (m/s²)", sort_key, sort_dir),
     ];
-    let taps: [Mutation<nil, nil>] = [
+    let taps: [Handler<nil>] = [
         sort_mutation("name", fills, sort_key, sort_dir, rows),
         sort_mutation("moons", fills, sort_key, sort_dir, rows),
         sort_mutation("gravity", fills, sort_key, sort_dir, rows),
@@ -59,10 +59,10 @@ entry fn start() -> u64 {
 
     // The status line (boa's derive over the load state).
     let status: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        if (!ctx.get_bool(loaded)) {
+        if (!ctx.get<bool>(loaded)) {
             return "Loading…";
         }
-        return f"Loaded {ctx.get_f64(count) as u64} rows · click a header to sort";
+        return f"Loaded {ctx.get<f64>(count) as u64} rows · click a header to sort";
     });
 
     // The fake fetch rides the spawn rail (boa loads at mount; start is
@@ -99,7 +99,7 @@ entry fn start() -> u64 {
 // the bound label + the painted fill): pointer cursor, tap = sort, the
 // active column highlighted with its direction marker.
 fn header_cell(col: u64, fills: [Readable<f64>], labels: [Readable<str>],
-               taps: [Mutation<nil, nil>]) -> opaque {
+               taps: [Handler<nil>]) -> opaque {
     let i: i32 = col as i32;
     return MouseRegion()
         .cursor(CURSOR_POINTER)
@@ -140,10 +140,10 @@ fn hdr_key(col: u64) -> str {
 // marker (boa's HeaderCell text derive).
 fn hdr_label(key: str, label: str, sort_key: Readable<str>, sort_dir: Readable<f64>) -> Readable<str> {
     return derive_str(fn (ctx: DeriveCtx) -> str {
-        if (ctx.get_str(sort_key) != key) {
+        if (ctx.get<str>(sort_key) != key) {
             return label;
         }
-        if (ctx.get_f64(sort_dir) > 0.0) {
+        if (ctx.get<f64>(sort_dir) > 0.0) {
             return f"{label} ^";
         }
         return f"{label} v";
@@ -169,15 +169,15 @@ fn paint_header(ctx: MutationCtx, fills: [Readable<f64>], on: u64) {
 // One column's tap: same key flips the direction, a new key resets to
 // ascending; then the sorted view is recomputed and the active fill moves.
 fn sort_mutation(key: str, fills: [Readable<f64>], sort_key: Readable<str>, sort_dir: Readable<f64>,
-                 rows: Readable<opaque>) -> Mutation<nil, nil> {
+                 rows: Readable<opaque>) -> Handler<nil> {
     return mutate(fn (ctx: MutationCtx) {
-        if (ctx.get_str(sort_key) == key) {
-            ctx.set_f64(sort_dir, -ctx.get_f64(sort_dir));
+        if (ctx.get<str>(sort_key) == key) {
+            ctx.set<f64>(sort_dir, -ctx.get<f64>(sort_dir));
         } else {
-            ctx.set_str(sort_key, key);
-            ctx.set_f64(sort_dir, 1.0);
+            ctx.set<str>(sort_key, key);
+            ctx.set<f64>(sort_dir, 1.0);
         }
-        ctx.set_value(rows, sorted_rows(ctx.get_value(rows), key, ctx.get_f64(sort_dir)));
+        ctx.set<opaque>(rows, sorted_rows(ctx.get<opaque>(rows), key, ctx.get<f64>(sort_dir)));
         let mut on: u64 = 0;
         if (key == "moons") {
             on = 1;
@@ -268,7 +268,7 @@ fn str_less(a: str, b: str) -> bool {
 // name column is emphasized (boa's `Cell(row.name, true)`).
 fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> opaque {
     let read = MutationCtx.over(ctx_bridge());
-    let item = value_item(read.get_value(rows), row);
+    let item = value_item(read.get<opaque>(rows), row);
     let text = slot(item, col);
     let mut fg: u64 = CELL_FG;
     if (col == 0) {
@@ -323,8 +323,8 @@ async fn loader(ctx: TaskCtx, rows: Readable<opaque>, loaded: Readable<bool>,
                 count: Readable<f64>, sort_key: Readable<str>, sort_dir: Readable<f64>) -> str {
     await sleep(300);
     let raw = fake_rows();
-    ctx.set_value(rows, sorted_rows(raw, ctx.get_str(sort_key), ctx.get_f64(sort_dir)));
-    ctx.set_f64(count, value_len(raw) as f64);
-    ctx.set_bool(loaded, true);
+    ctx.set<opaque>(rows, sorted_rows(raw, ctx.get<str>(sort_key), ctx.get<f64>(sort_dir)));
+    ctx.set<f64>(count, value_len(raw) as f64);
+    ctx.set<bool>(loaded, true);
     return "";
 }

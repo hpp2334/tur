@@ -37,7 +37,7 @@ use tur::{
     MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, anim_forward, anim_reverse, ctx_bridge, mount,
 };
 use tur_kit::{
-    Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent,
+    Condition, Container, DeriveCtx, MouseRegion, Handler, MutationCtx, PointerEvent,
     PointerInteract, Positioned, Readable, Row, SizedBox, Stack, Text, derive_str, mutate,
     mutate_f64, source_bool, source_f64, source_str,
 };
@@ -98,26 +98,26 @@ let LIFT_MAX: f64 = 1.1;
 // ---- the per-piece state (arrays of sources in one bundle) ---------------------
 
 struct Pieces {
-    px: [Readable<f64>]; // left anchors (the drag rail)
-    py: [Readable<f64>]; // top anchors
-    sl: [Readable<f64>]; // target slots (the snap math reads them)
-    br: [Readable<f64>]; // fill brushes (bright on deal, dim when placed)
-    lb: [Readable<str>]; // labels (re-set by deal)
-    ok: [Readable<bool>]; // placed flags
-    sc: [Readable<f64>]; // shadow colors (the state shadow)
-    sb: [Readable<f64>]; // shadow blurs
-    sd: [Readable<f64>]; // shadow dys
-    sx: [Readable<f64>]; // lift scales
-    drag: Readable<f64>; // the dragged piece (-1 = none)
-    last: Readable<f64>; // the just-released piece (the settle keeps animating it)
-    gx0: Readable<f64>; // grab point (global)
-    gy0: Readable<f64>;
-    x0: Readable<f64>; // the piece's position at grab
-    y0: Readable<f64>;
+    px: [SourceF64]; // left anchors (the drag rail)
+    py: [SourceF64]; // top anchors
+    sl: [SourceF64]; // target slots (the snap math reads them)
+    br: [SourceF64]; // fill brushes (bright on deal, dim when placed)
+    lb: [SourceStr]; // labels (re-set by deal)
+    ok: [SourceBool]; // placed flags
+    sc: [SourceF64]; // shadow colors (the state shadow)
+    sb: [SourceF64]; // shadow blurs
+    sd: [SourceF64]; // shadow dys
+    sx: [SourceF64]; // lift scales
+    drag: SourceF64; // the dragged piece (-1 = none)
+    last: SourceF64; // the just-released piece (the settle keeps animating it)
+    gx0: SourceF64; // grab point (global)
+    gy0: SourceF64;
+    x0: SourceF64; // the piece's position at grab
+    y0: SourceF64;
 }
 
 // Nine fresh f64 sources (the per-piece channel mint).
-fn m9() -> [Readable<f64>] {
+fn m9() -> [SourceF64] {
     return [
         source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
         source_f64(0.0), source_f64(0.0), source_f64(0.0), source_f64(0.0),
@@ -159,13 +159,13 @@ entry fn start() -> u64 {
     // just-released piece's bound scale source.
     let a_lift_tick = mutate_f64(fn (ctx: MutationCtx, v: f64) {
         let scale: f64 = 1.0 + v * (LIFT_MAX - 1.0);
-        let d = ctx.get_f64(p.drag);
-        let l = ctx.get_f64(p.last);
+        let d = ctx.get<f64>(p.drag);
+        let l = ctx.get<f64>(p.last);
         if (d >= 0.0) {
-            ctx.set_f64(p.sx[d as i32], scale);
+            ctx.set<f64>(p.sx[d as i32], scale);
         }
         if (l >= 0.0 && l != d) {
-            ctx.set_f64(p.sx[l as i32], scale);
+            ctx.set<f64>(p.sx[l as i32], scale);
         }
     });
     let a_lift_end = mutate(fn (ctx: MutationCtx) {
@@ -174,10 +174,10 @@ entry fn start() -> u64 {
         // Boa's dragScale$ stays at LIFT_MAX for the whole grab: the
         // forward ease completing mid-drag must not drop the piece back
         // while the pointer is still down (the release settles it).
-        if (ctx.get_f64(p.drag) < 0.0) {
-            let l = ctx.get_f64(p.last);
+        if (ctx.get<f64>(p.drag) < 0.0) {
+            let l = ctx.get<f64>(p.last);
             if (l >= 0.0) {
-                ctx.set_f64(p.sx[l as i32], 1.0);
+                ctx.set<f64>(p.sx[l as i32], 1.0);
             }
         }
     });
@@ -256,31 +256,31 @@ fn deal(ctx: MutationCtx, p: Pieces, count: Readable<f64>, solved: Readable<bool
     let mut b: u64 = 0;
     while (b < 9) {
         let s = deck[b as i32] as u64;
-        ctx.set_f64(p.sl[b as i32], s as f64);
-        ctx.set_str(p.lb[b as i32], fmt_slot(s as f64));
+        ctx.set<f64>(p.sl[b as i32], s as f64);
+        ctx.set<str>(p.lb[b as i32], fmt_slot(s as f64));
         ctx.set_brush(p.br[b as i32], bright(s));
-        ctx.set_f64(p.px[b as i32], tray_x(b));
-        ctx.set_f64(p.py[b as i32], tray_y(b));
-        ctx.set_bool(p.ok[b as i32], false);
+        ctx.set<f64>(p.px[b as i32], tray_x(b));
+        ctx.set<f64>(p.py[b as i32], tray_y(b));
+        ctx.set<bool>(p.ok[b as i32], false);
         // The state shadow resets to loose; the lift scale to 1.
         ctx.set_brush(p.sc[b as i32], SHADOW_LOOSE);
-        ctx.set_f64(p.sb[b as i32], 10.0);
-        ctx.set_f64(p.sd[b as i32], 4.0);
-        ctx.set_f64(p.sx[b as i32], 1.0);
+        ctx.set<f64>(p.sb[b as i32], 10.0);
+        ctx.set<f64>(p.sd[b as i32], 4.0);
+        ctx.set<f64>(p.sx[b as i32], 1.0);
         b = b + 1;
     }
-    ctx.set_f64(count, 0.0);
-    ctx.set_bool(solved, false);
-    ctx.set_f64(p.drag, -1.0);
-    ctx.set_f64(p.last, -1.0);
+    ctx.set<f64>(count, 0.0);
+    ctx.set<bool>(solved, false);
+    ctx.set<f64>(p.drag, -1.0);
+    ctx.set<f64>(p.last, -1.0);
 }
 
 // Park-Miller in f64 (48271 × 2^31 < 2^53 — exact). Fixed boot seed: deals
 // are deterministic per session, shuffles advance the state.
 fn rnd(ctx: MutationCtx, seed: Readable<f64>) -> f64 {
-    let s = ctx.get_f64(seed);
+    let s = ctx.get<f64>(seed);
     let n = (s * 48271.0) % 2147483647.0;
-    ctx.set_f64(seed, n);
+    ctx.set<f64>(seed, n);
     return n;
 }
 
@@ -357,64 +357,64 @@ fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: 
     // previous settle (parking that piece at rest), then the lift runs and
     // the shadow hardens.
     let b_down = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        if (ctx.get_bool(p.ok[i as i32])) {
+        if (ctx.get<bool>(p.ok[i as i32])) {
             return;
         }
-        let prev = ctx.get_f64(p.last);
+        let prev = ctx.get<f64>(p.last);
         if (prev >= 0.0 && prev != i as f64) {
-            ctx.set_f64(p.sx[prev as i32], 1.0);
+            ctx.set<f64>(p.sx[prev as i32], 1.0);
         }
-        ctx.set_f64(p.drag, i as f64);
-        ctx.set_f64(p.last, i as f64);
-        ctx.set_f64(p.gx0, ev.global.x);
-        ctx.set_f64(p.gy0, ev.global.y);
-        ctx.set_f64(p.x0, ctx.get_f64(p.px[i as i32]));
-        ctx.set_f64(p.y0, ctx.get_f64(p.py[i as i32]));
+        ctx.set<f64>(p.drag, i as f64);
+        ctx.set<f64>(p.last, i as f64);
+        ctx.set<f64>(p.gx0, ev.global.x);
+        ctx.set<f64>(p.gy0, ev.global.y);
+        ctx.set<f64>(p.x0, ctx.get<f64>(p.px[i as i32]));
+        ctx.set<f64>(p.y0, ctx.get<f64>(p.py[i as i32]));
         anim_forward(lift);
         ctx.set_brush(p.sc[i as i32], SHADOW_DRAG);
-        ctx.set_f64(p.sb[i as i32], 28.0);
-        ctx.set_f64(p.sd[i as i32], 12.0);
+        ctx.set<f64>(p.sb[i as i32], 28.0);
+        ctx.set<f64>(p.sd[i as i32], 12.0);
     });
     // Follow: frame-formulated from the grab anchor (absolute — no drift).
     let b_move = mutate_ev(fn (ctx: MutationCtx, ev: PointerEvent) {
-        if (ctx.get_f64(p.drag) != i as f64) {
+        if (ctx.get<f64>(p.drag) != i as f64) {
             return;
         }
-        ctx.set_f64(p.px[i as i32], ctx.get_f64(p.x0) + (ev.global.x - ctx.get_f64(p.gx0)));
-        ctx.set_f64(p.py[i as i32], ctx.get_f64(p.y0) + (ev.global.y - ctx.get_f64(p.gy0)));
+        ctx.set<f64>(p.px[i as i32], ctx.get<f64>(p.x0) + (ev.global.x - ctx.get<f64>(p.gx0)));
+        ctx.set<f64>(p.py[i as i32], ctx.get<f64>(p.y0) + (ev.global.y - ctx.get<f64>(p.gy0)));
     });
     // Release: within SNAP_T² of the target the piece snaps + locks (dim
     // fill, own-hue glow, counted, maybe solved); otherwise it settles
     // back to the loose shadow where it was dropped.
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        if (ctx.get_f64(p.drag) != i as f64) {
+        if (ctx.get<f64>(p.drag) != i as f64) {
             return;
         }
-        ctx.set_f64(p.drag, -1.0);
-        let nx = ctx.get_f64(p.px[i as i32]);
-        let ny = ctx.get_f64(p.py[i as i32]);
-        let s = ctx.get_f64(p.sl[i as i32]) as u64;
+        ctx.set<f64>(p.drag, -1.0);
+        let nx = ctx.get<f64>(p.px[i as i32]);
+        let ny = ctx.get<f64>(p.py[i as i32]);
+        let s = ctx.get<f64>(p.sl[i as i32]) as u64;
         let tx = slot_x(s);
         let ty = slot_y(s);
         let d2 = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
         if (d2 >= SNAP_T2) {
             ctx.set_brush(p.sc[i as i32], SHADOW_LOOSE);
-            ctx.set_f64(p.sb[i as i32], 10.0);
-            ctx.set_f64(p.sd[i as i32], 4.0);
+            ctx.set<f64>(p.sb[i as i32], 10.0);
+            ctx.set<f64>(p.sd[i as i32], 4.0);
             anim_reverse(lift);
             return; // the piece stays where it was dropped
         }
-        ctx.set_f64(p.px[i as i32], tx);
-        ctx.set_f64(p.py[i as i32], ty);
-        ctx.set_bool(p.ok[i as i32], true);
+        ctx.set<f64>(p.px[i as i32], tx);
+        ctx.set<f64>(p.py[i as i32], ty);
+        ctx.set<bool>(p.ok[i as i32], true);
         ctx.set_brush(p.br[i as i32], dim(s));
         ctx.set_brush(p.sc[i as i32], glow(s));
-        ctx.set_f64(p.sb[i as i32], 18.0);
-        ctx.set_f64(p.sd[i as i32], 4.0);
-        let c = ctx.get_f64(count) + 1.0;
-        ctx.set_f64(count, c);
+        ctx.set<f64>(p.sb[i as i32], 18.0);
+        ctx.set<f64>(p.sd[i as i32], 4.0);
+        let c = ctx.get<f64>(count) + 1.0;
+        ctx.set<f64>(count, c);
         if (c >= 9.0) {
-            ctx.set_bool(solved, true);
+            ctx.set<bool>(solved, true);
         }
         anim_reverse(lift);
     });
@@ -528,9 +528,9 @@ fn tray_bg() -> View {
 
 // The top bar: the Shuffle pill (its mutation re-deals) + the badge (the
 // derive over the count source).
-fn top_bar(b_shuffle: Mutation<nil, nil>, count: Readable<f64>) -> View {
+fn top_bar(b_shuffle: Handler<nil>, count: Readable<f64>) -> View {
     let badge: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        let n = ctx.get_f64(count) as u64;
+        let n = ctx.get<f64>(count) as u64;
         return f"{n} / 9 placed";
     });
     let pill = Container()

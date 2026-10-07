@@ -3,7 +3,7 @@
 // by the drag mutations (opaques are just values — no stash); the last
 // gesture phase renders into the `last-event` Text.
 use tur::{ anim_forward, anim_reverse, ctx_bridge, mount };
-use tur_kit::{ Column, Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text,
+use tur_kit::{ SourceStr,  SourceF64,  Column, Container, MutationCtx, PointerEvent, PointerInteract, Readable, Text,
     mutate, mutate_ev, source_str };
 use tur_anim_kit::{ anim_ctrl };
 
@@ -17,14 +17,14 @@ entry fn start() -> u64 {
 
     let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_forward(ctrl);
-        ctx.set_str(phase, "down");
+        ctx.set<str>(phase, "down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(phase, "move");
+        ctx.set<str>(phase, "move");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
         anim_reverse(ctrl);
-        ctx.set_str(phase, "up");
+        ctx.set<str>(phase, "up");
     });
 
     let b = Container()
@@ -42,6 +42,6 @@ entry fn start() -> u64 {
 // The `__resetDrag` seam (the lift keeps settling; only the transcript
 // clears). The atom id rides the entry arg.
 entry fn reset(atom: u64, _b: f64) {
-    let phase = Readable<str>.of(ctx_bridge(), atom);
-    MutationCtx.over(ctx_bridge()).set_str(phase, "");
+    let phase = SourceStr.of(ctx_bridge(), atom, false);
+    MutationCtx.over(ctx_bridge()).set<str>(phase, "");
 }

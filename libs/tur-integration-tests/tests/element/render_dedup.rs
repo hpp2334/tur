@@ -42,7 +42,7 @@ fn identical_frames_render_once() {
     app.load_rut_module(
         r#"
 use tur::{ mount };
-use tur_kit::{ Container };
+use tur_kit::{ SourceF64,  Container };
 
 
 entry fn start() {
@@ -103,9 +103,9 @@ entry fn do_set(color: u64, v: f64) {
     // repaints unpainted (the batch differs either way).
     let write = MutationCtx.over(ctx_bridge());
     if (v == 0.0) {
-        write.set_brush(Readable<f64>.of(ctx_bridge(), color), 0);
+        write.set_brush(SourceF64.of(ctx_bridge(), color, false), 0);
     } else {
-        write.set_brush(Readable<f64>.of(ctx_bridge(), color), 0x00FF00FFu64);
+        write.set_brush(SourceF64.of(ctx_bridge(), color, false), 0x00FF00FFu64);
     }
 }
 "#,

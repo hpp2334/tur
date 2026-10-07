@@ -13,15 +13,15 @@ entry fn start() -> u64 {
     let phase: Readable<str> = source_str("");
 
     let b_down = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_f64(n, ctx.get_f64(n) + 1.0);
-        ctx.set_str(count, f"{ctx.get_f64(n) as u64}");
-        ctx.set_str(phase, "down");
+        ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
+        ctx.set<str>(count, f"{ctx.get<f64>(n) as u64}");
+        ctx.set<str>(phase, "down");
     });
     let b_move = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(phase, "move");
+        ctx.set<str>(phase, "move");
     });
     let b_up = mutate_ev(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set_str(phase, "up");
+        ctx.set<str>(phase, "up");
     });
 
     let mut stack = Stack()
