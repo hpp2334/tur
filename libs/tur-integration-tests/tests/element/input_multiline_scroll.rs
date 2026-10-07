@@ -78,7 +78,11 @@ fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
 
     let tree = app.element_tree();
     let root_snap = tree.root_element().unwrap();
-    assert_eq!(root_snap.children.len(), 1, "root hosts the Input container");
+    assert_eq!(
+        root_snap.children.len(),
+        1,
+        "root hosts the Input container"
+    );
     let container = ElementNodeId::new(root_snap.children[0].as_u64());
     let container_snap = tree.get_element(container).unwrap();
     assert_eq!(
@@ -88,7 +92,10 @@ fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
     );
     let ed = ElementNodeId::new(container_snap.children[0].as_u64());
     app.with_element(ed, |e| {
-        assert!(e.cast::<EditableTextElement>().is_some(), "child is the editable");
+        assert!(
+            e.cast::<EditableTextElement>().is_some(),
+            "child is the editable"
+        );
     })
     .unwrap();
     (app, ed)
@@ -103,8 +110,16 @@ fn wheel_advances_multiline_scroll() {
 
     app.with_element(ed, |e| {
         let ed = e.cast::<EditableTextElement>().unwrap();
-        assert!(ed.max_scroll_y() > 300.0, "fixture must overflow: max_scroll_y = {}", ed.max_scroll_y());
-        assert!((ed.scroll_y() - 40.0).abs() < 0.001, "scroll_y = {}", ed.scroll_y());
+        assert!(
+            ed.max_scroll_y() > 300.0,
+            "fixture must overflow: max_scroll_y = {}",
+            ed.max_scroll_y()
+        );
+        assert!(
+            (ed.scroll_y() - 40.0).abs() < 0.001,
+            "scroll_y = {}",
+            ed.scroll_y()
+        );
     })
     .unwrap();
 }
@@ -179,7 +194,11 @@ fn arrow_down_reveals_the_caret_past_the_fold() {
     app.with_element(ed, |e| {
         let ed = e.cast::<EditableTextElement>().unwrap();
         let max = ed.max_scroll_y();
-        assert!(ed.scroll_y() > 300.0, "caret reveal scrolled to {}", ed.scroll_y());
+        assert!(
+            ed.scroll_y() > 300.0,
+            "caret reveal scrolled to {}",
+            ed.scroll_y()
+        );
         assert!(ed.scroll_y() <= max);
     })
     .unwrap();

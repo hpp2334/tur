@@ -345,13 +345,25 @@ fn jigsaw_target(app: &TurTestApp, piece: u64) -> u64 {
 fn jigsaw_shadow(
     app: &TurTestApp,
     piece: u64,
-) -> (Option<tur_engine::core::render::brush::Color>, Option<f64>, Option<f64>) {
+) -> (
+    Option<tur_engine::core::render::brush::Color>,
+    Option<f64>,
+    Option<f64>,
+) {
     let id = tur_engine::core::element::ElementNodeId::new(
-        app.query_element(&["jw", &format!("piece-{piece}")]).unwrap().as_u64(),
+        app.query_element(&["jw", &format!("piece-{piece}")])
+            .unwrap()
+            .as_u64(),
     );
     app.with_element(id, |e| {
-        let c = e.cast::<tur_engine::builtin_plugins::layout::ContainerElement>().unwrap();
-        (c.painted_shadow_color(), c.painted_shadow_blur(), c.painted_shadow_dy())
+        let c = e
+            .cast::<tur_engine::builtin_plugins::layout::ContainerElement>()
+            .unwrap();
+        (
+            c.painted_shadow_color(),
+            c.painted_shadow_blur(),
+            c.painted_shadow_dy(),
+        )
     })
     .unwrap()
 }
@@ -359,7 +371,9 @@ fn jigsaw_shadow(
 // The piece lift scale — the Transform wrapping the pad (the pad's parent).
 fn jigsaw_lift(app: &TurTestApp, piece: u64) -> f64 {
     let pad = tur_engine::core::element::ElementNodeId::new(
-        app.query_element(&["jw", &format!("pad-{piece}")]).unwrap().as_u64(),
+        app.query_element(&["jw", &format!("pad-{piece}")])
+            .unwrap()
+            .as_u64(),
     );
     let xf = {
         let tree = app.element_tree();
@@ -410,12 +424,23 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
 
     // Boot: counter seeds at 0, 9 pieces + 9 ghosts, piece 0 at rest — the
     // loose soft shadow, scale 1.
-    assert_eq!(label(&app, &["jw", "counter"]), "0 / 9 placed", "seed count");
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "0 / 9 placed",
+        "seed count"
+    );
     let (sc, sb, sd) = jigsaw_shadow(&app, 0);
-    assert_eq!(sc, Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0x6E)), "loose shadow color");
+    assert_eq!(
+        sc,
+        Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0x6E)),
+        "loose shadow color"
+    );
     assert_eq!(sb, Some(10.0), "loose shadow blur");
     assert_eq!(sd, Some(4.0), "loose shadow dy");
-    assert!((jigsaw_lift(&app, 0) - 1.0).abs() < 0.001, "at rest scale 1");
+    assert!(
+        (jigsaw_lift(&app, 0) - 1.0).abs() < 0.001,
+        "at rest scale 1"
+    );
 
     // WRONG slot: the piece follows the drag, nothing snaps, nothing counts.
     let target0 = jigsaw_target(&app, 0);
@@ -443,7 +468,11 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     app.pointer_move(to.0 + 10.0, to.1 + 10.0);
     app.wait_for_timeout(Duration::from_millis(16));
     let (sc, sb, sd) = jigsaw_shadow(&app, 0);
-    assert_eq!(sc, Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0xB4)), "dragging shadow color");
+    assert_eq!(
+        sc,
+        Some(tur_engine::core::render::brush::Color::rgba(0, 0, 0, 0xB4)),
+        "dragging shadow color"
+    );
     assert_eq!(sb, Some(28.0), "dragging shadow blur");
     assert_eq!(sd, Some(12.0), "dragging shadow dy");
     assert!(
@@ -456,11 +485,20 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     // The 180ms settle rides the virtual clock.
     app.wait_for_timeout(Duration::from_millis(300));
 
-    assert_eq!(label(&app, &["jw", "counter"]), "1 / 9 placed", "snap counts");
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "1 / 9 placed",
+        "snap counts"
+    );
     let (sc, sb, sd) = jigsaw_shadow(&app, 0);
-    let glow = [0xD14747, 0xD1B347, 0x83D147, 0x47D178, 0x47BFD1, 0x4753D1, 0xA847D1, 0xD1478F, 0xD16C47][target0 as usize];
+    let glow = [
+        0xD14747, 0xD1B347, 0x83D147, 0x47D178, 0x47BFD1, 0x4753D1, 0xA847D1, 0xD1478F, 0xD16C47,
+    ][target0 as usize];
     let want = tur_engine::core::render::brush::Color::rgba(
-        (glow >> 16) as u8, (glow >> 8) as u8, glow as u8, 0x8C,
+        (glow >> 16) as u8,
+        (glow >> 8) as u8,
+        glow as u8,
+        0x8C,
     );
     assert_eq!(sc, Some(want), "placed pieces glow their own hue");
     assert_eq!(sb, Some(18.0), "placed glow blur");
@@ -502,7 +540,11 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     let (sx, sy) = center(&app, &["jw", "shuffle"]);
     app.click(sx, sy);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(label(&app, &["jw", "counter"]), "0 / 9 placed", "shuffle resets");
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "0 / 9 placed",
+        "shuffle resets"
+    );
     assert!(
         app.query_element(&["jw", "snap-hl"]).is_none(),
         "no highlight after shuffle"
@@ -518,18 +560,29 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     let from0b = center(&app, &["jw", "piece-0"]);
     let to0b = center(&app, &["jw", &format!("ghost-{target0b}")]);
     mouse_drag(&mut app, from0b, to0b, 6);
-    assert_eq!(label(&app, &["jw", "counter"]), "1 / 9 placed", "replay counts");
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "1 / 9 placed",
+        "replay counts"
+    );
 
     // …and solving the board flips the Solved! banner on at 9 / 9 (a
     // full-viewer end screen — it covers Shuffle, so the game rests there).
-    assert!(app.query_element(&["jw", "banner"]).is_none(), "no banner yet");
+    assert!(
+        app.query_element(&["jw", "banner"]).is_none(),
+        "no banner yet"
+    );
     for p in 1..9 {
         let t = jigsaw_target(&app, p);
         let from = center(&app, &["jw", &format!("piece-{p}")]);
         let to = center(&app, &["jw", &format!("ghost-{t}")]);
         mouse_drag(&mut app, from, to, 6);
     }
-    assert_eq!(label(&app, &["jw", "counter"]), "9 / 9 placed", "solved count");
+    assert_eq!(
+        label(&app, &["jw", "counter"]),
+        "9 / 9 placed",
+        "solved count"
+    );
     assert!(
         app.query_element(&["jw", "banner"]).is_some(),
         "the Solved! banner shows at 9 / 9"
@@ -541,13 +594,11 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
     // the top-left (the round-5 audit's resolved-state MAJOR).
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let stack_id =
-        tur_engine::core::element::ElementNodeId::new(root.children[0].as_u64());
+    let stack_id = tur_engine::core::element::ElementNodeId::new(root.children[0].as_u64());
     let stack = tree.get_element(stack_id).unwrap();
     assert_eq!(stack.kind().unwrap(), ElementKind::new("tur_stack"));
-    let win_id = tur_engine::core::element::ElementNodeId::new(
-        (*stack.children.last().unwrap()).as_u64(),
-    );
+    let win_id =
+        tur_engine::core::element::ElementNodeId::new((*stack.children.last().unwrap()).as_u64());
     let win = tree.get_element(win_id).unwrap();
     assert_eq!(
         win.kind().unwrap(),
@@ -555,21 +606,41 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
         "the win overlay is the stack's last child"
     );
     let (vw, vh) = (400.0, 600.0);
-    assert_eq!(win.computed_layout.size.width, vw, "the overlay fills the width");
-    assert_eq!(win.computed_layout.size.height, vh, "the overlay fills the height");
-    assert_eq!(win.computed_layout.offset.x, 0.0, "anchored at the origin x");
-    assert_eq!(win.computed_layout.offset.y, 0.0, "anchored at the origin y");
+    assert_eq!(
+        win.computed_layout.size.width, vw,
+        "the overlay fills the width"
+    );
+    assert_eq!(
+        win.computed_layout.size.height, vh,
+        "the overlay fills the height"
+    );
+    assert_eq!(
+        win.computed_layout.offset.x, 0.0,
+        "anchored at the origin x"
+    );
+    assert_eq!(
+        win.computed_layout.offset.y, 0.0,
+        "anchored at the origin y"
+    );
     // The scrim (the banner card's parent Container) fills too…
     let banner_id = app.query_element(&["jw", "banner"]).unwrap();
     let banner = tree
-        .get_element(tur_engine::core::element::ElementNodeId::new(banner_id.as_u64()))
+        .get_element(tur_engine::core::element::ElementNodeId::new(
+            banner_id.as_u64(),
+        ))
         .unwrap();
     let scrim_id = tur_engine::core::element::ElementNodeId::new(
         banner.parent.expect("the banner's scrim parent").as_u64(),
     );
     let scrim = tree.get_element(scrim_id).unwrap();
-    assert_eq!(scrim.computed_layout.size.width, vw, "the scrim fills the width");
-    assert_eq!(scrim.computed_layout.size.height, vh, "the scrim fills the height");
+    assert_eq!(
+        scrim.computed_layout.size.width, vw,
+        "the scrim fills the width"
+    );
+    assert_eq!(
+        scrim.computed_layout.size.height, vh,
+        "the scrim fills the height"
+    );
     // …and the banner card sits centered in the viewer.
     let b = center(&app, &["jw", "banner"]);
     assert!(
@@ -579,4 +650,3 @@ fn jigsaw_game_drags_snaps_counts_and_solves() {
         vh / 2.0
     );
 }
-

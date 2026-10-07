@@ -264,7 +264,8 @@ fn radius_bound_resolves_through_the_live_atom() {
 
     // The atom swap re-resolves the radius through layout (the subscribe
     // → relayout rail; painting carries the reactive value).
-    app.call_rut_entry("probe_r", app.rut_start_answer(), 20.0).unwrap();
+    app.call_rut_entry("probe_r", app.rut_start_answer(), 20.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(box_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();

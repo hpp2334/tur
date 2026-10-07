@@ -25,18 +25,14 @@ impl FontLoader for BundledWasmFonts {
         let default: &[u8] = include_bytes!("../../../tur-wasm/fonts/Roboto-VF.ttf");
         let mono: &[u8] = include_bytes!("../../../tur-wasm/fonts/RobotoMono-VF.ttf");
 
-        let families = fcx
-            .collection
-            .register_fonts(default.to_vec().into(), None);
+        let families = fcx.collection.register_fonts(default.to_vec().into(), None);
         let roboto_ids: Vec<_> = families.into_iter().map(|(id, _)| id).collect();
         fcx.collection
             .set_generic_families(GenericFamily::SansSerif, roboto_ids.iter().copied());
         fcx.collection
             .set_generic_families(GenericFamily::Serif, roboto_ids.iter().copied());
 
-        let mono_families = fcx
-            .collection
-            .register_fonts(mono.to_vec().into(), None);
+        let mono_families = fcx.collection.register_fonts(mono.to_vec().into(), None);
         let mono_ids: Vec<_> = mono_families.into_iter().map(|(id, _)| id).collect();
         fcx.collection
             .set_generic_families(GenericFamily::Monospace, mono_ids.iter().copied());
@@ -108,7 +104,8 @@ fn status_bar_command_glyph_shapes_non_tofu() {
 #[test]
 fn platform_symbol_set_shapes_non_tofu() {
     let mut mgr = wasm_font_stack();
-    let symbols = "\u{2318}\u{2190}\u{2191}\u{2192}\u{2193}\u{21E5}\u{21E7}\u{2325}\u{232B}\u{23CE}";
+    let symbols =
+        "\u{2318}\u{2190}\u{2191}\u{2192}\u{2193}\u{21E5}\u{21E7}\u{2325}\u{232B}\u{23CE}";
     let ids = shape_glyph_ids(&mut mgr, GenericFamily::SansSerif, symbols);
     assert_eq!(ids.len(), symbols.chars().count());
     let missing: Vec<char> = ids

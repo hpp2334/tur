@@ -93,4 +93,3 @@ impl UndoController {
         self.redo_stack.clear();
     }
 }
-

@@ -119,9 +119,7 @@ fn fills_for(
 )> {
     cmds.iter()
         .filter_map(|c| match c {
-            RenderCommand::Paint {
-                id: pid, ops, ..
-            } if *pid == id => Some(ops),
+            RenderCommand::Paint { id: pid, ops, .. } if *pid == id => Some(ops),
             _ => None,
         })
         .flatten()
@@ -178,9 +176,7 @@ fn stripe_rows_paint_per_parity_from_the_element() {
     let mut app = TurTestApp::new_with_renderer(
         400.0,
         300.0,
-        Box::new(RecordingRenderer {
-            last: last.clone(),
-        }),
+        Box::new(RecordingRenderer { last: last.clone() }),
     )
     .expect("app");
     app.load_rut_module(STRIPE_TABLE_RUT).expect("mount");
@@ -263,10 +259,7 @@ entry fn start() {
                 .width
         })
         .collect();
-    assert_eq!(
-        widths[0], 150.0,
-        "the extent column lays out at its extent"
-    );
+    assert_eq!(widths[0], 150.0, "the extent column lays out at its extent");
     assert!(
         (widths[1] - 250.0 / 3.0).abs() < 0.01,
         "flex 1 column takes its share, got {}",

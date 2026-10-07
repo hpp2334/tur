@@ -200,7 +200,11 @@ fn table_reactive_header_sits_left_aligned_above_rows() {
     let (tx, ty, tw, _) = rect(&app, &["table-reactive"]);
     assert_eq!(hy, ty, "the header band is the table's first row");
     assert_eq!(hx, tx, "the header cell sits flush-left in the table");
-    assert_eq!(hw, tw / 2.0, "the flex-2 header column takes half the width");
+    assert_eq!(
+        hw,
+        tw / 2.0,
+        "the flex-2 header column takes half the width"
+    );
 
     // After the 300ms fake fetch the rows flow in BELOW the header —
     // the header band is never displaced by the loaded body.

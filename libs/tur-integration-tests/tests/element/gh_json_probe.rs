@@ -207,7 +207,8 @@ fn setup() -> TurTestApp {
 #[test]
 fn full_name_extracts_verbatim() {
     let mut app = setup();
-    app.call_rut_entry("probe", app.rut_start_answer(), 0.0).unwrap();
+    app.call_rut_entry("probe", app.rut_start_answer(), 0.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         app.query_text(&["ghj-full"]).as_deref(),

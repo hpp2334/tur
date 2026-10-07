@@ -582,7 +582,11 @@ fn static_transform_path_unchanged() {
         assert_eq!(t.painted_rotate(), 0.7, "the static angle paints verbatim");
         assert_eq!(t.painted_scale(), 1.0, "the static scale paints verbatim");
         let (tx, ty) = t.painted_translate();
-        assert_eq!((tx, ty), (12.0, 0.0), "the static translate paints verbatim");
+        assert_eq!(
+            (tx, ty),
+            (12.0, 0.0),
+            "the static translate paints verbatim"
+        );
     });
 }
 
@@ -657,13 +661,22 @@ fn scale_and_translate_bounds_follow_their_atoms() {
     let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();
-        assert_eq!(t.painted_translate(), (10.0, 20.0), "the atoms' initial offsets");
+        assert_eq!(
+            t.painted_translate(),
+            (10.0, 20.0),
+            "the atoms' initial offsets"
+        );
     });
-    app.call_rut_entry("probe_t", app.rut_start_answer(), 30.0).unwrap();
+    app.call_rut_entry("probe_t", app.rut_start_answer(), 30.0)
+        .unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();
-        assert_eq!(t.painted_translate(), (30.0, 60.0), "translate follows the atoms");
+        assert_eq!(
+            t.painted_translate(),
+            (30.0, 60.0),
+            "translate follows the atoms"
+        );
     });
 }
 

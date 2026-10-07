@@ -318,7 +318,9 @@ entry fn start() -> u64 {
         }
         let child = found.expect("cell should be mounted");
         let tree = app.element_tree();
-        let node = tree.get_element(ElementNodeId::new(child.as_u64())).unwrap();
+        let node = tree
+            .get_element(ElementNodeId::new(child.as_u64()))
+            .unwrap();
         (
             node.computed_layout.offset.x,
             node.computed_layout.offset.y,
@@ -340,17 +342,11 @@ entry fn start() -> u64 {
 
     // Cell 1: one cross pitch right (cell + 6px gap).
     let (x1, _, _, _) = cell_of(&app, 1);
-    assert!(
-        (x1 - 101.5).abs() < 0.5,
-        "cell 1 x = 95.5 + 6, got {x1}"
-    );
+    assert!((x1 - 101.5).abs() < 0.5, "cell 1 x = 95.5 + 6, got {x1}");
 
     // Cell 4: one main pitch down (extent + 6px gap).
     let (_, y4, _, _) = cell_of(&app, 4);
-    assert!(
-        (y4 - 66.0).abs() < 0.5,
-        "cell 4 y = 60 + 6, got {y4}"
-    );
+    assert!((y4 - 66.0).abs() < 0.5, "cell 4 y = 60 + 6, got {y4}");
 }
 
 /// Horizontal axis: cross axis = height → 6 rows of cells, scroll along x.

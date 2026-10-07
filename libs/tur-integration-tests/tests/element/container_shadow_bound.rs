@@ -77,7 +77,10 @@ fn setup(source: &str) -> (TurTestApp, tur_engine::core::element::ElementNodeId)
     let root_snap = tree.root_element().unwrap();
     let card = tur_engine::core::element::ElementNodeId::new(root_snap.children[0].as_u64());
     app.with_element(card, |e| {
-        assert!(e.cast::<ContainerElement>().is_some(), "card is a container");
+        assert!(
+            e.cast::<ContainerElement>().is_some(),
+            "card is a container"
+        );
     })
     .unwrap();
     (app, card)
@@ -89,7 +92,12 @@ fn bound_shadow_channels_paint_their_atoms() {
 
     app.with_element(card, |e| {
         let c = e.cast::<ContainerElement>().unwrap();
-        assert_eq!(c.painted_shadow_color(), Some(tur_engine::core::render::brush::Color::rgba(0xFF, 0x00, 0x00, 0xFF)));
+        assert_eq!(
+            c.painted_shadow_color(),
+            Some(tur_engine::core::render::brush::Color::rgba(
+                0xFF, 0x00, 0x00, 0xFF
+            ))
+        );
         assert_eq!(c.painted_shadow_blur(), Some(10.0));
         assert_eq!(c.painted_shadow_dy(), Some(4.0));
     })
@@ -102,13 +110,19 @@ fn shadow_atom_writes_repaint_without_remount() {
 
     let color_atom = app.rut_start_answer();
     app.call_rut_entry("retint", color_atom, 0.0).unwrap();
-    app.call_rut_entry("resteepen", color_atom + 2, 0.0).unwrap(); // the dy channel mints third
+    app.call_rut_entry("resteepen", color_atom + 2, 0.0)
+        .unwrap(); // the dy channel mints third
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // The SAME element id — a rebuild would have minted a new one.
     app.with_element(card, |e| {
         let c = e.cast::<ContainerElement>().unwrap();
-        assert_eq!(c.painted_shadow_color(), Some(tur_engine::core::render::brush::Color::rgba(0x00, 0xFF, 0x00, 0xFF)));
+        assert_eq!(
+            c.painted_shadow_color(),
+            Some(tur_engine::core::render::brush::Color::rgba(
+                0x00, 0xFF, 0x00, 0xFF
+            ))
+        );
         assert_eq!(c.painted_shadow_dy(), Some(12.0));
         assert_eq!(c.painted_shadow_blur(), Some(10.0), "blur atom untouched");
     })
@@ -122,7 +136,12 @@ fn bound_dy_overrides_the_static_offset_y() {
     app.with_element(card, |e| {
         let c = e.cast::<ContainerElement>().unwrap();
         // Static .shadow() supplies color/blur/dx; the bound dy wins on y.
-        assert_eq!(c.painted_shadow_color(), Some(tur_engine::core::render::brush::Color::rgba(0xAB, 0xCD, 0xEF, 0xFF)));
+        assert_eq!(
+            c.painted_shadow_color(),
+            Some(tur_engine::core::render::brush::Color::rgba(
+                0xAB, 0xCD, 0xEF, 0xFF
+            ))
+        );
         assert_eq!(c.painted_shadow_blur(), Some(24.0));
         assert_eq!(c.painted_shadow_dy(), Some(12.0));
     })
