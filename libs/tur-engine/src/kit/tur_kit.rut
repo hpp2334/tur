@@ -69,7 +69,7 @@ use tur::{
   input_font_size, input_multiline, input_new, input_obscure, input_obscure_bound,
   input_obscure_char,
   input_on_input, input_placeholder, input_placeholder_bound, input_placeholder_color,
-  input_qkey, input_size, input_undo,
+  input_qkey, input_size, input_undo, tctrl_new, tctrl_set_text, tctrl_text, undo_new,
   lazy_axis,
   lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis, lazy_grid_build,
   lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
@@ -94,8 +94,8 @@ use tur::{
   text_bind_derived, text_build, text_clip, text_color, text_ellipsis, text_max_lines, text_new,
   text_overflow_visible, text_qkey, text_selectable, text_size, text_spans, text_text, text_weight,
   va_app_atom, va_bind, va_build,
-  va_controller, va_controller_set, va_new, va_qkey, va_size, va_create_source,
-  va_source_handle,
+  va_controller, va_controller_set, va_destroy, va_error, va_new, va_qkey, va_size,
+  va_create_source, va_source_handle, va_status, va_status_atom,
   // the mutation rail (source / derive / mutate + the ctx rows).
   ctx_bridge, ctx_run_box, ctx_get_box, ctx_set_box, derive_seal, mutate_seal,
   rs_box_stamp, rs_source_box,
@@ -109,7 +109,84 @@ use futures::{ launch_future };
 
 // The user-facing view alias: built views cross kit signatures as `View`
 // (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
+//
+// The vocabulary law: biz signatures spell WHAT a value is — views say
+// `View`, handles say their type — and bare `opaque` stays infra-only
+// (row decls, the dispatch entries, kit internals). `View` and the data
+// handles are transparent aliases; the CONTROLLERS are nominal newtypes
+// (`class X(opaque)` — the compiler-provided `X(v)` is the construction,
+// the `inner` field is private), so a TextCtrl can never be confused
+// with another handle and the rows they wrap surface as METHODS, never
+// as raw row calls in biz code.
 pub type View = opaque;
+
+// A structured store list (`list_new` / `list_push`).
+pub type ListHandle = opaque;
+// A structured store map (`map_new` / `map_set`).
+pub type MapHandle = opaque;
+// A mem cell (`mem_new` / `mem_get` / `mem_set` — the generation-guard rail).
+pub type MemCell = opaque;
+// A virtual-app source (`va_create_source` / `virtual_app_source`).
+pub type VAppSource = opaque;
+
+// The text-input controller (`tctrl_new` / `tctrl_set_text` /
+// `tctrl_text`; `Input.controller`). Mint with `text_ctrl()`.
+pub class TextCtrl(opaque);
+
+impl TextCtrl {
+  // The erase hatch: the one place a controller goes back to a raw
+  // opaque (the `st_*` stash rails are opaque-typed by design).
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn set_text(self, s: str) {
+    tctrl_set_text(self.inner, s);
+  }
+  pub fn text(self) -> str {
+    return tctrl_text(self.inner);
+  }
+}
+
+// Mint the input's text controller.
+pub fn text_ctrl() -> TextCtrl {
+  return TextCtrl(tctrl_new());
+}
+
+// The input undo controller (`undo_new`; `Input.undo`). Mint with
+// `undo_ctrl()`.
+pub class UndoCtrl(opaque);
+
+impl UndoCtrl {
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+}
+
+// Mint the input's undo controller.
+pub fn undo_ctrl() -> UndoCtrl {
+  return UndoCtrl(undo_new());
+}
+
+// A virtual-app controller (`va_controller`; `VirtualAppView.controller`).
+pub class VAppCtrl(opaque);
+
+impl VAppCtrl {
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn status(self) -> str {
+    return va_status(self.inner);
+  }
+  pub fn status_atom(self) -> u64 {
+    return va_status_atom(self.inner);
+  }
+  pub fn error(self) -> str {
+    return va_error(self.inner);
+  }
+  pub fn destroy(self) {
+    va_destroy(self.inner);
+  }
+}
 
 // ---- the infra dispatch entries (the callback rail's fire half) ----------
 //
@@ -1199,12 +1276,12 @@ impl Input {
   [constructor] pub fn builder() -> Self {
     return Self { spec: input_new() };
   }
-  pub fn controller(mut self, c: opaque) -> Self {
-    input_controller(self.spec, c);
+  pub fn controller(mut self, c: TextCtrl) -> Self {
+    input_controller(self.spec, c.raw());
     return self;
   }
-  pub fn undo(mut self, u: opaque) -> Self {
-    input_undo(self.spec, u);
+  pub fn undo(mut self, u: UndoCtrl) -> Self {
+    input_undo(self.spec, u.raw());
     return self;
   }
   pub fn width_height(mut self, w: f64, h: f64) -> Self {
@@ -1788,8 +1865,8 @@ impl VirtualApp {
   [constructor] pub fn builder() -> Self {
     return Self { spec: va_new() };
   }
-  pub fn controller(mut self, c: opaque) -> Self {
-    va_controller_set(self.spec, c);
+  pub fn controller(mut self, c: VAppCtrl) -> Self {
+    va_controller_set(self.spec, c.raw());
     return self;
   }
   pub fn bind(mut self, atom: u64) -> Self {
@@ -1898,19 +1975,19 @@ impl CompositedFollower {
 
 // The structured-value data ops (the list/map builders the case code
 // folds into sources; the STATE writes go through the ctx, never these).
-pub fn list_new() -> opaque {
+pub fn list_new() -> ListHandle {
   return rs_list_new();
 }
 
-pub fn list_push(l: opaque, item: str) {
+pub fn list_push(l: ListHandle, item: str) {
   rs_list_push(l, item);
 }
 
-pub fn map_new() -> opaque {
+pub fn map_new() -> MapHandle {
   return rs_map_new();
 }
 
-pub fn map_set(m: opaque, key: str, value: str) {
+pub fn map_set(m: MapHandle, key: str, value: str) {
   rs_map_set(m, key, value);
 }
 
@@ -1945,14 +2022,14 @@ pub fn image_resource_solid(w: u64, h: u64, packed: u64) -> u64 {
 
 // Register a string-authored child module source with the virtual-app
 // subsystem — the `createModuleSource` twin.
-pub fn virtual_app_source(src: str) -> opaque {
+pub fn virtual_app_source(src: str) -> VAppSource {
   return va_create_source(src);
 }
 
 // Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
 // answers) into the source handle — Rust-defined sources enter the realm
 // as plain u64s.
-pub fn virtual_app_source_handle(id: u64) -> opaque {
+pub fn virtual_app_source_handle(id: u64) -> VAppSource {
   return va_source_handle(id);
 }
 
@@ -1964,6 +2041,6 @@ pub fn virtual_app_atom() -> u64 {
 
 // Mint a virtual-app controller from a registered source — the
 // `createVirtualAppController` twin.
-pub fn virtual_app_controller(src: opaque) -> opaque {
-  return va_controller(src);
+pub fn virtual_app_controller(src: VAppSource) -> VAppCtrl {
+  return VAppCtrl(va_controller(src));
 }

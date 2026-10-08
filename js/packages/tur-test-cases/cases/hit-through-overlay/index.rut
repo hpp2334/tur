@@ -54,7 +54,7 @@ entry fn start() -> u64 {
     return down_n.atom_id();
 }
 
-fn box_h(h: f64) -> opaque {
+fn box_h(h: f64) -> View {
     let b = Container().width_height(0.0, h);
     return b.build();
 }

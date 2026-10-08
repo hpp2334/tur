@@ -70,7 +70,7 @@ fn slot(data: str, i: u64) -> str {
 }
 
 // One header cell (called once per column): a padded muted label.
-fn header_cell(col: u64) -> opaque {
+fn header_cell(col: u64) -> View {
     let mut label = "PLANET";
     if (col == 1) {
         label = "NOTES";
@@ -85,7 +85,7 @@ fn header_cell(col: u64) -> opaque {
 
 // One body cell (called per (row, col)): the padded field. The stripes
 // are the element's (`.stripes` above) — cells stay untinted.
-fn planet_cell(row: u64, col: u64) -> opaque {
+fn planet_cell(row: u64, col: u64) -> View {
     let mut text = "";
     if (col == 0) {
         text = slot(P_NAME, row);

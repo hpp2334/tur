@@ -27,7 +27,7 @@ entry fn start() {
 }
 
 // The aspect-2 grid: 10 hue cells labeled #i.
-fn aspect_grid() -> opaque {
+fn aspect_grid() -> View {
     let mut grid = Grid().max_cross(160.0).aspect(2.0).spacing(6.0, 6.0).query_key("grid-aspect");
     let mut i: u64 = 0;
     while (i < 10) {
@@ -42,7 +42,7 @@ fn aspect_grid() -> opaque {
 
 // The fixed-extent grid: main_extent pins each row at 40px tall
 // (overriding the aspect), same 10-cell ramp.
-fn extent_grid() -> opaque {
+fn extent_grid() -> View {
     let mut grid = Grid().max_cross(160.0).main_extent(40.0).spacing(6.0, 6.0).query_key("grid-aspect-extent");
     let mut i: u64 = 0;
     while (i < 10) {

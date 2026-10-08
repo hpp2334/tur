@@ -93,8 +93,8 @@ pub fn static_tree(frames: usize) {
     app.load_rut_module(
         r##"
 use tur::{ mount, rs_get_f64, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container, Row };
-use tur_kit::{ rs_derive };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Row };
+use tur_kit::{ TextCtrl, UndoCtrl, rs_derive };
 
 
 fn label(v: f64) -> str {
@@ -141,7 +141,7 @@ pub fn scrolled_list(frames: usize) {
     app.load_rut_module(
         r##"
 use tur::{ AXIS_VERTICAL, mount };
-use tur_kit::{ Column, Container, Expanded, ScrollView };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Expanded, ScrollView };
 
 
 entry fn start() {
@@ -204,8 +204,8 @@ pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ anim_forward, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container };
+use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Container };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
 
@@ -224,7 +224,7 @@ entry fn start() -> u64 {
     // u64::MAX repeat = infinite; the onTick rail writes the eased value
     // into the bound opacity atom — every frame differs.
     let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, a_tick, a_end);
-    anim_forward(ctrl);
+    ctrl.forward();
     mount(Opacity(0.0).bound(alpha).child(col.build()).build());
     return alpha;
 }
@@ -278,7 +278,7 @@ pub fn long_editor(frames: usize) {
     app.load_rut_module(
         r##"
 use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span };
-use tur_kit::{ Input, ScrollView };
+use tur_kit::{ TextCtrl, UndoCtrl, Input, ScrollView };
 
 
 entry fn start() {
@@ -289,7 +289,7 @@ entry fn start() {
         i += 1;
     }
 
-    let input = Input().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(100000.0, 10000.0).font_size(14.0).build();
     input.query_key("ed");
     let scroller = ScrollView().axis(AXIS_VERTICAL).initial_offset(0.0).child(input).build();
     scroller.query_key("scroll");

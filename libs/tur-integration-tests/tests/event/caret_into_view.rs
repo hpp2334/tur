@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
 use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Column, Input, ScrollView };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, ScrollView };
 
 
 entry fn start() {
@@ -24,7 +24,7 @@ entry fn start() {
     // The width spans the window (the JS twin's stretched-column geometry):
     // a ScrollView shrink-wraps its cross axis, so without it the whole
     // scroller would hug the longest line and the top-left click misses it.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
     let input = input;
     let col = Column().child(input);
     let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(col.build()).query_key("scroll").build();

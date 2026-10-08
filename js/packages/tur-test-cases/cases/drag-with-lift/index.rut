@@ -2,9 +2,9 @@
 // animation (forward on down, reverse on up). The controller is CAPTURED
 // by the drag mutations (opaques are just values — no stash); the last
 // gesture phase renders into the `last-event` Text.
-use tur::{ anim_forward, anim_reverse, ctx_bridge, mount };
+use tur::{ ctx_bridge, mount };
 use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mutate, source };
-use tur_anim_kit::{ anim_ctrl };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 
 entry fn start() -> u64 {
@@ -15,14 +15,14 @@ entry fn start() -> u64 {
     let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
 
     let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        anim_forward(ctrl);
+        ctrl.forward();
         ctx.set<str>(phase, "down");
     });
     let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(phase, "move");
     });
     let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        anim_reverse(ctrl);
+        ctrl.reverse();
         ctx.set<str>(phase, "up");
     });
 

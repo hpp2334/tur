@@ -149,7 +149,7 @@ entry fn start() -> u64 {
 }
 
 // "tile #0 · 1:1 · maxExtent 150" — three live fragments.
-fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> opaque {
+fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> View {
     return Row()
         .main_axis_size(MAIN_SIZE_MIN)
         .child(Text().text_bound(d_tile).font_size(12.0).color(SUB_FG).query_key("gallery/subtitle").build())
@@ -204,7 +204,7 @@ fn gallery_grid(aspect: f64, max_cross: f64, rings: [Source<u64>], sel: Readable
 // one-slot array param — each call site passes a DISTINCT literal (the
 // capture law: the VM binds a closure's cell per call site, so a loop
 // would point every pad at the last iteration's cell).
-fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> opaque {
+fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
     let i: u64 = ii[0] as u64;
     let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         let prev = ctx.get<f64>(sel) as i32;
@@ -230,7 +230,7 @@ fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> opaque {
 }
 
 // A pill chip: the fill rides its brush source (indigo when active).
-fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> opaque {
+fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
     let face = Container()
         .padding(7.0)
         .radius(7.0)

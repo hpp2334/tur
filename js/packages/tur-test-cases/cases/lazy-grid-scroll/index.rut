@@ -7,7 +7,7 @@ use tur::mount;
 use tur_kit::{ Container, LazyGrid, Source, source };
 
 
-fn cell(i: u64) -> opaque {
+fn cell(i: u64) -> View {
     return Container().color(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0)).build();
 }
 

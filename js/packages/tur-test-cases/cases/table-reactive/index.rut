@@ -95,7 +95,7 @@ entry fn start() -> u64 {
 // the bound label + the painted fill): pointer cursor, tap = sort, the
 // active column highlighted with its direction marker.
 fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
-               taps: [Mutation<nil>]) -> opaque {
+               taps: [Mutation<nil>]) -> View {
     let i: i32 = col as i32;
     return MouseRegion()
         .cursor(CURSOR_POINTER)
@@ -190,7 +190,7 @@ fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_d
 // `key` picks the slot, `dir` the sign. The dataset is the fixed 8-planet
 // payload (the `used` flags ride a fixed array — module arrays are
 // fixed-length in this build).
-fn sorted_rows(data: opaque, key: str, dir: f64) -> opaque {
+fn sorted_rows(data: ListHandle, key: str, dir: f64) -> ListHandle {
     let n = value_len(data);
     let fresh = list_new();
     let mut used: [bool] = [false, false, false, false, false, false, false, false];
@@ -262,9 +262,9 @@ fn str_less(a: str, b: str) -> bool {
 // is read from the SAME sorted list the table iterates — the bridge ctx
 // at build time (the grid_of precedent — builders read live state). The
 // name column is emphasized (boa's `Cell(row.name, true)`).
-fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> opaque {
+fn body_cell(row: u64, col: u64, rows: Readable<ListHandle>) -> View {
     let read = MutationCtx.over(ctx_bridge());
-    let item = value_item(read.get<opaque>(rows), row);
+    let item = value_item(read.get<ListHandle>(rows), row);
     let text = slot(item, col);
     let mut fg: u64 = CELL_FG;
     if (col == 0) {
@@ -300,7 +300,7 @@ fn slot(data: str, i: u64) -> str {
 
 // The boa payload — one "name|moons|gravity" per row (gravity
 // pre-formatted, the `toFixed(1)` twin).
-fn fake_rows() -> opaque {
+fn fake_rows() -> ListHandle {
     let rows = list_new();
     list_push(rows, "Mercury|0|3.7");
     list_push(rows, "Venus|0|8.9");

@@ -4,7 +4,7 @@ use tur::{ mount };
 use tur_kit::{ Container, Positioned, Stack };
 
 
-fn quad(color: u64) -> opaque {
+fn quad(color: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(color);
     return b.build();
 }

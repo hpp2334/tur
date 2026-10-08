@@ -66,13 +66,13 @@ fn text_input_requests_fire_on_editable_focus() {
     app.load_rut_module(
         r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 44.0).query_key("editor").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 44.0).query_key("editor").build();
     mount(input);
 }
 "#,

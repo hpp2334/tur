@@ -85,7 +85,7 @@ entry fn start() -> u64 {
 }
 
 // A titled, content-sized card (the boa `Section`).
-fn section(title: str, kids: [opaque]) -> opaque {
+fn section(title: str, kids: [View]) -> View {
     return Container()
         .padding(14.0)
         .radius(10.0)
@@ -104,7 +104,7 @@ fn section(title: str, kids: [opaque]) -> opaque {
 }
 
 // The size ladder: Aa at 10 / 14 / 20 / 28, baseline-aligned.
-fn size_row() -> [opaque] {
+fn size_row() -> [View] {
     return [
         Row()
             .cross_alignment(CROSS_ALIGN_END)
@@ -121,7 +121,7 @@ fn size_row() -> [opaque] {
 }
 
 // The weight ladder: the fox sentence at 300 / 400 / 700 / 900.
-fn weight_col() -> [opaque] {
+fn weight_col() -> [View] {
     return [
         Text().text(BROWN).font_size(14.0).font_weight(300.0).color(TEXT).build(),
         SizedBox(0.0, 4.0).build(),
@@ -134,7 +134,7 @@ fn weight_col() -> [opaque] {
 }
 
 // The named colors in one row.
-fn color_row() -> [opaque] {
+fn color_row() -> [View] {
     return [
         Row()
             .main_axis_size(MAIN_SIZE_MIN)
@@ -151,7 +151,7 @@ fn color_row() -> [opaque] {
 
 // The span run: per-run size / weight / italic / underline / color
 // (0 = inherit, the span_add law).
-fn spans_line() -> opaque {
+fn spans_line() -> View {
     let run = Spans()
         .add("The ", 0.0, TEXT, 0.0, 0)
         .add("quick ", 0.0, TEXT, 0.0, SPAN_ITALIC)
@@ -166,7 +166,7 @@ fn spans_line() -> opaque {
 
 // One truncation card: the fox sentence clipped to `max_lines` lines at a
 // 100px width under the given overflow mode.
-fn overflow_card(kind: str, max_lines: u64) -> opaque {
+fn overflow_card(kind: str, max_lines: u64) -> View {
     return Container()
         .width(100.0)
         .padding(8.0)
@@ -187,7 +187,7 @@ fn overflow_card(kind: str, max_lines: u64) -> opaque {
 
 // The styled sentence under one overflow mode (branches keep the chain —
 // no statement-mutated builders).
-fn overflow_text(kind: str, max_lines: u64) -> opaque {
+fn overflow_text(kind: str, max_lines: u64) -> View {
     if (kind == "clip") {
         return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).clip().build();
     }
@@ -200,7 +200,7 @@ fn overflow_text(kind: str, max_lines: u64) -> opaque {
 // The three truncation cards, keyed by the mirrored mode string — a
 // maxLines change structurally swaps the row (the prop is static per
 // build).
-fn overflow_cards(mode: Readable<str>) -> opaque {
+fn overflow_cards(mode: Readable<str>) -> View {
     return Switch()
         .value(mode)
         .query_key("overflow-cards")
@@ -210,7 +210,7 @@ fn overflow_cards(mode: Readable<str>) -> opaque {
         .build();
 }
 
-fn cards_row(max_lines: u64) -> opaque {
+fn cards_row(max_lines: u64) -> View {
     return Row()
         .cross_alignment(CROSS_ALIGN_START)
         .main_axis_size(MAIN_SIZE_MIN)
@@ -224,7 +224,7 @@ fn cards_row(max_lines: u64) -> opaque {
 
 // The indigo pill button that cycles maxLines (2 → 1 → 3 → 2); the
 // mutation + the label derive ride by parameter.
-fn cycle_button(b_cycle: Mutation<nil>, btn_label: Readable<str>) -> opaque {
+fn cycle_button(b_cycle: Mutation<nil>, btn_label: Readable<str>) -> View {
     let pill = Container()
         .padding(10.0)
         .radius(8.0)

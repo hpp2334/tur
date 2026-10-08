@@ -100,7 +100,7 @@ entry fn start() {
 
 // A fresh one-item list — rewriting it re-invokes the Each (the grid
 // re-mounts with the live aspect / density read at build time).
-fn one_list() -> opaque {
+fn one_list() -> View {
     let fresh = list_new();
     list_push(fresh, "grid");
     return fresh;
@@ -110,7 +110,7 @@ fn one_list() -> opaque {
 // cells; density narrows the max cross 140 → 85 — more, smaller tiles).
 // The handles ride by parameter; the read face is the ctx over the
 // bridge.
-fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> opaque {
+fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> View {
     let read = MutationCtx.over(ctx_bridge());
     let mut max_cross: f64 = 140.0;
     if (read.get<bool>(dense)) {
@@ -129,7 +129,7 @@ fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -
 // One tile: the rounded hue face (hue = (i*37) % 360 at 52/48) with the
 // index label, inset 2 in its cell (the spacing stand-in — see the header
 // note).
-fn tile(i: u64) -> opaque {
+fn tile(i: u64) -> View {
     let face = Container()
         .color(hsl_packed(((i * 37) % 360) as f64, 52.0, 48.0))
         .radius(6.0)
@@ -141,7 +141,7 @@ fn tile(i: u64) -> opaque {
 // ---- the chips -----------------------------------------------------------------
 
 // A pill chip: the fill rides its brush source (indigo when active).
-fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> opaque {
+fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
     let face = Container()
         .padding(7.0)
         .radius(7.0)

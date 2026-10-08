@@ -14,7 +14,7 @@ entry fn start() {
     mount(sv);
 }
 
-fn sized(w: f64, h: f64) -> opaque {
+fn sized(w: f64, h: f64) -> View {
     let b = Container().width_height(w, h);
     return b.build();
 }

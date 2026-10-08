@@ -39,7 +39,7 @@ use futures::StreamExt;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
 use crate::core::clock::Clock;
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::{
     RenderCommand, RenderCommandBatch, Renderer, fingerprint_batch, referenced_image_ids,
@@ -142,8 +142,7 @@ impl WorkerBackend {
         let inputs = crate::core::rut_runtime::RutRealmInputs {
             clock: self.internal.app_context.borrow().frame_env.clock(),
         };
-        let mut rut =
-            crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
 
         // Apply the root the module's `start` stashed via `tur::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).
@@ -379,14 +378,26 @@ impl WorkerBackend {
         let focused_id = self.focused_element()?;
         let tree = self.internal.instance.element_tree.borrow();
 
+        // Hop fragment ancestors transparently (Switch/Each/Condition hosts
+        // live in the fragment map, carry zero offset, and can't host the
+        // caret) — mirroring every other parent walk. Without the hop the
+        // walk aborts on the first fragment and the caret rect reports
+        // `None` for ANY focused element inside a control-flow subtree
+        // (the playground's editor sits under the layout-mode Switch), so
+        // the embedder's IME anchor never follows the caret.
         let mut abs_x = 0.0f64;
         let mut abs_y = 0.0f64;
         let mut current: Option<NodeId> = Some(focused_id.into());
         while let Some(id) = current {
-            let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
-            abs_x += node.computed_layout.offset.x;
-            abs_y += node.computed_layout.offset.y;
-            current = node.parent;
+            if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+                abs_x += node.computed_layout.offset.x;
+                abs_y += node.computed_layout.offset.y;
+                current = node.parent;
+            } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+                current = Some(frag.parent);
+            } else {
+                break;
+            }
         }
 
         let node = tree.get_element(focused_id)?;
@@ -931,7 +942,9 @@ impl HostBackend {
             // to the parent worker (children) or logged/dropped (root) by
             // the looper.
             HostMsg::RuntimeError { .. } | HostMsg::FocusChanged { .. } => {
-                unreachable!("HostMsg::RuntimeError/FocusChanged are routed by TurAppLooper before apply_msg")
+                unreachable!(
+                    "HostMsg::RuntimeError/FocusChanged are routed by TurAppLooper before apply_msg"
+                )
             }
         }
     }
@@ -1003,7 +1016,6 @@ impl HostBackend {
     pub(crate) async fn rut_start_answer(&self) -> u64 {
         self.rpc(|tx| WorkerMsg::RutStartAnswer { reply: tx }).await
     }
-
 
     /// Count of image resources retained on main (pixel `Blob`s). Test-only
     /// introspection (forwarded on

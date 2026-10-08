@@ -39,7 +39,7 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
 use tur::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, Text, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
 entry fn start() -> u64 {
@@ -47,7 +47,7 @@ entry fn start() -> u64 {
     st_put(7, ctrl);
     let label: Readable<str> = source<str>("");
     let undo = undo_new();
-    let input = Input().controller(ctrl).undo(undo).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
+    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
     let txt = Text().text_bound(label).query_key("child-text").build();
     mount(Column().child(input).child(txt).build());
     return label.atom_id();
@@ -75,13 +75,13 @@ fn parent_module(child_src: &str) -> String {
     format!(
         r#"
 use tur::{{ mount, va_controller, va_create_source }};
-use tur_kit::{{ VirtualApp }};
+use tur_kit::{{ VAppCtrl, VirtualApp }};
 
 
 entry fn start() {{
     let src = va_create_source("{escaped}");
     let ctrl = va_controller(src);
-    let host = VirtualApp().controller(ctrl).width_height(400.0, 200.0).build();
+    let host = VirtualApp().controller(VAppCtrl(ctrl)).width_height(400.0, 200.0).build();
     mount(host);
 }}
 "#
@@ -262,7 +262,7 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 /// host) overflows, keyed for the offset probe.
 const WHEEL_CHILD_SRC: &str = r#"
 use tur::{ AXIS_VERTICAL, mount };
-use tur_kit::{ Column, Container, MutationCtx, Readable, ScrollView, Source, Text, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, MutationCtx, Readable, ScrollView, Source, Text, source };
 
 
 entry fn start() -> u64 {

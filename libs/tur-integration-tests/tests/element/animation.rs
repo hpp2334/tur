@@ -49,9 +49,9 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
-use tur::{ anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, mount, rs_set_str, st_put, st_take };
+use tur::{ mount, rs_set_str, st_put, st_take };
 use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
-use tur_anim_kit::{ anim_ctrl };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 
 let CTRL: u64 = 7;
@@ -71,7 +71,7 @@ entry fn start() -> u64 {
     let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
-    st_put(CTRL, ctrl);
+    st_put(CTRL, ctrl.raw());
 
     let col = Column()
         .child(b.build())
@@ -81,59 +81,59 @@ entry fn start() -> u64 {
 }
 
 entry fn do_forward(_a: u64, _b: f64) {
-    let c = st_take(CTRL);
-    anim_forward(c);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.forward();
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_reverse(_a: u64, _b: f64) {
-    let c = st_take(CTRL);
-    anim_reverse(c);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.reverse();
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_stop(_a: u64, _b: f64) {
-    let c = st_take(CTRL);
-    anim_stop(c);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.stop();
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_pause(_a: u64, _b: f64) {
-    let c = st_take(CTRL);
-    anim_pause(c);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.pause();
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_resume(_a: u64, _b: f64) {
-    let c = st_take(CTRL);
-    anim_resume(c);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.resume();
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_seek(_a: u64, t: f64) {
-    let c = st_take(CTRL);
-    anim_seek(c, t);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.seek(t);
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_repeat(_a: u64, n: f64) {
-    let c = st_take(CTRL);
-    anim_repeat(c, n as u64);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.repeat(n as u64);
+    st_put(CTRL, c.raw());
 }
 
 entry fn do_speed(_a: u64, s: f64) {
-    let c = st_take(CTRL);
-    anim_speed(c, s);
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    c.speed(s);
+    st_put(CTRL, c.raw());
 }
 
 // Report `status|v{value}` into the transcript label (the controller's
 // own raw value — the width binding reads the same tick stream).
 entry fn probe(label: u64, _b: f64) {
-    let c = st_take(CTRL);
-    rs_set_str(label, f"{anim_status(c)}|v{anim_value(c)}");
-    st_put(CTRL, c);
+    let c = AnimCtrl(st_take(CTRL));
+    rs_set_str(label, f"{c.status()}|v{c.value()}");
+    st_put(CTRL, c.raw());
 }
 "#;
 
@@ -481,9 +481,9 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur::{ anim_forward, mount, st_put, st_take };
+use tur::{ mount, st_put, st_take };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
-use tur_anim_kit::{ Transform, anim_ctrl };
+use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 let TAU: f64 = 6.283185307179586;
 let K_CTRL: u64 = 6;
@@ -498,15 +498,15 @@ entry fn start() -> u64 {
     let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
-    st_put(K_CTRL, ctrl);
+    st_put(K_CTRL, ctrl.raw());
     mount(xf);
     return angle.atom_id();
 }
 
 entry fn do_forward(_a: u64, _b: f64) {
-    let c = st_take(K_CTRL);
-    anim_forward(c);
-    st_put(K_CTRL, c);
+    let c = AnimCtrl(st_take(K_CTRL));
+    c.forward();
+    st_put(K_CTRL, c.raw());
 }
 "#;
 

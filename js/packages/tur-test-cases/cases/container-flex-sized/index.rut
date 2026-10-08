@@ -10,7 +10,7 @@ entry fn start() {
 }
 
 // A 100x44 colored pill with a centered 14px label.
-fn qkey_button(key: str, label: str) -> opaque {
+fn qkey_button(key: str, label: str) -> View {
     let b = Container()
         .width_height(100.0, 44.0)
         .color(0x6366F1FFu64)

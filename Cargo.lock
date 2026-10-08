@@ -3412,6 +3412,7 @@ dependencies = [
  "tur-native",
  "tur-net-capability",
  "tur-playground",
+ "vello_common",
  "wgpu",
 ]
 

@@ -624,7 +624,18 @@ impl WasmApp {
                 }
             });
 
-        canvas
+        // Mouse input is wired at the WINDOW level, not the canvas — the
+        // same seam the wheel listener fixed (see the wheel comment below):
+        // the hidden IME `<textarea>` is a 1×1 element that FOLLOWS THE
+        // CARET, so any trusted mouse event whose DOM hit-target is that
+        // pixel (a click exactly on the caret; a drag RELEASED over it)
+        // never reaches a canvas-scoped listener. A lost `mouseup` is the
+        // worst case: the engine's gesture composer stays in drag-capture
+        // and every subsequent mouse MOVE extends the text selection —
+        // clicks then appear unable to place the caret. Events bubble, so
+        // the window listener sees them all; coordinates are still
+        // resolved against the canvas rect.
+        window
             .add_event_listener_with_callback(
                 "mousedown",
                 pointer_down_closure.as_ref().unchecked_ref(),
@@ -651,7 +662,7 @@ impl WasmApp {
                 }
             });
 
-        canvas
+        window
             .add_event_listener_with_callback(
                 "mouseup",
                 pointer_up_closure.as_ref().unchecked_ref(),
@@ -676,7 +687,7 @@ impl WasmApp {
                 }
             });
 
-        canvas
+        window
             .add_event_listener_with_callback(
                 "mousemove",
                 pointer_move_closure.as_ref().unchecked_ref(),
@@ -922,7 +933,10 @@ impl WasmApp {
                 event.prevent_default();
             });
 
-        canvas
+        // Window-level for the same hit-target reason as the mouse
+        // listeners (the IME textarea can swallow the pixel under the
+        // caret); we only suppress the native menu here.
+        window
             .add_event_listener_with_callback(
                 "contextmenu",
                 context_closure.as_ref().unchecked_ref(),
@@ -1156,7 +1170,6 @@ impl WasmApp {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
     }
-
 
     /// JSON snapshot of the root node, or `""` if no tree is mounted.
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.

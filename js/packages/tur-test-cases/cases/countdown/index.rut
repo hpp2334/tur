@@ -70,8 +70,8 @@ entry fn start() -> u64 {
 
     // The modal's text controller + undo stack: minted once, re-seeded by
     // the edit mutation at every open.
-    let ctrl = tctrl_new();
-    let undo = undo_new();
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
 
     // Start: guard against double-start, set running, launch the ticker
     // with a fresh generation.
@@ -107,7 +107,7 @@ entry fn start() -> u64 {
         ctx.set<bool>(running, false);
         gen_bump(cell);
         ctx.set<bool>(editing, true);
-        tctrl_set_text(ctrl, f"{ctx.get<f64>(initial) as u64}");
+        ctrl.set_text(f"{ctx.get<f64>(initial) as u64}");
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
@@ -118,7 +118,7 @@ entry fn start() -> u64 {
 
     // Confirm: parse the field, apply it to initial + remaining, close.
     let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let v = str_parse_f64(tctrl_text(ctrl));
+        let v = str_parse_f64(ctrl.text());
         ctx.set<f64>(initial, v);
         ctx.set<f64>(remaining, v);
         ctx.set<bool>(editing, false);
@@ -189,7 +189,7 @@ entry fn start() -> u64 {
 // ---- the styled pieces -------------------------------------------------------
 
 // The big rounded primary button (the boa PrimaryButton).
-fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> opaque {
+fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
@@ -206,7 +206,7 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> opaque {
 }
 
 // The Start pad: the label rides the derive ("Restart" once drained).
-fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> opaque {
+fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
     let face = Container()
         .width_height(220.0, 48.0)
         .radius(12.0)
@@ -223,7 +223,7 @@ fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> opaque {
 }
 
 // The bordered ghost button (the boa GhostButton).
-fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> opaque {
+fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
     let face = Container()
         .padding(10.0)
         .radius(10.0)
@@ -246,7 +246,7 @@ fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> opaque {
 // The "● Ready/Running/Paused/Done" pill: the dot + label ride their
 // sources — the four states are painted by the mutations (sync_chrome)
 // and the ticker's Done write.
-fn chip_status(dot: Readable<u64>, label: Readable<str>) -> opaque {
+fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
     return Container()
         .padding(6.0)
         .radius(999.0)
@@ -273,7 +273,7 @@ fn display_text(color: u64, disp: Readable<str>) -> View {
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
 // swallows its own taps. Runs at ACTIVATION over the controller the edit
 // mutation re-seeded.
-fn edit_modal(ctrl: opaque, undo: opaque, b_confirm: Mutation<nil>, b_cancel: Mutation<nil>, b_swallow: Mutation<nil>) -> opaque {
+fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel: Mutation<nil>, b_swallow: Mutation<nil>) -> View {
     let field = Input()
         .controller(ctrl)
         .undo(undo)
@@ -435,7 +435,7 @@ fn fmt_start_label(v: f64) -> str {
 // cell ride as parameters; the ctx is task-scoped. The chrome rides the
 // task too: ticks re-derive the urgent tint, and the drained exit writes
 // the Done state.
-async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, remaining: Readable<f64>,
+async fn ticker(ctx: TaskCtx, g: f64, cell: MemCell, running: Readable<bool>, remaining: Readable<f64>,
                 dot: Readable<u64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
     while (ctx.get<bool>(running)) {
         await sleep(1000);
@@ -461,7 +461,7 @@ async fn ticker(ctx: TaskCtx, g: f64, cell: opaque, running: Readable<bool>, rem
 }
 
 // Bump the generation cell and answer the fresh generation.
-fn gen_bump(cell: opaque) -> f64 {
+fn gen_bump(cell: MemCell) -> f64 {
     let g = mem_get(cell) + 1.0;
     mem_set(cell, g);
     return g;

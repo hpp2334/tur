@@ -8,14 +8,14 @@ use tur_integration_tests::TurTestApp;
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, MutationCtx, Readable, Source, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, MutationCtx, Readable, Source, source };
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
     // flags bit 0 = multiline, bit 1 = obscure.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0).obscure(true).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());
@@ -27,12 +27,12 @@ entry fn start() {
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Input, MutationCtx, Readable, Source, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Input, MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let input = Input().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
     mount(input);
 }
 "#;
@@ -297,13 +297,13 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Input, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
     let obscure: Readable<bool> = source<bool>(true);
-    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0)
         .obscure_bound(obscure)
         .query_key("input").build();
     mount(input);
@@ -363,13 +363,13 @@ fn obscure_bound_toggles_masking_reactively() {
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Input, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     let undo = undo_new();
     let hint: Readable<str> = source<str>("type here");
-    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0)
         .placeholder_bound(hint)
         .query_key("input").build();
     mount(input);

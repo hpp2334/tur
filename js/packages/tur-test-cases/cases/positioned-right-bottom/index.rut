@@ -4,7 +4,7 @@ use tur::{ mount };
 use tur_kit::{ Container, Positioned, Stack };
 
 
-fn sized(w: f64, h: f64, key: str) -> opaque {
+fn sized(w: f64, h: f64, key: str) -> View {
     let mut b = Container().width_height(w, h);
     if (key != "") {
         b.query_key(key);

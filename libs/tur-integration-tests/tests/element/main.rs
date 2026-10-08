@@ -11,6 +11,7 @@ mod container_shadow_bound;
 mod debug;
 mod destroy_cleanup;
 mod each_in_row;
+mod editor_caret_integrity;
 mod editor_scroll_caret;
 mod encode;
 mod expanded;

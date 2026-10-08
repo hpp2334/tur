@@ -20,8 +20,8 @@
 // crossing is raw, the payload-less end is nil). Nullable params (the
 // `kid: ?opaque` field pattern) let one kit fn serve every combo: the kit
 // branches to the row's 0 = absent by null-check.
-use tur::{ anim_ctrl_mut, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
-use tur_kit::{ Mutation, MutationCtx, Readable, mutate };
+use tur::{ anim_ctrl_mut, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
+use tur_kit::{ Mutation, MutationCtx, Readable, View, mutate };
 
 // The seal tags the controller installs under — the kit spells the same
 // numbers as its own consts (rut_runtime::seal_tags; one law, two
@@ -30,12 +30,57 @@ let SEAL_NIL: u64 = 0;
 let SEAL_F64: u64 = 2;
 
 // The animation controller — the authored face over the `anim_ctrl_mut`
-// row. The tick is `Mutation<f64>` (the eased progress crosses as the
-// invocation payload) and the end is `Mutation<nil>`; either may be nil
-// (the controller then only drives its bound channels — polled through
-// `anim_value`). The tick mutation CAPTURES the channels it drives — no
-// id rail, no stash.
-pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64>, on_end: ?Mutation<nil>) -> opaque {
+// row: a NOMINAL newtype (`class AnimCtrl(opaque)` — the compiler-given
+// `AnimCtrl(v)` is the construction, the field is private), so the row
+// calls surface as METHODS and an AnimCtrl can never be confused with
+// another handle. The tick is `Mutation<f64>` (the eased progress crosses
+// as the invocation payload) and the end is `Mutation<nil>`; either may
+// be nil (the controller then only drives its bound channels — polled
+// through `.value()`). The tick mutation CAPTURES the channels it
+// drives — no id rail, no stash.
+pub class AnimCtrl(opaque);
+
+impl AnimCtrl {
+  // The erase hatch: the one place a controller goes back to a raw
+  // opaque (the `st_*` stash rails are opaque-typed by design).
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn forward(self) {
+    anim_forward(self.inner);
+  }
+  pub fn reverse(self) {
+    anim_reverse(self.inner);
+  }
+  pub fn pause(self) {
+    anim_pause(self.inner);
+  }
+  pub fn resume(self) {
+    anim_resume(self.inner);
+  }
+  pub fn stop(self) {
+    anim_stop(self.inner);
+  }
+  pub fn seek(self, t: f64) {
+    anim_seek(self.inner, t);
+  }
+  pub fn repeat(self, n: u64) {
+    anim_repeat(self.inner, n);
+  }
+  pub fn speed(self, factor: f64) {
+    anim_speed(self.inner, factor);
+  }
+  // The polled progress (the eased f64 driving the bound channels).
+  pub fn value(self) -> f64 {
+    return anim_value(self.inner);
+  }
+  // The transport state ("playing" / "paused" / …).
+  pub fn status(self) -> str {
+    return anim_status(self.inner);
+  }
+}
+
+pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64>, on_end: ?Mutation<nil>) -> AnimCtrl {
   let mut tick: u64 = 0;
   if (on_tick != nil) {
     tick = on_tick.seal(SEAL_F64);
@@ -44,22 +89,22 @@ pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f
   if (on_end != nil) {
     end = on_end.seal(SEAL_NIL);
   }
-  return anim_ctrl_mut(duration_ms, curve, repeat, tick, end);
+  return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, tick, end));
 }
 
 // The tick-only twin — `anim_ctrl_tick(dur, curve, repeat, tick)`.
-pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutation<f64>) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, on_tick.seal(SEAL_F64), 0);
+pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutation<f64>) -> AnimCtrl {
+  return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, on_tick.seal(SEAL_F64), 0));
 }
 
 // The end-only twin — `anim_ctrl_end(dur, curve, repeat, end)`.
-pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil>) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.seal(SEAL_NIL));
+pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil>) -> AnimCtrl {
+  return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.seal(SEAL_NIL)));
 }
 
-// The bare controller (no callbacks — polled through `anim_value`).
-pub fn anim_ctrl_open(duration_ms: f64, curve: str, repeat: u64) -> opaque {
-  return anim_ctrl_mut(duration_ms, curve, repeat, 0, 0);
+// The bare controller (no callbacks — polled through `.value()`).
+pub fn anim_ctrl_open(duration_ms: f64, curve: str, repeat: u64) -> AnimCtrl {
+  return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, 0, 0));
 }
 
 class Opacity {
@@ -77,11 +122,11 @@ impl Opacity {
     self.r = r;
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     self.kid = c;
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     if (self.r != nil) {
       return el_opacity_bound(self.r.atom_id(), self.kid);
     }
@@ -137,11 +182,11 @@ impl Transform {
     self.rotate_r = nil;
     return self;
   }
-  pub fn child(mut self, c: opaque) -> Self {
+  pub fn child(mut self, c: View) -> Self {
     self.kid = c;
     return self;
   }
-  pub fn build(self) -> opaque {
+  pub fn build(self) -> View {
     if (self.rotate_r != nil) {
       return el_transform_angle_bound(self.scale, self.rotate_r.atom_id(), self.tx, self.ty, self.kid);
     }

@@ -14,9 +14,9 @@ use tur_kit::{ Column, Container, Input, InputEvent, Mutation, MutationCtx, Read
 
 entry fn start() -> u64 {
     let value: Readable<str> = source<str>("value: \"hunter2\"");
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, "hunter2");
-    let undo = undo_new();
+    let ctrl = text_ctrl();
+    ctrl.set_text("hunter2");
+    let undo = undo_ctrl();
 
     // The on-input rail: the typed event carries the fresh true text; the
     // controller is captured (the readout wraps it as value: "…").
@@ -26,8 +26,8 @@ entry fn start() -> u64 {
     });
 
     let plain = Input()
-        .controller(tctrl_new())
-        .undo(undo_new())
+        .controller(text_ctrl())
+        .undo(undo_ctrl())
         .placeholder("Plain")
         .font_size(16.0)
         .width_height(240.0, 38.0)

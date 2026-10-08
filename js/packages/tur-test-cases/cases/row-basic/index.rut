@@ -3,7 +3,7 @@ use tur::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Container, Row };
 
 
-fn box_w(w: f64) -> opaque {
+fn box_w(w: f64) -> View {
     let b = Container().width_height(w, 0.0);
     return b.build();
 }

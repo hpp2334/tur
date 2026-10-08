@@ -56,13 +56,13 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input };
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());

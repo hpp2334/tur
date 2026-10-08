@@ -98,10 +98,10 @@ entry fn start() -> u64 {
         is_empty: source<bool>(false),
         busy: source<bool>(false),
     };
-    let ctrl = tctrl_new();
+    let ctrl = text_ctrl();
     // The boa landing boots with the draft pre-filled.
-    tctrl_set_text(ctrl, "facebook/react");
-    let undo = undo_new();
+    ctrl.set_text("facebook/react");
+    let undo = undo_ctrl();
     let gh = img_res_svg(SVG_GITHUB);
 
     // The quick-pick chips: pre-fill the field and open directly (each
@@ -111,7 +111,7 @@ entry fn start() -> u64 {
     let b_sug2 = sug_mutation(ctrl, s, "vuejs/core");
     // The Browse tap: read the draft, validate the owner/name shape, launch.
     let b_browse = mutate(fn (ctx: MutationCtx, _e: nil) {
-        open_draft(ctx, s, tctrl_text(ctrl));
+        open_draft(ctx, s, ctrl.text());
     });
 
     let body = Switch()
@@ -133,7 +133,7 @@ entry fn start() -> u64 {
 
 // A compact pill button (the boa Button/IconButton composite); the
 // mutation rides by parameter.
-fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> opaque {
+fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> View {
     let face = Container()
         .padding(9.0)
         .radius(8.0)
@@ -148,7 +148,7 @@ fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> opaque {
 }
 
 // The error banner row (a visible failure state on landing + explorer).
-fn error_banner(s: Gh) -> opaque {
+fn error_banner(s: Gh) -> View {
     let banner = Container()
         .padding(10.0)
         .radius(8.0)
@@ -160,9 +160,9 @@ fn error_banner(s: Gh) -> opaque {
 
 // ---- landing ---------------------------------------------------------------
 
-fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Mutation<nil>,
+fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutation<nil>,
                 b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
-                b_sug2: Mutation<nil>) -> opaque {
+                b_sug2: Mutation<nil>) -> View {
     // The boa Field: the "Repository" caption over the bordered input.
     let field = Column()
         .cross_alignment(CROSS_ALIGN_STRETCH)
@@ -223,7 +223,7 @@ fn landing_view(s: Gh, ctrl: opaque, undo: opaque, gh: u64, b_browse: Mutation<n
 
 // The 40x40 rounded brand mark (the boa octocat badge, an inline SVG
 // through the image rail).
-fn brand_mark(gh: u64) -> opaque {
+fn brand_mark(gh: u64) -> View {
     let mark = Container()
         .width_height(40.0, 40.0)
         .radius(10.0)
@@ -235,7 +235,7 @@ fn brand_mark(gh: u64) -> opaque {
 }
 
 fn suggestion_row(b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
-                  b_sug2: Mutation<nil>) -> opaque {
+                  b_sug2: Mutation<nil>) -> View {
     // Stacked (the boa mobile variant) — the three chips overflow the
     // 360 card's content width in a row. The boa quick-pick set (all
     // under jsDelivr's 50 MB tree cap).
@@ -252,7 +252,7 @@ fn suggestion_row(b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
 
 // ---- explorer --------------------------------------------------------------
 
-fn explorer_view(s: Gh) -> opaque {
+fn explorer_view(s: Gh) -> View {
     // Back: up one directory, or back to the landing when at the root.
     let b_back = mutate(fn (ctx: MutationCtx, _e: nil) {
         let cur = ctx.get<str>(s.path);
@@ -403,7 +403,7 @@ fn explorer_view(s: Gh) -> opaque {
 // One listing row: icon square + name + size. The row tap captures the
 // row string + the bundle (a directory descends — a fresh contents fetch;
 // a file fills the selection footer).
-fn item_file(i: u64, s: str, g: Gh) -> opaque {
+fn item_file(i: u64, s: str, g: Gh) -> View {
     let is_dir = s.starts_with(0, "d|");
     let n = s.len();
     let mut name = "";
@@ -475,9 +475,9 @@ fn item_file(i: u64, s: str, g: Gh) -> opaque {
 // ---- actions ---------------------------------------------------------------
 
 // A quick-pick chip's mutation: pre-fill the field and open directly.
-fn sug_mutation(ctrl: opaque, s: Gh, name: str) -> Mutation<nil> {
+fn sug_mutation(ctrl: TextCtrl, s: Gh, name: str) -> Mutation<nil> {
     return mutate(fn (ctx: MutationCtx, _e: nil) {
-        tctrl_set_text(ctrl, name);
+        ctrl.set_text(name);
         open_draft(ctx, s, name);
     });
 }
@@ -835,7 +835,7 @@ fn json_get_str(t: str, key: str) -> str {
 // Walk a JSON array of flat objects; push "d|name" (dirs pass) or
 // "f|name|bytes" (files pass) onto `out`. Answers the item count seen, or
 // -1 when the payload is not an array of objects.
-fn json_contents(t: str, out: opaque, dirs_only: bool) -> i32 {
+fn json_contents(t: str, out: ListHandle, dirs_only: bool) -> i32 {
     let n = t.len();
     let mut i = skip_ws(t, 0);
     if (i >= n || t.code_at(i) != C_LBRACKET) {

@@ -16,7 +16,7 @@ entry fn start() {
     mount(row.build());
 }
 
-fn box_wh(w: f64, h: f64) -> opaque {
+fn box_wh(w: f64, h: f64) -> View {
     let b = Container().width_height(w, h);
     return b.build();
 }

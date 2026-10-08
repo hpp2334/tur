@@ -4,7 +4,7 @@ use tur::{ CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, Each, Expanded, Row, SizedBox, Source, Text, list_new, list_push, source };
 
 
-fn item(_i: u64, s: str) -> opaque {
+fn item(_i: u64, s: str) -> View {
     let t = Text().text(s).font_size(13.0);
     return t.build();
 }

@@ -79,12 +79,19 @@ fn cases_dir() -> std::path::PathBuf {
 }
 
 fn playground_app() -> TurTestApp {
+    playground_app_sized(1200.0, 700.0)
+}
+
+/// The playground at an explicit shell size (the pane-fill pins need a
+/// window tall enough that the counter source — ~700px of 13px mono —
+/// genuinely fits the pane, the browser-tall shape).
+fn playground_app_sized(width: f64, height: f64) -> TurTestApp {
     // The browser-shaped capability set: the website's runtime registers
     // `Http` (tur-net-wasm), so the playground instance must have it too
     // for the net-riding showcase cases (github-viewer) to compile.
     let app = TurTestApp::new_with_http_and_plugins(
-        1200.0,
-        700.0,
+        width,
+        height,
         vec![Box::new(TurRutPlaygroundPlugin)],
     )
     .unwrap();
@@ -707,14 +714,14 @@ fn joined(spans: &[(String, u64)]) -> String {
 /// with a hole, a comment, and the fn/call/method/param roles.
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
 use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
 
 let K_CTRL: u64 = 2;
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
     st_put(K_CTRL, ctrl);
-    let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
+    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(400.0, 200.0)
         .multiline(true).query_key("editor").build();
     mount(Column().child(input).build());
     return 0;
@@ -862,7 +869,7 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
 /// edit delivers the named entry with the row's id crossing.
 const INPUT_ON_INPUT_MODULE: &str = r#"
 use tur::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 entry fn start() -> u64 {
     let text: Readable<str> = source<str>("cold");
@@ -872,7 +879,7 @@ entry fn start() -> u64 {
     let b_edit = mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) {
         ctx.set<str>(text, "edit");
     });
-    let input = Input().controller(ctrl).undo(undo_new()).width_height(400.0, 200.0)
+    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(400.0, 200.0)
         .on_input(b_edit).query_key("input").build();
     let col = Column().child(input).child(Text().text_bound(text).query_key("echo").build());
     mount(col.build());
@@ -1201,7 +1208,7 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
 
 const SPACING_ROWS_MODULE: &str = r#"
 use tur::{ mount, pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
 
 let K_CTRL: u64 = 2;
 
@@ -1212,7 +1219,7 @@ entry fn start() -> u64 {
     tctrl_set_text(ctrl, src);
     pg_apply_highlight(ctrl, pg_highlight(src));
     mount(Column().child(
-        Input().controller(ctrl).undo(undo_new()).width_height(700.0, 200.0)
+        Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(700.0, 200.0)
             .font_family("monospace").font_size(13.0)
             .multiline(true).query_key("editor").build()).build());
     return 0;
@@ -1300,5 +1307,106 @@ fn playground_complex_animation_studio_boots_to_ready() {
         node.size.0 > 0.0 && node.size.1 > 0.0,
         "the hosting element kept its layout: {:?}",
         node.size
+    );
+}
+
+// ── S4: boa parity — the ScrollView owns the scrolling ──────────────────
+//
+// The boa editor was `Expanded → ScrollView → Input` and the Input itself
+// NEVER scrolled (it painted at Offset::ZERO, hugging its content): the
+// ScrollView clamped to content − viewport (a fitting source cannot
+// scroll), push_clip'd its child (scrolled lines never left the pane),
+// and caret-follow rode the scroll ancestor. The rut port instead taught
+// the editable to scroll itself at a hardcoded 480px — a source taller
+// than 480 became scrollable even when the pane had room (its overflow
+// painting invisibly over the same-colored pane), and scrolled lines
+// escaped the editor box entirely.
+//
+// The restored architecture pins, for BOTH scroll directions of state:
+//   - the editable's self-scroll stays 0 (it cannot scroll itself);
+//   - the ScrollView fills the pane and owns the offset: 0 for a fitting
+//     source (wheel no-op), > 0 for a long one.
+
+fn editor_scroll_offset(app: &TurTestApp) -> f64 {
+    use tur_engine::builtin_plugins::scroll::ScrollViewElement;
+    let id = ElementNodeId::new(app.query_element(&["editor-scroll"]).unwrap().as_u64());
+    app.with_element(id, |e| {
+        e.cast::<ScrollViewElement>().unwrap().scroll_offset()
+    })
+    .unwrap()
+}
+
+fn editable_scroll_y(app: &TurTestApp) -> f64 {
+    let ed = editor_editable(app);
+    app.with_element(ed, |e| e.cast::<EditableTextElement>().unwrap().scroll_y())
+        .unwrap()
+}
+
+#[test]
+fn editor_scrolls_through_the_scrollview_never_itself() {
+    let mut app = playground_app_sized(1200.0, 1400.0);
+
+    // A SHORT source (counter, ~700px of 13px mono against a ~1300px pane):
+    // nothing may scroll, in either element.
+    let (cx, cy) = qk_center(&app, &["row", "counter"]);
+    app.click(cx, cy);
+    assert!(
+        wait_for_state(&app, "ready"),
+        "counter never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+
+    // Boa viewport parity: the ScrollView fills the pane's inner extent.
+    let sv = ElementNodeId::new(
+        app.query_element(&["editor-scroll"]).unwrap().as_u64(),
+    );
+    let sv_h = {
+        let b = app.get_element_absolute_bounds(sv).unwrap();
+        b.bottom - b.top
+    };
+    let pane = app
+        .get_element_absolute_bounds(ElementNodeId::new(
+            app.query_element(&["editor-pane"]).unwrap().as_u64(),
+        ))
+        .unwrap();
+    let pane_inner = pane.bottom - pane.top - 24.0; // the pane's 12px padding, both sides
+    assert!(
+        (sv_h - pane_inner).abs() < 2.0,
+        "the ScrollView fills the pane (boa Expanded parity): scrollview {sv_h}px vs pane inner {pane_inner}px"
+    );
+
+    let (ecx, ecy) = qk_center(&app, &["editor"]);
+    app.wheel(0.0, 240.0, ecx, ecy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editable_scroll_y(&app),
+        0.0,
+        "the text editor cannot scroll itself"
+    );
+    assert_eq!(
+        editor_scroll_offset(&app),
+        0.0,
+        "a source that fits the pane cannot scroll (max_scroll_extent <= 0)"
+    );
+
+    // A LONG source: the wheel scrolls the SCROLLVIEW — never the editor.
+    let (cx, cy) = qk_center(&app, &["row", "todolist"]);
+    app.click(cx, cy);
+    assert!(
+        wait_for_state(&app, "ready"),
+        "todolist never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+    app.wheel(0.0, 240.0, ecx, ecy);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editable_scroll_y(&app),
+        0.0,
+        "the text editor cannot scroll itself"
+    );
+    let offset = editor_scroll_offset(&app);
+    assert!(
+        offset > 50.0,
+        "the wheel must scroll the ScrollView, got offset {offset}"
     );
 }

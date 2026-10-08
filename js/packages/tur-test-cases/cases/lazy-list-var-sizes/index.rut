@@ -77,7 +77,7 @@ entry fn start() {
 
 // A fresh one-item list — rewriting it re-invokes the Each builder (the
 // list re-mounts with the axis read fresh).
-fn one_list() -> opaque {
+fn one_list() -> View {
     let fresh = list_new();
     list_push(fresh, "list");
     return fresh;
@@ -86,7 +86,7 @@ fn one_list() -> opaque {
 // The Each branch: one LazyList keyed by the live axis — a Condition
 // over the handle picks the orientation (the branch factories capture
 // the count handle; they read nothing at build time).
-fn list_of(axis: Readable<bool>, count: Readable<f64>) -> opaque {
+fn list_of(axis: Readable<bool>, count: Readable<f64>) -> View {
     return Condition(axis)
         .then_build(fn () -> View {
             return LazyList()
@@ -139,12 +139,12 @@ fn zebra_fill(i: u64) -> u64 {
 
 // One vertical item — the per-index sizing + palette folded, then the
 // row renderer.
-fn vertical_row(i: u64) -> opaque {
+fn vertical_row(i: u64) -> View {
     return vertical_item(i, main_size(i), cross_size(i), pal(BAR_HUES, (i * 5) % 12), zebra_fill(i));
 }
 
 // One horizontal item — the same fold for the axis-flipped list.
-fn horizontal_row(i: u64) -> opaque {
+fn horizontal_row(i: u64) -> View {
     return horizontal_item(i, main_size(i), cross_size(i), pal(BAR_HUES, (i * 5) % 12), zebra_fill(i));
 }
 
@@ -194,7 +194,7 @@ fn idx_of(s: str, from: i32, c: u32) -> i32 {
 
 // Vertical row: full-width (clamped), height = main; the inner bar of
 // width `cross` + the #i/h/bar label.
-fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> opaque {
+fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> View {
     let mut bar_h = main - 16.0;
     if (bar_h > 26.0) {
         bar_h = 26.0;
@@ -220,7 +220,7 @@ fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> o
 
 // Horizontal column: full-height (clamped), width = main; the inner bar
 // of height `cross` + the #i / w= labels.
-fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> opaque {
+fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> View {
     let mut bar_w = main - 16.0;
     if (bar_w > 26.0) {
         bar_w = 26.0;

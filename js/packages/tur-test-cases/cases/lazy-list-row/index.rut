@@ -3,7 +3,7 @@ use tur::{ AXIS_HORIZONTAL, mount };
 use tur_kit::{ Container, LazyList, Source, source };
 
 
-fn item(i: u64) -> opaque {
+fn item(i: u64) -> View {
     let mut b = Container().width_height(80.0, 300.0);
     if (i % 2 == 0) {
         b.color(0x303030FF);

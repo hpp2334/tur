@@ -42,7 +42,7 @@ entry fn start() -> u64 {
 }
 
 // A 100x44 indigo pill with a centered label; the pad takes the mutation.
-fn button(b: Mutation<nil>, text: str, key: str) -> opaque {
+fn button(b: Mutation<nil>, text: str, key: str) -> View {
     let face = Container()
         .width_height(100.0, 44.0)
         .radius(8.0)

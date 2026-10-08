@@ -34,10 +34,10 @@
 //     drop pointer capture mid-drag).
 use tur::{
     ALIGN_CENTER, ALIGN_TOP_LEFT, BORDER_INSIDE, CROSS_ALIGN_CENTER, CURSOR_POINTER,
-    MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, anim_forward, anim_reverse, ctx_bridge, mount,
+    MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, ctx_bridge, mount,
 };
 use tur_kit::{ Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, mutate, source };
-use tur_anim_kit::{ Transform, anim_ctrl };
+use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 // ---- the boa geometry --------------------------------------------------------
 
@@ -357,7 +357,7 @@ fn fmt_slot(v: f64) -> str {
 
 // ---- the view helpers --------------------------------------------------------------
 
-fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: opaque) -> View {
+fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: AnimCtrl) -> View {
     // Grab: placed pieces stop answering; a new grab interrupts the
     // previous settle (parking that piece at rest), then the lift runs and
     // the shadow hardens.
@@ -375,7 +375,7 @@ fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: 
         ctx.set<f64>(p.gy0, ev.global.y);
         ctx.set<f64>(p.x0, ctx.get<f64>(p.px[i as i32]));
         ctx.set<f64>(p.y0, ctx.get<f64>(p.py[i as i32]));
-        anim_forward(lift);
+        lift.forward();
         ctx.set<u64>(p.sc[i as i32], SHADOW_DRAG);
         ctx.set<f64>(p.sb[i as i32], 28.0);
         ctx.set<f64>(p.sd[i as i32], 12.0);
@@ -406,7 +406,7 @@ fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: 
             ctx.set<u64>(p.sc[i as i32], SHADOW_LOOSE);
             ctx.set<f64>(p.sb[i as i32], 10.0);
             ctx.set<f64>(p.sd[i as i32], 4.0);
-            anim_reverse(lift);
+            lift.reverse();
             return; // the piece stays where it was dropped
         }
         ctx.set<f64>(p.px[i as i32], tx);
@@ -421,7 +421,7 @@ fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: 
         if (c >= 9.0) {
             ctx.set<bool>(solved, true);
         }
-        anim_reverse(lift);
+        lift.reverse();
     });
 
     let face = Container()

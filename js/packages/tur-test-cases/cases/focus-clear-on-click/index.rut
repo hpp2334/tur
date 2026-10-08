@@ -8,8 +8,8 @@ use tur_kit::{ Column, Input, Mutation, MutationCtx, PointerInteract, Readable, 
 entry fn start() -> u64 {
     let clicks: Readable<f64> = source<f64>(0.0);
     let label: Readable<str> = source<str>("clicks: 0");
-    let ctrl = tctrl_new();
-    let undo = undo_new();
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
 
     let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(clicks, ctx.get<f64>(clicks) + 1.0);

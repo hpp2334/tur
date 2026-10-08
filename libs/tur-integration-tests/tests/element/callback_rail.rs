@@ -169,7 +169,7 @@ fn each_item_builder_takes_a_fn_value() {
 }
 
 const ANIM_RAIL_RUT: &str = r#"
-use tur::{ anim_forward, mount };
+use tur::{ mount };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 use tur_anim_kit::{ anim_ctrl_tick };
 
@@ -183,7 +183,7 @@ entry fn start() {
         let _ = progress;
     });
     let ctrl = anim_ctrl_tick(50.0, "linear", 0, a_tick);
-    anim_forward(ctrl);
+    ctrl.forward();
     mount(Column().query_key("rail/anim").child(Text().text("anim").build()).build());
 }
 "#;

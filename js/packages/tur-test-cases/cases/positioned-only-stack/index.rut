@@ -10,7 +10,7 @@ entry fn start() {
     mount(Expanded().flex(1.0).child(stack.build()).build());
 }
 
-fn qkey_sized(w: f64, h: f64, key: str) -> opaque {
+fn qkey_sized(w: f64, h: f64, key: str) -> View {
     let b = Container().width_height(w, h).query_key(key);
     return b.build();
 }

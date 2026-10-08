@@ -5,7 +5,7 @@ use tur::{ MAIN_SIZE_MIN, mount };
 use tur_kit::{ Column, Container };
 
 
-fn box_h(h: f64) -> opaque {
+fn box_h(h: f64) -> View {
     let b = Container().width_height(0.0, h);
     return b.build();
 }

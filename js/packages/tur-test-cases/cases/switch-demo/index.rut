@@ -25,7 +25,7 @@ entry fn start() -> u64 {
     return on.atom_id();
 }
 
-fn thumb(on: bool) -> opaque {
+fn thumb(on: bool) -> View {
     let knob = Container().width_height(24.0, 24.0).color(0xFFFFFFFFu64).radius(12.0);
     let side = Container().width_height(32.0, 24.0).alignment(thumb_align(on)).child(knob.build());
     return side.build();

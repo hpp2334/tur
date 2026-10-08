@@ -47,13 +47,13 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input };
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());
@@ -64,14 +64,14 @@ entry fn start() {
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Column, Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input };
 
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());

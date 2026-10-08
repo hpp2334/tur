@@ -75,11 +75,10 @@ use tur::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     pg_compile_diags, pg_highlight, rs_get_bool, rs_get_f64, rs_get_str,
     rs_list_new, rs_list_push, rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool,
     rs_source_f64, rs_source_str, rs_source_value, rs_watch_start, rs_watch_stop,
-    st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, tctrl_text, undo_new, va_app_atom,
-    va_app_set, va_controller, va_create_source, va_destroy, va_error, va_source_handle,
-    va_status, va_status_atom };
-use tur_anim_kit::{ anim_ctrl_end };
-use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Switch, TaskCtx, Text, VirtualApp, mutate, rs_derive, rs_watch };
+    st_put, stf_put, stf_take, va_app_atom,
+    va_app_set, va_create_source, va_source_handle };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl_end };
+use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Switch, TaskCtx, Text, TextCtrl, UndoCtrl, VAppCtrl, VirtualApp, mutate, rs_derive, rs_watch, text_ctrl, undo_ctrl, virtual_app_controller };
 
 // The handle rebuilders: the raw substrate atom ids cross the stash slots
 // (the module's state rail); the kit's bound props take the typed
@@ -258,8 +257,8 @@ entry fn start() -> u64 {
 
     let selected = rs_source_str("");
     stf_put(K_SELECTED, selected as f64);
-    let ctrl = tctrl_new();
-    st_put(K_CTRL, ctrl);
+    let ctrl = text_ctrl();
+    st_put(K_CTRL, ctrl.raw());
 
     // The app-state rail: the status bar's dot + label AND the viewer's
     // state Switch both read it (the watch deliveries settle it).
@@ -302,9 +301,9 @@ entry fn start() -> u64 {
     // The timers (animation controllers — the wasm-safe rail): the ago
     // clock starts now; the debounce waits for the first edit.
     let clock = anim_ctrl_end(1000.0, "linear", 0, mutate(fn (_ctx: MutationCtx, _e: nil) { on_clock_end(); }));
-    st_put(K_CLOCK, clock);
-    anim_forward(clock);
-    st_put(K_DEBOUNCE, anim_ctrl_end(500.0, "linear", 0, mutate(fn (_ctx: MutationCtx, _e: nil) { on_debounce_end(); })));
+    st_put(K_CLOCK, clock.raw());
+    clock.forward();
+    st_put(K_DEBOUNCE, anim_ctrl_end(500.0, "linear", 0, mutate(fn (_ctx: MutationCtx, _e: nil) { on_debounce_end(); })).raw());
 
     // The phase-E rails: the sidebar width (the divider's atom — the clamp
     // lives in the drag intent; the boa seed is 200), the divider's drag
@@ -352,8 +351,8 @@ entry fn start() -> u64 {
     // `va_destroy` the stashed controller — and the status watch has a
     // rail to ride until the first run swaps in the real one.
     let seed = va_create_source("use tur::{ mount };\nentry fn start() {\n}\n");
-    let seed_ctrl = va_controller(seed);
-    st_put(K_VCTRL, seed_ctrl);
+    let seed_ctrl = virtual_app_controller(seed);
+    st_put(K_VCTRL, seed_ctrl.raw());
     watch_controller(seed_ctrl);
 
     build_ui();
@@ -376,8 +375,8 @@ entry fn start() -> u64 {
 // Watch the controller's status rail (`va_status_atom` + `rs_watch`):
 // the transitions deliver as intents into `on_vstat`, which settles the
 // viewer's state atoms.
-fn watch_controller(vctrl: opaque) {
-    let stat = va_status_atom(vctrl);
+fn watch_controller(vctrl: VAppCtrl) {
+    let stat = vctrl.status_atom();
     stf_put(K_VSTAT, stat as f64);
     let watch = rs_watch(stat, on_vstat, 0);
     rs_watch_start(watch);
@@ -389,7 +388,7 @@ fn watch_controller(vctrl: opaque) {
 // (see `case_tap`).
 fn build_ui() {
     let names_atom = stf_take(K_NAMES) as u64;
-    let ctrl = st_take(K_CTRL);
+    let ctrl = TextCtrl(st_take(K_CTRL));
     let selected = stf_take(K_SELECTED) as u64;
     let state = stf_take(K_STATE) as u64;
     let verr = stf_take(K_VERR) as u64;
@@ -515,14 +514,22 @@ fn build_ui() {
     // The editable fills the pane (a stretch column — no hardcoded width,
     // so the hidden zero-width shell truly collapses it). Monospace 13 —
     // the boa editor's face (uniform glyphs keep the caret math honest).
-    let editor = Input().controller(ctrl).undo(undo_new()).placeholder("select a case…")
+    // THE BOA SCROLL ARCHITECTURE: the editor never scrolls ITSELF — it
+    // hugs its content (no hardcoded height, so the scroll extent grows
+    // with the text) inside a pane-filling ScrollView, which owns the
+    // scrolling: clamped to content − viewport (a fitting source cannot
+    // scroll), push_clip'd (scrolled lines never leave the pane), and the
+    // caret-follow rides `ensure_caret_visible`'s ScrollView branch. The
+    // self-scroller inside the editable stays at 0 the whole time.
+    let editor = Input().controller(ctrl).undo(undo_ctrl()).placeholder("select a case…")
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
-        .width_height(0.0, 480.0)
         .multiline(true).on_input(mutate<InputEvent>(fn (_ctx: MutationCtx, _ev: InputEvent) { on_edit(); }))
         .query_key("editor").build();
     let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
-        .child(Column().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
+        .child(ScrollView().axis(AXIS_VERTICAL).query_key("editor-scroll")
+            .child(Column().cross_alignment(CROSS_ALIGN_STRETCH).child(editor).build())
+            .build())
         .build();
 
     // ---- viewer pane ----------------------------------------------------
@@ -663,7 +670,7 @@ fn build_ui() {
         .build();
     mount(shell);
     stf_put(K_NAMES, names_atom as f64);
-    st_put(K_CTRL, ctrl);
+    st_put(K_CTRL, ctrl.raw());
     stf_put(K_SELECTED, selected as f64);
     stf_put(K_STATE, state as f64);
     stf_put(K_VERR, verr as f64);
@@ -685,7 +692,7 @@ fn build_ui() {
 // the bound child, plus the hint overlay. Fit-expand so the overlay fills
 // (and centers its label) while visible; the hidden branch is a
 // decoration-less box that passes pointers through to the child.
-fn ready_viewer(app_atom: u64, hint: u64, hint_on: u64) -> opaque {
+fn ready_viewer(app_atom: u64, hint: u64, hint_on: u64) -> View {
     let host = VirtualApp().bind(app_atom).query_key("viewer").build();
     let overlay = Condition(br(hint_on))
         .then(Container().color(CARD_BG).alignment(ALIGN_CENTER)
@@ -704,7 +711,7 @@ fn ready_viewer(app_atom: u64, hint: u64, hint_on: u64) -> opaque {
 // The error panels — the boa RuntimeErrorView / ErrorPanel shape: red
 // panel, "!" badge, title + message (the message atom is shared: the
 // compile diags and the child's `va_error` land in the same rail).
-fn error_view(title_text: str, err: u64) -> opaque {
+fn error_view(title_text: str, err: u64) -> View {
     return Container().color(BG_DANGER).padding(24.0).alignment(ALIGN_CENTER)
         .child(Column().cross_alignment(CROSS_ALIGN_CENTER)
             .child(Container().width_height(32.0, 32.0).radius(16.0).color(STATUS_ERROR)
@@ -722,7 +729,7 @@ fn error_view(title_text: str, err: u64) -> opaque {
 // The status bar's state label — the Switch rides the app-state atom:
 // the failure states read in the status red, everything else in the
 // success green (the boa label coloring; the dot leads, text confirms).
-fn state_label(state: u64) -> opaque {
+fn state_label(state: u64) -> View {
     let ok = Text().text_bound(sr(state)).font_size(11.0).color(STATUS_SUCCESS)
         .query_key("app-state").build();
     let err_a = Text().text_bound(sr(state)).font_size(11.0).color(STATUS_ERROR)
@@ -741,7 +748,7 @@ fn state_label(state: u64) -> opaque {
 // knob (right when on, left when off). Two pre-built pills over a
 // Condition (both branches carry the `autorun` query key; only one
 // mounts).
-fn auto_toggle(autorun: u64) -> opaque {
+fn auto_toggle(autorun: u64) -> View {
     let on = PointerInteract().on_click(mutate(fn (_ctx: MutationCtx, _e: nil) { b_autorun(); })).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
             .child(Stack().fit(STACK_FIT_EXPAND)
@@ -773,7 +780,7 @@ fn auto_toggle(autorun: u64) -> opaque {
 // The status bar's auto-run caption ("auto-run on" while the toggle is
 // live, the "⌘S to run" keyboard hint otherwise — the boa status bar's
 // right cluster).
-fn auto_state_text(autorun: u64) -> opaque {
+fn auto_state_text(autorun: u64) -> View {
     let on = Text().text("auto-run on").font_size(11.0).color(TEXT_TERTIARY)
         .query_key("auto-state").build();
     let off = Text().text("\u{2318}S to run").font_size(11.0).color(TEXT_TERTIARY)
@@ -783,7 +790,7 @@ fn auto_state_text(autorun: u64) -> opaque {
 
 // The edited pill — a coral dot + "edited", visible only while the editor
 // text differs from the last-compiled source.
-fn edited_pill(edited: u64) -> opaque {
+fn edited_pill(edited: u64) -> View {
     let pill = Row().main_axis_size(MAIN_SIZE_MIN)
         .child(SizedBox(12.0, 0.0).build())
         .child(Container().width_height(6.0, 6.0).radius(999.0).color(ACCENT_COMPLEMENT)
@@ -797,7 +804,7 @@ fn edited_pill(edited: u64) -> opaque {
 // A layout tab — the segmented control's option. The selected option's
 // fill is the tray's selected ink (the brush atoms; 0 = transparent); a
 // MouseRegion delivers the hover lift (the index crosses as the id).
-fn tab_button(label: str, m: Mutation<nil>, key: str, brush: u64, idx: u64) -> opaque {
+fn tab_button(label: str, m: Mutation<nil>, key: str, brush: u64, idx: u64) -> View {
     return MouseRegion()
         .on_enter(mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { tab_enter(idx); }))
         .on_exit(mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { tab_exit(idx); }))
@@ -812,7 +819,7 @@ fn tab_button(label: str, m: Mutation<nil>, key: str, brush: u64, idx: u64) -> o
 
 // The Split / Edit / View segmented control (the boa toolbar's right
 // cluster): a tray with the three tabs.
-fn layout_tabs(split_brush: u64, edit_brush: u64, view_brush: u64) -> opaque {
+fn layout_tabs(split_brush: u64, edit_brush: u64, view_brush: u64) -> View {
     let tray = Row().main_axis_size(MAIN_SIZE_MIN)
         .child(tab_button("Split", mutate(fn (_ctx: MutationCtx, _e: nil) { set_layout("split"); }), "tab-split", split_brush, 0))
         .child(tab_button("Edit", mutate(fn (_ctx: MutationCtx, _e: nil) { set_layout("edit"); }), "tab-edit", edit_brush, 1))
@@ -829,7 +836,7 @@ fn layout_tabs(split_brush: u64, edit_brush: u64, view_brush: u64) -> opaque {
 // cursor. Geometry = the boa NavItem: a 2px gap, then padding-8 around a
 // reserved 3x20 bar, an 8px gap and the full-width inset pill (radius 5,
 // padding 7) carrying the 13px label — label x ≈ 26.
-fn side_item(i: u64, name: str) -> opaque {
+fn side_item(i: u64, name: str) -> View {
     let bar = rs_source_value(rs_list_new());
     rs_set_brush(bar, 0);
     stf_put(K_ROW0 + i * 2, bar as f64);
@@ -957,10 +964,10 @@ fn case_tap(idx: u64) {
 // every character. `pg_apply_highlight` keeps the caret, so the auto-run's
 // re-highlight never yanks it either.
 fn load_editor(text: str) {
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, text);
-    pg_apply_highlight(ctrl, pg_highlight(text));
-    st_put(K_CTRL, ctrl);
+    let ctrl = TextCtrl(st_take(K_CTRL));
+    ctrl.set_text(text);
+    pg_apply_highlight(ctrl.raw(), pg_highlight(text));
+    st_put(K_CTRL, ctrl.raw());
 }
 
 // The test rail's probe: select + run by sidebar index (the corpus
@@ -972,9 +979,9 @@ entry fn select(i: u64, _b: f64) {
 // The test rail's probe: report the live controller's `va_status` into the
 // caller's str atom.
 entry fn probe(state: u64, _b: f64) {
-    let vctrl = st_take(K_VCTRL);
-    let s = va_status(vctrl);
-    st_put(K_VCTRL, vctrl);
+    let vctrl = VAppCtrl(st_take(K_VCTRL));
+    let s = vctrl.status();
+    st_put(K_VCTRL, vctrl.raw());
     rs_set_str(state, s);
 }
 
@@ -987,9 +994,9 @@ fn run_case() {
 }
 
 fn do_run() {
-    let ctrl = st_take(K_CTRL);
-    let src = tctrl_text(ctrl);
-    st_put(K_CTRL, ctrl);
+    let ctrl = TextCtrl(st_take(K_CTRL));
+    let src = ctrl.text();
+    st_put(K_CTRL, ctrl.raw());
 
     let id = pg_compile(src);
     if (id == 0) {
@@ -1007,22 +1014,22 @@ fn do_run() {
     // and swap the viewer's reactive `app$` atom — the mounted
     // `VirtualAppView` rebinds in the same flush and the new child
     // spawns. The new controller's status rail is watched in its place.
-    let old = st_take(K_VCTRL);
-    va_destroy(old);
+    let old = VAppCtrl(st_take(K_VCTRL));
+    old.destroy();
     rs_watch_stop(st_take(K_WATCH));
-    let vctrl = va_controller(va_source_handle(id));
-    st_put(K_VCTRL, vctrl);
+    let vctrl = virtual_app_controller(va_source_handle(id));
+    st_put(K_VCTRL, vctrl.raw());
     watch_controller(vctrl);
     let app_atom = stf_take(K_APP) as u64;
-    va_app_set(app_atom, vctrl);
+    va_app_set(app_atom, vctrl.raw());
     stf_put(K_APP, app_atom as f64);
 
     // A successful Run re-highlights the editor (the compiled source's
     // colors land — the apply keeps the caret where the user left it; the
     // text itself is already current, only the colors refresh).
-    let ectrl = st_take(K_CTRL);
-    pg_apply_highlight(ectrl, pg_highlight(src));
-    st_put(K_CTRL, ectrl);
+    let ectrl = TextCtrl(st_take(K_CTRL));
+    pg_apply_highlight(ectrl.raw(), pg_highlight(src));
+    st_put(K_CTRL, ectrl.raw());
 
     // The status rail: spawning (the watch deliveries settle it into
     // ready/error).
@@ -1189,9 +1196,9 @@ fn b_autorun() {
     rs_set_bool(autorun, !rs_get_bool(autorun));
     stf_put(K_AUTORUN, autorun as f64);
     if (!rs_get_bool(autorun)) {
-        let debounce = st_take(K_DEBOUNCE);
-        anim_stop(debounce);
-        st_put(K_DEBOUNCE, debounce);
+        let debounce = AnimCtrl(st_take(K_DEBOUNCE));
+        debounce.stop();
+        st_put(K_DEBOUNCE, debounce.raw());
     }
 }
 
@@ -1281,12 +1288,12 @@ fn on_edit() {
     mark_edited();
     let autorun = stf_take(K_AUTORUN) as u64;
     stf_put(K_AUTORUN, autorun as f64);
-    let debounce = st_take(K_DEBOUNCE);
-    anim_stop(debounce);
+    let debounce = AnimCtrl(st_take(K_DEBOUNCE));
+    debounce.stop();
     if (rs_get_bool(autorun)) {
-        anim_forward(debounce);
+        debounce.forward();
     }
-    st_put(K_DEBOUNCE, debounce);
+    st_put(K_DEBOUNCE, debounce.raw());
 }
 
 // The debounce window elapsed: recompile + respawn the editor's source.
@@ -1295,9 +1302,9 @@ fn on_debounce_end() {
 }
 
 fn mark_edited() {
-    let ctrl = st_take(K_CTRL);
-    let text = tctrl_text(ctrl);
-    st_put(K_CTRL, ctrl);
+    let ctrl = TextCtrl(st_take(K_CTRL));
+    let text = ctrl.text();
+    st_put(K_CTRL, ctrl.raw());
     let compiled = stf_take(K_COMPILED) as u64;
     let edited = stf_take(K_EDITED) as u64;
     rs_set_bool(edited, text != rs_get_str(compiled));
@@ -1311,9 +1318,9 @@ fn on_clock_end() {
     let ago = stf_take(K_AGO) as u64;
     rs_set_f64(ago, rs_get_f64(ago) + 1.0);
     stf_put(K_AGO, ago as f64);
-    let clock = st_take(K_CLOCK);
-    anim_forward(clock);
-    st_put(K_CLOCK, clock);
+    let clock = AnimCtrl(st_take(K_CLOCK));
+    clock.forward();
+    st_put(K_CLOCK, clock.raw());
 }
 
 fn fmt_ago(v: f64) -> str {
@@ -1339,9 +1346,9 @@ fn on_vstat(_report: u64, watched: u64, _n: f64) {
         hide_hint();
     }
     if (s == "error") {
-        let vctrl = st_take(K_VCTRL);
-        let msg = va_error(vctrl);
-        st_put(K_VCTRL, vctrl);
+        let vctrl = VAppCtrl(st_take(K_VCTRL));
+        let msg = vctrl.error();
+        st_put(K_VCTRL, vctrl.raw());
         let verr = stf_take(K_VERR) as u64;
         rs_set_str(verr, msg);
         stf_put(K_VERR, verr as f64);

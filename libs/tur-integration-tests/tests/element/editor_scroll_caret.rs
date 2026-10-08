@@ -36,7 +36,7 @@ const ZERO: Duration = Duration::ZERO;
 /// `i` starts at byte `7 * i`.
 const EDITOR_RUT: &str = r#"
 use tur::{ mount, st_put, st_take, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 let K_CTRL: u64 = 1;
 
@@ -55,8 +55,8 @@ entry fn start() -> u64 {
     tctrl_set_text(ctrl, long_doc());
     st_put(K_CTRL, ctrl);
     let input = Input()
-        .controller(ctrl)
-        .undo(undo_new())
+        .controller(TextCtrl(ctrl))
+        .undo(UndoCtrl(undo_new()))
         .multiline(true)
         .font_family("monospace")
         .width_height(200.0, 60.0)
@@ -362,5 +362,216 @@ fn drag_and_click_after_scroll_hit_the_right_bytes() {
         cursor_of(&app, ed),
         26,
         "click after scroll+drag places the caret on the clicked line"
+    );
+}
+
+// ── S4: the self-scroller's two remaining holes ─────────────────────────
+//
+// The boa editor scrolled through a pane-filling ScrollView (clamped to
+// content − viewport, push_clip'd); the rut-era editable scrolls ITSELF.
+// Two holes in the self-scroller, both user-reported against the served
+// build:
+//
+//   1. A scrolled field paints its content translated by −scroll_y with
+//      NO clip — lines above the viewport escape the editor's box (and
+//      the pane, over the app header). The boa ScrollView wrapped every
+//      child paint in `push_clip(Offset::ZERO, layout.size)`; the
+//      self-scroller owns that duty now.
+//   2. (rail below) content that fits must never scroll — the wheel
+//      clamps to max_scroll_y = content − viewport, which is 0 when the
+//      document fits.
+
+use std::sync::Arc;
+
+use tur_engine::core::clock::{Clock, FixedClock};
+use tur_engine::core::element::NodeId;
+use tur_engine::core::frame_env::FrameEnv;
+use tur_engine::core::image_resource::{ImageManager, ImageResourceId};
+use tur_engine::core::layout::{Geometry, Offset, Size};
+use tur_engine::core::render::brush::{Brush, Color};
+use tur_engine::core::render::Canvas;
+use tur_engine::core::text::text_layout::TextLayoutData;
+use vello_common::kurbo::Affine;
+
+/// Two short lines in the 200×60 editor — the content fits with room to
+/// spare, so the scrollable excess is 0 and a wheel must be a no-op.
+const SHORT_RUT: &str = r#"
+use tur::{ mount, tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
+
+entry fn start() -> u64 {
+    let ctrl = tctrl_new();
+    tctrl_set_text(ctrl, "line 0\nline 1\n");
+    let input = Input()
+        .controller(TextCtrl(ctrl))
+        .undo(UndoCtrl(undo_new()))
+        .multiline(true)
+        .font_family("monospace")
+        .width_height(200.0, 60.0)
+        .query_key("ed")
+        .build();
+    mount(input);
+    return 0;
+}
+"#;
+
+#[test]
+fn short_content_never_scrolls() {
+    let (mut app, ed) = setup(SHORT_RUT);
+    app.click(100.0, 30.0);
+    app.wait_for_timeout(ZERO);
+
+    let max = max_scroll_of(&app, ed);
+    assert_eq!(
+        max, 0.0,
+        "content that fits the viewport has no scrollable excess"
+    );
+
+    app.wheel(0.0, 200.0, 100.0, 30.0);
+    app.wait_for_timeout(ZERO);
+    let y = scroll_of(&app, ed);
+    assert_eq!(y, 0.0, "wheel on a fitting editor must not scroll");
+}
+
+fn max_scroll_of(app: &TurTestApp, ed: ElementNodeId) -> f64 {
+    app.with_element(ed, |e| {
+        e.cast::<EditableTextElement>().unwrap().max_scroll_y()
+    })
+    .unwrap()
+}
+
+// ── the clip recorder ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PaintOp {
+    NodeStart(u64),
+    NodeEnd,
+    FillText,
+    PushClip { x: f64, y: f64, w: f64, h: f64 },
+    PopClip,
+    Other,
+}
+
+#[derive(Default)]
+#[derive(Debug)]
+struct ClipRecorder {
+    ops: Vec<PaintOp>,
+}
+
+impl Canvas for ClipRecorder {
+    fn fill_geometry(&mut self, _o: Offset, _g: &Geometry, _b: &Brush) {
+        self.ops.push(PaintOp::Other);
+    }
+    fn stroke_geometry(&mut self, _o: Offset, _g: &Geometry, _c: &Color, _w: f64) {
+        self.ops.push(PaintOp::Other);
+    }
+    #[allow(private_interfaces)]
+    fn fill_text_layout(&mut self, _o: Offset, _l: &Arc<TextLayoutData>) {
+        self.ops.push(PaintOp::FillText);
+    }
+    fn draw_image(&mut self, _r: ImageResourceId, _n: Size, _t: Affine) {}
+    fn draw_shadow(
+        &mut self,
+        _o: Offset,
+        _s: Size,
+        _c: &Color,
+        _r: f64,
+        _b: f64,
+        _so: (f64, f64),
+    ) {
+    }
+    fn push_clip(&mut self, o: Offset, s: Size) {
+        self.ops.push(PaintOp::PushClip {
+            x: o.x,
+            y: o.y,
+            w: s.width,
+            h: s.height,
+        });
+    }
+    fn push_clip_geometry(&mut self, _o: Offset, _g: &Geometry) {
+        self.ops.push(PaintOp::Other);
+    }
+    fn pop_clip(&mut self) {
+        self.ops.push(PaintOp::PopClip);
+    }
+    fn push_opacity(&mut self, _o: f32) {}
+    fn pop_opacity(&mut self) {}
+    fn push_transform(&mut self, _t: Affine) {}
+    fn pop_transform(&mut self) {}
+    fn notify_node_entry(&mut self, id: ElementNodeId, _t: Affine, _s: Size) {
+        self.ops.push(PaintOp::NodeStart(NodeId::from(id).as_u64()));
+    }
+    fn notify_node_exit(&mut self) {
+        self.ops.push(PaintOp::NodeEnd);
+    }
+}
+
+/// Paint the live tree into the recorder; return the editable's op segment
+/// (between its NodeStart and the matching NodeEnd).
+fn editable_paint_ops(app: &TurTestApp, ed: ElementNodeId) -> Vec<PaintOp> {
+    app.with_tree(move |tree, focus| {
+        let mut rec = ClipRecorder::default();
+        let env = FrameEnv::new(std::rc::Rc::new(FixedClock::from_millis(0.0)));
+        tree.paint(
+            &mut rec,
+            focus.focused(),
+            &ImageManager::new(),
+            env.paint_env(),
+        );
+        let start = rec
+            .ops
+            .iter()
+            .position(|o| *o == PaintOp::NodeStart(NodeId::from(ed).as_u64()))
+            .unwrap_or_else(|| panic!("the editable never painted"));
+        let end = start
+            + rec.ops[start..]
+                .iter()
+                .position(|o| *o == PaintOp::NodeEnd)
+                .expect("unterminated node segment");
+        rec.ops[start + 1..end].to_vec()
+    })
+    .unwrap()
+}
+
+#[test]
+fn scrolled_paint_is_clipped_to_the_editor_bounds() {
+    let (mut app, ed) = setup(EDITOR_RUT);
+    app.click(100.0, 30.0);
+    app.wait_for_timeout(ZERO);
+    app.wheel(0.0, 200.0, 100.0, 30.0);
+    app.wait_for_timeout(ZERO);
+    let scrolled = scroll_of(&app, ed);
+    assert!(scrolled > 50.0, "fixture precondition: scrolled, got {scrolled}");
+
+    let seg = editable_paint_ops(&app, ed);
+    let fill = seg
+        .iter()
+        .position(|o| *o == PaintOp::FillText)
+        .expect("the editable paints its text layout");
+
+    let clip = seg[..fill]
+        .iter()
+        .rev()
+        .find(|o| matches!(o, PaintOp::PushClip { .. }))
+        .copied()
+        .expect(
+            "the scrolled text fill must sit inside a push_clip — \
+             without it the lines above the viewport paint outside the editor",
+        );
+    let PaintOp::PushClip { x, y, w, h } = clip else {
+        unreachable!()
+    };
+    assert_eq!(
+        (x, y),
+        (0.0, 0.0),
+        "the clip is the editor's own local bounds"
+    );
+    assert!(
+        (w - 200.0).abs() < 0.5 && (h - 60.0).abs() < 0.5,
+        "the clip is the editor viewport (200x60), got {w}x{h}"
+    );
+    assert!(
+        seg[fill + 1..].contains(&PaintOp::PopClip),
+        "the clip must be popped (balanced layers)"
     );
 }

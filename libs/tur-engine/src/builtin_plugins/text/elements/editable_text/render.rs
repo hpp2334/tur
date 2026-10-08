@@ -24,7 +24,7 @@ impl ElementRender for EditableTextElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        _layout: &ComputedLayout,
+        layout: &ComputedLayout,
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
@@ -52,6 +52,11 @@ impl ElementRender for EditableTextElement {
 
         // Multiline fields paint through their vertical scroll offset — the
         // text layout is content-relative, the canvas is viewport-relative.
+        // The viewport clip wraps EVERYTHING the field paints: the boa
+        // editor's ScrollView pushed this clip around every child; the
+        // self-scroller owns it now. Without it the lines scrolled past
+        // either edge paint outside the field (over the pane, the header…).
+        canvas.push_clip(Offset::ZERO, layout.size);
         let scroll_y = self.scroll_y.get();
         let paint_origin = Offset::new(0.0, -scroll_y);
 
@@ -103,6 +108,8 @@ impl ElementRender for EditableTextElement {
                 );
             }
         }
+
+        canvas.pop_clip();
     }
 }
 

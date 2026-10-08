@@ -539,14 +539,14 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
 use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "hello");
     let undo = undo_new();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -555,7 +555,7 @@ entry fn start() {
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -564,13 +564,13 @@ entry fn start() {
     tctrl_push_span(ctrl, "import");
     tctrl_push_span(ctrl, " {");
     let undo = undo_new();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -580,7 +580,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "def\n");
     tctrl_push_span(ctrl, "ghi");
     let undo = undo_new();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -750,7 +750,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -762,7 +762,7 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_new();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -805,7 +805,7 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -816,7 +816,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "");
     tctrl_push_span(ctrl, "abcd");
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(300.0, 100.0).query_key("editor").build();
     let keyed = input;
     mount(keyed);
 }
@@ -845,16 +845,16 @@ fn empty_colored_span_does_not_panic() {
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Column, Input, ScrollView };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, ScrollView };
 
 
-use tur_kit::{ Column, Input, ScrollView };
+use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, ScrollView };
 
 entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
     let undo = undo_new();
-    let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
+    let input = Input().controller(TextCtrl(ctrl)).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
     let col = Column().child(input).build();
     let scroller = ScrollView().axis(AXIS_VERTICAL).child(col).build();
     mount(scroller);
@@ -946,7 +946,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -955,7 +955,7 @@ entry fn start() {
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
     // flags bit 0 = multiline.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
     let keyed = input;
     mount(keyed);
 }
@@ -1074,7 +1074,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
 const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input };
+use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
 
@@ -1082,7 +1082,7 @@ entry fn start() {
     let ctrl = tctrl_new();
     tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_new();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
+    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
     let keyed = input;
     mount(keyed);
 }

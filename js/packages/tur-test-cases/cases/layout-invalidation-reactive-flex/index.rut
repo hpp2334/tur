@@ -20,7 +20,7 @@ entry fn start() -> u64 {
     return flex_a.atom_id();
 }
 
-fn qkey_box(key: str, color: u64) -> opaque {
+fn qkey_box(key: str, color: u64) -> View {
     let b = Container().width_height(0.0, 0.0).color(color).query_key(key);
     return b.build();
 }

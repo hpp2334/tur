@@ -3,9 +3,9 @@
 // mutations (opaques are just values — no stash); per-tile event
 // transcripts render into `tile-events-0` / `tile-events-1` (each tile's
 // mutation captures its own transcript source).
-use tur::{ ALIGN_TOP_LEFT, anim_forward, anim_reverse, mount };
+use tur::{ ALIGN_TOP_LEFT, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mutate, source };
-use tur_anim_kit::{ anim_ctrl };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 
 entry fn start() -> u64 {
@@ -35,16 +35,16 @@ entry fn start() -> u64 {
 // One tile: the drag mutations capture the shared controller + the tile's
 // transcript source (state by capture — no id rails). The transcript
 // ACCUMULATES (the test checks down+move are present).
-fn tile(ctrl: opaque, transcript: Readable<str>, key: str) -> opaque {
+fn tile(ctrl: AnimCtrl, transcript: Readable<str>, key: str) -> View {
     let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        anim_forward(ctrl);
+        ctrl.forward();
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} down");
     });
     let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} move");
     });
     let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        anim_reverse(ctrl);
+        ctrl.reverse();
         ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} up");
     });
 

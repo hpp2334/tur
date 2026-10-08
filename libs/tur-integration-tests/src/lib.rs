@@ -12,7 +12,7 @@ use futures::StreamExt;
 use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
-use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 
 /// `Send + Sync` wrapper around boa's `FixedClock` (which uses `RefCell`
 /// internally and is therefore `!Sync`). The runtime requires
@@ -1218,12 +1218,20 @@ impl TurTestApp {
             let focused_id = focus.focused()?;
             let mut abs_x = 0.0f64;
             let mut abs_y = 0.0f64;
+            // Hop fragment ancestors (Switch/Each/Condition hosts live in
+            // the fragment map and carry no offset) — mirrors the engine's
+            // `focused_cursor_rect`.
             let mut current = Some(NodeId::from(focused_id));
             while let Some(id) = current {
-                let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
-                abs_x += node.computed_layout.offset.x;
-                abs_y += node.computed_layout.offset.y;
-                current = node.parent;
+                if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+                    abs_x += node.computed_layout.offset.x;
+                    abs_y += node.computed_layout.offset.y;
+                    current = node.parent;
+                } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+                    current = Some(frag.parent);
+                } else {
+                    break;
+                }
             }
             let node = tree.get_element(focused_id)?;
             let element = node.element.as_ref()?;

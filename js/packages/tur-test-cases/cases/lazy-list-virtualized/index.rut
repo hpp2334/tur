@@ -99,7 +99,7 @@ fn zebra_fill(i: u64) -> u64 {
 }
 
 // The row: initials avatar + name + the "Item #i of 10000" subtitle.
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let name = name_for(i);
     let n = name.len();
     let mut sp = 0;

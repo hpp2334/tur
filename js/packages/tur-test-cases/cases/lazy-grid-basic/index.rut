@@ -9,7 +9,7 @@ use tur::mount;
 use tur_kit::{ Container, LazyGrid, Source, Text, source };
 
 
-fn cell(i: u64) -> opaque {
+fn cell(i: u64) -> View {
     let tile = Container()
         .color(hsl_packed(((i * 47) % 360) as f64, 55.0, 50.0))
         .child(Text().text(f"{i}").font_size(11.0).color(0xFFFFFFFFu64).build())
