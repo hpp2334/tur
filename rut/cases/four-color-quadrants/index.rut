@@ -1,7 +1,7 @@
 // four-color-quadrants: a 2x2 grid of 100x100 colored quadrants (Stack +
 // positioned fills) — the vello render fixtures sample exact pixels.
-use tur_host::{ mount };
-use tur_kit::{ Container, Positioned, Stack };
+
+use tur_kit::{ Container, Positioned, Stack, mount };
 
 
 fn quad(color: u64) -> View {

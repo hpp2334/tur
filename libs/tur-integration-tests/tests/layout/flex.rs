@@ -13,8 +13,8 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, Expanded, Row, SizedBox };
+use tur_host::{ CROSS_ALIGN_STRETCH };
+use tur_kit::{ Column, Container, Expanded, Row, SizedBox, mount };
 
 
 entry fn start() {

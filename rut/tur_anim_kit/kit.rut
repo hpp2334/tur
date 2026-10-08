@@ -123,14 +123,14 @@ impl Opacity {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    self.kid = c;
+    self.kid = c.inner;
     return self;
   }
   pub fn build(self) -> View {
     if (self.r != nil) {
-      return el_opacity_bound(self.r.atom_id(), self.kid);
+      return View(el_opacity_bound(self.r.atom_id(), self.kid));
     }
-    return el_opacity(self.value, self.kid);
+    return View(el_opacity(self.value, self.kid));
   }
 }
 
@@ -183,15 +183,15 @@ impl Transform {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    self.kid = c;
+    self.kid = c.inner;
     return self;
   }
   pub fn build(self) -> View {
     if (self.rotate_r != nil) {
-      return el_transform_angle_bound(self.scale, self.rotate_r.atom_id(), self.tx, self.ty, self.kid);
+      return View(el_transform_angle_bound(self.scale, self.rotate_r.atom_id(), self.tx, self.ty, self.kid));
     }
     if (self.scale_r != nil) {
-      return el_transform_scale_bound(self.scale_r.atom_id(), self.rotate, self.tx, self.ty, self.kid);
+      return View(el_transform_scale_bound(self.scale_r.atom_id(), self.rotate, self.tx, self.ty, self.kid));
     }
     if (self.tx_r != nil || self.ty_r != nil) {
       let mut tx_atom: u64 = 0;
@@ -202,8 +202,8 @@ impl Transform {
       if (self.ty_r != nil) {
         ty_atom = self.ty_r.atom_id();
       }
-      return el_transform_translate_bound(self.scale, self.rotate, tx_atom, ty_atom, self.kid);
+      return View(el_transform_translate_bound(self.scale, self.rotate, tx_atom, ty_atom, self.kid));
     }
-    return el_transform(self.scale, self.rotate, self.tx, self.ty, self.kid);
+    return View(el_transform(self.scale, self.rotate, self.tx, self.ty, self.kid));
   }
 }

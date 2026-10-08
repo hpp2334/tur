@@ -1,6 +1,6 @@
 // text-wrapping: a long 14px line wraps within the width budget.
-use tur_host::{ mount };
-use tur_kit::{ Text };
+
+use tur_kit::{ Text, mount };
 
 
 entry fn start() {

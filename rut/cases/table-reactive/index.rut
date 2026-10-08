@@ -17,8 +17,8 @@
 // brush source (the corpus's brush law — bound colors are sources the
 // mutations repaint).
 use futures::{ sleep };
-use tur_host::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, mount, spawn, str_parse_f64 };
-use tur_kit::{ Column, Container, DeriveCtx, Expanded, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, derive, list_new, list_push, mutate, source, value_item, value_len };
+use tur_host::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, spawn, str_parse_f64 };
+use tur_kit::{ Column, Container, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, derive, list_new, mutate, source, value_item, value_len };
 
 
 // The boa palette (dark slate table on the #0b1220 frame).
@@ -33,7 +33,7 @@ let STATUS_FG: u64 = 0x64748BFFu64;
 entry fn start() -> u64 {
     let sort_key: Readable<str> = source<str>("moons");
     let sort_dir: Readable<f64> = source<f64>(1.0);
-    let rows: Readable<opaque> = source<opaque>(list_new());
+    let rows: Readable<opaque> = source<opaque>(list_new().raw());
     let loaded: Readable<bool> = source<bool>(false);
     let count: Readable<f64> = source<f64>(0.0);
 
@@ -190,7 +190,7 @@ fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_d
 // `key` picks the slot, `dir` the sign. The dataset is the fixed 8-planet
 // payload (the `used` flags ride a fixed array — module arrays are
 // fixed-length in this build).
-fn sorted_rows(data: ListHandle, key: str, dir: f64) -> ListHandle {
+fn sorted_rows(data: opaque, key: str, dir: f64) -> opaque {
     let n = value_len(data);
     let fresh = list_new();
     let mut used: [bool] = [false, false, false, false, false, false, false, false];
@@ -207,10 +207,10 @@ fn sorted_rows(data: ListHandle, key: str, dir: f64) -> ListHandle {
             i += 1;
         }
         used[best as i32] = true;
-        list_push(fresh, value_item(data, best as u64));
+        fresh.push(value_item(data, best as u64));
         k += 1;
     }
-    return fresh;
+    return fresh.raw();
 }
 
 // "a sorts strictly before b" under (key, dir) — ties keep their order
@@ -262,9 +262,9 @@ fn str_less(a: str, b: str) -> bool {
 // is read from the SAME sorted list the table iterates — the bridge ctx
 // at build time (the grid_of precedent — builders read live state). The
 // name column is emphasized (boa's `Cell(row.name, true)`).
-fn body_cell(row: u64, col: u64, rows: Readable<ListHandle>) -> View {
+fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
     let read = MutationCtx.over(ctx_bridge());
-    let item = value_item(read.get<ListHandle>(rows), row);
+    let item = value_item(read.get<opaque>(rows), row);
     let text = slot(item, col);
     let mut fg: u64 = CELL_FG;
     if (col == 0) {
@@ -302,14 +302,14 @@ fn slot(data: str, i: u64) -> str {
 // pre-formatted, the `toFixed(1)` twin).
 fn fake_rows() -> ListHandle {
     let rows = list_new();
-    list_push(rows, "Mercury|0|3.7");
-    list_push(rows, "Venus|0|8.9");
-    list_push(rows, "Earth|1|9.8");
-    list_push(rows, "Mars|2|3.7");
-    list_push(rows, "Jupiter|95|24.8");
-    list_push(rows, "Saturn|146|10.4");
-    list_push(rows, "Uranus|28|8.9");
-    list_push(rows, "Neptune|16|11.2");
+    rows.push("Mercury|0|3.7");
+    rows.push("Venus|0|8.9");
+    rows.push("Earth|1|9.8");
+    rows.push("Mars|2|3.7");
+    rows.push("Jupiter|95|24.8");
+    rows.push("Saturn|146|10.4");
+    rows.push("Uranus|28|8.9");
+    rows.push("Neptune|16|11.2");
     return rows;
 }
 
@@ -318,7 +318,7 @@ fn fake_rows() -> ListHandle {
 async fn loader(ctx: TaskCtx, rows: Readable<opaque>, loaded: Readable<bool>,
                 count: Readable<f64>, sort_key: Readable<str>, sort_dir: Readable<f64>) -> str {
     await sleep(300);
-    let raw = fake_rows();
+    let raw = fake_rows().raw();
     ctx.set<opaque>(rows, sorted_rows(raw, ctx.get<str>(sort_key), ctx.get<f64>(sort_dir)));
     ctx.set<f64>(count, value_len(raw) as f64);
     ctx.set<bool>(loaded, true);

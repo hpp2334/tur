@@ -209,6 +209,10 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
     let host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
         // stash the root — the engine applies it after `start` returns
         row("mount", vec![TY_OPAQUE], TY_NIL),
+        // The kit's twin spelling (see the mount bodies below): same
+        // decl, same body — the kit's own `mount` wrapper shadows the
+        // row name, so its body calls this alias.
+        row("mount_raw", vec![TY_OPAQUE], TY_NIL),
         // reactive rails: str / f64 / bool scalars over the native KV
         row("rs_source_str", vec![TY_STR], TY_U64),
         row("rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
@@ -313,9 +317,15 @@ fn install_tur_pkg(
     //
     // A face-driven call (a derive / item builder materializing mid-flush)
     // may NOT re-mount — the trap is reported through the error rail and
-    // the flush continues.
-    let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "mount", (Opaque<RutView>,) -> (), move |vm: &mut rut_vm::interp::Vm, view: Opaque<RutView>| {
+    // the flush continues. `mount_raw` is the kit's twin spelling of the
+    // SAME body: the kit defines its own `pub fn mount(v: View)` (the
+    // unwrap happens kit-side), which shadows the row's name — the body
+    // reaches the row through this alias.
+    fn mount_body(
+        _vm: &mut rut_vm::interp::Vm,
+        h: Rc<RutHandles>,
+        view: Opaque<RutView>,
+    ) -> Result<(), rut_vm::Trap> {
         if h.face_busy.get() > 0 {
             return Err(rut_vm::Trap::new(
                 rut_vm::TrapKind::Invalid,
@@ -323,9 +333,16 @@ fn install_tur_pkg(
             ));
         }
         let root = view.with(|v| v.0.clone())?;
-        let _ = vm;
         *h.pending_root.borrow_mut() = Some(root);
         Ok(())
+    }
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "mount", (Opaque<RutView>,) -> (), move |vm: &mut rut_vm::interp::Vm, view: Opaque<RutView>| {
+        mount_body(vm, h.clone(), view)
+    });
+    let h = handles.clone();
+    rut_vm::pkg_fn!(pkg, "mount_raw", (Opaque<RutView>,) -> (), move |vm: &mut rut_vm::interp::Vm, view: Opaque<RutView>| {
+        mount_body(vm, h.clone(), view)
     });
 
     // ---- reactive rails (the native-KV substrate) ------------------------

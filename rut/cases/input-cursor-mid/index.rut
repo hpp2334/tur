@@ -1,7 +1,7 @@
 // input-cursor-mid: the same shape as input-typing (the cursor-mid-tick
 // seam is a no-op probe on the rut side too).
-use tur_host::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Container, Input };
+use tur_host::{ tctrl_new, undo_new };
+use tur_kit::{ Container, Input, mount };
 
 
 entry fn start() {

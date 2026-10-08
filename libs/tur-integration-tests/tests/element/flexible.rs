@@ -24,8 +24,8 @@ fn setup_row_flex_item_ex(
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     let source = format!(
         r#"
-use tur_host::{{ mount }};
-use tur_kit::{{ Container, Expanded, Flexible, Row, Text }};
+
+use tur_kit::{{ Container, Expanded, Flexible, Row, Text, mount }};
 
 
 entry fn start() {{
@@ -181,8 +181,8 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ mount };
-use tur_kit::{ Container, Flexible, Row, SizedBox, Text };
+
+use tur_kit::{ Container, Flexible, Row, SizedBox, Text, mount };
 
 
 entry fn start() {
@@ -283,13 +283,13 @@ entry fn start() {
 fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ mount };
-use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
+        r#"
+use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
 
-use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
+use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
 
 
-fn long_label() -> opaque {
+fn long_label() -> View {
     let txt = Text()
         .text("A very long label that must ellipsize inside its slot")
         .font_size(14.0)
@@ -371,10 +371,10 @@ entry fn start() {
 fn flexible_zero_remaining_slot_paints_within_budget() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ mount };
-use tur_kit::{ Container, Flexible, Row, Text };
+        r#"
+use tur_kit::{ Container, Flexible, Row, Text, mount };
 
-use tur_kit::{ Container, Flexible, Row, Text };
+use tur_kit::{ Container, Flexible, Row, Text, mount };
 
 
 entry fn start() {

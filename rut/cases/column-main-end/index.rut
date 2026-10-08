@@ -1,6 +1,6 @@
 // column-main-end: two fixed-height children pinned to the main-axis end.
-use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END, mount };
-use tur_kit::{ Column, Container };
+use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END };
+use tur_kit::{ Column, Container, mount };
 
 
 fn box_h(h: f64) -> View {

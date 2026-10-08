@@ -2,8 +2,8 @@
 // via a paint-only Transform translate — clickable at the PAINTED center.
 // The click flips the hit source; the Condition mounts the red
 // confirmation box (the branch swap adds one container node).
-use tur_host::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Condition, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Stack, Text, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT };
+use tur_kit::{ Condition, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
 use tur_anim_kit::{ Transform };
 
 

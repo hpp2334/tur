@@ -24,14 +24,14 @@
 // box, fired back through the dispatch entries — until the M2 sweep
 // converts them to their typed events. The arity/type check happens at
 // THIS boundary, at compile time. Nothing callable crosses the boundary
-// as a string. `View` is the user-facing alias for built views.
+// as a string. `View` is the user-facing view newtype.
 //
 // Reactive bindings are methods (`text_bound(atom)`, `color_bound(atom)`),
-// not constructor variants. Flags are the `u64` consts the `tur` pkg
+// not constructor variants. Flags are the `u64` consts the `tur_host` pkg
 // declares (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` /
 // `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` /
 // `BOXFIT_*` / `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from
-// `tur` directly.
+// `tur_host` directly.
 //
 // Color law: every `packed: u64` color prop (`color` / `color_bound` /
 // `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
@@ -75,7 +75,7 @@ use tur_host::{
   lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
   lazy_grid_new, lazy_grid_overscan,
   lazy_grid_qkey, lazy_grid_spacing, lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, lc_before_destroy,
-  lc_build, lc_child, lc_new, lc_on_mount, mr_build, mr_child, mr_cursor, mr_cursor_bound,
+  lc_build, lc_child, lc_new, lc_on_mount, mount_raw, mr_build, mr_child, mr_cursor, mr_cursor_bound,
   mr_new, mr_on_enter, mr_on_exit, mr_behavior, pi_behavior, pi_build, pi_child,
   pi_mut_down, pi_mut_move, pi_mut_up,
   pi_new, pi_on_click, pi_on_context_menu,
@@ -107,27 +107,90 @@ use core::{ Future };
 use futures::{ launch_future };
 
 
-// The user-facing view alias: built views cross kit signatures as `View`
-// (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
+// The user-facing view newtype: built views cross kit signatures as
+// `View` (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
 //
 // The vocabulary law: biz signatures spell WHAT a value is — views say
 // `View`, handles say their type — and bare `opaque` stays infra-only
 // (row decls, the dispatch entries, kit internals). `View` and the data
-// handles are transparent aliases; the CONTROLLERS are nominal newtypes
-// (`class X(opaque)` — the compiler-provided `X(v)` is the construction,
-// the `inner` field is private), so a TextCtrl can never be confused
-// with another handle and the rows they wrap surface as METHODS, never
-// as raw row calls in biz code.
-pub type View = opaque;
+// handles are NOMINAL newtypes (`class X(opaque)` — the compiler-provided
+// `X(v)` is the construction, the `inner` field is private), so a
+// TextCtrl can never be confused with another handle and the rows they
+// wrap surface as METHODS, never as raw row calls in biz code. The kit
+// wraps every row answer (`View(flex_build(..))`) and unwraps every row
+// arg (`c.inner`) — a raw view opaque never crosses a kit signature.
+//
+// TODO(phase5): host-seam law — the raw() hatches and the compiler-provided
+// `X(v)` ctors are still pub while the stash dance and the current test
+// spellings are alive; privatize when the stash dies.
+pub class View(opaque);
 
-// A structured store list (`list_new` / `list_push`).
-pub type ListHandle = opaque;
-// A structured store map (`map_new` / `map_set`).
-pub type MapHandle = opaque;
+impl View {
+  // The kit machinery's erase hatch (kit-internal — not on the pkg
+  // surface): the one place a built view goes back to the raw opaque
+  // the mount row takes.
+  pub(mod) fn raw(self) -> opaque {
+    return self.inner;
+  }
+}
+
+// The one mount door users reach — the unwrap happens HERE, never at a
+// call site (the row takes the raw RutView opaque). The body calls the
+// `mount_raw` twin because this fn's own name shadows the row's.
+pub fn mount(v: View) {
+  mount_raw(v.raw());
+}
+
+// A structured store list (`list_new`; the `.push` / `.len` / `.item`
+// method surface). The store lane still crosses as the raw opaque (the
+// KV holds structured values as host opaques), so `raw()` is pub for
+// the `source<opaque>(handles.raw())` crossings.
+pub class ListHandle(opaque);
+
+impl ListHandle {
+  // TODO(phase5): host-seam law — privatize when the stash dies (the
+  // boxed store lane may keep needing the raw; re-judge there).
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn push(self, item: str) {
+    rs_list_push(self.inner, item);
+  }
+  pub fn len(self) -> u64 {
+    return rs_value_len(self.inner);
+  }
+  pub fn item(self, i: u64) -> str {
+    return rs_value_item(self.inner, i);
+  }
+}
+
+// A structured store map (`map_new`; the `.set` / `.get` / `.len`
+// method surface).
+pub class MapHandle(opaque);
+
+impl MapHandle {
+  // Kit machinery only — nothing outside needs the map's raw yet.
+  pub(mod) fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn set(self, key: str, value: str) {
+    rs_map_set(self.inner, key, value);
+  }
+  pub fn get(self, key: str) -> str {
+    return rs_value_get(self.inner, key);
+  }
+  pub fn len(self) -> u64 {
+    return rs_value_len(self.inner);
+  }
+}
+
 // A mem cell (`mem_new` / `mem_get` / `mem_set` — the generation-guard rail).
+// TODO(phase4): deleted — a struct field over a shared cell subsumes it.
 pub type MemCell = opaque;
-// A virtual-app source (`va_create_source` / `virtual_app_source`).
-pub type VAppSource = opaque;
+
+// A virtual-app source (`virtual_app_source` / `virtual_app_source_handle`;
+// `virtual_app_controller`).
+pub class VAppSource(opaque);
 
 // The text-input controller (`tctrl_new` / `tctrl_set_text` /
 // `tctrl_text`; `Input.controller`). Mint with `text_ctrl()`.
@@ -136,6 +199,7 @@ pub class TextCtrl(opaque);
 impl TextCtrl {
   // The erase hatch: the one place a controller goes back to a raw
   // opaque (the `st_*` stash rails are opaque-typed by design).
+  // TODO(phase5): host-seam law — privatize when the stash dies.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -157,6 +221,7 @@ pub fn text_ctrl() -> TextCtrl {
 pub class UndoCtrl(opaque);
 
 impl UndoCtrl {
+  // TODO(phase5): host-seam law — privatize when the stash dies.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -171,6 +236,7 @@ pub fn undo_ctrl() -> UndoCtrl {
 pub class VAppCtrl(opaque);
 
 impl VAppCtrl {
+  // TODO(phase5): host-seam law — privatize when the stash dies.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -227,25 +293,26 @@ entry fn __tur_cb_ptr2(cb: opaque, a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy
 // Table) — face-called WITH an answer (the built view) during flush. The
 // zero-arg entry drives the Condition/Switch branch factories: the
 // builder is invoked at activation and re-invoked at every re-activation
-// (fresh read of live state).
-entry fn __tur_cb_build0(cb: opaque) -> View {
+// (fresh read of live state). The user fn answers a `View`; the entry
+// UNWRAPS it — the engine drain decodes the raw view opaque.
+entry fn __tur_cb_build0(cb: opaque) -> opaque {
   let f = opaque.downcast<fn() -> View>(cb);
-  return f();
+  return f().raw();
 }
 
-entry fn __tur_cb_build1(cb: opaque, i: u64) -> View {
+entry fn __tur_cb_build1(cb: opaque, i: u64) -> opaque {
   let f = opaque.downcast<fn(u64) -> View>(cb);
-  return f(i);
+  return f(i).raw();
 }
 
-entry fn __tur_cb_build2(cb: opaque, i: u64, item: str) -> View {
+entry fn __tur_cb_build2(cb: opaque, i: u64, item: str) -> opaque {
   let f = opaque.downcast<fn(u64, str) -> View>(cb);
-  return f(i, item);
+  return f(i, item).raw();
 }
 
-entry fn __tur_cb_build2i(cb: opaque, i: u64, col: u64) -> View {
+entry fn __tur_cb_build2i(cb: opaque, i: u64, col: u64) -> opaque {
   let f = opaque.downcast<fn(u64, u64) -> View>(cb);
-  return f(i, col);
+  return f(i, col).raw();
 }
 
 // The derive format fns — face-called WITH an answer (the formatted str).
@@ -855,17 +922,17 @@ impl Column {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    flex_child(self.spec, c);
+    flex_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      flex_child(self.spec, c);
+      flex_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return flex_build(self.spec);
+    return View(flex_build(self.spec));
   }
 }
 
@@ -894,17 +961,17 @@ impl Row {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    flex_child(self.spec, c);
+    flex_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      flex_child(self.spec, c);
+      flex_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return flex_build(self.spec);
+    return View(flex_build(self.spec));
   }
 }
 
@@ -931,11 +998,11 @@ impl Expanded {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    flexi_child(self.spec, c);
+    flexi_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return flexi_build(self.spec);
+    return View(flexi_build(self.spec));
   }
 }
 
@@ -962,11 +1029,11 @@ impl Flexible {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    flexi_child(self.spec, c);
+    flexi_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return flexi_build(self.spec);
+    return View(flexi_build(self.spec));
   }
 }
 
@@ -993,17 +1060,17 @@ impl Stack {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    stack_child(self.spec, c);
+    stack_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      stack_child(self.spec, c);
+      stack_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return stack_build(self.spec);
+    return View(stack_build(self.spec));
   }
 }
 
@@ -1051,11 +1118,11 @@ impl Positioned {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    pos_child(self.spec, c);
+    pos_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return pos_build(self.spec);
+    return View(pos_build(self.spec));
   }
 }
 
@@ -1147,17 +1214,17 @@ impl Container {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    box_child(self.spec, c);
+    box_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      box_child(self.spec, c);
+      box_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return box_build(self.spec);
+    return View(box_build(self.spec));
   }
 }
 
@@ -1170,7 +1237,7 @@ impl SizedBox {
     return Self { spec: sizedbox_new(w, h) };
   }
   pub fn child(mut self, c: View) -> Self {
-    sizedbox_child(self.spec, c);
+    sizedbox_child(self.spec, c.inner);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1178,7 +1245,7 @@ impl SizedBox {
     return self;
   }
   pub fn build(self) -> View {
-    return sizedbox_build(self.spec);
+    return View(sizedbox_build(self.spec));
   }
 }
 
@@ -1248,7 +1315,7 @@ impl Text {
     return self;
   }
   pub fn build(self) -> View {
-    return text_build(self.spec);
+    return View(text_build(self.spec));
   }
 }
 
@@ -1348,7 +1415,7 @@ impl Input {
     return self;
   }
   pub fn build(self) -> View {
-    return input_build(self.spec);
+    return View(input_build(self.spec));
   }
 }
 
@@ -1398,11 +1465,11 @@ impl PointerInteract {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    pi_child(self.spec, c);
+    pi_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return pi_build(self.spec);
+    return View(pi_build(self.spec));
   }
 }
 
@@ -1435,11 +1502,11 @@ impl MouseRegion {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    mr_child(self.spec, c);
+    mr_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return mr_build(self.spec);
+    return View(mr_build(self.spec));
   }
 }
 
@@ -1464,11 +1531,11 @@ impl Focusable {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    focus_child(self.spec, c);
+    focus_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return focus_build(self.spec);
+    return View(focus_build(self.spec));
   }
 }
 
@@ -1495,11 +1562,11 @@ impl ScrollView {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    scroll_child(self.spec, c);
+    scroll_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return scroll_build(self.spec);
+    return View(scroll_build(self.spec));
   }
 }
 
@@ -1536,7 +1603,7 @@ impl LazyList {
     return self;
   }
   pub fn build(self) -> View {
-    return lazy_build(self.spec);
+    return View(lazy_build(self.spec));
   }
 }
 
@@ -1590,7 +1657,7 @@ impl LazyGrid {
     return self;
   }
   pub fn build(self) -> View {
-    return lazy_grid_build(self.spec);
+    return View(lazy_grid_build(self.spec));
   }
 }
 
@@ -1625,17 +1692,17 @@ impl Grid {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    grid_child(self.spec, c);
+    grid_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      grid_child(self.spec, c);
+      grid_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return grid_build(self.spec);
+    return View(grid_build(self.spec));
   }
 }
 
@@ -1700,7 +1767,7 @@ impl Table {
     return self;
   }
   pub fn build(self) -> View {
-    return table_build(self.spec);
+    return View(table_build(self.spec));
   }
 }
 
@@ -1727,7 +1794,7 @@ impl Switch {
   // Appends one case — the historical `cases` prop's crossing (`case` is
   // a reserved word in rut).
   pub fn cases(mut self, key: str, branch: View) -> Self {
-    switch_case(self.spec, key, branch);
+    switch_case(self.spec, key, branch.inner);
     return self;
   }
   // The lazy case twin: the branch is a FN VALUE, invoked when the key
@@ -1737,7 +1804,7 @@ impl Switch {
     return self;
   }
   pub fn fallback(mut self, branch: View) -> Self {
-    switch_fallback(self.spec, branch);
+    switch_fallback(self.spec, branch.inner);
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1745,7 +1812,7 @@ impl Switch {
     return self;
   }
   pub fn build(self) -> View {
-    return switch_build(self.spec);
+    return View(switch_build(self.spec));
   }
 }
 
@@ -1758,11 +1825,11 @@ impl Condition {
     return Self { spec: cond_new(r.atom_id()) };
   }
   pub fn then(mut self, branch: View) -> Self {
-    cond_then(self.spec, branch);
+    cond_then(self.spec, branch.inner);
     return self;
   }
   pub fn else_branch(mut self, branch: View) -> Self {
-    cond_else(self.spec, branch);
+    cond_else(self.spec, branch.inner);
     return self;
   }
   // The lazy twins: the branch is a FN VALUE (`fn() -> View`), invoked
@@ -1782,7 +1849,7 @@ impl Condition {
     return self;
   }
   pub fn build(self) -> View {
-    return cond_build(self.spec);
+    return View(cond_build(self.spec));
   }
 }
 
@@ -1799,7 +1866,7 @@ impl Each {
     return self;
   }
   pub fn build(self) -> View {
-    return each_build(self.spec);
+    return View(each_build(self.spec));
   }
 }
 
@@ -1812,17 +1879,17 @@ impl Fragment {
     return Self { spec: frag_new() };
   }
   pub fn child(mut self, c: View) -> Self {
-    frag_child(self.spec, c);
+    frag_child(self.spec, c.inner);
     return self;
   }
   pub fn children(mut self, cs: [View]) -> Self {
     for (let c of cs) {
-      frag_child(self.spec, c);
+      frag_child(self.spec, c.inner);
     }
     return self;
   }
   pub fn build(self) -> View {
-    return frag_build(self.spec);
+    return View(frag_build(self.spec));
   }
 }
 
@@ -1853,7 +1920,7 @@ impl Image {
     return self;
   }
   pub fn build(self) -> View {
-    return img_build(self.spec);
+    return View(img_build(self.spec));
   }
 }
 
@@ -1882,7 +1949,7 @@ impl VirtualApp {
     return self;
   }
   pub fn build(self) -> View {
-    return va_build(self.spec);
+    return View(va_build(self.spec));
   }
 }
 
@@ -1903,11 +1970,11 @@ impl Lifecycle {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    lc_child(self.spec, c);
+    lc_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return lc_build(self.spec);
+    return View(lc_build(self.spec));
   }
 }
 
@@ -1926,11 +1993,11 @@ impl CompositedTarget {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    ct_target_child(self.spec, c);
+    ct_target_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return ct_target_build(self.spec);
+    return View(ct_target_build(self.spec));
   }
 }
 
@@ -1963,11 +2030,11 @@ impl CompositedFollower {
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
-    ct_follower_child(self.spec, c);
+    ct_follower_child(self.spec, c.inner);
     return self;
   }
   pub fn build(self) -> View {
-    return ct_follower_build(self.spec);
+    return View(ct_follower_build(self.spec));
   }
 }
 
@@ -1975,22 +2042,19 @@ impl CompositedFollower {
 
 // The structured-value data ops (the list/map builders the case code
 // folds into sources; the STATE writes go through the ctx, never these).
+// Minting WRAPS: the handle is nominal, the rows take `h.inner` inside
+// the class methods (`.push` / `.set` / …).
 pub fn list_new() -> ListHandle {
-  return rs_list_new();
-}
-
-pub fn list_push(l: ListHandle, item: str) {
-  rs_list_push(l, item);
+  return ListHandle(rs_list_new());
 }
 
 pub fn map_new() -> MapHandle {
-  return rs_map_new();
+  return MapHandle(rs_map_new());
 }
 
-pub fn map_set(m: MapHandle, key: str, value: str) {
-  rs_map_set(m, key, value);
-}
-
+// The raw-opaque readers (the store's read-back lane: `ctx.get<opaque>`
+// recovers the structured value as a bare opaque — these take it
+// directly). The handle-typed surface is the classes' methods.
 pub fn value_len(v: opaque) -> u64 {
   return rs_value_len(v);
 }
@@ -2023,14 +2087,14 @@ pub fn image_resource_solid(w: u64, h: u64, packed: u64) -> u64 {
 // Register a string-authored child module source with the virtual-app
 // subsystem — the `createModuleSource` twin.
 pub fn virtual_app_source(src: str) -> VAppSource {
-  return va_create_source(src);
+  return VAppSource(va_create_source(src));
 }
 
 // Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
 // answers) into the source handle — Rust-defined sources enter the realm
 // as plain u64s.
 pub fn virtual_app_source_handle(id: u64) -> VAppSource {
-  return va_source_handle(id);
+  return VAppSource(va_source_handle(id));
 }
 
 // Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
@@ -2042,5 +2106,5 @@ pub fn virtual_app_atom() -> u64 {
 // Mint a virtual-app controller from a registered source — the
 // `createVirtualAppController` twin.
 pub fn virtual_app_controller(src: VAppSource) -> VAppCtrl {
-  return VAppCtrl(va_controller(src));
+  return VAppCtrl(va_controller(src.inner));
 }

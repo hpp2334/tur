@@ -1,8 +1,8 @@
 // composited-transform-sibling-relayout: an unrelated sibling's reactive
 // height flip forces the common Stack to relayout — the follower must keep
 // painting at the tracked (100, 80).
-use tur_host::{ ALIGN_TOP_LEFT, ct_link_new, mount };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT, ct_link_new };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mount, mutate, source };
 
 
 entry fn start() -> u64 {

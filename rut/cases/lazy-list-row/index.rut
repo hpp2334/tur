@@ -1,6 +1,6 @@
 // lazy-list-row: a 50-item HORIZONTAL virtualized list (80px columns).
-use tur_host::{ AXIS_HORIZONTAL, mount };
-use tur_kit::{ Container, LazyList, Source, source };
+use tur_host::{ AXIS_HORIZONTAL };
+use tur_kit::{ Container, LazyList, Source, mount, source };
 
 
 fn item(i: u64) -> View {

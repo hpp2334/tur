@@ -3,8 +3,7 @@
 // MutationCtx; the thumb's alignment is authored once from the seed value
 // (reads live in ctx bodies, so the static subtree takes the initial
 // state).
-use tur_host::mount;
-use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, mutate, source };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, mount, mutate, source };
 
 
 entry fn start() -> u64 {

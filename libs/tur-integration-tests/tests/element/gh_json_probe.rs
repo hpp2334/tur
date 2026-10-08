@@ -8,8 +8,8 @@
 use tur_integration_tests::TurTestApp;
 
 const PROBE_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 // ASCII codepoints the scanner compares against (typed so the literals
 // land on `u32`).

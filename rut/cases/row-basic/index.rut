@@ -1,6 +1,6 @@
 // row-basic: two fixed-width children laid out horizontally.
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Container, Row };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Container, Row, mount };
 
 
 fn box_w(w: f64) -> View {

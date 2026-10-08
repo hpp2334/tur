@@ -712,8 +712,8 @@ fn joined(spans: &[(String, u64)]) -> String {
 /// `pg_apply_highlight`) over a baked-in source — a keyword, an f-string
 /// with a hole, a comment, and the fn/call/method/param roles.
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
-use tur_host::{ mount, pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_host::{ pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, mutate, source };
 
 let K_CTRL: u64 = 2;
 
@@ -867,8 +867,8 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
 /// kit's `.on_input(name, id)` (the `input_on_input` row). Every user
 /// edit delivers the named entry with the row's id crossing.
 const INPUT_ON_INPUT_MODULE: &str = r#"
-use tur_host::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
+use tur_host::{ ctx_bridge, tctrl_new, undo_new };
+use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
 
 entry fn start() -> u64 {
     let text: Readable<str> = source<str>("cold");
@@ -1206,8 +1206,8 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
 // future span/shaping regression trips here.
 
 const SPACING_ROWS_MODULE: &str = r#"
-use tur_host::{ mount, pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_host::{ pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, mutate, source };
 
 let K_CTRL: u64 = 2;
 

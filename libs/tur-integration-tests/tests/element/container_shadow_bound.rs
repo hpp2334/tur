@@ -14,8 +14,8 @@ use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, Source, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 
 entry fn start() -> u64 {
     // The channels mint in order: color, blur, dy (the probe entries
@@ -51,8 +51,7 @@ entry fn resteepen(atom: u64, _b: f64) {
 "#;
 
 const STATIC_SHADOW_RUT: &str = r#"
-use tur_host::mount;
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, source };
 
 entry fn start() -> u64 {
     let dy: Readable<f64> = source<f64>(12.0);

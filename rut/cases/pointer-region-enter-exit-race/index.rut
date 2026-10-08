@@ -1,8 +1,7 @@
 // pointer-region-enter-exit-race: two regions sharing one hover atom —
 // moving A->B in a single event must land on "B" (exit-before-enter).
 // The four handlers are mutations over the shared hover source.
-use tur_host::mount;
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
 
 
 entry fn start() -> u64 {

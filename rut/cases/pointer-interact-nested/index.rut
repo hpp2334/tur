@@ -2,8 +2,8 @@
 // the outer, the translucent inner lets both fire. The result labels are
 // derived readables over the two counter pairs; every tap is a mutation
 // capturing its counter (no ids, no stash).
-use tur_host::{ CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
-use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mutate, source };
+use tur_host::{ CROSS_ALIGN_START, MAIN_SIZE_MIN };
+use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mount, mutate, source };
 
 
 entry fn start() -> u64 {

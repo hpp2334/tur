@@ -25,10 +25,10 @@
 // local first).
 use tur_host::{
     ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH,
-    CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
+    CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg,
     net_request, spawn, str_parse_f64, tctrl_new, tctrl_set_text, undo_new,
 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, TaskCtx, Text, list_new, list_push, mutate, source };
+use tur_kit::{ Column, Condition, Container, Each, Expanded, Image, Input, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, TaskCtx, Text, list_new, mutate, source };
 
 
 // The state bundle (the sources every journey reads and writes — handles
@@ -94,7 +94,7 @@ entry fn start() -> u64 {
         stats: source<str>(""),
         path: source<str>(""),
         selected: source<str>(""),
-        files: source<opaque>(list_new()),
+        files: source<opaque>(list_new().raw()),
         is_empty: source<bool>(false),
         busy: source<bool>(false),
     };
@@ -572,7 +572,7 @@ async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
         fail(ctx, s, "Unexpected file-list response from the GitHub API.", true);
         return "";
     }
-    ctx.set<opaque>(s.files, fresh);
+    ctx.set<opaque>(s.files, fresh.raw());
     ctx.set<bool>(s.is_empty, ndirs + nfiles == 0);
     ctx.set<bool>(s.busy, false);
     ctx.set<str>(s.mode, "explorer");
@@ -857,10 +857,10 @@ fn json_contents(t: str, out: ListHandle, dirs_only: bool) -> i32 {
         if (is_dir == dirs_only) {
             let name = json_get_str(item, "name");
             if (is_dir) {
-                list_push(out, f"d|{name}");
+                out.push(f"d|{name}");
             } else {
                 let size = json_get_str(item, "size");
-                list_push(out, f"f|{name}|{size}");
+                out.push(f"f|{name}|{size}");
             }
             count = count + 1;
         }

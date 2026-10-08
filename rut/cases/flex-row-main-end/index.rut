@@ -1,6 +1,6 @@
 // flex-row-main-end: two fixed-width children pinned to the main-axis end.
-use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END, mount };
-use tur_kit::{ Container, Row };
+use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END };
+use tur_kit::{ Container, Row, mount };
 
 
 fn box_wh(w: f64, h: f64) -> View {

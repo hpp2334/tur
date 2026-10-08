@@ -1,8 +1,8 @@
 // pointer-drag: a gesture pad reporting down/move/up — the phase label
 // and the last position ride two bound sources; the drag mutations
 // receive the typed `PointerEvent` (state by capture, data by argument).
-use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mutate, source };
+use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_START };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mount, mutate, source };
 
 
 entry fn start() -> u64 {

@@ -14,11 +14,11 @@ fn setup_grid(
     let mut app = TurTestApp::new(width, height).unwrap();
     app.load_rut_module(&format!(
         r#"
-use tur_host::{{ mount }};
-use tur_kit::{{ Container, Grid }};
+
+use tur_kit::{{ Container, Grid, mount }};
 
 
-fn tile() -> opaque {{
+fn tile() -> View {{
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);
     return b.build();
 }}

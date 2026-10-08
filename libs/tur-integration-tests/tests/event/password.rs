@@ -7,8 +7,8 @@ use tur_integration_tests::TurTestApp;
 /// (`el_input_opts` flags bit 1). The `queryKey` lands on Input's Container
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-use tur_host::{ mount, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, MutationCtx, Readable, Source, source };
+use tur_host::{ tctrl_new, undo_new };
+use tur_kit::{ Column, Input, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
 
 
 entry fn start() {
@@ -26,8 +26,8 @@ entry fn start() {
 /// `input_obscure` + `input_obscure_char` (the JS `obscureText: true` +
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-use tur_host::{ mount, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Input, MutationCtx, Readable, Source, source };
+use tur_host::{ tctrl_new, undo_new };
+use tur_kit::{ Input, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -296,8 +296,8 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// returns its id — the standard probe channel). `probe_obscure(b)` sets
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
-use tur_host::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Input, Mutation, MutationCtx, Readable, Source, source };
+use tur_host::{ ctx_bridge, tctrl_new, undo_new };
+use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -362,8 +362,8 @@ fn obscure_bound_toggles_masking_reactively() {
 /// same Val/subscribe machinery `obscure_bound` exercises above — plus
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
-use tur_host::{ ctx_bridge, mount, tctrl_new, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Input, Mutation, MutationCtx, Readable, Source, source };
+use tur_host::{ ctx_bridge, tctrl_new, undo_new };
+use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();

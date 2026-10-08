@@ -1,8 +1,8 @@
 // container-update-clear-prop: the checkbox's color prop is bound to a
 // brush source — toggling clears it (a Nil brush fails the decode and the
 // prop resolves to absent) while the border stays.
-use tur_host::{ BORDER_CENTER, ctx_bridge, mount };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerInteract, Readable, Source, mutate, source };
+use tur_host::{ BORDER_CENTER, ctx_bridge };
+use tur_kit::{ Container, Mutation, MutationCtx, PointerInteract, Readable, Source, mount, mutate, source };
 
 
 entry fn start() -> u64 {

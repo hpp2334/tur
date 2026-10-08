@@ -71,14 +71,14 @@
 use tur_host::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_COL_RESIZE, CURSOR_POINTER, ctx_bridge,
     img_res_svg, MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, mem_get, mem_new,
-    mem_set, mount, pg_apply_highlight, pg_case_count, pg_case_name, pg_case_source, pg_compile,
+    mem_set, pg_apply_highlight, pg_case_count, pg_case_name, pg_case_source, pg_compile,
     pg_compile_diags, pg_highlight, rs_get_bool, rs_get_f64, rs_get_str,
-    rs_list_new, rs_list_push, rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool,
+    rs_set_bool, rs_set_brush, rs_set_f64, rs_set_str, rs_source_bool,
     rs_source_f64, rs_source_str, rs_source_value, rs_watch_start, rs_watch_stop,
     st_put, stf_put, stf_take, va_app_atom,
-    va_app_set, va_create_source, va_source_handle };
+    va_app_set };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end };
-use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Switch, TaskCtx, Text, TextCtrl, UndoCtrl, VAppCtrl, VirtualApp, mutate, rs_derive, rs_watch, text_ctrl, undo_ctrl, virtual_app_controller };
+use tur_kit::{ Column, Condition, Container, Each, EnterEvent, Expanded, Image, Input, InputEvent, list_new, MouseRegion, Mutation, MutationCtx, mount, PointerEvent, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Switch, TaskCtx, Text, TextCtrl, UndoCtrl, VAppCtrl, VirtualApp, mutate, rs_derive, rs_watch, text_ctrl, undo_ctrl, virtual_app_controller, virtual_app_source, virtual_app_source_handle };
 
 // The handle rebuilders: the raw substrate atom ids cross the stash slots
 // (the module's state rail); the kit's bound props take the typed
@@ -245,14 +245,14 @@ let K_ROW0: u64 = 1000;
 
 entry fn start() -> u64 {
     // The sidebar's case list (from the generated registry).
-    let names = rs_list_new();
+    let names = list_new();
     let n = pg_case_count();
     let mut i = 0;
     while (i < n as i32) {
-        rs_list_push(names, pg_case_name(i as u64));
+        names.push(pg_case_name(i as u64));
         i += 1;
     }
-    let names_atom = rs_source_value(names);
+    let names_atom = rs_source_value(names.raw());
     stf_put(K_NAMES, names_atom as f64);
 
     let selected = rs_source_str("");
@@ -350,7 +350,7 @@ entry fn start() -> u64 {
     // empty module) so `run_case`'s destroy-then-spawn can unconditionally
     // `va_destroy` the stashed controller — and the status watch has a
     // rail to ride until the first run swaps in the real one.
-    let seed = va_create_source("use tur_host::{ mount };\nentry fn start() {\n}\n");
+    let seed = virtual_app_source("use tur_kit::{ mount };\nentry fn start() {\n}\n");
     let seed_ctrl = virtual_app_controller(seed);
     st_put(K_VCTRL, seed_ctrl.raw());
     watch_controller(seed_ctrl);
@@ -1017,7 +1017,7 @@ fn do_run() {
     let old = VAppCtrl(st_take(K_VCTRL));
     old.destroy();
     rs_watch_stop(st_take(K_WATCH));
-    let vctrl = virtual_app_controller(va_source_handle(id));
+    let vctrl = virtual_app_controller(virtual_app_source_handle(id));
     st_put(K_VCTRL, vctrl.raw());
     watch_controller(vctrl);
     let app_atom = stf_take(K_APP) as u64;

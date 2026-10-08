@@ -22,8 +22,8 @@ use tur_native::NativeFontLoader;
 /// best-effort at destroy) registers an image resource — a synchronous
 /// host-visible effect (one `UploadImage` ship).
 const SOURCE: &str = r#"
-use tur_host::{ img_res_solid, mount };
-use tur_kit::{ Container };
+use tur_host::{ img_res_solid };
+use tur_kit::{ Container, mount };
 
 
 entry fn start() {

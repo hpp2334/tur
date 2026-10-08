@@ -1,7 +1,7 @@
 // container-border: explicit size + padding + color + inside border +
 // radius around a Text.
-use tur_host::{ BORDER_INSIDE, mount };
-use tur_kit::{ Container, Text };
+use tur_host::{ BORDER_INSIDE };
+use tur_kit::{ Container, Text, mount };
 
 
 entry fn start() {

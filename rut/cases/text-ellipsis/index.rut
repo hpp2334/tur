@@ -1,6 +1,6 @@
 // text-ellipsis: the long line ellipsized at two lines.
-use tur_host::{ mount };
-use tur_kit::{ Text };
+
+use tur_kit::{ Text, mount };
 
 
 entry fn start() {

@@ -10,8 +10,7 @@
 // Row extents stay intrinsic so the wrapped notes are never clipped.
 // (Module lets are literals-only in this build, so the planet data rides
 // pipe-joined strings.)
-use tur_host::mount;
-use tur_kit::{ Container, Expanded, Source, Table, TableCols, Text, list_new, list_push, source };
+use tur_kit::{ Container, Expanded, mount, Source, Table, TableCols, Text, list_new, source };
 
 
 // The planet data (pipe-joined slots — the row builder indexes by row).
@@ -28,10 +27,10 @@ entry fn start() {
     let rows = list_new();
     let mut i = 0;
     while (i < 6) {
-        list_push(rows, f"p{i}");
+        rows.push(f"p{i}");
         i = i + 1;
     }
-    let rows_atom = source<opaque>(rows);
+    let rows_atom = source<opaque>(rows.raw());
 
     // Per-column geometry: extent 150 / flex 1 / flex 2 (min 120) — the
     // widths resolve against the table width once, and the header + every

@@ -13,8 +13,8 @@ fn with_element_panic_propagates_to_test_thread() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-        use tur_host::{ mount };
-use tur_kit::{ Container };
+        
+use tur_kit::{ Container, mount };
 
 
         entry fn start() {
@@ -52,8 +52,8 @@ use tur_kit::{ Container };
 fn with_element_assert_failure_propagates() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ mount };
-use tur_kit::{ Container };
+        r#"
+use tur_kit::{ Container, mount };
 
 
 

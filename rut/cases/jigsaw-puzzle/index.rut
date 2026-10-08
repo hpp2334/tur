@@ -32,11 +32,8 @@
 //     read-modify-write drift, frame-independent of the stack's offset.
 //   * Not `Each`: the 9 pieces mount ONCE (a rebuild per move event would
 //     drop pointer capture mid-drag).
-use tur_host::{
-    ALIGN_CENTER, ALIGN_TOP_LEFT, BORDER_INSIDE, CROSS_ALIGN_CENTER, CURSOR_POINTER,
-    MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, ctx_bridge, mount,
-};
-use tur_kit::{ Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, mutate, source };
+use tur_host::{ ALIGN_CENTER, ALIGN_TOP_LEFT, BORDER_INSIDE, CROSS_ALIGN_CENTER, CURSOR_POINTER, MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, ctx_bridge };
+use tur_kit::{ Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 // ---- the boa geometry --------------------------------------------------------

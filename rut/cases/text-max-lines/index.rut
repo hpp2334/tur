@@ -1,6 +1,6 @@
 // text-max-lines: the long line clipped to two lines.
-use tur_host::{ mount };
-use tur_kit::{ Text };
+
+use tur_kit::{ Text, mount };
 
 
 entry fn start() {

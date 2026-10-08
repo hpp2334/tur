@@ -20,8 +20,8 @@
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur_host::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
-use tur_kit::{ Column, Container, Each, Expanded, LazyGrid, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, list_push, mutate, source };
+use tur_host::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge };
+use tur_kit::{ Column, Container, Each, Expanded, LazyGrid, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, mutate, source };
 
 
 // The boa palette (the deep-slate gallery chrome).
@@ -37,7 +37,7 @@ entry fn start() {
     let aspect: Readable<f64> = source<f64>(1.0);
     let dense: Readable<bool> = source<bool>(false);
     let count: Readable<f64> = source<f64>(6000.0);
-    let items: Readable<opaque> = source<opaque>(one_list());
+    let items: Readable<opaque> = source<opaque>(one_list().raw());
 
     // The five chip brushes (Square / Wide / Tall / Normal / Dense),
     // seeded to the boot state (Square + Normal).
@@ -100,9 +100,9 @@ entry fn start() {
 
 // A fresh one-item list — rewriting it re-invokes the Each (the grid
 // re-mounts with the live aspect / density read at build time).
-fn one_list() -> View {
+fn one_list() -> ListHandle {
     let fresh = list_new();
-    list_push(fresh, "grid");
+    fresh.push("grid");
     return fresh;
 }
 
@@ -163,7 +163,7 @@ fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<
     return mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(aspect, v);
         paint_chips(ctx, aspect, dense, chips);
-        ctx.set<opaque>(items, one_list());
+        ctx.set<opaque>(items, one_list().raw());
     });
 }
 
@@ -173,7 +173,7 @@ fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u
     return mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(dense, d);
         paint_chips(ctx, aspect, dense, chips);
-        ctx.set<opaque>(items, one_list());
+        ctx.set<opaque>(items, one_list().raw());
     });
 }
 

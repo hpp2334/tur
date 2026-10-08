@@ -1,7 +1,7 @@
 // vello-column-basic: a colored container with two text rows — the vello
 // render smoke fixture.
-use tur_host::{ mount };
-use tur_kit::{ Column, Container, Text };
+
+use tur_kit::{ Column, Container, Text, mount };
 
 
 entry fn start() {

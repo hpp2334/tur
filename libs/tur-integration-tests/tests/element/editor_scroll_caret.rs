@@ -35,8 +35,8 @@ const ZERO: Duration = Duration::ZERO;
 /// hundreds of pixels. Every line is exactly 7 bytes ("line {i}\n"), so line
 /// `i` starts at byte `7 * i`.
 const EDITOR_RUT: &str = r#"
-use tur_host::{ mount, st_put, st_take, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Input };
+use tur_host::{ st_put, st_take, tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
 
 let K_CTRL: u64 = 1;
 
@@ -396,8 +396,8 @@ use vello_common::kurbo::Affine;
 /// Two short lines in the 200×60 editor — the content fits with room to
 /// spare, so the scrollable excess is 0 and a wheel must be a no-op.
 const SHORT_RUT: &str = r#"
-use tur_host::{ mount, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ TextCtrl, UndoCtrl, Input };
+use tur_host::{ tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();

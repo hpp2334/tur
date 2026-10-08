@@ -1,8 +1,8 @@
 // scroll-view-shrink-wrap: the viewport shrink-wraps to its content
 // (120x80) under the root's loose constraints (Flutter
 // _RenderSingleChildViewport parity).
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container, ScrollView };
+use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_START };
+use tur_kit::{ Column, Container, ScrollView, mount };
 
 
 entry fn start() {

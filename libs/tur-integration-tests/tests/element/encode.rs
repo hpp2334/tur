@@ -9,8 +9,8 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur_host::{ ctx_bridge, decode_utf8, encode_utf8, mount };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, source };
+use tur_host::{ ctx_bridge, decode_utf8, encode_utf8 };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
 entry fn start() -> u64 {

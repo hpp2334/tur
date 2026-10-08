@@ -1,7 +1,7 @@
 // container-padding-offset: a padded container around a start-aligned
 // column holding one fixed-size child.
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Column, Container, mount };
 
 
 entry fn start() {

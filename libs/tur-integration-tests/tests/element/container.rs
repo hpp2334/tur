@@ -234,8 +234,8 @@ fn container_with_shadow() {
 // ---------------------------------------------------------------------------
 
 const RADIUS_BOUND_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, source };
 
 entry fn start() -> u64 {
     let r: Readable<f64> = source<f64>(8.0);

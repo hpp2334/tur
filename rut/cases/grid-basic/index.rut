@@ -6,8 +6,7 @@
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur_host::mount;
-use tur_kit::{ Container, Grid };
+use tur_kit::{ Container, Grid, mount };
 
 
 entry fn start() {

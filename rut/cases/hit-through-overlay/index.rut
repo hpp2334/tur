@@ -2,8 +2,8 @@
 // overlay must not steal pointer/wheel input from the scrollable beneath;
 // the opaque anchored pill still consumes clicks. The counters render into
 // bound Texts (`beneath-downs` / `pill-clicks`).
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, ScrollView, Source, Stack, Text, mutate, source };
+use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, ScrollView, Source, Stack, Text, mount, mutate, source };
 
 
 entry fn start() -> u64 {

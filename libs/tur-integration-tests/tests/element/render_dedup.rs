@@ -41,8 +41,8 @@ fn identical_frames_render_once() {
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
     app.load_rut_module(
         r#"
-use tur_host::{ mount };
-use tur_kit::{ Container, MutationCtx, Readable, Source, source };
+
+use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 
 
 entry fn start() {
@@ -86,8 +86,8 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, MutationCtx, Readable, Source, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 
 entry fn start() -> u64 {
     let color: Readable<u64> = source<u64>(0);
@@ -150,9 +150,9 @@ fn attach_resets_dedup() {
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
     app.load_rut_module(
         r#"
-use tur_host::{ mount };
-use tur_kit::{ Container, MutationCtx, Readable, Source, source };
-use tur_kit::{ Container, MutationCtx, Readable, Source, source };
+
+use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 
 
 

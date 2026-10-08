@@ -332,8 +332,8 @@ fn text_max_lines_no_truncation_when_fits() {
 #[test]
 fn text_layout_is_dpr_invariant() {
     let fixture = r#"
-use tur_host::{ mount };
-use tur_kit::{ Container, Text };
+
+use tur_kit::{ Container, Text, mount };
 
 
 entry fn start() {

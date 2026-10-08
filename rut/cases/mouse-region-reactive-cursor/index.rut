@@ -2,8 +2,8 @@
 // layout — flipping the atom re-resolves the cursor on hover. The
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the guarded ctx row.
-use tur_host::{ ctx_bridge, ctx_set_str, mount };
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
+use tur_host::{ ctx_bridge, ctx_set_str };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
 
 
 entry fn start() -> u64 {

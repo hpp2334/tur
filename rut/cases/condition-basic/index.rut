@@ -1,8 +1,7 @@
 // condition-basic: a Condition whose then-branch renders (pre-built
 // branches swapped by the engine — no rut during flush). The condition
 // rides a typed bool source handle.
-use tur_host::mount;
-use tur_kit::{ Condition, Container, Source, Text, source };
+use tur_kit::{ Condition, Container, Source, Text, mount, source };
 
 
 entry fn start() {

@@ -18,8 +18,8 @@
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur_host::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge, mount };
-use tur_kit::{ Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, derive, mutate, source };
+use tur_host::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge };
+use tur_kit::{ Column, Container, DeriveCtx, Expanded, Grid, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, derive, mount, mutate, source };
 
 
 // The boa palette (deep slate page, indigo active chips).

@@ -1,7 +1,6 @@
 // pointer-interact-empty: a bare PointerInteract with no child — the
 // invisible hit-target widget (zero-sized, still absorbs at its point).
-use tur_host::mount;
-use tur_kit::{ PointerInteract };
+use tur_kit::{ PointerInteract, mount };
 
 
 entry fn start() {

@@ -6,8 +6,8 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-use tur_host::{ mount };
-use tur_kit::{ Column, Container, Expanded };
+
+use tur_kit::{ Column, Container, Expanded, mount };
 
 
 entry fn start() {

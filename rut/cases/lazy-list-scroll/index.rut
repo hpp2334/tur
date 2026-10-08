@@ -1,7 +1,6 @@
 // lazy-list-scroll: a 100-row virtualized list (wheeling mounts rows
 // outside the initial build set).
-use tur_host::mount;
-use tur_kit::{ Container, LazyList, Source, source };
+use tur_kit::{ Container, LazyList, Source, mount, source };
 
 
 fn row(i: u64) -> View {

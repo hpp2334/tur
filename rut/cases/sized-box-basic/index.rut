@@ -1,6 +1,6 @@
 // sized-box-basic: an exactly-sized box wrapping a Text child.
-use tur_host::{ mount };
-use tur_kit::{ SizedBox, Text };
+
+use tur_kit::{ SizedBox, Text, mount };
 
 
 entry fn start() {

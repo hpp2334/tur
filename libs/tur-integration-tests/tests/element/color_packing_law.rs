@@ -56,8 +56,8 @@ fn container_color_packs_rrggbbaa() {
 
     app.load_rut_module(
         r#"
-use tur_host::{ mount };
-use tur_kit::{ Container };
+
+use tur_kit::{ Container, mount };
 
 
 entry fn start() {

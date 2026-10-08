@@ -2,8 +2,8 @@
 // main-axis constraints, so the inner Row (default MainAxisSize.max) must
 // shrink-wrap to its content width instead of consuming the outer Row's
 // full width — leaving the following sibling visible.
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Container, Row };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Container, Row, mount };
 
 
 fn box_wh(w: f64, h: f64) -> View {

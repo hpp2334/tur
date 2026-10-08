@@ -12,9 +12,9 @@
 // reference, NEITHER boots open (the boot-modal bug is not ported).
 use tur_host::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_START,
     CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END,
-    MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg, mount,
+    MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg,
     tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Text, list_new, list_push, mutate, source, value_item, value_len };
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Text, list_new, mutate, source, value_item, value_len };
 
 
 // The boa light palette (Notion / Linear-style).
@@ -41,7 +41,7 @@ let SVG_PLUS: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='
 
 entry fn start() -> u64 {
     // The board state (all rides by capture — no stash).
-    let tasks = source<opaque>(seed_tasks());
+    let tasks = source<opaque>(seed_tasks().raw());
     let n = source<f64>(0.0);
     let done = source<f64>(0.0);
     let add_open = source<bool>(false);
@@ -126,11 +126,11 @@ entry fn start() -> u64 {
 // The boa state.ts seed list.
 fn seed_tasks() -> ListHandle {
     let items = list_new();
-    list_push(items, "Buy groceries|Milk, eggs, sourdough, coffee beans|0");
-    list_push(items, "Walk the dog|30 minutes around the park|1");
-    list_push(items, "Finish quarterly report|Q2 numbers + projection slides for Monday's review|0");
-    list_push(items, "Call mom|Birthday planning for Saturday|0");
-    list_push(items, "Read chapter 4|Designing Data-Intensive Applications|0");
+    items.push("Buy groceries|Milk, eggs, sourdough, coffee beans|0");
+    items.push("Walk the dog|30 minutes around the park|1");
+    items.push("Finish quarterly report|Q2 numbers + projection slides for Monday's review|0");
+    items.push("Call mom|Birthday planning for Saturday|0");
+    items.push("Read chapter 4|Designing Data-Intensive Applications|0");
     return items;
 }
 
@@ -493,11 +493,11 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
         let mut k: u64 = 0;
         while (k < count) {
             if (k != target) {
-                list_push(fresh, value_item(old, k));
+                fresh.push(value_item(old, k));
             }
             k = k + 1;
         }
-        ctx.set<opaque>(tasks, fresh);
+        ctx.set<opaque>(tasks, fresh.raw());
         recount(ctx, tasks, n, done);
         ctx.set<bool>(rm_open, false);
     });
@@ -547,16 +547,16 @@ fn toggle_task(ctx: MutationCtx, tasks: Readable<opaque>, idx: u64) {
         if (k == idx) {
             let body = item.slice(0, item.len() - 1);
             if (item_done(item)) {
-                list_push(fresh, f"{body}0");
+                fresh.push(f"{body}0");
             } else {
-                list_push(fresh, f"{body}1");
+                fresh.push(f"{body}1");
             }
         } else {
-            list_push(fresh, item);
+            fresh.push(item);
         }
         k = k + 1;
     }
-    ctx.set<opaque>(tasks, fresh);
+    ctx.set<opaque>(tasks, fresh.raw());
 }
 
 // The add-modal append (the encoded row arrives prebuilt).
@@ -566,11 +566,11 @@ fn append_task(ctx: MutationCtx, tasks: Readable<opaque>, row: str) {
     let count = value_len(old);
     let mut k: u64 = 0;
     while (k < count) {
-        list_push(fresh, value_item(old, k));
+        fresh.push(value_item(old, k));
         k = k + 1;
     }
-    list_push(fresh, row);
-    ctx.set<opaque>(tasks, fresh);
+    fresh.push(row);
+    ctx.set<opaque>(tasks, fresh.raw());
 }
 
 // ---- the counters -------------------------------------------------------------------

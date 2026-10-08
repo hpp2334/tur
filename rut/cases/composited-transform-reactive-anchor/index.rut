@@ -1,8 +1,8 @@
 // composited-transform-reactive-anchor: the target anchor resolves from a
 // source; the button (20, 540) flips it to BottomRight — the follower
 // relocates to the target's bottom-right (160, 120).
-use tur_host::{ ALIGN_TOP_LEFT, ct_link_new, mount };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT, ct_link_new };
+use tur_kit::{ CompositedFollower, CompositedTarget, Container, Mutation, MutationCtx, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, mount, mutate, source };
 
 
 entry fn start() -> u64 {

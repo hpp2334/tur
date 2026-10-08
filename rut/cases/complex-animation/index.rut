@@ -18,8 +18,8 @@
 // label swaps "Loop" ↔ "Loop ✓" with white text when on) are mutations
 // over the handles they capture — the boa interactions, no ids, no stash.
 // The boot brush seeds ride the root Lifecycle's on_mount.
-use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, color_tween_lerp, math_cos, math_sin, mount, tween_lerp };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, list_new, mutate, source };
+use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, color_tween_lerp, math_cos, math_sin, tween_lerp };
+use tur_kit::{ Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, list_new, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 
@@ -88,7 +88,7 @@ entry fn start() -> u64 {
     // is never driven — the mount seed lands the real boot controller
     // before any interaction (the host-box rail: opaques are just
     // values).
-    let controller: Readable<opaque> = source<opaque>(list_new());
+    let controller: Readable<opaque> = source<opaque>(list_new().raw());
 
     // The end: status → the badge label + the fill brush.
     let a_end: ?Mutation<nil> = mutate(fn (ctx: MutationCtx, _e: nil) {

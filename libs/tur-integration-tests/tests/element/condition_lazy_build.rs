@@ -18,8 +18,8 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Column, Condition, Mutation, MutationCtx, Readable, Source, Text, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Column, Condition, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 entry fn start() -> u64 {
     let open: Readable<bool> = source<bool>(false);
@@ -114,8 +114,8 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Switch, Text, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Switch, Text, mount, source };
 
 entry fn start() -> u64 {
     let tab: Readable<str> = source<str>("b");

@@ -1,7 +1,7 @@
 // container-clip-rounded: a rounded, hard-edge-clipped container holding
 // an oversized red child (the corners must clip).
-use tur_host::{ CLIP_HARD_EDGE, mount };
-use tur_kit::{ Container };
+use tur_host::{ CLIP_HARD_EDGE };
+use tur_kit::{ Container, mount };
 
 
 entry fn start() {

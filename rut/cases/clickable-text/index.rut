@@ -2,8 +2,8 @@
 // swaps the atom's content. The handler is a MUTATION over the
 // MutationCtx (the triad: source / derive / mutate); the source binds by
 // capture — no ids, no stash.
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source };
 
 
 entry fn start() -> u64 {

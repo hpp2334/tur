@@ -30,23 +30,23 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
-use tur_host::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
-use tur_kit::{ Column, Container, Readable, Table, TableCols };
+use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+use tur_kit::{ Column, Container, Readable, Table, TableCols, mount };
 
 
-fn cell(key: str) -> opaque {
+fn cell(key: str) -> View {
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
     return b.build();
 }
 
-fn header_row(_col: u64) -> opaque {
+fn header_row(_col: u64) -> View {
     let col = Column().child(cell("h0")).child(cell("h1")).child(cell("h2"));
     return col.build();
 }
 
 // The row builder receives `(row, col)` (the RutEntryBuilder face calls
 // it per column; the row spans all three columns, so `col` is ignored).
-fn row_cell(i: u64, _col: u64) -> opaque {
+fn row_cell(i: u64, _col: u64) -> View {
     let col = Column().child(cell(f"c0-{i}")).child(cell(f"c1-{i}")).child(cell(f"c2-{i}"));
     return col.build();
 }
@@ -138,11 +138,11 @@ fn fills_for(
 /// declarative stripes — even rows red, odd rows blue (the cells paint
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
-use tur_host::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Readable, Table, TableCols };
+use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_source_value };
+use tur_kit::{ Container, Readable, Table, TableCols, mount };
 
 
-fn body_cell(_row: u64, _col: u64) -> opaque {
+fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();
 }
 
@@ -213,11 +213,11 @@ fn column_extent_honored_in_layout() {
     // (min 120) — the leftover 250 splits 1:2.
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Readable, Table, TableCols };
+use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_source_value };
+use tur_kit::{ Container, Readable, Table, TableCols, mount };
 
 
-fn body_cell(_row: u64, _col: u64) -> opaque {
+fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();
 }
 

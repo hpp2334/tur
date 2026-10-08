@@ -1,8 +1,8 @@
 // column-overflow: three 300px children in a Min column — total 900px
 // overflows the 600px viewport. Children keep their natural height (not
 // squished to 0).
-use tur_host::{ MAIN_SIZE_MIN, mount };
-use tur_kit::{ Column, Container };
+use tur_host::{ MAIN_SIZE_MIN };
+use tur_kit::{ Column, Container, mount };
 
 
 fn box_h(h: f64) -> View {

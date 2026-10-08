@@ -239,11 +239,11 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let b = Container()
         .width_height(50.0, 50.0)
         .color(0xC8C8C8FFu64)
@@ -317,12 +317,12 @@ entry fn start() -> u64 {
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
+        r#"use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
 
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let b = Container()
         .width_height(56.0, 56.0)
         .color(0xC8C8C8FFu64)
@@ -790,12 +790,12 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
+        r#"use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
 
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
@@ -838,12 +838,12 @@ entry fn set_count(atom: u64, n: f64) {
 fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
+        r#"use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
 
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
@@ -911,12 +911,12 @@ entry fn set_count(atom: u64, n: f64) {
 fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, source };
+        r#"use tur_host::{ ctx_bridge };
+use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 
 
-fn row(i: u64) -> opaque {
+fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }

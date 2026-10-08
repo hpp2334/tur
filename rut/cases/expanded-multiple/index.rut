@@ -1,6 +1,6 @@
 // expanded-multiple: two Expanded children sharing the main axis evenly.
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container, Expanded };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Column, Container, Expanded, mount };
 
 
 fn box_wh(w: f64, h: f64) -> View {

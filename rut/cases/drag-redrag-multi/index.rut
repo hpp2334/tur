@@ -3,8 +3,8 @@
 // mutations (opaques are just values — no stash); per-tile event
 // transcripts render into `tile-events-0` / `tile-events-1` (each tile's
 // mutation captures its own transcript source).
-use tur_host::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT };
+use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 

@@ -42,8 +42,8 @@ fn rect(app: &TurTestApp, key: &[&str]) -> (f64, f64, f64, f64) {
 // ── Shape (a): a fixed-size Container as a Column child ─────────────────
 
 const FIXED_HEADER_RUT: &str = r#"
-use tur_host::{ mount };
-use tur_kit::{ Column, Container, Text };
+
+use tur_kit::{ Column, Container, Text, mount };
 
 entry fn start() -> u64 {
     // The lazy-grid-gallery header shape, with the size the audit assumed:
@@ -91,8 +91,8 @@ fn fixed_size_column_child_honored() {
 // ── Shape (b): an unset-width (0 = unset idiom) child among siblings ────
 
 const UNSET_WIDTH_HEADER_RUT: &str = r#"
-use tur_host::{ mount };
-use tur_kit::{ Column, Container, Text };
+
+use tur_kit::{ Column, Container, Text, mount };
 
 entry fn start() -> u64 {
     // The table-reactive shape verbatim: header `width_height(0, 32)` (0 =

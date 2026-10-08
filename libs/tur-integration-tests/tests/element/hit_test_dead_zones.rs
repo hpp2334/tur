@@ -73,8 +73,8 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 // ── Shape (a): PointerInteract inside ScrollView content ────────────────
 
 const SCROLL_BTN_RUT: &str = r#"
-use tur_host::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount };
-use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mutate, source };
+use tur_host::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH };
+use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let taps: Readable<f64> = source<f64>(0.0);
@@ -175,8 +175,8 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 // ── Shape (b): PointerInteract inside Positioned inside Stack ───────────
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
-use tur_host::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT };
+use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
@@ -215,8 +215,8 @@ entry fn start() -> u64 {
 // `.child(pos)` on that View, then `mount(stack.build())`. See the test
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
-use tur_host::{ ALIGN_TOP_LEFT, mount };
-use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
+use tur_host::{ ALIGN_TOP_LEFT };
+use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
@@ -286,8 +286,8 @@ fn positioned_in_stack_piece_receives_drag_single_build() {
 // `stack` holds a VIEW, not the builder), then `.child(pos)` on that View,
 // then `mount(stack.build())`. VERDICT: the shape cannot exist — the kit's
 // compile-time type check rejects the post-build mutation outright
-// ("`opaque` has no methods": `build()` returns `View` = `opaque`, and
-// opaques carry no builder methods), so the audited malformation fails the
+// ("`View` has no method `child`": `build()` returns the `View` newtype,
+// which carries no builder methods), so the audited malformation fails the
 // module at LOAD, never mounting a dead tree. Combined with the green
 // single-build variant above, the Positioned-in-Stack dead zone cannot be
 // an engine hit-test bug — it is case-authoring (or browser-side), and the
@@ -301,8 +301,8 @@ fn double_build_is_rejected_at_compile_time() {
         .expect_err("build-then-mutate must fail at COMPILE time");
     let msg = format!("{err}");
     assert!(
-        msg.contains("opaque"),
-        "the diagnostic should name the opaque-method misuse, got: {msg}"
+        msg.contains("View"),
+        "the diagnostic should name the post-build method misuse, got: {msg}"
     );
 }
 

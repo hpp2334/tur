@@ -1,6 +1,6 @@
 // input-multiline: a multiline editable with an explicit size.
-use tur_host::{ mount, tctrl_new, undo_new };
-use tur_kit::{ Container, Input };
+use tur_host::{ tctrl_new, undo_new };
+use tur_kit::{ Container, Input, mount };
 
 
 entry fn start() {

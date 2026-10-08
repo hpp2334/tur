@@ -8,8 +8,8 @@ use tur_integration_tests::TurTestApp;
 /// A switch bound to a str atom with two cases + a fallback; `set_key`
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
-use tur_host::{ ctx_bridge, mount };
-use tur_kit::{ Mutation, MutationCtx, Readable, Source, Switch, Text, source };
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Mutation, MutationCtx, Readable, Source, Switch, Text, mount, source };
 
 
 entry fn start() -> u64 {
@@ -119,9 +119,9 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 /// dep as f64 (`entry fn d(dep: f64) -> str`), so the source is a numeric
 /// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
-use tur_host::{ ctx_bridge, mount, rs_set_f64, rs_source_f64 };
-use tur_kit::{ MutationCtx, Readable, Source, Switch, Text, source };
-use tur_kit::{ MutationCtx, Readable, Source, rs_derive, source };
+use tur_host::{ ctx_bridge, rs_set_f64, rs_source_f64 };
+use tur_kit::{ MutationCtx, Readable, Source, Switch, Text, mount, source };
+use tur_kit::{ MutationCtx, Readable, Source, mount, rs_derive, source };
 
 fn d(v: f64) -> str {
     if (v == 1.0) {

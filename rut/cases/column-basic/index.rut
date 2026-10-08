@@ -1,7 +1,7 @@
 // column-basic: two fixed-height children stacked vertically (the root
 // Column fills the viewport; cross axis start-aligned).
-use tur_host::{ CROSS_ALIGN_START, mount };
-use tur_kit::{ Column, Container };
+use tur_host::{ CROSS_ALIGN_START };
+use tur_kit::{ Column, Container, mount };
 
 
 fn box_h(h: f64) -> View {
