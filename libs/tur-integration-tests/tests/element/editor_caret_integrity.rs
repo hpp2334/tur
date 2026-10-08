@@ -27,15 +27,14 @@ use tur_integration_tests::TurTestApp;
 
 const ZERO: Duration = Duration::ZERO;
 
-const K_CTRL: u64 = 1;
-const K_MODE: u64 = 2;
-
 const EDITOR_RUT: &str = r#"
-use tur_host::{ ctx_bridge, rs_set_str, rs_source_str, st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Clip, Container, Input, Source, Switch, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Clip, Container, Input, Source, Switch, TextCtrl, UndoCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
 
-let K_CTRL: u64 = 1;
-let K_MODE: u64 = 2;
+struct EditorCx {
+    ctrl: TextCtrl,
+    undo: UndoCtrl,
+    mode: Source<str>,
+}
 
 fn long_doc() -> str {
     let mut text = "";
@@ -51,13 +50,12 @@ fn long_doc() -> str {
     return text;
 }
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, long_doc());
-    st_put(K_CTRL, ctrl);
-    let mode = rs_source_str("split");
-    stf_put(K_MODE, mode as f64);
-    let editor = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new()))
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    ctrl.set_text(long_doc());
+    let undo = undo_ctrl();
+    let mode = source<str>("split");
+    let editor = Input().controller(ctrl).undo(undo)
         .multiline(true)
         .font_family("monospace")
         .font_size(13.0)
@@ -65,23 +63,35 @@ entry fn start() -> u64 {
         .query_key("ed")
         .build();
     let pane = Container().child(editor).build();
-    let slot = Switch().value(Source<str>.of(ctx_bridge(), mode, false, 1))
+    let slot = Switch().value(mode)
         .cases("view", Container().width(0.0).height(0.0).clip(Clip.HardEdge).child(pane).build())
         .cases("split", Container().width(200.0).child(pane).build())
         .fallback(Container().width(400.0).child(pane).build())
         .query_key("slot")
         .build();
     mount(slot);
-    return 0;
+    return EditorCx { ctrl: ctrl, undo: undo, mode: mode };
 }
 
-entry fn set_mode(_a: u64, code: f64) {
-    let mode = stf_take(K_MODE) as u64;
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn editor_cx(cx: opaque) -> EditorCx {
+    let c = opaque.downcast<EditorCx>(cx);
+    if (c == nil) {
+        panic("editor fixture: cx is not an EditorCx");
+    }
+    return c;
+}
+
+entry fn set_mode(cx: opaque, code: f64) {
+    let c = editor_cx(cx);
     let mut name = "split";
     if (code == 1.0) { name = "edit"; }
     if (code == 2.0) { name = "view"; }
-    rs_set_str(mode, name);
-    stf_put(K_MODE, mode as f64);
+    entry_ctx().set<str>(c.mode, name);
 }
 "#;
 
@@ -110,12 +120,13 @@ fn line_starts(doc: &str) -> Vec<usize> {
     starts
 }
 
-fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
+fn setup(source: &str) -> (TurTestApp, ElementNodeId, u64) {
     let mut app = TurTestApp::new(500.0, 300.0).unwrap();
     app.load_rut_module(source).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(ZERO);
     let ed = find_editable(&app);
-    (app, ed)
+    (app, ed, cx)
 }
 
 /// Locate the live `EditableTextElement` anywhere in the tree (the Switch
@@ -274,7 +285,7 @@ fn click_line(app: &mut TurTestApp, cal: (f64, f64, f64, f64), k: usize, c: usiz
 // the end of the document.
 #[test]
 fn deep_scroll_clicks_land_where_clicked() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
     let doc = mirror_doc();
     let starts = line_starts(&doc);
     let cal = calibrate(&mut app);
@@ -328,7 +339,7 @@ fn deep_scroll_clicks_land_where_clicked() {
 // must agree.
 #[test]
 fn mode_switch_click_and_type_agree() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, cx) = setup(EDITOR_RUT);
     let doc = mirror_doc();
     let starts = line_starts(&doc);
 
@@ -339,9 +350,9 @@ fn mode_switch_click_and_type_agree() {
 
     // The playground journey: split -> view -> edit (each remounts the
     // editor; the controller survives).
-    app.call_rut_entry("set_mode", 0, 2.0).unwrap();
+    app.call_rut_entry_cx_f64("set_mode", cx, 2.0).unwrap();
     app.wait_for_timeout(ZERO);
-    app.call_rut_entry("set_mode", 0, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("set_mode", cx, 1.0).unwrap();
     app.wait_for_timeout(ZERO);
 
     let ed2 = find_editable(&app);
@@ -372,7 +383,7 @@ fn mode_switch_click_and_type_agree() {
 // view.
 #[test]
 fn drag_over_empty_lines_selects_the_dragged_span() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
     let doc = mirror_doc();
     let starts = line_starts(&doc);
     let cal = calibrate(&mut app);
@@ -410,7 +421,7 @@ fn drag_over_empty_lines_selects_the_dragged_span() {
 // must never scroll BACKWARD toward the top while the user drags down.
 #[test]
 fn bottom_edge_drag_scrolls_forward_never_backward() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
     let cal = calibrate(&mut app);
     let (x0, y0, cw, line_h) = cal;
 
@@ -450,7 +461,7 @@ fn bottom_edge_drag_scrolls_forward_never_backward() {
 // document top, never a jump past the selection).
 #[test]
 fn top_edge_drag_scrolls_back_gently() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
     let cal = calibrate(&mut app);
     let (x0, y0, cw, line_h) = cal;
 
@@ -484,7 +495,7 @@ fn top_edge_drag_scrolls_back_gently() {
 // across mode switches (the served build's real wheel was reported dead).
 #[test]
 fn wheel_scrolls_through_the_slot_shape_and_mode_switches() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, cx) = setup(EDITOR_RUT);
     let cal = calibrate(&mut app);
     let (_, _, _, line_h) = cal;
 
@@ -495,7 +506,7 @@ fn wheel_scrolls_through_the_slot_shape_and_mode_switches() {
     );
 
     // Mode switch (remount) — the fresh editor must wheel immediately.
-    app.call_rut_entry("set_mode", 0, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("set_mode", cx, 1.0).unwrap();
     app.wait_for_timeout(ZERO);
     let ed2 = find_editable(&app);
     assert_eq!(scroll_of(&app, ed2), 0.0, "a fresh editor opens at the top");

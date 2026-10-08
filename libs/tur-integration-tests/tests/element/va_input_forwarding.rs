@@ -8,58 +8,52 @@
 //! untranslated (keys carry no position — focus-routing, not hit-testing).
 //!
 //! The child's controller text is read back through a deliberate probe
-//! entry (`sync`) that mirrors it into a bound label on the child instance.
+//! entry (`sync`) that answers the controller's live text (the
+//! context-crossing contract: the probe takes the held `cx` and
+//! downcasts; the mirror label is gone — the answer IS the readback).
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use tur_integration_tests::TurTestApp;
 
-/// Read a keyed Text node's rendered content on an app facade (the rut
-/// corpus's standard state probe, via the instance's own tree face).
-fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
-    let key = key.to_string();
-    futures::executor::block_on(app.with_tree(move |tree, _focus| {
-        let id = tree.query_element(&[key.as_str()])?;
-        let node = tree.get_element(tur_engine::core::element::ElementNodeId::new(id.as_u64()))?;
-        let element = node.element.as_ref()?;
-        use tur_engine::builtin_plugins::text::TextElement;
-        element.cast::<TextElement>().map(|c| {
-            c.spans()
-                .iter()
-                .map(|s| s.text.as_str())
-                .collect::<String>()
-        })
-    }))
-    .flatten()
-}
-
-/// The child case: an Input (like the playground's password-input) plus a
-/// bound label; the `sync` probe mirrors the controller text into the label
-/// so the test can read it through the child facade.
+/// The child case: an Input (like the playground's password-input); the
+/// `sync` probe answers the controller's live text so the test can read it
+/// through the child facade. The controller rides the answered context
+/// (`AppContext`) — no stash, no raw rows.
 const CHILD_SRC: &str = r#"
-use tur_host::{ ctx_bridge, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Axis, Column, Input, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    st_put(7, ctrl);
-    let label: Readable<str> = source<str>("");
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
-    let txt = Text().text_bound(label).query_key("child-text").build();
-    mount(Column().child(input).child(txt).build());
-    return label.atom_id();
+struct ChildCx {
+    ctrl: TextCtrl,
+    undo: UndoCtrl,
 }
 
-// Test probe: mirror the controller text into the bound label (entries
-// return nothing — the label is the read-back channel). The label atom
-// rides the entry arg (`start` returns it).
-entry fn sync(label: u64, _b: f64) {
-    let ctrl = st_take(7);
-    st_put(7, ctrl);
-    let r = Source<str>.of(ctx_bridge(), label, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(r, tctrl_text(ctrl));
+fn start() -> ChildCx {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).undo(undo).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
+    mount(Column().child(input).build());
+    return ChildCx { ctrl: ctrl, undo: undo };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn child_cx(cx: opaque) -> ChildCx {
+    let c = opaque.downcast<ChildCx>(cx);
+    if (c == nil) {
+        panic("va child fixture: cx is not a ChildCx");
+    }
+    return c;
+}
+
+// Test probe: the answered str is the controller's live text (entries
+// answer — the readback crosses the entry lane's answer slot).
+entry fn sync(cx: opaque) -> str {
+    return child_cx(cx).ctrl.text();
 }
 "#;
 
@@ -73,42 +67,71 @@ fn parent_module(child_src: &str) -> String {
         .replace('\n', "\\n");
     format!(
         r#"
-use tur_host::{{ va_controller, va_create_source }};
-use tur_kit::{{ VAppCtrl, VirtualApp, mount }};
+use tur_kit::{{ VirtualApp, mount, virtual_app_controller, virtual_app_source }};
 
 entry fn start() {{
-    let src = va_create_source("{escaped}");
-    let ctrl = va_controller(src);
-    let host = VirtualApp().controller(VAppCtrl(ctrl)).width_height(400.0, 200.0).build();
+    let src = virtual_app_source("{escaped}");
+    let ctrl = virtual_app_controller(src);
+    let host = VirtualApp().controller(ctrl).width_height(400.0, 200.0).build();
     mount(host);
 }}
 "#
     )
 }
 
-/// Boot parent + child; returns the parent app and the child facade once
-/// the child's tree has mounted (module loaded + `start` ran + first
-/// layout). `wait_key` is the child element the mount poll waits for.
-fn setup_with_child_src(child_src: &str, wait_key: &str) -> (TurTestApp, Rc<tur_engine::TurApp>) {
+/// Boot parent + child; returns the parent app, the child facade, and the
+/// child's held context token (None for an eagerly-booted child) once the
+/// child's tree has mounted (module loaded + boot + first layout).
+/// `wait_key` is the child element the mount poll waits for.
+fn setup_with_child_src(
+    child_src: &str,
+    wait_key: &str,
+) -> (
+    TurTestApp,
+    Rc<tur_engine::TurApp>,
+    Option<u64>,
+) {
     let wait_key = wait_key.to_string();
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(&parent_module(child_src)).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // The child compiles + boots on the virtual-pool worker (real time).
-    // Poll until its wait_key element exists in its own tree.
+    // The child's boot is LAZY (the fixture contract: no `start` export —
+    // the embedder's `entry_start` probe runs it), so poll for the
+    // facade, boot it ONCE, then wait for its wait_key element.
     let deadline = Instant::now() + Duration::from_secs(10);
+    let child = loop {
+        if let Some(child) = app.app().virtual_apps().first() {
+            break child.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the child instance never spawned"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    // The contract-shaped children boot LAZY (no `start` export — the
+    // embedder's `entry_start` probe runs it and answers the context);
+    // children that keep a plain `entry fn start()` booted eagerly at
+    // load and hold no context.
+    let answer = futures::executor::block_on(child.call_rut_entry_opaque("entry_start"));
+    let cx = match answer {
+        Ok(a) => Some(
+            a.opaque_token()
+                .expect("entry_start answers the child's context"),
+        ),
+        // "no export `entry_start`" = the eager-boot shape.
+        Err(_) => None,
+    };
     loop {
-        let children = app.app().virtual_apps();
-        if let Some(child) = children.first() {
-            let key = wait_key.clone();
-            let mounted = futures::executor::block_on(
-                child.with_tree(move |tree, _focus| tree.query_element(&[key.as_str()]).is_some()),
-            )
-            .unwrap_or(false);
-            if mounted {
-                break (app, child.clone());
-            }
+        let key = wait_key.clone();
+        let mounted = futures::executor::block_on(
+            child.with_tree(move |tree, _focus| tree.query_element(&[key.as_str()]).is_some()),
+        )
+        .unwrap_or(false);
+        if mounted {
+            break (app, child, cx);
         }
         assert!(
             Instant::now() < deadline,
@@ -118,8 +141,9 @@ fn setup_with_child_src(child_src: &str, wait_key: &str) -> (TurTestApp, Rc<tur_
     }
 }
 
-fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>) {
-    setup_with_child_src(CHILD_SRC, "child-input")
+fn setup() -> (TurTestApp, Rc<tur_engine::TurApp>, u64) {
+    let (app, child, cx) = setup_with_child_src(CHILD_SRC, "child-input");
+    (app, child, cx.expect("the contract child holds a context"))
 }
 
 /// The focused element id on the parent's focus manager (the key-routing
@@ -152,11 +176,11 @@ fn host_id(app: &TurTestApp) -> Option<u64> {
     .flatten()
 }
 
-/// The child controller's current text (via the sync probe + label read).
-fn child_text(child: &Rc<tur_engine::TurApp>) -> String {
-    let label_atom = futures::executor::block_on(child.rut_start_answer());
-    futures::executor::block_on(child.call_rut_entry("sync", label_atom, 0.0)).expect("sync probe");
-    label_text(child, "child-text").unwrap_or_default()
+/// The child controller's current text (the `sync` probe's answered str
+/// over the held context).
+fn child_text(child: &Rc<tur_engine::TurApp>, cx: u64) -> String {
+    futures::executor::block_on(child.call_rut_entry_cx_str("sync", cx))
+        .expect("sync probe")
 }
 
 /// Keys typed at the parent reach the focused Input inside the child: the
@@ -164,7 +188,7 @@ fn child_text(child: &Rc<tur_engine::TurApp>) -> String {
 /// child reports focus, and the parent's key rail forwards into the child.
 #[test]
 fn va_child_receives_key_events_when_its_input_is_focused() {
-    let (mut app, child) = setup();
+    let (mut app, child, cx) = setup();
     let host = host_id(&app).expect("host element");
 
     // Click the child input — the child lays it out at (0..200, 0..32) in
@@ -182,7 +206,7 @@ fn va_child_receives_key_events_when_its_input_is_focused() {
     // Typed keys flow: parent key rail → focused child host → child input.
     app.send_key("a");
     app.send_key("b");
-    let grew = app.wait_for(|_| child_text(&child) == "ab");
+    let grew = app.wait_for(|_| child_text(&child, cx) == "ab");
     assert!(grew, "child input should have received the typed keys");
 }
 
@@ -191,7 +215,7 @@ fn va_child_receives_key_events_when_its_input_is_focused() {
 /// child input.
 #[test]
 fn va_child_receives_ime_composition_end() {
-    let (mut app, child) = setup();
+    let (mut app, child, cx) = setup();
     let host = host_id(&app).expect("host element");
 
     app.click(100.0, 16.0);
@@ -210,7 +234,7 @@ fn va_child_receives_ime_composition_end() {
     app.send_ime(ImeEvent::CompositionEnd {
         text: "héllo".to_string(),
     });
-    let grew = app.wait_for(|_| child_text(&child) == "héllo");
+    let grew = app.wait_for(|_| child_text(&child, cx) == "héllo");
     assert!(
         grew,
         "child input should have received the composition text"
@@ -221,7 +245,7 @@ fn va_child_receives_ime_composition_end() {
 /// child, and later keys no longer reach it.
 #[test]
 fn va_child_loses_focus_when_the_parent_clicks_away() {
-    let (mut app, child) = setup();
+    let (mut app, child, cx) = setup();
     let host = host_id(&app).expect("host element");
 
     app.click(100.0, 16.0);
@@ -231,7 +255,7 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
         "the parent's focus manager should hold the child host"
     );
     app.send_key("a");
-    let grew = app.wait_for(|_| child_text(&child) == "a");
+    let grew = app.wait_for(|_| child_text(&child, cx) == "a");
     assert!(grew, "the typed key reached the focused child input");
 
     // Click the parent background below the 200px-tall host.
@@ -243,7 +267,7 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
     app.send_key("c");
     app.wait_for_timeout(Duration::from_millis(32));
     assert_eq!(
-        child_text(&child),
+        child_text(&child, cx),
         "a",
         "keys must stop reaching the child after the parent regains focus"
     );
@@ -298,7 +322,7 @@ fn child_scroll_offset(child: &Rc<tur_engine::TurApp>) -> f64 {
 
 #[test]
 fn va_child_wheel_over_the_host_scrolls_the_child_scrollable() {
-    let (mut app, child) = setup_with_child_src(WHEEL_CHILD_SRC, "child-scroll");
+    let (mut app, child, _cx) = setup_with_child_src(WHEEL_CHILD_SRC, "child-scroll");
 
     // Wheel over the host (400×200 at the parent origin) — the child-local
     // point lands on the child's scroll view, which fills its viewport.

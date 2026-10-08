@@ -15,24 +15,36 @@ use tur_engine::core::elements::{DevNodeData, TraceValue};
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur_host::{ st_put, st_take, tctrl_new, tctrl_set_text };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
 
-let K_CTRL: u64 = 1;
+struct EditorCx {
+    ctrl: TextCtrl,
+}
 
-entry fn start() {
-    let ctrl = tctrl_new();
-    let mut input = Input().controller(TextCtrl(ctrl)).width_height(200.0, 44.0).query_key("editor").build();
-    st_put(K_CTRL, ctrl);
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    let input = Input().controller(ctrl).width_height(200.0, 44.0).query_key("editor").build();
     mount(input);
+    return EditorCx { ctrl: ctrl };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn editor_cx(cx: opaque) -> EditorCx {
+    let c = opaque.downcast<EditorCx>(cx);
+    if (c == nil) {
+        panic("editor fixture: cx is not an EditorCx");
+    }
+    return c;
 }
 
 // The playground's `case_tap` shape: a programmatic write into the
 // controller the mounted Input was built with.
-entry fn set_text(_a: u64, _b: f64) {
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, "hello from the row");
-    st_put(K_CTRL, ctrl);
+entry fn set_text(cx: opaque) {
+    editor_cx(cx).ctrl.set_text("hello from the row");
 }
 "#;
 
@@ -65,6 +77,7 @@ fn metric(node: &DevNodeData, key: &str) -> f64 {
 fn tctrl_set_text_refreshes_the_mounted_editable() {
     let app = TurTestApp::new(300.0, 120.0).expect("app builds");
     app.load_rut_module(EDITOR_RUT).expect("module loads");
+    let cx = app.call_rut_entry_opaque("entry_start").expect("boot");
     app.pump();
 
     // Locate the mounted editable and record its pre-write painted
@@ -79,7 +92,7 @@ fn tctrl_set_text_refreshes_the_mounted_editable() {
     );
 
     // The programmatic write — then drive the frame that must repaint it.
-    app.call_rut_entry("set_text", 0, 0.0).expect("entry runs");
+    app.call_rut_entry_cx("set_text", cx).expect("entry runs");
     app.pump();
 
     let root = app

@@ -1,15 +1,16 @@
 //! The animation controller state machine, driven end to end through the
-//! `tur_host` pkg's animation rows: the Rust-held controller opaque ticks
-//! via the animation subsystem (frame-advanced against the virtual
-//! clock), its onTick / onEnd intent rail writes bound atoms, and the
-//! control rows (forward / reverse / stop / pause / resume / seek /
-//! repeat / speed) are exercised through the entry rail mid-test.
+//! animation kit: the Rust-held controller opaque ticks via the animation
+//! subsystem (frame-advanced against the virtual clock), its onTick /
+//! onEnd sealed mutations write bound atoms, and the control methods
+//! (forward / reverse / stop / pause / resume / seek / repeat / speed)
+//! are exercised through the context-crossing entry rail mid-test.
 //!
-//! Common scaffold: a box whose width is bound to an f64 atom (the
-//! controller's tick target: `100 + 100·v`), the controller stashed under
-//! key 7 (an entry cannot capture an opaque — the stash is the hand-off
-//! rail), and control/probe `entry fn`s the test drives via
-//! `call_rut_entry`.
+//! Common scaffold — the context-crossing fixture contract: `fn start()
+//! -> AppContext` + `entry fn entry_start() -> opaque` boxing it; the
+//! `do_*` control entries take `cx: opaque` and downcast (the shared
+//! `anim_cx` helper); `probe` answers `status|v{value}` over the entry
+//! lane's answer slot. The harness holds the context between calls
+//! (`call_rut_entry_opaque` / `call_rut_entry_cx*`).
 
 use std::time::Duration;
 
@@ -28,8 +29,16 @@ fn box_width(app: &TurTestApp) -> f64 {
         .width
 }
 
-/// Read the transcript label's text (probe entries write status/value
-/// answers into it).
+/// The probe rail: write `status|v{value}` into the transcript label over
+/// the held context, then read it back through the tree.
+fn probe(app: &mut TurTestApp, cx: u64) -> String {
+    app.call_rut_entry_cx("probe", cx).expect("probe runs");
+    app.wait_for_timeout(Duration::ZERO);
+    label(app)
+}
+
+/// Read the transcript label's text (the probe writes status/value
+/// answers into it over the entry rail's ctx).
 fn label(app: &TurTestApp) -> String {
     let id = app.query_element(&["rut", "text"]).expect("label missing");
     let id = ElementNodeId::new(id.as_u64());
@@ -47,109 +56,111 @@ fn label(app: &TurTestApp) -> String {
 }
 
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
-/// bound box, and `do_*` control entries over the stashed controller.
+/// bound box, and `do_*` control entries over the held context.
 const CONTROLLER_RUT: &str = r#"
-use tur_host::{ rs_set_str, st_put, st_take };
-use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, entry_ctx, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
-let CTRL: u64 = 7;
+struct AppContext {
+    ctrl: AnimCtrl,
+    label: Source<str>,
+}
 
-entry fn start() -> u64 {
-    let label: Readable<str> = source<str>("");
+fn start() -> AppContext {
+    // Concrete annotation — the field is written from the probe entry
+    // (`entry_ctx().set` targets a `Source`, the one Writable).
+    let label: Source<str> = source<str>("");
     let width: Readable<f64> = source<f64>(100.0);
 
     let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
 
     // The tick mutation captures the width source (the eased 0..1 maps to
-    // 100..200); the controller rides the stash only because the do_*
-    // control entries cannot capture it.
+    // 100..200); the controller crosses entry boundaries as the context's
+    // field.
     let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
         ctx.set<f64>(width, 100.0 + (200.0 - 100.0) * v);
     });
     let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
-    st_put(CTRL, ctrl.raw());
 
     let col = Column()
         .child(b.build())
         .child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
-    return label.atom_id();
+    return AppContext { ctrl: ctrl, label: label };
 }
 
-entry fn do_forward(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.forward();
-    st_put(CTRL, c.raw());
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
 }
 
-entry fn do_reverse(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.reverse();
-    st_put(CTRL, c.raw());
+// The shared downcast — one nil-guard, no per-entry duplication (a kind
+// mismatch is the loud channel; the guard is belt-and-braces).
+fn anim_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    return c;
 }
 
-entry fn do_stop(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.stop();
-    st_put(CTRL, c.raw());
+entry fn do_forward(cx: opaque) {
+    anim_cx(cx).ctrl.forward();
 }
 
-entry fn do_pause(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.pause();
-    st_put(CTRL, c.raw());
+entry fn do_reverse(cx: opaque) {
+    anim_cx(cx).ctrl.reverse();
 }
 
-entry fn do_resume(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.resume();
-    st_put(CTRL, c.raw());
+entry fn do_stop(cx: opaque) {
+    anim_cx(cx).ctrl.stop();
 }
 
-entry fn do_seek(_a: u64, t: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.seek(t);
-    st_put(CTRL, c.raw());
+entry fn do_pause(cx: opaque) {
+    anim_cx(cx).ctrl.pause();
 }
 
-entry fn do_repeat(_a: u64, n: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.repeat(n as u64);
-    st_put(CTRL, c.raw());
+entry fn do_resume(cx: opaque) {
+    anim_cx(cx).ctrl.resume();
 }
 
-entry fn do_speed(_a: u64, s: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    c.speed(s);
-    st_put(CTRL, c.raw());
+entry fn do_seek(cx: opaque, t: f64) {
+    anim_cx(cx).ctrl.seek(t);
+}
+
+entry fn do_repeat(cx: opaque, n: f64) {
+    anim_cx(cx).ctrl.repeat(n as u64);
+}
+
+entry fn do_speed(cx: opaque, s: f64) {
+    anim_cx(cx).ctrl.speed(s);
 }
 
 // Report `status|v{value}` into the transcript label (the controller's
-// own raw value — the width binding reads the same tick stream).
-entry fn probe(label: u64, _b: f64) {
-    let c = AnimCtrl(st_take(CTRL));
-    rs_set_str(label, f"{c.status()}|v{c.value()}");
-    st_put(CTRL, c.raw());
+// own raw value — the width binding reads the same tick stream). The
+// write rides `entry_ctx` — the entry rail's ctx.
+entry fn probe(cx: opaque) {
+    let c = anim_cx(cx);
+    entry_ctx().set<str>(c.label, f"{c.ctrl.status()}|v{c.ctrl.value()}");
 }
 "#;
 
 fn new_controller_app() -> (TurTestApp, u64) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(CONTROLLER_RUT).unwrap();
-    let label_atom = app.rut_start_answer();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    (app, label_atom)
+    (app, cx)
 }
 
 #[test]
 fn animation_controller_forward_with_on_tick() {
-    let (mut app, _width) = new_controller_app();
+    let (mut app, cx) = new_controller_app();
     assert_eq!(box_width(&app), 100.0, "at t=0 width should still be 100");
 
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
@@ -169,8 +180,8 @@ fn animation_controller_forward_with_on_tick() {
 
 #[test]
 fn animation_controller_reverse_with_on_tick() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_reverse", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_reverse", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
@@ -190,8 +201,8 @@ fn animation_controller_reverse_with_on_tick() {
 
 #[test]
 fn animation_controller_stop_freezes_value() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(50));
     let frozen = box_width(&app);
     assert!(
@@ -199,7 +210,7 @@ fn animation_controller_stop_freezes_value() {
         "width should be mid-animation, got {frozen}"
     );
 
-    app.call_rut_entry("do_stop", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_stop", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(200));
     assert_eq!(
         box_width(&app),
@@ -210,9 +221,9 @@ fn animation_controller_stop_freezes_value() {
 
 #[test]
 fn animation_controller_repeats() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_repeat", 0, 3.0).unwrap();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_repeat", cx, 3.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // 250ms = 2.5 iterations of the 100ms... the controller duration is
@@ -236,27 +247,21 @@ fn animation_controller_repeats() {
 
 #[test]
 fn animation_controller_status_transitions() {
-    let (mut app, label_atom) = new_controller_app();
+    let (mut app, cx) = new_controller_app();
     // Probe BEFORE starting: the controller rests at `stopped`.
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
-    assert!(label(&app).starts_with("stopped|"), "initial status");
+    assert!(probe(&mut app, cx).starts_with("stopped|"), "initial status");
 
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert!(
-        label(&app).starts_with("forward|"),
+        probe(&mut app, cx).starts_with("forward|"),
         "status after the start: {}",
         label(&app)
     );
 
     app.wait_for_timeout(Duration::from_millis(250));
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
-        label(&app),
+        probe(&mut app, cx),
         "completed|v1",
         "after duration elapsed: completed, the value at the end"
     );
@@ -264,8 +269,8 @@ fn animation_controller_status_transitions() {
 
 #[test]
 fn animation_controller_ease_in_curve() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // The scaffold's curve is linear; a second controller application with
@@ -282,12 +287,12 @@ fn animation_controller_ease_in_curve() {
 
 #[test]
 fn animation_controller_pause_freezes_and_resume_continues() {
-    let (mut app, label_atom) = new_controller_app();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
 
     // Halfway through (100ms of 200ms) → ~150, then pause.
     app.wait_for_timeout(Duration::from_millis(100));
-    app.call_rut_entry("do_pause", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_pause", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let paused = box_width(&app);
     assert!(
@@ -304,16 +309,14 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     );
 
     // Status reads paused.
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
     assert!(
-        label(&app).starts_with("paused|"),
+        probe(&mut app, cx).starts_with("paused|"),
         "status while paused: {}",
         label(&app)
     );
 
     // Resume — the remaining half plays out to completion.
-    app.call_rut_entry("do_resume", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_resume", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(150));
     assert_eq!(
         box_width(&app),
@@ -324,12 +327,12 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 
 #[test]
 fn animation_controller_seek_jumps_value() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // Seek to 0.25 immediately → the width lands at 125.
-    app.call_rut_entry("do_seek", 0, 0.25).unwrap();
+    app.call_rut_entry_cx_f64("do_seek", cx, 0.25).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let w = box_width(&app);
     assert!(
@@ -340,9 +343,9 @@ fn animation_controller_seek_jumps_value() {
 
 #[test]
 fn animation_controller_set_speed_scales_time() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_speed", 0, 2.0).unwrap();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_speed", cx, 2.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // 2x speed: 50ms of wall time covers the first 100ms of timeline —
@@ -357,14 +360,12 @@ fn animation_controller_set_speed_scales_time() {
 
 #[test]
 fn controller_on_tick_value_tracks_progress() {
-    let (mut app, label_atom) = new_controller_app();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
-    let text = label(&app);
+    let text = probe(&mut app, cx);
     // `v{anim_value}` is the controller's raw value — mid-range at ~0.5.
     assert!(
         text.starts_with("forward|v0."),
@@ -374,11 +375,11 @@ fn controller_on_tick_value_tracks_progress() {
 
 #[test]
 fn controller_infinite_does_not_complete_after_many_iterations() {
-    let (mut app, label_atom) = new_controller_app();
+    let (mut app, cx) = new_controller_app();
     // u64::MAX = infinite (the `repeat("infinite")` crossing).
-    app.call_rut_entry("do_repeat", 0, 18446744073709551615.0)
+    app.call_rut_entry_cx_f64("do_repeat", cx, 18446744073709551615.0)
         .unwrap();
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // 10 full iterations later: still forward, still cycling.
@@ -388,10 +389,8 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
         (100.0..=200.0).contains(&w),
         "an infinite animation keeps cycling inside [100, 200]: {w}"
     );
-    app.call_rut_entry("probe", label_atom, 0.0).unwrap();
-    app.wait_for_timeout(Duration::ZERO);
     assert!(
-        label(&app).starts_with("forward|"),
+        probe(&mut app, cx).starts_with("forward|"),
         "an infinite animation never completes: {}",
         label(&app)
     );
@@ -399,10 +398,10 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
 
 #[test]
 fn controller_infinite_reverse_cycles_back_to_zero() {
-    let (mut app, _width) = new_controller_app();
-    app.call_rut_entry("do_repeat", 0, 18446744073709551615.0)
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_repeat", cx, 18446744073709551615.0)
         .unwrap();
-    app.call_rut_entry("do_reverse", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_reverse", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     // An infinite reverse cycles: it returns to ~100 (v wraps to 0) and
@@ -428,12 +427,12 @@ fn animation_started_from_handler_schedules_next_frame() {
     // next vsync. If the schedule signal were captured only by the
     // once-per-flush subsystem tick — which ran BEFORE the controller was
     // registered — the animation would stall until the next platform event.
-    let (mut app, _width) = new_controller_app();
+    let (mut app, cx) = new_controller_app();
     assert_eq!(box_width(&app), 100.0);
 
     // Start mid-frame via the entry rail, then drive frames with no
     // further input — the width must advance on its own.
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     let progressed = app.wait_for(|a| box_width(a) > 100.0);
     assert!(
         progressed,
@@ -480,15 +479,24 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur_host::{ st_put, st_take };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 let TAU: f64 = 6.283185307179586;
-let K_CTRL: u64 = 6;
 
-entry fn start() -> u64 {
-    let angle: Readable<f64> = source<f64>(0.0);
+struct AppContext {
+    ctrl: AnimCtrl,
+    angle: Source<f64>,
+}
+
+fn start() -> AppContext {
+    // Two interning-bug accommodations (this rut pin, the documented
+    // family): the str-interface let precedes the first mutate (the kit's
+    // generic fill is order-sensitive), and the captured sources stay
+    // CONCRETE (an interface-typed capture misbinds in the tick).
+    let label: Readable<str> = source<str>("");
+    let angle: Source<f64> = source<f64>(0.0);
+    let _ = label;
     let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
     let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
     let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
@@ -497,15 +505,25 @@ entry fn start() -> u64 {
     let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
     });
     let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
-    st_put(K_CTRL, ctrl.raw());
     mount(xf);
-    return angle.atom_id();
+    return AppContext { ctrl: ctrl, angle: angle };
 }
 
-entry fn do_forward(_a: u64, _b: f64) {
-    let c = AnimCtrl(st_take(K_CTRL));
-    c.forward();
-    st_put(K_CTRL, c.raw());
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn anim_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    return c;
+}
+
+entry fn do_forward(cx: opaque) {
+    anim_cx(cx).ctrl.forward();
 }
 "#;
 
@@ -513,6 +531,7 @@ entry fn do_forward(_a: u64, _b: f64) {
 fn bound_angle_animates_without_rebuild() {
     let mut app = TurTestApp::new(300.0, 300.0).unwrap();
     app.load_rut_module(BOUND_ANGLE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
@@ -524,7 +543,7 @@ fn bound_angle_animates_without_rebuild() {
     // linear 200ms run the bound angle is ~π — with the element identity
     // UNMOVED (the old rebuild channel re-mounted a fresh Transform per
     // tick, churning the id).
-    app.call_rut_entry("do_forward", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(100));
     let mid = painted_rotate(&app, xf);
     assert!(
@@ -590,48 +609,69 @@ fn static_transform_path_unchanged() {
 
 /// The symmetric-cheap twins: `scale_bound` and `translate_bound` ride
 /// their atoms the same way (each in its own app — the rut qkey
-/// `rut/transform` matches the first transform).
+/// `rut/transform` matches the first transform). The writes ride the
+/// context-crossing lane (`entry_ctx` — the entry rail's ctx).
 const BOUND_SCALE_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, mutate, source };
+use tur_kit::{ Container, Mutation, MutationCtx, Source, entry_ctx, mount, mutate, source };
 use tur_anim_kit::{ Transform };
 
-entry fn start() -> u64 {
-    let s: Readable<f64> = source<f64>(2.0);
-    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
-    return s.atom_id();
+struct AppContext {
+    s: Source<f64>,
 }
 
-entry fn probe_s(atom: u64, b: f64) {
-    let s = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(s, b);
+fn start() -> AppContext {
+    let s = source<f64>(2.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
+    return AppContext { s: s };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+entry fn probe_s(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.s, b);
 }
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, mutate, source };
+use tur_kit::{ Container, Mutation, MutationCtx, Source, entry_ctx, mount, mutate, source };
 use tur_anim_kit::{ Transform };
 
-entry fn start() -> u64 {
-    let tx: Readable<f64> = source<f64>(10.0);
-    let ty: Readable<f64> = source<f64>(20.0);
-    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
-    return tx.atom_id();
+struct AppContext {
+    tx: Source<f64>,
+    ty: Source<f64>,
 }
 
-// The ty atom mints right after tx — the test drives it at tx+1 (the
-// probe takes the pair's head and writes both).
-entry fn probe_t(atom: u64, b: f64) {
-    // The tx/ty pair mints in order (atom, atom+1) — one entry drives
-    // both channels (ty reads 2× the arg, the test's b×2 expectation).
-    let write = MutationCtx.over(ctx_bridge());
-    let tx = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    let ty = Source<f64>.of(ctx_bridge(), atom + 1, false, 1);
-    write.set<f64>(tx, b);
-    write.set<f64>(ty, b * 2.0);
+fn start() -> AppContext {
+    let tx = source<f64>(10.0);
+    let ty = source<f64>(20.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
+    return AppContext { tx: tx, ty: ty };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+// One entry drives both channels (ty reads 2× the arg, the test's b×2
+// expectation).
+entry fn probe_t(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
+    write.set<f64>(c.tx, b);
+    write.set<f64>(c.ty, b * 2.0);
 }
 "#;
 
@@ -639,14 +679,14 @@ entry fn probe_t(atom: u64, b: f64) {
 fn scale_and_translate_bounds_follow_their_atoms() {
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
     app.load_rut_module(BOUND_SCALE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();
         assert_eq!(t.painted_scale(), 2.0, "the atom's initial scale");
     });
-    let s_atom = app.rut_start_answer();
-    app.call_rut_entry("probe_s", s_atom, 3.5).unwrap();
+    app.call_rut_entry_cx_f64("probe_s", cx, 3.5).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();
@@ -655,6 +695,7 @@ fn scale_and_translate_bounds_follow_their_atoms() {
 
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
     app.load_rut_module(BOUND_TRANSLATE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
     let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
     app.with_element(xf, |el| {
@@ -665,8 +706,7 @@ fn scale_and_translate_bounds_follow_their_atoms() {
             "the atoms' initial offsets"
         );
     });
-    app.call_rut_entry("probe_t", app.rut_start_answer(), 30.0)
-        .unwrap();
+    app.call_rut_entry_cx_f64("probe_t", cx, 30.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app.with_element(xf, |el| {
         let t = el.cast::<TransformElement>().unwrap();

@@ -35,10 +35,12 @@ const ZERO: Duration = Duration::ZERO;
 /// hundreds of pixels. Every line is exactly 7 bytes ("line {i}\n"), so line
 /// `i` starts at byte `7 * i`.
 const EDITOR_RUT: &str = r#"
-use tur_host::{ st_put, st_take, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 
-let K_CTRL: u64 = 1;
+struct EditorCx {
+    ctrl: TextCtrl,
+    undo: UndoCtrl,
+}
 
 fn long_doc() -> str {
     let mut text = "";
@@ -50,40 +52,54 @@ fn long_doc() -> str {
     return text;
 }
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, long_doc());
-    st_put(K_CTRL, ctrl);
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    ctrl.set_text(long_doc());
+    let undo = undo_ctrl();
     let input = Input()
-        .controller(TextCtrl(ctrl))
-        .undo(UndoCtrl(undo_new()))
+        .controller(ctrl)
+        .undo(undo)
         .multiline(true)
         .font_family("monospace")
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();
     mount(input);
-    return 0;
+    return EditorCx { ctrl: ctrl, undo: undo };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn editor_cx(cx: opaque) -> EditorCx {
+    let c = opaque.downcast<EditorCx>(cx);
+    if (c == nil) {
+        panic("editor fixture: cx is not an EditorCx");
+    }
+    return c;
 }
 
 // The case-switch rail: the playground loads a new case source into the
-// SAME editor via `tctrl_set_text` (a true external replacement — the view
-// must reopen at the top).
-entry fn load_case(_a: u64, _b: f64) {
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, long_doc());
-    st_put(K_CTRL, ctrl);
+// SAME editor via the controller write (a true external replacement — the
+// view must reopen at the top).
+entry fn load_case(cx: opaque) {
+    editor_cx(cx).ctrl.set_text(long_doc());
 }
 "#;
 
 /// Mount the editor fixture and locate the `EditableTextElement` (the
 /// `Input` view is a Container wrapper whose only child is the editable).
-fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
+/// Boots through the context-crossing contract (`entry_start`) and
+/// returns the held context token with the app.
+fn setup(source: &str) -> (TurTestApp, ElementNodeId, u64) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(source).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(ZERO);
     let ed = find_editable(&app);
-    (app, ed)
+    (app, ed, cx)
 }
 
 /// Walk root → Input container → editable (fresh ids after any reload).
@@ -140,7 +156,7 @@ fn selection_of(app: &TurTestApp, ed: ElementNodeId) -> (usize, usize) {
 /// no-op — any scroll change is the revision-bump reset bug.
 #[test]
 fn typing_keeps_the_scroll_position() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     // Focus, scroll deep, then put the caret ON the visible line.
     app.click(100.0, 30.0);
@@ -175,7 +191,7 @@ fn typing_keeps_the_scroll_position() {
 // wheel and wiped the fresh offset).
 #[test]
 fn first_wheel_after_an_edit_is_not_eaten() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     app.click(100.0, 30.0);
     app.wait_for_timeout(ZERO);
@@ -207,7 +223,7 @@ fn first_wheel_after_an_edit_is_not_eaten() {
 // visible line, so caret-follow is a no-op too).
 #[test]
 fn undo_does_not_reset_the_scroll() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     // Focus, scroll deep, caret onto the visible line, type there.
     app.click(100.0, 30.0);
@@ -244,13 +260,13 @@ fn undo_does_not_reset_the_scroll() {
 // case switch, via `tctrl_set_text`) DOES reset the scroll to the top.
 #[test]
 fn replacing_the_text_resets_the_scroll() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, cx) = setup(EDITOR_RUT);
 
     app.wheel(0.0, 200.0, 100.0, 30.0);
     app.wait_for_timeout(ZERO);
     assert!(scroll_of(&app, ed) > 100.0, "fixture precondition");
 
-    app.call_rut_entry("load_case", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("load_case", cx).unwrap();
     app.wait_for_timeout(ZERO);
 
     assert_eq!(scroll_of(&app, ed), 0.0, "a new case opens at the top");
@@ -260,9 +276,9 @@ fn replacing_the_text_resets_the_scroll() {
 // no dead wheel while some cached max is stale.
 #[test]
 fn wheel_after_a_case_switch_scrolls_immediately() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, cx) = setup(EDITOR_RUT);
 
-    app.call_rut_entry("load_case", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("load_case", cx).unwrap();
     app.wait_for_timeout(ZERO);
 
     app.wheel(0.0, 60.0, 100.0, 30.0);
@@ -280,7 +296,7 @@ fn wheel_after_a_case_switch_scrolls_immediately() {
 // scroll (max_scroll_y valid before any wheel dispatch post-recreation).
 #[test]
 fn reloaded_module_editor_wheels_immediately() {
-    let (mut app, _ed) = setup(EDITOR_RUT);
+    let (mut app, _ed, _cx) = setup(EDITOR_RUT);
 
     // A full module reload: the old tree is torn down, a fresh editor boots.
     app.load_rut_module(EDITOR_RUT).unwrap();
@@ -303,7 +319,7 @@ fn reloaded_module_editor_wheels_immediately() {
 // fixture's lines are 7 bytes each: line i starts at 7*i).
 #[test]
 fn drag_and_click_after_scroll_hit_the_right_bytes() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     // Focus at the top-left; caret lands on line 0 at byte 0.
     app.click(101.0, 5.0);
@@ -396,28 +412,38 @@ use vello_common::kurbo::Affine;
 /// Two short lines in the 200×60 editor — the content fits with room to
 /// spare, so the scrollable excess is 0 and a wheel must be a no-op.
 const SHORT_RUT: &str = r#"
-use tur_host::{ tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, "line 0\nline 1\n");
+struct EditorCx {
+    ctrl: TextCtrl,
+    undo: UndoCtrl,
+}
+
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    ctrl.set_text("line 0\nline 1\n");
+    let undo = undo_ctrl();
     let input = Input()
-        .controller(TextCtrl(ctrl))
-        .undo(UndoCtrl(undo_new()))
+        .controller(ctrl)
+        .undo(undo)
         .multiline(true)
         .font_family("monospace")
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();
     mount(input);
-    return 0;
+    return EditorCx { ctrl: ctrl, undo: undo };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
 }
 "#;
 
 #[test]
 fn short_content_never_scrolls() {
-    let (mut app, ed) = setup(SHORT_RUT);
+    let (mut app, ed, _cx) = setup(SHORT_RUT);
     app.click(100.0, 30.0);
     app.wait_for_timeout(ZERO);
 
@@ -535,7 +561,7 @@ fn editable_paint_ops(app: &TurTestApp, ed: ElementNodeId) -> Vec<PaintOp> {
 
 #[test]
 fn scrolled_paint_is_clipped_to_the_editor_bounds() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
     app.click(100.0, 30.0);
     app.wait_for_timeout(ZERO);
     app.wheel(0.0, 200.0, 100.0, 30.0);
