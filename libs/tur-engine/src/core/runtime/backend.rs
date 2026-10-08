@@ -144,7 +144,7 @@ impl WorkerBackend {
         };
         let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
 
-        // Apply the root the module's `start` stashed via `tur::mount` —
+        // Apply the root the module's `start` stashed via `tur_host::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).
         rut.apply_root().map_err(ModuleError::Eval)?;
         js.set_dirty();

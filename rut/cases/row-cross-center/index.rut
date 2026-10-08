@@ -1,6 +1,6 @@
 // row-cross-center: a 200x36 container centering a row of two boxes on
 // the cross axis.
-use tur::{ CROSS_ALIGN_CENTER, mount };
+use tur_host::{ CROSS_ALIGN_CENTER, mount };
 use tur_kit::{ Container, Row };
 
 

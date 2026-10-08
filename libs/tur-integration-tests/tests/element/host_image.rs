@@ -95,7 +95,7 @@ fn host_image_lays_out_at_natural_size() {
     // The host-minted id crosses to the module through the entry rail.
     app.load_rut_module(
         r#"
-use tur::{ BOXFIT_FILL, mount };
+use tur_host::{ BOXFIT_FILL, mount };
 use tur_kit::{ Column, Image };
 
 
@@ -139,7 +139,7 @@ fn host_and_js_image_ids_coexist() {
 
     app.load_rut_module(
         r#"
-use tur::{ BOXFIT_FILL, img_res_solid, mount };
+use tur_host::{ BOXFIT_FILL, img_res_solid, mount };
 use tur_kit::{ Column, Image };
 
 entry fn start() {
@@ -202,7 +202,7 @@ fn reattach_ensures_retained_images_before_first_frame() {
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
     app.load_rut_module(
-        r#"use tur::{ BOXFIT_FILL, img_res_solid, mount };
+        r#"use tur_host::{ BOXFIT_FILL, img_res_solid, mount };
 use tur_kit::{ Column, Image };
 
 
@@ -299,7 +299,7 @@ fn reattach_uploads_only_painted_images() {
         .collect();
 
     app.load_rut_module(
-        r#"use tur::{ BOXFIT_FILL, mount };
+        r#"use tur_host::{ BOXFIT_FILL, mount };
 use tur_kit::{ Image };
 
 use tur_kit::{ Image };
@@ -355,7 +355,7 @@ fn img_res_svg_row_registers_a_worker_minted_resource() {
     let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r##"
-use tur::{ BOXFIT_FILL, img_res_svg, mount };
+use tur_host::{ BOXFIT_FILL, img_res_svg, mount };
 use tur_kit::{ Column, Image };
 
 entry fn start() {

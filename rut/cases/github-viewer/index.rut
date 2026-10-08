@@ -23,7 +23,7 @@
 // `f32` by the default-width rule (annotate `: f64` when handing them to
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
-use tur::{
+use tur_host::{
     ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH,
     CROSS_ALIGN_START, CURSOR_POINTER, MAIN_ALIGN_END, MAIN_SIZE_MIN, img_res_svg, mount,
     net_request, spawn, str_parse_f64, tctrl_new, tctrl_set_text, undo_new,

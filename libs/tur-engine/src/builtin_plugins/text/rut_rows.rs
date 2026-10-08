@@ -1,4 +1,4 @@
-//! The text families' `tur` host-pkg rows (via the pkg-extension seam):
+//! The text families' `tur_host` pkg rows (via the pkg-extension seam):
 //! the Text spec family (literal / bound / derived + the style setters +
 //! rich-text spans), the Input spec family over shared controllers, and the
 //! realm-free controller method rows (`tctrl_*` / `undo_*`).

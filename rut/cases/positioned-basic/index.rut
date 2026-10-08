@@ -1,5 +1,5 @@
 // positioned-basic: a positioned child anchored (10, 20) inside a Stack.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, Positioned, Stack };
 
 

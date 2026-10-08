@@ -117,7 +117,7 @@ fn wheel_scrolls_the_playground_sidebar_shape() {
     let mut app = TurTestApp::new(400.0, 800.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, Expanded, MutationCtx, Readable, ScrollView, Source, Text, source };
 
 
@@ -220,7 +220,7 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ ctx_bridge, AXIS_VERTICAL, mount };
+use tur_host::{ ctx_bridge, AXIS_VERTICAL, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, ScrollView, Source, source };
 
 

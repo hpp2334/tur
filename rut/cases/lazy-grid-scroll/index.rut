@@ -3,7 +3,7 @@
 // mainAxisExtent) with 6px cross/main gaps, max cross 120, overscan 2.
 // Wheeling mounts only the visible window; the ramp IS the show (boa's
 // dark zebra is gone).
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, LazyGrid, Source, source };
 
 

@@ -1,6 +1,6 @@
 // flex-row-expanded: a fixed-width child plus an Expanded filling the
 // remaining main axis.
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Container, Expanded, Row };
 
 

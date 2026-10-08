@@ -10,7 +10,7 @@
 // Row extents stay intrinsic so the wrapped notes are never clipped.
 // (Module lets are literals-only in this build, so the planet data rides
 // pipe-joined strings.)
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, Expanded, Source, Table, TableCols, Text, list_new, list_push, source };
 
 

@@ -538,7 +538,7 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -554,7 +554,7 @@ entry fn start() {
 // Mirrors the playground code editor: syntax-highlighted spans with different
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
-const CLICK_SPANS_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SPANS_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -569,7 +569,7 @@ entry fn start() {
 }
 "#;
 
-const CLICK_MULTI_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_MULTI_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -749,7 +749,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // Four adjacent spans with DIFFERENT colors → parley emits 4 glyph runs on one
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
-const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -804,7 +804,7 @@ fn click_in_later_run_places_caret_correctly() {
 // Regression for the "click todolist state.ts → panic" bug: an empty style
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
-const EMPTY_SPAN_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const EMPTY_SPAN_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -844,7 +844,7 @@ fn empty_colored_span_does_not_panic() {
 // viewport_height). With a 100px viewport and 16px lines, ~12 lines (=192px)
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
-const CLICK_SCROLLED_BUNDLE: &str = r#"use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, ScrollView };
 
 
@@ -945,7 +945,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // only wraps at break opportunities, so the text MUST contain spaces (a bare
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
-const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 
@@ -1073,7 +1073,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // VISUAL lines. Reported bug: clicking a lower visual line placed the caret
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
-const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur::{ mount, tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur_host::{ mount, tctrl_new, tctrl_push_span, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 

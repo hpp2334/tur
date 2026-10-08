@@ -1,4 +1,4 @@
-//! The `math_sin` / `math_cos` rows — pure f64 → f64 trig on the `tur`
+//! The `math_sin` / `math_cos` rows — pure f64 → f64 trig on the `tur_host`
 //! pkg (radians in, radians out; no instance state, no reactivity).
 //!
 //! Pinned headlessly through `start`'s u64 answer (the standard probe
@@ -10,7 +10,7 @@
 use tur_integration_tests::TurTestApp;
 
 const MATH_RUT: &str = r#"
-use tur::{ math_cos, math_sin, mount };
+use tur_host::{ math_cos, math_sin, mount };
 use tur_kit::{ Text };
 
 entry fn start() -> u64 {

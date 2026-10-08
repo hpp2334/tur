@@ -26,7 +26,7 @@ use tur_native::NativeFontLoader;
 /// the remaining flex space) so a resize dirties it and flushes ship real
 /// render batches.
 const SOURCE: &str = r##"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container };
 
 

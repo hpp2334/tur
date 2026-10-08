@@ -1,4 +1,4 @@
-//! The lifecycle family's `tur` host-pkg rows (via the pkg-extension
+//! The lifecycle family's `tur_host` pkg rows (via the pkg-extension
 //! seam): the Lifecycle spec — mount/destroy intent callbacks around a
 //! pre-built child (the rut twin of the JS `lifecycleView(fn)`).
 

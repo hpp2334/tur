@@ -50,7 +50,7 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
 }
 
 const RAIL_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 entry fn start() -> u64 {
@@ -99,7 +99,7 @@ fn fn_value_callbacks_fire_through_the_infra_dispatch() {
 }
 
 const WRONG_ARITY_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mutate, source };
 
 entry fn start() {
@@ -126,7 +126,7 @@ fn wrong_arity_callback_fails_to_compile() {
 }
 
 const EACH_RAIL_RUT: &str = r#"
-use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
+use tur_host::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_source_value };
 use tur_kit::{ Column, Each, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 entry fn start() {
@@ -169,7 +169,7 @@ fn each_item_builder_takes_a_fn_value() {
 }
 
 const ANIM_RAIL_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 use tur_anim_kit::{ anim_ctrl_tick };
 

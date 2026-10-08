@@ -1,7 +1,7 @@
 // scroll-view-offset: a scroll viewport with a one-shot initial offset
 // (the controller's initialOffset twin) — the content offset starts at
 // -100.
-use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, ScrollView };
 
 

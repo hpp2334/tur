@@ -1,4 +1,4 @@
-//! C5 — animation rows on the `tur` rut host pkg (via the pkg-extension
+//! C5 — animation rows on the `tur_host` rut pkg (via the pkg-extension
 //! seam): `Opacity` / `Transform` effect rows, the animation-controller
 //! opaque (a Rust-held controller registered into the same
 //! [`AnimationManager`] the subsystem ticks), the `onTick` rail, and

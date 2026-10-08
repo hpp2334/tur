@@ -1,6 +1,6 @@
 // flex-todolist-sidebar: the todolist two-pane shell — a 200px tab
 // sidebar beside a padded content column.
-use tur::{ CROSS_ALIGN_CENTER, MAIN_ALIGN_SPACE_BETWEEN, mount };
+use tur_host::{ CROSS_ALIGN_CENTER, MAIN_ALIGN_SPACE_BETWEEN, mount };
 use tur_kit::{ Column, Container, Row, Text };
 
 

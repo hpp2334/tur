@@ -159,7 +159,7 @@ fn blocking_work_does_not_stall_lane_cotenants() {
             .clone()
             .load_rut_module(
                 r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Text };
 
 

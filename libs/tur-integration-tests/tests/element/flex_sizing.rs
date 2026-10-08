@@ -42,7 +42,7 @@ fn rect(app: &TurTestApp, key: &[&str]) -> (f64, f64, f64, f64) {
 // ── Shape (a): a fixed-size Container as a Column child ─────────────────
 
 const FIXED_HEADER_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Container, Text };
 
 entry fn start() -> u64 {
@@ -91,7 +91,7 @@ fn fixed_size_column_child_honored() {
 // ── Shape (b): an unset-width (0 = unset idiom) child among siblings ────
 
 const UNSET_WIDTH_HEADER_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Container, Text };
 
 entry fn start() -> u64 {

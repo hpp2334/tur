@@ -1,4 +1,4 @@
-//! The virtual-app family's `tur` host-pkg rows (via the pkg-extension
+//! The virtual-app family's `tur_host` pkg rows (via the pkg-extension
 //! seam): the controller ops (`va_create_source` / `va_source_handle` /
 //! `va_controller` / `va_destroy` / `va_status` / `va_error` /
 //! `va_app_atom` / `va_bind_atom` / `va_app_set` / `va_app_clear`) and the

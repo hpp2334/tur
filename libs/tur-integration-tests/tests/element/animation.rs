@@ -1,5 +1,5 @@
 //! The animation controller state machine, driven end to end through the
-//! `tur` host pkg's animation rows: the Rust-held controller opaque ticks
+//! `tur_host` pkg's animation rows: the Rust-held controller opaque ticks
 //! via the animation subsystem (frame-advanced against the virtual
 //! clock), its onTick / onEnd intent rail writes bound atoms, and the
 //! control rows (forward / reverse / stop / pause / resume / seek /
@@ -49,7 +49,7 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the stashed controller.
 const CONTROLLER_RUT: &str = r#"
-use tur::{ mount, rs_set_str, st_put, st_take };
+use tur_host::{ mount, rs_set_str, st_put, st_take };
 use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
@@ -481,7 +481,7 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur::{ mount, st_put, st_take };
+use tur_host::{ mount, st_put, st_take };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
@@ -560,7 +560,7 @@ fn bound_angle_animates_without_rebuild() {
 
 /// The static path — `el_transform` with all-static channels — unchanged.
 const STATIC_TRANSFORM_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
@@ -593,7 +593,7 @@ fn static_transform_path_unchanged() {
 /// their atoms the same way (each in its own app — the rut qkey
 /// `rut/transform` matches the first transform).
 const BOUND_SCALE_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
@@ -611,7 +611,7 @@ entry fn probe_s(atom: u64, b: f64) {
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 

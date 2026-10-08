@@ -1,6 +1,6 @@
 // stack-basic: two non-positioned children — the Stack sizes to the
 // largest one and paints them overlaid.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, Stack };
 
 

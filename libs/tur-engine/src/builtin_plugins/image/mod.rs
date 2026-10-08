@@ -21,7 +21,7 @@ pub mod layout;
 pub(crate) mod rut_rows;
 pub mod render;
 
-/// Install the image family's `tur` host-pkg rows (the kit wraps them):
+/// Install the image family's `tur_host` pkg rows (the kit wraps them):
 /// resource registration + the Image spec.
 pub fn install_image(ctx: &mut crate::core::plugin::PluginRegisterContext) -> Result<(), crate::error::TurError> {
     ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));

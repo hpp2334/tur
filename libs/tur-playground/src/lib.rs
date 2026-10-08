@@ -1,10 +1,10 @@
 //! The playground's rut compile service — the `TurRutPlaygroundPlugin`.
 //!
 //! A tiny plugin whose `register` pushes a [`RutPkgExt`](tur_engine::core::
-//! rut_runtime::RutPkgExt) adding the `pg_*` rows to the `tur` host pkg:
+//! rut_runtime::RutPkgExt) adding the `pg_*` rows to the `tur_host` pkg:
 //!
 //! - `pg_compile(source) -> u64` — compile a rut module in-realm (a fresh
-//!   session against the same `tur` decl surface the engine mounts) and, on
+//!   session against the same `tur_host` decl surface the engine mounts) and, on
 //!   success, register it as a virtual-app source
 //!   ([`VirtualState::create_source`]), answering the source id (a plain
 //!   `u64` — the rut realm lifts it through `va_source_handle`). Answers
@@ -139,7 +139,7 @@ fn install(cx: &mut RutPkgCx<'_>) {
 }
 
 /// Compile `source` against the engine's standard assembly —
-/// `RutRuntime::parse_check` (std core + the `tur` decl pkg extended with
+/// `RutRuntime::parse_check` (std core + the `tur_host` decl pkg extended with
 /// every plugin's rows/consts + the extension preludes: the kit et al.) —
 /// then register it as a virtual-app source. Answers the source id, or the
 /// joined diagnostics / service error.

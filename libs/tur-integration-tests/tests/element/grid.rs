@@ -14,7 +14,7 @@ fn setup_grid(
     let mut app = TurTestApp::new(width, height).unwrap();
     app.load_rut_module(&format!(
         r#"
-use tur::{{ mount }};
+use tur_host::{{ mount }};
 use tur_kit::{{ Container, Grid }};
 
 

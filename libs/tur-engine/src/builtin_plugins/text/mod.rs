@@ -52,7 +52,7 @@ use crate::core::plugin::PluginRegisterContext;
 pub fn install_text(ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
     ctx.register_subsystem(Box::new(handlers::ClipboardPasteSubsystem));
     ctx.register_subsystem(Box::new(handlers::CaretVisibilitySubsystem));
-    // The text families' `tur` rows (the kit wraps them): Text / Input /
+    // The text families' `tur_host` rows (the kit wraps them): Text / Input /
     // spans + the realm-free controllers.
     ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     Ok(())

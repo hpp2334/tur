@@ -1,4 +1,4 @@
-//! The packed-color law at the row boundary: every `tur` color row takes a
+//! The packed-color law at the row boundary: every `tur_host` color row takes a
 //! `u64` packed **`0xRRGGBBAA`** — R in bits 31..24, A in bits 7..0 (the
 //! layout `Color::from_str`'s `#RRGGBBAA` and the corpus's `0xFF0000FF` =
 //! red both pin). The truth lives in `core::rut_runtime::color_of`; this
@@ -56,7 +56,7 @@ fn container_color_packs_rrggbbaa() {
 
     app.load_rut_module(
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container };
 
 

@@ -1,5 +1,5 @@
 // scroll-view-basic: a vertical scroll viewport around a 3x200 column.
-use tur::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, ScrollView };
 
 

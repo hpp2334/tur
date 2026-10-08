@@ -88,7 +88,7 @@ pub struct CompileContext<'a> {
 /// is gone.
 ///
 /// Registration primitives: subsystems, per-instance plugin state, and rut
-/// pkg rows (the `tur` host-pkg extension seam). The consumed
+/// pkg rows (the `tur_host` pkg extension seam). The consumed
 /// register-phase collectors are handed to the instance by the builder once
 /// the last plugin has registered (see
 /// [`PluginRegisterContext::into_parts`]): the flush-subsystem list and the
@@ -242,7 +242,7 @@ impl PluginRegisterContext {
         self.subsystems.push(sub);
     }
 
-    /// Push a rut pkg extension — plugin-owned rows for the `tur` host pkg
+    /// Push a rut pkg extension — plugin-owned rows for the `tur_host` pkg
     /// (decl rows at compile time, bodies at boot). See
     /// [`crate::core::rut_runtime::RutPkgExt`].
     pub fn push_rut_ext(&self, ext: crate::core::rut_runtime::RutPkgExt) {

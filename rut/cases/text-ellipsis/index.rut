@@ -1,5 +1,5 @@
 // text-ellipsis: the long line ellipsized at two lines.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Text };
 
 

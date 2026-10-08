@@ -7,7 +7,7 @@ use crate::controller::AnimationController;
 pub type ControllerFace = Rc<std::cell::RefCell<AnimationController>>;
 
 /// Registry of active `AnimationController`s. Each controller registers
-/// itself via `forward()` / `reverse()` (the `tur` pkg rows); the frame loop
+/// itself via `forward()` / `reverse()` (the `tur_host` pkg rows); the frame loop
 /// ticks them and enqueues (does not fire) their `onTick` / `onEnd`
 /// callbacks on the mutation queue, which fire later in
 /// `flush_pending_mutations` after the `RefMut` on each controller is

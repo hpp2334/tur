@@ -38,7 +38,7 @@ impl Default for RepeatMode {
 
 /// One explicit animation transport: value interpolation driven by the
 /// engine clock, registered into the shared [`AnimationManager`] while
-/// playing. Pure Rust state — the `tur` pkg rows mint and drive it.
+/// playing. Pure Rust state — the `tur_host` pkg rows mint and drive it.
 pub struct AnimationController {
     duration_ms: u64,
     curve: Curve,

@@ -1,4 +1,4 @@
-//! The composited-transform families' `tur` host-pkg rows (via the
+//! The composited-transform families' `tur_host` pkg rows (via the
 //! pkg-extension seam): `ct_link_new` mints a `LayerLink` (registered into
 //! the subsystem's registry, exactly like the JS `createLayerLink`
 //! factory), and the CompositedTransformTarget / CompositedTransformFollower

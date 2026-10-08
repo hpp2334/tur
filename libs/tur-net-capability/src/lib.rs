@@ -19,7 +19,7 @@
 //!   `tur-net-native`, `RecordingHttp` in `tur-integration-tests`)
 //!   implement [`HttpBackend`] and are registered via
 //!   `.capability(Http::new(backend))`.
-//! - The `tur` host pkg rows (in [`rut_rows`], via the pkg-extension seam)
+//! - The `tur_host` pkg rows (in [`rut_rows`], via the pkg-extension seam)
 //!   parse [`RequestOpts`] and drive the backend on the rut async weave;
 //!   a stream's cancel row wire-aborts the download.
 //! - [`TurNetPlugin`] does NOT declare a `requires` for [`Http`] — HTTP is
@@ -196,7 +196,7 @@ impl tur_engine::core::capability::Capability for Http {}
 /// registered.
 ///
 /// One synthetic module: `tur:net` exports `request(opts): Task<Response>` +
-/// The net plugin: pushes the `tur` host pkg's net rows (see
+/// The net plugin: pushes the `tur_host` pkg's net rows (see
 /// [`rut_rows`]) when an [`Http`] backend is registered.
 ///
 /// If no backend is injected, the plugin is a no-op — the rows stay

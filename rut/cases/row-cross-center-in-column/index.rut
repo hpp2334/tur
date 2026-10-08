@@ -1,5 +1,5 @@
 // row-cross-center-in-column: a min-size centering Row in a Column.
-use tur::{ CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
+use tur_host::{ CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
 use tur_kit::{ Column, Container, Row };
 
 

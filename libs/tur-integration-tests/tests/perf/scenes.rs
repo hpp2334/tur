@@ -92,7 +92,7 @@ pub fn static_tree(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ mount, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur_host::{ mount, rs_get_f64, rs_set_f64, rs_source_f64 };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Row };
 use tur_kit::{ TextCtrl, UndoCtrl, rs_derive };
 
@@ -140,7 +140,7 @@ pub fn scrolled_list(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ AXIS_VERTICAL, mount };
+use tur_host::{ AXIS_VERTICAL, mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Expanded, ScrollView };
 
 
@@ -204,7 +204,7 @@ pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_host::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
@@ -277,7 +277,7 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span };
+use tur_host::{ AXIS_VERTICAL, mount, tctrl_new, tctrl_push_span };
 use tur_kit::{ TextCtrl, UndoCtrl, Input, ScrollView };
 
 

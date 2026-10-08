@@ -19,7 +19,7 @@
 // brush/str/bool sources repainted by the mutations (sync_chrome) and
 // the ticker's Done write — the corpus's brush law.
 use futures::{ sleep };
-use tur::{
+use tur_host::{
     ALIGN_CENTER, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_POINTER,
     HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, mem_get, mem_new,
     mem_set, mount, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new,

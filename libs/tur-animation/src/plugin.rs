@@ -1,5 +1,5 @@
-//! `TurAnimationPlugin` — registers the animation subsystem and the `tur`
-//! host pkg's animation rows.
+//! `TurAnimationPlugin` — registers the animation subsystem and the `tur_host`
+//! pkg's animation rows.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -14,7 +14,7 @@ use crate::manager::AnimationManager;
 ///
 ///   - the [`AnimationSubsystem`] flush participant (ticks active
 ///     controllers once per frame),
-///   - the `tur` host pkg's animation rows (via the pkg-extension seam —
+///   - the `tur_host` pkg's animation rows (via the pkg-extension seam —
 ///     `el_opacity` / `el_transform` effects, the controller opaque,
 ///     the tween + curve helpers).
 ///
@@ -41,7 +41,7 @@ impl Default for TurAnimationPlugin {
 impl Plugin for TurAnimationPlugin {
     fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         // Build the shared animation manager. The manager is shared between
-        // the AnimationSubsystem (ticks it once per frame) and the `tur` pkg
+        // the AnimationSubsystem (ticks it once per frame) and the `tur_host` pkg
         // rows (every minted rut controller registers into it).
         let manager: Rc<RefCell<AnimationManager>> = Rc::new(RefCell::new(AnimationManager::new()));
         let clock = ctx.clock();
@@ -51,7 +51,7 @@ impl Plugin for TurAnimationPlugin {
         // immediately after TurStdPlugin so animation ticks first.
         ctx.register_subsystem(Box::new(AnimationSubsystem::new(manager.clone(), clock)));
 
-        // The `tur` host pkg rows: pushed as a pkg extension so
+        // The `tur_host` pkg rows: pushed as a pkg extension so
         // `RutRuntime::boot` installs them into the pkg (decl + bodies) on
         // both the compile and boot passes. The closure captures the shared
         // manager — a rut controller registers into the SAME registry the

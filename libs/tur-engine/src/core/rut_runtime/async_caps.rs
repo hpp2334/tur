@@ -17,7 +17,7 @@ use rut_core::types::{TY_BYTES, TY_NIL, TY_STR};
 
 use super::RutHandles;
 
-/// Declare the C6 rows on the `tur` decl module. The async rows ride the
+/// Declare the C6 rows on the `tur_host` decl module. The async rows ride the
 /// driver's family expansion (`is_async = true`).
 pub fn decl_rows() -> Vec<(
     String,

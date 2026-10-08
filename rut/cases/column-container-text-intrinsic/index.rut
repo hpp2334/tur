@@ -1,6 +1,6 @@
 // column-container-text-intrinsic: a padded, unsized Container in a Column
 // sizes from its Text child's intrinsic measurement.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Container, Text };
 
 

@@ -1,7 +1,7 @@
 // mouse-region-cursor: a MouseRegion whose cursor + enter/exit drive the
 // shell cursor and the bound state label. The handlers are mutations over
 // the MutationCtx; the state source rides by capture — no ids, no stash.
-use tur::{ CURSOR_COL_RESIZE, mount };
+use tur_host::{ CURSOR_COL_RESIZE, mount };
 use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mutate, source };
 
 

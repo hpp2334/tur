@@ -17,7 +17,7 @@
 // brush source (the corpus's brush law — bound colors are sources the
 // mutations repaint).
 use futures::{ sleep };
-use tur::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, mount, spawn, str_parse_f64 };
+use tur_host::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, mount, spawn, str_parse_f64 };
 use tur_kit::{ Column, Container, DeriveCtx, Expanded, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, derive, list_new, list_push, mutate, source, value_item, value_len };
 
 

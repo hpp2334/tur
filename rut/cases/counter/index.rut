@@ -3,7 +3,7 @@
 // dressed to the boa design: the slate page, the 36px "Count: N" readout
 // (a derive over the count source) and the centered 100×44 indigo pill
 // row.
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
+use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
 use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, derive, mutate, source };
 
 

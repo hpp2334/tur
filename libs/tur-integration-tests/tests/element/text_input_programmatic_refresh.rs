@@ -15,7 +15,7 @@ use tur_engine::core::elements::{DevNodeData, TraceValue};
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur::{ mount, st_put, st_take, tctrl_new, tctrl_set_text };
+use tur_host::{ mount, st_put, st_take, tctrl_new, tctrl_set_text };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 let K_CTRL: u64 = 1;

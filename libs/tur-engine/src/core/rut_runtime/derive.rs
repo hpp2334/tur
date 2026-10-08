@@ -11,7 +11,7 @@
 //!   retry grants, then one drain grant that always returns the machine
 //!   to idle (never parked mid-flush);
 //! - **no-mount** — `face_busy` is raised for the call's duration; a
-//!   derive that tries `tur::mount` traps (checked by the mount row);
+//!   derive that tries `tur_host::mount` traps (checked by the mount row);
 //! - **depth-limited** — nested face calls cap at `VM_FACE_MAX_DEPTH`;
 //! - **traps never abort the flush** — reported through the
 //!   runtime-error rail, the derived falls back to `Value::Nil`.

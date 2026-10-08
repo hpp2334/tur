@@ -2,7 +2,7 @@
 // (the VDivider pattern). The scratch points ride f64 sources captured by
 // the drag mutations; the transcript source renders "dsx,dsy,dlx,dly" for
 // the test to parse.
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mutate, source };
 
 

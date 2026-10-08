@@ -3,7 +3,7 @@
 // PointerInteract catches invisible hits; a translucent MouseRegion joins
 // the path without blocking. The beneath-target's down count renders into
 // the `beneath-downs` Text (the test parses it).
-use tur::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mount };
+use tur_host::{ ALIGN_TOP_LEFT, CURSOR_AUTO, mount };
 use tur_kit::{ Container, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mutate, source };
 
 

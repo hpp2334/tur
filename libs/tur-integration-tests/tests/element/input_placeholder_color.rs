@@ -59,7 +59,7 @@ fn placeholder_default_is_default_text_color_mixed_50pct_alpha() {
     mount(
         &mut app,
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Input };
 
 
@@ -93,7 +93,7 @@ fn placeholder_default_follows_explicit_text_color() {
     mount(
         &mut app,
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Input };
 
 
@@ -132,7 +132,7 @@ fn placeholder_default_multiplies_existing_alpha() {
     mount(
         &mut app,
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Input };
 
 
@@ -170,7 +170,7 @@ fn explicit_placeholder_color_wins() {
     mount(
         &mut app,
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Input };
 
 entry fn start() {

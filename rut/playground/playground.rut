@@ -68,7 +68,7 @@
 // restarted on every edit (`anim_stop` = cancellation). The async weave
 // (`launch_future` / `sleep`) is native-only — on wasm an async import
 // fails the compile.
-use tur::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
+use tur_host::{ ALIGN_CENTER, anim_forward, anim_stop, AXIS_VERTICAL, CLIP_HARD_EDGE,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_COL_RESIZE, CURSOR_POINTER, ctx_bridge,
     img_res_svg, MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, mem_get, mem_new,
     mem_set, mount, pg_apply_highlight, pg_case_count, pg_case_name, pg_case_source, pg_compile,
@@ -350,7 +350,7 @@ entry fn start() -> u64 {
     // empty module) so `run_case`'s destroy-then-spawn can unconditionally
     // `va_destroy` the stashed controller — and the status watch has a
     // rail to ride until the first run swaps in the real one.
-    let seed = va_create_source("use tur::{ mount };\nentry fn start() {\n}\n");
+    let seed = va_create_source("use tur_host::{ mount };\nentry fn start() {\n}\n");
     let seed_ctrl = virtual_app_controller(seed);
     st_put(K_VCTRL, seed_ctrl.raw());
     watch_controller(seed_ctrl);

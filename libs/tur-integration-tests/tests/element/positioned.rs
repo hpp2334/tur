@@ -126,7 +126,7 @@ fn positioned_only_stack_sizes_to_constraints_biggest() {
 // ---------------------------------------------------------------------------
 
 const BOUND_ANCHORS_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, Mutation, MutationCtx, Positioned, Readable, Source, Stack, source };
 
 entry fn start() -> u64 {

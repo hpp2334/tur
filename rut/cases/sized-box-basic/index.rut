@@ -1,5 +1,5 @@
 // sized-box-basic: an exactly-sized box wrapping a Text child.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ SizedBox, Text };
 
 

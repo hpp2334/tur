@@ -1,4 +1,4 @@
-//! The layout families' `tur` host-pkg rows (via the pkg-extension seam):
+//! The layout families' `tur_host` pkg rows (via the pkg-extension seam):
 //! flex (Column/Row), stack, box (Container), sized box, positioned,
 //! flexible items (Expanded/Flexible), grid, and the reactive-rows table.
 //!

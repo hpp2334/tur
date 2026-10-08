@@ -1,5 +1,5 @@
 // flex-row-main-end: two fixed-width children pinned to the main-axis end.
-use tur::{ CROSS_ALIGN_START, MAIN_ALIGN_END, mount };
+use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END, mount };
 use tur_kit::{ Container, Row };
 
 

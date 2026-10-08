@@ -73,7 +73,7 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 // ── Shape (a): PointerInteract inside ScrollView content ────────────────
 
 const SCROLL_BTN_RUT: &str = r#"
-use tur::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mutate, source };
 
 entry fn start() -> u64 {
@@ -175,7 +175,7 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 // ── Shape (b): PointerInteract inside Positioned inside Stack ───────────
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
-use tur::{ ALIGN_TOP_LEFT, mount };
+use tur_host::{ ALIGN_TOP_LEFT, mount };
 use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
 
 entry fn start() -> u64 {
@@ -215,7 +215,7 @@ entry fn start() -> u64 {
 // `.child(pos)` on that View, then `mount(stack.build())`. See the test
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
-use tur::{ ALIGN_TOP_LEFT, mount };
+use tur_host::{ ALIGN_TOP_LEFT, mount };
 use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mutate, source };
 
 entry fn start() -> u64 {

@@ -1,5 +1,5 @@
 // container-basic: a padded container around a fixed-size child.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container };
 
 

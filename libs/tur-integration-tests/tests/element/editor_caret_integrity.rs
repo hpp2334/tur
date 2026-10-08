@@ -31,7 +31,7 @@ const K_CTRL: u64 = 1;
 const K_MODE: u64 = 2;
 
 const EDITOR_RUT: &str = r#"
-use tur::{ CLIP_HARD_EDGE, ctx_bridge, mount, rs_set_str, rs_source_str,
+use tur_host::{ CLIP_HARD_EDGE, ctx_bridge, mount, rs_set_str, rs_source_str,
     st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Container, Input, Source, Switch };
 

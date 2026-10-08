@@ -29,7 +29,7 @@ use crate::error::TurError;
 /// Install the gesture plugin (`MouseRegion`, `PointerInteract`) and
 /// register `GestureSubsystem` + `PointerSubsystem`.
 pub fn install_gesture(ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
-    // The gesture families' `tur` rows (the kit wraps them):
+    // The gesture families' `tur_host` rows (the kit wraps them):
     // PointerInteract / MouseRegion / Focusable.
     ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     ctx.register_subsystem(Box::new(gesture_handler::GestureSubsystem::new()));

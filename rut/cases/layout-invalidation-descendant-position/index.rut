@@ -3,7 +3,7 @@
 // track the width change through the intermediate Row (the divider-drag
 // position-gap repro). The `set_width` probe drives the change (the atom
 // id rides the entry arg — the probe's handles bind at the call site).
-use tur::{ MAIN_ALIGN_END, ctx_bridge, mount };
+use tur_host::{ MAIN_ALIGN_END, ctx_bridge, mount };
 use tur_kit::{ Container, MutationCtx, Readable, Row, Source, source };
 
 

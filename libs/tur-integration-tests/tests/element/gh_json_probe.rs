@@ -8,7 +8,7 @@
 use tur_integration_tests::TurTestApp;
 
 const PROBE_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, source };
 
 // ASCII codepoints the scanner compares against (typed so the literals

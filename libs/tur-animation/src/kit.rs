@@ -1,5 +1,5 @@
 //! The animation family's kit prelude — the authored wrappers over this
-//! plugin's `tur` host-pkg rows (`Opacity` / `Transform`). Lives in the
+//! plugin's `tur_host` pkg rows (`Opacity` / `Transform`). Lives in the
 //! crate that owns the rows (the layering law applied to the kit): the
 //! plugin pushes it as a compile-session prelude next to its rows, so a
 //! plugin set without animation never sees (or compiles) these classes.

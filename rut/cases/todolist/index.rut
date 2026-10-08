@@ -10,7 +10,7 @@
 // per-row taps capture the row index (no id rails). Both modals overlay
 // via Condition branches in the root Stack — and unlike the boa
 // reference, NEITHER boots open (the boot-modal bug is not ported).
-use tur::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_START,
+use tur_host::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_START,
     CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END,
     MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg, mount,
     tctrl_new, tctrl_text, undo_new };

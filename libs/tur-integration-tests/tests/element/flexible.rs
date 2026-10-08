@@ -24,7 +24,7 @@ fn setup_row_flex_item_ex(
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     let source = format!(
         r#"
-use tur::{{ mount }};
+use tur_host::{{ mount }};
 use tur_kit::{{ Container, Expanded, Flexible, Row, Text }};
 
 
@@ -181,7 +181,7 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, Flexible, Row, SizedBox, Text };
 
 
@@ -283,7 +283,7 @@ entry fn start() {
 fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"use tur::{ mount };
+        r#"use tur_host::{ mount };
 use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
 
 use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text };
@@ -371,7 +371,7 @@ entry fn start() {
 fn flexible_zero_remaining_slot_paints_within_budget() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
-        r#"use tur::{ mount };
+        r#"use tur_host::{ mount };
 use tur_kit::{ Container, Flexible, Row, Text };
 
 use tur_kit::{ Container, Flexible, Row, Text };

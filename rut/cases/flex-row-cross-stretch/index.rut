@@ -1,6 +1,6 @@
 // flex-row-cross-stretch: fixed-width children stretched to the row's
 // full cross axis (the viewport height).
-use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Container, Row };
 
 

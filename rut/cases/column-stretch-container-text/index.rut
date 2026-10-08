@@ -1,6 +1,6 @@
 // column-stretch-container-text: Column(crossAlignment: Stretch) around a
 // padded unsized Container + Text — full-width colored strip.
-use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, Text };
 
 

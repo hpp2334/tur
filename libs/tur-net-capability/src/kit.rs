@@ -1,5 +1,5 @@
 //! The net capability's kit prelude — the authored face over this
-//! plugin's `tur` host-pkg rows (`net_stream`). Lives in the crate that
+//! plugin's `tur_host` pkg rows (`net_stream`). Lives in the crate that
 //! owns the rows (the layering law applied to the kit): the plugin pushes
 //! it as a compile-session prelude next to its rows.
 

@@ -127,7 +127,7 @@ pub struct InstanceContext {
     /// (`Arc<[WorkerPoolHandle]>` — each an `Arc` over plain data), no
     pub(crate) worker_pools: Arc<[WorkerPoolHandle]>,
     /// The rut pkg-extension installers — plugins that own rut rows for
-    /// the `tur` host pkg (tur-animation's C5 rows) push a closure here at
+    /// the `tur_host` pkg (tur-animation's C5 rows) push a closure here at
     /// `register`; `RutRuntime::boot` drains it when building the pkg (see
     /// `core::rut_runtime::RutPkgExt`).
     pub rut_pkg_exts: Rc<RefCell<Vec<crate::core::rut_runtime::RutPkgExt>>>,

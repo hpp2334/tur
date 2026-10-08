@@ -17,7 +17,7 @@ pub use each::{EachBuilder, EachView};
 pub use fragment::FragmentView;
 pub use switch::{Prebuilt, SwitchKey, SwitchView};
 
-/// Install the control-flow families' `tur` host-pkg rows (the kit wraps
+/// Install the control-flow families' `tur_host` pkg rows (the kit wraps
 /// them): condition / switch / each / fragment.
 pub fn install_control_flow(
     ctx: &mut crate::core::plugin::PluginRegisterContext,

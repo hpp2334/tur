@@ -23,7 +23,7 @@ use tur_integration_tests::TurTestApp;
 /// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
-use tur::{ AXIS_VERTICAL, ctx_bridge, mount, tctrl_new, tctrl_push_span };
+use tur_host::{ AXIS_VERTICAL, ctx_bridge, mount, tctrl_new, tctrl_push_span };
 use tur_kit::{ TextCtrl, UndoCtrl, Container, Input, Mutation, MutationCtx, Readable, ScrollView, Source, source };
 
 

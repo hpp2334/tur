@@ -48,7 +48,7 @@
 // Shape note: every class holds exactly ONE `spec: opaque` field (the
 // family's host-side spec) — no rut-side containers; the host spec
 // accumulates children through the `*_child` rows.
-use tur::{
+use tur_host::{
   box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
   box_height_bound, box_new, box_padding, box_qkey, box_radius, box_radius_bound, box_shadow,
   box_shadow_blur_bound, box_shadow_color_bound, box_shadow_dy_bound,

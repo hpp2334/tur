@@ -4,7 +4,7 @@
 // is tall: cell_main = cell_cross / 2); the second exercises
 // `main_extent`, which overrides the aspect with a fixed 40px row height.
 // Both grids ride `max_cross` 160 for the column count.
-use tur::{ CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
+use tur_host::{ CROSS_ALIGN_START, MAIN_SIZE_MIN, mount };
 use tur_kit::{ Column, Container, Grid, ScrollView, SizedBox, Text };
 
 

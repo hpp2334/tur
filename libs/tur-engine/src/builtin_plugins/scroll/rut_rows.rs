@@ -1,4 +1,4 @@
-//! The scroll family's `tur` host-pkg rows (via the pkg-extension seam):
+//! The scroll family's `tur_host` pkg rows (via the pkg-extension seam):
 //! the ScrollView spec — axis, one-shot initial offset (the JS controller's
 //! `initialOffset` twin), query key, child.
 

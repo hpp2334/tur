@@ -1,5 +1,5 @@
 // image-basic: a synthetic 1x1-ish RGBA resource in a fixed-size Image.
-use tur::{ BOXFIT_FILL, img_res_solid, mount };
+use tur_host::{ BOXFIT_FILL, img_res_solid, mount };
 use tur_kit::{ Container, Image };
 
 

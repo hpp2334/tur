@@ -1,7 +1,7 @@
 //! The kit — the authored element-construction surface.
 //!
 //! [`TUR_KIT_RUT`] is a rut SOURCE module (one class per element over its
-//! family's `tur` host-pkg rows: one method per prop, `.child` /
+//! family's `tur_host` pkg rows: one method per prop, `.child` /
 //! `.children` appending, `.build()` the only terminal). It lives OUTSIDE
 //! `core/` (the layering law: core owns mechanism, never elements) and is
 //! registered as a compile-session prelude by the standard bundle

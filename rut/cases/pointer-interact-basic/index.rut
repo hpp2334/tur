@@ -1,5 +1,5 @@
 // pointer-interact-basic: an opaque gesture pad around a fixed-size box.
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, PointerInteract };
 
 

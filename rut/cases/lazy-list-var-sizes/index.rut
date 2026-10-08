@@ -10,7 +10,7 @@
 //
 // Deterministic per-index sizes via the boa sine-hash (math_sin is the
 // engine's only trig row — exactly what the hash needs).
-use tur::{ ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL, CURSOR_POINTER,
+use tur_host::{ ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL, CURSOR_POINTER,
     CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, mount, str_parse_f64 };
 use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, list_push, mutate, source };
 

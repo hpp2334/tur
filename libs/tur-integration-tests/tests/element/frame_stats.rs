@@ -67,7 +67,7 @@ fn stat_present(app: &TurTestApp, key: &str) -> bool {
 fn mount(app: &TurTestApp) {
     app.load_rut_module(
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Container, Text };
 
 
@@ -133,7 +133,7 @@ fn host_frame_timing_is_opt_in() {
     // a new root → paint).
     app.set_host_frame_timing(true);
     app.load_rut_module(
-        r#"use tur::{ mount };
+        r#"use tur_host::{ mount };
 use tur_kit::{ Container };
 
 use tur_kit::{ Container };

@@ -2,7 +2,7 @@
 //!
 //! Architecture: **rut drives, the engine applies.** A loaded rut module's
 //! `start()` builds a tree of *pure-Rust view data* through host rows and
-//! stashes the root via `tur::mount`. The engine applies the stashed root
+//! stashes the root via `tur_host::mount`. The engine applies the stashed root
 //! into the instance's `ElementTree` right after `start` returns, on the
 //! same code path the JS `mount(view)` bridge used. The rut VM itself is
 //! driven by the embedder's pump (`run_ready()` before each flush — never
@@ -15,7 +15,7 @@
 //! ## Layering law
 //!
 //! This module is MECHANISM ONLY: the `RutView` crossing, the
-//! [`RutHandles`] bridge state, the `tur` host pkg's store / stash / mount
+//! [`RutHandles`] bridge state, the `tur_host` pkg's store / stash / mount
 //! rows, the entry rails ([`Intent`] + the drain), and the pkg-extension
 //! seam ([`RutPkgExt`]). It contains ZERO element concepts — every element
 //! family's spec + rows live in the builtin plugin that owns its view type
@@ -192,7 +192,7 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 }
 
 // ---------------------------------------------------------------------------
-// The `tur` host package — decl rows (mounted in-memory as a Module) +
+// The `tur_host` package — decl rows (mounted in-memory as a Module) +
 // bodies (a HostPkg installed into the per-instance HostRegistry).
 //
 // MECHANISM ONLY: mount + the C8 no-mount trap, the `rs_*` store rows,
@@ -200,7 +200,7 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 // their view types and arrive through the [`RutPkgExt`] seam.
 // ---------------------------------------------------------------------------
 
-/// The in-memory `tur` host pkg (the DECL side): the mechanism surface
+/// The in-memory `tur_host` pkg (the DECL side): the mechanism surface
 /// rut code compiles against. Offered to the run chain — no filesystem
 /// involved. Plugin families extend it through their pushed
 /// [`RutPkgExt`]s (decl rows + consts).
@@ -286,8 +286,8 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
     let mut funcs = host_funcs;
     funcs.extend(async_caps::decl_rows());
     rut_driver::Pkg {
-        spec: "tur".to_string(),
-        namespace: Some("tur".to_string()),
+        spec: "tur_host".to_string(),
+        namespace: Some("tur_host".to_string()),
         body: PkgBody::Host {
             host_funcs: funcs,
             consts: Vec::new(),
@@ -307,7 +307,7 @@ fn install_tur_pkg(
     handles: &Rc<RutHandles>,
     exts: &[RutPkgExt],
 ) {
-    let mut pkg = rut_vm::interp::HostPkg::new("tur");
+    let mut pkg = rut_vm::interp::HostPkg::new("tur_host");
 
     // ---- mount + the C8 no-mount law ------------------------------------
     //
@@ -319,7 +319,7 @@ fn install_tur_pkg(
         if h.face_busy.get() > 0 {
             return Err(rut_vm::Trap::new(
                 rut_vm::TrapKind::Invalid,
-                "tur::mount inside a face call (derive / item builder) —                  mounting is a start-time or intent-drain-time op only",
+                "tur_host::mount inside a face call (derive / item builder) —                  mounting is a start-time or intent-drain-time op only",
             ));
         }
         let root = view.with(|v| v.0.clone())?;
@@ -627,7 +627,7 @@ pub struct RutHandles {
     /// The instance's focus manager — the `focus_request` row targets it
     /// (the FocusChange flush pushes the focus/blur mutations next frame).
     pub focus_manager: Rc<std::cell::RefCell<crate::core::focus::FocusManager>>,
-    /// The root stashed by `tur::mount` during `start`, applied by the
+    /// The root stashed by `tur_host::mount` during `start`, applied by the
     /// engine after the call returns (outside the VM, on the mount path).
     pub pending_root: std::cell::RefCell<Option<Rc<dyn View>>>,
     /// Callback intents queued by element callbacks (the row closures are
@@ -659,7 +659,7 @@ pub struct RutHandles {
     /// by rows reach the VM through it. Detached until boot installs the
     /// VM; guards (depth, no-mount) live here.
     pub face: Rc<VmFace>,
-    /// Above zero while a face-driven VM call is in flight — `tur::mount`
+    /// Above zero while a face-driven VM call is in flight — `tur_host::mount`
     /// traps inside one (the C8 no-mount law: a derive/build that tries to
     /// re-mount the tree can never wedge the frame).
     pub face_busy: std::cell::Cell<u32>,
@@ -827,7 +827,7 @@ pub mod seal_tags {
 ///   exhausts it is retried with bounded extra fuel, then bailed (reported,
 ///   machine returned to idle).
 /// - **no-mount**: `face_busy` is raised for the call's duration; a row
-///   calling `tur::mount` inside traps (checked by the `mount` row).
+///   calling `tur_host::mount` inside traps (checked by the `mount` row).
 /// - **depth-limited**: nested face calls (a derive reading a derived)
 ///   cap at [`VM_FACE_MAX_DEPTH`].
 /// - **traps never abort the flush**: reported through the runtime-error
@@ -993,7 +993,7 @@ impl RutRuntime {
         let v = Opaque::<RutView>::from_handle(handle).ok()?;
         v.with(|v| Some(v.0.clone())).ok()?
     }
-    /// Assemble a fresh session (core + the in-memory `tur` decl pkg +
+    /// Assemble a fresh session (core + the in-memory `tur_host` decl pkg +
     /// every extension's prelude modules) and compile `source` against it.
     /// Split from [`Self::boot`] so a syntactically-broken module fails
     /// BEFORE any teardown runs (the parse-first contract).
@@ -1015,7 +1015,7 @@ impl RutRuntime {
         let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId, bool)> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
         let mut preludes: Vec<rut_driver::Pkg> = Vec::new();
-        let mut probe = rut_vm::interp::HostPkg::new("tur");
+        let mut probe = rut_vm::interp::HostPkg::new("tur_host");
         for ext in exts {
             ext(&mut RutPkgCx {
                 decl: &mut ext_decl,
@@ -1201,7 +1201,7 @@ impl RutRuntime {
             })
     }
 
-    /// Apply the root stashed by `tur::mount` into the instance tree —
+    /// Apply the root stashed by `tur_host::mount` into the instance tree —
     /// the engine-side twin of the JS `mount(view)` bridge. **Realm-free**:
     /// rut rows materialize pure-Rust `Rc<dyn View>` values and the tree
     /// build path is realm-optional, so a rut-only instance never touches
@@ -1322,7 +1322,7 @@ pub struct RutRealmInputs {
     pub clock: std::rc::Rc<dyn crate::core::clock::Clock>,
 }
 
-/// The pkg-extension context an installer sees: the `tur` host pkg's decl
+/// The pkg-extension context an installer sees: the `tur_host` pkg's decl
 /// rows + consts (compile side), the body pkg + bridge handles (boot side),
 /// and the prelude modules (the kit et al.) registered before the app
 /// source compiles.
@@ -1343,7 +1343,7 @@ pub struct RutPkgCx<'a> {
     pub preludes: &'a mut Vec<rut_driver::Pkg>,
 }
 
-/// A rut pkg extension: plugin-owned rows for the `tur` host pkg (e.g.
+/// A rut pkg extension: plugin-owned rows for the `tur_host` pkg (e.g.
 /// tur-animation's C5 rows, each element family's spec + rows). Plugins
 /// push one during `register`; both the compile (decl) and boot (bodies)
 /// phases drain them.

@@ -19,7 +19,7 @@
 //!   in `tur-filepicker-native`, `RecordingFilePicker` in
 //!   `tur-integration-tests`) implement [`FilePickerBackend`] and are
 //!   registered via `.capability(FilePicker::new(backend))`.
-//! - The `tur` host pkg rows (in [`rut_rows`], via the pkg-extension seam)
+//! - The `tur_host` pkg rows (in [`rut_rows`], via the pkg-extension seam)
 //!   parse [`PickOptions`] and drive the backend on the rut async weave.
 //! - File picking is **opt-in**: unlike net (an optional capability that
 //!   silently skips when absent), [`TurFilePickerPlugin`] declares
@@ -123,7 +123,7 @@ impl tur_engine::core::capability::Capability for FilePicker {}
 // Plugin
 // ---------------------------------------------------------------------------
 
-/// tur-filepicker plugin: pushes the `tur` host pkg's pick rows (see
+/// tur-filepicker plugin: pushes the `tur_host` pkg's pick rows (see
 /// [`rut_rows`]).
 ///
 /// The plugin declares a hard dependency on the [`FilePicker`] capability via

@@ -1,6 +1,6 @@
 // container-shadow: an elevated card — size + color + radius + shadow —
 // around a Text.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, Text };
 
 

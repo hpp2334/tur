@@ -1,4 +1,4 @@
-//! The image family's `tur` host-pkg rows (via the pkg-extension seam):
+//! The image family's `tur_host` pkg rows (via the pkg-extension seam):
 //! byte-resource registration + the Image element spec.
 //!
 //! - `img_res_bytes(bytes) -> u64` — decode + register (the

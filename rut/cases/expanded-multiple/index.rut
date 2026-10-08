@@ -1,5 +1,5 @@
 // expanded-multiple: two Expanded children sharing the main axis evenly.
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container, Expanded };
 
 

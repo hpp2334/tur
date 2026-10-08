@@ -1,5 +1,5 @@
 // expanded-flex-weights: two Expanded children sharing the main axis 2:1.
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container, Expanded };
 
 

@@ -78,7 +78,7 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 fn id_module(value: &str) -> String {
     format!(
         r#"
-use tur::{{ ctx_bridge, mount }};
+use tur_host::{{ ctx_bridge, mount }};
 use tur_kit::{{ MutationCtx, Readable, Source, Text, source }};
 
 
@@ -160,7 +160,7 @@ fn instances_have_isolated_element_trees() {
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, source };
 
 
@@ -205,7 +205,7 @@ fn headless_instance_runs_rut_without_rendering() {
 
     // The module boots; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur::mount;
+        r#"use tur_host::mount;
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, source };
 
 
@@ -244,7 +244,7 @@ fn build_headless_runs_engine_on_worker() {
 
     // The module boots via the worker RPC path.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur::mount;
+        r#"use tur_host::mount;
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, source };
 
 
@@ -281,7 +281,7 @@ fn many_instances_share_one_runtime() {
             .expect("app");
         futures::executor::block_on(app.load_rut_module(format!(
             r#"
-use tur::{{ mount }};
+use tur_host::{{ mount }};
 use tur_kit::{{ Readable, Text, source }};
 
 entry fn start() {{
@@ -485,7 +485,7 @@ fn platform_events_route_to_the_correct_instance() {
 
     // Mount a full-width box in each (the root sizes with the viewport).
     let module = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 
@@ -542,7 +542,7 @@ fn reactive_stores_are_isolated_per_instance() {
     // "A2" — the write lands in A's own store.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, source };
 
 entry fn start() -> u64 {

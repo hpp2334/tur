@@ -1,5 +1,5 @@
 //! Phase-1 gate for the boa→rut migration: a rut module loaded through the
-//! engine's rut rail builds a real element tree via `tur` host rows and
+//! engine's rut rail builds a real element tree via `tur_host` rows and
 //! lays out exactly like a JS-loaded module.
 
 use std::time::Duration;
@@ -7,7 +7,7 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const HELLO_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
@@ -22,7 +22,7 @@ entry fn start() {
 
 /// The `entry fn stop` cleanup contract: stop runs on reload, and the new
 /// module's tree replaces the old one.
-const HELLO_RUT_V2: &str = r#"use tur::{ mount };
+const HELLO_RUT_V2: &str = r#"use tur_host::{ mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 use tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
@@ -89,7 +89,7 @@ fn rut_module_mounts_a_tree() {
 /// `el_text_bound`; an engine→rut entry call mutates the atom; the
 /// existing reactive flush re-renders the Text.
 const COUNTER_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 
@@ -139,7 +139,7 @@ fn rut_reactive_atom_rebinds_text() {
 /// click queues an intent; the pump drains it into `entry fn ts_click`,
 /// which mutates the bound atom — the full interactive loop, all rut.
 /// The button's `id` IS the atom id (the callback's first argument).
-const BUTTON_RUT: &str = r#"use tur::mount;
+const BUTTON_RUT: &str = r#"use tur_host::mount;
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 
@@ -189,7 +189,7 @@ fn rut_button_click_mutates_bound_text() {
 /// callbacks), a bound reactive label, and cleanup — the rut twin of the
 /// JS counter case. Callbacks receive (count_atom, label_atom, seq).
 const COUNTER_APP_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
@@ -248,7 +248,7 @@ fn rut_counter_app_full_journey() {
 /// Stack+Positioned, and `condition` with pre-built branches toggled by a
 /// button — all authored in rut.
 const CONDITION_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Condition, Container, Expanded, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Source, Stack, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
@@ -326,7 +326,7 @@ fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f
 /// Scroll + styled-text gate: a scroll viewport wrapping tall styled
 /// content — the long-list pattern every real app needs.
 const SCROLL_RUT: &str = r#"
-use tur::{ AXIS_VERTICAL, mount, rs_source_f64 };
+use tur_host::{ AXIS_VERTICAL, mount, rs_source_f64 };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Expanded, Mutation, MutationCtx, Readable, ScrollView, Source, TaskCtx, Text, mutate, source };
 
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Expanded, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, Source, TaskCtx, Text, mutate, source };
@@ -385,7 +385,7 @@ fn rut_scroll_view_with_styled_rows() {
 /// reads the whole value back, rebuilds it, writes it, and re-joins. No JS
 /// realm anywhere: every row speaks native `Value`s.
 const LIST_MAP_RUT: &str = r#"
-use tur::{ mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
+use tur_host::{ mount, rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
     rs_set_str, rs_set_value, rs_source_str, rs_source_value, rs_value_get, rs_value_item,
     rs_value_len };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
@@ -507,7 +507,7 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// undo rows. The interactive half (keyboard / IME into the focused
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
-use tur::{ mount, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_new };
+use tur_host::{ mount, tctrl_new, tctrl_paste, tctrl_select, tctrl_set_text, tctrl_text, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 entry fn start() -> u64 {
@@ -599,7 +599,7 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 /// reconciliation runs during flush — the guarded face call), and the item
 /// builder entry authors each row.
 const EACH_RUT: &str = r#"
-use tur::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
+use tur_host::{ ctx_bridge, mount, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Each, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 fn item_row(i: u64, item: str) -> opaque {
@@ -700,7 +700,7 @@ fn rut_each_maps_a_list_atom_and_rebuilds_on_change() {
 /// mounts rows outside the initial build set — flush-time face calls on
 /// the remount path.
 const LAZY_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Expanded, LazyList, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 fn lazy_row(i: u64) -> opaque {
@@ -765,7 +765,7 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
 /// the exported flag consts. The align/size assertions read back through
 /// the tree geometry; a second box (SizedBox) pins the exact size.
 const CONTAINER_FULL_RUT: &str = r#"
-use tur::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, mount };
+use tur_host::{ ALIGN_BOTTOM_RIGHT, BORDER_CENTER, CLIP_ANTI_ALIAS, mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Mutation, MutationCtx, Readable, SizedBox, Source, TaskCtx, Text, mutate, source };
 
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, TaskCtx, Text, mutate, source };
@@ -843,7 +843,7 @@ fn rut_container_full_surface_and_sizedbox() {
 /// `KeydownEvent` / `FocusEvent` / `BlurEvent` mutations. One log source
 /// carries the transcript; every handler captures it — no id rails.
 const GESTURE_RUT: &str = r#"
-use tur::{ focus_request, mount };
+use tur_host::{ focus_request, mount };
 use tur_kit::{ TextCtrl, UndoCtrl, BlurEvent, Column, FocusEvent, Focusable, KeydownEvent, MouseButton, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 
 
@@ -1003,7 +1003,7 @@ fn rut_gesture_focus_key_payloads_realm_free() {
 /// the atom); the atom drives an Opacity. The label records the tween /
 /// curve helper answers at start.
 const ANIM_RUT: &str = r#"
-use tur::{ color_tween_lerp, curve_eval, mount, tween_lerp };
+use tur_host::{ color_tween_lerp, curve_eval, mount, tween_lerp };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
@@ -1080,7 +1080,7 @@ fn rut_animation_controller_ticks_into_opacity() {
 /// A clipboard round-trip and an HTTP request, awaited in rut
 /// (`launch_future` + `await`; the pump's `run_ready` drives it).
 const ASYNC_RUT: &str = r#"
-use tur::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, spawn };
+use tur_host::{ clipboard_read, clipboard_write, decode_utf8, mount, net_request, spawn };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 
 // The async boundary: the handles ride by parameter; the ctx is
@@ -1143,7 +1143,7 @@ fn rut_async_clipboard_and_net_request() {
 /// into `on_chunk` (the chunk lengths append to the label); the task
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
-use tur::{ clipboard_write, mount, spawn, task_cancel };
+use tur_host::{ clipboard_write, mount, spawn, task_cancel };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_net_kit::{ net_stream };
 
@@ -1222,7 +1222,7 @@ fn rut_net_stream_chunks_cross_as_records() {
 /// controller rides the opaque stash (the poll entry reads it back); the
 /// child's lifecycle flips the status rail the rows read natively.
 const VAPP_RUT: &str = r#"
-use tur::{ mount, st_put, st_take, va_controller, va_create_source, va_destroy, va_error,
+use tur_host::{ mount, st_put, st_take, va_controller, va_create_source, va_destroy, va_error,
     va_status };
 use tur_kit::{ TextCtrl, UndoCtrl, VAppCtrl, Column, Lifecycle, MountEvent, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, VirtualApp, mutate, source };
 
@@ -1231,7 +1231,7 @@ let CTRL_KEY: u64 = 42;
 
 entry fn start() -> u64 {
     let label: Readable<str> = source<str>("");
-    let src = va_create_source("use tur::{ mount };\nuse tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
+    let src = va_create_source("use tur_host::{ mount };\nuse tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, mutate, source };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
     let ctrl = va_controller(src);
     // The controller rides the opaque stash only because the poll /
     // destroy entries cannot capture it (an entry binds no module state);
@@ -1363,7 +1363,7 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
     // The stale facade's load reports `WorkerGone` ("worker gone" through
     // the facade's TurError wrap) — it must NOT panic.
     let outcome = futures::executor::block_on(children[0].load_rut_module(
-        "use tur::{ mount };\nentry fn start() {}\n",
+        "use tur_host::{ mount };\nentry fn start() {}\n",
     ));
     let err = outcome.expect_err("a load against a destroyed child must err, not panic");
     assert!(
@@ -1381,7 +1381,7 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 /// the flush (the guarded face call). A second derived (`d2`) chains two
 /// deps. A watcher reports changes into a transcript atom.
 const DERIVED_RUT: &str = r#"
-use tur::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str,
+use tur_host::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_set_str, rs_source_f64, rs_source_str,
     rs_watch_start };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, mutate, rs_derive, rs_derive2, rs_watch, source };
@@ -1434,12 +1434,12 @@ fn on_count(report: u64, watched: u64, _n: f64) {
 }
 "#;
 
-/// The no-mount guard: a derive whose body tries `tur::mount` TRAPS (the
+/// The no-mount guard: a derive whose body tries `tur_host::mount` TRAPS (the
 /// face raises `face_busy`), the trap reports through the error rail, the
 /// derived falls back to Nil — and the frame never wedges (the healthy
 /// derive beside it keeps materializing).
 const DERIVED_NO_MOUNT_RUT: &str = r#"
-use tur::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur_host::{ ctx_bridge, mount, rs_get_f64, rs_set_f64, rs_source_f64 };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, TaskCtx, Text, mutate, source };
 use tur_kit::{ TextCtrl, UndoCtrl, Mutation, MutationCtx, Readable, Source, TaskCtx, mutate, rs_derive, source };
 

@@ -18,7 +18,7 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Column, Condition, Mutation, MutationCtx, Readable, Source, Text, source };
 
 entry fn start() -> u64 {
@@ -114,7 +114,7 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Switch, Text, source };
 
 entry fn start() -> u64 {

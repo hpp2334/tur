@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn spans_never_overlap_or_skip_text() {
-        let src = "use tur::{ mount };\nentry fn start() {\n    let x = f\"{x + 1}\"; // t\n}\n";
+        let src = "use tur_host::{ mount };\nentry fn start() {\n    let x = f\"{x + 1}\"; // t\n}\n";
         let spans = highlight_spans(src);
         let mut pos = 0usize;
         for s in &spans {

@@ -1,6 +1,6 @@
 // container-flex-sized: a Column of fixed-size colored "buttons" with
 // labeled children (the counter-family shapes).
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Container, Text };
 
 

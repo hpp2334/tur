@@ -1,5 +1,5 @@
 // text-in-column: two Texts stacked in a start-aligned Column.
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Text };
 
 

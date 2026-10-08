@@ -1,4 +1,4 @@
-//! The lazy-container families' `tur` host-pkg rows (via the pkg-extension
+//! The lazy-container families' `tur_host` pkg rows (via the pkg-extension
 //! seam): LazyList / LazyGrid over a reactive count atom and an entry-fn
 //! item builder (`entry fn(index: u64) -> opaque`, invoked through the
 //! guarded VM face — the same flush-time-call law the Each family rides).

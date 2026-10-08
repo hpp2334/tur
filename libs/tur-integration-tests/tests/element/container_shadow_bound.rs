@@ -14,7 +14,7 @@ use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
@@ -51,7 +51,7 @@ entry fn resteepen(atom: u64, _b: f64) {
 "#;
 
 const STATIC_SHADOW_RUT: &str = r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {

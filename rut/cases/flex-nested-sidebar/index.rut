@@ -1,6 +1,6 @@
 // flex-nested-sidebar: a 200px sidebar Column beside a content Column in
 // a Row (the classic two-pane shape).
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container, Row };
 
 

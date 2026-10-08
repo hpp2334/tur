@@ -42,7 +42,7 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.load_rut_module(
         r#"
-use tur::{ AXIS_VERTICAL, mount };
+use tur_host::{ AXIS_VERTICAL, mount };
 use tur_kit::{ Column, Container, ScrollView };
 
 
@@ -184,7 +184,7 @@ fn no_clip_means_no_culling() {
 
     app.load_rut_module(
         r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Container };
 
 

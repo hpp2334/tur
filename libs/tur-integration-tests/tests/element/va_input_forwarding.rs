@@ -38,7 +38,7 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// bound label; the `sync` probe mirrors the controller text into the label
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
-use tur::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
+use tur_host::{ ctx_bridge, mount, st_put, st_take, tctrl_new, tctrl_text, undo_new };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Input, Mutation, MutationCtx, Readable, Source, Text, source };
 
 
@@ -74,7 +74,7 @@ fn parent_module(child_src: &str) -> String {
         .replace('\n', "\\n");
     format!(
         r#"
-use tur::{{ mount, va_controller, va_create_source }};
+use tur_host::{{ mount, va_controller, va_create_source }};
 use tur_kit::{{ VAppCtrl, VirtualApp }};
 
 
@@ -261,7 +261,7 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 /// The child case: a ScrollView whose content (1200px in a 200px-tall
 /// host) overflows, keyed for the offset probe.
 const WHEEL_CHILD_SRC: &str = r#"
-use tur::{ AXIS_VERTICAL, mount };
+use tur_host::{ AXIS_VERTICAL, mount };
 use tur_kit::{ TextCtrl, UndoCtrl, Column, Container, MutationCtx, Readable, ScrollView, Source, Text, source };
 
 

@@ -1,6 +1,6 @@
 // text-font-weight: weight 400 vs 700 at the same size — the bold run
 // measures wider.
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Fragment, Text };
 
 

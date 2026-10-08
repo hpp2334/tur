@@ -1,6 +1,6 @@
 // scroll-container-text: a padded unsized Container sized from its Text
 // child inside a vertical ScrollView's content Column.
-use tur::{ AXIS_VERTICAL, mount };
+use tur_host::{ AXIS_VERTICAL, mount };
 use tur_kit::{ Column, Container, ScrollView, Text };
 
 

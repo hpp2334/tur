@@ -2,7 +2,7 @@
 
 A JavaScript-free rendering engine built on vello-hybrid and the **rut** scripting VM
 (rut-lexer / rut-parser / rut-vm). Modules are **rut** sources: they call into the
-engine through the `tur` host pkg rows registered by engine plugins.
+engine through the `tur_host` pkg rows registered by engine plugins.
 
 ## Roleplay
 
@@ -25,7 +25,7 @@ harness). A loaded module MUST export `entry fn start()`:
   new module and invokes `start`. `start` may return a `u64` answer — the
   module's return value, readable via `TurApp::rut_start_answer` (the standard
   probe channel: modules return their label/binding atom ids).
-- The root-tree lifecycle is ENGINE-OWNED: `tur::mount(view)` stashes the root
+- The root-tree lifecycle is ENGINE-OWNED: `tur_host::mount(view)` stashes the root
   (a pure-Rust `Rc<dyn View>` — no script runtime anywhere in the tree); the
   engine applies it and module teardown clears it. A module's `stop` only
   disposes its own non-tree resources.
@@ -63,11 +63,11 @@ drives via `call_rut_entry`. The playground is a rut module
 │  builder classes); element builders materialize     │
 │  pure-Rust views.                                   │
 └──────────────────────┬──────────────────────────────┘
-                       │ rut host-pkg rows (`tur::…`)
+                       │ rut host-pkg rows (`tur_host::…`)
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-engine (unified engine crate)             │
 │  core/        engine infrastructure (no plugin deps)│
-│  rut_runtime/ the `tur` host pkg mechanism: RutView,│
+│  rut_runtime/ the `tur_host` pkg mechanism: RutView,│
 │               RutHandles, HostPkg wiring, mount,    │
 │               the rs_* store rows, entry rails      │
 │  builtin_plugins/ feature bundles — subsystems +    │
@@ -81,12 +81,12 @@ drives via `call_rut_entry`. The playground is a rut module
 │  renderer/vello WebGL2 + wgpu backends              │
 ├─────────────────────────────────────────────────────┤
 │  libs/tur-animation (standalone crate)              │
-│  AnimationSubsystem + the `tur` pkg's animation     │
+│  AnimationSubsystem + the `tur_host` pkg's animation│
 │  rows (anim_ctrl / el_opacity / tween / curve) —    │
 │  Rust-held controllers ticked by the subsystem.     │
 ├─────────────────────────────────────────────────────┤
 │  Capability surfaces: Clipboard / Http / FilePicker │
-│  (backend crates per platform) + their `tur` pkg    │
+│  (backend crates per platform) + their `tur_host` pkg│
 │  rows (clipboard_read / net_request / pick_file).   │
 ├─────────────────────────────────────────────────────┤
 │  libs/tur-wasm (pure rlib — the reusable wasm       │
@@ -102,7 +102,7 @@ Embedders register swappable backends (clipboard, http, filepicker) on the
 runtime builder: `.capability(|cx| Ok(Http::new(backend)))`. Plugins declare
 hard deps via `requires` (fail-fast at `build()`); `TurNetPlugin` is the
 exception — it feature-detects `Http` at `register` and skips pushing the net
-rows when absent. The `tur` pkg rows reach capabilities at call time through
+rows when absent. The `tur_host` pkg rows reach capabilities at call time through
 `RutHandles.inst.capability()`.
 
 ### Reactive substrate
@@ -177,7 +177,7 @@ subagent. `elementTree()` shapes are unchanged from the JS era.
 libs/
   tur-engine/          # unified engine crate (core + builtin_plugins +
                        #   kit/ + renderer/vello + rut_runtime)
-  tur-animation/       # animation subsystem + `tur` pkg animation rows
+  tur-animation/       # animation subsystem + `tur_host` pkg animation rows
                        #   (+ rut/tur_anim_kit/ — the Opacity/Transform wrappers)
   tur-clipboard-*/     # capability + wasm/native/android backends
   tur-net-*/           # capability + wasm/native backends
@@ -256,7 +256,7 @@ Android build + device debugging live in the **`android-dev` skill** at
 
 - Rust edition 2024, MSRV 1.91
 - Layout: Flutter-inspired (see the layout notes above; unchanged).
-- **Host-pkg rows are the ONLY script surface**: every `tur::…` call is a
+- **Host-pkg rows are the ONLY script surface**: every `tur_host::…` call is a
   typed row — a `pkg_fn!`/`pkg_async_fn!` body + a `decl_rows` entry. The
   decl (compile-time) and body (runtime) signatures must agree exactly.
 - **The kit is THE element construction surface** (`rut/tur_kit/tur_kit.rut`,
@@ -288,8 +288,8 @@ Android build + device debugging live in the **`android-dev` skill** at
   stash rails (`st_*` / `stf_*` / `peek`) never appear in case code.
   Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
   `Text().text("literal")`, `Container().color_bound(atom)`,
-  `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur` pkg,
-  imported from `tur` alongside `mount` (`ALIGN_*` / `CLIP_*` / `BORDER_*` /
+  `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur_host` pkg,
+  imported from `tur_host` alongside `mount` (`ALIGN_*` / `CLIP_*` / `BORDER_*` /
   `CROSS_ALIGN_*` / `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*`); the kit
   documents the full const inventory in its header. The kit hides row churn
   from call sites; the rows are the boundary.

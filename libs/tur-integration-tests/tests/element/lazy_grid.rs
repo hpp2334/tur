@@ -8,7 +8,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_host::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
@@ -147,7 +147,7 @@ fn lazy_grid_scroll_shifts_visible_window() {
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur::{ mount, rs_set_f64, rs_source_f64 };
+        r#"use tur_host::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
@@ -275,7 +275,7 @@ fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 
@@ -355,7 +355,7 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
+use tur_host::{ AXIS_HORIZONTAL, mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {
@@ -445,7 +445,7 @@ fn lazy_grid_column_count_ceils_max_extent_division() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_host::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {
@@ -497,7 +497,7 @@ fn lazy_grid_exact_multiple_stays_at_exact_count() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur::{ mount, rs_set_f64, rs_source_f64 };
+use tur_host::{ mount, rs_set_f64, rs_source_f64 };
 use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, source };
 
 fn cell(i: u64) -> opaque {

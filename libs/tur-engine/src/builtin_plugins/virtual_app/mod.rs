@@ -47,7 +47,7 @@ pub(crate) fn install_virtual_app(ctx: &mut PluginRegisterContext) -> Result<(),
             focused: focused.is_some(),
         });
     }));
-    // The virtual-app family's `tur` rows (the kit wraps them).
+    // The virtual-app family's `tur_host` rows (the kit wraps them).
     ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
     Ok(())
 }

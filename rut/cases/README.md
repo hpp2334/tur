@@ -103,7 +103,7 @@ the kit now — the boa cases lean on it heavily.
 ### Example
 
 ```rut
-use tur::{ ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
+use tur_host::{ ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
 use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable,
     Text, derive_str, mutate, source_f64 };
 

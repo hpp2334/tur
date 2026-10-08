@@ -313,7 +313,7 @@ entry fn busy(_a: u64, _b: f64) {
     // return after it finished.
     futures::executor::block_on(ui_app.load_rut_module(
         r#"
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Mutation, Readable, Source, Text, source };
 
 

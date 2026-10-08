@@ -3,7 +3,7 @@
 // nodes dirty via the gesture handler and mask the layout-invalidation
 // behavior). The atoms ride the entry args: the pair mints in order, so
 // the b probe addresses a's answer + 1.
-use tur::{ ctx_bridge, mount };
+use tur_host::{ ctx_bridge, mount };
 use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, Source, source };
 
 

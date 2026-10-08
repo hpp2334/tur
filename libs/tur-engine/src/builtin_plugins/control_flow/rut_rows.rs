@@ -1,4 +1,4 @@
-//! The control-flow families' `tur` host-pkg rows (via the pkg-extension
+//! The control-flow families' `tur_host` pkg rows (via the pkg-extension
 //! seam): Condition, Switch, Each (one child per item of a native list
 //! atom), and Fragment.
 //!

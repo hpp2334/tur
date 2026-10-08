@@ -1,5 +1,5 @@
 //! Integration tests for the bytes helpers — `encode_utf8` / `decode_utf8`
-//! (the `tur` host pkg rows). The canonical string↔bytes round-trip: net
+//! (the `tur_host` pkg rows). The canonical string↔bytes round-trip: net
 //! bodies cross as raw bytes and decode through these rows.
 
 use std::time::Duration;
@@ -9,7 +9,7 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur::{ ctx_bridge, decode_utf8, encode_utf8, mount };
+use tur_host::{ ctx_bridge, decode_utf8, encode_utf8, mount };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, source };
 
 

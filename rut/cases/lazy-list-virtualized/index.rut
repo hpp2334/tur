@@ -6,7 +6,7 @@
 // The name/initials/hue are deterministic per index (the boa generator,
 // palette-string twin: module lets are literals-only in this build, so
 // the name lists and the avatar palette ride pipe-joined strings).
-use tur::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN,
+use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN,
     mount, str_parse_f64 };
 use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Source, Text, source };
 

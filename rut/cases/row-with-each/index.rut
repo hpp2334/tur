@@ -1,6 +1,6 @@
 // row-with-each: an Each inside a content-sized Row — the Row must not
 // inflate to the parent Column's height (the regression the test pins).
-use tur::{ CROSS_ALIGN_STRETCH, mount };
+use tur_host::{ CROSS_ALIGN_STRETCH, mount };
 use tur_kit::{ Column, Container, Each, Expanded, Row, SizedBox, Source, Text, list_new, list_push, source };
 
 

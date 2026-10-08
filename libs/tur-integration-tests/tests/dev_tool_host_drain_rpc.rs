@@ -11,7 +11,7 @@
 use tur_integration_tests::TurTestApp;
 
 const TREE_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Text };
 
 entry fn start() {

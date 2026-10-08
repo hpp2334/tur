@@ -18,7 +18,7 @@ use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur::{ mount, st_put, st_take, tctrl_new, tctrl_set_text };
+use tur_host::{ mount, st_put, st_take, tctrl_new, tctrl_set_text };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 let K_CTRL: u64 = 1;
@@ -52,7 +52,7 @@ entry fn set_short_text(_a: u64, _b: f64) {
 
 /// A single-line control with the same geometry — the negative control.
 const SINGLE_LINE_RUT: &str = r#"
-use tur::{ mount, tctrl_new, tctrl_set_text };
+use tur_host::{ mount, tctrl_new, tctrl_set_text };
 use tur_kit::{ TextCtrl, UndoCtrl, Input };
 
 entry fn start() -> u64 {

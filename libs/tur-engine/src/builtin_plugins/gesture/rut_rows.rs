@@ -1,4 +1,4 @@
-//! The gesture families' `tur` host-pkg rows (via the pkg-extension seam):
+//! The gesture families' `tur_host` pkg rows (via the pkg-extension seam):
 //! PointerInteract (the click + pointer-event pads), MouseRegion (hover
 //! cursor + enter/exit), and Focusable (key events + focus/blur), all
 //! storing SEALED MUTATIONS — the dispatch enqueues the invocation and the

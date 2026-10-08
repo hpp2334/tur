@@ -1,7 +1,7 @@
 // composited-transform-follower-anchor: explicit follower anchor — the
 // follower's BOTTOM_RIGHT lands on the target's top-left (the anchor
 // math the subsystem solves).
-use tur::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_RIGHT, ct_link_new, mount };
+use tur_host::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_RIGHT, ct_link_new, mount };
 use tur_kit::{ CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack };
 
 

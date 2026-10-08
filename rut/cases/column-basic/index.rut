@@ -1,6 +1,6 @@
 // column-basic: two fixed-height children stacked vertically (the root
 // Column fills the viewport; cross axis start-aligned).
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container };
 
 

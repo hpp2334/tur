@@ -1,5 +1,5 @@
 // lazy-list-basic: a 20-row virtualized vertical list (50px rows).
-use tur::mount;
+use tur_host::mount;
 use tur_kit::{ Container, LazyList, Source, source };
 
 

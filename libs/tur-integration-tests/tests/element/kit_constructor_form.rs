@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// (`SizedBox(400.0, 200.0)`), and the animation kit's `Opacity(0.5)` all
 /// lower byte-identically to their long-form member calls.
 const CTOR_FORM_RUT: &str = r#"
-use tur::{ mount };
+use tur_host::{ mount };
 use tur_kit::{ Column, Row, SizedBox, Text };
 use tur_anim_kit::{ Opacity };
 

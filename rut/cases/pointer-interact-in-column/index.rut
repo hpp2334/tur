@@ -1,5 +1,5 @@
 // pointer-interact-in-column: two gesture pads stacked in a column.
-use tur::{ CROSS_ALIGN_START, mount };
+use tur_host::{ CROSS_ALIGN_START, mount };
 use tur_kit::{ Column, Container, PointerInteract };
 
 
