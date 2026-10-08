@@ -1,12 +1,15 @@
 {
-  "name": "tur.t1",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "name": "tur",
+    "private": true,
+    "scripts": {
+        "build": "pnpm -r --sort run build",
+        "typecheck": "pnpm -r run typecheck",
+        "lint": "biome lint demo/website package.json tsconfig.base.json biome.json",
+        "format": "biome format --write demo/website package.json tsconfig.base.json biome.json",
+        "check": "biome check demo/website package.json tsconfig.base.json biome.json"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.4.15",
+        "typescript": "^5.7.0"
+    }
 }

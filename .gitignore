@@ -13,12 +13,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Generated TypeScript
-demo/playground-view/src/cases/generated.ts
-
-# Build output
-js/packages/tur-rspack-plugin/dist/
-
 # Test fixtures
 scripts/tests/fixtures/
 

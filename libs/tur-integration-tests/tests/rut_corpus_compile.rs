@@ -1,5 +1,5 @@
 //! The corpus compile gate: every rut case in
-//! `js/packages/tur-test-cases/cases` must compile against the standard
+//! `rut/cases` must compile against the standard
 //! plugin set (the callback rail's corpus-wide pin — a case that
 //! regressions to a stringly-typed callback or a stale row name fails
 //! here, per case, with its own load error).
@@ -20,7 +20,7 @@ fn workspace_root() -> std::path::PathBuf {
 
 #[test]
 fn every_corpus_case_compiles_against_the_standard_kit() {
-    let cases_dir = workspace_root().join("js/packages/tur-test-cases/cases");
+    let cases_dir = workspace_root().join("rut/cases");
     let mut names: Vec<String> = std::fs::read_dir(&cases_dir)
         .expect("cases dir")
         .filter_map(|e| e.ok())
@@ -37,8 +37,7 @@ fn every_corpus_case_compiles_against_the_standard_kit() {
 
     let mut failures = Vec::new();
     for name in &names {
-        let source =
-            std::fs::read_to_string(cases_dir.join(name).join("index.rut")).unwrap();
+        let source = std::fs::read_to_string(cases_dir.join(name).join("index.rut")).unwrap();
         // The browser-shaped capability set: showcase cases ride the net
         // rows (github-viewer), which only install when Http is present.
         let app = TurTestApp::new_with_http(400.0, 600.0).unwrap();

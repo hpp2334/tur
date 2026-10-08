@@ -1,5 +1,4 @@
 packages:
-  - "packages/*"
-  - "../demo/website"
+  - "demo/website"
 allowBuilds:
   core-js: false

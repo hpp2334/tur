@@ -109,7 +109,7 @@ fn op(atom: u64) -> Readable<opaque> {
 
 // ---- design tokens ---------------------------------------------------------
 //
-// The light theme from demo/playground-view/DESIGN-SYSTEM.md §1.1/§2 — the
+// The light theme from rut/playground/DESIGN-SYSTEM.md §1.1/§2 — the
 // single source of truth for visual decisions (the boa reference palette:
 // warm-tinted ink neutrals + the saturated teal signature + the coral
 // complement + AA-verified status colors).

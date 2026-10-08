@@ -23,9 +23,9 @@ use wasm_bindgen::prelude::*;
 use tur_playground::TurRutPlaygroundPlugin;
 
 #[cfg(target_arch = "wasm32")]
-pub const PLAYGROUND_RUT: &str = include_str!("../../../playground-view/playground.rut");
+pub const PLAYGROUND_RUT: &str = include_str!("../../../../rut/playground/playground.rut");
 #[cfg(target_arch = "wasm32")]
-pub const CASES_GEN_RUT: &str = include_str!("../../../playground-view/cases_gen.rut");
+pub const CASES_GEN_RUT: &str = include_str!("../../../../rut/playground/cases_gen.rut");
 
 /// One-time wasm init (panic hook + tracing). Called automatically on module
 /// instantiation via the `#[wasm_bindgen(start)]` attribute.
@@ -37,8 +37,8 @@ pub fn wasm_entry() {
 
 /// A running tur website app. Construct via [`TurWebsiteApp::create`] (full
 /// viewport) or [`TurWebsiteApp::create_in`] (embedded in a container element).
-/// Load a view bundle (e.g. the playground-view `impl.js`) via
-/// `loadAndRunModule`.
+/// Load a rut module (e.g. the playground, `rut/playground`) via
+/// `loadAndRunRutModule`.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurWebsiteApp {

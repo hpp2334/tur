@@ -11,7 +11,7 @@
 //! set compiles. Core never names it.
 
 /// The kit's rut source (the authored builder surface).
-pub const TUR_KIT_RUT: &str = include_str!("tur_kit.rut");
+pub const TUR_KIT_RUT: &str = include_str!("../../../../rut/tur_kit/tur_kit.rut");
 
 /// The kit as a compile pkg (spec `tur_kit`) — what the standard bundle
 /// assembly pushes into [`crate::core::rut_runtime::RutPkgCx::preludes`].

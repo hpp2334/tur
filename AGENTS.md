@@ -40,7 +40,7 @@ harness). A loaded module MUST export `entry fn start()`:
   surprise.
 
 Entry points follow the contract: the test corpus
-(`js/packages/tur-test-cases/cases` + the playground-local cases) authors
+(`rut/cases` + the playground-local cases) authors
 `entry fn start()` that builds its tree through the **kit** (`use
 tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
 engine with `mount(root.build())`, plus probe `entry fn`s the test
@@ -75,9 +75,9 @@ drives via `call_rut_entry`. The playground is a rut module
 │               (text, scroll, gesture, image,        │
 │               virtual_app …); each element family's │
 │               spec struct + rows live here          │
-│  kit/         tur_kit.rut — the authored builder    │
-│               surface (one class per element over   │
-│               its family rows); outside core/       │
+│  kit/         registers the kit pkg (rut/tur_kit/   │
+│               — the authored builder surface);      │
+│               outside core/                         │
 │  renderer/vello WebGL2 + wgpu backends              │
 ├─────────────────────────────────────────────────────┤
 │  libs/tur-animation (standalone crate)              │
@@ -178,7 +178,7 @@ libs/
   tur-engine/          # unified engine crate (core + builtin_plugins +
                        #   kit/ + renderer/vello + rut_runtime)
   tur-animation/       # animation subsystem + `tur` pkg animation rows
-                       #   (+ kit.rut — the Opacity/Transform wrappers)
+                       #   (+ rut/tur_anim_kit/ — the Opacity/Transform wrappers)
   tur-clipboard-*/     # capability + wasm/native/android backends
   tur-net-*/           # capability + wasm/native backends
   tur-filepicker-*/    # capability + wasm/native backends
@@ -187,12 +187,18 @@ libs/
   tur-android/         # the Android embedder glue rlib
   tur-integration-tests/ # harness + integration corpus
 demo/
-  tur-playground-…     # (retired — the swc plugin is gone)
   website/             # the web host app + native/ (tur-website cdylib)
   compose/             # Android playground app + native/ (tur-demo cdylib)
-js/
-  packages/
-    tur-test-cases/    # the rut case corpus (cases/*/index.rut)
+rut/                   # all rut package sources (pure rut — no build step)
+  cases/               # the shared case corpus (<name>/index.rut + README)
+  tur_kit/             # the authored builder surface (tur_kit.rut; embedded
+                       #   by tur-engine/src/kit/mod.rs)
+  tur_anim_kit/        # the animation kit (kit.rut; embedded by
+                       #   tur-animation/src/kit.rs)
+  tur_net_kit/         # the net kit (kit.rut; embedded by
+                       #   tur-net-capability/src/kit.rs)
+  playground/          # playground.rut + cases_gen.rut + showcase.json +
+                       #   scripts/gen-cases.cjs
 ```
 
 ## Commands
@@ -231,10 +237,10 @@ backend — `SharedArrayBuffer` + workers; COEP must be `require-corp`).
 `cloudflared.yml` next to the config (one-time `cloudflared tunnel login` /
 `create` / `route dns` setup — see that file's header).
 
-### JS
+### JS tooling (repo root)
 
-The js workspace now only carries lint tooling (biome) + the rut corpus. No
-per-package builds remain.
+The pnpm workspace + lint tooling live at the repo root (`demo/website` is
+the only workspace package; biome lint + the website build run from root).
 
 ```sh
 pnpm install
@@ -253,8 +259,8 @@ Android build + device debugging live in the **`android-dev` skill** at
 - **Host-pkg rows are the ONLY script surface**: every `tur::…` call is a
   typed row — a `pkg_fn!`/`pkg_async_fn!` body + a `decl_rows` entry. The
   decl (compile-time) and body (runtime) signatures must agree exactly.
-- **The kit is THE element construction surface** (`libs/tur-engine/src/
-  kit/tur_kit.rut`, animation wrappers in `libs/tur-animation/src/kit.rut`):
+- **The kit is THE element construction surface** (`rut/tur_kit/tur_kit.rut`,
+  animation wrappers in `rut/tur_anim_kit/kit.rut`):
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
   snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
@@ -304,9 +310,9 @@ Android build + device debugging live in the **`android-dev` skill** at
   (corpus); state probes are `entry fn`s (`call_rut_entry`), bound labels
   (query keys), dev-tool tree queries, or controller rows — never a script
   realm poke.
-- Linting: biome (the js workspace is lint-only).
-- Publishable npm packages: the `@tur-ng/*` packages are gone from `js/`;
-  `@tur-ng/website` remains (the website shell).
+- Linting: biome (root workspace; `pnpm lint` at the repo root).
+- Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
+  workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;
   cancel rides the task opaque's cancel row (`net_stream` + `task_cancel`).
 - Runtime errors: VM task traps + face traps ship as

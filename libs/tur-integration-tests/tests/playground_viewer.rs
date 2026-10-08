@@ -20,8 +20,8 @@ use tur_engine::core::shell::Cursor;
 use tur_integration_tests::TurTestApp;
 use tur_playground::TurRutPlaygroundPlugin;
 
-const PLAYGROUND_RUT: &str = include_str!("../../../demo/playground-view/playground.rut");
-const CASES_GEN_RUT: &str = include_str!("../../../demo/playground-view/cases_gen.rut");
+const PLAYGROUND_RUT: &str = include_str!("../../../rut/playground/playground.rut");
+const CASES_GEN_RUT: &str = include_str!("../../../rut/playground/cases_gen.rut");
 
 /// The website's concatenation (`playgroundSource()`): one loadable module.
 fn playground_source() -> String {
@@ -38,14 +38,14 @@ fn workspace_root() -> std::path::PathBuf {
         .to_path_buf()
 }
 
-/// The curated showcase manifest (`demo/playground-view/showcase.json`) —
+/// The curated showcase manifest (`rut/playground/showcase.json`) —
 /// the same file `gen-cases.cjs` consumes. The registry emits it in
 /// alphabetical order (the generator sorts, like the boa reference), which
 /// is the sidebar order the `select` probes address. A plain comma split
 /// is enough: showcase names are lowercase-hyphen identifiers.
 fn showcase_names() -> Vec<String> {
-    let raw = std::fs::read_to_string(workspace_root().join("demo/playground-view/showcase.json"))
-        .expect("demo/playground-view/showcase.json");
+    let raw = std::fs::read_to_string(workspace_root().join("rut/playground/showcase.json"))
+        .expect("rut/playground/showcase.json");
     let raw = raw.trim();
     assert!(
         raw.starts_with('[') && raw.ends_with(']'),
@@ -64,8 +64,7 @@ fn case_index(name: &str) -> u64 {
     showcase_names()
         .iter()
         .position(|n| n == name)
-        .unwrap_or_else(|| panic!("case `{name}` not in demo/playground-view/showcase.json"))
-        as u64
+        .unwrap_or_else(|| panic!("case `{name}` not in rut/playground/showcase.json")) as u64
 }
 
 /// A showcase case's original source (what Reset restores).
@@ -75,7 +74,7 @@ fn case_source(name: &str) -> String {
 }
 
 fn cases_dir() -> std::path::PathBuf {
-    workspace_root().join("js/packages/tur-test-cases/cases")
+    workspace_root().join("rut/cases")
 }
 
 fn playground_app() -> TurTestApp {

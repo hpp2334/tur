@@ -186,11 +186,11 @@ The editor controller in `playground.rut` is correct: minted once in `start`, re
 ### 3.5 File structure
 
 ```
-demo/playground-view/
+rut/playground/
   playground.rut         # The module: state atoms, controllers, build_ui() tree
   cases_gen.rut          # AUTO-GENERATED case registry — do not edit
   scripts/gen-cases.cjs  # Regenerates cases_gen.rut from the shared corpus
-                         # (js/packages/tur-test-cases/cases)
+                         # (rut/cases)
 ```
 
 Views are builder fns inside the module; all side effects live in `entry fn`s.
@@ -407,8 +407,8 @@ There is exactly one editor surface in the playground. If a future feature needs
 
 Before approving any PR that touches `playground.rut` / `scripts/gen-cases.cjs`, verify:
 
-- [ ] **No new raw hexes outside the token layer.** Run `rg '0x[0-9A-Fa-f]{8}' demo/playground-view/playground.rut` and confirm every match traces to a token (the token port lands in a later phase).
-- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' demo/playground-view/playground.rut` should return nothing (post token port).
+- [ ] **No new raw hexes outside the token layer.** Run `rg '0x[0-9A-Fa-f]{8}' rut/playground/playground.rut` and confirm every match traces to a token (the token port lands in a later phase).
+- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' rut/playground/playground.rut` should return nothing (post token port).
 - [ ] **No `derive(() => ...)` wrapping static values.** Grep for `derive` and check each one reads at least one source via `get(...)`.
 - [ ] **No off-scale spacing.** Search for `padding:`, `margin:` (if introduced), and verify values are in `{0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64}`. Documented exceptions allowed with a comment.
 - [ ] **No off-scale font sizes.** Values must be in `{10, 11, 13, 14, 18}` for UI, `13` for code.

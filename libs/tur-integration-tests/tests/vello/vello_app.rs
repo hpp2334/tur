@@ -259,7 +259,7 @@ impl TurVelloApp {
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
         let path = workspace_root
-            .join("js/packages/tur-test-cases/cases")
+            .join("rut/cases")
             .join(name)
             .join("index.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;

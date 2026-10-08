@@ -1,15 +1,15 @@
-# tur-test-cases — the shared case corpus (rut)
+# The shared case corpus (rut)
 
 The case corpus drives three consumers:
 
 1. **Rust integration tests** — `TurTestApp::load_bundle` / `load_rut_bundle`
-   load a case by name (`cases/<name>/index.rut` for the rut rail; the
+   load a case by name (`<name>/index.rut` for the rut rail; the
    legacy `dist/<name>.js` path is the JS rail's, retired with Phase 4).
-2. **The playground** — `demo/playground-view/scripts/gen-cases.cjs` embeds
+2. **The playground** — `rut/playground/scripts/gen-cases.cjs` embeds
    the case sources verbatim so the sidebar can list + open every case.
 3. **Rut-semantics documentation** — the cases are the reference examples
    for authoring tur UIs in rut (see the `tur_kit` prelude —
-   `libs/tur-engine/src/kit/tur_kit.rut` — for the builder classes each
+   `rut/tur_kit/tur_kit.rut` — for the builder classes each
    example uses, and each builtin plugin's `rut_rows.rs` for the row
    surface underneath).
 

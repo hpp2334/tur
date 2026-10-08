@@ -755,7 +755,7 @@ impl TurTestApp {
     }
 
     /// Load the **rut** case `name` from the shared case corpus
-    /// (`js/packages/tur-test-cases/cases/<name>/index.rut`) through the
+    /// (`rut/cases/<name>/index.rut`) through the
     /// rut rail — the Phase-4 twin of [`Self::load_bundle`].
     ///
     /// The corpus's per-case contract (see the corpus README): the module
@@ -770,7 +770,7 @@ impl TurTestApp {
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
         let path = workspace_root
-            .join("js/packages/tur-test-cases/cases")
+            .join("rut/cases")
             .join(name)
             .join("index.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;

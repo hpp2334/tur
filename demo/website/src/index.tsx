@@ -1,8 +1,8 @@
 // tur website — thin browser host. Loads the tur WASM (the website's own
 // `tur-website` cdylib, which wraps the pure `tur-wasm` embedder lib + adds the
-// demo-helper plugin), then fetches the playground-view bundle and evaluates it
-// via `loadAndRunModule`. The entire playground UI (sidebar / editor / viewer)
-// lives in playground-view and is rendered by tur itself.
+// demo-helper plugin), then loads the playground rut module
+// (`rut/playground`, embedded in the cdylib) via `loadAndRunRutModule`. The
+// entire playground UI (sidebar / editor / viewer) is rendered by tur itself.
 
 let wasmReady: Promise<Record<string, unknown>> | null = null;
 
