@@ -60,6 +60,53 @@ pub enum DevToolRequest {
     FrameStats,
 }
 
+/// The engine→rut entry rail's argument shape — the two crossing lanes:
+/// the legacy `(u64, f64)` probe rail and the context-crossing lane (the
+/// fixture contract: the module answers its `AppContext` as an opaque,
+/// the embedder holds the slot token, and control entries take it back).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RutEntryArgs {
+    /// `entry fn(u64, f64)` — the legacy probe rail (corpus-case probes;
+    /// atom ids ride the args).
+    Nums { a: u64, b: f64 },
+    /// `entry fn()` — the no-arg probe (the fixture contract's lazy
+    /// `entry fn entry_start() -> opaque` boot; the answer crosses back
+    /// through the answer slot as [`RutEntryAnswer::Opaque`]).
+    None,
+    /// `entry fn(opaque)` — the held context only.
+    Cx(u64),
+    /// `entry fn(opaque, u64)` — the context + a scalar.
+    CxU64(u64, u64),
+    /// `entry fn(opaque, f64)` — the context + a float.
+    CxF64(u64, f64),
+}
+
+/// The entry RPC's answer slot — `tur_start_answer`'s channel extended to
+/// the shapes a probe answers. Opaque answers are slot tokens over
+/// worker-held contexts (the embedder never sees a raw heap handle).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RutEntryAnswer {
+    Nil,
+    /// An answered opaque: the worker-side slot token. Pass it back
+    /// through [`RutEntryArgs::Cx`]/[`RutEntryArgs::CxU64`]/[
+    /// `RutEntryArgs::CxF64`].
+    Opaque(u64),
+    U64(u64),
+    F64(f64),
+    Str(String),
+}
+
+impl RutEntryAnswer {
+    /// The opaque token out of an `Opaque` answer (the fixture contract's
+    /// `entry_start` boot: the harness holds the context token).
+    pub fn opaque_token(self) -> Option<u64> {
+        match self {
+            RutEntryAnswer::Opaque(token) => Some(token),
+            _ => None,
+        }
+    }
+}
+
 /// host → worker channel sender. Unbounded — the host side pushes input
 /// (platform events, wake, RPC requests) and the worker drains them in
 /// arrival order.
@@ -97,14 +144,17 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
-    /// Call a named `entry fn(u64, f64)` on the loaded rut module — the
-    /// engine→rut event rail (input dispatch, embedder events). A missing
-    /// entry is a successful no-op (event rails are optional).
+    /// Call a named `entry fn` on the loaded rut module — the
+    /// engine→rut event rail. Two lanes: the legacy `(u64, f64)` probe
+    /// (a missing entry is a successful no-op — event rails are optional)
+    /// and the context-crossing lane (`RutEntryArgs::Cx*` — the answered
+    /// `AppContext` token passing back into control entries; loud on a
+    /// missing entry, since a control entry that does not exist is an
+    /// embedder bug). The reply carries the answer slot.
     CallRutEntry {
         name: Arc<str>,
-        a: u64,
-        b: f64,
-        reply: ReplySender<Result<(), ModuleError>>,
+        args: RutEntryArgs,
+        reply: ReplySender<Result<RutEntryAnswer, ModuleError>>,
     },
     /// Read the loaded rut module's `entry fn start() -> u64` answer
     /// (0 when `start` returns nil or no rut module is loaded).
@@ -340,11 +390,10 @@ impl fmt::Debug for WorkerMsg {
                 .debug_struct("LoadRutModule")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
-            Self::CallRutEntry { name, a, b, .. } => f
+            Self::CallRutEntry { name, args, .. } => f
                 .debug_struct("CallRutEntry")
                 .field("name", &name.as_ref())
-                .field("a", a)
-                .field("b", b)
+                .field("args", args)
                 .finish_non_exhaustive(),
             Self::RutStartAnswer { .. } => f.write_str("RutStartAnswer"),
             Self::DevTool { req, .. } => f.debug_struct("DevTool").field("req", req).finish(),

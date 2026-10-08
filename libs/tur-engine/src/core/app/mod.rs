@@ -9,8 +9,8 @@ pub mod root;
 pub mod runtime_error;
 
 pub use comm::{
-    DevToolRequest, HostMsg, HostRx, HostTx, ModuleError, Reply, ReplySender, ShellCommand,
-    WorkerMsg, WorkerRx, WorkerTx,
+    DevToolRequest, HostMsg, HostRx, HostTx, ModuleError, Reply, ReplySender, RutEntryAnswer,
+    RutEntryArgs, ShellCommand, WorkerMsg, WorkerRx, WorkerTx,
 };
 pub use context::TurAppContext;
 pub use event::{AppEvent, CustomAppEvent};

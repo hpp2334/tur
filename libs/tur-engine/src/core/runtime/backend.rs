@@ -182,6 +182,57 @@ impl WorkerBackend {
         Ok(())
     }
 
+    /// The entry rail with the answer slot — the context-crossing lane
+    /// (the fixture contract) plus the legacy probe rail. The cx token
+    /// addresses a worker-held answered context ([`RutRuntime`]'s slot
+    /// map — cleared at module teardown, the stash's old lifetime,
+    /// embedder-facing); the answer decodes under the export's declared
+    /// return type. Synchronous, pump-level — the legacy rail's timing.
+    fn call_rut_entry_args_inner(
+        &self,
+        name: &str,
+        args: crate::core::app::RutEntryArgs,
+    ) -> Result<crate::core::app::RutEntryAnswer, ModuleError> {
+        use crate::core::app::RutEntryArgs;
+        match args {
+            RutEntryArgs::Nums { a, b } => self
+                .call_rut_entry_inner(name, a, b)
+                .map(|_| crate::core::app::RutEntryAnswer::Nil),
+            RutEntryArgs::None
+            | RutEntryArgs::Cx(_)
+            | RutEntryArgs::CxU64(..)
+            | RutEntryArgs::CxF64(..) => {
+                let mut rut_guard = self.rut.borrow_mut();
+                let Some(rut) = rut_guard.as_mut() else {
+                    return Err(ModuleError::Eval(
+                        "call_rut_entry: no rut module loaded".into(),
+                    ));
+                };
+                let answer = match args {
+                    RutEntryArgs::None => rut.call_entry_opaque(name)?,
+                    RutEntryArgs::Cx(token) => {
+                        let cx = rut.entry_slot_handle(token)?;
+                        rut.call_entry_cx(name, &cx)?
+                    }
+                    RutEntryArgs::CxU64(token, a) => {
+                        let cx = rut.entry_slot_handle(token)?;
+                        rut.call_entry_cx_u64(name, &cx, a)?
+                    }
+                    RutEntryArgs::CxF64(token, b) => {
+                        let cx = rut.entry_slot_handle(token)?;
+                        rut.call_entry_cx_f64(name, &cx, b)?
+                    }
+                    RutEntryArgs::Nums { .. } => unreachable!("matched above"),
+                };
+                // The fixture contract's `entry_start` boot mounts here —
+                // apply the stashed root exactly like the legacy rail.
+                rut.apply_root().map_err(ModuleError::Eval)?;
+                self.internal.instance.set_dirty();
+                Ok(answer)
+            }
+        }
+    }
+
     /// Dispatch one [`WorkerMsg`]. RPC variants settle their own `Reply`;
     /// non-RPC variants push state into the worker for the next `pump()`.
     pub(crate) fn handle_worker_msg(&self, msg: WorkerMsg) {
@@ -207,8 +258,8 @@ impl WorkerBackend {
                 self.wake_if_dirty();
                 reply.send(res);
             }
-            WorkerMsg::CallRutEntry { name, a, b, reply } => {
-                let res = self.call_rut_entry_inner(&name, a, b);
+            WorkerMsg::CallRutEntry { name, args, reply } => {
+                let res = self.call_rut_entry_args_inner(&name, args);
                 self.wake_if_dirty();
                 reply.send(res);
             }
@@ -1003,10 +1054,24 @@ impl HostBackend {
         b: f64,
     ) -> Result<(), ModuleError> {
         let name = std::sync::Arc::from(name);
+        let args = crate::core::app::RutEntryArgs::Nums { a, b };
+        self.call_rut_entry_args(&name, args)
+            .await
+            .map(|_| ())
+    }
+
+    /// The entry rail's answer-carrying lanes — the RPC entries behind
+    /// [`TurApp::call_rut_entry_opaque`] / [`TurApp::call_rut_entry_cx`]
+    /// and twins.
+    pub(crate) async fn call_rut_entry_args(
+        &self,
+        name: &str,
+        args: crate::core::app::RutEntryArgs,
+    ) -> Result<crate::core::app::RutEntryAnswer, ModuleError> {
+        let name = std::sync::Arc::from(name);
         self.rpc(|tx| WorkerMsg::CallRutEntry {
             name,
-            a,
-            b,
+            args,
             reply: tx,
         })
         .await

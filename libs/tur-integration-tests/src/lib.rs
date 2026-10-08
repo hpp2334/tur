@@ -11,7 +11,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
-use tur_engine::core::app::{FrameOutcome, NextFrame};
+use tur_engine::core::app::{FrameOutcome, NextFrame, RutEntryAnswer};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 
 /// `Send + Sync` wrapper around boa's `FixedClock` (which uses `RefCell`
@@ -1427,8 +1427,45 @@ impl TurTestApp {
         block_on(self.inner.call_rut_entry(name, a, b))
     }
 
-    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
-    /// `start` returns nil or no rut module is loaded).
+    /// The fixture contract's lazy boot: call the no-arg
+    /// `entry fn entry_start() -> opaque` and take the answered context
+    /// as a slot token. The token feeds [`Self::call_rut_entry_cx`] and
+    /// twins (control entries downcast it module-side).
+    pub fn call_rut_entry_opaque(&self, name: &str) -> Result<u64, TurError> {
+        block_on(self.inner.call_rut_entry_opaque(name)).and_then(|a| match a {
+            RutEntryAnswer::Opaque(token) => Ok(token),
+            other => Err(TurError::Other(format!(
+                "call_rut_entry_opaque: `{name}` answered {other:?}, expected an opaque context"
+            ))),
+        })
+    }
+
+    /// Engine→rut context-crossing entry rail: `entry fn(opaque)` — the
+    /// held context token passing back in.
+    pub fn call_rut_entry_cx(&self, name: &str, cx: u64) -> Result<(), TurError> {
+        block_on(self.inner.call_rut_entry_cx(name, cx)).map(|_| ())
+    }
+
+    /// [`Self::call_rut_entry_cx`] + a u64 scalar — `entry fn(opaque, u64)`.
+    pub fn call_rut_entry_cx_u64(&self, name: &str, cx: u64, a: u64) -> Result<(), TurError> {
+        block_on(self.inner.call_rut_entry_cx_u64(name, cx, a)).map(|_| ())
+    }
+
+    /// [`Self::call_rut_entry_cx`] + an f64 scalar — `entry fn(opaque, f64)`.
+    pub fn call_rut_entry_cx_f64(&self, name: &str, cx: u64, b: f64) -> Result<(), TurError> {
+        block_on(self.inner.call_rut_entry_cx_f64(name, cx, b)).map(|_| ())
+    }
+
+    /// [`Self::call_rut_entry_cx`] decoding a `-> str` answer — the
+    /// control-probe shape (the entry answers the value; no atom write).
+    pub fn call_rut_entry_cx_str(&self, name: &str, cx: u64) -> Result<String, TurError> {
+        block_on(self.inner.call_rut_entry_cx_str(name, cx))
+    }
+
+    /// The loaded rut module's `entry fn start()` answer — the u64 answer,
+    /// or the answered-context slot token when `start` is declared
+    /// `-> opaque` (the context-crossing contract's eager shape). 0 when
+    /// `start` returns nil or no rut module is loaded.
     pub fn rut_start_answer(&self) -> u64 {
         block_on(self.inner.rut_start_answer())
     }

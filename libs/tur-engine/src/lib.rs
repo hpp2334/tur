@@ -51,6 +51,7 @@ pub use crate::core::scheduler::SpawnError;
 // never crossing an embedder boundary as a string). Owned by embedder-side
 // runtime state (e.g. `AndroidRuntime`), not by `TurRuntime` itself.
 pub use crate::core::app::ModuleSourceRegistry;
+pub use crate::core::app::{RutEntryAnswer, RutEntryArgs};
 // Re-export the worker-pool declaration type so embedders can write
 // `tur_engine::WorkerPoolHandle` (registered via
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
@@ -183,8 +184,72 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
-    /// The loaded rut module's `entry fn start() -> u64` answer (0 when
-    /// `start` returns nil or no rut module is loaded).
+    /// The entry rail's no-arg probe — the fixture contract's lazy boot:
+    /// call `entry fn entry_start() -> opaque` (a module whose boot
+    /// deferred for want of a `start` export) and take the answered
+    /// context as a slot token. The token feeds [`Self::call_rut_entry_cx`]
+    /// and twins.
+    pub async fn call_rut_entry_opaque(&self, name: &str) -> Result<RutEntryAnswer, TurError> {
+        self.host
+            .backend()
+            .call_rut_entry_args(name, RutEntryArgs::None)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// Engine→rut context-crossing entry rail: call `entry fn(opaque)`,
+    /// passing the held context token back in (the module downcasts it).
+    pub async fn call_rut_entry_cx(&self, name: &str, cx: u64) -> Result<RutEntryAnswer, TurError> {
+        self.host
+            .backend()
+            .call_rut_entry_args(name, RutEntryArgs::Cx(cx))
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::call_rut_entry_cx`] + a u64 scalar — `entry fn(opaque, u64)`.
+    pub async fn call_rut_entry_cx_u64(
+        &self,
+        name: &str,
+        cx: u64,
+        a: u64,
+    ) -> Result<RutEntryAnswer, TurError> {
+        self.host
+            .backend()
+            .call_rut_entry_args(name, RutEntryArgs::CxU64(cx, a))
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::call_rut_entry_cx`] + an f64 scalar — `entry fn(opaque, f64)`.
+    pub async fn call_rut_entry_cx_f64(
+        &self,
+        name: &str,
+        cx: u64,
+        b: f64,
+    ) -> Result<RutEntryAnswer, TurError> {
+        self.host
+            .backend()
+            .call_rut_entry_args(name, RutEntryArgs::CxF64(cx, b))
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::call_rut_entry_cx`] decoding a `-> str` answer — the
+    /// control-probe shape (the entry answers the value; no atom write).
+    pub async fn call_rut_entry_cx_str(&self, name: &str, cx: u64) -> Result<String, TurError> {
+        match self.call_rut_entry_cx(name, cx).await? {
+            RutEntryAnswer::Str(s) => Ok(s),
+            other => Err(TurError::Other(format!(
+                "call_rut_entry: `{name}` answered {other:?}, expected a str"
+            ))),
+        }
+    }
+
+    /// The loaded rut module's `entry fn start()` answer — the u64 answer,
+    /// or the answered-context slot token when `start` is declared
+    /// `-> opaque` (the context-crossing contract's eager shape). 0 when
+    /// `start` returns nil or no rut module is loaded.
     pub async fn rut_start_answer(&self) -> u64 {
         self.host.backend().rut_start_answer().await
     }

@@ -12,68 +12,98 @@
 //! never scrolls (the delta passes through); moving the caret below the
 //! fold reveals it; clicks and the IME caret rect read through the offset;
 //! replacing the text resets the scroll to the top.
+//!
+//! Fixture shape — the context-crossing entry contract: `fn start() ->
+//! AppContext` + `entry fn entry_start() -> opaque` boxing it; control
+//! entries take `cx: opaque` and downcast. The harness holds the answered
+//! context between calls (`call_rut_entry_opaque` /
+//! `call_rut_entry_cx`).
 
 use tur_engine::builtin_plugins::text::EditableTextElement;
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur_host::{ st_put, st_take, tctrl_new, tctrl_set_text };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
 
-let K_CTRL: u64 = 1;
+struct EditorCx {
+    ctrl: TextCtrl,
+}
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
     let mut text = "";
     let mut i = 0;
     while (i < 40) {
         text = f"{text}line {i}\n";
         i = i + 1;
     }
-    tctrl_set_text(ctrl, text);
-    st_put(K_CTRL, ctrl);
+    ctrl.set_text(text);
     let input = Input()
-        .controller(TextCtrl(ctrl))
+        .controller(ctrl)
         .multiline(true)
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();
     mount(input);
-    return 0;
+    return EditorCx { ctrl: ctrl };
 }
 
-entry fn set_short_text(_a: u64, _b: f64) {
-    let ctrl = st_take(K_CTRL);
-    tctrl_set_text(ctrl, "short");
-    st_put(K_CTRL, ctrl);
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+// The shared downcast (the nil-guard is belt-and-braces: a kind mismatch
+// is the loud channel — the downcast traps naming both sides).
+fn editor_cx(cx: opaque) -> EditorCx {
+    let c = opaque.downcast<EditorCx>(cx);
+    if (c == nil) {
+        panic("editor fixture: cx is not an EditorCx");
+    }
+    return c;
+}
+
+entry fn set_short_text(cx: opaque) {
+    editor_cx(cx).ctrl.set_text("short");
 }
 "#;
 
 /// A single-line control with the same geometry — the negative control.
 const SINGLE_LINE_RUT: &str = r#"
-use tur_host::{ tctrl_new, tctrl_set_text };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    tctrl_set_text(ctrl, "one line only");
+struct EditorCx {
+    ctrl: TextCtrl,
+}
+
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    ctrl.set_text("one line only");
     let input = Input()
-        .controller(TextCtrl(ctrl))
+        .controller(ctrl)
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();
     mount(input);
-    return 0;
+    return EditorCx { ctrl: ctrl };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
 }
 "#;
 
 /// Mount the editor fixture and locate the `EditableTextElement` (the
 /// `Input` view is a Container wrapper whose only child is the editable;
 /// `mount` hosts the container under the root host).
-fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
+fn setup(source: &str) -> (TurTestApp, ElementNodeId, u64) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(source).unwrap();
+    // The context-crossing boot: entry_start builds + mounts + answers
+    // the AppContext token.
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let tree = app.element_tree();
@@ -98,12 +128,12 @@ fn setup(source: &str) -> (TurTestApp, ElementNodeId) {
         );
     })
     .unwrap();
-    (app, ed)
+    (app, ed, cx)
 }
 
 #[test]
 fn wheel_advances_multiline_scroll() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     app.wheel(0.0, 40.0, 100.0, 30.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -126,7 +156,7 @@ fn wheel_advances_multiline_scroll() {
 
 #[test]
 fn wheel_accumulates_and_clamps_multiline_scroll() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     app.wheel(0.0, 400.0, 100.0, 30.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -151,7 +181,7 @@ fn wheel_accumulates_and_clamps_multiline_scroll() {
 
 #[test]
 fn wheel_does_not_remount_the_editor() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     app.wheel(0.0, 40.0, 100.0, 30.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -166,7 +196,7 @@ fn wheel_does_not_remount_the_editor() {
 
 #[test]
 fn single_line_input_never_scrolls() {
-    let (mut app, ed) = setup(SINGLE_LINE_RUT);
+    let (mut app, ed, _cx) = setup(SINGLE_LINE_RUT);
 
     app.wheel(0.0, 40.0, 100.0, 30.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -181,7 +211,7 @@ fn single_line_input_never_scrolls() {
 
 #[test]
 fn arrow_down_reveals_the_caret_past_the_fold() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     // Focus the field, then walk the caret well below the 60px fold.
     app.click(100.0, 30.0);
@@ -206,7 +236,7 @@ fn arrow_down_reveals_the_caret_past_the_fold() {
 
 #[test]
 fn clicks_read_through_the_scroll_offset() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, _cx) = setup(EDITOR_RUT);
 
     // Scroll deep, then click near the TOP of the visible field: the byte
     // under the cursor must come from layout y ≈ 200+offset, not from
@@ -233,15 +263,15 @@ fn clicks_read_through_the_scroll_offset() {
 
 #[test]
 fn replacing_the_text_resets_the_scroll() {
-    let (mut app, ed) = setup(EDITOR_RUT);
+    let (mut app, ed, cx) = setup(EDITOR_RUT);
 
     app.wheel(0.0, 400.0, 100.0, 30.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Reset the controller's text programmatically (the playground does
     // this on every case switch): the view must return to the top.
-    // (set_short_text is dispatched through the module's entry probe.)
-    app.call_rut_entry("set_short_text", 0, 0.0);
+    // (set_short_text rides the context-crossing entry lane.)
+    app.call_rut_entry_cx("set_short_text", cx);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(ed, |e| {

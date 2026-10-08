@@ -653,6 +653,22 @@ impl TaskCtx {
   }
 }
 
+// The entry rail's ctx — the one user-reachable ctx door: control/probe
+// `entry fn` bodies read and write through it (ctxs originate only from
+// the rails, and the entry rail is one: the embedder's entry RPC runs
+// outside the flush, and this is its sanctioned access face). `over` is
+// kit-internal (the dispatch entries' seam); entries mint through here.
+pub fn entry_ctx() -> MutationCtx {
+  return MutationCtx.over(ctx_bridge());
+}
+
+// The store-bridge accessor (the probe/entry seam — the raw-atom probe
+// rail's hatch). TODO(phase5): deleted once the sweep retires the last
+// `bridge()` spelling (the entry-cx contract + `entry_ctx` replaced it).
+pub fn bridge() -> opaque {
+  return ctx_bridge();
+}
+
 // Mint a source atom (`boa: source<T>(value)`): the value crosses boxed,
 // the engine decodes it into the same native KV variant the typed rows
 // store (existing engine-side reads unchanged), and the stamp records
@@ -662,14 +678,6 @@ impl TaskCtx {
 // `Writable<T>` both (the iface objects track no concrete origin, so the
 // write face must flow unboxed); `let r: Readable<T> = source<T>(..)`
 // coerces at the annotation as usual.
-//
-// The store-bridge accessor (the probe/entry seam): the corpus probe
-// entries and boot journeys the ctx rails don't carry rebuild handles
-// over the instance bridge. TODO(phase5): the context-crossing entry
-// contract (the opaque `AppContext`) retires the raw-atom probes.
-pub fn bridge() -> opaque {
-  return ctx_bridge();
-}
 pub fn source<T>(v: T) -> Source<T> {
   let b = opaque(v);
   let atom = rs_source_box(b);

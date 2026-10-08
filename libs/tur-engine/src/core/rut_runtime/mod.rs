@@ -997,9 +997,19 @@ pub struct RutRuntime {
     /// The instance context (held for `apply_root` and future rails).
     js_ctx: InstanceContext,
     pub has_stop: bool,
-    /// `entry fn start()`'s answer when declared `-> u64` (the module's
-    /// handle back to the host — e.g. the id of its root atom), else 0.
+    /// `entry fn start()`'s answer — the u64 answer when declared `-> u64`,
+    /// or the answered-context slot token when declared `-> opaque` (the
+    /// `tur_start_answer` channel extended to opaques; see
+    /// [`Self::entry_slot_mint`]). 0 when `start` returns nil.
     pub start_answer: u64,
+    /// The embedder-facing answered-context slots (the entry RPC's opaque
+    /// pass-through — the stash's old cross-entry lifetime, now held by
+    /// the ENGINE instead of the module): boot's opaque `start` answer and
+    /// the `call_rut_entry_opaque` lane mint tokens here, and control
+    /// entries take them back by token. Dropped with the module — teardown
+    /// clears (the same lifetime the stash had, embedder-facing).
+    entry_slots: std::cell::RefCell<std::collections::HashMap<u64, OpaqueRef>>,
+    entry_slot_next: std::cell::Cell<u64>,
 }
 
 impl RutRuntime {
@@ -1155,11 +1165,17 @@ impl RutRuntime {
                 .map(|(_, fid)| *fid as usize)
         };
         let has_stop = export_of("stop").is_some();
-        // `entry fn start() -> u64` hands the host a module answer (e.g.
-        // its root atom's id); a plain `start()` returns nil.
-        let start_returns_u64 = export_of("start")
+        // `entry fn start()`'s declared answer type drives the boot call:
+        // `-> u64` records the answer, `-> opaque` answers the module's
+        // AppContext (the context-crossing contract's eager shape — a slot
+        // token becomes the start answer), `-> nil` answers nothing. A
+        // module with no `start` export but an `entry_start` boots LAZILY —
+        // the embedder's first `call_rut_entry_opaque("entry_start")` runs
+        // it (the fixture contract's `fn start() -> AppContext` shape).
+        let start_ret = export_of("start")
             .and_then(|fid| prog.funcs.get(fid))
-            .is_some_and(|f| f.ret == TY_U64);
+            .map(|f| f.ret);
+        let has_entry_start = export_of("entry_start").is_some();
 
         let vm = rut_vm::interp::Vm::builder()
             .program(prog)
@@ -1180,22 +1196,67 @@ impl RutRuntime {
             js_ctx: js_ctx.clone(),
             has_stop,
             start_answer: 0,
+            entry_slots: std::cell::RefCell::new(std::collections::HashMap::new()),
+            entry_slot_next: std::cell::Cell::new(1),
         };
-        rt.call_start(start_returns_u64)?;
+        rt.call_start(start_ret, has_entry_start)?;
         Ok(rt)
     }
 
-    fn call_start(&mut self, returns_u64: bool) -> Result<(), crate::core::app::ModuleError> {
+    fn call_start(
+        &mut self,
+        start_ret: Option<TypeId>,
+        has_entry_start: bool,
+    ) -> Result<(), crate::core::app::ModuleError> {
         let mut vm = self.vm.borrow_mut();
-        if returns_u64 {
-            let answer = vm.call::<_, u64>("start", ()).map_err(|t| {
-                crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
-            })?;
-            self.start_answer = answer;
-        } else {
-            vm.call::<_, ()>("start", ()).map_err(|t| {
-                crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
-            })?;
+        match start_ret {
+            Some(TY_U64) => {
+                let answer = vm.call::<_, u64>("start", ()).map_err(|t| {
+                    crate::core::app::ModuleError::Eval(format!(
+                        "start: {} — {}",
+                        t.name(),
+                        t.msg
+                    ))
+                })?;
+                self.start_answer = answer;
+            }
+            // The eager context-crossing shape: `entry fn start() ->
+            // opaque` answers the module's AppContext — the engine slots
+            // it and the token IS the start answer (the embedder passes it
+            // back through the cx entry lanes).
+            Some(TY_OPAQUE) => {
+                let cx = vm.call::<_, OpaqueRef>("start", ()).map_err(|t| {
+                    crate::core::app::ModuleError::Eval(format!(
+                        "start: {} — {}",
+                        t.name(),
+                        t.msg
+                    ))
+                })?;
+                self.start_answer = self.entry_slot_mint(cx);
+            }
+            Some(TY_NIL) => {
+                vm.call::<_, ()>("start", ()).map_err(|t| {
+                    crate::core::app::ModuleError::Eval(format!(
+                        "start: {} — {}",
+                        t.name(),
+                        t.msg
+                    ))
+                })?;
+            }
+            Some(other) => {
+                return Err(crate::core::app::ModuleError::Eval(format!(
+                    "start: unsupported answer type (type id {other})"
+                )));
+            }
+            None => {
+                if !has_entry_start {
+                    return Err(crate::core::app::ModuleError::Eval(
+                        "boot: the module has no `entry fn start()`".into(),
+                    ));
+                }
+                // The lazy fixture shape — boot defers to the embedder's
+                // first `entry_start` probe.
+            }
         }
         Ok(())
     }
@@ -1216,6 +1277,157 @@ impl RutRuntime {
             .map_err(|t| {
                 crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg))
             })
+    }
+
+    /// Whether the module exports `name` (the legacy rail's optional-entry
+    /// check; the cx lanes treat a missing control entry as an error).
+    pub fn has_export(&self, name: &str) -> bool {
+        let vm = self.vm.borrow();
+        vm.prog
+            .exports
+            .iter()
+            .any(|(n, _)| vm.prog.interner.name(*n) == name)
+    }
+
+    /// The declared return type of a named export (None when absent) —
+    /// the cx lane's answer-decode key.
+    pub fn export_ret(&self, name: &str) -> Option<TypeId> {
+        let vm = self.vm.borrow();
+        let (_, fid) = vm
+            .prog
+            .exports
+            .iter()
+            .find(|(n, _)| vm.prog.interner.name(*n) == name)?;
+        vm.prog.funcs.get(*fid as usize).map(|f| f.ret)
+    }
+
+    /// Mint a slot over an answered opaque — the entry RPC's answer
+    /// channel (boot's opaque `start` answer; the
+    /// `call_rut_entry_opaque` lane's answers). The worker holds the
+    /// handle here; the token is the embedder's only view.
+    fn entry_slot_mint(&self, o: OpaqueRef) -> u64 {
+        let token = self.entry_slot_next.get();
+        self.entry_slot_next.set(token + 1);
+        self.entry_slots.borrow_mut().insert(token, o);
+        token
+    }
+
+    /// Clone a held slot's handle — the cx crossing back INTO the VM (the
+    /// slot STAYS: one context re-crosses on every control call).
+    pub fn entry_slot_handle(&self, token: u64) -> Result<OpaqueRef, crate::core::app::ModuleError> {
+        self.entry_slots
+            .borrow()
+            .get(&token)
+            .cloned()
+            .ok_or_else(|| {
+                crate::core::app::ModuleError::Eval(format!(
+                    "call_rut_entry: no context held for slot {token} (module reloaded over it?)"
+                ))
+            })
+    }
+
+    /// The `entry fn() -> opaque` probe — the fixture contract's lazy
+    /// `entry_start` boot. Mints a slot over the answer and reports the
+    /// token.
+    pub fn call_entry_opaque(
+        &mut self,
+        name: &str,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        let o = self
+            .vm
+            .borrow_mut()
+            .call::<_, OpaqueRef>(name, ())
+            .map_err(|t| {
+                crate::core::app::ModuleError::Eval(format!(
+                    "{name}: {} — {}",
+                    t.name(),
+                    t.msg
+                ))
+            })?;
+        Ok(crate::core::app::RutEntryAnswer::Opaque(
+            self.entry_slot_mint(o),
+        ))
+    }
+
+    /// `entry fn(opaque)` — the held context only; the answer decodes
+    /// under the export's declared return.
+    pub fn call_entry_cx(
+        &mut self,
+        name: &str,
+        cx: &OpaqueRef,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        self.entry_cx_call(name, (cx.clone(),))
+    }
+
+    /// `entry fn(opaque, u64)` — the context + a scalar.
+    pub fn call_entry_cx_u64(
+        &mut self,
+        name: &str,
+        cx: &OpaqueRef,
+        a: u64,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        self.entry_cx_call(name, (cx.clone(), a))
+    }
+
+    /// `entry fn(opaque, f64)` — the context + a float.
+    pub fn call_entry_cx_f64(
+        &mut self,
+        name: &str,
+        cx: &OpaqueRef,
+        b: f64,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        self.entry_cx_call(name, (cx.clone(), b))
+    }
+
+    /// The shared cx-lane body: ONE vm.call with the given args tuple, the
+    /// answer decoded under the export's declared return type (nil / u64 /
+    /// f64 / str / opaque — anything else is a loud error naming both
+    /// sides). An opaque answer slots and reports its token.
+    fn entry_cx_call<A: CallArgs>(
+        &mut self,
+        name: &str,
+        args: A,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        type Ans = crate::core::app::RutEntryAnswer;
+        let ret = self.export_ret(name).ok_or_else(|| {
+            crate::core::app::ModuleError::Eval(format!(
+                "call_rut_entry: no export `{name}` (a control entry must exist)"
+            ))
+        })?;
+        let answer = match ret {
+            TY_NIL => self
+                .vm
+                .borrow_mut()
+                .call::<A, ()>(name, args)
+                .map(|_| Ans::Nil),
+            TY_U64 => self
+                .vm
+                .borrow_mut()
+                .call::<A, u64>(name, args)
+                .map(Ans::U64),
+            TY_F64 => self
+                .vm
+                .borrow_mut()
+                .call::<A, f64>(name, args)
+                .map(Ans::F64),
+            TY_STR => self
+                .vm
+                .borrow_mut()
+                .call::<A, String>(name, args)
+                .map(Ans::Str),
+            TY_OPAQUE => self
+                .vm
+                .borrow_mut()
+                .call::<A, OpaqueRef>(name, args)
+                .map(|o| Ans::Opaque(self.entry_slot_mint(o))),
+            other => Err(rut_vm::Trap::new(
+                rut_vm::TrapKind::Invalid,
+                format!("call_rut_entry: `{name}` answers an unsupported type (type id {other})"),
+            )),
+        };
+        answer.map_err(|t| {
+            crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg))
+        })
     }
 
     /// Apply the root stashed by `tur_host::mount` into the instance tree —
