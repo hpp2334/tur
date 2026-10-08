@@ -93,9 +93,8 @@ pub fn static_tree(frames: usize) {
     app.load_rut_module(
         r##"
 use tur_host::{ rs_get_f64, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container, Row, TextCtrl, UndoCtrl, mount };
-use tur_kit::{ TextCtrl, UndoCtrl, mount, rs_derive };
-
+use tur_kit::{ Axis, Column, Container, Row, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Axis, TextCtrl, UndoCtrl, mount, rs_derive };
 
 fn label(v: f64) -> str {
     return f"t={v as u64}";
@@ -140,9 +139,8 @@ pub fn scrolled_list(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ AXIS_VERTICAL };
-use tur_kit::{ Column, Container, Expanded, ScrollView, TextCtrl, UndoCtrl, mount };
 
+use tur_kit::{ Axis, Column, Container, Expanded, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let mut content = Column();
@@ -152,7 +150,7 @@ entry fn start() {
         content.child(b.build());
         i += 1;
     }
-    let scroller = ScrollView().axis(AXIS_VERTICAL).initial_offset(0.0).child(content.build()).build();
+    let scroller = ScrollView().axis(Axis.Vertical).initial_offset(0.0).child(content.build()).build();
     let root = Column().child(Expanded().flex(1.0).child(scroller).build());
     mount(root.build());
 }
@@ -205,10 +203,9 @@ pub fn animated_opacity(frames: usize) {
     app.load_rut_module(
         r##"
 use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Column, Container, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Axis, Column, Container, TextCtrl, UndoCtrl, mount };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
-
 
 entry fn start() -> u64 {
     let alpha = rs_source_f64();
@@ -277,9 +274,8 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ AXIS_VERTICAL, tctrl_new, tctrl_push_span };
-use tur_kit::{ Input, ScrollView, TextCtrl, UndoCtrl, mount };
-
+use tur_host::{ tctrl_new, tctrl_push_span };
+use tur_kit::{ Axis, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -291,7 +287,7 @@ entry fn start() {
 
     let input = Input().controller(TextCtrl(ctrl)).width_height(100000.0, 10000.0).font_size(14.0).build();
     input.query_key("ed");
-    let scroller = ScrollView().axis(AXIS_VERTICAL).initial_offset(0.0).child(input).build();
+    let scroller = ScrollView().axis(Axis.Vertical).initial_offset(0.0).child(input).build();
     scroller.query_key("scroll");
     mount(scroller);
 }

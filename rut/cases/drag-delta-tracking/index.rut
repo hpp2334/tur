@@ -2,9 +2,7 @@
 // (the VDivider pattern). The scratch points ride f64 sources captured by
 // the drag mutations; the transcript source renders "dsx,dsy,dlx,dly" for
 // the test to parse.
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mount, mutate, source };
-
+use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, bridge, mount, mutate, source };
 
 entry fn start() -> u64 {
     let info: Readable<str> = source<str>("0,0,0,0");
@@ -47,6 +45,6 @@ entry fn start() -> u64 {
 // the engine stops delivering moves once the pointer is up, so no further
 // deltas land. The atom id rides the entry arg.
 entry fn reset(atom: u64, _b: f64) {
-    let info = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(info, "0,0,0,0");
+    let info = Source<str>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<str>(info, "0,0,0,0");
 }

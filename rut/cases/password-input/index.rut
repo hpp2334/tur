@@ -8,9 +8,8 @@
 //
 // Phase-2 note: this case is typed in the playground VIEWER too — the
 // va-child keyboard rail forwards real keys into the focused child input.
-use tur_host::{ CROSS_ALIGN_START, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Column, Container, Input, InputEvent, Mutation, MutationCtx, Readable, SizedBox, Source, Text, mount, mutate, source };
-
+use tur_host::{ tctrl_set_text };
+use tur_kit::{ Column, Container, CrossAlign, Input, InputEvent, Mutation, MutationCtx, Readable, SizedBox, Source, Text, mount, mutate, source, text_ctrl, undo_ctrl };
 
 entry fn start() -> u64 {
     let value: Readable<str> = source<str>("value: \"hunter2\"");
@@ -45,7 +44,7 @@ entry fn start() -> u64 {
         .build();
 
     let col = Column()
-        .cross_alignment(CROSS_ALIGN_START)
+        .cross_alignment(CrossAlign.Start)
         .child(Text().text("Password Input").font_size(18.0).color(0x0F172AFFu64).query_key("password-title").build())
         .child(SizedBox(0.0, 12.0).build())
         .child(plain)

@@ -70,7 +70,6 @@ fn mount(app: &TurTestApp) {
 
 use tur_kit::{ Column, Container, Text, mount };
 
-
 entry fn start() {
     let col = Column()
         .child(Container().width_height(100.0, 50.0).build())
@@ -137,7 +136,6 @@ fn host_frame_timing_is_opt_in() {
 use tur_kit::{ Container, mount };
 
 use tur_kit::{ Container, mount };
-
 
 entry fn start() {
     let b = Container().width_height(100.0, 10.0).color(0xFF0000FFu64);

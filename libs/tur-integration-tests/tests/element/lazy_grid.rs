@@ -9,8 +9,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.load_rut_module(
         r#"
 use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
-
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
@@ -148,9 +147,7 @@ fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
-
-
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
@@ -275,8 +272,7 @@ fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
-
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     return Container().color(0xC8C8C8FFu64).build();
@@ -354,8 +350,8 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ AXIS_HORIZONTAL, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
+use tur_host::{ rs_set_f64, rs_source_f64 };
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(0xB4B4DCFFu64);
@@ -364,7 +360,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(1000.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).axis(AXIS_HORIZONTAL).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let mut lg = LazyGrid().item_builder(cell).count(count).axis(Axis.Horizontal).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
@@ -445,7 +441,7 @@ fn lazy_grid_column_count_ceils_max_extent_division() {
     app.load_rut_module(
         r#"
 use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(145.0, 145.0).color(0xC8C8C8FFu64);
@@ -497,7 +493,7 @@ fn lazy_grid_exact_multiple_stays_at_exact_count() {
     app.load_rut_module(
         r#"
 use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);

@@ -1,9 +1,7 @@
 // column-overflow: three 300px children in a Min column — total 900px
 // overflows the 600px viewport. Children keep their natural height (not
 // squished to 0).
-use tur_host::{ MAIN_SIZE_MIN };
-use tur_kit::{ Column, Container, mount };
-
+use tur_kit::{ Column, Container, MainAxisSize, mount };
 
 fn box_h(h: f64) -> View {
     let b = Container().width_height(0.0, h);
@@ -12,7 +10,7 @@ fn box_h(h: f64) -> View {
 
 entry fn start() {
     let col = Column()
-        .main_axis_size(MAIN_SIZE_MIN)
+        .main_axis_size(MainAxisSize.Min)
         .child(box_h(300.0))
         .child(box_h(300.0))
         .child(box_h(300.0));

@@ -10,12 +10,8 @@
 // per-row taps capture the row index (no id rails). Both modals overlay
 // via Condition branches in the root Stack — and unlike the boa
 // reference, NEITHER boots open (the boot-modal bug is not ported).
-use tur_host::{ ALIGN_CENTER, AXIS_VERTICAL, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_START,
-    CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END,
-    MAIN_ALIGN_SPACE_BETWEEN, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, img_res_svg,
-    tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Each, Expanded, Image, Input, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, Text, list_new, mutate, source, value_item, value_len };
-
+use tur_host::{ tctrl_text };
+use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx, Each, Expanded, HitTestBehavior, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, StackFit, Text, bridge, image_resource_svg, list_new, mount, mutate, source, text_ctrl, undo_ctrl, value_item, value_len };
 
 // The boa light palette (Notion / Linear-style).
 let CARD_BG: u64 = 0xFFFFFFFFu64;
@@ -50,21 +46,21 @@ entry fn start() -> u64 {
 
     // The icon resources (inline SVG through the image rail; plain u64
     // resource ids — the builders take them as params).
-    let ico: [u64] = [img_res_svg(SVG_CHECK), img_res_svg(SVG_CLOSE), img_res_svg(SVG_PLUS)];
+    let ico: [u64] = [image_resource_svg(SVG_CHECK), image_resource_svg(SVG_CLOSE), image_resource_svg(SVG_PLUS)];
 
     // Seed the counters, then hand the header derive its deps.
-    recount(MutationCtx.over(ctx_bridge()), tasks, n, done);
+    recount(MutationCtx.over(bridge()), tasks, n, done);
     let count = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"{ctx.get<f64>(n) as u64} items · {ctx.get<f64>(done) as u64} done";
     });
 
     let header = Row()
-        .main_alignment(MAIN_ALIGN_SPACE_BETWEEN)
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_alignment(MainAlign.SpaceBetween)
+        .cross_alignment(CrossAlign.Center)
         .child(
             Column()
-                .cross_alignment(CROSS_ALIGN_START)
-                .main_axis_size(MAIN_SIZE_MIN)
+                .cross_alignment(CrossAlign.Start)
+                .main_axis_size(MainAxisSize.Min)
                 .child(Text().text("Tasks").font_size(26.0).color(TEXT).build())
                 .child(SizedBox(0.0, 4.0).build())
                 .child(Text().text_bound(count).font_size(13.0).color(TEXT_MUTED).query_key("todo-count").build())
@@ -74,10 +70,10 @@ entry fn start() -> u64 {
         .build();
 
     let scroller = ScrollView()
-        .axis(AXIS_VERTICAL)
+        .axis(Axis.Vertical)
         .child(
             Column()
-                .cross_alignment(CROSS_ALIGN_STRETCH)
+                .cross_alignment(CrossAlign.Stretch)
                 .child(Each(tasks).item_builder(fn (i: u64, s: str) -> View {
                     return task_row(i, s, tasks, n, done, rm_tgt, rm_open, ico);
                 }).build())
@@ -90,7 +86,7 @@ entry fn start() -> u64 {
         .padding(22.0)
         .child(
             Column()
-                .cross_alignment(CROSS_ALIGN_STRETCH)
+                .cross_alignment(CrossAlign.Stretch)
                 .child(header)
                 .child(SizedBox(0.0, 18.0).build())
                 .child(Expanded().flex(1.0).child(scroller).build())
@@ -102,7 +98,7 @@ entry fn start() -> u64 {
     // is a zero box — cond_build requires both branches).
     mount(
         Stack()
-            .fit(STACK_FIT_EXPAND)
+            .fit(StackFit.Expand)
             .child(page)
             .child(
                 Condition(add_open)
@@ -191,8 +187,8 @@ fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
         .shadow(0x4F46E550u64, 10.0, 0.0, 4.0)
         .child(
             Row()
-                .main_axis_size(MAIN_SIZE_MIN)
-                .cross_alignment(CROSS_ALIGN_CENTER)
+                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign.Center)
                 .child(icon(ico[2], 13.0))
                 .child(SizedBox(7.0, 0.0).build())
                 .child(Text().text("New Task").font_size(13.0).color(ACCENT_FG).build())
@@ -200,7 +196,7 @@ fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
         )
         .build();
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(b_open)
@@ -227,11 +223,11 @@ fn task_row(i: u64, s: str, tasks: Readable<opaque>, n: Readable<f64>, done: Rea
         .radius(10.0)
         .padding(14.0)
         .color(CARD_BG)
-        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
         .shadow(0x0F172A14u64, 6.0, 0.0, 1.0)
         .child(
             Row()
-                .cross_alignment(CROSS_ALIGN_START)
+                .cross_alignment(CrossAlign.Start)
                 .child(checkbox(i, is_done, tasks, n, done, ico))
                 .child(SizedBox(12.0, 0.0).build())
                 .child(Expanded().flex(1.0).child(title_block(title, desc, is_done)).build())
@@ -241,8 +237,8 @@ fn task_row(i: u64, s: str, tasks: Readable<opaque>, n: Readable<f64>, done: Rea
         )
         .build();
     return Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
-        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CrossAlign.Stretch)
+        .main_axis_size(MainAxisSize.Min)
         .child(row_spacer(i))
         .child(card)
         .build();
@@ -265,7 +261,7 @@ fn checkbox(i: u64, done: bool, tasks: Readable<opaque>, n: Readable<f64>,
         recount(ctx, tasks, n, done_count);
     });
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(b_toggle)
@@ -282,7 +278,7 @@ fn checkbox_face(done: bool, ico: [u64]) -> View {
             .width_height(20.0, 20.0)
             .radius(6.0)
             .color(SUCCESS)
-            .alignment(ALIGN_CENTER)
+            .alignment(Align.Center)
             .child(icon(ico[0], 13.0))
             .build();
     }
@@ -290,7 +286,7 @@ fn checkbox_face(done: bool, ico: [u64]) -> View {
         .width_height(20.0, 20.0)
         .radius(6.0)
         .color(CARD_BG)
-        .border(INPUT_BORDER, 1.5, BORDER_INSIDE)
+        .border(INPUT_BORDER, 1.5, BorderPosition.Inside)
         .build();
 }
 
@@ -303,14 +299,14 @@ fn title_block(title: str, desc: str, done: bool) -> View {
     let t = Text().text(title).font_size(14.0).color(fg).build();
     if (desc == "") {
         return Column()
-            .cross_alignment(CROSS_ALIGN_START)
-            .main_axis_size(MAIN_SIZE_MIN)
+            .cross_alignment(CrossAlign.Start)
+            .main_axis_size(MainAxisSize.Min)
             .child(t)
             .build();
     }
     return Column()
-        .cross_alignment(CROSS_ALIGN_START)
-        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CrossAlign.Start)
+        .main_axis_size(MainAxisSize.Min)
         .child(t)
         .child(SizedBox(0.0, 3.0).build())
         .child(Text().text(desc).font_size(12.0).color(TEXT_MUTED).build())
@@ -328,11 +324,11 @@ fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u
         .width_height(26.0, 26.0)
         .radius(6.0)
         .color(SUBTLE)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(icon(ico[1], 13.0))
         .build();
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(b_rm)
@@ -349,13 +345,13 @@ fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u
 // its own taps (both handlers ride by parameter).
 fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: View) -> View {
     let inner = PointerInteract()
-        .behavior(HIT_TEST_OPAQUE)
+        .behavior(HitTestBehavior.Opaque)
         .on_click(swallow)
         .child(card)
         .build();
-    let scrim = Container().color(BACKDROP).alignment(ALIGN_CENTER).child(inner).build();
+    let scrim = Container().color(BACKDROP).alignment(Align.Center).child(inner).build();
     return PointerInteract()
-        .behavior(HIT_TEST_OPAQUE)
+        .behavior(HitTestBehavior.Opaque)
         .on_click(scrim_tap)
         .child(scrim)
         .build();
@@ -370,7 +366,7 @@ fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> Vie
         .child(Text().text(label).font_size(13.0).color(fg).build())
         .build();
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(m)
@@ -384,8 +380,8 @@ fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> Vie
 // A labelled field (the boa Field): the caption over the bordered input.
 fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: str) -> View {
     return Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
-        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CrossAlign.Stretch)
+        .main_axis_size(MainAxisSize.Min)
         .child(Text().text(caption).font_size(11.0).color(TEXT_MUTED).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(
@@ -393,7 +389,7 @@ fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: st
                 .radius(7.0)
                 .padding(9.0)
                 .color(INPUT_BG)
-                .border(INPUT_BORDER, 1.0, BORDER_INSIDE)
+                .border(INPUT_BORDER, 1.0, BorderPosition.Inside)
                 .child(
                     Input()
                         .controller(ctrl)
@@ -445,8 +441,8 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
         .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
         .child(
             Column()
-                .cross_alignment(CROSS_ALIGN_STRETCH)
-                .main_axis_size(MAIN_SIZE_MIN)
+                .cross_alignment(CrossAlign.Stretch)
+                .main_axis_size(MainAxisSize.Min)
                 .child(Text().text("New Task").font_size(17.0).color(TEXT).build())
                 .child(SizedBox(0.0, 16.0).build())
                 .child(field("Title", "What needs doing?", ctrl, undo, "todo-add-title"))
@@ -455,8 +451,8 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
                 .child(SizedBox(0.0, 20.0).build())
                 .child(
                     Row()
-                        .main_alignment(MAIN_ALIGN_END)
-                        .main_axis_size(MAIN_SIZE_MIN)
+                        .main_alignment(MainAlign.End)
+                        .main_axis_size(MainAxisSize.Min)
                         .child(modal_button("todo-add-cancel", "Cancel", SUBTLE, SUBTLE_FG, b_cancel))
                         .child(SizedBox(8.0, 0.0).build())
                         .child(modal_button("todo-add-submit", "Add Task", ACCENT, ACCENT_FG, b_submit))
@@ -474,7 +470,7 @@ fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
 // (the branch reads the live target off the source).
 fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
                 rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
-    let read = MutationCtx.over(ctx_bridge());
+    let read = MutationCtx.over(bridge());
     let target = read.get<f64>(rm_tgt) as u64;
     let item = value_item(read.get<opaque>(tasks), target);
     let title = item_title(item);
@@ -510,16 +506,16 @@ fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
         .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
         .child(
             Column()
-                .cross_alignment(CROSS_ALIGN_STRETCH)
-                .main_axis_size(MAIN_SIZE_MIN)
+                .cross_alignment(CrossAlign.Stretch)
+                .main_axis_size(MainAxisSize.Min)
                 .child(Text().text("Remove task?").font_size(16.0).color(TEXT).build())
                 .child(SizedBox(0.0, 8.0).build())
                 .child(Text().text(said).font_size(13.0).color(TEXT_MUTED).query_key("todo-rm-msg").build())
                 .child(SizedBox(0.0, 18.0).build())
                 .child(
                     Row()
-                        .main_alignment(MAIN_ALIGN_END)
-                        .main_axis_size(MAIN_SIZE_MIN)
+                        .main_alignment(MainAlign.End)
+                        .main_axis_size(MainAxisSize.Min)
                         .child(modal_button("todo-rm-cancel", "Cancel", SUBTLE, SUBTLE_FG, b_cancel))
                         .child(SizedBox(8.0, 0.0).build())
                         .child(modal_button("todo-rm-confirm", "Remove", DANGER, ACCENT_FG, b_confirm))

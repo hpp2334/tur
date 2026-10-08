@@ -1,9 +1,11 @@
 // countdown: a 1 Hz countdown with start/pause/reset, an edit modal (a
 // pre-filled Input + confirm), and a ticking display derived from the
-// remaining atom. The ticker is an async loop over `sleep(1000)` with a
-// generation guard (a stale loop exits when a new start supersedes it):
-// a spawned task over a task-scoped TaskCtx, the handles and the mem-cell
-// generation passed as parameters. State rides typed Readable handles
+// remaining atom. The ticker is plain rut async — a loop over
+// `sleep(1000)` with a generation guard (a stale loop exits when a new
+// start supersedes it): the launching mutation hands its own ctx along
+// as a plain param (boa's captured-ctx shape), and the generation rides
+// a shared-cell struct field (`struct Ticker { g: f64 }` + `mut` — no
+// MemCell, no TaskCtx, no spawn). State rides typed Readable handles
 // captured by the mutations — no ids, no stash.
 //
 // The boa design: a light slate page with the 72px display centered in
@@ -18,10 +20,17 @@
 // to its undo stack). The pill's dot + label and the display tint ride
 // brush/str/bool sources repainted by the mutations (sync_chrome) and
 // the ticker's Done write — the corpus's brush law.
-use futures::{ sleep };
-use tur_host::{ ALIGN_CENTER, BORDER_INSIDE, CROSS_ALIGN_CENTER, CROSS_ALIGN_STRETCH, CURSOR_POINTER, HIT_TEST_OPAQUE, MAIN_ALIGN_END, MAIN_SIZE_MIN, STACK_FIT_EXPAND, ctx_bridge, mem_get, mem_new, mem_set, str_parse_f64, tctrl_new, tctrl_set_text, tctrl_text, undo_new };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Input, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Stack, TaskCtx, Text, derive, mount, mutate, source, spawn };
+use futures::{ launch_future, sleep };
+use tur_kit::{ Align, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx,
+    HitTestBehavior, Input, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract,
+    Readable, Row, SizedBox, Source, Stack, StackFit, Text, TextCtrl, UndoCtrl, derive, mount,
+    mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
 
+// The generation guard: a shared cell (a struct field written through
+// `mut` bindings) — the non-reactive scratch the ticker pins.
+struct Ticker {
+    g: f64,
+}
 
 // The light-slate palette (the boa countdown).
 let PAGE_BG: u64 = 0xF8FAFCFFu64;
@@ -45,24 +54,23 @@ entry fn start() -> u64 {
     let editing = source<bool>(false);
 
     // The chrome: the four-state pill's dot + label and the display's
-    // urgent tint — sources the mutations repaint (see sync_chrome).
-    let dot: Readable<u64> = source<u64>(0);
+    // urgent tint — sources the mutations repaint (see sync_chrome). The
+    // boot state is Ready (remaining == initial): the mint carries the
+    // seed values (the old boot-time ctx paint collapsed into them).
+    let dot: Readable<u64> = source<u64>(TEXT_MUTED);
     let pill = source<str>("Ready");
     let urgent = source<bool>(false);
 
-    let display_str = derive<str>(fn (ctx: DeriveCtx) -> str {
+    let display = derive(fn (ctx: DeriveCtx) -> str {
         return fmt_display(ctx.get<f64>(remaining));
     });
-    let start_label = derive<str>(fn (ctx: DeriveCtx) -> str {
+    let start_label = derive(fn (ctx: DeriveCtx) -> str {
         return fmt_start_label(ctx.get<f64>(remaining));
     });
 
-    // Seed the chrome to the boot state (Ready — remaining == initial).
-    sync_chrome(MutationCtx.over(ctx_bridge()), running, remaining, initial, dot, pill, urgent);
-
-    // The generation guard: the mem cell holds the live generation; the
-    // ticker pins its own and exits when superseded.
-    let cell = mem_new(0.0);
+    // The generation guard: the shared cell the ticker pins its
+    // generation against.
+    let mut gen = Ticker { g: 0.0 };
 
     // The modal's text controller + undo stack: minted once, re-seeded by
     // the edit mutation at every open.
@@ -70,27 +78,28 @@ entry fn start() -> u64 {
     let undo = undo_ctrl();
 
     // Start: guard against double-start, set running, launch the ticker
-    // with a fresh generation.
+    // with a fresh generation (the launching mutation hands its own ctx
+    // along — the ctx is an ordinary VALUE param of the async fn).
     let b_start = mutate(fn (ctx: MutationCtx, _e: nil) {
         if (ctx.get<bool>(running)) {
             return;
         }
         ctx.set<bool>(running, true);
-        spawn(ticker(TaskCtx.mint(), gen_bump(cell), cell, running, remaining, dot, pill, urgent));
+        launch_future(ticker(ctx, bump(gen), gen, running, remaining, dot, pill, urgent));
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Pause: stop the clock and supersede any live ticker.
     let b_pause = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
-        gen_bump(cell);
+        bump(gen);
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
 
     // Reset: stop the clock and restore the initial time.
     let b_reset = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
-        gen_bump(cell);
+        bump(gen);
         ctx.set<f64>(remaining, ctx.get<f64>(initial));
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
     });
@@ -101,7 +110,7 @@ entry fn start() -> u64 {
     // controller).
     let b_edit = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(running, false);
-        gen_bump(cell);
+        bump(gen);
         ctx.set<bool>(editing, true);
         ctrl.set_text(f"{ctx.get<f64>(initial) as u64}");
         sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
@@ -143,9 +152,9 @@ entry fn start() -> u64 {
     // The display: 72px, red while urgent (ticking at or below 10s),
     // slate otherwise — the Condition swaps the tinted twin; both bind
     // the same derive.
-    let display = Condition(urgent)
-        .then_build(fn () -> View { return display_text(URGENT, display_str); })
-        .else_build(fn () -> View { return display_text(TEXT, display_str); })
+    let display_view = Condition(urgent)
+        .then_build(fn () -> View { return display_text(URGENT, display); })
+        .else_build(fn () -> View { return display_text(TEXT, display); })
         .build();
 
     // The edit modal overlays the pane while `editing` is set.
@@ -155,11 +164,11 @@ entry fn start() -> u64 {
         .build();
 
     let pane = Column()
-        .main_axis_size(MAIN_SIZE_MIN)
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign.Center)
         .child(Text().text("COUNTDOWN").font_size(11.0).color(TEXT_FAINT).build())
         .child(SizedBox(0.0, 10.0).build())
-        .child(display)
+        .child(display_view)
         .child(SizedBox(0.0, 12.0).build())
         .child(status)
         .child(SizedBox(0.0, 36.0).build())
@@ -167,8 +176,8 @@ entry fn start() -> u64 {
         .child(SizedBox(0.0, 12.0).build())
         .child(
             Row()
-                .main_axis_size(MAIN_SIZE_MIN)
-                .cross_alignment(CROSS_ALIGN_CENTER)
+                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign.Center)
                 .child(edit_button)
                 .child(SizedBox(10.0, 0.0).build())
                 .child(reset_button)
@@ -177,9 +186,9 @@ entry fn start() -> u64 {
         .build();
 
     // The pane centered in the viewer; the modal overlays it when open.
-    let page = Container().color(PAGE_BG).alignment(ALIGN_CENTER).child(pane).build();
-    mount(Stack().fit(STACK_FIT_EXPAND).child(page).child(modal).build());
-    return remaining.atom_id();
+    let page = Container().color(PAGE_BG).alignment(Align.Center).child(pane).build();
+    mount(Stack().fit(StackFit.Expand).child(page).child(modal).build());
+    return 0;
 }
 
 // ---- the styled pieces -------------------------------------------------------
@@ -191,7 +200,7 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
         .radius(12.0)
         .color(bg)
         .shadow(shade, 14.0, 0.0, 6.0)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
@@ -208,7 +217,7 @@ fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
         .radius(12.0)
         .color(START)
         .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(Text().text_bound(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
@@ -223,12 +232,12 @@ fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
     let face = Container()
         .padding(10.0)
         .radius(10.0)
-        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
         .color(CARD_BG)
         .child(Text().text(label).font_size(13.0).color(TEXT_MUTED).build())
         .build();
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(cb)
@@ -246,12 +255,12 @@ fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
     return Container()
         .padding(6.0)
         .radius(999.0)
-        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
         .color(CARD_BG)
         .child(
             Row()
-                .main_axis_size(MAIN_SIZE_MIN)
-                .cross_alignment(CROSS_ALIGN_CENTER)
+                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign.Center)
                 .child(Container().width_height(7.0, 7.0).radius(999.0).color_bound(dot).build())
                 .child(SizedBox(6.0, 0.0).build())
                 .child(Text().text_bound(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
@@ -284,11 +293,11 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
         .radius(14.0)
         .padding(22.0)
         .color(CARD_BG)
-        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
         .child(
             Column()
-                .main_axis_size(MAIN_SIZE_MIN)
-                .cross_alignment(CROSS_ALIGN_STRETCH)
+                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign.Stretch)
                 .child(Text().text("Set duration").font_size(18.0).color(TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
                 .child(Text().text("Enter a positive integer (seconds).").font_size(13.0).color(TEXT_MUTED).build())
@@ -297,20 +306,20 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
                     Container()
                         .padding(4.0)
                         .radius(8.0)
-                        .border(CARD_BORDER, 1.0, BORDER_INSIDE)
+                        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
                         .child(field)
                         .build(),
                 )
                 .child(SizedBox(0.0, 18.0).build())
                 .child(
                     Row()
-                        .main_alignment(MAIN_ALIGN_END)
-                        .main_axis_size(MAIN_SIZE_MIN)
+                        .main_alignment(MainAlign.End)
+                        .main_axis_size(MainAxisSize.Min)
                         .child(ghost_button("btn-cancel", "Cancel", b_cancel))
                         .child(SizedBox(8.0, 0.0).build())
                         .child(
                             MouseRegion()
-                                .cursor(CURSOR_POINTER)
+                                .cursor(Cursor.Pointer)
                                 .child(
                                     PointerInteract()
                                         .on_click(b_confirm)
@@ -321,7 +330,7 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
                                                 .radius(12.0)
                                                 .color(START)
                                                 .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-                                                .alignment(ALIGN_CENTER)
+                                                .alignment(Align.Center)
                                                 .child(Text().text("Save").font_size(15.0).color(BTN_FG).build())
                                                 .build(),
                                         )
@@ -336,17 +345,17 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
         .build();
 
     let inner = PointerInteract()
-        .behavior(HIT_TEST_OPAQUE)
+        .behavior(HitTestBehavior.Opaque)
         .on_click(b_swallow)
         .child(card)
         .build();
     let scrim = Container()
         .color(BACKDROP)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(inner)
         .build();
     return PointerInteract()
-        .behavior(HIT_TEST_OPAQUE)
+        .behavior(HitTestBehavior.Opaque)
         .on_click(b_cancel)
         .query_key("edit-modal")
         .child(scrim)
@@ -390,8 +399,8 @@ fn urgent_of(running: bool, r: f64) -> bool {
 }
 
 // Repaint the pill + display tint after any state write (every chrome
-// mutation's tail; the ticker writes its Done state directly — TaskCtx
-// and MutationCtx are distinct faces).
+// mutation's tail; the ticker writes its Done state directly through the
+// ctx it carried along).
 fn sync_chrome(ctx: MutationCtx, running: Readable<bool>, remaining: Readable<f64>,
                initial: Readable<f64>, dot: Readable<u64>, pill: Readable<str>,
                urgent: Readable<bool>) {
@@ -426,16 +435,17 @@ fn fmt_start_label(v: f64) -> str {
 
 // ---- the 1 Hz ticker ------------------------------------------------------------
 
-// `g` pins the generation: a stale loop (superseded by a later start /
-// pause / edit / reset) exits without ticking. The handles and the mem
-// cell ride as parameters; the ctx is task-scoped. The chrome rides the
-// task too: ticks re-derive the urgent tint, and the drained exit writes
-// the Done state.
-async fn ticker(ctx: TaskCtx, g: f64, cell: MemCell, running: Readable<bool>, remaining: Readable<f64>,
+// Plain rut async: ordinary params — the launching mutation's ctx rides
+// along as a VALUE (the RunContext stays injected and unspelled). `g`
+// pins the generation: a stale loop (superseded by a later start /
+// pause / edit / reset) exits without ticking. The chrome rides the task
+// too: ticks re-derive the urgent tint, and the drained exit writes the
+// Done state.
+async fn ticker(ctx: MutationCtx, g: f64, mut gen: Ticker, running: Readable<bool>, remaining: Readable<f64>,
                 dot: Readable<u64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
     while (ctx.get<bool>(running)) {
         await sleep(1000);
-        if (mem_get(cell) != g) {
+        if (gen.g != g) {
             return "";
         }
         if (!ctx.get<bool>(running)) {
@@ -456,9 +466,9 @@ async fn ticker(ctx: TaskCtx, g: f64, cell: MemCell, running: Readable<bool>, re
     return "";
 }
 
-// Bump the generation cell and answer the fresh generation.
-fn gen_bump(cell: MemCell) -> f64 {
-    let g = mem_get(cell) + 1.0;
-    mem_set(cell, g);
-    return g;
+// Bump the shared-cell generation and answer the fresh one (`mut` param
+// — the write flows through to the caller's cell).
+fn bump(mut gen: Ticker) -> f64 {
+    gen.g = gen.g + 1.0;
+    return gen.g;
 }

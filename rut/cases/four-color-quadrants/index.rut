@@ -3,7 +3,6 @@
 
 use tur_kit::{ Container, Positioned, Stack, mount };
 
-
 fn quad(color: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(color);
     return b.build();

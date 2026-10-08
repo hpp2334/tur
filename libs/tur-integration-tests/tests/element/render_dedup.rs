@@ -44,7 +44,6 @@ fn identical_frames_render_once() {
 
 use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 
-
 entry fn start() {
     let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
     mount(b.build());
@@ -153,8 +152,6 @@ fn attach_resets_dedup() {
 
 use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
 use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
-
-
 
 entry fn start() {
     let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);

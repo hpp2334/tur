@@ -31,8 +31,8 @@ const K_CTRL: u64 = 1;
 const K_MODE: u64 = 2;
 
 const EDITOR_RUT: &str = r#"
-use tur_host::{ CLIP_HARD_EDGE, ctx_bridge, rs_set_str, rs_source_str, st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Container, Input, Source, Switch, TextCtrl, UndoCtrl, mount };
+use tur_host::{ ctx_bridge, rs_set_str, rs_source_str, st_put, stf_put, stf_take, tctrl_new, tctrl_set_text, undo_new };
+use tur_kit::{ Clip, Container, Input, Source, Switch, TextCtrl, UndoCtrl, mount };
 
 let K_CTRL: u64 = 1;
 let K_MODE: u64 = 2;
@@ -66,7 +66,7 @@ entry fn start() -> u64 {
         .build();
     let pane = Container().child(editor).build();
     let slot = Switch().value(Source<str>.of(ctx_bridge(), mode, false, 1))
-        .cases("view", Container().width(0.0).height(0.0).clip(CLIP_HARD_EDGE).child(pane).build())
+        .cases("view", Container().width(0.0).height(0.0).clip(Clip.HardEdge).child(pane).build())
         .cases("split", Container().width(200.0).child(pane).build())
         .fallback(Container().width(400.0).child(pane).build())
         .query_key("slot")

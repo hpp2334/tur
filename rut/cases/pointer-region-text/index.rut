@@ -1,9 +1,7 @@
 // pointer-region-text: a MouseRegion whose enter/exit writes the bound
 // label inside a padded, centered surface. The handlers are mutations
 // over the MutationCtx; the state source rides by capture.
-use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_START, CURSOR_AUTO };
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
-
+use tur_kit::{ Align, Column, Container, CrossAlign, Cursor, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
 
 entry fn start() -> u64 {
     let state: Readable<str> = source<str>("idle");
@@ -13,15 +11,15 @@ entry fn start() -> u64 {
     let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
         ctx.set<str>(state, "exited");
     });
-    let mut col = Column().cross_alignment(CROSS_ALIGN_START);
+    let mut col = Column().cross_alignment(CrossAlign.Start);
 
     let b = Container()
         .width_height(100.0, 50.0)
         .color(0xCCCCCCFFu64)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(Text().text_bound(state).query_key("region-text").build());
 
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(CURSOR_AUTO).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(b.build()).build());
     mount(col.build());
     return state.atom_id();
 }

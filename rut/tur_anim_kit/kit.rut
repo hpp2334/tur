@@ -20,7 +20,7 @@
 // crossing is raw, the payload-less end is nil). Nullable params (the
 // `kid: ?opaque` field pattern) let one kit fn serve every combo: the kit
 // branches to the row's 0 = absent by null-check.
-use tur_host::{ anim_ctrl_mut, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound };
+use tur_host::{ anim_ctrl_mut, anim_forward, anim_pause, anim_repeat, anim_resume, anim_reverse, anim_seek, anim_speed, anim_status, anim_stop, anim_value, color_tween_lerp_raw, el_opacity, el_opacity_bound, el_transform, el_transform_angle_bound, el_transform_scale_bound, el_transform_translate_bound, tween_lerp_raw };
 use tur_kit::{ Mutation, MutationCtx, Readable, View, mutate };
 
 // The seal tags the controller installs under — the kit spells the same
@@ -105,6 +105,19 @@ pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation
 // The bare controller (no callbacks — polled through `.value()`).
 pub fn anim_ctrl_open(duration_ms: f64, curve: str, repeat: u64) -> AnimCtrl {
   return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, 0, 0));
+}
+
+// ---- the tween helpers -------------------------------------------------------
+//
+// The pure interpolation rows (no instance state, no reactivity): an
+// eased progress `t` in, the mixed value out.
+
+pub fn tween_lerp(begin: f64, end: f64, t: f64) -> f64 {
+  return tween_lerp_raw(begin, end, t);
+}
+
+pub fn color_tween_lerp(begin: u64, end: u64, t: f64) -> u64 {
+  return color_tween_lerp_raw(begin, end, t);
 }
 
 class Opacity {

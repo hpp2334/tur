@@ -162,7 +162,6 @@ fn blocking_work_does_not_stall_lane_cotenants() {
 
 use tur_kit::{ Text, mount };
 
-
 entry fn start() {
     mount(Text().text("b").build());
 }

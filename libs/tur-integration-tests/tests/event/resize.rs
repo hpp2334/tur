@@ -9,7 +9,6 @@ const RESIZE_BUNDLE: &str = r#"
 
 use tur_kit::{ Column, Container, Expanded, mount };
 
-
 entry fn start() {
     let fill_builder = Container().color(0x404040FFu64);
     let mut fill = Expanded().flex(1.0).child(fill_builder.build()).query_key("fill").build();

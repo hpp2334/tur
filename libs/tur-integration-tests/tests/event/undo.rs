@@ -49,7 +49,6 @@ const UNDO_INPUT_BUNDLE: &str = r#"
 use tur_host::{ tctrl_new, undo_new };
 use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount };
 
-
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();
@@ -65,8 +64,6 @@ entry fn start() {
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"use tur_host::{ tctrl_new, undo_new };
 use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount };
-
-
 
 entry fn start() {
     let ctrl = tctrl_new();

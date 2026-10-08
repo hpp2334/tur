@@ -95,15 +95,14 @@ fn host_image_lays_out_at_natural_size() {
     // The host-minted id crosses to the module through the entry rail.
     app.load_rut_module(
         r#"
-use tur_host::{ BOXFIT_FILL };
-use tur_kit::{ Column, Image, mount };
 
+use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
 
 entry fn mount_host(host_id: u64, _b: f64) {
-    let col = Column().child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
+    let col = Column().child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
     mount(col.build());
 }
 "#,
@@ -139,8 +138,8 @@ fn host_and_js_image_ids_coexist() {
 
     app.load_rut_module(
         r#"
-use tur_host::{ BOXFIT_FILL, img_res_solid };
-use tur_kit::{ Column, Image, mount };
+use tur_host::{ img_res_solid };
+use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
@@ -149,8 +148,8 @@ entry fn start() {
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
-        .child(Image(worker_id).width(1.0).fit(BOXFIT_FILL).build())
-        .child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
+        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
     mount(col.build());
 }
 "#,
@@ -202,10 +201,8 @@ fn reattach_ensures_retained_images_before_first_frame() {
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
     app.load_rut_module(
-        r#"use tur_host::{ BOXFIT_FILL, img_res_solid };
-use tur_kit::{ Column, Image, mount };
-
-
+        r#"use tur_host::{ img_res_solid };
+use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
@@ -213,8 +210,8 @@ entry fn start() {
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
-        .child(Image(worker_id).width(1.0).fit(BOXFIT_FILL).build())
-        .child(Image(host_id).width(4.0).fit(BOXFIT_FILL).build());
+        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
     mount(col.build());
 }
 "#,
@@ -299,17 +296,16 @@ fn reattach_uploads_only_painted_images() {
         .collect();
 
     app.load_rut_module(
-        r#"use tur_host::{ BOXFIT_FILL };
-use tur_kit::{ Image, mount };
+        r#"
+use tur_kit::{ BoxFit, Image, mount };
 
-use tur_kit::{ Image, mount };
-
+use tur_kit::{ BoxFit, Image, mount };
 
 entry fn start() {
 }
 
 entry fn mount_one(id: u64, _b: f64) {
-    mount(Image(id).width(4.0).fit(BOXFIT_FILL).build());
+    mount(Image(id).width(4.0).fit(BoxFit.Fill).build());
 }
 "#,
     )
@@ -355,15 +351,15 @@ fn img_res_svg_row_registers_a_worker_minted_resource() {
     let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r##"
-use tur_host::{ BOXFIT_FILL, img_res_svg };
-use tur_kit::{ Column, Image, mount };
+use tur_host::{ img_res_svg };
+use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
 
 entry fn mount_svg(_a: u64, _b: f64) {
     let id = img_res_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
-    mount(Column().child(Image(id).width(10.0).fit(BOXFIT_FILL).build()).build());
+    mount(Column().child(Image(id).width(10.0).fit(BoxFit.Fill).build()).build());
 }
 "##,
     )

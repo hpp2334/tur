@@ -1,9 +1,7 @@
 // container-update-clear-prop: the checkbox's color prop is bound to a
 // brush source — toggling clears it (a Nil brush fails the decode and the
 // prop resolves to absent) while the border stays.
-use tur_host::{ BORDER_CENTER, ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerInteract, Readable, Source, mount, mutate, source };
-
+use tur_kit::{ BorderPosition, Container, Mutation, MutationCtx, PointerInteract, Readable, Source, bridge, mount, mutate, source };
 
 entry fn start() -> u64 {
     let color: Readable<u64> = source<u64>(0);
@@ -20,13 +18,13 @@ entry fn start() -> u64 {
         .width_height(40.0, 40.0)
         .radius(8.0)
         .color_bound(color)
-        .border(0xE2E8F0FFu64, 2.0, BORDER_CENTER)
+        .border(0xE2E8F0FFu64, 2.0, BorderPosition.Center)
         .query_key("checkbox");
     outer.child(PointerInteract().on_click(b_toggle).query_key("rut/gesture").child(checkbox.build()).build());
 
     // The checked state: the brush seed (the ctx face at boot — the
     // channels seed before the first flush).
-    MutationCtx.over(ctx_bridge()).set<u64>(color, 0x22C35EFFu64);
+    MutationCtx.over(bridge()).set<u64>(color, 0x22C35EFFu64);
 
     mount(outer.build());
     return color.atom_id();

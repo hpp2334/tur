@@ -5,7 +5,6 @@
 // dark zebra is gone).
 use tur_kit::{ Container, LazyGrid, Source, mount, source };
 
-
 fn cell(i: u64) -> View {
     return Container().color(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0)).build();
 }

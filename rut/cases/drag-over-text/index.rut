@@ -1,10 +1,8 @@
 // drag-over-text: a Positioned -> Transform -> PointerInteract -> Text
 // piece — a non-selectable Text must not steal touch drags from the
 // PointerInteract beneath. The down count renders into `down-count`.
-use tur_host::{ ALIGN_TOP_LEFT };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
+use tur_kit::{ Align, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
 use tur_anim_kit::{ Transform };
-
 
 entry fn start() -> u64 {
     let count: Readable<str> = source<str>("0");
@@ -24,7 +22,7 @@ entry fn start() -> u64 {
     });
 
     let mut stack = Stack()
-        .alignment(ALIGN_TOP_LEFT)
+        .alignment(Align.TopLeft)
         .child(SizedBox(400.0, 400.0).child(Container().build()).build());
 
     let label = Text().text("drag me").font_size(14.0);

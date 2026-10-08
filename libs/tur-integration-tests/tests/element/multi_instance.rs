@@ -81,7 +81,6 @@ fn id_module(value: &str) -> String {
 use tur_host::{{ ctx_bridge }};
 use tur_kit::{{ MutationCtx, Readable, Source, Text, mount, source }};
 
-
 entry fn start() -> u64 {{
     let atom: Readable<str> = source<str>("{value}");
     let mut txt = Text().text_bound(atom).query_key("id").build();
@@ -162,7 +161,6 @@ fn instances_have_isolated_element_trees() {
         r#"
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
-
 entry fn start() {
     let atom: Readable<str> = source<str>("only-in-A");
     let mut txt = Text().text_bound(atom).query_key("a_only").build();
@@ -206,8 +204,6 @@ fn headless_instance_runs_rut_without_rendering() {
     futures::executor::block_on(app.load_rut_module(
         r#"use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
-
-
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
     let mut txt = Text().text_bound(atom).query_key("val").build();
@@ -243,8 +239,6 @@ fn build_headless_runs_engine_on_worker() {
     // The module boots via the worker RPC path.
     futures::executor::block_on(app.load_rut_module(
         r#"use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
-
-
 
 entry fn start() {
     let atom: Readable<str> = source<str>("7");
@@ -484,7 +478,6 @@ fn platform_events_route_to_the_correct_instance() {
     let module = r#"
 
 use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
-
 
 entry fn start() {
     let b = Container().width_height(10.0, 10.0).color(0x336699FFu64);

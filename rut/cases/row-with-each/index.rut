@@ -1,8 +1,6 @@
 // row-with-each: an Each inside a content-sized Row — the Row must not
 // inflate to the parent Column's height (the regression the test pins).
-use tur_host::{ CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Each, Expanded, mount, Row, SizedBox, Source, Text, list_new, source };
-
+use tur_kit::{ Column, Container, CrossAlign, Each, Expanded, Row, SizedBox, Source, Text, list_new, mount, source };
 
 fn item(_i: u64, s: str) -> View {
     let t = Text().text(s).font_size(13.0);
@@ -16,7 +14,7 @@ entry fn start() {
     let seg_atom = source<opaque>(seg.raw());
 
     let col = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(Each(seg_atom).item_builder(item).build()).build())
         .child(SizedBox(40.0, 10.0).child(Container().build()).build())
         .child(Expanded().flex(1.0).child(Container().build()).build());

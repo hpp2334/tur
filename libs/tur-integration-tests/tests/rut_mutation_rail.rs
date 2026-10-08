@@ -212,8 +212,6 @@ entry fn start() -> u64 {
         ctx.run<nil>(mark, nil);
     });
 
-
-
     let pad = PointerInteract()
         .on_click(compose)
         .query_key("rut/pad")

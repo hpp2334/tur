@@ -539,8 +539,7 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
 use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -555,9 +554,7 @@ entry fn start() {
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -570,9 +567,7 @@ entry fn start() {
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -750,9 +745,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -805,9 +798,7 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -844,11 +835,10 @@ fn empty_colored_span_does_not_panic() {
 // viewport_height). With a 100px viewport and 16px lines, ~12 lines (=192px)
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
-const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ AXIS_VERTICAL, tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
-
-use tur_kit::{ Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -856,7 +846,7 @@ entry fn start() {
     let undo = undo_new();
     let input = Input().controller(TextCtrl(ctrl)).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
     let col = Column().child(input).build();
-    let scroller = ScrollView().axis(AXIS_VERTICAL).child(col).build();
+    let scroller = ScrollView().axis(Axis.Vertical).child(col).build();
     mount(scroller);
 }
 "#;
@@ -946,9 +936,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();
@@ -1074,9 +1062,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
 const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
-
-
+use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
     let ctrl = tctrl_new();

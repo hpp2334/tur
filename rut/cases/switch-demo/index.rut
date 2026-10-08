@@ -5,7 +5,6 @@
 // state).
 use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, mount, mutate, source };
 
-
 entry fn start() -> u64 {
     let on: Readable<bool> = source<bool>(true);
     let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
@@ -30,9 +29,9 @@ fn thumb(on: bool) -> View {
     return side.build();
 }
 
-fn thumb_align(on: bool) -> u64 {
+fn thumb_align(on: bool) -> Align {
     if (on) {
-        return 5;
+        return Align.CenterRight;
     }
-    return 3;
+    return Align.CenterLeft;
 }

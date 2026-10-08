@@ -1,24 +1,22 @@
 // scroll-view-nested: a vertical ScrollView inside a horizontal one. The
 // outer sits in a Row — `Expanded` supplies the bounded viewport (non-flex
 // flex children get unbounded main-axis constraints, Flutter parity).
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_START, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Expanded, Row, ScrollView, SizedBox, mount };
-
+use tur_kit::{ Axis, Column, Container, CrossAlign, Expanded, Row, ScrollView, SizedBox, mount };
 
 entry fn start() {
     let mut row = Row().child(SizedBox(200.0, 0.0).child(Container().build()).build());
-    let mut outer_content = Column().cross_alignment(CROSS_ALIGN_START).child(box_h(100.0));
+    let mut outer_content = Column().cross_alignment(CrossAlign.Start).child(box_h(100.0));
     let mut inner_wrapper = Container().width_height(0.0, 200.0).query_key("inner-wrapper");
     let inner_content = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(box_h(200.0))
         .child(box_h(200.0))
         .child(box_h(200.0));
-    let inner = ScrollView().axis(AXIS_VERTICAL).child(inner_content.build()).build();
+    let inner = ScrollView().axis(Axis.Vertical).child(inner_content.build()).build();
     inner_wrapper.child(inner);
     outer_content.child(inner_wrapper.build());
     outer_content.child(box_h(400.0));
-    let outer = ScrollView().axis(AXIS_VERTICAL).child(outer_content.build()).query_key("outer-scroll").build();
+    let outer = ScrollView().axis(Axis.Vertical).child(outer_content.build()).query_key("outer-scroll").build();
     row.child(Expanded().flex(1.0).child(outer).build());
     mount(row.build());
 }

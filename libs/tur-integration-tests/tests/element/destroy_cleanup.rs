@@ -25,7 +25,6 @@ const SOURCE: &str = r#"
 use tur_host::{ img_res_solid };
 use tur_kit::{ Container, mount };
 
-
 entry fn start() {
     let b = Container().width_height(10.0, 10.0);
     mount(b.build());

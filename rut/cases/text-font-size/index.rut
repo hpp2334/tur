@@ -3,7 +3,6 @@
 
 use tur_kit::{ Fragment, Text, mount };
 
-
 entry fn start() {
     let small = Text().text("Hello").font_size(14.0);
     let large = Text().text("Hello").font_size(28.0);

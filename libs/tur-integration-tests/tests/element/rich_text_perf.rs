@@ -23,9 +23,8 @@ use tur_integration_tests::TurTestApp;
 /// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
-use tur_host::{ AXIS_VERTICAL, ctx_bridge, tctrl_new, tctrl_push_span };
-use tur_kit::{ Container, Input, Mutation, MutationCtx, Readable, ScrollView, Source, TextCtrl, UndoCtrl, mount, source };
-
+use tur_host::{ ctx_bridge, tctrl_new, tctrl_push_span };
+use tur_kit::{ Axis, Container, Input, Mutation, MutationCtx, Readable, ScrollView, Source, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -39,7 +38,7 @@ entry fn start() -> u64 {
 
     let input = Input().controller(TextCtrl(ctrl)).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
     let wrap = Container().width_bound(width).child(input).build();
-    let scroller = ScrollView().axis(AXIS_VERTICAL).child(wrap).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis.Vertical).child(wrap).query_key("scroll").build();
     mount(scroller);
     return width.atom_id();
 }

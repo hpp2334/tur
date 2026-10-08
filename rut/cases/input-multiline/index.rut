@@ -1,7 +1,5 @@
 // input-multiline: a multiline editable with an explicit size.
-use tur_host::{ tctrl_new, undo_new };
-use tur_kit::{ Container, Input, mount };
-
+use tur_kit::{ Container, Input, mount, text_ctrl, undo_ctrl };
 
 entry fn start() {
     let ctrl = text_ctrl();

@@ -73,8 +73,8 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 // ── Shape (a): PointerInteract inside ScrollView content ────────────────
 
 const SCROLL_BTN_RUT: &str = r#"
-use tur_host::{ CURSOR_POINTER, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mount, mutate, source };
+
+use tur_kit::{ Align, Column, Container, CrossAlign, Cursor, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let taps: Readable<f64> = source<f64>(0.0);
@@ -95,7 +95,7 @@ entry fn start() -> u64 {
         ctx.set<f64>(taps, ctx.get<f64>(taps) + 1.0);
     });
     let btn = MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(b_tap)
@@ -105,7 +105,7 @@ entry fn start() -> u64 {
         )
         .build();
     let page = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(Text().text("top").build())
         .child(SizedBox(0.0, 900.0).build())
         .child(btn)
@@ -175,8 +175,8 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 // ── Shape (b): PointerInteract inside Positioned inside Stack ───────────
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
-use tur_host::{ ALIGN_TOP_LEFT };
-use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
+
+use tur_kit::{ Align, Container, CrossAlign, Cursor, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
@@ -203,7 +203,7 @@ entry fn start() -> u64 {
         .child(b)
         .build();
     mount(Stack()
-        .alignment(ALIGN_TOP_LEFT)
+        .alignment(Align.TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .child(Positioned().left(10.0).top(10.0).child(pad).build())
         .build());
@@ -215,8 +215,8 @@ entry fn start() -> u64 {
 // `.child(pos)` on that View, then `mount(stack.build())`. See the test
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
-use tur_host::{ ALIGN_TOP_LEFT };
-use tur_kit::{ Container, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
+
+use tur_kit::{ Align, Container, CrossAlign, Cursor, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
@@ -243,7 +243,7 @@ entry fn start() -> u64 {
         .child(b)
         .build();
     let mut stack = Stack()
-        .alignment(ALIGN_TOP_LEFT)
+        .alignment(Align.TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .build();
     stack.child(Positioned().left(10.0).top(10.0).child(pad).build());

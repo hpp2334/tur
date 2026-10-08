@@ -16,7 +16,6 @@ fn with_element_panic_propagates_to_test_thread() {
         
 use tur_kit::{ Container, mount };
 
-
         entry fn start() {
             let b = Container().width_height(50.0, 50.0).query_key("c");
             mount(b.build());
@@ -54,8 +53,6 @@ fn with_element_assert_failure_propagates() {
     app.load_rut_module(
         r#"
 use tur_kit::{ Container, mount };
-
-
 
         entry fn start() {
             let b = Container().width_height(50.0, 50.0).query_key("c");

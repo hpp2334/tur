@@ -2,10 +2,8 @@
 // animation (forward on down, reverse on up). The controller is CAPTURED
 // by the drag mutations (opaques are just values — no stash); the last
 // gesture phase renders into the `last-event` Text.
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, mount, mutate, source };
+use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, bridge, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
-
 
 entry fn start() -> u64 {
     let phase: Readable<str> = source<str>("");
@@ -41,6 +39,6 @@ entry fn start() -> u64 {
 // The `__resetDrag` seam (the lift keeps settling; only the transcript
 // clears). The atom id rides the entry arg.
 entry fn reset(atom: u64, _b: f64) {
-    let phase = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(phase, "");
+    let phase = Source<str>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<str>(phase, "");
 }

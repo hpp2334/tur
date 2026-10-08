@@ -2,7 +2,6 @@
 
 use tur_kit::{ Text, mount };
 
-
 entry fn start() {
     mount(Text().text("").build());
 }

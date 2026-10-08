@@ -117,14 +117,13 @@ fn wheel_scrolls_the_playground_sidebar_shape() {
     let mut app = TurTestApp::new(400.0, 800.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Expanded, MutationCtx, Readable, ScrollView, Source, Text, mount, source };
 
+use tur_kit::{ Axis, Column, Container, CrossAlign, Expanded, MutationCtx, Readable, ScrollView, Source, Text, mount, source };
 
 entry fn start() -> u64 {
     let header = Container().padding(14.0)
         .child(Text().text("CASES").font_size(10.0).build());
-    let rows = Column().cross_alignment(CROSS_ALIGN_STRETCH);
+    let rows = Column().cross_alignment(CrossAlign.Stretch);
     // 19 fixed-height rows — the sidebar's overflow content (939px total
     // against a 754px scroll viewport in the 800-tall fixture window).
     let rows = rows.child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
@@ -147,10 +146,10 @@ entry fn start() -> u64 {
         .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
         .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build());
     let sidebar = Container().width(200.0)
-        .child(Column().cross_alignment(CROSS_ALIGN_STRETCH)
+        .child(Column().cross_alignment(CrossAlign.Stretch)
             .child(header.build())
             .child(Expanded().flex(1.0)
-                .child(ScrollView().axis(AXIS_VERTICAL)
+                .child(ScrollView().axis(Axis.Vertical)
                     .child(rows.build())
                     .query_key("sidebar-scroll")
                     .build())
@@ -220,16 +219,15 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge, AXIS_VERTICAL };
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, ScrollView, Source, mount, source };
-
+use tur_host::{ ctx_bridge };
+use tur_kit::{ Axis, Container, CrossAlign, Mutation, MutationCtx, Readable, ScrollView, Source, mount, source };
 
 entry fn start() -> u64 {
     let height: Readable<f64> = source<f64>(900.0);
 
     let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
 
-    let mut scroller = ScrollView().axis(AXIS_VERTICAL).child(b.build()).query_key("sv").build();
+    let mut scroller = ScrollView().axis(Axis.Vertical).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
     return height.atom_id();

@@ -17,7 +17,6 @@ fn setup_grid(
 
 use tur_kit::{{ Container, Grid, mount }};
 
-
 fn tile() -> View {{
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);
     return b.build();

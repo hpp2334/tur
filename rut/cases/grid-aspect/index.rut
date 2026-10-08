@@ -4,17 +4,15 @@
 // is tall: cell_main = cell_cross / 2); the second exercises
 // `main_extent`, which overrides the aspect with a fixed 40px row height.
 // Both grids ride `max_cross` 160 for the column count.
-use tur_host::{ CROSS_ALIGN_START, MAIN_SIZE_MIN };
-use tur_kit::{ Column, Container, Grid, ScrollView, SizedBox, Text, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, Grid, MainAxisSize, ScrollView, SizedBox, Text, mount };
 
 let LABEL_FG: u64 = 0xFFFFFFFFu64;
 let CAPTION_FG: u64 = 0x94A3B8FFu64;
 
 entry fn start() {
     let page = Column()
-        .cross_alignment(CROSS_ALIGN_START)
-        .main_axis_size(MAIN_SIZE_MIN)
+        .cross_alignment(CrossAlign.Start)
+        .main_axis_size(MainAxisSize.Min)
         .child(Text().text("aspect 2:1 (10 cells)").font_size(11.0).color(CAPTION_FG).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(aspect_grid())

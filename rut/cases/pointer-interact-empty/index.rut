@@ -2,7 +2,6 @@
 // invisible hit-target widget (zero-sized, still absorbs at its point).
 use tur_kit::{ PointerInteract, mount };
 
-
 entry fn start() {
     mount(PointerInteract().build());
 }

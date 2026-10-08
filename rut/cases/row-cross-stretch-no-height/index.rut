@@ -1,14 +1,12 @@
 // row-cross-stretch-no-height: a Stretch Row gives non-flex children its
 // full cross height; the Expanded supplies the bounded height inside the
 // unbounded Column (sidebar + divider + expanded content pane).
-use tur_host::{ CROSS_ALIGN_START, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Expanded, Row, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, Expanded, Row, mount };
 
 entry fn start() {
-    let mut col = Column().cross_alignment(CROSS_ALIGN_START);
+    let mut col = Column().cross_alignment(CrossAlign.Start);
     let row = Row()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(box_w(100.0))
         .child(box_w(8.0))
         .child(Expanded().flex(1.0).child(box_w(0.0)).build());

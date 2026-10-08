@@ -2,7 +2,6 @@
 
 use tur_kit::{ Text, mount };
 
-
 entry fn start() {
     let t = Text().text("Hello World this is a long text that should wrap").font_size(14.0);
     mount(t.build());

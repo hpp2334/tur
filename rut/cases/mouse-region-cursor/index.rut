@@ -1,9 +1,7 @@
 // mouse-region-cursor: a MouseRegion whose cursor + enter/exit drive the
 // shell cursor and the bound state label. The handlers are mutations over
 // the MutationCtx; the state source rides by capture — no ids, no stash.
-use tur_host::{ CURSOR_COL_RESIZE };
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
-
+use tur_kit::{ Column, Container, Cursor, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
 
 entry fn start() -> u64 {
     let state: Readable<str> = source<str>("");
@@ -15,7 +13,7 @@ entry fn start() -> u64 {
     });
     let mut col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).query_key("mr-state").build());
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(CURSOR_COL_RESIZE).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor.ColResize).behavior(HitTestBehavior.Opaque).child(b.build()).build());
     mount(col.build());
     return state.atom_id();
 }

@@ -13,9 +13,8 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Expanded, Row, SizedBox, mount };
 
+use tur_kit::{ Column, Container, CrossAlign, Expanded, Row, SizedBox, mount };
 
 entry fn start() {
     let mut col = Column();
@@ -24,7 +23,7 @@ entry fn start() {
     // Column): Stretch degrades to loose cross.
     let stretch_row = Row()
         .query_key("stretch-row")
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(SizedBox(50.0, 0.0).child(Container().build()).build());
     col.child(stretch_row.build());
 

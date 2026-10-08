@@ -2,7 +2,6 @@
 
 use tur_kit::{ SizedBox, Text, mount };
 
-
 entry fn start() {
     mount(SizedBox(100.0, 50.0).child(Text().text("Hi").build()).build());
 }

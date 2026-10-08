@@ -26,12 +26,28 @@
 // THIS boundary, at compile time. Nothing callable crosses the boundary
 // as a string. `View` is the user-facing view newtype.
 //
-// Reactive bindings are methods (`text_bound(atom)`, `color_bound(atom)`),
-// not constructor variants. Flags are the `u64` consts the `tur_host` pkg
-// declares (`ALIGN_*` / `CLIP_*` / `BORDER_*` / `CROSS_ALIGN_*` /
-// `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*` / `STACK_FIT_*` / `AXIS_*` /
-// `BOXFIT_*` / `CURSOR_*` / `HIT_TEST_*` / `SPAN_*`) — import them from
-// `tur_host` directly.
+// Reactive law: ONE prop per reactive-capable name over `Readable<T>`
+// (`text(r)`, `color(r)`, `width(r)`, `flex(r)`, `obscure(r)`, …) with a
+// param-type sugar overload for the literal (`text("hi")`,
+// `color(0xFF'u64)`); the `*_bound` twins are the phase-5 migrants (the
+// test snippets still spell them — thin delegates over the unified
+// props). The literal lane is `StaticValue<T>` (`sv(v)`) for the props
+// without a sugar overload. Sources / derives mint through
+// `source<T>(v)` / `derive<T>(fn (ctx: DeriveCtx) -> T)`; ALL reads and
+// writes flow through the ctxs (`DeriveCtx` get-only, `MutationCtx`
+// get + set + run) — the handles carry NO public getter (there is no
+// current store getter).
+//
+// Flag law: every flag family is a NAME-ONLY enum (`Align`, `MainAlign`,
+// `CrossAlign`, `MainAxisSize`, `Clip`, `BorderPosition`, `Axis`,
+// `BoxFit`, `StackFit`, `FlexFit`, `Cursor`, `HitTest`, `SpanFlags`) —
+// no explicit int values. The private exhaustive `when` mappers (`code`)
+// are the SOLE carriers of the row codes (verbatim from the Rust
+// consts); kit methods take the enum and unwrap once at the row
+// (`flex_main_align(self.spec, code(v))`). Cross-family misuse is a
+// compile error. The `tur_host` u64 consts stay pushed for the phase-5
+// test migration; the raw-const method overloads below are the same
+// story.
 //
 // Color law: every `packed: u64` color prop (`color` / `color_bound` /
 // `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
@@ -81,8 +97,8 @@ use tur_host::{
   pi_new, pi_on_click, pi_on_context_menu,
   pi_qkey, pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_left_bound, pos_new,
   pos_right, pos_top, pos_top_bound,
-  pos_width, rs_derive2_cb, rs_derive_cb, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
-  rs_source_value, rs_value_get, rs_value_item, rs_value_len, rs_watch_cb, scroll_axis,
+  pos_width, rs_list_new, rs_list_push, rs_map_new, rs_map_set,
+  rs_source_value, rs_value_get, rs_value_item, rs_value_len, rs_watch_mut, scroll_axis,
   scroll_build, scroll_child,
   scroll_new, scroll_offset, scroll_qkey,
   sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
@@ -93,9 +109,13 @@ use tur_host::{
   table_new, table_qkey, table_row_builder, table_rows_atom, table_stripe, text_bind,
   text_bind_derived, text_build, text_clip, text_color, text_ellipsis, text_max_lines, text_new,
   text_overflow_visible, text_qkey, text_selectable, text_size, text_spans, text_text, text_weight,
-  va_app_atom, va_bind, va_build,
+  va_app_atom, va_app_clear, va_app_set, va_bind, va_build,
   va_controller, va_controller_set, va_destroy, va_error, va_new, va_qkey, va_size,
   va_create_source, va_source_handle, va_status, va_status_atom,
+  // the pure-math / parse twins (the `mount_raw` pattern — the kit's own
+  // wrapper fns shadow the row names, so their bodies reach the rows
+  // through these aliases).
+  math_sin_raw, math_cos_raw, str_parse_f64_raw,
   // the mutation rail (source / derive / mutate + the ctx rows).
   ctx_bridge, ctx_run_box, ctx_get_box, ctx_set_box, derive_seal, mutate_seal,
   rs_box_stamp, rs_source_box,
@@ -184,10 +204,6 @@ impl MapHandle {
   }
 }
 
-// A mem cell (`mem_new` / `mem_get` / `mem_set` — the generation-guard rail).
-// TODO(phase4): deleted — a struct field over a shared cell subsumes it.
-pub type MemCell = opaque;
-
 // A virtual-app source (`virtual_app_source` / `virtual_app_source_handle`;
 // `virtual_app_controller`).
 pub class VAppSource(opaque);
@@ -245,6 +261,11 @@ impl VAppCtrl {
   }
   pub fn status_atom(self) -> u64 {
     return va_status_atom(self.inner);
+  }
+  // The public read: the controller's status rail as a typed Source<str>
+  // (the playground's watch rides it — no raw atom ids in biz code).
+  pub fn status_source(self) -> Source<str> {
+    return Source<str>.of(ctx_bridge(), va_status_atom(self.inner), false, STAMP_NUM_F64);
   }
   pub fn error(self) -> str {
     return va_error(self.inner);
@@ -327,23 +348,48 @@ entry fn __tur_cb_str2(cb: opaque, a: f64, b: f64) -> str {
 }
 
 // ---- reactive helpers (the C8 substrate's authored face) ------------------
+//
+// TODO(phase5): the RAW-spelling reactive surface — the boot-corpus test
+// snippets still probe these rail shapes (`rs_derive(fmt, dep)` over a raw
+// atom dep, the click-shaped watch callback). The underlying rows died
+// with the phase-4 re-railing; these spell the SAME shapes through the
+// surviving rails (the boxed derive lane + `rs_watch_mut`), so the tests
+// keep probing the rail they intend to probe until the context-crossing
+// contract migrates them.
 
-// Mint a derived atom: `rs_derive(fmt, dep)` — `fmt` is a fn value
-// (`fn(v: f64) -> str`) invoked through the guarded face on every
-// materialization. (The row underneath is `rs_derive_cb` — the box rail.)
+// `rs_derive(fmt, dep)` — the str-format rail over a raw f64 dep atom:
+// the boxed derive lane runs the fmt fn with the dep's fresh value on
+// every materialization (the tracked read records the dependency).
 pub fn rs_derive(fmt: fn(f64) -> str, dep: u64) -> u64 {
-  return rs_derive_cb(opaque(fmt), dep);
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    let dep_r: Readable<f64> = Source<f64>.of(ctx_bridge(), dep, false, STAMP_NUM_F64);
+    return opaque(fmt(ctx.get(dep_r)));
+  };
+  return derive_seal(opaque(wrap), TAG_BOX);
 }
 
 // The two-dep twin: `fn(a: f64, b: f64) -> str`.
 pub fn rs_derive2(fmt: fn(f64, f64) -> str, da: u64, db: u64) -> u64 {
-  return rs_derive2_cb(opaque(fmt), da, db);
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    let da_r: Readable<f64> = Source<f64>.of(ctx_bridge(), da, false, STAMP_NUM_F64);
+    let db_r: Readable<f64> = Source<f64>.of(ctx_bridge(), db, false, STAMP_NUM_F64);
+    return opaque(fmt(ctx.get(da_r), ctx.get(db_r)));
+  };
+  return derive_seal(opaque(wrap), TAG_BOX);
 }
 
-// Watch an atom: every change queues an intent into `cb` (a fn value with
-// the click shape); `report` crosses as the callback's first argument.
+// `rs_watch(atom, cb, report)` — the click-shaped watch surface: the
+// callback crosses as the `(report, watched, seq)` fn the intent drain
+// used to fire; the delivery rides the nil-payload mutation lane now,
+// with the sealed fn invoked through its fresh ctx. (The wrapper seals
+// the fn through `mutate_seal` DIRECTLY — a kit-side `mutate(...)`
+// instantiation perturbs the app unit's mutation dispatch.)
 pub fn rs_watch(atom: u64, cb: fn(u64, u64, f64), report: u64) -> opaque {
-  return rs_watch_cb(atom, opaque(cb), report);
+  let fire = fn (_ctx: MutationCtx, _e: nil) -> nil {
+    cb(report, atom, 1.0);
+  };
+  let sealed = mutate_seal(opaque(fire), SEAL_NIL);
+  return rs_watch_mut(atom, sealed);
 }
 
 // ---- the mutation rail (M1 + the generic unification): source / derive /
@@ -428,23 +474,24 @@ interface Mutation<A> {
   fn invoke(self, h: opaque, a: A) -> nil;
 }
 
-// The ONE generic source class: `h` is the store-bridge marker the rows
-// route through; `atom` the raw id; `derived` selects the bind row for
-// the reactive props (a derived atom's channel resolves through the
-// derive rail); `stamp` the number lane's width (the boxed rail's one
-// KV collapse — see `source<T>`). `source<T>` mints writable,
-// `derive<T>` derived — ONE class, both mints share it. The reads and
-// writes ride the boxed rows; `unopaque<T>` recovers the typed value.
+// The ONE writable handle class: `h` is the store-bridge marker the rows
+// route through; `atom` the raw id; `stamp` the number lane's width (the
+// boxed rail's one KV collapse — see `source<T>`). `source<T>` mints it;
+// DERIVED atoms are a separate class (`Derived<T>` below — the write face
+// cannot even spell a derived target, and `Source` sheds the old
+// `derived: bool` flag).
 pub class Source<T> {
   h: opaque;
   atom: u64;
-  derived: bool;
   stamp: u64;
 }
 
 impl<T> Source<T> {
-  [constructor] pub fn of(h: opaque, atom: u64, derived: bool, stamp: u64) -> Self {
-    return Self { h: h, atom: atom, derived: derived, stamp: stamp };
+  [constructor] pub fn of(h: opaque, atom: u64, _derived: bool, stamp: u64) -> Self {
+    // TODO(phase5): the 4-arg crossing (the boot tests still spell the
+    // legacy `derived` flag position); the flag is GONE — `derive<T>`
+    // mints `Derived<T>` — and the param is accepted and ignored.
+    return Self { h: h, atom: atom, stamp: stamp };
   }
   pub fn get(self) -> T {
     return unopaque<T>(ctx_get_box(self.h, self.atom, self.stamp));
@@ -456,7 +503,33 @@ impl<T> Source<T> {
     return self.atom;
   }
   pub fn is_derived(self) -> bool {
-    return self.derived;
+    return false;
+  }
+}
+
+// The computed handle: `derive<T>` mints it; the value MATERIALIZES
+// during flush (the ctx is the only sanctioned reader — there is no
+// current store getter, and a free-floating read outside a ctx face is
+// undefined for a derived). NOT `Writable` — `ctx.set` cannot compile
+// against it.
+pub class Derived<T> {
+  h: opaque;
+  atom: u64;
+  stamp: u64;
+}
+
+impl<T> Derived<T> {
+  [constructor] pub fn of(h: opaque, atom: u64, stamp: u64) -> Self {
+    return Self { h: h, atom: atom, stamp: stamp };
+  }
+  pub fn get(self) -> T {
+    return unopaque<T>(ctx_get_box(self.h, self.atom, self.stamp));
+  }
+  pub fn atom_id(self) -> u64 {
+    return self.atom;
+  }
+  pub fn is_derived(self) -> bool {
+    return true;
   }
 }
 
@@ -482,7 +555,7 @@ impl<T> StaticValue<T> {
   }
 }
 
-pub fn sv<T>(v: T) -> StaticValue<T> {
+pub fn sv<T>(v: T) -> Readable<T> {
   return StaticValue<T>.of(v);
 }
 
@@ -526,6 +599,9 @@ pub class MutationCtx {
 }
 
 impl MutationCtx {
+  // TODO(phase5): the host-seam law — `over` is the dispatch entries'
+  // mint (ctxs originate only from the rails) and goes kit-private when
+  // the boot-corpus snippets stop spelling it.
   [constructor] pub fn over(h: opaque) -> Self {
     return Self { h: h };
   }
@@ -586,6 +662,14 @@ impl TaskCtx {
 // `Writable<T>` both (the iface objects track no concrete origin, so the
 // write face must flow unboxed); `let r: Readable<T> = source<T>(..)`
 // coerces at the annotation as usual.
+//
+// The store-bridge accessor (the probe/entry seam): the corpus probe
+// entries and boot journeys the ctx rails don't carry rebuild handles
+// over the instance bridge. TODO(phase5): the context-crossing entry
+// contract (the opaque `AppContext`) retires the raw-atom probes.
+pub fn bridge() -> opaque {
+  return ctx_bridge();
+}
 pub fn source<T>(v: T) -> Source<T> {
   let b = opaque(v);
   let atom = rs_source_box(b);
@@ -596,12 +680,46 @@ pub fn source<T>(v: T) -> Source<T> {
 // Mint a derived atom whose fn reads through the ctx — dependencies
 // auto-track (boa's `derive<T>((ctx) => ctx.get(x$))`). The fixed-type
 // wrapper calls the user fn and returns the result boxed; the drain's
-// BOX lane recovers kind + value through the kit's probe entries.
-pub fn derive<T>(f: fn(DeriveCtx) -> T) -> Source<T> {
+// BOX lane recovers kind + value through the kit's probe entries. The
+// ONE derive minter: any arity of deps through `ctx.get`, one spelling.
+// (The mint answers the INTERFACE — the `mutate<A>` shape: the fill
+// demand rides the kit's own return coercion, and the binding sites
+// spell `Readable<T>` on both sides.)
+pub fn derive<T>(f: fn(DeriveCtx) -> T) -> Readable<T> {
   let wrap = fn (ctx: DeriveCtx) -> opaque {
     return opaque(f(ctx));
   };
-  return Source<T>.of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), true, STAMP_NUM_F64);
+  return Derived<T>.of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), STAMP_NUM_F64);
+}
+
+// The watch rail — BOA's model: the cb is a nil-payload MUTATION (the
+// ctx is the delivery vehicle); no event shape, no atom ids, no report
+// slot — nothing of the intent lane leaks into the callback. Semantics:
+// change-only (start never fires), at most once per frame (epoch
+// coalescing), invalidation-based delivery, and the LOOP RULE is
+// engine-enforced (a cb writing its watched atom traps "watch loop
+// detected" at the offending set). `Watch` is a lifecycle object —
+// `.start()` / `.stop()` scope it; drop or stop it with its owner.
+pub class Watch {
+  h: opaque;
+}
+
+impl Watch {
+  [constructor] pub(mod) fn of(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn start(self) {
+    rs_watch_start(self.h);
+  }
+  pub fn stop(self) {
+    rs_watch_stop(self.h);
+  }
+}
+
+pub fn watch<T>(atom: Readable<T>, cb: Mutation<nil>) -> Watch {
+  // atom_id is pub(mod)-grade iface machinery — kit-internal, never a
+  // user spelling.
+  return Watch.of(rs_watch_mut(atom.atom_id(), cb.seal(SEAL_NIL)));
 }
 
 // Mint a mutation (`boa: mutate<A>((ctx, a) => ...)`): the engine
@@ -895,6 +1013,141 @@ entry fn __tur_cb_unbox_u64(b: opaque) -> u64 {
   return unopaque<u64>(b);
 }
 
+// ---- flags (the per-family enums + the row-code mappers) -------------------
+//
+// Name-only enums — no explicit int values. The `code()` mappers' literals
+// are the SOLE carriers of the row contract (migrated verbatim from the
+// `builtin_plugins/*/rut_rows.rs` consts / `FromPrimitive` orders); the
+// exhaustive `when` IS the pin — a new member without its code arm is a
+// compile error, never a silent 0. Overloaded `code` names are fine
+// (distinct param types, not arities).
+
+pub enum Align {
+  TopLeft, TopCenter, TopRight,
+  CenterLeft, Center, CenterRight,
+  BottomLeft, BottomCenter, BottomRight,
+}
+
+pub enum MainAlign { Start, Center, End, SpaceBetween, SpaceAround, SpaceEvenly }
+
+pub enum CrossAlign { Start, Center, End, Stretch }
+
+pub enum MainAxisSize { Max, Min }
+
+pub enum StackFit { Loose, Expand, Passthrough }
+
+pub enum Axis { Vertical, Horizontal }
+
+pub enum BoxFit { Fill, Contain, Cover, FitWidth, FitHeight, None }
+
+pub enum BorderPosition { Inside, Center, Outside }
+
+pub enum Clip { None, HardEdge, AntiAlias, AntiAliasWithSaveLayer }
+
+pub enum HitTestBehavior { Opaque, Translucent }
+
+pub enum SpanFlags { None, Italic, Underline }
+
+pub enum Cursor {
+  Auto, Default, None, ContextMenu, Help, Pointer, Progress, Wait, Cell,
+  Crosshair, Text, VerticalText, Alias, Copy, Move, NoDrop, NotAllowed,
+  Grab, Grabbing, EResize, NResize, NeResize, NwResize, SResize, SeResize,
+  SwResize, WResize, EwResize, NsResize, NeswResize, NwseResize, ColResize,
+  RowResize, AllScroll, ZoomIn, ZoomOut,
+}
+
+// THE row contract — the only place the numbers live. One mapper per
+// family (the compiler has no overloads — the names carry the family).
+fn align_code(a: Align) -> u64 {
+  return when (a) {
+    Align.TopLeft -> 0,     Align.TopCenter -> 1,    Align.TopRight -> 2,
+    Align.CenterLeft -> 3,  Align.Center -> 4,       Align.CenterRight -> 5,
+    Align.BottomLeft -> 6,  Align.BottomCenter -> 7, Align.BottomRight -> 8,
+  };
+}
+
+fn main_align_code(a: MainAlign) -> u64 {
+  return when (a) {
+    MainAlign.Start -> 0,        MainAlign.Center -> 1,
+    MainAlign.End -> 2,          MainAlign.SpaceBetween -> 3,
+    MainAlign.SpaceAround -> 4,  MainAlign.SpaceEvenly -> 5,
+  };
+}
+
+fn cross_align_code(a: CrossAlign) -> u64 {
+  return when (a) {
+    CrossAlign.Start -> 0, CrossAlign.Center -> 1,
+    CrossAlign.End -> 2,   CrossAlign.Stretch -> 3,
+  };
+}
+
+fn main_size_code(a: MainAxisSize) -> u64 {
+  return when (a) {
+    MainAxisSize.Max -> 0, MainAxisSize.Min -> 1,
+  };
+}
+
+fn stack_fit_code(a: StackFit) -> u64 {
+  return when (a) {
+    StackFit.Loose -> 0, StackFit.Expand -> 1, StackFit.Passthrough -> 2,
+  };
+}
+
+fn axis_code(a: Axis) -> u64 {
+  return when (a) {
+    Axis.Vertical -> 0, Axis.Horizontal -> 1,
+  };
+}
+
+fn box_fit_code(a: BoxFit) -> u64 {
+  return when (a) {
+    BoxFit.Fill -> 0, BoxFit.Contain -> 1, BoxFit.Cover -> 2,
+    BoxFit.FitWidth -> 3, BoxFit.FitHeight -> 4, BoxFit.None -> 5,
+  };
+}
+
+fn border_pos_code(a: BorderPosition) -> u64 {
+  return when (a) {
+    BorderPosition.Inside -> 0, BorderPosition.Center -> 1, BorderPosition.Outside -> 2,
+  };
+}
+
+fn clip_code(a: Clip) -> u64 {
+  return when (a) {
+    Clip.None -> 0, Clip.HardEdge -> 1, Clip.AntiAlias -> 2,
+    Clip.AntiAliasWithSaveLayer -> 3,
+  };
+}
+
+fn hit_test_code(a: HitTestBehavior) -> u64 {
+  return when (a) {
+    HitTestBehavior.Opaque -> 0, HitTestBehavior.Translucent -> 1,
+  };
+}
+
+fn span_flags_code(a: SpanFlags) -> u64 {
+  return when (a) {
+    SpanFlags.None -> 0, SpanFlags.Italic -> 1, SpanFlags.Underline -> 2,
+  };
+}
+
+fn cursor_code(a: Cursor) -> u64 {
+  return when (a) {
+    Cursor.Auto -> 0, Cursor.Default -> 1, Cursor.None -> 2,
+    Cursor.ContextMenu -> 3, Cursor.Help -> 4, Cursor.Pointer -> 5,
+    Cursor.Progress -> 6, Cursor.Wait -> 7, Cursor.Cell -> 8,
+    Cursor.Crosshair -> 9, Cursor.Text -> 10, Cursor.VerticalText -> 11,
+    Cursor.Alias -> 12, Cursor.Copy -> 13, Cursor.Move -> 14,
+    Cursor.NoDrop -> 15, Cursor.NotAllowed -> 16, Cursor.Grab -> 17,
+    Cursor.Grabbing -> 18, Cursor.EResize -> 19, Cursor.NResize -> 20,
+    Cursor.NeResize -> 21, Cursor.NwResize -> 22, Cursor.SResize -> 23,
+    Cursor.SeResize -> 24, Cursor.SwResize -> 25, Cursor.WResize -> 26,
+    Cursor.EwResize -> 27, Cursor.NsResize -> 28, Cursor.NeswResize -> 29,
+    Cursor.NwseResize -> 30, Cursor.ColResize -> 31, Cursor.RowResize -> 32,
+    Cursor.AllScroll -> 33, Cursor.ZoomIn -> 34, Cursor.ZoomOut -> 35,
+  };
+}
+
 // ---- flex (Column / Row) ------------------------------------------------
 
 class Column {
@@ -905,16 +1158,20 @@ impl Column {
   [constructor] pub fn builder() -> Self {
     return Self { spec: flex_column() };
   }
-  pub fn main_alignment(mut self, v: u64) -> Self {
-    flex_main_align(self.spec, v);
+  // The unified flag prop: the kind rides the VALUE — the enum lane is
+  // the typed spelling, the raw u64 lane is the phase-5 migrant (the
+  // test snippets' consts); a wrong-family value traps at the unbox,
+  // never a silent 0.
+  pub fn main_alignment(mut self, v: MainAlign) -> Self {
+    flex_main_align(self.spec, main_align_code(v));
     return self;
   }
-  pub fn cross_alignment(mut self, v: u64) -> Self {
-    flex_cross_align(self.spec, v);
+  pub fn cross_alignment(mut self, v: CrossAlign) -> Self {
+    flex_cross_align(self.spec, cross_align_code(v));
     return self;
   }
-  pub fn main_axis_size(mut self, v: u64) -> Self {
-    flex_main_size(self.spec, v);
+  pub fn main_axis_size(mut self, v: MainAxisSize) -> Self {
+    flex_main_size(self.spec, main_size_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -944,16 +1201,16 @@ impl Row {
   [constructor] pub fn builder() -> Self {
     return Self { spec: flex_row() };
   }
-  pub fn main_alignment(mut self, v: u64) -> Self {
-    flex_main_align(self.spec, v);
+  pub fn main_alignment(mut self, v: MainAlign) -> Self {
+    flex_main_align(self.spec, main_align_code(v));
     return self;
   }
-  pub fn cross_alignment(mut self, v: u64) -> Self {
-    flex_cross_align(self.spec, v);
+  pub fn cross_alignment(mut self, v: CrossAlign) -> Self {
+    flex_cross_align(self.spec, cross_align_code(v));
     return self;
   }
-  pub fn main_axis_size(mut self, v: u64) -> Self {
-    flex_main_size(self.spec, v);
+  pub fn main_axis_size(mut self, v: MainAxisSize) -> Self {
+    flex_main_size(self.spec, main_size_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1013,7 +1270,7 @@ class Flexible {
 impl Flexible {
   [constructor] pub fn builder() -> Self {
     let s = flexi_new();
-    flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot
+    flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot // the child shrink-wraps below its slot
     return Self { spec: s };
   }
   pub fn flex(mut self, v: f64) -> Self {
@@ -1047,12 +1304,12 @@ impl Stack {
   [constructor] pub fn builder() -> Self {
     return Self { spec: stack_new() };
   }
-  pub fn alignment(mut self, v: u64) -> Self {
-    stack_align(self.spec, v);
+  pub fn alignment(mut self, v: Align) -> Self {
+    stack_align(self.spec, align_code(v));
     return self;
   }
-  pub fn fit(mut self, v: u64) -> Self {
-    stack_fit(self.spec, v);
+  pub fn fit(mut self, v: StackFit) -> Self {
+    stack_fit(self.spec, stack_fit_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1136,20 +1393,20 @@ impl Container {
   [constructor] pub fn builder() -> Self {
     return Self { spec: box_new() };
   }
-  pub fn width(mut self, v: f64) -> Self {
-    box_width(self.spec, v);
-    return self;
-  }
-  pub fn height(mut self, v: f64) -> Self {
-    box_height(self.spec, v);
-    return self;
-  }
   pub fn width_height(mut self, w: f64, h: f64) -> Self {
     box_size(self.spec, w, h);
     return self;
   }
   pub fn padding(mut self, v: f64) -> Self {
     box_padding(self.spec, v);
+    return self;
+  }
+  pub fn width(mut self, v: f64) -> Self {
+    box_width(self.spec, v);
+    return self;
+  }
+  pub fn height(mut self, v: f64) -> Self {
+    box_height(self.spec, v);
     return self;
   }
   pub fn color(mut self, packed: u64) -> Self {
@@ -1174,8 +1431,8 @@ impl Container {
     box_radius_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn border(mut self, packed: u64, width: f64, position: u64) -> Self {
-    box_border(self.spec, packed, width, position);
+  pub fn border(mut self, packed: u64, width: f64, position: BorderPosition) -> Self {
+    box_border(self.spec, packed, width, border_pos_code(position));
     return self;
   }
   pub fn radius(mut self, r: f64) -> Self {
@@ -1201,12 +1458,12 @@ impl Container {
     box_shadow_dy_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn alignment(mut self, v: u64) -> Self {
-    box_align(self.spec, v);
+  pub fn alignment(mut self, v: Align) -> Self {
+    box_align(self.spec, align_code(v));
     return self;
   }
-  pub fn clip(mut self, v: u64) -> Self {
-    box_clip(self.spec, v);
+  pub fn clip(mut self, v: Clip) -> Self {
+    box_clip(self.spec, clip_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1327,8 +1584,8 @@ impl Spans {
   [constructor] pub fn builder() -> Self {
     return Self { spec: spans_new() };
   }
-  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: u64) -> Self {
-    span_add(self.spec, text, size, packed, weight, flags);
+  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: SpanFlags) -> Self {
+    span_add(self.spec, text, size, packed, weight, span_flags_code(flags));
     return self;
   }
 }
@@ -1355,8 +1612,27 @@ impl Input {
     input_size(self.spec, w, h);
     return self;
   }
+  pub fn obscure(mut self, v: bool) -> Self {
+    input_obscure(self.spec, v);
+    return self;
+  }
+  // The reactive reveal toggle: masking rides a live bool (the bound
+  // props take the handle).
+  pub fn obscure_bound(mut self, r: Readable<bool>) -> Self {
+    input_obscure_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn obscure_char(mut self, v: str) -> Self {
+    input_obscure_char(self.spec, v);
+    return self;
+  }
   pub fn placeholder(mut self, v: str) -> Self {
     input_placeholder(self.spec, v);
+    return self;
+  }
+  // The reactive placeholder: the hint rides a live str.
+  pub fn placeholder_bound(mut self, r: Readable<str>) -> Self {
+    input_placeholder_bound(self.spec, r.atom_id());
     return self;
   }
   pub fn color(mut self, packed: u64) -> Self {
@@ -1373,25 +1649,6 @@ impl Input {
   }
   pub fn font_size(mut self, v: f64) -> Self {
     input_font_size(self.spec, v);
-    return self;
-  }
-  pub fn obscure(mut self, v: bool) -> Self {
-    input_obscure(self.spec, v);
-    return self;
-  }
-  // The reactive reveal toggle: masking rides a live bool (the bound
-  // props take the handle).
-  pub fn obscure_bound(mut self, r: Readable<bool>) -> Self {
-    input_obscure_bound(self.spec, r.atom_id());
-    return self;
-  }
-  pub fn obscure_char(mut self, v: str) -> Self {
-    input_obscure_char(self.spec, v);
-    return self;
-  }
-  // The reactive placeholder: the hint rides a live str.
-  pub fn placeholder_bound(mut self, r: Readable<str>) -> Self {
-    input_placeholder_bound(self.spec, r.atom_id());
     return self;
   }
   pub fn multiline(mut self, v: bool) -> Self {
@@ -1456,8 +1713,8 @@ impl PointerInteract {
     pi_on_context_menu(self.spec, m.seal(SEAL_PTR));
     return self;
   }
-  pub fn behavior(mut self, v: u64) -> Self {
-    pi_behavior(self.spec, v);
+  pub fn behavior(mut self, v: HitTestBehavior) -> Self {
+    pi_behavior(self.spec, hit_test_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1489,16 +1746,18 @@ impl MouseRegion {
     mr_on_exit(self.spec, m.seal(SEAL_EXIT));
     return self;
   }
-  pub fn cursor(mut self, v: u64) -> Self {
-    mr_cursor(self.spec, v);
+  pub fn cursor(mut self, v: Cursor) -> Self {
+    mr_cursor(self.spec, cursor_code(v));
     return self;
   }
+  // The reactive cursor: the name rides a live str (the reactive-cursor
+  // corpus case).
   pub fn cursor_bound(mut self, r: Readable<str>) -> Self {
     mr_cursor_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn behavior(mut self, v: u64) -> Self {
-    mr_behavior(self.spec, v);
+  pub fn behavior(mut self, v: HitTestBehavior) -> Self {
+    mr_behavior(self.spec, hit_test_code(v));
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
@@ -1549,8 +1808,8 @@ impl ScrollView {
   [constructor] pub fn builder() -> Self {
     return Self { spec: scroll_new() };
   }
-  pub fn axis(mut self, v: u64) -> Self {
-    scroll_axis(self.spec, v);
+  pub fn axis(mut self, v: Axis) -> Self {
+    scroll_axis(self.spec, axis_code(v));
     return self;
   }
   pub fn initial_offset(mut self, v: f64) -> Self {
@@ -1586,8 +1845,8 @@ impl LazyList {
     lazy_count(self.spec, r.atom_id());
     return self;
   }
-  pub fn axis(mut self, v: u64) -> Self {
-    lazy_axis(self.spec, v);
+  pub fn axis(mut self, v: Axis) -> Self {
+    lazy_axis(self.spec, axis_code(v));
     return self;
   }
   pub fn overscan(mut self, v: u64) -> Self {
@@ -1623,8 +1882,8 @@ impl LazyGrid {
     lazy_grid_count(self.spec, r.atom_id());
     return self;
   }
-  pub fn axis(mut self, v: u64) -> Self {
-    lazy_grid_axis(self.spec, v);
+  pub fn axis(mut self, v: Axis) -> Self {
+    lazy_grid_axis(self.spec, axis_code(v));
     return self;
   }
   pub fn overscan(mut self, v: u64) -> Self {
@@ -1911,8 +2170,8 @@ impl Image {
     img_height(self.spec, v);
     return self;
   }
-  pub fn fit(mut self, v: u64) -> Self {
-    img_fit(self.spec, v);
+  pub fn fit(mut self, v: BoxFit) -> Self {
+    img_fit(self.spec, box_fit_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -1988,8 +2247,8 @@ impl CompositedTarget {
   [constructor] pub fn builder() -> Self {
     return Self { spec: ct_target_new() };
   }
-  pub fn link(mut self, l: opaque) -> Self {
-    ct_target_link(self.spec, l);
+  pub fn link(mut self, l: LinkCtrl) -> Self {
+    ct_target_link(self.spec, l.inner);
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
@@ -2009,20 +2268,22 @@ impl CompositedFollower {
   [constructor] pub fn builder() -> Self {
     return Self { spec: ct_follower_new() };
   }
-  pub fn link(mut self, l: opaque) -> Self {
-    ct_follower_link(self.spec, l);
+  pub fn link(mut self, l: LinkCtrl) -> Self {
+    ct_follower_link(self.spec, l.inner);
     return self;
   }
-  pub fn target_anchor(mut self, v: u64) -> Self {
-    ct_follower_target_anchor(self.spec, v);
+  pub fn target_anchor(mut self, v: Align) -> Self {
+    ct_follower_target_anchor(self.spec, align_code(v));
     return self;
   }
+  // The reactive anchor (the composited-transform corpus's reactive
+  // anchor rail).
   pub fn target_anchor_bound(mut self, r: Readable<f64>) -> Self {
     ct_follower_target_anchor_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn follower_anchor(mut self, v: u64) -> Self {
-    ct_follower_follower_anchor(self.spec, v);
+  pub fn follower_anchor(mut self, v: Align) -> Self {
+    ct_follower_follower_anchor(self.spec, align_code(v));
     return self;
   }
   pub fn offset(mut self, x: f64, y: f64) -> Self {
@@ -2039,6 +2300,10 @@ impl CompositedFollower {
 }
 
 // ---- shared helpers ----------------------------------------------------------------
+
+// A LayerLink (the JS `createLayerLink` twin) — the composited
+// target/follower pair's shared handle. Mint with `layer_link()`.
+pub class LinkCtrl(opaque);
 
 // The structured-value data ops (the list/map builders the case code
 // folds into sources; the STATE writes go through the ctx, never these).
@@ -2067,10 +2332,9 @@ pub fn value_get(v: opaque, key: str) -> str {
   return rs_value_get(v, key);
 }
 
-// Mint a LayerLink (the JS `createLayerLink` twin) for the composited
-// target/follower pair.
-pub fn layer_link() -> opaque {
-  return ct_link_new();
+// Mint a LayerLink for the composited target/follower pair.
+pub fn layer_link() -> LinkCtrl {
+  return LinkCtrl(ct_link_new());
 }
 
 // Register an encoded image resource (PNG/JPEG) — the `createImageResource`
@@ -2082,6 +2346,27 @@ pub fn image_resource_bytes(bytes: bytes) -> u64 {
 // A synthetic solid RGBA image resource (fixture-friendly).
 pub fn image_resource_solid(w: u64, h: u64, packed: u64) -> u64 {
   return img_res_solid(w, h, packed);
+}
+
+// Rasterise an SVG string into an image resource (the todolist /
+// github-viewer icon rail).
+pub fn image_resource_svg(src: str) -> u64 {
+  return img_res_svg(src);
+}
+
+// str -> f64 parse (0 on failure) — the edit-field confirm path.
+pub fn str_parse_f64(s: str) -> f64 {
+  return str_parse_f64_raw(s);
+}
+
+// Trig helpers (f64 radians in/out) — the pure-math rows the orbit /
+// wave shapes feed a progress atom through.
+pub fn math_sin(x: f64) -> f64 {
+  return math_sin_raw(x);
+}
+
+pub fn math_cos(x: f64) -> f64 {
+  return math_cos_raw(x);
 }
 
 // Register a string-authored child module source with the virtual-app
@@ -2098,9 +2383,21 @@ pub fn virtual_app_source_handle(id: u64) -> VAppSource {
 }
 
 // Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
-// (`VirtualApp.bind(atom)` + `va_app_set` / `va_app_clear` swaps).
+// (`VirtualApp.bind(atom)` + `virtual_app_set` / `virtual_app_clear`
+// swaps).
 pub fn virtual_app_atom() -> u64 {
   return va_app_atom();
+}
+
+// Swap the reactive `app$` binding to a controller (the mounted
+// VirtualAppView rebinds in the same flush).
+pub fn virtual_app_set(atom: u64, ctrl: VAppCtrl) {
+  va_app_set(atom, ctrl.raw());
+}
+
+// Clear the reactive `app$` binding.
+pub fn virtual_app_clear(atom: u64) {
+  va_app_clear(atom);
 }
 
 // Mint a virtual-app controller from a registered source — the

@@ -1,7 +1,5 @@
 // column-main-end: two fixed-height children pinned to the main-axis end.
-use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_END };
-use tur_kit::{ Column, Container, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, MainAlign, mount };
 
 fn box_h(h: f64) -> View {
     let b = Container().width_height(0.0, h);
@@ -10,8 +8,8 @@ fn box_h(h: f64) -> View {
 
 entry fn start() {
     let col = Column()
-        .main_alignment(MAIN_ALIGN_END)
-        .cross_alignment(CROSS_ALIGN_START)
+        .main_alignment(MainAlign.End)
+        .cross_alignment(CrossAlign.Start)
         .child(box_h(50.0))
         .child(box_h(30.0));
     mount(col.build());

@@ -3,9 +3,7 @@
 // PointerInteract catches invisible hits; a translucent MouseRegion joins
 // the path without blocking. The beneath-target's down count renders into
 // the `beneath-downs` Text (the test parses it).
-use tur_host::{ ALIGN_TOP_LEFT, CURSOR_AUTO };
-use tur_kit::{ Container, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
-
+use tur_kit::{ Align, Container, Cursor, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
 
 entry fn start() -> u64 {
     let downs: Readable<str> = source<str>("0");
@@ -18,7 +16,7 @@ entry fn start() -> u64 {
         ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
     });
 
-    let mut stack = Stack().alignment(ALIGN_TOP_LEFT);
+    let mut stack = Stack().alignment(Align.TopLeft);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
     let target = Container()
@@ -36,7 +34,7 @@ entry fn start() -> u64 {
 
     // A translucent MouseRegion over the right half (x 200..400).
     let region_child = SizedBox(200.0, 600.0).child(Container().build()).query_key("region").build();
-    let region = MouseRegion().cursor(CURSOR_AUTO).behavior(1).child(region_child).build();
+    let region = MouseRegion().cursor(Cursor.Auto).behavior(HitTestBehavior.Translucent).child(region_child).build();
     stack.child(Positioned().left(200.0).width(200.0).height(600.0).child(region).build());
 
     mount(stack.build());

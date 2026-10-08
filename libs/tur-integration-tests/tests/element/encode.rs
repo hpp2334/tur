@@ -12,7 +12,6 @@ const ENCODE_RUT: &str = r#"
 use tur_host::{ ctx_bridge, decode_utf8, encode_utf8 };
 use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
-
 entry fn start() -> u64 {
     let label: Readable<str> = source<str>("");
 

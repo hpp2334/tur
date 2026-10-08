@@ -11,7 +11,6 @@ const RUNTIME: &str = r#"
 use tur_host::{ ctx_bridge };
 use tur_kit::{ Mutation, MutationCtx, Readable, Source, Switch, Text, mount, source };
 
-
 entry fn start() -> u64 {
     let key: Readable<str> = source<str>("a");
 

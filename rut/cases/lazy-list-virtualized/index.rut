@@ -6,9 +6,7 @@
 // The name/initials/hue are deterministic per index (the boa generator,
 // palette-string twin: module lets are literals-only in this build, so
 // the name lists and the avatar palette ride pipe-joined strings).
-use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, str_parse_f64 };
-use tur_kit::{ Column, Container, Expanded, LazyList, Row, SizedBox, Source, Text, mount, source };
-
+use tur_kit::{ Align, Column, Container, CrossAlign, Expanded, LazyList, MainAlign, MainAxisSize, Row, SizedBox, Source, Text, mount, source, str_parse_f64 };
 
 let ITEM_COUNT: f64 = 10000.0;
 let ITEM_HEIGHT: f64 = 56.0;
@@ -115,19 +113,19 @@ fn row(i: u64) -> View {
         .width_height(36.0, 36.0)
         .radius(999.0)
         .color(avatar_bg)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .child(Text().text(initials).font_size(13.0).color(WHITE).build())
         .build();
     let lines = Column()
-        .main_alignment(MAIN_ALIGN_CENTER)
-        .cross_alignment(CROSS_ALIGN_START)
-        .main_axis_size(MAIN_SIZE_MIN)
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Start)
+        .main_axis_size(MainAxisSize.Min)
         .child(Text().text(name).font_size(13.0).color(TEXT).build())
         .child(SizedBox(0.0, 2.0).build())
         .child(Text().text(sub).font_size(11.0).color(TEXT_MUTED).build())
         .build();
     let inner = Row()
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .cross_alignment(CrossAlign.Center)
         .child(avatar)
         .child(SizedBox(12.0, 0.0).build())
         .child(Expanded().flex(1.0).child(lines).build())

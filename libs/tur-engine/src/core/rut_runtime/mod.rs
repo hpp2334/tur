@@ -178,10 +178,6 @@ pub struct RutView(pub Rc<dyn View>);
 /// to structured atom values (lists / maps).
 pub struct RutValue(pub Value);
 
-/// A mutable f64 cell — the stateful-entry scratch crossing (the stash
-/// holds opaques only, so numbers cross in cells).
-pub struct RutCell(pub std::cell::Cell<f64>);
-
 /// The per-instance resource budget. Phase-1 defaults; tunable per embedder.
 pub fn default_limits() -> rut_vm::interp::Limits {
     rut_vm::interp::Limits {
@@ -236,11 +232,11 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
         // brush atoms (nonzero packed color sets, 0 clears)
         row("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
-        // C8 — derived atoms + watch (the guarded flush-time VM call;
-        // the format/watch callbacks arrive as kit-sealed fn boxes)
-        row("rs_derive_cb", vec![TY_OPAQUE, TY_U64], TY_U64),
-        row("rs_derive2_cb", vec![TY_OPAQUE, TY_U64, TY_U64], TY_U64),
-        row("rs_watch_cb", vec![TY_U64, TY_OPAQUE, TY_U64], TY_OPAQUE),
+        // C8 — the watch rail (the guarded flush-time delivery; the
+        // callback is the kit-sealed `Mutation<nil>` composition atom).
+        // The str-typed derive rows are gone — the kit's `derive<T>`
+        // mints through `derive_seal`'s boxed lane.
+        row("rs_watch_mut", vec![TY_U64, TY_U64], TY_OPAQUE),
         row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
         row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
         // the boxed rail — the GENERIC source lane: an erased rut value
@@ -277,13 +273,17 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         // and async frames as f64 — the opaque stash cannot hold numbers)
         row("stf_put", vec![TY_U64, TY_F64], TY_NIL),
         row("stf_take", vec![TY_U64], TY_F64),
-        row("mem_new", vec![TY_F64], TY_OPAQUE),
-        row("mem_get", vec![TY_OPAQUE], TY_F64),
-        row("mem_set", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("str_parse_f64", vec![TY_STR], TY_F64),
         // pure math (f64 radians in/out) — the orbit / wave case shapes
         row("math_sin", vec![TY_F64], TY_F64),
         row("math_cos", vec![TY_F64], TY_F64),
+        // The kit wrappers' twin spellings (the `mount_raw` pattern): the
+        // kit defines its own `math_sin` / `math_cos` / `str_parse_f64`
+        // (the authored surface's names), which shadow the row names —
+        // the wrapper bodies reach the rows through these aliases.
+        row("str_parse_f64_raw", vec![TY_STR], TY_F64),
+        row("math_sin_raw", vec![TY_F64], TY_F64),
+        row("math_cos_raw", vec![TY_F64], TY_F64),
     ];
     // C6 — async capabilities (clipboard + bytes helpers; the async rows
     // ride the driver's five-row family expansion).
@@ -574,16 +574,6 @@ fn install_tur_pkg(
     // The opaque stash holds OPQUES only, so stateful entries keep their
     // scratch numbers in f64 cells (`mem_*`) — minted at start, stashed,
     // read/written in the intent entries.
-    rut_vm::pkg_fn!(pkg, "mem_new", (f64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, v: f64| {
-        Ok(Opaque::alloc(vm, RutCell(std::cell::Cell::new(v)))?.handle().clone())
-    });
-    rut_vm::pkg_fn!(pkg, "mem_get", (Opaque<RutCell>,) -> f64, |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>| {
-        c.with(|c| c.0.get())
-    });
-    rut_vm::pkg_fn!(pkg, "mem_set", (Opaque<RutCell>, f64) -> (), |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutCell>, v: f64| {
-        c.with_mut(_vm, |_vm, c: &mut RutCell| c.0.set(v))?;
-        Ok(())
-    });
     // str -> f64 parse (0 on failure) — the edit-field confirm path.
     rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
         Ok(s.trim().parse::<f64>().unwrap_or(0.0))
@@ -595,6 +585,16 @@ fn install_tur_pkg(
         Ok(x.sin())
     });
     rut_vm::pkg_fn!(pkg, "math_cos", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+        Ok(x.cos())
+    });
+    // The kit wrappers' twin spellings — SAME bodies (see the decl note).
+    rut_vm::pkg_fn!(pkg, "str_parse_f64_raw", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
+        Ok(s.trim().parse::<f64>().unwrap_or(0.0))
+    });
+    rut_vm::pkg_fn!(pkg, "math_sin_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+        Ok(x.sin())
+    });
+    rut_vm::pkg_fn!(pkg, "math_cos_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
         Ok(x.cos())
     });
 
@@ -725,11 +725,11 @@ impl Intent {
 /// `tur_kit` prelude owns these shapes; other kits declare their own.
 /// (The M2 sweep retired the legacy pointer/key shapes — the gesture,
 /// input, focus, mouse-region and lifecycle pads store sealed mutations
-/// now; the click shape survives for `rs_watch` deliveries and the
-/// lifecycle `before_destroy` fn rail.)
+/// now. The watch rail re-railed onto `rs_watch_mut` + the MNIL lane, so
+/// the lifecycle `before_destroy` fn rail is the click shape's LAST user.)
 pub mod cb_entries {
-    /// The `(cb, a, b, n)` click shape - watch deliveries +
-    /// `before_destroy`.
+    /// The `(cb, a, b, n)` click shape - `before_destroy` (its last user
+    /// since the watch rail moved to `rs_watch_mut` + `__tur_cb_mnil`).
     pub const CLICK: &str = "__tur_cb_click";
     /// The `(cb) -> view` zero-arg branch-builder shape (Condition
     /// then/else + Switch cases — invoked at activation).

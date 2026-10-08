@@ -1,8 +1,6 @@
 // flex-todolist-sidebar: the todolist two-pane shell — a 200px tab
 // sidebar beside a padded content column.
-use tur_host::{ CROSS_ALIGN_CENTER, MAIN_ALIGN_SPACE_BETWEEN };
-use tur_kit::{ Column, Container, Row, Text, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, MainAlign, Row, Text, mount };
 
 entry fn start() {
     let mut row = Row();
@@ -19,11 +17,11 @@ entry fn start() {
     // Content: heading + list shell.
     let mut content = Container().padding(16.0);
     let mut col = Column()
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .cross_alignment(CrossAlign.Center)
         .child(Text().text("Todo List").font_size(24.0).build())
         .child(box_h(16.0));
     let list = Column()
-        .child(Row().main_alignment(MAIN_ALIGN_SPACE_BETWEEN).child(Text().text("Buy milk").build()).build());
+        .child(Row().main_alignment(MainAlign.SpaceBetween).child(Text().text("Buy milk").build()).build());
     col.child(list.build());
     content.child(col.build());
     row.child(content.build());

@@ -3,17 +3,15 @@
 // mutations (opaques are just values — no stash); per-tile event
 // transcripts render into `tile-events-0` / `tile-events-1` (each tile's
 // mutation captures its own transcript source).
-use tur_host::{ ALIGN_TOP_LEFT };
-use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
+use tur_kit::{ Align, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
-
 
 entry fn start() -> u64 {
     // The shared lift controller — captured by both tiles' mutations.
     let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
 
     let mut stack = Stack()
-        .alignment(ALIGN_TOP_LEFT)
+        .alignment(Align.TopLeft)
         .child(SizedBox(300.0, 200.0).child(Container().build()).build());
 
     // Tile 0 at (10, 10); tile 1 at (150, 100).

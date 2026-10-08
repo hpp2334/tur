@@ -2,9 +2,8 @@
 // layout — flipping the atom re-resolves the cursor on hover. The
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the guarded ctx row.
-use tur_host::{ ctx_bridge, ctx_set_str };
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
-
+use tur_host::{ ctx_set_str };
+use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, bridge, mount, mutate, source };
 
 entry fn start() -> u64 {
     let cursor: Readable<str> = source<str>("pointer");
@@ -15,7 +14,7 @@ entry fn start() -> u64 {
     });
     let mut col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(HitTestBehavior.Opaque).child(b.build()).build());
     let ct = Text().text_bound(cursor).query_key("cursor-atom");
     col.child(ct.build());
     mount(col.build());
@@ -27,7 +26,7 @@ entry fn set_cursor(cursor: u64, code: f64) {
     // position of the cursor it wants). The entry rail crosses the raw
     // cursor-atom id; the guarded ctx write row sets the source.
     let name = cursor_name(code as u64);
-    ctx_set_str(ctx_bridge(), cursor, name);
+    ctx_set_str(bridge(), cursor, name);
 }
 
 // The standard CSS keyword for a cursor code (the el_mouse_region_bound

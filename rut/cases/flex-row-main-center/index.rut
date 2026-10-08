@@ -1,7 +1,5 @@
 // flex-row-main-center: two fixed-width children centered on the main axis.
-use tur_host::{ CROSS_ALIGN_START, MAIN_ALIGN_CENTER };
-use tur_kit::{ Container, Row, mount };
-
+use tur_kit::{ Container, CrossAlign, MainAlign, Row, mount };
 
 fn box_wh(w: f64, h: f64) -> View {
     let b = Container().width_height(w, h);
@@ -10,8 +8,8 @@ fn box_wh(w: f64, h: f64) -> View {
 
 entry fn start() {
     let row = Row()
-        .main_alignment(MAIN_ALIGN_CENTER)
-        .cross_alignment(CROSS_ALIGN_START)
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Start)
         .child(box_wh(50.0, 0.0))
         .child(box_wh(30.0, 0.0));
     mount(row.build());

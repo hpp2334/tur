@@ -1,19 +1,17 @@
 // composited-transform-follower-anchor: explicit follower anchor — the
 // follower's BOTTOM_RIGHT lands on the target's top-left (the anchor
 // math the subsystem solves).
-use tur_host::{ ALIGN_BOTTOM_RIGHT, ALIGN_TOP_RIGHT, ct_link_new };
-use tur_kit::{ CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack, mount };
-
+use tur_kit::{ Align, CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack, layer_link, mount };
 
 entry fn start() {
-    let link = ct_link_new();
+    let link = layer_link();
     let mut stack = Stack()
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();
     stack.child(Positioned().left(100.0).top(80.0).child(target).build());
     let red = Container().width_height(60.0, 40.0).color(0x2563EBFFu64).color(0xFF0000FFu64);
-    let follower = CompositedFollower().link(link).target_anchor(ALIGN_BOTTOM_RIGHT).follower_anchor(ALIGN_TOP_RIGHT).child(red.build()).build();
+    let follower = CompositedFollower().link(link).target_anchor(Align.BottomRight).follower_anchor(Align.TopRight).child(red.build()).build();
     stack.child(follower);
     mount(stack.build());
 }

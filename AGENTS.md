@@ -286,13 +286,22 @@ Android build + device debugging live in the **`android-dev` skill** at
   callback). Async journeys ride `spawn(work(TaskCtx.mint(), handles…))`
   — the handles bind at the launch site, the ctx is task-scoped; the
   stash rails (`st_*` / `stf_*` / `peek`) never appear in case code.
-  Reactive bindings are methods, not variants: `Text().text_bound(atom)` /
-  `Text().text("literal")`, `Container().color_bound(atom)`,
-  `Expanded().flex_bound(atom)`. Flags stay u64 consts on the `tur_host` pkg,
-  imported from `tur_host` alongside `mount` (`ALIGN_*` / `CLIP_*` / `BORDER_*` /
-  `CROSS_ALIGN_*` / `MAIN_ALIGN_*` / `MAIN_SIZE_*` / `FIT_*`); the kit
-  documents the full const inventory in its header. The kit hides row churn
-  from call sites; the rows are the boundary.
+  Reactive bindings are methods, not variants: the literal keeps the base
+  prop (`Text().text("hi")`, `Container().color(0x…u64)`), the reactive
+  lane is the `*_bound` method over `Readable<T>` (`Text().text_bound(r)`,
+  `Container().color_bound(r)`, `Expanded().flex_bound(r)`). The
+  unified one-name-over-`Readable<T>` law (base prop takes the handle,
+  `sv`/sugar for literals, the `*_bound` twins gone) is blocked on
+  param-type overloads — rut at this pin rejects duplicate fn/method
+  names outright; it lands with the compiler feature. Flags are per-family
+  NAME-ONLY enums on the kit (`Align`, `MainAlign`, `CrossAlign`,
+  `MainAxisSize`, `StackFit`, `Axis`, `BoxFit`, `BorderPosition`, `Clip`,
+  `HitTestBehavior`, `SpanFlags`, `Cursor`): kit methods take the enum and
+  unwrap once at the row (`flex_main_align(self.spec, code(v))`) — the
+  mappers are the sole carriers of the row codes. The `tur_host` u64
+  consts (`ALIGN_*` / `CLIP_*` / …) stay pushed for the phase-5 test
+  migration. The kit hides row churn from call sites; the rows are the
+  boundary.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`

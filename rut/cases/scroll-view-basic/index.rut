@@ -1,15 +1,13 @@
 // scroll-view-basic: a vertical scroll viewport around a 3x200 column.
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, ScrollView, mount };
-
+use tur_kit::{ Axis, Column, Container, CrossAlign, ScrollView, mount };
 
 entry fn start() {
     let content = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(box_h(200.0))
         .child(box_h(200.0))
         .child(box_h(200.0));
-    let sv = ScrollView().axis(AXIS_VERTICAL).child(content.build()).query_key("scroll-view").build();
+    let sv = ScrollView().axis(Axis.Vertical).child(content.build()).query_key("scroll-view").build();
     mount(sv);
 }
 

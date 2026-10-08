@@ -2,9 +2,7 @@
 // the outer, the translucent inner lets both fire. The result labels are
 // derived readables over the two counter pairs; every tap is a mutation
 // capturing its counter (no ids, no stash).
-use tur_host::{ CROSS_ALIGN_START, MAIN_SIZE_MIN };
-use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mount, mutate, source };
-
+use tur_kit::{ Column, Container, CrossAlign, DeriveCtx, MainAxisSize, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
     let outer_o: Readable<f64> = source<f64>(0.0);
@@ -32,7 +30,7 @@ entry fn start() -> u64 {
         ctx.set<f64>(inner_t, ctx.get<f64>(inner_t) + 1.0);
     });
 
-    let mut col = Column().cross_alignment(CROSS_ALIGN_START).main_axis_size(MAIN_SIZE_MIN);
+    let mut col = Column().cross_alignment(CrossAlign.Start).main_axis_size(MainAxisSize.Min);
 
     // Opaque pair: the inner (opaque) absorbs the click.
     let mut outer_box = Container().width_height(80.0, 40.0).query_key("outer-opaque");
@@ -46,7 +44,7 @@ entry fn start() -> u64 {
     let mut outer_t_box = Container().width_height(80.0, 40.0).query_key("outer-translucent");
     let mut t_row = Row();
     let inner_t_box = Container().width_height(60.0, 30.0).query_key("inner-translucent");
-    t_row.child(PointerInteract().on_click(b_inner_t).behavior(1).child(inner_t_box.build()).build());
+    t_row.child(PointerInteract().on_click(b_inner_t).behavior(HitTestBehavior.Translucent).child(inner_t_box.build()).build());
     outer_t_box.child(t_row.build());
     col.child(PointerInteract().on_click(b_outer_t).child(outer_t_box.build()).build());
 

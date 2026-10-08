@@ -1,12 +1,10 @@
 // image-basic: a synthetic 1x1-ish RGBA resource in a fixed-size Image.
-use tur_host::{ BOXFIT_FILL, img_res_solid };
-use tur_kit::{ Container, Image, mount };
-
+use tur_kit::{ BoxFit, Container, Image, image_resource_solid, mount };
 
 entry fn start() {
-    let res = img_res_solid(1, 1, 0xFF6366F1u64);
+    let res = image_resource_solid(1, 1, 0xFF6366F1u64);
     let mut outer = Container().width_height(200.0, 100.0);
-    let img = Image(res).width(200.0).height(100.0).fit(BOXFIT_FILL).build();
+    let img = Image(res).width(200.0).height(100.0).fit(BoxFit.Fill).build();
     outer.child(img);
     mount(outer.build());
 }

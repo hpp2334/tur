@@ -3,7 +3,6 @@
 // The four handlers are mutations over the shared hover source.
 use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
 
-
 entry fn start() -> u64 {
     let hover: Readable<str> = source<str>("");
     let b_a_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
@@ -21,10 +20,10 @@ entry fn start() -> u64 {
     let mut col = Column();
 
     let a = Container().width_height(100.0, 50.0).color(0xEF4444FFu64).query_key("a");
-    col.child(MouseRegion().on_enter(b_a_enter).on_exit(b_a_exit).cursor(0).behavior(0).child(a.build()).build());
+    col.child(MouseRegion().on_enter(b_a_enter).on_exit(b_a_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(a.build()).build());
 
     let b = Container().width_height(100.0, 50.0).color(0x3B82F6FF).query_key("b");
-    col.child(MouseRegion().on_enter(b_b_enter).on_exit(b_b_exit).cursor(0).behavior(0).child(b.build()).build());
+    col.child(MouseRegion().on_enter(b_b_enter).on_exit(b_b_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(b.build()).build());
 
     let t = Text().text_bound(hover).query_key("hover");
     col.child(t.build());

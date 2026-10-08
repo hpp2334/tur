@@ -17,9 +17,8 @@
 // brush source (the corpus's brush law — bound colors are sources the
 // mutations repaint).
 use futures::{ sleep };
-use tur_host::{ CROSS_ALIGN_STRETCH, CURSOR_POINTER, ctx_bridge, spawn, str_parse_f64 };
-use tur_kit::{ Column, Container, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, derive, list_new, mutate, source, value_item, value_len };
-
+use tur_host::{ spawn };
+use tur_kit::{ Column, Container, CrossAlign, Cursor, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, bridge, derive, list_new, mount, mutate, source, str_parse_f64, value_item, value_len };
 
 // The boa palette (dark slate table on the #0b1220 frame).
 let HDR_ON: u64 = 0x334155FFu64;
@@ -41,7 +40,7 @@ entry fn start() -> u64 {
     // labels (the ^/v marker rides a derive over the sort state). The
     // boot state is MOONS ascending (boa's `source<SortKey>("moons")`).
     let fills: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
-    paint_header(MutationCtx.over(ctx_bridge()), fills, 1);
+    paint_header(MutationCtx.over(bridge()), fills, 1);
     let labels: [Readable<str>] = [
         hdr_label("name", "PLANET", sort_key, sort_dir),
         hdr_label("moons", "MOONS", sort_key, sort_dir),
@@ -80,7 +79,7 @@ entry fn start() -> u64 {
         .build();
 
     let page = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(table)
         .child(SizedBox(0.0, 12.0).build())
         .child(Text().text_bound(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build())
@@ -98,7 +97,7 @@ fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
                taps: [Mutation<nil>]) -> View {
     let i: i32 = col as i32;
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(taps[i])
@@ -263,7 +262,7 @@ fn str_less(a: str, b: str) -> bool {
 // at build time (the grid_of precedent — builders read live state). The
 // name column is emphasized (boa's `Cell(row.name, true)`).
 fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
-    let read = MutationCtx.over(ctx_bridge());
+    let read = MutationCtx.over(bridge());
     let item = value_item(read.get<opaque>(rows), row);
     let text = slot(item, col);
     let mut fg: u64 = CELL_FG;

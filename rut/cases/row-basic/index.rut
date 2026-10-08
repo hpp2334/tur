@@ -1,7 +1,5 @@
 // row-basic: two fixed-width children laid out horizontally.
-use tur_host::{ CROSS_ALIGN_START };
-use tur_kit::{ Container, Row, mount };
-
+use tur_kit::{ Container, CrossAlign, Row, mount };
 
 fn box_w(w: f64) -> View {
     let b = Container().width_height(w, 0.0);
@@ -9,6 +7,6 @@ fn box_w(w: f64) -> View {
 }
 
 entry fn start() {
-    let row = Row().cross_alignment(CROSS_ALIGN_START).child(box_w(50.0)).child(box_w(30.0));
+    let row = Row().cross_alignment(CrossAlign.Start).child(box_w(50.0)).child(box_w(30.0));
     mount(row.build());
 }

@@ -10,7 +10,6 @@ const PASSWORD_BUNDLE: &str = r#"
 use tur_host::{ tctrl_new, undo_new };
 use tur_kit::{ Column, Input, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
 
-
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();

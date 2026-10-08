@@ -39,8 +39,7 @@ fn label_text(app: &Rc<tur_engine::TurApp>, key: &str) -> Option<String> {
 /// so the test can read it through the child facade.
 const CHILD_SRC: &str = r#"
 use tur_host::{ ctx_bridge, st_put, st_take, tctrl_new, tctrl_text, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, source };
-
+use tur_kit::{ Axis, Column, Input, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() -> u64 {
     let ctrl = tctrl_new();
@@ -76,7 +75,6 @@ fn parent_module(child_src: &str) -> String {
         r#"
 use tur_host::{{ va_controller, va_create_source }};
 use tur_kit::{{ VAppCtrl, VirtualApp, mount }};
-
 
 entry fn start() {{
     let src = va_create_source("{escaped}");
@@ -261,9 +259,8 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 /// The child case: a ScrollView whose content (1200px in a 200px-tall
 /// host) overflows, keyed for the offset probe.
 const WHEEL_CHILD_SRC: &str = r#"
-use tur_host::{ AXIS_VERTICAL };
-use tur_kit::{ Column, Container, MutationCtx, Readable, ScrollView, Source, Text, TextCtrl, UndoCtrl, mount, source };
 
+use tur_kit::{ Axis, Column, Container, MutationCtx, Readable, ScrollView, Source, Text, TextCtrl, UndoCtrl, mount, source };
 
 entry fn start() -> u64 {
     let rows = Column();
@@ -279,7 +276,7 @@ entry fn start() -> u64 {
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r9").font_size(12.0).build()).build())
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r10").font_size(12.0).build()).build())
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r11").font_size(12.0).build()).build());
-    mount(ScrollView().axis(AXIS_VERTICAL).child(rows.build()).query_key("child-scroll").build());
+    mount(ScrollView().axis(Axis.Vertical).child(rows.build()).query_key("child-scroll").build());
     return 0;
 }
 "#;

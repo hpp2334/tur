@@ -7,7 +7,6 @@
 // case-side stand-in; the outer edges sit 2px in where boa's sit flush).
 use tur_kit::{ Container, LazyGrid, Source, Text, mount, source };
 
-
 fn cell(i: u64) -> View {
     let tile = Container()
         .color(hsl_packed(((i * 47) % 360) as f64, 55.0, 50.0))

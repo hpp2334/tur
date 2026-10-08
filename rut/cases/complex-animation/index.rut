@@ -18,10 +18,8 @@
 // label swaps "Loop" ↔ "Loop ✓" with white text when on) are mutations
 // over the handles they capture — the boa interactions, no ids, no stash.
 // The boot brush seeds ride the root Lifecycle's on_mount.
-use tur_host::{ ALIGN_CENTER, CROSS_ALIGN_CENTER, MAIN_ALIGN_CENTER, MAIN_SIZE_MIN, color_tween_lerp, math_cos, math_sin, tween_lerp };
-use tur_kit::{ Column, Condition, Container, DeriveCtx, Lifecycle, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, list_new, mount, mutate, source };
-use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
-
+use tur_kit::{ Align, Column, Condition, Container, CrossAlign, DeriveCtx, Lifecycle, MainAlign, MainAxisSize, MountEvent, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, list_new, math_cos, math_sin, mount, mutate, source };
+use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl, color_tween_lerp, tween_lerp };
 
 // The tween endpoints (the boa card: width 120→280, radius 8→40,
 // indigo→coral; the orbit rides a radius-80 circle).
@@ -174,30 +172,30 @@ entry fn start() -> u64 {
     });
 
     let mut col = Column()
-        .main_alignment(MAIN_ALIGN_CENTER)
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Center)
         .child(Text().text("Animated Card Studio").font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
         .child(SizedBox(0.0, 4.0).build())
-        .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(status_badge(status, badge)).child(gap(12.0)).child(
+        .child(Row().main_axis_size(MainAxisSize.Min).cross_alignment(CrossAlign.Center).child(status_badge(status, badge)).child(gap(12.0)).child(
             Text().text_bound(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
         ).build())
         .child(SizedBox(0.0, 32.0).build())
         .child(stage(orbit_x, orbit_y, width, hue, radius, progress))
         .child(SizedBox(0.0, 32.0).build())
-        .child(Row().main_axis_size(MAIN_SIZE_MIN).child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
+        .child(Row().main_axis_size(MainAxisSize.Min).child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
             .child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0))
             .child(pill("Resume", 0x0EA5E9FFu64, b_resume, "cas-resume")).child(gap(6.0))
             .child(pill("Reverse", 0x8B5CF6FFu64, b_reverse, "cas-reverse")).child(gap(6.0))
             .child(pill("Stop", 0xEF4444FFu64, b_stop, "cas-stop")).build())
         .child(SizedBox(0.0, 16.0).build())
-        .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(Text().text("Speed:").font_size(11.0).color(0x64748BFFu64).build())
+        .child(Row().main_axis_size(MainAxisSize.Min).cross_alignment(CrossAlign.Center).child(Text().text("Speed:").font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
             .child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0))
             .child(chip(sp1, "1x", b_speed1, "cas-s1")).child(gap(4.0))
             .child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0))
             .child(chip(sp3, "4x", b_speed3, "cas-s3")).build())
         .child(SizedBox(0.0, 12.0).build())
-        .child(Row().main_axis_size(MAIN_SIZE_MIN).cross_alignment(CROSS_ALIGN_CENTER).child(Text().text("Curve:").font_size(11.0).color(0x64748BFFu64).build())
+        .child(Row().main_axis_size(MainAxisSize.Min).cross_alignment(CrossAlign.Center).child(Text().text("Curve:").font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
             .child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0))
             .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
@@ -208,7 +206,7 @@ entry fn start() -> u64 {
         .child(Text().text("Controls: pause mid-play, change speed/curve, resume").font_size(10.0).color(0x94A3B8FFu64).build());
     // The root Lifecycle fires the seed at mount (a transparent
     // pass-through around the unchanged page chain).
-    let page = Container().color(0xF8FAFCFFu64).alignment(ALIGN_CENTER).child(col.build()).build();
+    let page = Container().color(0xF8FAFCFFu64).alignment(Align.Center).child(col.build()).build();
     mount(Lifecycle().on_mount(seed).child(page).build());
     return progress.atom_id();
 }
@@ -249,7 +247,7 @@ fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progres
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
     return Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
         .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .query_key("cas-card")
         .child(spin)
         .build();

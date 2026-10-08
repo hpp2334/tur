@@ -89,6 +89,11 @@ pub fn install(
         row("anim_speed", vec![TY_OPAQUE, TY_F64], TY_NIL),
         row("tween_lerp", vec![TY_F64, TY_F64, TY_F64], TY_F64),
         row("color_tween_lerp", vec![TY_U64, TY_U64, TY_F64], TY_U64),
+        // The kit wrappers' twin spellings (the `mount_raw` pattern — the
+        // kit's own wrapper fns shadow the row names, so their bodies
+        // reach the rows through these aliases).
+        row("tween_lerp_raw", vec![TY_F64, TY_F64, TY_F64], TY_F64),
+        row("color_tween_lerp_raw", vec![TY_U64, TY_U64, TY_F64], TY_U64),
         row("curve_eval", vec![TY_STR, TY_F64], TY_F64),
     ]);
 
@@ -276,9 +281,34 @@ pub fn install(
     rut_vm::pkg_fn!(pkg, "tween_lerp", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
         Ok(NumTween::new(begin, end).lerp(t))
     });
+    // The kit wrappers' twin spellings — SAME bodies (see the decl note).
+    rut_vm::pkg_fn!(pkg, "tween_lerp_raw", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
+        Ok(NumTween::new(begin, end).lerp(t))
+    });
     // Component-wise u8 lerp — the same math as `Color::lerp` (the
     // `ColorTween` payload), over the packed 0xRRGGBBAA crossing form.
     rut_vm::pkg_fn!(pkg, "color_tween_lerp", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
+        let t = t.clamp(0.0, 1.0);
+        let ch = |x: u64, y: u64| -> u64 {
+            if t == 0.0 {
+                x
+            } else if t == 1.0 {
+                y
+            } else {
+                let v = (x & 0xFF) as f64 + (((y & 0xFF) as f64) - ((x & 0xFF) as f64)) * t;
+                v.round().clamp(0.0, 255.0) as u64
+            }
+        };
+        let mix = |x: u64, y: u64| -> u64 {
+            (ch(x >> 24, y >> 24) << 24)
+                | (ch(x >> 16, y >> 16) << 16)
+                | (ch(x >> 8, y >> 8) << 8)
+                | ch(x, y)
+        };
+        Ok(mix(begin, end))
+    });
+    // The kit wrappers' twin spelling — SAME body (see the decl note).
+    rut_vm::pkg_fn!(pkg, "color_tween_lerp_raw", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
         let t = t.clamp(0.0, 1.0);
         let ch = |x: u64, y: u64| -> u64 {
             if t == 0.0 {

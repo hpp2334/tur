@@ -2,16 +2,14 @@
 // swaps the atom's content. The handler is a MUTATION over the
 // MutationCtx (the triad: source / derive / mutate); the source binds by
 // capture — no ids, no stash.
-use tur_host::{ CROSS_ALIGN_START };
-use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source };
-
+use tur_kit::{ Column, CrossAlign, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source };
 
 entry fn start() -> u64 {
     let content: Readable<str> = source<str>("before");
     let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(content, "after");
     });
-    let col = Column().cross_alignment(CROSS_ALIGN_START);
+    let col = Column().cross_alignment(CrossAlign.Start);
     let t = Text().text_bound(content).query_key("click-text");
     col.child(PointerInteract().on_click(b_click).child(t.build()).build());
     mount(col.build());

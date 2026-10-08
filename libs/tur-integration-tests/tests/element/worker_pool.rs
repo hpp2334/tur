@@ -315,7 +315,6 @@ entry fn busy(_a: u64, _b: f64) {
         r#"
 use tur_kit::{ Mutation, Readable, Source, Text, mount, source };
 
-
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
     let txt = Text().text_bound(atom).build();

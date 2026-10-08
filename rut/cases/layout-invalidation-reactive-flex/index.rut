@@ -3,9 +3,7 @@
 // nodes dirty via the gesture handler and mask the layout-invalidation
 // behavior). The atoms ride the entry args: the pair mints in order, so
 // the b probe addresses a's answer + 1.
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, Source, mount, source };
-
+use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, Source, bridge, mount, source };
 
 entry fn start() -> u64 {
     let flex_a: Readable<f64> = source<f64>(1.0);
@@ -29,11 +27,11 @@ fn qkey_box(key: str, color: u64) -> View {
 // write — no gesture, no extra mark_dirty); the atom id rides the entry
 // arg (the probe's handle binds at the call site).
 entry fn set_flex_a(atom: u64, v: f64) {
-    let flex_a = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(flex_a, v);
+    let flex_a = Source<f64>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<f64>(flex_a, v);
 }
 
 entry fn set_flex_b(atom: u64, v: f64) {
-    let flex_b = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(flex_b, v);
+    let flex_b = Source<f64>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<f64>(flex_b, v);
 }

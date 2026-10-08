@@ -10,9 +10,7 @@
 //
 // Deterministic per-index sizes via the boa sine-hash (math_sin is the
 // engine's only trig row — exactly what the hash needs).
-use tur_host::{ ALIGN_CENTER_LEFT, ALIGN_TOP_CENTER, AXIS_HORIZONTAL, AXIS_VERTICAL, CURSOR_POINTER, CROSS_ALIGN_CENTER, CROSS_ALIGN_START, MAIN_SIZE_MIN, math_sin, str_parse_f64 };
-use tur_kit::{ Column, Condition, Container, Each, Expanded, LazyList, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, mutate, source };
-
+use tur_kit::{ Align, Axis, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, LazyList, ListHandle, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, math_sin, mount, mutate, source, str_parse_f64 };
 
 let ITEM_COUNT: f64 = 2000.0;
 
@@ -34,7 +32,7 @@ entry fn start() {
     });
 
     let toggle = MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(
             PointerInteract()
                 .on_click(b_flip)
@@ -65,7 +63,7 @@ entry fn start() {
         .build();
 
     let col = Column()
-        .cross_alignment(CROSS_ALIGN_START)
+        .cross_alignment(CrossAlign.Start)
         .child(toggle)
         .child(SizedBox(0.0, 12.0).build())
         .child(Expanded().flex(1.0).child(list_host).build())
@@ -92,7 +90,7 @@ fn list_of(axis: Readable<bool>, count: Readable<f64>) -> View {
                 .item_builder(vertical_row)
                 .count(count)
                 .overscan(2)
-                .axis(AXIS_VERTICAL)
+                .axis(Axis.Vertical)
                 .query_key("var-sizes-v")
                 .build();
         })
@@ -101,7 +99,7 @@ fn list_of(axis: Readable<bool>, count: Readable<f64>) -> View {
                 .item_builder(horizontal_row)
                 .count(count)
                 .overscan(2)
-                .axis(AXIS_HORIZONTAL)
+                .axis(Axis.Horizontal)
                 .query_key("var-sizes-h")
                 .build();
         })
@@ -201,8 +199,8 @@ fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> V
     let label = f"#{i}  h={main as u64}  bar={cross as u64}";
     let bar = Container().width_height(cross, bar_h).radius(4.0).color(bar_color).build();
     let line = Row()
-        .main_axis_size(MAIN_SIZE_MIN)
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign.Center)
         .child(bar)
         .child(SizedBox(10.0, 0.0).build())
         .child(Text().text(label).font_size(11.0).color(LABEL).build())
@@ -211,7 +209,7 @@ fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> V
         .height(main)
         .color(zebra)
         .padding(8.0)
-        .alignment(ALIGN_CENTER_LEFT)
+        .alignment(Align.CenterLeft)
         .query_key("var-sizes-item")
         .child(line)
         .build();
@@ -228,8 +226,8 @@ fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) ->
     let width_label = f"w={main as u64}";
     let bar = Container().width_height(bar_w, cross).radius(4.0).color(bar_color).build();
     let line = Column()
-        .main_axis_size(MAIN_SIZE_MIN)
-        .cross_alignment(CROSS_ALIGN_CENTER)
+        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign.Center)
         .child(bar)
         .child(SizedBox(0.0, 8.0).build())
         .child(Text().text(count_label).font_size(11.0).color(LABEL).build())
@@ -239,7 +237,7 @@ fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) ->
         .width(main)
         .color(zebra)
         .padding(8.0)
-        .alignment(ALIGN_TOP_CENTER)
+        .alignment(Align.TopCenter)
         .child(line)
         .build();
 }

@@ -32,8 +32,7 @@
 //     read-modify-write drift, frame-independent of the stack's offset.
 //   * Not `Each`: the 9 pieces mount ONCE (a rebuild per move event would
 //     drop pointer capture mid-drag).
-use tur_host::{ ALIGN_CENTER, ALIGN_TOP_LEFT, BORDER_INSIDE, CROSS_ALIGN_CENTER, CURSOR_POINTER, MAIN_ALIGN_SPACE_BETWEEN, STACK_FIT_EXPAND, ctx_bridge };
-use tur_kit::{ Condition, Container, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
+use tur_kit::{ Align, BorderPosition, Condition, Container, CrossAlign, Cursor, DeriveCtx, MainAlign, MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row, SizedBox, Source, Stack, StackFit, Text, bridge, derive, mount, mutate, source };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 // ---- the boa geometry --------------------------------------------------------
@@ -187,7 +186,7 @@ entry fn start() -> u64 {
 
     // The initial deal (the ctx face at boot — the channels seed before
     // the first flush) and the Shuffle tap's mutation.
-    deal(MutationCtx.over(ctx_bridge()), p, count, solved, seed);
+    deal(MutationCtx.over(bridge()), p, count, solved, seed);
     let b_shuffle = mutate(fn (ctx: MutationCtx, _e: nil) {
         deal(ctx, p, count, solved, seed);
     });
@@ -195,7 +194,7 @@ entry fn start() -> u64 {
     // ---- the play area (board + ghosts + tray + pieces + bar) ----
 
     let play = Stack()
-        .alignment(ALIGN_TOP_LEFT)
+        .alignment(Align.TopLeft)
         .child(SizedBox(PLAY_W, PLAY_H).build())
         .child(board_bg())
         .children([ghost(0), ghost(1), ghost(2), ghost(3), ghost(4), ghost(5), ghost(6), ghost(7), ghost(8)])
@@ -225,9 +224,9 @@ entry fn start() -> u64 {
 
     mount(
         Stack()
-            .fit(STACK_FIT_EXPAND)
+            .fit(StackFit.Expand)
             .child(Container().color(0x020617FFu64).build())
-            .child(Container().alignment(ALIGN_CENTER).child(play).build())
+            .child(Container().alignment(Align.Center).child(play).build())
             .child(win)
             .build(),
     );
@@ -425,11 +424,11 @@ fn piece(i: u64, p: Pieces, count: Readable<f64>, solved: Readable<bool>, lift: 
         .width_height(PIECE, PIECE)
         .color_bound(p.br[i as i32])
         .radius(14.0)
-        .border(0xFFFFFFFFu64, 2.0, BORDER_INSIDE)
+        .border(0xFFFFFFFFu64, 2.0, BorderPosition.Inside)
         .shadow_color_bound(p.sc[i as i32])
         .shadow_blur_bound(p.sb[i as i32])
         .shadow_dy_bound(p.sd[i as i32])
-        .alignment(ALIGN_CENTER)
+        .alignment(Align.Center)
         .query_key(f"jw/piece-{i}")
         .child(
             Text()
@@ -474,9 +473,9 @@ fn ghost(s: u64) -> View {
             Container()
                 .width_height(PIECE, PIECE)
                 .color(0x1E293BFFu64)
-                .border(0x475569FFu64, 1.0, BORDER_INSIDE)
+                .border(0x475569FFu64, 1.0, BorderPosition.Inside)
                 .radius(12.0)
-                .alignment(ALIGN_CENTER)
+                .alignment(Align.Center)
                 .query_key(f"jw/ghost-{s}")
                 .child(
                     Text()
@@ -502,7 +501,7 @@ fn board_bg() -> View {
             Container()
                 .width_height(w, w)
                 .color(0x0F172AFFu64)
-                .border(0x3B82F6FFu64, 2.0, BORDER_INSIDE)
+                .border(0x3B82F6FFu64, 2.0, BorderPosition.Inside)
                 .radius(16.0)
                 .shadow(0x3B82F628u64, 18.0, 0.0, 0.0)
                 .build(),
@@ -521,7 +520,7 @@ fn tray_bg() -> View {
             Container()
                 .width_height(w, w)
                 .color(0x0A0F1DFFu64)
-                .border(0x334155FFu64, 1.0, BORDER_INSIDE)
+                .border(0x334155FFu64, 1.0, BorderPosition.Inside)
                 .radius(16.0)
                 .build(),
         )
@@ -539,7 +538,7 @@ fn top_bar(b_shuffle: Mutation<nil>, count: Readable<f64>) -> View {
         .padding(10.0)
         .radius(20.0)
         .color(0x4F46E5FFu64)
-        .border(0x818CF8FFu64, 1.0, BORDER_INSIDE)
+        .border(0x818CF8FFu64, 1.0, BorderPosition.Inside)
         .shadow(0x4F46E578u64, 12.0, 0.0, 4.0)
         .child(
             Text()
@@ -553,7 +552,7 @@ fn top_bar(b_shuffle: Mutation<nil>, count: Readable<f64>) -> View {
         .padding(10.0)
         .radius(8.0)
         .color(0x1E293BFFu64)
-        .border(0x334155FFu64, 1.0, BORDER_INSIDE)
+        .border(0x334155FFu64, 1.0, BorderPosition.Inside)
         .child(
             Text()
                 .text_bound(badge)
@@ -569,11 +568,11 @@ fn top_bar(b_shuffle: Mutation<nil>, count: Readable<f64>) -> View {
         .top(12.0)
         .child(
             Row()
-                .main_alignment(MAIN_ALIGN_SPACE_BETWEEN)
-                .cross_alignment(CROSS_ALIGN_CENTER)
+                .main_alignment(MainAlign.SpaceBetween)
+                .cross_alignment(CrossAlign.Center)
                 .child(
                     MouseRegion()
-                        .cursor(CURSOR_POINTER)
+                        .cursor(Cursor.Pointer)
                         .child(
                             PointerInteract()
                                 .on_click(b_shuffle)
@@ -598,13 +597,13 @@ fn win_banner() -> View {
         .child(
             Container()
                 .color(0x020617C8u64)
-                .alignment(ALIGN_CENTER)
+                .alignment(Align.Center)
                 .child(
                     Container()
                         .padding(24.0)
                         .radius(18.0)
                         .color(0x4F46E5FFu64)
-                        .border(0x818CF8FFu64, 2.0, BORDER_INSIDE)
+                        .border(0x818CF8FFu64, 2.0, BorderPosition.Inside)
                         .shadow(0x4F46E5B4u64, 32.0, 0.0, 8.0)
                         .query_key("jw/banner")
                         .child(

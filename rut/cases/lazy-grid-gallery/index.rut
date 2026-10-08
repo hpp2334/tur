@@ -20,9 +20,7 @@
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur_host::{ CROSS_ALIGN_START, CURSOR_POINTER, MAIN_SIZE_MIN, ctx_bridge };
-use tur_kit::{ Column, Container, Each, Expanded, LazyGrid, ListHandle, MouseRegion, Mutation, MutationCtx, mount, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, mutate, source };
-
+use tur_kit::{ Column, Container, CrossAlign, Cursor, Each, Expanded, LazyGrid, ListHandle, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, bridge, list_new, mount, mutate, source };
 
 // The boa palette (the deep-slate gallery chrome).
 let PAGE_BG: u64 = 0x0F172AFFu64;
@@ -44,7 +42,7 @@ entry fn start() {
     let chips: [Source<u64>] = [
         source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
     ];
-    paint_chips(MutationCtx.over(ctx_bridge()), aspect, dense, chips);
+    paint_chips(MutationCtx.over(bridge()), aspect, dense, chips);
 
     // The chip taps: write the state, repaint the trio, remount the grid.
     let b_square = aspect_mutation(aspect, dense, chips, items, 1.0);
@@ -54,7 +52,7 @@ entry fn start() {
     let b_dense = dense_mutation(aspect, dense, chips, items, true);
 
     let col = Column()
-        .cross_alignment(CROSS_ALIGN_START)
+        .cross_alignment(CrossAlign.Start)
         .query_key("gallery/col")
         .child(Text().text("Lazy Grid Gallery").font_size(18.0).color(TITLE_FG).query_key("gallery/header").build())
         .child(SizedBox(0.0, 4.0).build())
@@ -62,7 +60,7 @@ entry fn start() {
         .child(SizedBox(0.0, 12.0).build())
         .child(
             Row()
-                .main_axis_size(MAIN_SIZE_MIN)
+                .main_axis_size(MainAxisSize.Min)
                 .child(chip(chips[0], "gallery/a-square", "Square", b_square))
                 .child(SizedBox(6.0, 0.0).build())
                 .child(chip(chips[1], "gallery/a-wide", "Wide", b_wide))
@@ -73,7 +71,7 @@ entry fn start() {
         .child(SizedBox(0.0, 8.0).build())
         .child(
             Row()
-                .main_axis_size(MAIN_SIZE_MIN)
+                .main_axis_size(MainAxisSize.Min)
                 .child(chip(chips[3], "gallery/d-normal", "Normal", b_normal))
                 .child(SizedBox(6.0, 0.0).build())
                 .child(chip(chips[4], "gallery/d-dense", "Dense", b_dense))
@@ -111,7 +109,7 @@ fn one_list() -> ListHandle {
 // The handles ride by parameter; the read face is the ctx over the
 // bridge.
 fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> View {
-    let read = MutationCtx.over(ctx_bridge());
+    let read = MutationCtx.over(bridge());
     let mut max_cross: f64 = 140.0;
     if (read.get<bool>(dense)) {
         max_cross = 85.0;
@@ -149,7 +147,7 @@ fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
         .child(Text().text(label).font_size(12.0).color(CHIP_FG).build())
         .build();
     return MouseRegion()
-        .cursor(CURSOR_POINTER)
+        .cursor(Cursor.Pointer)
         .child(PointerInteract().on_click(m).query_key(key).child(face).build())
         .build();
 }

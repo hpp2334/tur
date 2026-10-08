@@ -62,7 +62,6 @@ fn placeholder_default_is_default_text_color_mixed_50pct_alpha() {
 
 use tur_kit::{ Input, mount };
 
-
 entry fn start() {
     let input = Input().placeholder("hint").font_size(20.0).width_height(300.0, 40.0);
     mount(input.build());
@@ -95,8 +94,6 @@ fn placeholder_default_follows_explicit_text_color() {
         r#"
 
 use tur_kit::{ Input, mount };
-
-
 
 entry fn start() {
     let input = Input()
@@ -134,8 +131,6 @@ fn placeholder_default_multiplies_existing_alpha() {
         r#"
 
 use tur_kit::{ Input, mount };
-
-
 
 entry fn start() {
     let input = Input()

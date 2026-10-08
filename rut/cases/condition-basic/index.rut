@@ -3,7 +3,6 @@
 // rides a typed bool source handle.
 use tur_kit::{ Condition, Container, Source, Text, mount, source };
 
-
 entry fn start() {
     let when = source<bool>(true);
     let then_box = Container()

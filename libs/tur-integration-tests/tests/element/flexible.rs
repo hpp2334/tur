@@ -25,8 +25,7 @@ fn setup_row_flex_item_ex(
     let source = format!(
         r#"
 
-use tur_kit::{{ Container, Expanded, Flexible, Row, Text, mount }};
-
+use tur_kit::{{ Container, Expanded, Flexible, MainAxisSize, Row, Text, mount }};
 
 entry fn start() {{
     let mut row = Row().query_key("row");
@@ -184,11 +183,10 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
 
 use tur_kit::{ Container, Flexible, Row, SizedBox, Text, mount };
 
-
 entry fn start() {
     let mut pill = Row()
         .query_key("pill")
-        .main_axis_size(1)
+        .main_axis_size(MainAxisSize.Min)
         .child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
     let txt = Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis();
@@ -288,7 +286,6 @@ use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
 
 use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
 
-
 fn long_label() -> View {
     let txt = Text()
         .text("A very long label that must ellipsize inside its slot")
@@ -301,14 +298,14 @@ fn long_label() -> View {
 entry fn start() {
     let long_row = Row()
         .query_key("long-row")
-        .main_axis_size(1)
+        .main_axis_size(MainAxisSize.Min)
         .child(Container().width_height(100.0, 40.0).build())
         .child(Flexible().flex(1.0).child(long_label()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
     let short_row = Row()
         .query_key("short-row")
-        .main_axis_size(1)
+        .main_axis_size(MainAxisSize.Min)
         .child(Container().width_height(100.0, 40.0).build())
         .child(Flexible().flex(1.0).child(Text().text("Hi").build()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());
@@ -375,7 +372,6 @@ fn flexible_zero_remaining_slot_paints_within_budget() {
 use tur_kit::{ Container, Flexible, Row, Text, mount };
 
 use tur_kit::{ Container, Flexible, Row, Text, mount };
-
 
 entry fn start() {
     let mut row = Row().child(Container().width_height(400.0, 40.0).build());

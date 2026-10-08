@@ -43,7 +43,7 @@ fn rect(app: &TurTestApp, key: &[&str]) -> (f64, f64, f64, f64) {
 
 const FIXED_HEADER_RUT: &str = r#"
 
-use tur_kit::{ Column, Container, Text, mount };
+use tur_kit::{ Column, Container, CrossAlign, Text, mount };
 
 entry fn start() -> u64 {
     // The lazy-grid-gallery header shape, with the size the audit assumed:
@@ -92,7 +92,7 @@ fn fixed_size_column_child_honored() {
 
 const UNSET_WIDTH_HEADER_RUT: &str = r#"
 
-use tur_kit::{ Column, Container, Text, mount };
+use tur_kit::{ Column, Container, CrossAlign, Text, mount };
 
 entry fn start() -> u64 {
     // The table-reactive shape verbatim: header `width_height(0, 32)` (0 =
@@ -160,7 +160,7 @@ fn unset_width_child_does_not_corrupt_sibling_placement() {
 /// Text now — it sits at the column's leading edge ABOVE the Expanded grid,
 /// which starts below the header block (title + subtitle + chips intervene)
 /// and fills the column's width. (The pre-restyle pin — a full-width 40px
-/// band under `CROSS_ALIGN_STRETCH` — described a header design the boa
+/// band under `CrossAlign.Stretch` — described a header design the boa
 /// port replaced; the surviving intent is flush-left header, full-width
 /// grid.)
 #[test]
@@ -185,7 +185,7 @@ fn lazy_grid_gallery_header_sits_above_the_full_width_grid() {
 /// table-reactive (the boa port): the Table element's header band — the
 /// three sortable header cells — sits at the table's top, flush-left, and
 /// the first body row starts below it. (The pre-port pin — a full-width
-/// 32px band under `CROSS_ALIGN_STRETCH` — described the old add-row
+/// 32px band under `CrossAlign.Stretch` — described the old add-row
 /// design; the boa port replaced it with the real header. The boot state
 /// is Loading — the header renders above an empty body, boa's shape.)
 #[test]

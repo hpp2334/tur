@@ -1,8 +1,6 @@
 // flex-row-expanded: a fixed-width child plus an Expanded filling the
 // remaining main axis.
-use tur_host::{ CROSS_ALIGN_START };
-use tur_kit::{ Container, Expanded, Row, mount };
-
+use tur_kit::{ Container, CrossAlign, Expanded, Row, mount };
 
 fn box_wh(w: f64, h: f64) -> View {
     let b = Container().width_height(w, h);
@@ -11,7 +9,7 @@ fn box_wh(w: f64, h: f64) -> View {
 
 entry fn start() {
     let row = Row()
-        .cross_alignment(CROSS_ALIGN_START)
+        .cross_alignment(CrossAlign.Start)
         .child(box_wh(50.0, 0.0))
         .child(Expanded().flex(1.0).child(box_wh(0.0, 0.0)).build());
     mount(row.build());

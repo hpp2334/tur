@@ -1,12 +1,10 @@
 // column-stretch-container-text: Column(crossAlignment: Stretch) around a
 // padded unsized Container + Text — full-width colored strip.
-use tur_host::{ CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, Text, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, Text, mount };
 
 entry fn start() {
     let col = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(Container().color(0xFF0000FFu64).padding(20.0).query_key("container").child(Text().text("Empty State").build()).build());
     mount(col.build());
 }

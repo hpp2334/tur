@@ -68,7 +68,6 @@ fn text_input_requests_fire_on_editable_focus() {
 use tur_host::{ tctrl_new, undo_new };
 use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
 
-
 entry fn start() {
     let ctrl = tctrl_new();
     let undo = undo_new();

@@ -1,14 +1,12 @@
 // container-clip-rounded: a rounded, hard-edge-clipped container holding
 // an oversized red child (the corners must clip).
-use tur_host::{ CLIP_HARD_EDGE };
-use tur_kit::{ Container, mount };
-
+use tur_kit::{ Clip, Container, mount };
 
 entry fn start() {
     let b = Container()
         .width_height(200.0, 200.0)
         .radius(40.0)
-        .clip(CLIP_HARD_EDGE)
+        .clip(Clip.HardEdge)
         .child(Container().width_height(200.0, 200.0).color(0xFF0000FFu64).build());
     mount(b.build());
 }

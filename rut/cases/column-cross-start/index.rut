@@ -1,9 +1,7 @@
 // column-cross-start: one 100x50 box, cross axis start-aligned.
-use tur_host::{ CROSS_ALIGN_START };
-use tur_kit::{ Column, Container, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, mount };
 
 entry fn start() {
-    let col = Column().cross_alignment(CROSS_ALIGN_START).child(Container().width_height(100.0, 50.0).build());
+    let col = Column().cross_alignment(CrossAlign.Start).child(Container().width_height(100.0, 50.0).build());
     mount(col.build());
 }

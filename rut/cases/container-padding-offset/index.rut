@@ -1,12 +1,10 @@
 // container-padding-offset: a padded container around a start-aligned
 // column holding one fixed-size child.
-use tur_host::{ CROSS_ALIGN_START };
-use tur_kit::{ Column, Container, mount };
-
+use tur_kit::{ Column, Container, CrossAlign, mount };
 
 entry fn start() {
     let mut outer = Container().width_height(200.0, 100.0).padding(20.0);
-    let col = Column().cross_alignment(CROSS_ALIGN_START).child(Container().width_height(40.0, 40.0).build());
+    let col = Column().cross_alignment(CrossAlign.Start).child(Container().width_height(40.0, 40.0).build());
     outer.child(col.build());
     mount(outer.build());
 }

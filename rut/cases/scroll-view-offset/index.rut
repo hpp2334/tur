@@ -1,17 +1,15 @@
 // scroll-view-offset: a scroll viewport with a one-shot initial offset
 // (the controller's initialOffset twin) — the content offset starts at
 // -100.
-use tur_host::{ AXIS_VERTICAL, CROSS_ALIGN_STRETCH };
-use tur_kit::{ Column, Container, ScrollView, mount };
-
+use tur_kit::{ Axis, Column, Container, CrossAlign, ScrollView, mount };
 
 entry fn start() {
     let content = Column()
-        .cross_alignment(CROSS_ALIGN_STRETCH)
+        .cross_alignment(CrossAlign.Stretch)
         .child(box_h(200.0))
         .child(box_h(200.0))
         .child(box_h(200.0));
-    let sv = ScrollView().axis(AXIS_VERTICAL).initial_offset(100.0).child(content.build()).query_key("scroll-view").build();
+    let sv = ScrollView().axis(Axis.Vertical).initial_offset(100.0).child(content.build()).query_key("scroll-view").build();
     mount(sv);
 }
 

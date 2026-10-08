@@ -2,7 +2,6 @@
 
 use tur_kit::{ Text, mount };
 
-
 entry fn start() {
     let t = Text().text("Hello").font_size(14.0);
     mount(t.build());
