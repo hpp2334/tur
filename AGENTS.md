@@ -189,10 +189,19 @@ libs/
 demo/
   website/             # the web host app + native/ (tur-website cdylib)
   compose/             # Android playground app + native/ (tur-demo cdylib)
-rut/                   # all rut package sources (pure rut — no build step)
-  cases/               # the shared case corpus (<name>/index.rut + README)
-  tur_kit/             # the authored builder surface (tur_kit.rut; embedded
-                       #   by tur-engine/src/kit/mod.rs)
+rut/                   # all rut package sources (pure rut — no build step;
+                       #   every pkg dir carries its rut.jsonc manifest)
+  cases/               # the shared case corpus (<name>/index.rut + the
+                       #   generated <name>/rut.jsonc + README)
+  tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
+                       #   test-pinned tur_host.d.rut decl snapshot (the Rust
+                       #   rows stay compile truth; bless:
+                       #   TUR_BLESS_TUR_HOST_DECL=1)
+  tur_kit/             # the authored builder surface — a MULTI-FILE module
+                       #   spliced per rut.jsonc (handles, flags, dispatch,
+                       #   reactive, then one file per element family);
+                       #   embedded by tur-engine/src/kit/mod.rs (the embed
+                       #   mirrors the manifest splice — pinned)
   tur_anim_kit/        # the animation kit (kit.rut; embedded by
                        #   tur-animation/src/kit.rs)
   tur_net_kit/         # the net kit (kit.rut; embedded by
@@ -259,7 +268,33 @@ Android build + device debugging live in the **`android-dev` skill** at
 - **Host-pkg rows are the ONLY script surface**: every `tur_host::…` call is a
   typed row — a `pkg_fn!`/`pkg_async_fn!` body + a `decl_rows` entry. The
   decl (compile-time) and body (runtime) signatures must agree exactly.
-- **The kit is THE element construction surface** (`rut/tur_kit/tur_kit.rut`,
+- **Every rut pkg dir carries a `rut.jsonc`** (the manifest grammar: the
+  pinned rut checkout's docs, `reference/project-structure.md`): `name`
+  (bare `[a-zA-Z0-9_]+` — kebab dir names sanitize to underscores for the
+  per-case manifests), `entry.lib` + `entry.libs` (the canonical
+  '\n'-splice order — one module, one namespace), `type: "host"` +
+  `entry.type` for a pure-declaration pkg. `tur_host`'s decl surface is
+  the GENERATED `rut/tur_host/tur_host.d.rut` snapshot — the Rust rows
+  stay compile truth; the pin test (`tur_host_decl`) diffs the snapshot
+  against the live standard session and fails on drift (regenerate
+  deliberately: `TUR_BLESS_TUR_HOST_DECL=1`). The per-case manifests are
+  generated the same way (`TUR_BLESS_CASE_MANIFESTS=1`).
+- **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
+  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
+  exceptions live in the test's commented allowlist: the playground's
+  pg_*/rs_derive/second-use-line accommodations, the generated
+  `cases_gen.rut`, github-viewer's net row, and the corpora's named
+  raw-row probes); `rs_derive|rs_derive2|rs_watch` have no call sites
+  outside the kit's wrappers (the authored spelling is
+  `derive<T>`/`watch<T>`); and the deleted stash rows
+  (`st_put|st_take|stf_put|stf_take`) have zero spellings anywhere.
+- **The kit is THE element construction surface** (`rut/tur_kit/` — a
+  MULTI-FILE module: `rut.jsonc`'s `entry.lib` + `entry.libs` list the
+  files (handles, flags, dispatch, reactive, flex, box, stack, text,
+  input, image, grid_table, scroll_lazy, gesture, focus, lifecycle,
+  control, virtual_app) and their canonical '\n'-splice order; the engine
+  embed (`tur-engine/src/kit/mod.rs`) mirrors the same list and the
+  `tur_host_decl` pin test diffs the two;
   animation wrappers in `rut/tur_anim_kit/kit.rut`):
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
