@@ -41,8 +41,9 @@ let SEAL_F64: u64 = 2;
 pub class AnimCtrl(opaque);
 
 impl AnimCtrl {
-  // The erase hatch: the one place a controller goes back to a raw
-  // opaque (the `st_*` stash rails are opaque-typed by design).
+  // The erase hatch: the replaceable-controller slot's write side
+  // (complex-animation swaps the live controller through an opaque
+  // source — the slot rail's documented shape).
   pub fn raw(self) -> opaque {
     return self.inner;
   }

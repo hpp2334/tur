@@ -139,9 +139,12 @@ use core::{ Future };
 // wraps every row answer (`View(flex_build(..))`) and unwraps every row
 // arg (`c.inner`) — a raw view opaque never crosses a kit signature.
 //
-// TODO(phase5): host-seam law — the raw() hatches and the compiler-provided
-// `X(v)` ctors are still pub while the stash dance and the current test
-// spellings are alive; privatize when the stash dies.
+// Host-seam note: the compiler-provided `X(v)` ctors and the `raw()`
+// hatches stay pub — their remaining consumers are the row-probe fixtures
+// (the pg rails' `ctrl.raw()` erase) and complex-animation's
+// replaceable-controller slot. The STASH consumers are gone (the
+// context-crossing entry contract); a further privatization pass lands
+// with complex-animation's AppContext restructure.
 pub class View(opaque);
 
 impl View {
@@ -167,8 +170,9 @@ pub fn mount(v: View) {
 pub class ListHandle(opaque);
 
 impl ListHandle {
-  // TODO(phase5): host-seam law — privatize when the stash dies (the
-  // boxed store lane may keep needing the raw; re-judge there).
+  // The boxed store lane's erase (the `source<opaque>(list.raw())`
+  // crossing) — stays pub: the store holds structured values as host
+  // opaques, so a list into a source IS the typed shape.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -212,9 +216,8 @@ pub class VAppSource(opaque);
 pub class TextCtrl(opaque);
 
 impl TextCtrl {
-  // The erase hatch: the one place a controller goes back to a raw
-  // opaque (the `st_*` stash rails are opaque-typed by design).
-  // TODO(phase5): host-seam law — privatize when the stash dies.
+  // The row-probe erase (the pg highlight rails + the span probes take
+  // the raw opaque). Kit fns mint; only the raw ROWS need this.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -236,7 +239,7 @@ pub fn text_ctrl() -> TextCtrl {
 pub class UndoCtrl(opaque);
 
 impl UndoCtrl {
-  // TODO(phase5): host-seam law — privatize when the stash dies.
+  // The row-probe erase (the undo rows take the raw opaque).
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -251,7 +254,7 @@ pub fn undo_ctrl() -> UndoCtrl {
 pub class VAppCtrl(opaque);
 
 impl VAppCtrl {
-  // TODO(phase5): host-seam law — privatize when the stash dies.
+  // Kit machinery — the virtual-app rows take the raw opaque.
   pub fn raw(self) -> opaque {
     return self.inner;
   }
@@ -348,13 +351,12 @@ entry fn __tur_cb_str2(cb: opaque, a: f64, b: f64) -> str {
 
 // ---- reactive helpers (the C8 substrate's authored face) ------------------
 //
-// TODO(phase5): the RAW-spelling reactive surface — the boot-corpus test
-// snippets still probe these rail shapes (`rs_derive(fmt, dep)` over a raw
-// atom dep, the click-shaped watch callback). The underlying rows died
-// with the phase-4 re-railing; these spell the SAME shapes through the
-// surviving rails (the boxed derive lane + `rs_watch_mut`), so the tests
-// keep probing the rail they intend to probe until the context-crossing
-// contract migrates them.
+// The RAW-spelling reactive surface — the sanctioned PLAIN-FN derive rail
+// (the lambda-capturing `derive(fn ...)` spelling trips the upstream
+// duplicate-type-interning bug in large modules; `rs_derive(fmt, dep)`
+// takes a plain fn and serves those modules — the playground's status
+// label is the standing consumer). `rs_derive2`/`rs_watch` died with the
+// phase-5 migration (their users spell `derive<T>`/`watch<T>` now).
 
 // `rs_derive(fmt, dep)` — the str-format rail over a raw f64 dep atom:
 // the boxed derive lane runs the fmt fn with the dep's fresh value on
@@ -487,9 +489,9 @@ pub class Source<T> {
 
 impl<T> Source<T> {
   [constructor] pub fn of(h: opaque, atom: u64, _derived: bool, stamp: u64) -> Self {
-    // TODO(phase5): the 4-arg crossing (the boot tests still spell the
-    // legacy `derived` flag position); the flag is GONE — `derive<T>`
-    // mints `Derived<T>` — and the param is accepted and ignored.
+    // The 4-arg crossing (the corpus probe entries spell the legacy
+    // `derived` flag position); the flag is GONE — `derive<T>` mints
+    // `Derived<T>` — and the param is accepted and ignored.
     return Self { h: h, atom: atom, stamp: stamp };
   }
   pub fn get(self) -> T {
@@ -598,9 +600,12 @@ pub class MutationCtx {
 }
 
 impl MutationCtx {
-  // TODO(phase5): the host-seam law — `over` is the dispatch entries'
-  // mint (ctxs originate only from the rails) and goes kit-private when
-  // the boot-corpus snippets stop spelling it.
+  // The dispatch entries' + entry_ctx's mint. STILL PUB at this pin: the
+  // corpus cases' raw-atom probe entries spell `over(bridge())` (the
+  // sanctioned probe rail — see `bridge`), and pub(mod) would lock them
+  // out. The TEST fixtures reach the ctx through `entry_ctx()` / the cx
+  // lanes instead; the privatization lands with the corpus probe rail's
+  // retirement.
   [constructor] pub fn over(h: opaque) -> Self {
     return Self { h: h };
   }
@@ -624,7 +629,9 @@ pub class DeriveCtx {
 }
 
 impl DeriveCtx {
-  [constructor] pub fn over(h: opaque) -> Self {
+  // Kit-internal — `derive<T>`'s wrapper mints it at the drain (no
+  // external user spells it; the corpus derives go through the minter).
+  [constructor] pub(mod) fn over(h: opaque) -> Self {
     return Self { h: h };
   }
   pub fn get<T>(self, r: Readable<T>) -> T {
@@ -641,9 +648,11 @@ pub fn entry_ctx() -> MutationCtx {
   return MutationCtx.over(ctx_bridge());
 }
 
-// The store-bridge accessor (the probe/entry seam — the raw-atom probe
-// rail's hatch). TODO(phase5): deleted once the sweep retires the last
-// `bridge()` spelling (the entry-cx contract + `entry_ctx` replaced it).
+// The store-bridge accessor — the raw-atom PROBE rail's hatch, kept for
+// the corpus cases' probe entries and the playground's one documented
+// upstream-workaround line (the status label's raw `rs_derive`, until the
+// next rut bump). Test FIXTURES use the context-crossing entry contract
+// (AppContext + entry_start + the cx lanes) instead.
 pub fn bridge() -> opaque {
   return ctx_bridge();
 }

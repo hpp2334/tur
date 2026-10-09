@@ -15,8 +15,8 @@
 //! ## Layering law
 //!
 //! This module is MECHANISM ONLY: the `RutView` crossing, the
-//! [`RutHandles`] bridge state, the `tur_host` pkg's store / stash / mount
-//! rows, the entry rails ([`Intent`] + the drain), and the pkg-extension
+//! [`RutHandles`] bridge state, the `tur_host` pkg's store / mount rows,
+//! the entry rails ([`Intent`] + the drain), and the pkg-extension
 //! seam ([`RutPkgExt`]). It contains ZERO element concepts — every element
 //! family's spec + rows live in the builtin plugin that owns its view type
 //! (pushed via `PluginRegisterContext::push_rut_ext`, the
@@ -33,7 +33,7 @@ use crate::core::edgy::value::Value;
 use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
-use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_OPAQUE, TY_STR, TY_U64, TypeId};
+use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64, TypeId};
 use rut_driver::PkgBody;
 use rut_vm::Opaque;
 use rut_vm::OpaqueRef;
@@ -191,8 +191,8 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 // The `tur_host` package — decl rows (mounted in-memory as a Module) +
 // bodies (a HostPkg installed into the per-instance HostRegistry).
 //
-// MECHANISM ONLY: mount + the C8 no-mount trap, the `rs_*` store rows,
-// and the stash / scratch rails. Element rows live in the plugins that own
+// MECHANISM ONLY: mount + the C8 no-mount trap and the `rs_*` store rows.
+// Element rows live in the plugins that own
 // their view types and arrive through the [`RutPkgExt`] seam.
 // ---------------------------------------------------------------------------
 
@@ -266,13 +266,6 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
         row("mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
         row("derive_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
-        // the opaque stash (cross-entry hand-off)
-        row("st_put", vec![TY_U64, TY_OPAQUE], TY_NIL),
-        row("st_take", vec![TY_U64], TY_OPT_OPAQUE),
-        // the scalar stash + scratch cells (atom ids / counts cross entries
-        // and async frames as f64 — the opaque stash cannot hold numbers)
-        row("stf_put", vec![TY_U64, TY_F64], TY_NIL),
-        row("stf_take", vec![TY_U64], TY_F64),
         row("str_parse_f64", vec![TY_STR], TY_F64),
         // pure math (f64 radians in/out) — the orbit / wave case shapes
         row("math_sin", vec![TY_F64], TY_F64),
@@ -546,34 +539,7 @@ fn install_tur_pkg(
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_brush: {e}")))
     });
 
-    // ---- the opaque + scalar stashes (cross-entry hand-off rails) --------
-    {
-        let h = handles.clone();
-        rut_vm::pkg_fn!(pkg, "st_put", (u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, o: OpaqueRef| {
-            h.stash.borrow_mut().insert(key, o);
-            Ok(())
-        });
-        let h = handles.clone();
-        rut_vm::pkg_fn!(pkg, "st_take", (u64,) -> Option<OpaqueRef>, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
-            Ok(h.stash.borrow_mut().remove(&key))
-        });
-    }
-    {
-        let h = handles.clone();
-        rut_vm::pkg_fn!(pkg, "stf_put", (u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, key: u64, v: f64| {
-            h.stash_num.borrow_mut().insert(key, v);
-            Ok(())
-        });
-        let h = handles.clone();
-        rut_vm::pkg_fn!(pkg, "stf_take", (u64,) -> f64, move |_vm: &mut rut_vm::interp::Vm, key: u64| {
-            Ok(h.stash_num.borrow_mut().remove(&key).unwrap_or(0.0))
-        });
-    }
-
-    // ---- scratch cells + parse helper --------------------------------------
-    // The opaque stash holds OPQUES only, so stateful entries keep their
-    // scratch numbers in f64 cells (`mem_*`) — minted at start, stashed,
-    // read/written in the intent entries.
+    // ---- parse helper -------------------------------------------------------
     // str -> f64 parse (0 on failure) — the edit-field confirm path.
     rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
         Ok(s.trim().parse::<f64>().unwrap_or(0.0))
@@ -653,13 +619,6 @@ pub struct RutHandles {
     pub pending_calls: std::cell::RefCell<Vec<Intent>>,
     /// Monotonic click counter stamped into click intents.
     pub click_seq: std::cell::Cell<u64>,
-    /// The module-facing opaque stash — `st_put` / `st_take` let a module
-    /// hold host objects across entry calls (an async frame cannot carry
-    /// opaque params, so the stash is the hand-off rail).
-    pub stash: std::cell::RefCell<std::collections::HashMap<u64, OpaqueRef>>,
-    /// The scalar stash (`stf_put` / `stf_take`) — atom ids and counts
-    /// cross entries and async frames as f64.
-    pub stash_num: std::cell::RefCell<std::collections::HashMap<u64, f64>>,
     /// The worker→host channel — runtime-error reports for face traps ride
     /// the same `RuntimeError` message the JS rail used.
     pub host_tx: crate::core::app::HostTx,
@@ -1139,8 +1098,6 @@ impl RutRuntime {
             pending_root: std::cell::RefCell::new(None),
             pending_calls: std::cell::RefCell::new(Vec::new()),
             click_seq: std::cell::Cell::new(0),
-            stash: std::cell::RefCell::new(std::collections::HashMap::new()),
-            stash_num: std::cell::RefCell::new(std::collections::HashMap::new()),
             host_tx: js_ctx.host_tx.clone(),
             clock: inputs.clock,
             mutation_queue: js_ctx.mutation_queue.clone(),
