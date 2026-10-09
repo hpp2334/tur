@@ -1,0 +1,208 @@
+// dispatch.rut — the callback rail's fire half: the infra dispatch
+// entries, the mutation rail's dispatch entries, and the boxed
+// derive-lane probes. Split file 3/17 of tur_kit (the splice order IS
+// rut.jsonc's entry.lib + entry.libs).
+
+// ---- the infra dispatch entries (the callback rail's fire half) ----------
+//
+// The engine's intent drain calls these with the SEALED callback box as
+// the first argument (the only callable shape that ever crosses). Each
+// entry recovers the fn value — the downcast spells the same fn type the
+// sealing kit method declared, so the ids always match — and calls it.
+// One entry per payload shape; the arities are the drain's contract.
+//
+// Scope law: a kit's dispatch entries live in the SAME module that seals
+// its callbacks (the box stamps the sealing unit's fn-type id; the
+// downcast must spell the same id). So this kit owns the shapes its
+// surfaces declare — click/key/pointer/build/derive — and OTHER kits own
+// theirs (tur_anim_kit: `__tur_acb_val`; the net kit: `__tur_ncb_bytes`).
+// A fn-type shape is exported by at most ONE kit per program.
+
+entry fn __tur_cb_click(cb: opaque, a: u64, b: u64, n: f64) {
+  let f = opaque.downcast<fn(u64, u64, f64)>(cb);
+  f(a, b, n);
+}
+
+entry fn __tur_cb_key(cb: opaque, id: u64, key: str, code: str, mods: u64, kind: u64) {
+  let f = opaque.downcast<fn(u64, str, str, u64, u64)>(cb);
+  f(id, key, code, mods, kind);
+}
+
+entry fn __tur_cb_ptr1(cb: opaque, id: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(u64, f64, f64, f64, f64, u64)>(cb);
+  f(id, lx, ly, gx, gy, btn);
+}
+
+entry fn __tur_cb_ptr2(cb: opaque, a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(u64, u64, f64, f64, f64, f64, u64)>(cb);
+  f(a, b, lx, ly, gx, gy, btn);
+}
+
+// The lazy builders (branch builders / Each / LazyList / LazyGrid /
+// Table) — face-called WITH an answer (the built view) during flush. The
+// zero-arg entry drives the Condition/Switch branch factories: the
+// builder is invoked at activation and re-invoked at every re-activation
+// (fresh read of live state). The user fn answers a `View`; the entry
+// UNWRAPS it — the engine drain decodes the raw view opaque.
+entry fn __tur_cb_build0(cb: opaque) -> opaque {
+  let f = opaque.downcast<fn() -> View>(cb);
+  return f().raw();
+}
+
+entry fn __tur_cb_build1(cb: opaque, i: u64) -> opaque {
+  let f = opaque.downcast<fn(u64) -> View>(cb);
+  return f(i).raw();
+}
+
+entry fn __tur_cb_build2(cb: opaque, i: u64, item: str) -> opaque {
+  let f = opaque.downcast<fn(u64, str) -> View>(cb);
+  return f(i, item).raw();
+}
+
+entry fn __tur_cb_build2i(cb: opaque, i: u64, col: u64) -> opaque {
+  let f = opaque.downcast<fn(u64, u64) -> View>(cb);
+  return f(i, col).raw();
+}
+
+// The derive format fns — face-called WITH an answer (the formatted str).
+entry fn __tur_cb_str1(cb: opaque, v: f64) -> str {
+  let f = opaque.downcast<fn(f64) -> str>(cb);
+  return f(v);
+}
+
+entry fn __tur_cb_str2(cb: opaque, a: f64, b: f64) -> str {
+  let f = opaque.downcast<fn(f64, f64) -> str>(cb);
+  return f(a, b);
+}
+
+// ---- the mutation rail's dispatch entries (the fire half) -----------------
+//
+// The sealed mutation's Rust closure face-calls these with the sealed fn
+// box + the bridge marker + the payload; the entry constructs the ctx
+// (+ the typed event) — rut-side, per the layering law — and calls the
+// user's typed fn. One entry per payload shape; the arities are the
+// mutation pass's contract (`mutation_entries` in rut_runtime).
+
+entry fn __tur_cb_mnil(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, nil)>(cb);
+  f(MutationCtx.over(h), nil);
+}
+
+entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
+  let f = opaque.downcast<fn(MutationCtx, PointerEvent)>(cb);
+  f(MutationCtx.over(h), PointerEvent.of(Point.at(lx, ly), Point.at(gx, gy), mouse_button_of(btn)));
+}
+
+entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) {
+  let f = opaque.downcast<fn(MutationCtx, f64)>(cb);
+  f(MutationCtx.over(h), a);
+}
+
+// The boxed composition lane: the drain hands the erasure box the kit's
+// `invoke` built; the SEALED box is the mint's fixed-type wrapper, which
+// recovers A and calls the user fn. One entry for every A.
+entry fn __tur_cb_mbox(cb: opaque, h: opaque, b: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, opaque)>(cb);
+  f(MutationCtx.over(h), b);
+}
+
+entry fn __tur_cb_menter(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
+  let f = opaque.downcast<fn(MutationCtx, EnterEvent)>(cb);
+  f(MutationCtx.over(h), EnterEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+}
+
+entry fn __tur_cb_mexit(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
+  let f = opaque.downcast<fn(MutationCtx, ExitEvent)>(cb);
+  f(MutationCtx.over(h), ExitEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+}
+
+entry fn __tur_cb_mkey(cb: opaque, h: opaque, key: str, code: str, mods: u64) {
+  let f = opaque.downcast<fn(MutationCtx, KeydownEvent)>(cb);
+  f(MutationCtx.over(h), KeydownEvent.of(key, code, mods));
+}
+
+entry fn __tur_cb_minput(cb: opaque, h: opaque, value: str, enter: bool) {
+  let f = opaque.downcast<fn(MutationCtx, InputEvent)>(cb);
+  f(MutationCtx.over(h), InputEvent.of(value, enter));
+}
+
+entry fn __tur_cb_mfocus(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, FocusEvent)>(cb);
+  f(MutationCtx.over(h), FocusEvent.of());
+}
+
+entry fn __tur_cb_mblur(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, BlurEvent)>(cb);
+  f(MutationCtx.over(h), BlurEvent.of());
+}
+
+entry fn __tur_cb_mmount(cb: opaque, h: opaque) {
+  let f = opaque.downcast<fn(MutationCtx, MountEvent)>(cb);
+  f(MutationCtx.over(h), MountEvent.of());
+}
+
+entry fn __tur_cb_mbytes(cb: opaque, h: opaque, data: bytes) {
+  let f = opaque.downcast<fn(MutationCtx, bytes)>(cb);
+  f(MutationCtx.over(h), data);
+}
+
+entry fn __tur_cb_derive_f64(cb: opaque, h: opaque) -> f64 {
+  let f = opaque.downcast<fn(DeriveCtx) -> f64>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_str(cb: opaque, h: opaque) -> str {
+  let f = opaque.downcast<fn(DeriveCtx) -> str>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_bool(cb: opaque, h: opaque) -> bool {
+  let f = opaque.downcast<fn(DeriveCtx) -> bool>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+// ---- the boxed derive lane (the GENERIC surface) ---------------------------
+//
+// The mint seals the fixed-type wrapper (`fn(DeriveCtx) -> opaque`, the
+// user fn captured); the drain calls it, then recovers kind + value
+// through these probes (the drain closure holds no VM, so the unbox runs
+// rut-side). The kinds are the drain's contract — `BOX_KIND_*` in
+// rut_runtime (one law, two spellings).
+
+entry fn __tur_cb_derive_box(cb: opaque, h: opaque) -> opaque {
+  let f = opaque.downcast<fn(DeriveCtx) -> opaque>(cb);
+  return f(DeriveCtx.over(h));
+}
+
+entry fn __tur_cb_derive_kind(b: opaque) -> u64 {
+  if (opaque.downcast<f64>(b) != nil) {
+    return 1;
+  }
+  if (opaque.downcast<str>(b) != nil) {
+    return 2;
+  }
+  if (opaque.downcast<bool>(b) != nil) {
+    return 3;
+  }
+  if (opaque.downcast<u64>(b) != nil) {
+    return 4;
+  }
+  return 0;
+}
+
+entry fn __tur_cb_unbox_f64(b: opaque) -> f64 {
+  return unopaque<f64>(b);
+}
+
+entry fn __tur_cb_unbox_str(b: opaque) -> str {
+  return unopaque<str>(b);
+}
+
+entry fn __tur_cb_unbox_bool(b: opaque) -> bool {
+  return unopaque<bool>(b);
+}
+
+entry fn __tur_cb_unbox_u64(b: opaque) -> u64 {
+  return unopaque<u64>(b);
+}
+

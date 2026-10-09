@@ -1,0 +1,33 @@
+// focus.rut — the focus family (Focusable).
+// Split file 14/17 of tur_kit (the splice order IS rut.jsonc's
+// entry.lib + entry.libs).
+
+class Focusable {
+  spec: opaque;
+}
+
+impl Focusable {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: focus_new() };
+  }
+  pub fn on_key_down(mut self, m: Mutation<KeydownEvent>) -> Self {
+    focus_on_key_down(self.spec, m.seal(SEAL_KEY));
+    return self;
+  }
+  pub fn on_focus(mut self, m: Mutation<FocusEvent>) -> Self {
+    focus_on_focus(self.spec, m.seal(SEAL_FOCUS));
+    return self;
+  }
+  pub fn on_blur(mut self, m: Mutation<BlurEvent>) -> Self {
+    focus_on_blur(self.spec, m.seal(SEAL_BLUR));
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    focus_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(focus_build(self.spec));
+  }
+}
+

@@ -40,9 +40,11 @@ use rut_vm::OpaqueRef;
 use rut_vm::interp::{CallArgs, Ret, Vm};
 
 mod async_caps;
+mod decl_gen;
 mod derive;
 mod mutation;
 
+pub use decl_gen::{render_tur_host_decl, tur_host_surface};
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return

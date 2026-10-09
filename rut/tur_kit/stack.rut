@@ -1,0 +1,93 @@
+// stack.rut — the stack families (Stack / Positioned).
+// Split file 7/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
+// entry.libs).
+
+// ---- stack + positioned ---------------------------------------------------
+
+class Stack {
+  spec: opaque;
+}
+
+impl Stack {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: stack_new() };
+  }
+  pub fn alignment(mut self, v: Align) -> Self {
+    stack_align(self.spec, align_code(v));
+    return self;
+  }
+  pub fn fit(mut self, v: StackFit) -> Self {
+    stack_fit(self.spec, stack_fit_code(v));
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    stack_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    stack_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn children(mut self, cs: [View]) -> Self {
+    for (let c of cs) {
+      stack_child(self.spec, c.inner);
+    }
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(stack_build(self.spec));
+  }
+}
+
+class Positioned {
+  spec: opaque;
+}
+
+impl Positioned {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: pos_new() };
+  }
+  pub fn left(mut self, v: f64) -> Self {
+    pos_left(self.spec, v);
+    return self;
+  }
+  pub fn top(mut self, v: f64) -> Self {
+    pos_top(self.spec, v);
+    return self;
+  }
+  // The reactive anchors (drag-to-move writes the live atom; a bound
+  // anchor's 0 is a real coordinate, same as the static rows — anchors
+  // are verbatim, absence is never calling the row).
+  pub fn left_bound(mut self, r: Readable<f64>) -> Self {
+    pos_left_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn top_bound(mut self, r: Readable<f64>) -> Self {
+    pos_top_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn right(mut self, v: f64) -> Self {
+    pos_right(self.spec, v);
+    return self;
+  }
+  pub fn bottom(mut self, v: f64) -> Self {
+    pos_bottom(self.spec, v);
+    return self;
+  }
+  pub fn width(mut self, v: f64) -> Self {
+    pos_width(self.spec, v);
+    return self;
+  }
+  pub fn height(mut self, v: f64) -> Self {
+    pos_height(self.spec, v);
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    pos_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(pos_build(self.spec));
+  }
+}
+

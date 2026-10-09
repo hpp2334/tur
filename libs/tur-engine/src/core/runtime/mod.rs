@@ -734,6 +734,73 @@ pub(crate) fn build_worker_backend(
     ))
 }
 
+/// A never-driven `WorkerExecutor` + `FontLoader` for the register probe
+/// below: the probe registers plugins only — no task outlives the probe
+/// (spawned futures drop unpolled; sleeps pend forever), and no fonts load.
+struct ProbeExecutor;
+
+impl crate::core::scheduler::WorkerExecutor for ProbeExecutor {
+    fn spawn_local(
+        &self,
+        _fut: crate::core::scheduler::LocalFut,
+    ) -> crate::core::scheduler::TaskHandle {
+        // Drop the future unpolled — track_spawn's Dropped path.
+        crate::core::scheduler::track_spawn(Box::pin(async {}), |_f| { /* never driven */ })
+    }
+    fn sleep(&self, _d: std::time::Duration) -> crate::core::scheduler::Sleep {
+        crate::core::scheduler::Sleep(Box::pin(std::future::pending::<()>()))
+    }
+}
+
+/// The probe's font loader: registers nothing (the register phase never
+/// loads fonts — the runtime build owns that).
+struct ProbeFontLoader;
+
+impl crate::core::fonts::FontLoader for ProbeFontLoader {
+    fn load_preset_fonts(&self, _fcx: &mut crate::core::fonts::FontContext) {}
+}
+
+/// Run `plugins`' register phase against a SCRATCH instance context and
+/// answer the rut pkg extensions they pushed — no worker, no realm, no
+/// renderer (subsystems are constructed into the discarded collector and
+/// dropped; nothing is ever driven). The decl-surface generator's plugin
+/// seam: the caller supplies the plugin set (the engine cannot name the
+/// out-of-crate plugins — animation, net, filepicker are separate crates),
+/// the probe supplies the register-phase machinery that is otherwise
+/// buried inside [`build_worker_backend`].
+pub fn probe_register_rut_pkg_exts(
+    plugins: &[Box<dyn Plugin>],
+    capabilities: Capabilities,
+    viewport: (f64, f64),
+) -> Result<Vec<crate::core::rut_runtime::RutPkgExt>, TurError> {
+    let clock: Arc<dyn Clock> = Arc::new(crate::core::clock::StdClock);
+    let (host_tx, _host_rx) = futures::channel::mpsc::unbounded::<crate::core::app::HostMsg>();
+    let (task_tx, _task_rx) =
+        futures::channel::mpsc::unbounded::<crate::core::scheduler::HostTask>();
+    let internal = TurAppInternal::new(
+        FontContext::new(),
+        Arc::new(ProbeFontLoader),
+        clock,
+        capabilities,
+        crate::core::scheduler::WorkerContext::new(Rc::new(ProbeExecutor)),
+        Arc::new(|| {}),
+        host_tx,
+        Arc::from(Vec::<WorkerPoolHandle>::new()),
+    );
+    internal.app_context.borrow_mut().screen.logical_size = viewport;
+    let mut register_cx = PluginRegisterContext {
+        js_ctx: internal.instance.clone(),
+        app: internal.app_context.clone(),
+        subsystems: Vec::new(),
+        plugin_state: HashMap::new(),
+        host_exec: HostExecutor::from_sender(task_tx),
+    };
+    for plugin in plugins {
+        plugin.register(&mut register_cx)?;
+    }
+    Ok(internal.instance.rut_pkg_exts.borrow().clone())
+}
+
 pub struct TurRuntimeBuilder {
     font_loader: Option<Arc<dyn FontLoader>>,
     clock: Option<Arc<dyn Clock>>,

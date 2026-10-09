@@ -1,0 +1,220 @@
+// gesture.rut — the gesture family (the typed event prelude +
+// PointerInteract / MouseRegion). Split file 13/17 of tur_kit (the
+// splice order IS rut.jsonc's entry.lib + entry.libs).
+
+// ---- the event value prelude (M1: the gesture family) ---------------------
+
+enum MouseButton {
+  Left,
+  Right,
+  Middle,
+  None,
+}
+
+// The engine's button crossing code → the enum (0 primary, 1 middle,
+// 2 the context menu's right button).
+pub fn mouse_button_of(v: u64) -> MouseButton {
+  if (v == 1) {
+    return MouseButton.Middle;
+  }
+  if (v == 2) {
+    return MouseButton.Right;
+  }
+  return MouseButton.Left;
+}
+
+class Point {
+  x: f64;
+  y: f64;
+}
+
+impl Point {
+  [constructor] pub fn at(x: f64, y: f64) -> Self {
+    return Self { x: x, y: y };
+  }
+}
+
+// One typed event for the whole gesture family (boa's single
+// `PointerInteractEvent`): nested Points, reads spell `ev.global.x`.
+class PointerEvent {
+  local: Point;
+  global: Point;
+  button: MouseButton;
+}
+
+impl PointerEvent {
+  [constructor] pub fn of(local: Point, global: Point, button: MouseButton) -> Self {
+    return Self { local: local, global: global, button: button };
+  }
+}
+
+// The region pair (MouseRegion's onEnter / onExit) — positions only.
+pub class EnterEvent {
+  local: Point;
+  global: Point;
+}
+
+impl EnterEvent {
+  [constructor] pub fn of(local: Point, global: Point) -> Self {
+    return Self { local: local, global: global };
+  }
+}
+
+pub class ExitEvent {
+  local: Point;
+  global: Point;
+}
+
+impl ExitEvent {
+  [constructor] pub fn of(local: Point, global: Point) -> Self {
+    return Self { local: local, global: global };
+  }
+}
+
+// The input event (the editable's every keystroke / IME commit): the
+// fresh text + whether Enter delivered it.
+pub class InputEvent {
+  value: str;
+  enter: bool;
+}
+
+impl InputEvent {
+  [constructor] pub fn of(value: str, enter: bool) -> Self {
+    return Self { value: value, enter: enter };
+  }
+}
+
+// The key event (Focusable's onKeyDown): the platform key + code and the
+// modifier bitmask (bit0 shift / bit1 ctrl / bit2 alt / bit3 meta).
+pub class KeydownEvent {
+  key: str;
+  code: str;
+  modifiers: u64;
+}
+
+impl KeydownEvent {
+  [constructor] pub fn of(key: str, code: str, modifiers: u64) -> Self {
+    return Self { key: key, code: code, modifiers: modifiers };
+  }
+}
+
+// The payload-less events (the focus lifecycle + mount). They are TYPED
+// so a handler's fn signature names its surface; the fields are empty.
+pub class FocusEvent {
+}
+
+impl FocusEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
+pub class BlurEvent {
+}
+
+impl BlurEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
+pub class MountEvent {
+}
+
+impl MountEvent {
+  [constructor] pub fn of() -> Self {
+    return Self { };
+  }
+}
+
+class PointerInteract {
+  spec: opaque;
+}
+
+impl PointerInteract {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: pi_new() };
+  }
+  // ---- the mutation surface (boa's names, snake_cased) ------------------
+  //
+  // Handlers are MUTATIONS over the MutationCtx (`on_click(mutate(...))`);
+  // the gesture dispatch enqueues the invocation and the flush's mutation
+  // pass invokes the fn with a fresh ctx — never synchronously. State
+  // binds by closure (the mutation captures its sources), events flow by
+  // the typed `PointerEvent` argument — no id args.
+  pub fn on_click(mut self, m: Mutation<nil>) -> Self {
+    pi_on_click(self.spec, m.seal(SEAL_NIL));
+    return self;
+  }
+  pub fn on_pointer_down(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_down(self.spec, m.seal(SEAL_PTR));
+    return self;
+  }
+  pub fn on_pointer_move(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_move(self.spec, m.seal(SEAL_PTR));
+    return self;
+  }
+  pub fn on_pointer_up(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_mut_up(self.spec, m.seal(SEAL_PTR));
+    return self;
+  }
+  pub fn on_context_menu(mut self, m: Mutation<PointerEvent>) -> Self {
+    pi_on_context_menu(self.spec, m.seal(SEAL_PTR));
+    return self;
+  }
+  pub fn behavior(mut self, v: HitTestBehavior) -> Self {
+    pi_behavior(self.spec, hit_test_code(v));
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    pi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    pi_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(pi_build(self.spec));
+  }
+}
+
+class MouseRegion {
+  spec: opaque;
+}
+
+impl MouseRegion {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: mr_new() };
+  }
+  pub fn on_enter(mut self, m: Mutation<EnterEvent>) -> Self {
+    mr_on_enter(self.spec, m.seal(SEAL_ENTER));
+    return self;
+  }
+  pub fn on_exit(mut self, m: Mutation<ExitEvent>) -> Self {
+    mr_on_exit(self.spec, m.seal(SEAL_EXIT));
+    return self;
+  }
+  pub fn cursor(mut self, v: Cursor) -> Self {
+    mr_cursor(self.spec, cursor_code(v));
+    return self;
+  }
+  // The reactive cursor: the name rides a live str (the reactive-cursor
+  // corpus case).
+  pub fn cursor_bound(mut self, r: Readable<str>) -> Self {
+    mr_cursor_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn behavior(mut self, v: HitTestBehavior) -> Self {
+    mr_behavior(self.spec, hit_test_code(v));
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    mr_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(mr_build(self.spec));
+  }
+}
+

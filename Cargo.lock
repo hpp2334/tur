@@ -3404,6 +3404,7 @@ dependencies = [
  "parley",
  "pollster",
  "raw-window-handle",
+ "rut-driver",
  "thiserror 2.0.18",
  "tokio",
  "tur-animation",

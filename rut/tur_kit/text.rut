@@ -1,0 +1,88 @@
+// text.rut — the text family (Text / Spans).
+// Split file 8/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
+// entry.libs).
+
+// ---- text family (Text / spans) -------------------------------------------
+
+class Text {
+  spec: opaque;
+}
+
+impl Text {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: text_new() };
+  }
+  pub fn text(mut self, v: str) -> Self {
+    text_text(self.spec, v);
+    return self;
+  }
+  // The ONE reactive text prop (a prop never has a twin): the handle's
+  // kind selects the bind row — a source binds directly, a derived binds
+  // through the derive rail.
+  pub fn text_bound(mut self, r: Readable<str>) -> Self {
+    if (r.is_derived()) {
+      text_bind_derived(self.spec, r.atom_id());
+    } else {
+      text_bind(self.spec, r.atom_id());
+    }
+    return self;
+  }
+  pub fn font_size(mut self, v: f64) -> Self {
+    text_size(self.spec, v);
+    return self;
+  }
+  pub fn font_weight(mut self, v: f64) -> Self {
+    text_weight(self.spec, v);
+    return self;
+  }
+  pub fn color(mut self, packed: u64) -> Self {
+    text_color(self.spec, packed);
+    return self;
+  }
+  pub fn max_lines(mut self, n: u64) -> Self {
+    text_max_lines(self.spec, n);
+    return self;
+  }
+  pub fn clip(mut self) -> Self {
+    text_clip(self.spec);
+    return self;
+  }
+  pub fn ellipsis(mut self) -> Self {
+    text_ellipsis(self.spec);
+    return self;
+  }
+  pub fn overflow_visible(mut self) -> Self {
+    text_overflow_visible(self.spec);
+    return self;
+  }
+  pub fn selectable(mut self, v: bool) -> Self {
+    text_selectable(self.spec, v);
+    return self;
+  }
+  pub fn spans(mut self, list: Spans) -> Self {
+    text_spans(self.spec, list.spec);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    text_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(text_build(self.spec));
+  }
+}
+
+class Spans {
+  spec: opaque;
+}
+
+impl Spans {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: spans_new() };
+  }
+  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: SpanFlags) -> Self {
+    span_add(self.spec, text, size, packed, weight, span_flags_code(flags));
+    return self;
+  }
+}
+

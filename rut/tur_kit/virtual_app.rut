@@ -1,0 +1,143 @@
+// virtual_app.rut — the embedding families (VirtualApp + the
+// composited target/follower pair with its LayerLink) and the
+// virtual-app helpers. Split file 17/17 of tur_kit (the splice order IS
+// rut.jsonc's entry.lib + entry.libs).
+
+class VirtualApp {
+  spec: opaque;
+}
+
+impl VirtualApp {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: va_new() };
+  }
+  pub fn controller(mut self, c: VAppCtrl) -> Self {
+    va_controller_set(self.spec, c.raw());
+    return self;
+  }
+  pub fn bind(mut self, atom: u64) -> Self {
+    va_bind(self.spec, atom);
+    return self;
+  }
+  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+    va_size(self.spec, w, h);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    va_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(va_build(self.spec));
+  }
+}
+
+// ---- composited target / follower ------------------------------------------------
+
+class CompositedTarget {
+  spec: opaque;
+}
+
+impl CompositedTarget {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: ct_target_new() };
+  }
+  pub fn link(mut self, l: LinkCtrl) -> Self {
+    ct_target_link(self.spec, l.inner);
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    ct_target_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(ct_target_build(self.spec));
+  }
+}
+
+class CompositedFollower {
+  spec: opaque;
+}
+
+impl CompositedFollower {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: ct_follower_new() };
+  }
+  pub fn link(mut self, l: LinkCtrl) -> Self {
+    ct_follower_link(self.spec, l.inner);
+    return self;
+  }
+  pub fn target_anchor(mut self, v: Align) -> Self {
+    ct_follower_target_anchor(self.spec, align_code(v));
+    return self;
+  }
+  // The reactive anchor (the composited-transform corpus's reactive
+  // anchor rail).
+  pub fn target_anchor_bound(mut self, r: Readable<f64>) -> Self {
+    ct_follower_target_anchor_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn follower_anchor(mut self, v: Align) -> Self {
+    ct_follower_follower_anchor(self.spec, align_code(v));
+    return self;
+  }
+  pub fn offset(mut self, x: f64, y: f64) -> Self {
+    ct_follower_offset(self.spec, x, y);
+    return self;
+  }
+  pub fn child(mut self, c: View) -> Self {
+    ct_follower_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> View {
+    return View(ct_follower_build(self.spec));
+  }
+}
+
+// ---- shared helpers ----------------------------------------------------------------
+
+// A LayerLink (the JS `createLayerLink` twin) — the composited
+// target/follower pair's shared handle. Mint with `layer_link()`.
+pub class LinkCtrl(opaque);
+
+// Mint a LayerLink for the composited target/follower pair.
+pub fn layer_link() -> LinkCtrl {
+  return LinkCtrl(ct_link_new());
+}
+
+// Register a string-authored child module source with the virtual-app
+// subsystem — the `createModuleSource` twin.
+pub fn virtual_app_source(src: str) -> VAppSource {
+  return VAppSource(va_create_source(src));
+}
+
+// Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
+// answers) into the source handle — Rust-defined sources enter the realm
+// as plain u64s.
+pub fn virtual_app_source_handle(id: u64) -> VAppSource {
+  return VAppSource(va_source_handle(id));
+}
+
+// Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
+// (`VirtualApp.bind(atom)` + `virtual_app_set` / `virtual_app_clear`
+// swaps).
+pub fn virtual_app_atom() -> u64 {
+  return va_app_atom();
+}
+
+// Swap the reactive `app$` binding to a controller (the mounted
+// VirtualAppView rebinds in the same flush).
+pub fn virtual_app_set(atom: u64, ctrl: VAppCtrl) {
+  va_app_set(atom, ctrl.raw());
+}
+
+// Clear the reactive `app$` binding.
+pub fn virtual_app_clear(atom: u64) {
+  va_app_clear(atom);
+}
+
+// Mint a virtual-app controller from a registered source — the
+// `createVirtualAppController` twin.
+pub fn virtual_app_controller(src: VAppSource) -> VAppCtrl {
+  return VAppCtrl(va_controller(src.inner));
+}
