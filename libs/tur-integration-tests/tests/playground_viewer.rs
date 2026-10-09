@@ -191,7 +191,7 @@ fn wait_for_state(app: &TurTestApp, want: &str) -> bool {
 #[test]
 fn playground_boot_auto_selects_counter() {
     let app = playground_app();
-    let _state_atom = app.rut_start_answer();
+    let _cx = app.rut_start_answer();
 
     // The boot selection (the boa INITIAL_CASE): the toolbar's case name
     // reads `counter` before any tap.
@@ -246,7 +246,7 @@ fn playground_boot_auto_selects_counter() {
 #[test]
 fn playground_chrome_metrics_match_the_boa_reference() {
     let app = playground_app();
-    let _ = app.rut_start_answer();
+    let cx = app.rut_start_answer();
 
     // Toolbar: 48px band; the status bar: ~20px + hairlines (22 with the
     // inside border); the sidebar: the boa 200 seed.
@@ -304,7 +304,7 @@ fn playground_chrome_metrics_match_the_boa_reference() {
 #[test]
 fn playground_sidebar_rows_are_full_width_left_aligned_pills() {
     let app = playground_app();
-    let _ = app.rut_start_answer();
+    let cx = app.rut_start_answer();
 
     // The row's qk sits on the padding-8 wrapper: full sidebar width (the
     // full-width inset pill law), natural boa pitch (2 + 8 + pill + 8 ≈
@@ -326,10 +326,12 @@ fn playground_sidebar_rows_are_full_width_left_aligned_pills() {
 #[test]
 fn playground_viewer_runs_counter_to_ready() {
     let app = playground_app();
-    let state_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
+    let cx = app.rut_start_answer();
 
-    // Run the `counter` case through the probe entry.
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    // Run the `counter` case through the probe entry (the held context
+    // + the case index cross the entry lane).
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(
         wait_for_state(&app, "ready"),
@@ -338,9 +340,9 @@ fn playground_viewer_runs_counter_to_ready() {
     );
 
     // The explicit `va_status` probe writes the live controller's rail
-    // into the state atom (the start answer) — the label flips to the raw
-    // `running` read.
-    app.call_rut_entry("probe", state_atom, 0.0).unwrap();
+    // into the app-state source (the ctx writes it) — the label flips to
+    // the raw `running` read.
+    app.call_rut_entry_cx("probe", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         app.query_text(&["app-state"]).as_deref(),
@@ -376,7 +378,8 @@ fn playground_viewer_compiles_the_net_riding_github_viewer() {
     // live child. (The child's landing tree is pinned content-side by
     // `event/github_viewer.rs`.)
     let app = playground_app();
-    app.call_rut_entry("select", case_index("github-viewer"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("github-viewer"))
         .unwrap();
     assert!(
         wait_for_state(&app, "ready"),
@@ -399,6 +402,7 @@ fn playground_viewer_compiles_the_net_riding_github_viewer() {
 #[test]
 fn playground_run_swaps_controllers_destroy_then_spawn() {
     let mut app = playground_app();
+    let pg_cx = app.rut_start_answer();
 
     // First run via the REAL intent path: a sidebar tap on the first row
     // (complex-animation — the showcase manifest's alphabetical head).
@@ -414,7 +418,7 @@ fn playground_run_swaps_controllers_destroy_then_spawn() {
     // Second run via the probe: the swap destroys the first child and
     // spawns a fresh one under a new controller; the new child must reach
     // ready on its own rail.
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    app.call_rut_entry_cx_u64("select", pg_cx, case_index("counter"))
         .unwrap();
     assert!(
         wait_for_state(&app, "ready"),
@@ -426,9 +430,10 @@ fn playground_run_swaps_controllers_destroy_then_spawn() {
 #[test]
 fn playground_run_button_reruns_the_case() {
     let mut app = playground_app();
+    let cx = app.rut_start_answer();
 
     // First run via the probe entry.
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -447,7 +452,8 @@ fn playground_run_button_reruns_the_case() {
 #[test]
 fn playground_layout_tabs_switch_panes() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -520,7 +526,8 @@ fn playground_layout_tabs_switch_panes() {
 #[test]
 fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -546,8 +553,9 @@ fn playground_edit_split_swaps_with_a_live_child_settle_back_to_ready() {
 #[test]
 fn playground_reset_restores_the_original_source() {
     let mut app = playground_app();
+    let cx = app.rut_start_answer();
     let original = case_source("counter");
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
     assert_eq!(
@@ -589,7 +597,8 @@ fn playground_reset_restores_the_original_source() {
 #[test]
 fn playground_auto_run_respawns_after_the_debounce() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -622,7 +631,8 @@ fn playground_auto_run_respawns_after_the_debounce() {
 #[test]
 fn playground_auto_run_off_keeps_the_case_running() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -707,31 +717,45 @@ fn joined(spans: &[(String, u64)]) -> String {
     spans.iter().map(|(t, _)| t.as_str()).collect()
 }
 
-/// A minimal fixture: one editor Input on a realm-minted controller; the
-/// `highlight` probe runs the case-load rail (`pg_highlight` +
+/// A minimal fixture: one editor Input on a kit-minted controller; the
+/// `highlight` entry runs the case-load rail (`pg_highlight` +
 /// `pg_apply_highlight`) over a baked-in source — a keyword, an f-string
-/// with a hole, a comment, and the fn/call/method/param roles.
+/// with a hole, a comment, and the fn/call/method/param roles. The
+/// controller rides the answered context (the entry-cx contract).
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
-use tur_host::{ pg_apply_highlight, pg_highlight, st_put, st_take, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_host::{ pg_apply_highlight, pg_highlight };
+use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 
-let K_CTRL: u64 = 2;
+struct EditorCx {
+    ctrl: TextCtrl,
+}
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    st_put(K_CTRL, ctrl);
-    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(400.0, 200.0)
+fn start() -> EditorCx {
+    let ctrl = text_ctrl();
+    let input = Input().controller(ctrl).undo(undo_ctrl()).width_height(400.0, 200.0)
         .multiline(true).query_key("editor").build();
     mount(Column().child(input).build());
-    return 0;
+    return EditorCx { ctrl: ctrl };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn editor_cx(cx: opaque) -> EditorCx {
+    let c = opaque.downcast<EditorCx>(cx);
+    if (c == nil) {
+        panic("editor fixture: cx is not an EditorCx");
+    }
+    return c;
 }
 
 // The case-load rail over a known small source.
-entry fn highlight(_a: u64, _b: f64) {
+entry fn highlight(cx: opaque) {
     let src = "entry fn start() {\n    let s = f\"x {s}\"; // t\n    helper(1);\n    s.draw();\n}\nfn helper(n: u64) {\n}\n";
-    let ctrl = st_take(K_CTRL);
-    pg_apply_highlight(ctrl, pg_highlight(src));
-    st_put(K_CTRL, ctrl);
+    let c = editor_cx(cx);
+    pg_apply_highlight(c.ctrl.raw(), pg_highlight(src));
 }
 "#;
 
@@ -741,10 +765,10 @@ fn pg_highlight_rows_color_the_controller_spans() {
         TurTestApp::new_with_extra_plugins(600.0, 400.0, vec![Box::new(TurRutPlaygroundPlugin)])
             .unwrap();
     app.load_rut_module(HIGHLIGHT_ROWS_MODULE).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let _ = app.rut_start_answer();
 
-    app.call_rut_entry("highlight", 0, 0.0).unwrap();
+    app.call_rut_entry_cx("highlight", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
     let spans = editor_spans(&app);
@@ -777,7 +801,8 @@ fn pg_highlight_rows_color_the_controller_spans() {
 #[test]
 fn playground_highlights_on_load_and_the_spans_survive_editing() {
     let mut app = playground_app();
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
 
@@ -891,7 +916,7 @@ fn input_on_input_row_fires_the_edit_intent() {
     let mut app = TurTestApp::new(600.0, 400.0).unwrap();
     app.load_rut_module(INPUT_ON_INPUT_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let _text_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
     assert_eq!(
         app.query_text(&["echo"]).as_deref(),
         Some("cold"),
@@ -943,6 +968,7 @@ fn input_on_input_row_fires_the_edit_intent() {
 #[test]
 fn playground_sidebar_rows_hover_with_the_pointer_cursor() {
     let mut app = playground_app();
+    let cx = app.rut_start_answer();
 
     // Rows carry query keys (`row/<name>` — the selection paint targets;
     // the qkey rows split on `/`, so the query is a two-segment path).
@@ -977,10 +1003,11 @@ fn playground_sidebar_rows_hover_with_the_pointer_cursor() {
 #[test]
 fn playground_select_paints_the_selected_row() {
     let app = playground_app();
+    let cx = app.rut_start_answer();
 
     // Select via the probe: the selection atom moves, the toolbar's case
     // name follows, and the selected row's node is addressable.
-    app.call_rut_entry("select", case_index("counter"), 0.0)
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
     assert_eq!(
@@ -995,7 +1022,7 @@ fn playground_select_paints_the_selected_row() {
 
     // Re-selecting another row keeps every rail consistent (the old row's
     // paint drops — the brush sweep in `case_tap`).
-    app.call_rut_entry("select", case_index("todolist"), 0.0)
+    app.call_rut_entry_cx_u64("select", cx, case_index("todolist"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
     assert_eq!(app.query_text(&["case-name"]).as_deref(), Some("todolist"));
@@ -1206,22 +1233,18 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
 // future span/shaping regression trips here.
 
 const SPACING_ROWS_MODULE: &str = r#"
-use tur_host::{ pg_apply_highlight, pg_highlight, st_put, tctrl_new, tctrl_set_text, undo_new };
-use tur_kit::{ Column, Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_host::{ pg_apply_highlight, pg_highlight };
+use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 
-let K_CTRL: u64 = 2;
-
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    st_put(K_CTRL, ctrl);
+entry fn start() {
+    let ctrl = text_ctrl();
     let src = "entry fn start() { // the quick brown fox jumps over the lazy dog\n    let x = 1; // spaced — out\n}\n";
-    tctrl_set_text(ctrl, src);
-    pg_apply_highlight(ctrl, pg_highlight(src));
+    ctrl.set_text(src);
+    pg_apply_highlight(ctrl.raw(), pg_highlight(src));
     mount(Column().child(
-        Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(700.0, 200.0)
+        Input().controller(ctrl).undo(undo_ctrl()).width_height(700.0, 200.0)
             .font_family("monospace").font_size(13.0)
             .multiline(true).query_key("editor").build()).build());
-    return 0;
 }
 "#;
 
@@ -1232,7 +1255,7 @@ fn editor_comment_spans_keep_uniform_monospace_advances() {
             .unwrap();
     app.load_rut_module(SPACING_ROWS_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let _ = app.rut_start_answer();
+    let cx = app.rut_start_answer();
     app.wait_for_timeout(Duration::ZERO);
 
     let editable = editor_editable(&app);
@@ -1291,6 +1314,7 @@ fn playground_complex_animation_studio_boots_to_ready() {
     // by the corpus test; the browser side-by-side verified the in-viewer
     // tween end to end.)
     let mut app = playground_app();
+    let cx = app.rut_start_answer();
     let (cx, cy) = qk_center(&app, &["row", "complex-animation"]);
     app.click(cx, cy);
     assert!(

@@ -82,16 +82,20 @@
 // (`launch_future` / `sleep`) installs on BOTH targets — the vendored
 // decl lowers from the `.d.rut` (wasm has no filesystem) and the bodies
 // are pure VM-driving rows.
+// (A second `tur_host` use statement is LOAD-BEARING at this rut pin: the
+// duplicate-boot-scope type-interning bug collapses kit-fn/row resolution
+// in this module when it has fewer than two `tur_host` use lines — the
+// documented upstream family. Revisit at the next rut bump.)
+use tur_host::mount_raw;
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
-use tur_host::{ st_put, st_take };
 use tur_kit::{ Align, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx,
     Each, EnterEvent, ExitEvent, Expanded, Image, Input, InputEvent, Axis, MainAlign, MainAxisSize,
     MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row,
     ScrollView, SizedBox, Source, Stack, StackFit, Switch, Text, TextCtrl, UndoCtrl, VAppCtrl,
-    VirtualApp, Watch, bridge, derive, image_resource_svg, list_new, mount, mutate, text_ctrl,
+    VirtualApp, Watch, bridge, derive, entry_ctx, image_resource_svg, list_new, mount, mutate, text_ctrl,
     undo_ctrl, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
     virtual_app_source_handle, watch };
-use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_highlight };
+use tur_host::{ mount_raw, pg_apply_highlight, pg_compile, pg_compile_diags, pg_highlight };
 
 // ---- design tokens ---------------------------------------------------------
 //
@@ -244,7 +248,7 @@ struct AppContext {
     edragx: f64,
 }
 
-entry fn start() -> u64 {
+entry fn start() -> opaque {
     // The sidebar's case list (from the generated registry).
     let names = list_new();
     let n = pg_case_count();
@@ -325,25 +329,22 @@ entry fn start() -> u64 {
         }
         i += 1;
     }
-    case_tap(MutationCtx.over(bridge()), cx, boot as u64);
+    case_tap(entry_ctx(), cx, boot as u64);
 
     // The probe rail's context crossing: the harness-held cx rides the
     // stash box until the opaque entry lane lands.
     // TODO(phase5): the context-crossing entry contract retires the box.
-    st_put(K_CX, opaque(cx));
-    return cx.state.atom_id();
+    return opaque(cx);
 }
 
 // The probe seam's cx lookup (the stash-box preview of the phase-5
 // contract's `opaque.downcast<AppContext>`).
-fn probe_cx() -> AppContext {
-    let boxed = st_take(K_CX);
-    let cx = opaque.downcast<AppContext>(boxed);
-    if (cx == nil) {
+fn probe_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
         panic("probe: the held context is not an AppContext");
     }
-    st_put(K_CX, boxed);
-    return cx;
+    return c;
 }
 
 // The seed child: an empty module under its own controller — the
@@ -951,15 +952,15 @@ fn load_editor(cx: AppContext, text: str) {
 // probe-entry convention — `call_rut_entry` drives the (u64, f64) shape).
 // The context crosses through the held box (TODO(phase5): the
 // context-crossing entry contract).
-entry fn select(i: u64, _b: f64) {
-    case_tap(MutationCtx.over(bridge()), probe_cx(), i);
+entry fn select(cx: opaque, i: u64) {
+    case_tap(entry_ctx(), probe_cx(cx), i);
 }
 
 // The test rail's probe: report the live controller's `va_status` into
 // the caller's str atom (the start answer).
-entry fn probe(state: u64, _b: f64) {
-    let rail: Readable<str> = Source<str>.of(bridge(), state, false, 1);
-    MutationCtx.over(bridge()).set<str>(rail, probe_cx().vctrl.status());
+entry fn probe(cx: opaque) {
+    let c = probe_cx(cx);
+    entry_ctx().set<str>(c.state, c.vctrl.status());
 }
 
 // Compile the editor's current source; on success destroy the previous
