@@ -329,6 +329,7 @@ pub host fn color_tween_lerp_raw(p1: u64, p2: u64, p3: f64) -> u64;
 pub host fn curve_eval_raw(p1: str, p2: f64) -> f64;
 pub host fn curve_eval(p1: str, p2: f64) -> f64;
 pub host async fn net_request(p1: str, p2: str) -> bytes;
+pub host async fn net_request_raw(p1: str, p2: str) -> bytes;
 pub host fn net_status(p1: opaque) -> u64;
 pub host fn net_error(p1: opaque) -> str;
 pub host fn net_stream_mut(p1: str, p2: str, p3: u64) -> opaque;

@@ -9,13 +9,21 @@
 // ... })`; each chunk enqueues the invocation and the flush's mutation
 // pass delivers it with the task-scoped ctx.
 
-use tur_host::{ net_stream_mut };
+use tur_host::{ net_request_raw, net_stream_mut };
 use tur_kit::{ Mutation, mutate };
 
 // The seal tag the stream installs under — the kit spells the same
 // number as its own const (rut_runtime::seal_tags; one law, two
 // spellings, exactly as tur_kit mirrors them).
 let SEAL_BYTES: u64 = 10;
+
+// Request a response body (raw bytes — decode with the bytes helpers).
+// An error completes as empty bytes. Async: `await net_request(..)`.
+// The body calls the `net_request_raw` twin because this fn's own name
+// shadows the row's.
+pub async fn net_request(url: str, method: str) -> bytes {
+  return await net_request_raw(url, method);
+}
 
 // Stream a response body: the chunk mutation fires once per chunk (the
 // returned task's `task_cancel` wire-aborts the download).

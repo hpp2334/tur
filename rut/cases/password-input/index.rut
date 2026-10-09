@@ -8,7 +8,6 @@
 //
 // Phase-2 note: this case is typed in the playground VIEWER too — the
 // va-child keyboard rail forwards real keys into the focused child input.
-use tur_host::{ tctrl_set_text };
 use tur_kit::{ Column, Container, CrossAlign, Input, InputEvent, Mutation, MutationCtx, Readable, SizedBox, Source, Text, mount, mutate, source, text_ctrl, undo_ctrl };
 
 entry fn start() -> u64 {

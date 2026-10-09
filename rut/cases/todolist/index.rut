@@ -10,7 +10,6 @@
 // per-row taps capture the row index (no id rails). Both modals overlay
 // via Condition branches in the root Stack — and unlike the boa
 // reference, NEITHER boots open (the boot-modal bug is not ported).
-use tur_host::{ tctrl_text };
 use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx, Each, Expanded, HitTestBehavior, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, StackFit, Text, bridge, image_resource_svg, list_new, mount, mutate, source, text_ctrl, undo_ctrl, value_item, value_len };
 
 // The boa light palette (Notion / Linear-style).

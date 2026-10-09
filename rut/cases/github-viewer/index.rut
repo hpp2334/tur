@@ -4,8 +4,10 @@
 // Single-file port of the boa TSX original (a 6-file case: index/landing/
 // explorer/state/theme/ui — the explorer view is inlined here).
 //
-// Host surface: `net_request` (the async capability row) rides rut's own
-// async — the journeys take their handles as PARAMETERS (the `Gh` bundle
+// Host surface: `net_request` (the async capability row — the net kit's
+// wrapper trips the upstream interning bug in this module, see the import
+// note below) rides rut's own async — the journeys take their handles as
+// PARAMETERS (the `Gh` bundle
 // of sources) and the launching mutation's ctx rides along as a plain
 // value; the tap mutations capture the bundle. GitHub's REST API is CORS-friendly,
 // so the wasm build fetches it directly. Degradation: an empty response
@@ -24,7 +26,15 @@
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
 use futures::launch_future;
-use tur_host::{ net_request, tctrl_set_text };
+// The net row rides RAW here — the only corpus case that imports
+// `tur_host` (documented scan exception): importing `tur_net_kit`
+// instead trips the upstream duplicate-boot-scope type-interning bug in
+// this large module (the same family as the playground's second-use-line
+// accommodation; every accommodation tried — import position, the
+// single-name form, a second use line — still collapses kit-fn
+// resolution). Migrate to `tur_net_kit::net_request` (the wrapper exists)
+// at the next rut bump.
+use tur_host::{ net_request };
 use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, image_resource_svg, list_new, mount, mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
 
 // The state bundle (the sources every journey reads and writes — handles

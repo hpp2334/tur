@@ -24,6 +24,37 @@ pub struct RutNetTask {
     pub error: Rc<RefCell<String>>,
 }
 
+/// The `net_request` / `net_request_raw` bodies — one law, two spellings
+/// (the kit's own `net_request` wrapper shadows the row name, so its body
+/// reaches the row through the `_raw` alias).
+fn net_request_body(
+    h: Rc<tur_engine::core::rut_runtime::RutHandles>,
+    url: &str,
+    method: &str,
+) -> rut_vm::Completer<Vec<u8>> {
+    let done = rut_vm::Completer::<Vec<u8>>::new();
+    let Some(http) = h.inst.capability().of::<Http>() else {
+        done.complete(Vec::new());
+        return done;
+    };
+    let http = http.backend().clone();
+    let opts = RequestOpts {
+        url: url.to_string(),
+        method: method.to_string(),
+        headers: Vec::new(),
+        body: None,
+        stream_buffer_bytes: None,
+    };
+    let w = done.clone();
+    h.inst.spawn_local(move |_aw| async move {
+        match http.request(opts).await {
+            HttpOutcome::Ok { body, .. } => w.complete(body),
+            HttpOutcome::Err(_) => w.complete(Vec::new()),
+        }
+    });
+    done
+}
+
 /// (The allow covers the upstream `pkg_async_fn!` row expansion's
 /// cosmetic — the spike's precedent.)
 #[allow(clippy::needless_question_mark)]
@@ -35,6 +66,9 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     cx.decl.extend(
         vec![
             ("net_request", vec![TY_STR, TY_STR], TY_BYTES, true),
+            // The kit wrappers' twin spelling (the `mount_raw` pattern —
+            // see the body note below).
+            ("net_request_raw", vec![TY_STR, TY_STR], TY_BYTES, true),
             ("net_status", vec![TY_OPAQUE], TY_U64, false),
             ("net_error", vec![TY_OPAQUE], TY_STR, false),
             (
@@ -60,27 +94,16 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // the message stashed on the task (net_status / net_error read it).
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "net_request", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
-        let done = rut_vm::Completer::<Vec<u8>>::new();
-        let Some(http) = h.inst.capability().of::<Http>() else {
-            done.complete(Vec::new());
-            return done;
-        };
-        let http = http.backend().clone();
-        let opts = RequestOpts {
-            url: url.to_string(),
-            method: method.to_string(),
-            headers: Vec::new(),
-            body: None,
-            stream_buffer_bytes: None,
-        };
-        let w = done.clone();
-        h.inst.spawn_local(move |_aw| async move {
-            match http.request(opts).await {
-                HttpOutcome::Ok { body, .. } => w.complete(body),
-                HttpOutcome::Err(_) => w.complete(Vec::new()),
-            }
-        });
-        done
+        net_request_body(h.clone(), url, method)
+    });
+
+    // The kit's twin spelling (the `mount_raw` pattern): the kit defines
+    // its own `async fn net_request(url, method)` (the authored surface's
+    // name), which shadows the row's name — the wrapper body reaches the
+    // row through this alias.
+    let h = handles.clone();
+    rut_vm::pkg_async_fn!(pkg, "net_request_raw", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
+        net_request_body(h.clone(), url, method)
     });
 
     // net_status(task) -> u64 — the stashed HTTP status (0 = no response).
