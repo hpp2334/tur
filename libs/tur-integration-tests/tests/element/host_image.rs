@@ -138,7 +138,7 @@ fn host_and_js_image_ids_coexist() {
 
     app.load_rut_module(
         r#"
-use tur_host::{ img_res_solid };
+use tur_kit::{ image_resource_solid };
 use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
@@ -146,7 +146,7 @@ entry fn start() {
 
 // One worker-minted + one host-registered id, mounted side by side.
 entry fn mount_both(host_id: u64, _b: f64) {
-    let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
+    let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
         .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
         .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
@@ -201,14 +201,14 @@ fn reattach_ensures_retained_images_before_first_frame() {
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
     app.load_rut_module(
-        r#"use tur_host::{ img_res_solid };
+        r#"use tur_kit::{ image_resource_solid };
 use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
 
 entry fn mount_both(host_id: u64, _b: f64) {
-    let worker_id = img_res_solid(1, 1, 0xFF0000FFu64);
+    let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
         .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
         .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
@@ -347,18 +347,18 @@ entry fn mount_one(id: u64, _b: f64) {
 /// size crosses the metadata rail, and the pixel Blob is retained
 /// host-side. (The playground toolbar's ▶ / ↻ icons ride this row.)
 #[test]
-fn img_res_svg_row_registers_a_worker_minted_resource() {
+fn image_resource_svg_row_registers_a_worker_minted_resource() {
     let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r##"
-use tur_host::{ img_res_svg };
+use tur_kit::{ image_resource_svg };
 use tur_kit::{ BoxFit, Column, Image, mount };
 
 entry fn start() {
 }
 
 entry fn mount_svg(_a: u64, _b: f64) {
-    let id = img_res_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
+    let id = image_resource_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
     mount(Column().child(Image(id).width(10.0).fit(BoxFit.Fill).build()).build());
 }
 "##,

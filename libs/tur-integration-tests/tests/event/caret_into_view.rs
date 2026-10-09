@@ -7,23 +7,23 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
+    let ctrl = text_ctrl();
     let mut i = 0;
     while (i < 30) {
-        tctrl_push_span(ctrl, f"line {i}\n");
+        tctrl_push_span(ctrl.raw(), f"line {i}\n");
         i += 1;
     }
-    let undo = undo_new();
+    let undo = undo_ctrl();
     // Multiline (flags bit 0), auto height — the editable lays out at its
     // content height (~30 lines) so the ScrollView has overflow to scroll.
     // The width spans the window (the JS twin's stretched-column geometry):
     // a ScrollView shrink-wraps its cross axis, so without it the whole
     // scroller would hug the longest line and the top-left click misses it.
-    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
     let input = input;
     let col = Column().child(input);
     let mut scroller = ScrollView().axis(Axis.Vertical).child(col.build()).query_key("scroll").build();

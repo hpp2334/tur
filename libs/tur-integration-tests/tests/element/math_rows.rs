@@ -10,7 +10,7 @@
 use tur_integration_tests::TurTestApp;
 
 const MATH_RUT: &str = r#"
-use tur_host::{ math_cos, math_sin };
+use tur_kit::{ math_cos, math_sin };
 use tur_kit::{ Text, mount };
 
 entry fn start() -> u64 {

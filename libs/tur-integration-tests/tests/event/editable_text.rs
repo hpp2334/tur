@@ -538,14 +538,14 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "hello");
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "hello");
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -553,29 +553,29 @@ entry fn start() {
 // Mirrors the playground code editor: syntax-highlighted spans with different
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
-const CLICK_SPANS_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SPANS_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "import");
-    tctrl_push_span(ctrl, " {");
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "import");
+    tctrl_push_span(ctrl.raw(), " {");
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
 
-const CLICK_MULTI_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_MULTI_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "abc\n");
-    tctrl_push_span(ctrl, "def\n");
-    tctrl_push_span(ctrl, "ghi");
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "abc\n");
+    tctrl_push_span(ctrl.raw(), "def\n");
+    tctrl_push_span(ctrl.raw(), "ghi");
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -744,18 +744,18 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // Four adjacent spans with DIFFERENT colors → parley emits 4 glyph runs on one
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
-const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
+    let ctrl = text_ctrl();
     let mut i = 0;
     while (i < 4) {
-        tctrl_push_span(ctrl, f"line {i} of the seeded document\n");
+        tctrl_push_span(ctrl.raw(), f"line {i} of the seeded document\n");
         i += 1;
     }
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -797,17 +797,17 @@ fn click_in_later_run_places_caret_correctly() {
 // Regression for the "click todolist state.ts → panic" bug: an empty style
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
-const EMPTY_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const EMPTY_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
+    let ctrl = text_ctrl();
     // A zero-length span (the playground's `buildHighlightSpans` can emit
     // these from adjacent/zero-width lexer tokens) followed by the content.
-    tctrl_push_span(ctrl, "");
-    tctrl_push_span(ctrl, "abcd");
-    let undo = undo_new();
-    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(300.0, 100.0).query_key("editor").build();
+    tctrl_push_span(ctrl.raw(), "");
+    tctrl_push_span(ctrl.raw(), "abcd");
+    let undo = undo_ctrl();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
     let keyed = input;
     mount(keyed);
 }
@@ -835,16 +835,16 @@ fn empty_colored_span_does_not_panic() {
 // viewport_height). With a 100px viewport and 16px lines, ~12 lines (=192px)
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
-const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
-    let undo = undo_new();
-    let input = Input().controller(TextCtrl(ctrl)).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
     let col = Column().child(input).build();
     let scroller = ScrollView().axis(Axis.Vertical).child(col).build();
     mount(scroller);
@@ -935,15 +935,15 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // only wraps at break opportunities, so the text MUST contain spaces (a bare
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
-const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
-    let undo = undo_new();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
+    let undo = undo_ctrl();
     // flags bit 0 = multiline.
-    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
     let keyed = input;
     mount(keyed);
 }
@@ -1061,14 +1061,14 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // VISUAL lines. Reported bug: clicking a lower visual line placed the caret
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
-const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur_host::{ tctrl_new, tctrl_push_span, undo_new };
+const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    tctrl_push_span(ctrl, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
-    let undo = undo_new();
-    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
+    let ctrl = text_ctrl();
+    tctrl_push_span(ctrl.raw(), "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
+    let undo = undo_ctrl();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
     let keyed = input;
     mount(keyed);
 }

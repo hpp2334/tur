@@ -274,18 +274,18 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ tctrl_new, tctrl_push_span };
+use tur_host::{ tctrl_push_span };
 use tur_kit::{ Axis, Input, ScrollView, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
+    let ctrl = text_ctrl();
     let mut i = 0;
     while (i < 400) {
-        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;
     }
 
-    let input = Input().controller(TextCtrl(ctrl)).width_height(100000.0, 10000.0).font_size(14.0).build();
+    let input = Input().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
     input.query_key("ed");
     let scroller = ScrollView().axis(Axis.Vertical).initial_offset(0.0).child(input).build();
     scroller.query_key("scroll");

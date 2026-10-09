@@ -3,13 +3,13 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-use tur_host::{ tctrl_new, undo_new };
+
 use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount };
 
 entry fn start() {
-    let ctrl = tctrl_new();
-    let undo = undo_new();
-    let mut input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0).query_key("input").build();
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());
