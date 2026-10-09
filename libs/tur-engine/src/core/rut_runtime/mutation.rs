@@ -53,7 +53,8 @@ fn checked_writable(handles: &RutHandles, atom: u64) -> Result<(), String> {
 /// Install the M1 bodies.
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ctx_bridge() -> opaque — mint a store-bridge marker (the ctx
-    // classes' `h`; `TaskCtx.mint()` builds its task-scoped ctx over one).
+    // classes' `h`; the kit's `entry_ctx()` and async launches build
+    // their ctxs over one).
     let h = handles.clone();
     rut_vm::pkg_fn!(pkg, "ctx_bridge", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
