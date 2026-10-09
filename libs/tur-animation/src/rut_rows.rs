@@ -94,6 +94,7 @@ pub fn install(
         // reach the rows through these aliases).
         row("tween_lerp_raw", vec![TY_F64, TY_F64, TY_F64], TY_F64),
         row("color_tween_lerp_raw", vec![TY_U64, TY_U64, TY_F64], TY_U64),
+        row("curve_eval_raw", vec![TY_STR, TY_F64], TY_F64),
         row("curve_eval", vec![TY_STR, TY_F64], TY_F64),
     ]);
 
@@ -327,6 +328,9 @@ pub fn install(
                 | ch(x, y)
         };
         Ok(mix(begin, end))
+    });
+    rut_vm::pkg_fn!(pkg, "curve_eval_raw", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
+        Ok(curve_of(curve).transform(t))
     });
     rut_vm::pkg_fn!(pkg, "curve_eval", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
         Ok(curve_of(curve).transform(t))

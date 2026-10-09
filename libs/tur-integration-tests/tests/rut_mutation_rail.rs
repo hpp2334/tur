@@ -1,12 +1,13 @@
 //! Phase M1 — the mutation rail: `source` / `derive` / `mutate` (boa's
-//! reactive triad) over the `MutationCtx` / `DeriveCtx` / `TaskCtx` ctxs.
+//! reactive triad) over the `MutationCtx` / `DeriveCtx` ctxs.
 //!
 //! The plan's (a)–(g) list, pinned end-to-end through real gesture events:
 //! the click mutation's write lands through the flush's mutation pass
 //! (queued — never synchronously inside the gesture dispatch), captures
 //! replace the stash, `ctx.run` composes, the ctx reads reach sources AND
-//! derives, drag mutations receive one typed `PointerEvent`, spawned tasks
-//! carry a task-scoped ctx across awaits, and nothing remounts.
+//! derives, drag mutations receive one typed `PointerEvent`, launched
+//! tasks carry a ctx across awaits (a plain value param — the launch
+//! site's), and nothing remounts.
 
 use std::time::Duration;
 
@@ -103,12 +104,11 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
 // ---------------------------------------------------------------------------
 
 const QUEUED_RUT: &str = r#"
-use tur_host::{ rs_get_str, rs_set_str, rs_watch, rs_watch_start };
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, TaskCtx, Text, derive, mount, mutate, source };
+use tur_kit::{ Column, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Text, Watch, mount, mutate, source, watch };
 
 entry fn start() -> u64 {
-    let log: Readable<str> = source<str>("");
-    let n: Readable<f64> = source<f64>(0.0);
+    let log: Source<str> = source<str>("");
+    let n: Source<f64> = source<f64>(0.0);
 
     let m_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         let t = ctx.get<str>(log);
@@ -124,16 +124,17 @@ entry fn start() -> u64 {
         ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
     });
 
-    // The store-write observer: every write to `n` delivers here, after
-    // the write, through the reactive flush (the queued-semantics witness).
-    let w = rs_watch(n.atom_id(), fn (a: u64, _b: u64, _v: f64) {
-        rs_set_str(log.atom_id(), f"{rs_get_str(log.atom_id())}|w{a}");
-    }, n.atom_id());
-    rs_watch_start(w);
-    // The mint's seed write precedes the activation — the first delivery
-    // is that boot differential; clear it so the batch assertions read
-    // from a clean base.
-    rs_set_str(log.atom_id(), "");
+    // The store-write observer (the boa-model Watch over the same
+    // substrate rail): every write to `n` delivers here, after the write,
+    // through the reactive flush (the queued-semantics witness). The
+    // delivery cb reads/writes through ITS ctx.
+    let w = watch<f64>(n, mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<str>(log, f"{ctx.get<str>(log)}|w");
+    }));
+    w.start();
+    // (A boot write may deliver once around activation — the test reads
+    // the batch relative to the pre-click transcript, so no clear pad is
+    // needed.)
 
     let pad = PointerInteract()
         .on_pointer_down(m_down)
@@ -455,36 +456,41 @@ fn g_clicks_never_remount_the_tree() {
 }
 
 // ---------------------------------------------------------------------------
-// The async launch rail: `spawn` + the task-scoped `TaskCtx` — reads and
-// writes across an `await`, with the handles bound at the launch site.
+// The async launch rail: rut's own `launch_future` — the ctx rides as a
+// plain value param (the launch site's), reads and writes across awaits.
 // ---------------------------------------------------------------------------
 
 const SPAWN_RUT: &str = r#"
-use tur_host::{ clipboard_read, clipboard_write, spawn };
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, Readable, Source, TaskCtx, Text, derive, mount, mutate, source };
+use futures::launch_future;
+use tur_host::{ clipboard_read, clipboard_write };
+use tur_kit::{ Column, MutationCtx, Readable, Source, Text, entry_ctx, mount, source };
 
-async fn work(ctx: TaskCtx, label: Readable<str>, busy: Readable<bool>) -> str {
+// Plain rut async — ordinary params; the ctx (minted at the launch site —
+// start is the boot rail) rides along as a VALUE and works across awaits.
+async fn work(ctx: MutationCtx, label: Readable<str>, busy: Readable<bool>) -> str {
     ctx.set<bool>(busy, true);
     let t = ctx.get<str>(label);
-    await clipboard_write("from spawn");
+    await clipboard_write("from launch");
     let clip = await clipboard_read();
     ctx.set<str>(label, f"{t}|{clip}");
     ctx.set<bool>(busy, false);
     return "";
 }
 
-entry fn start() -> u64 {
-    let label: Readable<str> = source<str>("launched");
-    let busy: Readable<bool> = source<bool>(false);
-    spawn(work(TaskCtx.mint(), label, busy));
+entry fn start() {
+    // CONCRETE annotations (Source<T>, not the Readable iface) — an
+    // interface-typed capture misbinds in the ctx calls at this rut pin
+    // (the documented interning-bug family).
+    let label: Source<str> = source<str>("launched");
+    let busy: Source<bool> = source<bool>(false);
+    launch_future(work(entry_ctx(), label, busy));
     let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
-    return busy.atom_id();
 }
 "#;
 
 #[test]
-fn spawn_task_reads_and_writes_through_its_ctx_across_awaits() {
+fn launched_task_reads_and_writes_through_its_ctx_across_awaits() {
     let app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
     app.set_clipboard_read("seeded");
     app.load_rut_module(SPAWN_RUT).unwrap();
