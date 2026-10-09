@@ -78,41 +78,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("focus_build", vec![TY_OPAQUE], TY_OPAQUE),
         row("focus_request", vec![TY_U64], TY_NIL),
     ]);
-    let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
-    let order = [
-        ("CURSOR_AUTO", Cursor::Auto),
-        ("CURSOR_DEFAULT", Cursor::Default),
-        ("CURSOR_NONE", Cursor::None),
-        ("CURSOR_CONTEXT_MENU", Cursor::ContextMenu),
-        ("CURSOR_HELP", Cursor::Help),
-        ("CURSOR_POINTER", Cursor::Pointer),
-        ("CURSOR_PROGRESS", Cursor::Progress),
-        ("CURSOR_WAIT", Cursor::Wait),
-        ("CURSOR_CELL", Cursor::Cell),
-        ("CURSOR_CROSSHAIR", Cursor::Crosshair),
-        ("CURSOR_TEXT", Cursor::Text),
-        ("CURSOR_MOVE", Cursor::Move),
-        ("CURSOR_GRAB", Cursor::Grab),
-        ("CURSOR_GRABBING", Cursor::Grabbing),
-        ("CURSOR_E_RESIZE", Cursor::EResize),
-        ("CURSOR_W_RESIZE", Cursor::WResize),
-        ("CURSOR_EW_RESIZE", Cursor::EwResize),
-        ("CURSOR_NS_RESIZE", Cursor::NsResize),
-        ("CURSOR_COL_RESIZE", Cursor::ColResize),
-        ("CURSOR_ROW_RESIZE", Cursor::RowResize),
-        ("CURSOR_ALL_SCROLL", Cursor::AllScroll),
-    ];
-    let mut consts = vec![
-        // HitTestBehavior (0 = Opaque default, 1 = Translucent)
-        c("HIT_TEST_OPAQUE", 0),
-        c("HIT_TEST_TRANSLUCENT", 1),
-    ];
-    consts.extend(
-        order
-            .into_iter()
-            .map(|(name, cur)| (name.to_string(), TY_U64, cursor_code(cur))),
-    );
-    cx.consts.extend(consts);
+    // (No flag consts: `HitTestBehavior` / `Cursor` are the kit's
+    // name-only enums — the exhaustive `when` mappers in tur_kit are the
+    // SOLE carriers of the row codes.)
 }
 
 use rut_core::types::{TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
@@ -321,7 +289,9 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 }
 
-/// The u64 crossing code for a cursor (its `Cursor` variant position).
+
+/// The crossing decode for a cursor (the `Cursor` variant by its code —
+/// the consts' order, now carried kit-side by the `when` mapper).
 fn cursor_of(code: u64) -> Cursor {
     use Cursor::*;
     match code {
@@ -364,45 +334,3 @@ fn cursor_of(code: u64) -> Cursor {
     }
 }
 
-/// The u64 crossing code for a cursor (its `Cursor` variant position).
-fn cursor_code(c: Cursor) -> u64 {
-    use Cursor::*;
-    match c {
-        Auto => 0,
-        Default => 1,
-        None => 2,
-        ContextMenu => 3,
-        Help => 4,
-        Pointer => 5,
-        Progress => 6,
-        Wait => 7,
-        Cell => 8,
-        Crosshair => 9,
-        Text => 10,
-        VerticalText => 11,
-        Alias => 12,
-        Copy => 13,
-        Move => 14,
-        NoDrop => 15,
-        NotAllowed => 16,
-        Grab => 17,
-        Grabbing => 18,
-        EResize => 19,
-        NResize => 20,
-        NeResize => 21,
-        NwResize => 22,
-        SResize => 23,
-        SeResize => 24,
-        SwResize => 25,
-        WResize => 26,
-        EwResize => 27,
-        NsResize => 28,
-        NeswResize => 29,
-        NwseResize => 30,
-        ColResize => 31,
-        RowResize => 32,
-        AllScroll => 33,
-        ZoomIn => 34,
-        ZoomOut => 35,
-    }
-}

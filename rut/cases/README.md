@@ -32,12 +32,29 @@ Every case is a **single `index.rut` module** with:
   replace the JS era's `eval_js` state pokes. `entry` = a deliberate
   embedder/test contract — element callbacks are NOT entries.
 - **no JS anywhere** — a rut case never touches a JS realm. State lives
-  in source atoms minted through the kit (`source_f64` / `source_str` /
-  `source_bool` / `source_value` — the `rs_*` rows are the substrate case
-  code never calls) whose ids cross into entries as plain `u64`s. Tests
-  read state back through **dev-tool tree queries** (`query_element`,
-  `dev_tool_element_tree`, `query_text`) or bound atoms — never by
-  evaluating script.
+  in source atoms minted through the kit (`source<T>(…)` — the `rs_*`
+  rows are the substrate case code never calls) whose ids cross into
+  entries as plain `u64`s. Tests read state back through **dev-tool tree
+  queries** (`query_element`, `dev_tool_element_tree`, `query_text`) or
+  bound atoms — never by evaluating script.
+
+### The fixture contract (inline test fixtures — NOT these cases)
+
+Inline test fixtures (`tests/**/*.rs` rut strings) cross state through
+the **context-crossing entry contract**: the module builds an
+`AppContext` record, `entry fn entry_start() -> opaque` (or the eager
+`entry fn start() -> opaque`) boxes it out to the embedder, and control
+entries take it back as `cx: opaque` + downcast. The harness holds the
+token (`call_rut_entry_opaque` / `rut_start_answer`) and drives control
+entries through `call_rut_entry_cx*`; writes ride `entry_ctx()`. See
+AGENTS.md's fixture-contract section for the full shape and the
+upstream-interning accommodations.
+
+These corpus cases deliberately do NOT use that contract: the
+playground embeds them (their boot must stay eager `entry fn start() ->
+u64`) and their probe entries stay on the atom-arg rail (the kit's
+`bridge()`/`MutationCtx.over` hatch — the sanctioned raw-atom probe
+surface).
 
 ### Conventions
 
@@ -103,34 +120,34 @@ the kit now — the boa cases lean on it heavily.
 ### Example
 
 ```rut
-use tur_host::{ ALIGN_CENTER, MAIN_ALIGN_CENTER, mount };
-use tur_kit::{ Column, Container, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable,
-    Text, derive_str, mutate, source_f64 };
+use tur_kit::{ Align, Column, Container, CrossAlign, DeriveCtx, MainAlign, Mutation, MutationCtx,
+    PointerInteract, Readable, Text, derive, mount, mutate, source };
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source_f64(0.0);
-    let label: Readable<str> = derive_str(fn (ctx: DeriveCtx) -> str {
-        return f"Count: {ctx.get_f64(count) as u64}";
+    let count = source(0.0);
+    let label = derive(fn (ctx: DeriveCtx) -> str {
+        return f"Count: {ctx.get(count) as u64}";
     });
 
-    // The named mutations (boa's named `mutate(...)` values); the source
+    // The named mutation (boa's named `mutate(...)` value); the source
     // rides by capture — no ids, no stash.
-    let b_inc = mutate(fn (ctx: MutationCtx) {
-        ctx.set_f64(count, ctx.get_f64(count) + 1.0);
+    let b_inc = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set(count, ctx.get(count) + 1.0);
     });
 
     let col = Column()
-        .main_alignment(MAIN_ALIGN_CENTER)
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Center)
         .query_key("col")
         .child(Text().text_bound(label).query_key("count").font_size(36.0).build())
         .child(button(b_inc, "+1", "inc"));
-    mount(col.build());
+    mount(Container().alignment(Align.Center).child(col).build());
     return count.atom_id();
 }
 
 // A pill button: a PointerInteract pad taking the MUTATION. Handlers are
 // mutations; view-builder callbacks (item_builder & co) stay plain fns.
-fn button(b: Mutation<nil, nil>, text: str, key: str) -> opaque {
+fn button(b: Mutation<nil>, text: str, key: str) -> View {
     return PointerInteract()
         .on_click(b)
         .child(
@@ -286,16 +303,15 @@ handler surface** — `on_tap`, the `2` twins and `.ids()`/`.id()` are gone
 reads through `ctx.get_*` (tracked — a derive's `ctx.get` records its
 deps), composition through `ctx.run*`. Mutations are invoked at the
 flush's MUTATION PASS — never synchronously inside the gesture dispatch.
-Async journeys take their handles as parameters over a task-scoped
-`TaskCtx` from `spawn` — the stash rails (`st_*`/`stf_*`/`peek`) and the
-raw `rs_*` rows never appear in case code. Documented walls (the m1
-spike, settled against rut 442a979): ctx reads/writes spell per kind
-(`ctx.get_f64`/`ctx.set_f64`, … — the element type is an OUTPUT, so no
-generic inference), `mutate` is arity-split (`mutate` nil-arg /
-`mutate_ev` PointerEvent / `mutate_f64` typed arg), `spawn` is
-call-shaped (`spawn(work(TaskCtx.mint(), handles…))`), and `ctx.run*`
-QUEUES the composed invocation (drained at the next mutation pass —
-effects read through sources; there is no synchronous return).
+Async journeys are PLAIN RUT (`launch_future(work(handles…))` — the
+launching mutation's ctx rides along as a plain value; no `TaskCtx`, no
+`spawn`) — the stash rails (`st_*`/`stf_*`) are deleted and the raw
+`rs_*` rows never appear in case code. Historical round-5 walls, since
+lifted by the generic surface (phases 4–5): ctx reads/writes are GENERIC
+now (`ctx.get<T>`/`ctx.set<T>` — annotate `<T>`; no return-position
+inference at this pin), `mutate` is ONE generic mint (`mutate<A>`), and
+`ctx.run*` still QUEUES the composed invocation (drained at the next
+mutation pass — effects read through sources; no synchronous return).
 
 #### The 19-case journey ledger (both audit parts)
 

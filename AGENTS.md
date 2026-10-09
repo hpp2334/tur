@@ -283,10 +283,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   time. Nothing callable ever crosses the boundary as a string or a
   closure. Case modules declare `entry fn` ONLY for `start` (+ deliberate
   test/embedder probes — `entry` = a published contract, never a
-  callback). Async journeys ride `spawn(work(TaskCtx.mint(), handles…))`
-  — the handles bind at the launch site, the ctx is task-scoped; the
-  stash rails (`st_*` / `stf_*` / `peek`) never appear in case code.
-  Reactive bindings are methods, not variants: the literal keeps the base
+  callback). Async journeys are PLAIN RUT: `launch_future(work(handles…))`
+  over ordinary params — the launching mutation hands its own
+  `MutationCtx` along as a plain value when the body needs access (a
+  launch site with no ctx of its own — `start`, the boot rail — mints
+  the entry rail's ctx, `entry_ctx()`); `await sleep` rides the futures
+  prelude. No `TaskCtx`/`spawn`/`Task`; the stash rails (`st_*` /
+  `stf_*`) are DELETED (state crosses as `AppContext` fields — see the
+  fixture contract below). Reactive bindings are methods, not variants:
+  the literal keeps the base
   prop (`Text().text("hi")`, `Container().color(0x…u64)`), the reactive
   lane is the `*_bound` method over `Readable<T>` (`Text().text_bound(r)`,
   `Container().color_bound(r)`, `Expanded().flex_bound(r)`). The
@@ -298,10 +303,9 @@ Android build + device debugging live in the **`android-dev` skill** at
   `MainAxisSize`, `StackFit`, `Axis`, `BoxFit`, `BorderPosition`, `Clip`,
   `HitTestBehavior`, `SpanFlags`, `Cursor`): kit methods take the enum and
   unwrap once at the row (`flex_main_align(self.spec, code(v))`) — the
-  mappers are the sole carriers of the row codes. The `tur_host` u64
-  consts (`ALIGN_*` / `CLIP_*` / …) stay pushed for the phase-5 test
-  migration. The kit hides row churn from call sites; the rows are the
-  boundary.
+  mappers are the sole carriers of the row codes (the `tur_host` u64
+  const pushes are deleted). The kit hides row churn from call sites;
+  the rows are the boundary.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
@@ -316,9 +320,36 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`TurStdPlugin` prelude), never by core. Pinned by
   `libs/tur-integration-tests/tests/layering.rs`.
 - Module fixtures in tests: `load_rut_module` (inline) / `load_rut_bundle`
-  (corpus); state probes are `entry fn`s (`call_rut_entry`), bound labels
-  (query keys), dev-tool tree queries, or controller rows — never a script
-  realm poke.
+  (corpus); state probes are `entry fn`s, bound labels (query keys),
+  dev-tool tree queries, or controller rows — never a script realm poke.
+- **The context-crossing fixture contract** (inline test fixtures): the
+  module builds an `AppContext` record and the EMBEDDER holds it between
+  entry calls — no stash, no raw-atom args. `fn start() -> AppContext` +
+  `entry fn entry_start() -> opaque` boxing it (boot defers to the
+  embedder's first probe), OR the eager twin `entry fn start() -> opaque`
+  (the engine boots it at load; the slot token IS the
+  `rut_start_answer`). Control entries take `cx: opaque` and downcast —
+  `opaque.downcast<AppContext>(cx)` behind a shared `*_cx(cx)` helper
+  (the nil-guard is belt-and-braces; a kind mismatch is the loud
+  channel) — and writes ride `entry_ctx()` (the entry rail's ctx).
+  Harness: `call_rut_entry_opaque("entry_start")` → the context token;
+  `call_rut_entry_cx` / `_cx_u64` / `_cx_f64` / `_cx_str` drive the
+  control entries. Mirrors become `cx` fields or answered values (a
+  `-> str` probe). Real-input driving (clicks/keys) stays for genuine
+  gesture tests. The corpus CASES keep `entry fn start() -> u64` +
+  atom-arg probe entries (the playground embeds them; their boot must be
+  eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
+- Known upstream rut bug (pin 80b56c6, the duplicate-boot-scope
+  type-interning family): some module-shape edits trip it — kit fn/row
+  resolution collapses ("argument N is X, Y expected" far from the edit)
+  or an interface-typed capture misbinds at runtime ("no impl for
+  interface slot N"). Accommodations that hold: keep captured sources
+  CONCRETE-annotated (`Source<T>`, not `Readable<T>`) when they cross
+  ctx calls or struct fields; make import-list deltas single-name; an
+  interface-annotated `let` before the first `mutate` seeds the table;
+  the playground keeps a second `use tur_host` line (load-bearing). The
+  playground's status label spells its derive through `rs_derive` (the
+  plain-fn rail) for the same reason.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
 - Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
   workspace are gone; `@tur-ng/website` remains (the private website shell).

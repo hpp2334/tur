@@ -142,52 +142,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("col_flex", vec![TY_OPAQUE, TY_F64, TY_F64], TY_NIL),
         row("table_col_extent", vec![TY_OPAQUE, TY_F64], TY_NIL),
     ]);
-    let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
-    cx.consts.extend(vec![
-        // Alignment (the `FromPrimitive` order)
-        c("ALIGN_TOP_LEFT", 0),
-        c("ALIGN_TOP_CENTER", 1),
-        c("ALIGN_TOP_RIGHT", 2),
-        c("ALIGN_CENTER_LEFT", 3),
-        c("ALIGN_CENTER", 4),
-        c("ALIGN_CENTER_RIGHT", 5),
-        c("ALIGN_BOTTOM_LEFT", 6),
-        c("ALIGN_BOTTOM_CENTER", 7),
-        c("ALIGN_BOTTOM_RIGHT", 8),
-        // ClipBehavior
-        c("CLIP_NONE", 0),
-        c("CLIP_HARD_EDGE", 1),
-        c("CLIP_ANTI_ALIAS", 2),
-        // BorderPosition
-        c("BORDER_INSIDE", 0),
-        c("BORDER_CENTER", 1),
-        c("BORDER_OUTSIDE", 2),
-        // MainAxisAlignment
-        c("MAIN_ALIGN_START", 0),
-        c("MAIN_ALIGN_CENTER", 1),
-        c("MAIN_ALIGN_END", 2),
-        c("MAIN_ALIGN_SPACE_BETWEEN", 3),
-        c("MAIN_ALIGN_SPACE_AROUND", 4),
-        c("MAIN_ALIGN_SPACE_EVENLY", 5),
-        // CrossAxisAlignment
-        c("CROSS_ALIGN_START", 0),
-        c("CROSS_ALIGN_CENTER", 1),
-        c("CROSS_ALIGN_END", 2),
-        c("CROSS_ALIGN_STRETCH", 3),
-        // MainAxisSize
-        c("MAIN_SIZE_MAX", 0),
-        c("MAIN_SIZE_MIN", 1),
-        // StackFit
-        c("STACK_FIT_LOOSE", 0),
-        c("STACK_FIT_EXPAND", 1),
-        c("STACK_FIT_PASSTHROUGH", 2),
-        // FlexFit (Tight, Loose)
-        c("FIT_TIGHT", 0),
-        c("FIT_LOOSE", 1),
-        // Axis (Vertical, Horizontal)
-        c("AXIS_VERTICAL", 0),
-        c("AXIS_HORIZONTAL", 1),
-    ]);
+    // (No flag consts: the flags are the kit's name-only enums — the
+    // exhaustive `when` mappers in tur_kit are the SOLE carriers of the
+    // row codes.)
 }
 
 use rut_core::types::{TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};

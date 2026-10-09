@@ -46,16 +46,8 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         row("img_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("img_build", vec![TY_OPAQUE], TY_OPAQUE),
     ]);
-    let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
-    // The `BoxFit` flag consts (the `BoxFit` `FromPrimitive` order).
-    cx.consts.extend(vec![
-        c("BOXFIT_FILL", 0),
-        c("BOXFIT_CONTAIN", 1),
-        c("BOXFIT_COVER", 2),
-        c("BOXFIT_FIT_WIDTH", 3),
-        c("BOXFIT_FIT_HEIGHT", 4),
-        c("BOXFIT_NONE", 5),
-    ]);
+    // (No flag consts: `BoxFit` is the kit's name-only enum — the `when`
+    // mapper in tur_kit is the sole carrier of the row codes.)
 }
 
 use rut_core::types::{TY_BYTES, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};

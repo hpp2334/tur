@@ -278,10 +278,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         ("undo_can_redo".to_string(), vec![TY_OPAQUE], TY_BOOL, false),
         ("undo_clear".to_string(), vec![TY_OPAQUE], TY_NIL, false),
     ]);
-    let c = |name: &str, v: u64| (name.to_string(), TY_U64, v);
-    // span flags (bitfield)
-    cx.consts
-        .extend(vec![c("SPAN_ITALIC", 1), c("SPAN_UNDERLINE", 2)]);
+    // (No flag consts: the span flags are the kit's name-only
+    // `SpanFlags` enum — the `when` mapper in tur_kit is the sole
+    // carrier of the bitfield codes.)
 }
 
 use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
