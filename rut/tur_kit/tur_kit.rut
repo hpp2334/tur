@@ -124,7 +124,6 @@ use tur_host::{
 // The async launch rail's typed surface (the `futures` package rides the
 // same run chain the kit compiles in).
 use core::{ Future };
-use futures::{ launch_future };
 
 
 // The user-facing view newtype: built views cross kit signatures as
@@ -633,26 +632,6 @@ impl DeriveCtx {
   }
 }
 
-// The task-scoped ctx: a suspended task's own handle — the mutation
-// pass's ctx is pass-scoped and must never leak into a task, so `spawn`
-// call sites mint one. Its `get`/`set` work across `await`s; composition
-// is deferred (the M1 spike: a task spawns a fresh task instead).
-pub class TaskCtx {
-  h: opaque;
-}
-
-impl TaskCtx {
-  [constructor] pub fn mint() -> Self {
-    return Self { h: ctx_bridge() };
-  }
-  pub fn get<T>(self, r: Readable<T>) -> T {
-    return r.get();
-  }
-  pub fn set<T>(self, s: Writable<T>, v: T) -> nil {
-    s.put(v);
-  }
-}
-
 // The entry rail's ctx — the one user-reachable ctx door: control/probe
 // `entry fn` bodies read and write through it (ctxs originate only from
 // the rails, and the entry rail is one: the embedder's entry RPC runs
@@ -745,24 +724,6 @@ pub fn mutate<A>(f: fn(MutationCtx, A)) -> Mutation<A> {
   };
   let run_atom = mutate_seal(opaque(wrap), SEAL_BOX);
   return MutationOf<A>.of(opaque(f), opaque(wrap), run_atom);
-}
-
-// The async launch rail: the future binds its handle params at the launch
-// site (`spawn(work(TaskCtx.mint(), src, ...))` — async fns have no fn
-// values in this build, so the launch IS the call) and the ctx is
-// task-scoped (minted at the launch site — `TaskCtx.mint()`).
-pub class Task {
-  h: ?opaque;
-}
-
-impl Task {
-  [constructor] pub fn of(h: ?opaque) -> Self {
-    return Self { h: h };
-  }
-}
-
-pub fn spawn<T>(f: Future<T>) -> Task {
-  return Task.of(opaque(launch_future<T>(f)));
 }
 
 // ---- the event value prelude (M1: the gesture family) ---------------------

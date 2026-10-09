@@ -14,17 +14,19 @@ use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Container, Source, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    // The channels mint in order: color, blur, dy (the probe entries
-    // address them by the start answer + offset).
-    let color: Readable<u64> = source<u64>(0);
-    let blur: Readable<f64> = source<f64>(10.0);
-    let dy: Readable<f64> = source<f64>(4.0);
-    // The boot glow (the ctx face at start).
-    MutationCtx.over(ctx_bridge()).set<u64>(color, 0xFF0000FFu64);
+struct AppContext {
+    color: Source<u64>,
+    dy: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    // The boot glow seeds at the mint (a boot write with no entry-rail
+    // ctx is a construction-time value, not a state transition).
+    let color: Source<u64> = source<u64>(0xFF0000FFu64);
+    let blur: Source<f64> = source<f64>(10.0);
+    let dy: Source<f64> = source<f64>(4.0);
     let card = Container()
         .width_height(60.0, 40.0)
         .color(0x222222FFu64)
@@ -34,19 +36,25 @@ entry fn start() -> u64 {
         .query_key("card")
         .build();
     mount(card);
-    return color.atom_id();
+    return opaque(AppContext { color: color, dy: dy });
+}
+
+fn shadow_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("shadow fixture: cx is not an AppContext");
+    }
+    return c;
 }
 
 // Re-tint the glow (the placed-piece hue swap) — a brush write only; the
 // element must repaint without remounting.
-entry fn retint(atom: u64, _b: f64) {
-    let color = Source<u64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<u64>(color, 0x00FF00FFu64);
+entry fn retint(cx: opaque) {
+    entry_ctx().set<u64>(shadow_cx(cx).color, 0x00FF00FFu64);
 }
 
-entry fn resteepen(atom: u64, _b: f64) {
-    let dy = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(dy, 12.0);
+entry fn resteepen(cx: opaque) {
+    entry_ctx().set<f64>(shadow_cx(cx).dy, 12.0);
 }
 "#;
 
@@ -107,9 +115,9 @@ fn bound_shadow_channels_paint_their_atoms() {
 fn shadow_atom_writes_repaint_without_remount() {
     let (mut app, card) = setup(SHADOW_BOUND_RUT);
 
-    let color_atom = app.rut_start_answer();
-    app.call_rut_entry("retint", color_atom, 0.0).unwrap();
-    app.call_rut_entry("resteepen", color_atom + 2, 0.0)
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx("retint", cx).unwrap();
+    app.call_rut_entry_cx("resteepen", cx)
         .unwrap(); // the dy channel mints third
     app.wait_for_timeout(std::time::Duration::ZERO);
 

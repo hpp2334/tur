@@ -239,7 +239,6 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge };
 use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
 
 fn row(i: u64) -> View {
@@ -316,8 +315,7 @@ entry fn start() -> u64 {
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, View, mount, source };
 
 fn row(i: u64) -> View {
     let b = Container()
@@ -787,25 +785,31 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+
+struct AppContext {
+    count: Source<f64>,
+}
 
 fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
-entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(20.0);
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
-    return count.atom_id();
+    return opaque(AppContext { count: count });
 }
 
-entry fn set_count(atom: u64, n: f64) {
-    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
 }
         "#,
     )
@@ -813,7 +817,7 @@ entry fn set_count(atom: u64, n: f64) {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0)
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 5.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
@@ -833,25 +837,31 @@ entry fn set_count(atom: u64, n: f64) {
 fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+
+struct AppContext {
+    count: Source<f64>,
+}
 
 fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
-entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(20.0);
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
-    return count.atom_id();
+    return opaque(AppContext { count: count });
 }
 
-entry fn set_count(atom: u64, n: f64) {
-    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
 }
         "#,
     )
@@ -860,7 +870,7 @@ entry fn set_count(atom: u64, n: f64) {
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
     // Shrink 20 → 5: the tail (indices ≥ 5) unmounts.
-    app.call_rut_entry("set_count", app.rut_start_answer(), 5.0)
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 5.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
@@ -875,7 +885,7 @@ entry fn set_count(atom: u64, n: f64) {
 
     // Grow back 5 → 20: the viewport window (600/50 = 12 + 2×overscan)
     // must re-mount, and the content extent must cover all 20 items again.
-    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0)
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 20.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
@@ -904,25 +914,31 @@ entry fn set_count(atom: u64, n: f64) {
 fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+
+struct AppContext {
+    count: Source<f64>,
+}
 
 fn row(i: u64) -> View {
     let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
     return b.build();
 }
 
-entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(20.0);
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
     let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
-    return count.atom_id();
+    return opaque(AppContext { count: count });
 }
 
-entry fn set_count(atom: u64, n: f64) {
-    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
 }
         "#,
     )
@@ -930,7 +946,7 @@ entry fn set_count(atom: u64, n: f64) {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 0.0)
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 0.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
@@ -939,7 +955,7 @@ entry fn set_count(atom: u64, n: f64) {
     })
     .unwrap();
 
-    app.call_rut_entry("set_count", app.rut_start_answer(), 20.0)
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 20.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {

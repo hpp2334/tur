@@ -8,7 +8,6 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ rs_set_f64, rs_source_f64 };
 use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
@@ -146,37 +145,43 @@ fn lazy_grid_scroll_shifts_visible_window() {
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
+        r#"use tur_kit::{ Axis, Container, Expanded, LazyGrid, Source, entry_ctx, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
     return b.build();
 }
 
-entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(100.0);
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(100.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count.atom_id();
+    return opaque(AppContext { count: count });
+}
+
+struct AppContext {
+    count: Source<f64>,
 }
 
 // The test drives count changes through the entry rail.
-entry fn set_count(atom: u64, n: f64) {
-    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-grid fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
 }
 "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let count_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
     let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
 
     // Shrink 100 → 8 (2 rows of 4 columns).
-    app.call_rut_entry("set_count", count_atom, 8.0).unwrap();
+    app.call_rut_entry_cx_f64("set_count", cx, 8.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -191,7 +196,7 @@ entry fn set_count(atom: u64, n: f64) {
     // Grow back 8 → 100 (25 rows): the viewport window (6 visible rows × 4
     // columns + overscan) must re-mount, and the content extent must cover
     // all 25 rows again.
-    app.call_rut_entry("set_count", count_atom, 100.0).unwrap();
+    app.call_rut_entry_cx_f64("set_count", cx, 100.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -350,7 +355,6 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ rs_set_f64, rs_source_f64 };
 use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
@@ -440,7 +444,6 @@ fn lazy_grid_column_count_ceils_max_extent_division() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ rs_set_f64, rs_source_f64 };
 use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
 
 fn cell(i: u64) -> View {
@@ -492,33 +495,39 @@ fn lazy_grid_exact_multiple_stays_at_exact_count() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Axis, Container, Expanded, LazyGrid, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Axis, Container, Expanded, LazyGrid, Source, mount, source };
 
 fn cell(i: u64) -> View {
     let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);
     return b.build();
 }
 
-entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(6.0);
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(6.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(1.0).child(lg).build();
     mount(root);
-    return count.atom_id();
+    return opaque(AppContext { count: count });
+}
+
+struct AppContext {
+    count: Source<f64>,
 }
 
 // The test drives count changes through the entry rail.
-entry fn set_count(atom: u64, n: f64) {
-    let count = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(count, n);
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-grid fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
 }
 "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let count_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
     let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
 
     // 6 items / 3 columns = exactly 2 rows; maxScrollExtent clamps at 0
@@ -527,7 +536,7 @@ entry fn set_count(atom: u64, n: f64) {
     assert_eq!(cols, 3, "435/145 = 3.0 exactly must stay 3 columns");
 
     // 30 items / 3 columns = exactly 10 rows → 10*145 - 600 = 850.
-    app.call_rut_entry("set_count", count_atom, 30.0).unwrap();
+    app.call_rut_entry_cx_f64("set_count", cx, 30.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();

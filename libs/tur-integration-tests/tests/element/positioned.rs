@@ -126,30 +126,39 @@ fn positioned_only_stack_sizes_to_constraints_biggest() {
 // ---------------------------------------------------------------------------
 
 const BOUND_ANCHORS_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, Positioned, Readable, Source, Stack, mount, source };
+use tur_kit::{ Container, Positioned, Source, Stack, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let x: Readable<f64> = source<f64>(30.0);
-    let y: Readable<f64> = source<f64>(40.0);
+struct AppContext {
+    x: Source<f64>,
+    y: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let x: Source<f64> = source<f64>(30.0);
+    let y: Source<f64> = source<f64>(40.0);
     let stack = Stack().query_key("pos/board").child(
         Positioned().left_bound(x).top_bound(y)
             .child(Container().width_height(50.0, 50.0).query_key("pos/pill").build())
             .build(),
     ).build();
     mount(stack);
-    return x.atom_id();
+    return opaque(AppContext { x: x, y: y });
 }
 
-// The y atom mints right after x — the probes address the pair by order.
-entry fn probe_x(atom: u64, b: f64) {
-    let x = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(x, b);
+fn pos_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("positioned fixture: cx is not an AppContext");
+    }
+    return c;
 }
 
-entry fn probe_y(atom: u64, b: f64) {
-    let y = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(y, b);
+entry fn probe_x(cx: opaque, b: f64) {
+    entry_ctx().set<f64>(pos_cx(cx).x, b);
+}
+
+entry fn probe_y(cx: opaque, b: f64) {
+    entry_ctx().set<f64>(pos_cx(cx).y, b);
 }
 "#;
 
@@ -168,8 +177,8 @@ fn positioned_bound_anchors_follow_the_live_atom() {
     // Drag-to-move shape: the write lands on the atom, the anchor
     // re-resolves — the Phase-9 jigsaw rail.
     let x_atom = app.rut_start_answer();
-    app.call_rut_entry("probe_x", x_atom, 137.5).unwrap();
-    app.call_rut_entry("probe_y", x_atom + 1, 12.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_x", x_atom, 137.5).unwrap();
+    app.call_rut_entry_cx_f64("probe_y", x_atom, 12.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let pos_node = rt.get_element(pos_id).unwrap();
@@ -178,8 +187,8 @@ fn positioned_bound_anchors_follow_the_live_atom() {
 
     // A bound anchor's 0 is a REAL zero (not the authoring row's
     // 0-is-absent idiom): a piece parked at the origin stays put.
-    app.call_rut_entry("probe_x", x_atom, 0.0).unwrap();
-    app.call_rut_entry("probe_y", x_atom + 1, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_x", x_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_y", x_atom, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let pos_node = rt.get_element(pos_id).unwrap();

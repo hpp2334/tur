@@ -18,17 +18,25 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Column, Condition, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_kit::{ Column, Condition, MutationCtx, Readable, Source, Text, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let open: Readable<bool> = source<bool>(false);
-    let seed: Readable<f64> = source<f64>(1.0);
+struct AppContext {
+    open: Source<bool>,
+    seed: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    // CONCRETE annotations — the fields cross as Source (the one
+    // Writable; an interface-typed value does not fill the field).
+    let open: Source<bool> = source<bool>(false);
+    let seed: Source<f64> = source<f64>(1.0);
     let runs: Readable<f64> = source<f64>(0.0);
     let root = Column().query_key("cb/root").child(
         Condition(open)
             .then_build(fn () -> View {
-                let write = MutationCtx.over(ctx_bridge());
+                // The builder runs at ACTIVATION — a flush-time face call;
+                // its ctx is the entry rail's.
+                let write = entry_ctx();
                 write.set<f64>(runs, write.get<f64>(runs) + 1.0);
                 return Text().text(f"modal {write.get<f64>(seed) as u64}").query_key("cb/then").build();
             })
@@ -38,19 +46,24 @@ entry fn start() -> u64 {
             .build(),
     ).build();
     mount(root);
-    return open.atom_id();
+    return opaque(AppContext { open: open, seed: seed });
 }
 
-// The open atom mints first, the seed second — the probe entries address
-// them by the start answer's order.
-entry fn probe_open(atom: u64, _b: f64) {
-    let open = Source<bool>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<bool>(open, _b != 0.0);
+// The probe seam's downcast (one nil-guard, shared).
+fn cond_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("cond fixture: cx is not an AppContext");
+    }
+    return c;
 }
 
-entry fn probe_seed(atom: u64, b: f64) {
-    let seed = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(seed, b);
+entry fn probe_open(cx: opaque, v: f64) {
+    entry_ctx().set<bool>(cond_cx(cx).open, v != 0.0);
+}
+
+entry fn probe_seed(cx: opaque, b: f64) {
+    entry_ctx().set<f64>(cond_cx(cx).seed, b);
 }
 "#;
 
@@ -59,8 +72,10 @@ fn inactive_branch_rows_never_run_and_activation_invokes() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(COND_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let open_atom = app.rut_start_answer();
-    let seed_atom = open_atom + 1; // the seed mints right after open
+    // The eager context-crossing shape: start answers the AppContext and
+    // the token IS the start answer.
+    let cx = app.rut_start_answer();
+    app.wait_for_timeout(Duration::ZERO);
 
     // Boot with `open = false`: the ELSE branch is mounted and the THEN
     // branch's rows never ran — its marker is absent (a pre-built branch
@@ -74,7 +89,7 @@ fn inactive_branch_rows_never_run_and_activation_invokes() {
 
     // Activation: the then builder runs NOW — reads live state, mounts
     // the fresh marker, and the else branch unmounts.
-    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_open", cx, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "then"]).as_deref(), Some("modal 1"));
     assert_eq!(app.query_text(&["cb", "else"]), None);
@@ -85,22 +100,22 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(COND_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let open_atom = app.rut_start_answer();
-    let seed_atom = open_atom + 1; // the seed mints right after open
+    let cx = app.rut_start_answer();
+    app.wait_for_timeout(Duration::ZERO);
 
     // Open → close → change the seed while dormant → open again. The
     // rebuilt branch must read the NEW seed ("modal 2"): the builder is
     // re-invoked at re-activation, not cloned from a boot-time pre-build.
-    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_open", cx, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "then"]).as_deref(), Some("modal 1"));
 
-    app.call_rut_entry("probe_open", open_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_open", cx, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["cb", "else"]).as_deref(), Some("closed"));
 
-    app.call_rut_entry("probe_seed", seed_atom, 2.0).unwrap();
-    app.call_rut_entry("probe_open", open_atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_seed", cx, 2.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_open", cx, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         app.query_text(&["cb", "then"]).as_deref(),
@@ -114,15 +129,20 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Switch, Text, mount, source };
+use tur_kit::{ Column, MutationCtx, Source, Switch, Text, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let tab: Readable<str> = source<str>("b");
-    let label: Readable<str> = source<str>("idle");
+struct AppContext {
+    tab: Source<str>,
+}
+
+entry fn start() -> opaque {
+    let tab: Source<str> = source<str>("b");
+    let label: Source<str> = source<str>("idle");
     let v = Switch().value(tab)
         .case_build("a", fn () -> View {
-            let write = MutationCtx.over(ctx_bridge());
+            // The builder runs at ACTIVATION — its ctx is the entry
+            // rail's.
+            let write = entry_ctx();
             write.set<str>(label, "built-a");
             return Text().text("A").query_key("sw/a").build();
         })
@@ -133,17 +153,19 @@ entry fn start() -> u64 {
         .child(Text().text_bound(label).query_key("sw/label").build())
         .build();
     mount(root);
-    return tab.atom_id();
+    return opaque(AppContext { tab: tab });
 }
 
-// The flag rides the f64 slot; the atom the u64 slot.
-entry fn probe_tab(atom: u64, flag: f64) {
-    let tab = Source<str>.of(ctx_bridge(), atom, false, 1);
-    let write = MutationCtx.over(ctx_bridge());
+entry fn probe_tab(cx: opaque, flag: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("switch fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
     if (flag != 0.0) {
-        write.set<str>(tab, "a");
+        write.set<str>(c.tab, "a");
     } else {
-        write.set<str>(tab, "b");
+        write.set<str>(c.tab, "b");
     }
 }
 "#;
@@ -166,14 +188,14 @@ fn switch_case_build_invokes_only_when_the_key_activates() {
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("idle"));
 
     // Activate "a": the case builder runs now — marker + side effect.
-    app.call_rut_entry("probe_tab", tab_atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 1.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "a"]).as_deref(), Some("A"));
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("built-a"));
     assert_eq!(app.query_text(&["sw", "fb"]), None);
 
     // Back to "b": the fallback remounts.
-    app.call_rut_entry("probe_tab", tab_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "fb"]).as_deref(), Some("fallback"));
     assert_eq!(app.query_text(&["sw", "a"]), None);

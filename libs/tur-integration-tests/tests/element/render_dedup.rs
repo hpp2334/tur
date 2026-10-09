@@ -85,39 +85,46 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Container, Source, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let color: Readable<u64> = source<u64>(0);
-    MutationCtx.over(ctx_bridge()).set<u64>(color, 0xFF0000FFu64);
+struct AppContext {
+    color: Source<u64>,
+}
+
+entry fn start() -> opaque {
+    // The boot brush seeds at the mint.
+    let color: Source<u64> = source<u64>(0xFF0000FFu64);
 
     let b = Container().width_height(100.0, 50.0).color_bound(color);
     mount(b.build());
-    return color.atom_id();
+    return opaque(AppContext { color: color });
 }
 
-entry fn do_set(color: u64, v: f64) {
+entry fn do_set(cx: opaque, v: f64) {
     // 0 clears the brush (the decode refuses 0 — the prop resolves
     // absent); the container repaints unpainted (the batch differs
     // either way).
-    let write = MutationCtx.over(ctx_bridge());
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("dedup fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
     if (v == 0.0) {
-        write.set<u64>(Source<u64>.of(ctx_bridge(), color, false, 1), 0);
+        write.set<u64>(c.color, 0);
     } else {
-        write.set<u64>(Source<u64>.of(ctx_bridge(), color, false, 1), 0x00FF00FFu64);
+        write.set<u64>(c.color, 0x00FF00FFu64);
     }
 }
 "#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let color_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
     let after_initial = *calls.borrow();
     assert!(after_initial >= 1);
 
     // Flip the color: the batch differs → must apply.
-    app.call_rut_entry("do_set", color_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("do_set", cx, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let after_flip = *calls.borrow();
     assert!(

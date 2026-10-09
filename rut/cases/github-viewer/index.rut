@@ -4,10 +4,10 @@
 // Single-file port of the boa TSX original (a 6-file case: index/landing/
 // explorer/state/theme/ui — the explorer view is inlined here).
 //
-// Host surface: `net_request` (the async capability row) rides the spawn
-// rail — the async journeys take their handles as PARAMETERS (the `Gh`
-// bundle of sources) and a task-scoped ctx minted at the launch site; the
-// tap mutations capture the bundle. GitHub's REST API is CORS-friendly,
+// Host surface: `net_request` (the async capability row) rides rut's own
+// async — the journeys take their handles as PARAMETERS (the `Gh` bundle
+// of sources) and the launching mutation's ctx rides along as a plain
+// value; the tap mutations capture the bundle. GitHub's REST API is CORS-friendly,
 // so the wasm build fetches it directly. Degradation: an empty response
 // body (the net row completes empty on transport failure) becomes a
 // visible error banner; a JSON error payload (404 / rate limit) surfaces
@@ -23,8 +23,9 @@
 // `f32` by the default-width rule (annotate `: f64` when handing them to
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
-use tur_host::{ net_request, spawn, tctrl_set_text };
-use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, TaskCtx, Text, image_resource_svg, list_new, mount, mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
+use futures::launch_future;
+use tur_host::{ net_request, tctrl_set_text };
+use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, image_resource_svg, list_new, mount, mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
 
 // The state bundle (the sources every journey reads and writes — handles
 // bind at the launch site, captures stay rut-side).
@@ -270,18 +271,18 @@ fn explorer_view(s: Gh) -> View {
             ctx.set<str>(s.path, cur.slice(0, sep));
         }
         ctx.set<str>(s.selected, "");
-        spawn(fetch_dir(TaskCtx.mint(), s));
+        launch_future(fetch_dir(ctx, s));
     });
     // The crumb tap: back to the repo ROOT listing (the boa
     // navigateToRoot); the handles bind at the launch site.
     let b_root = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(s.path, "");
         ctx.set<str>(s.selected, "");
-        spawn(fetch_dir(TaskCtx.mint(), s));
+        launch_future(fetch_dir(ctx, s));
     });
     // Re-fetch the current directory.
-    let b_refresh = mutate(fn (_ctx: MutationCtx, _e: nil) {
-        spawn(fetch_dir(TaskCtx.mint(), s));
+    let b_refresh = mutate(fn (ctx: MutationCtx, _e: nil) {
+        launch_future(fetch_dir(ctx, s));
     });
     let list = ScrollView()
         .axis(Axis.Vertical)
@@ -430,7 +431,7 @@ fn item_file(i: u64, s: str, g: Gh) -> View {
             }
             ctx.set<str>(g.path, next);
             ctx.set<str>(g.selected, "");
-            spawn(fetch_dir(TaskCtx.mint(), g));
+            launch_future(fetch_dir(ctx, g));
             return;
         }
         let rn = s.len();
@@ -490,7 +491,7 @@ fn open_draft(ctx: MutationCtx, s: Gh, draft: str) {
     ctx.set<str>(s.err, "");
     ctx.set<bool>(s.err_has, false);
     ctx.set<str>(s.repo_full, full);
-    spawn(open_repo(TaskCtx.mint(), s));
+    launch_future(open_repo(ctx, s));
 }
 
 fn go_landing(ctx: MutationCtx, s: Gh) {
@@ -510,7 +511,7 @@ fn go_landing(ctx: MutationCtx, s: Gh) {
 // the repo, surface its error payload or seed the explorer and fetch the
 // root listing. The crumb keeps the PARSED draft identity (boa's repo$) —
 // the API's full_name never overwrites it.
-async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
+async fn open_repo(ctx: MutationCtx, s: Gh) -> str {
     ctx.set<bool>(s.busy, true);
     let full = ctx.get<str>(s.repo_full);
     let url = f"https://api.github.com/repos/{full}";
@@ -543,7 +544,7 @@ async fn open_repo(ctx: TaskCtx, s: Gh) -> str {
 // The directory journey: GET .../contents[/path], fill the display list
 // (dirs first), flip the empty flag, settle on the explorer. The list
 // area shows "Loading…" while the fetch rides (the busy source).
-async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
+async fn fetch_dir(ctx: MutationCtx, s: Gh) -> str {
     ctx.set<str>(s.mode, "explorer");
     ctx.set<bool>(s.busy, true);
     let full = ctx.get<str>(s.repo_full);
@@ -576,7 +577,7 @@ async fn fetch_dir(ctx: TaskCtx, s: Gh) -> str {
 
 // The failure rail: the message lands on the banner; `explorer` keeps the
 // listing visible under it, anything else falls back to the landing.
-fn fail(ctx: TaskCtx, s: Gh, msg: str, stay: bool) {
+fn fail(ctx: MutationCtx, s: Gh, msg: str, stay: bool) {
     ctx.set<str>(s.err, msg);
     ctx.set<bool>(s.err_has, true);
     if (stay) {

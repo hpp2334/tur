@@ -8,33 +8,41 @@ use tur_integration_tests::TurTestApp;
 /// A switch bound to a str atom with two cases + a fallback; `set_key`
 /// mutates the atom (the test's flip rail).
 const RUNTIME: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Mutation, MutationCtx, Readable, Source, Switch, Text, mount, source };
+use tur_kit::{ Source, Switch, Text, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let key: Readable<str> = source<str>("a");
+struct AppContext {
+    key: Source<str>,
+}
+
+entry fn start() -> opaque {
+    let key: Source<str> = source<str>("a");
 
     let mut sw = Switch().value(key);
     sw.cases("a", Text().text("AAA").query_key("case_a").build());
     sw.cases("b", Text().text("BBB").query_key("case_b").build());
     sw.fallback(Text().text("FALL").query_key("case_fallback").build());
     mount(sw.build());
-    return key.atom_id();
+    return opaque(AppContext { key: key });
 }
 
-entry fn set_key(atom: u64, _b: f64) {
-    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(key, "b");
+fn switch_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("switch fixture: cx is not an AppContext");
+    }
+    return c;
 }
 
-entry fn set_key_raw(atom: u64, _b: f64) {
-    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(key, "zzz");
+entry fn set_key(cx: opaque) {
+    entry_ctx().set<str>(switch_cx(cx).key, "b");
 }
 
-entry fn reemit(atom: u64, _b: f64) {
-    let key = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(key, "a");
+entry fn set_key_raw(cx: opaque) {
+    entry_ctx().set<str>(switch_cx(cx).key, "zzz");
+}
+
+entry fn reemit(cx: opaque) {
+    entry_ctx().set<str>(switch_cx(cx).key, "a");
 }
 "#;
 
@@ -72,7 +80,7 @@ fn switch_swaps_branch_on_value_change() {
     assert!(app.query_element(&["case_a"]).is_some());
 
     // Flip the value atom to "b".
-    app.call_rut_entry("set_key", key, 0.0).unwrap();
+    app.call_rut_entry_cx("set_key", key).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
@@ -90,7 +98,7 @@ fn switch_uses_fallback_when_no_case_matches() {
     let (mut app, key) = mount_switch();
 
     // Value with no matching case → fallback branch.
-    app.call_rut_entry("set_key_raw", key, 0.0).unwrap();
+    app.call_rut_entry_cx("set_key_raw", key).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(app.query_element(&["case_a"]).is_none());
@@ -107,7 +115,7 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
-    app.call_rut_entry("reemit", key, 0.0).unwrap();
+    app.call_rut_entry_cx("reemit", key).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
@@ -118,9 +126,7 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 /// dep as f64 (`entry fn d(dep: f64) -> str`), so the source is a numeric
 /// atom the derive maps onto the string keys.
 const DERIVED_RUNTIME: &str = r#"
-use tur_host::{ ctx_bridge, rs_set_f64, rs_source_f64 };
-use tur_kit::{ MutationCtx, Readable, Source, Switch, Text, mount, source };
-use tur_kit::{ MutationCtx, Readable, Source, mount, rs_derive, source };
+use tur_kit::{ DeriveCtx, MutationCtx, Readable, Source, Switch, Text, derive, entry_ctx, mount, mutate, source };
 
 fn d(v: f64) -> str {
     if (v == 1.0) {
@@ -132,24 +138,33 @@ fn d(v: f64) -> str {
     return "a";
 }
 
-entry fn start() -> u64 {
-    let key = rs_source_f64();
-    rs_set_f64(key, 0.0);
-    let derived = rs_derive(d, key);
+struct AppContext {
+    key: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let key: Source<f64> = source<f64>(0.0);
+    // d is a PLAIN fn (no captures) — the kit's ONE derive minter serves.
+    let derived = derive(fn (ctx: DeriveCtx) -> str {
+        return d(ctx.get<f64>(key));
+    });
 
     // The unified value prop over the derived handle (the kind rides the
     // handle: a derived binds through the derive rail).
-    let mut sw = Switch().value(Source<str>.of(ctx_bridge(), derived, false, 1));
+    let mut sw = Switch().value(derived);
     sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
     sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
     sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
     mount(sw.build());
-    return key;
+    return opaque(AppContext { key: key });
 }
 
-entry fn set_key(atom: u64, _b: f64) {
-    let key = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(key, 1.0);
+entry fn set_key(cx: opaque) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("derived switch fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.key, 1.0);
 }
 "#;
 
@@ -167,7 +182,7 @@ fn switch_swaps_branch_on_derived_value_change() {
 
     // Flip the source atom — the derived goes stale and the Switch swaps
     // via the subscriber graph (not a full-scan try_rebuild).
-    app.call_rut_entry("set_key", key, 0.0).unwrap();
+    app.call_rut_entry_cx("set_key", key).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(

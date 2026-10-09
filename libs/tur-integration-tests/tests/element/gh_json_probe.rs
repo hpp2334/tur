@@ -8,8 +8,7 @@
 use tur_integration_tests::TurTestApp;
 
 const PROBE_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_kit::{ Column, MutationCtx, Readable, Source, Text, entry_ctx, mount, source };
 
 // ASCII codepoints the scanner compares against (typed so the literals
 // land on `u32`).
@@ -25,25 +24,34 @@ let C_RBRACE: u32 = 125;
 let C_LBRACKET: u32 = 91;
 let C_RBRACKET: u32 = 93;
 
-entry fn start() -> u64 {
-    let full: Readable<str> = source<str>("");
-    let desc: Readable<str> = source<str>("");
+entry fn start() -> opaque {
+    let full: Source<str> = source<str>("");
+    let desc: Source<str> = source<str>("");
     let col = Column()
         .child(Text().text_bound(full).query_key("ghj-full").build())
         .child(Text().text_bound(desc).query_key("ghj-desc").build())
         .build();
     mount(col);
-    return full.atom_id();
+    return opaque(AppContext { full: full, desc: desc });
+}
+
+struct AppContext {
+    full: Source<str>,
+    desc: Source<str>,
 }
 
 // Run the scanner over META (the payload rides the f64 arg as a selector
 // into the case's payloads) and land the fields on the bound strings.
-entry fn probe(atom: u64, _b: f64) {
+entry fn probe(cx: opaque) {
     let meta = "{\"id\":10270450,\"node_id\":\"MDEwOlJlcG9zaXRvcnkxMDI3MDQ1MA==\",\"name\":\"react\",\"full_name\":\"facebook/react\",\"private\":false,\"owner\":{\"login\":\"facebook\",\"id\":69631,\"node_id\":\"MDEyOk9yZ2FuaXphdGlvbjY5NjMx\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/69631?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/facebook\",\"html_url\":\"https://github.com/facebook\",\"followers_url\":\"https://api.github.com/users/facebook/followers\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/facebook/react\",\"description\":\"The library for web and native user interfaces.\",\"fork\":false,\"url\":\"https://api.github.com/repos/facebook/react\",\"stargazers_count\":237000,\"watchers_count\":237000,\"language\":\"JavaScript\",\"open_issues_count\":995,\"license\":{\"key\":\"mit\",\"name\":\"MIT License\",\"spdx_id\":\"MIT\"},\"forks\":48500,\"default_branch\":\"main\"}";
-    // The desc atom mints right after full — the probe addresses the pair.
-    let write = MutationCtx.over(ctx_bridge());
-    write.set<str>(Source<str>.of(ctx_bridge(), atom, false, 1), json_get_str(meta, "full_name"));
-    write.set<str>(Source<str>.of(ctx_bridge(), atom + 1, false, 1), json_get_str(meta, "description"));
+    // The context carries the pair (the probe answers into both).
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("ghj fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
+    write.set<str>(c.full, json_get_str(meta, "full_name"));
+    write.set<str>(c.desc, json_get_str(meta, "description"));
 }
 
 fn skip_ws(t: str, i: i32) -> i32 {
@@ -207,7 +215,7 @@ fn setup() -> TurTestApp {
 #[test]
 fn full_name_extracts_verbatim() {
     let mut app = setup();
-    app.call_rut_entry("probe", app.rut_start_answer(), 0.0)
+    app.call_rut_entry_cx("probe", app.rut_start_answer())
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(

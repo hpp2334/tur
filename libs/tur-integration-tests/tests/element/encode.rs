@@ -9,20 +9,19 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur_host::{ ctx_bridge, decode_utf8, encode_utf8 };
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_host::{ decode_utf8, encode_utf8 };
+use tur_kit::{ Column, Source, Text, mount, source };
 
-entry fn start() -> u64 {
-    let label: Readable<str> = source<str>("");
-
+entry fn start() {
     let ascii = decode_utf8(encode_utf8("hello world"));
     let unicode = decode_utf8(encode_utf8("héllo 世界 🚀"));
     let empty = decode_utf8(encode_utf8(""));
-    MutationCtx.over(ctx_bridge()).set<str>(label, f"{ascii}|{unicode}|{empty}|");
+    // The mint seeds the transcript (a boot write with no entry-rail ctx
+    // is a construction-time value, not a state transition).
+    let label: Source<str> = source<str>(f"{ascii}|{unicode}|{empty}|");
 
     let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
     mount(col.build());
-    return label.atom_id();
 }
 "#;
 

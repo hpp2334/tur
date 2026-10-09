@@ -234,19 +234,25 @@ fn container_with_shadow() {
 // ---------------------------------------------------------------------------
 
 const RADIUS_BOUND_RUT: &str = r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, source };
+use tur_kit::{ Container, MutationCtx, Source, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let r: Readable<f64> = source<f64>(8.0);
-    let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
-    mount(card);
-    return r.atom_id();
+struct AppContext {
+    r: Source<f64>,
 }
 
-entry fn probe_r(atom: u64, b: f64) {
-    let r = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(r, b);
+entry fn start() -> opaque {
+    let r: Source<f64> = source<f64>(8.0);
+    let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
+    mount(card);
+    return opaque(AppContext { r: r });
+}
+
+entry fn probe_r(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("radius fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.r, b);
 }
 "#;
 
@@ -264,7 +270,7 @@ fn radius_bound_resolves_through_the_live_atom() {
 
     // The atom swap re-resolves the radius through layout (the subscribe
     // → relayout rail; painting carries the reactive value).
-    app.call_rut_entry("probe_r", app.rut_start_answer(), 20.0)
+    app.call_rut_entry_cx_f64("probe_r", app.rut_start_answer(), 20.0)
         .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(box_id, |el| {

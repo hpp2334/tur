@@ -78,19 +78,25 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 fn id_module(value: &str) -> String {
     format!(
         r#"
-use tur_host::{{ ctx_bridge }};
-use tur_kit::{{ MutationCtx, Readable, Source, Text, mount, source }};
+use tur_kit::{{ Source, Text, entry_ctx, mount, source }};
 
-entry fn start() -> u64 {{
-    let atom: Readable<str> = source<str>("{value}");
-    let mut txt = Text().text_bound(atom).query_key("id").build();
-    mount(txt);
-    return atom.atom_id();
+struct IdCx {{
+    atom: Source<str>,
 }}
 
-entry fn set_value(atom: u64, _b: f64) {{
-    let r = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(r, "A2");
+entry fn start() -> opaque {{
+    let atom: Source<str> = source<str>("{value}");
+    let mut txt = Text().text_bound(atom).query_key("id").build();
+    mount(txt);
+    return opaque(IdCx {{ atom: atom }});
+}}
+
+entry fn set_value(cx: opaque) {{
+    let c = opaque.downcast<IdCx>(cx);
+    if (c == nil) {{
+        panic("id fixture: cx is not an IdCx");
+    }}
+    entry_ctx().set<str>(c.atom, "A2");
 }}
 "#
     )
@@ -129,8 +135,8 @@ fn instances_have_isolated_state() {
     );
 
     // Mutating A must not affect B.
-    let atom_a = futures::executor::block_on(app_a.rut_start_answer());
-    futures::executor::block_on(app_a.call_rut_entry("set_value", atom_a, 0.0)).expect("mutate A");
+    let cx_a = futures::executor::block_on(app_a.rut_start_answer());
+    futures::executor::block_on(app_a.call_rut_entry_cx("set_value", cx_a)).expect("mutate A");
     assert_eq!(
         label_text(&app_b, "id"),
         Some("B".to_string()),
@@ -532,19 +538,25 @@ fn reactive_stores_are_isolated_per_instance() {
     // "A2" — the write lands in A's own store.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_kit::{ Source, Text, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let atom: Readable<str> = source<str>("from-A");
-    let mut txt = Text().text_bound(atom).query_key("id").build();
-    mount(txt);
-    return atom.atom_id();
+struct FlipCx {
+    atom: Source<str>,
 }
 
-entry fn flip(atom: u64, _b: f64) {
-    let r = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(r, "A2");
+entry fn start() -> opaque {
+    let atom: Source<str> = source<str>("from-A");
+    let mut txt = Text().text_bound(atom).query_key("id").build();
+    mount(txt);
+    return opaque(FlipCx { atom: atom });
+}
+
+entry fn flip(cx: opaque) {
+    let c = opaque.downcast<FlipCx>(cx);
+    if (c == nil) {
+        panic("flip fixture: cx is not a FlipCx");
+    }
+    entry_ctx().set<str>(c.atom, "A2");
 }
 "#,
     ))
@@ -562,8 +574,8 @@ entry fn flip(atom: u64, _b: f64) {
     );
 
     // A retains its own value — flip it and read it back.
-    let atom_a = futures::executor::block_on(app_a.rut_start_answer());
-    futures::executor::block_on(app_a.call_rut_entry("flip", atom_a, 0.0)).expect("flip");
+    let cx_a = futures::executor::block_on(app_a.rut_start_answer());
+    futures::executor::block_on(app_a.call_rut_entry_cx("flip", cx_a)).expect("flip");
     assert_eq!(
         label_text(&app_a, "id"),
         Some("A2".to_string()),

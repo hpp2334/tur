@@ -892,22 +892,20 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
 /// kit's `.on_input(name, id)` (the `input_on_input` row). Every user
 /// edit delivers the named entry with the row's id crossing.
 const INPUT_ON_INPUT_MODULE: &str = r#"
-use tur_host::{ ctx_bridge, tctrl_new, undo_new };
-use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, entry_ctx, mount, mutate, source, text_ctrl, undo_ctrl };
 
-entry fn start() -> u64 {
-    let text: Readable<str> = source<str>("cold");
-    let ctrl = tctrl_new();
+entry fn start() {
+    let text: Source<str> = source<str>("cold");
+    let ctrl = text_ctrl();
     // The edit intent: a mutation over the typed InputEvent (the row id
     // is gone — the handler names the source by capture).
     let b_edit = mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) {
         ctx.set<str>(text, "edit");
     });
-    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo_new())).width_height(400.0, 200.0)
+    let input = Input().controller(ctrl).undo(undo_ctrl()).width_height(400.0, 200.0)
         .on_input(b_edit).query_key("input").build();
     let col = Column().child(input).child(Text().text_bound(text).query_key("echo").build());
     mount(col.build());
-    return text.atom_id();
 }
 "#;
 
@@ -916,7 +914,6 @@ fn input_on_input_row_fires_the_edit_intent() {
     let mut app = TurTestApp::new(600.0, 400.0).unwrap();
     app.load_rut_module(INPUT_ON_INPUT_MODULE).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    let cx = app.rut_start_answer();
     assert_eq!(
         app.query_text(&["echo"]).as_deref(),
         Some("cold"),

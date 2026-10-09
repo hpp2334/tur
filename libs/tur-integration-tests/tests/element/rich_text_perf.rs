@@ -23,29 +23,36 @@ use tur_integration_tests::TurTestApp;
 /// unlike the JS-era stretch-to-viewport `Input` — a window resize cannot
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
-use tur_host::{ ctx_bridge, tctrl_new, tctrl_push_span };
-use tur_kit::{ Axis, Container, Input, Mutation, MutationCtx, Readable, ScrollView, Source, TextCtrl, UndoCtrl, mount, source };
+use tur_host::{ tctrl_push_span };
+use tur_kit::{ Axis, Container, Input, Source, ScrollView, entry_ctx, mount, source, text_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
+struct AppContext {
+    width: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let ctrl = text_ctrl();
     let mut i = 0;
     while (i < 400) {
-        tctrl_push_span(ctrl, f"const value{i} = {i}; // line {i}\n");
+        tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;
     }
 
-    let width: Readable<f64> = source<f64>(400.0);
+    let width: Source<f64> = source<f64>(400.0);
 
-    let input = Input().controller(TextCtrl(ctrl)).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
+    let input = Input().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
     let wrap = Container().width_bound(width).child(input).build();
     let scroller = ScrollView().axis(Axis.Vertical).child(wrap).query_key("scroll").build();
     mount(scroller);
-    return width.atom_id();
+    return opaque(AppContext { width: width });
 }
 
-entry fn set_width(atom: u64, v: f64) {
-    let width = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(width, v);
+entry fn set_width(cx: opaque, v: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("perf fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.width, v);
 }
 "##;
 
@@ -173,7 +180,7 @@ fn width_change_invalidates_memo() {
     // Narrower constraint → narrower max_width → new memo key. (The bound
     // wrapper's width drives the editable's constraint — the same contract
     // the JS twin pinned through a window resize.)
-    app.call_rut_entry("set_width", width_atom, 320.0).unwrap();
+    app.call_rut_entry_cx_f64("set_width", width_atom, 320.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         shape_count(&app, id),
@@ -182,7 +189,7 @@ fn width_change_invalidates_memo() {
     );
 
     // Back to the original width → another (different) key → reshape again.
-    app.call_rut_entry("set_width", width_atom, 400.0).unwrap();
+    app.call_rut_entry_cx_f64("set_width", width_atom, 400.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(shape_count(&app, id), before + 2);
 }

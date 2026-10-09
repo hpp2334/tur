@@ -30,8 +30,7 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
-use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_set_value, rs_source_value };
-use tur_kit::{ Column, Container, Readable, Table, TableCols, mount };
+use tur_kit::{ Column, Container, ListHandle, MutationCtx, Source, Table, TableCols, entry_ctx, list_new, mount, source };
 
 fn cell(key: str) -> View {
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
@@ -50,18 +49,18 @@ fn row_cell(i: u64, _col: u64) -> View {
     return col.build();
 }
 
-fn rows_of(n: u64) -> opaque {
-    let list = rs_list_new();
+fn rows_of(n: u64) -> ListHandle {
+    let list: ListHandle = list_new();
     let mut i = 0;
     while (i < n as i32) {
-        rs_list_push(list, f"row {i}");
+        list.push(f"row {i}");
         i += 1;
     }
     return list;
 }
 
 entry fn start() -> u64 {
-    let rows = Source<opaque>.of(ctx_bridge(), rs_source_value(rows_of({ROWS_PLACEHOLDER})), false, 1);
+    let rows = source<opaque>(rows_of({ROWS_PLACEHOLDER}).raw());
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
@@ -71,7 +70,7 @@ entry fn start() -> u64 {
 }
 
 fn set_rows(atom: u64, n: f64) {
-    rs_set_value(atom, rows_of(n as u64));
+    entry_ctx().set<opaque>(atom, rows_of(n as u64).raw());
 }
 "#
         .replace("{ROWS_PLACEHOLDER}", &rows.to_string())
@@ -137,25 +136,24 @@ fn fills_for(
 /// declarative stripes — even rows red, odd rows blue (the cells paint
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
-use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Readable, Table, TableCols, mount };
+use tur_kit::{ Container, ListHandle, Source, Table, TableCols, list_new, mount, source };
 
 fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();
 }
 
-fn rows_of(n: u64) -> opaque {
-    let list = rs_list_new();
+fn rows_of(n: u64) -> ListHandle {
+    let list: ListHandle = list_new();
     let mut i: u64 = 0;
     while (i < n) {
-        rs_list_push(list, f"r{i}");
+        list.push(f"r{i}");
         i = i + 1;
     }
     return list;
 }
 
 entry fn start() {
-    let rows: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(rows_of(4)), false, 1);
+    let rows = source<opaque>(rows_of(4).raw());
     let cols = TableCols().extent(300.0);
     let t = Table()
         .columns(cols)
@@ -211,17 +209,16 @@ fn column_extent_honored_in_layout() {
     // (min 120) — the leftover 250 splits 1:2.
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Container, Readable, Table, TableCols, mount };
+use tur_kit::{ Container, ListHandle, Source, Table, TableCols, list_new, mount, source };
 
 fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();
 }
 
 entry fn start() {
-    let rows = rs_list_new();
-    rs_list_push(rows, "a");
-    let rows_atom: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(rows), false, 1);
+    let rows: ListHandle = list_new();
+    rows.push("a");
+    let rows_atom = source<opaque>(rows.raw());
     let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
     let t = Table()
         .columns(cols)

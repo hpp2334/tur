@@ -295,23 +295,29 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// returns its id — the standard probe channel). `probe_obscure(b)` sets
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
-use tur_host::{ ctx_bridge, tctrl_new, undo_new };
-use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::{ Input, Source, TextCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    let undo = undo_new();
-    let obscure: Readable<bool> = source<bool>(true);
-    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0)
+struct AppContext {
+    obscure: Source<bool>,
+}
+
+entry fn start() -> opaque {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let obscure: Source<bool> = source<bool>(true);
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .obscure_bound(obscure)
         .query_key("input").build();
     mount(input);
-    return obscure.atom_id();
+    return opaque(AppContext { obscure: obscure });
 }
 
-entry fn probe_obscure(atom: u64, b: f64) {
-    let obscure = Source<bool>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<bool>(obscure, b != 0.0);
+entry fn probe_obscure(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("obscure fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<bool>(c.obscure, b != 0.0);
 }
 "#;
 
@@ -334,8 +340,8 @@ fn obscure_bound_toggles_masking_reactively() {
 
     // The reveal toggle flips the ATOM — the mounted input re-resolves
     // its obscure flag without any rebuild.
-    let atom = app.rut_start_answer();
-    app.call_rut_entry("probe_obscure", atom, 0.0).unwrap();
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_f64("probe_obscure", cx, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_displayed(&app, id),
@@ -345,7 +351,7 @@ fn obscure_bound_toggles_masking_reactively() {
     assert_eq!(get_value(&app, id), "abc", "value unchanged by the toggle");
 
     // And back.
-    app.call_rut_entry("probe_obscure", atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_obscure", cx, 1.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_displayed(&app, id),
@@ -361,23 +367,29 @@ fn obscure_bound_toggles_masking_reactively() {
 /// same Val/subscribe machinery `obscure_bound` exercises above — plus
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
-use tur_host::{ ctx_bridge, tctrl_new, undo_new };
-use tur_kit::{ Input, Mutation, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::{ Input, Source, TextCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
 
-entry fn start() -> u64 {
-    let ctrl = tctrl_new();
-    let undo = undo_new();
-    let hint: Readable<str> = source<str>("type here");
-    let input = Input().controller(TextCtrl(ctrl)).undo(UndoCtrl(undo)).width_height(200.0, 30.0)
+struct AppContext {
+    hint: Source<str>,
+}
+
+entry fn start() -> opaque {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let hint: Source<str> = source<str>("type here");
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
         .placeholder_bound(hint)
         .query_key("input").build();
     mount(input);
-    return hint.atom_id();
+    return opaque(AppContext { hint: hint });
 }
 
-entry fn probe_hint(atom: u64, _b: f64) {
-    let hint = Source<str>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<str>(hint, "other hint");
+entry fn probe_hint(cx: opaque) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("placeholder fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<str>(c.hint, "other hint");
 }
 "#;
 
@@ -394,7 +406,7 @@ fn placeholder_bound_swaps_through_the_live_atom() {
 
     // The placeholder atom swap must re-resolve the input cleanly (no
     // trap, no stale subtree) and leave the value intact.
-    app.call_rut_entry("probe_hint", app.rut_start_answer(), 0.0).unwrap();
+    app.call_rut_entry_cx("probe_hint", app.rut_start_answer()).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_value(&app, id),

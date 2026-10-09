@@ -219,30 +219,36 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_host::{ ctx_bridge };
-use tur_kit::{ Axis, Container, CrossAlign, Mutation, MutationCtx, Readable, ScrollView, Source, mount, source };
+use tur_kit::{ Axis, Container, CrossAlign, ScrollView, Source, entry_ctx, mount, source };
 
-entry fn start() -> u64 {
-    let height: Readable<f64> = source<f64>(900.0);
+struct AppContext {
+    height: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let height: Source<f64> = source<f64>(900.0);
 
     let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
 
     let mut scroller = ScrollView().axis(Axis.Vertical).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
-    return height.atom_id();
+    return opaque(AppContext { height: height });
 }
 
-entry fn shrink(atom: u64, _b: f64) {
-    let height = Source<f64>.of(ctx_bridge(), atom, false, 1);
-    MutationCtx.over(ctx_bridge()).set<f64>(height, 200.0);
+entry fn shrink(cx: opaque) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("scroll fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.height, 200.0);
 }
 "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let sv_id = ElementNodeId::new(app.query_element(&["sv"]).unwrap().as_u64());
-    let height_atom = app.rut_start_answer();
+    let cx = app.rut_start_answer();
 
     // Content 900 in a 300-tall viewport → maxScrollExtent 600. Scroll to
     // 300 with a wheel event.
@@ -257,7 +263,7 @@ entry fn shrink(atom: u64, _b: f64) {
 
     // Shrink the content to 200 → maxScrollExtent collapses to 0 → the
     // offset must clamp during layout, not stay stale.
-    app.call_rut_entry("shrink", height_atom, 0.0).unwrap();
+    app.call_rut_entry_cx("shrink", cx).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {

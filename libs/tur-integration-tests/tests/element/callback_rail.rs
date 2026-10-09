@@ -124,14 +124,13 @@ fn wrong_arity_callback_fails_to_compile() {
 }
 
 const EACH_RAIL_RUT: &str = r#"
-use tur_host::{ ctx_bridge, rs_list_new, rs_list_push, rs_source_value };
-use tur_kit::{ Column, Each, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
+use tur_kit::{ Column, Each, ListHandle, Source, Text, View, list_new, mount, source };
 
 entry fn start() {
-    let list = rs_list_new();
-    rs_list_push(list, "alpha");
-    rs_list_push(list, "beta");
-    let items: Readable<opaque> = Source<opaque>.of(ctx_bridge(), rs_source_value(list), false, 1);
+    let list: ListHandle = list_new();
+    list.push("alpha");
+    list.push("beta");
+    let items = source<opaque>(list.raw());
     mount(Column().query_key("rail/each").child(
         Each(items).item_builder(fn (i: u64, item: str) -> View {
             return Text().text(f"{i}:{item}").query_key(f"rail/item-{i}").build();

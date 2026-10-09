@@ -16,9 +16,8 @@
 // ^/v marker re-reads on layout); the active-column fill is a painted
 // brush source (the corpus's brush law — bound colors are sources the
 // mutations repaint).
-use futures::{ sleep };
-use tur_host::{ spawn };
-use tur_kit::{ Column, Container, CrossAlign, Cursor, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, TaskCtx, Text, bridge, derive, list_new, mount, mutate, source, str_parse_f64, value_item, value_len };
+use futures::{ launch_future, sleep };
+use tur_kit::{ Column, Container, CrossAlign, Cursor, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, Text, bridge, derive, entry_ctx, list_new, mount, mutate, source, str_parse_f64, value_item, value_len };
 
 // The boa palette (dark slate table on the #0b1220 frame).
 let HDR_ON: u64 = 0x334155FFu64;
@@ -40,7 +39,7 @@ entry fn start() -> u64 {
     // labels (the ^/v marker rides a derive over the sort state). The
     // boot state is MOONS ascending (boa's `source<SortKey>("moons")`).
     let fills: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
-    paint_header(MutationCtx.over(bridge()), fills, 1);
+    paint_header(entry_ctx(), fills, 1);
     let labels: [Readable<str>] = [
         hdr_label("name", "PLANET", sort_key, sort_dir),
         hdr_label("moons", "MOONS", sort_key, sort_dir),
@@ -60,9 +59,11 @@ entry fn start() -> u64 {
         return f"Loaded {ctx.get<f64>(count) as u64} rows · click a header to sort";
     });
 
-    // The fake fetch rides the spawn rail (boa loads at mount; start is
-    // the boot): 300 ms, then the rows flow in pre-sorted.
-    spawn(loader(TaskCtx.mint(), rows, loaded, count, sort_key, sort_dir));
+    // The fake fetch rides rut's own async (boa loads at mount; start is
+    // the boot): 300 ms, then the rows flow in pre-sorted. The launch site
+    // is start — the boot rail — so it mints the entry rail's ctx and
+    // hands it along.
+    launch_future(loader(entry_ctx(), rows, loaded, count, sort_key, sort_dir));
 
     let cols = TableCols().flex(2.0, 0.0).flex(1.0, 0.0).flex(1.0, 0.0);
     let table = Table()
@@ -314,7 +315,7 @@ fn fake_rows() -> ListHandle {
 
 // The 300 ms fake API: the delay rides the engine's frame-precise sleep,
 // then the rows land sorted under the live sort state.
-async fn loader(ctx: TaskCtx, rows: Readable<opaque>, loaded: Readable<bool>,
+async fn loader(ctx: MutationCtx, rows: Readable<opaque>, loaded: Readable<bool>,
                 count: Readable<f64>, sort_key: Readable<str>, sort_dir: Readable<f64>) -> str {
     await sleep(300);
     let raw = fake_rows().raw();
