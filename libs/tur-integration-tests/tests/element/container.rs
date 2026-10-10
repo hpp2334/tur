@@ -226,3 +226,57 @@ fn container_with_shadow() {
     assert_eq!(container_node.computed_layout.size.width, 200.0);
     assert_eq!(container_node.computed_layout.size.height, 200.0);
 }
+
+// ---------------------------------------------------------------------------
+// box_radius_bound — the reactive corner radius (`Container().radius_bound`
+// mirrors `width_bound`/`height_bound`/`color_bound`; animated corner
+// radius rides a derive of the progress atom).
+// ---------------------------------------------------------------------------
+
+const RADIUS_BOUND_RUT: &str = r#"
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
+
+struct AppContext {
+    r: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let r: Source<f64> = source<f64>(8.0);
+    let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
+    mount(card);
+    return opaque(AppContext { r: r });
+}
+
+entry fn probe_r(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("radius fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.r, b);
+}
+"#;
+
+#[test]
+fn radius_bound_resolves_through_the_live_atom() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(RADIUS_BOUND_RUT).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let box_id = ElementNodeId::new(app.query_element(&["rb", "box"]).unwrap().as_u64());
+    app.with_element(box_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        assert_eq!(c.border_radius(), Some(8.0), "the atom's initial value");
+    });
+
+    // The atom swap re-resolves the radius through layout (the subscribe
+    // → relayout rail; painting carries the reactive value).
+    app.call_rut_entry_cx_f64("probe_r", app.rut_start_answer(), 20.0)
+        .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(box_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        assert_eq!(c.border_radius(), Some(20.0), "radius follows the atom");
+    });
+}

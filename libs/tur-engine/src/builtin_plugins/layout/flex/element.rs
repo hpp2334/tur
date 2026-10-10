@@ -3,12 +3,9 @@ use std::rc::Rc;
 use crate::core::layout::{
     Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Size,
 };
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -38,7 +35,7 @@ pub struct FlexView {
 }
 
 impl View for FlexView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -51,13 +48,12 @@ impl View for FlexView {
                 warned_stretch_unbounded: false,
                 warned_flex_unbounded: false,
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -121,25 +117,5 @@ impl ElementTrace for FlexElement {
             p.push(("mainAxisSize", TraceValue::Str(format!("{v:?}"))));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl FlexView {
-    /// Build a `FlexView` from a JS props object. `direction` is supplied by
-    /// the factory (`Axis::Vertical` for Column, `Axis::Horizontal` for Row).
-    pub fn from_js(direction: Axis, props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FlexView {
-            direction: Some(direction),
-            main_alignment: p.val::<MainAxisAlignment>("mainAlignment"),
-            cross_alignment: p.val::<CrossAxisAlignment>("crossAlignment"),
-            main_axis_size: p.val::<MainAxisSize>("mainAxisSize"),
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
     }
 }

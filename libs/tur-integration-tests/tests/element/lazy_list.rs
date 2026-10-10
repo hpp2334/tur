@@ -237,20 +237,27 @@ fn lazy_list_virtualizes_large_item_count() {
     // Build a LazyList inline with 10,000 fixed-extent items and verify
     // that only a small subset is actually mounted after layout + scroll.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(LazyList({ itemCount: 10000 })
-    .axis(0)
-    .itemExtent(50)
-    .overscan(2)
-    .builder((i) => Container()
-     .height(50)
-     .color(createColor(200, 200, 200, 255))
-     .children([Text({ text: "Item " + i })
-    .build()])
-     .build())
-    .build());
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+fn row(i: u64) -> View {
+    let b = Container()
+        .width_height(50.0, 50.0)
+        .color(0xC8C8C8FFu64)
+        .child(Text().text(f"Item {i}").build());
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(10000.0);
+    mount(LazyList().item_builder(row).count(count).item_extent(50.0).build());
+    return count.atom_id();
+}
     "#,
     )
     .unwrap();
@@ -311,21 +318,28 @@ fn lazy_list_virtualizes_large_item_count() {
 /// Helper: load a virtualized 10,000-item list with fixed 56px extent.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { mount, LazyList, Container, createColor, Text } from "tur:std";
-        mount(LazyList({ itemCount: 10000 })
-    .axis(0)
-    .itemExtent(56)
-    .overscan(2)
-    .queryKey(["ll"])
-    .builder((i) => Container()
-     .height(56)
-     .color(createColor(200, 200, 200, 255))
-     .children([Text({ text: "Item " + i })
-    .build()])
-     .build())
-    .build());
+    app.load_rut_module(
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+fn row(i: u64) -> View {
+    let b = Container()
+        .width_height(56.0, 56.0)
+        .color(0xC8C8C8FFu64)
+        .child(Text().text(f"Item {i}").build());
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(10000.0);
+    let mut lg = LazyList().item_builder(row).count(count).item_extent(56.0).overscan(2).query_key("ll").build();
+    let lg = lg;
+    mount(lg);
+    return count.atom_id();
+}
         "#,
     )
     .unwrap();
@@ -778,28 +792,45 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 #[test]
 fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { mount, LazyList, Container, Text, source } from "tur:std";
-        const count$ = source(20);
-        mount(LazyList({ itemCount: count$ })
-            .axis(0)
-            .itemExtent(50)
-            .overscan(2)
-            .queryKey(["ll"])
-            .builder((i) => Container()
-                .height(50)
-                .children([Text({ text: "Item " + i }).build()])
-                .build())
-            .build());
-        globalThis.__setCount = (n) => store.set(count$, n);
+    app.load_rut_module(
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+struct AppContext {
+    count: Source<f64>,
+}
+
+fn row(i: u64) -> View {
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    return b.build();
+}
+
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
+    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
+    mount(lg);
+    return opaque(AppContext { count: count });
+}
+
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
+}
         "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.eval_js("globalThis.__setCount(5)");
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 5.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -817,21 +848,37 @@ fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
 #[test]
 fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { mount, LazyList, Container, Text, source } from "tur:std";
-        const count$ = source(20);
-        mount(LazyList({ itemCount: count$ })
-            .axis(0)
-            .itemExtent(50)
-            .overscan(2)
-            .queryKey(["ll"])
-            .builder((i) => Container()
-                .height(50)
-                .children([Text({ text: "Item " + i }).build()])
-                .build())
-            .build());
-        globalThis.__setCount = (n) => store.set(count$, n);
+    app.load_rut_module(
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+struct AppContext {
+    count: Source<f64>,
+}
+
+fn row(i: u64) -> View {
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    return b.build();
+}
+
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
+    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
+    mount(lg);
+    return opaque(AppContext { count: count });
+}
+
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
+}
         "#,
     )
     .unwrap();
@@ -839,7 +886,8 @@ fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
     // Shrink 20 → 5: the tail (indices ≥ 5) unmounts.
-    app.eval_js("globalThis.__setCount(5)");
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 5.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -853,7 +901,8 @@ fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
 
     // Grow back 5 → 20: the viewport window (600/50 = 12 + 2×overscan)
     // must re-mount, and the content extent must cover all 20 items again.
-    app.eval_js("globalThis.__setCount(20)");
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 20.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -880,28 +929,45 @@ fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
 #[test]
 fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { mount, LazyList, Container, Text, source } from "tur:std";
-        const count$ = source(20);
-        mount(LazyList({ itemCount: count$ })
-            .axis(0)
-            .itemExtent(50)
-            .overscan(2)
-            .queryKey(["ll"])
-            .builder((i) => Container()
-                .height(50)
-                .children([Text({ text: "Item " + i }).build()])
-                .build())
-            .build());
-        globalThis.__setCount = (n) => store.set(count$, n);
+    app.load_rut_module(
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+struct AppContext {
+    count: Source<f64>,
+}
+
+fn row(i: u64) -> View {
+    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    return b.build();
+}
+
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(20.0);
+    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = lg;
+    mount(lg);
+    return opaque(AppContext { count: count });
+}
+
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-list fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
+}
         "#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = ElementNodeId::new(app.query_element(&["ll"]).unwrap().as_u64());
 
-    app.eval_js("globalThis.__setCount(0)");
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 0.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -909,7 +975,8 @@ fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     })
     .unwrap();
 
-    app.eval_js("globalThis.__setCount(20)");
+    app.call_rut_entry_cx_f64("set_count", app.rut_start_answer(), 20.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();

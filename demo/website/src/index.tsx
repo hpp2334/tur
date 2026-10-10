@@ -1,8 +1,8 @@
 // tur website — thin browser host. Loads the tur WASM (the website's own
 // `tur-website` cdylib, which wraps the pure `tur-wasm` embedder lib + adds the
-// demo-helper plugin), then fetches the playground-view bundle and evaluates it
-// via `loadAndRunModule`. The entire playground UI (sidebar / editor / viewer)
-// lives in playground-view and is rendered by tur itself.
+// demo-helper plugin), then loads the playground rut module
+// (`rut/playground`, embedded in the cdylib) via `loadAndRunRutModule`. The
+// entire playground UI (sidebar / editor / viewer) is rendered by tur itself.
 
 let wasmReady: Promise<Record<string, unknown>> | null = null;
 
@@ -125,14 +125,16 @@ async function main(): Promise<void> {
         ).dev_tool();
 
         if (status) status.textContent = "loading playground…";
-        const resp = await fetch("./impl.js");
-        if (!resp.ok)
-            throw new Error(`failed to fetch impl.js: ${resp.status}`);
-        const bundle = await resp.text();
+        // The playground is a rut module embedded in the wasm host (the
+        // Phase-4 rewrite): the site shell only feeds it to the engine's
+        // zero-JS load path.
+        const source = (
+            app as { playgroundSource: () => string }
+        ).playgroundSource();
 
-        (app as { loadAndRunModule: (s: string) => void }).loadAndRunModule(
-            bundle,
-        );
+        (
+            app as { loadAndRunRutModule: (s: string) => void }
+        ).loadAndRunRutModule(source);
         // Fade the overlay out, then drop it so the canvas owns the
         // viewport. The paint is gone before tur's first frame lands.
         const overlay = document.getElementById("overlay");

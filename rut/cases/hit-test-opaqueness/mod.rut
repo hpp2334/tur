@@ -1,0 +1,48 @@
+// hit-test-opaqueness: the absorption matrix — a colored Container
+// absorbs; a decoration-less Container passes through; an opaque
+// PointerInteract catches invisible hits; a translucent MouseRegion joins
+// the path without blocking. The beneath-target's down count renders into
+// the `beneath-downs` Text (the test parses it).
+use tur_kit::flags::{ Align, Cursor, HitTestBehavior };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let downs: Readable<str> = source<str>("0");
+    let count: Readable<f64> = source<f64>(0.0);
+
+    // The down count rides its own source (the mutation captures both
+    // handles — no id rail, no stash).
+    let g_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+        ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
+    });
+
+    let mut stack = Stack().alignment(Align.TopLeft);
+
+    // The opaque gesture target beneath (fills the 400x600 stack).
+    let target = Container()
+        .width_height(400.0, 600.0)
+        .child(Text().text_bound(downs).query_key("beneath-downs").build());
+    stack.child(PointerInteract().on_pointer_down(g_down).query_key("rut/gesture").child(target.build()).build());
+
+    // A decoration-less full-size Container — transparent.
+    let plain = Container().width_height(400.0, 600.0).query_key("plain");
+    stack.child(plain.build());
+
+    // A painted red 200x200 surface at the top-left — absorbs.
+    let red = Container().width_height(200.0, 200.0).color(0xEF4444FFu64).query_key("red");
+    stack.child(red.build());
+
+    // A translucent MouseRegion over the right half (x 200..400).
+    let region_child = SizedBox(200.0, 600.0).child(Container().build()).query_key("region").build();
+    let region = MouseRegion().cursor(Cursor.Auto).behavior(HitTestBehavior.Translucent).child(region_child).build();
+    stack.child(Positioned().left(200.0).width(200.0).height(600.0).child(region).build());
+
+    mount(stack.build());
+    return downs.atom_id();
+}

@@ -9,14 +9,11 @@
 
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsResult, JsValue, js_string};
 use vello_common::kurbo::{Affine, Point};
 
+use crate::core::edgy::value::Value;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::JsProps;
-use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Alignment, ComputedLayout, Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset,
     Size, SubscribeCx,
@@ -24,7 +21,7 @@ use crate::core::layout::{
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
-use super::link::{CompositedLinkState, extract_link_state};
+use super::link::CompositedLinkState;
 
 #[derive(Clone)]
 pub struct FollowerView {
@@ -32,16 +29,38 @@ pub struct FollowerView {
     pub(super) target_anchor: Val<Alignment>,
     pub(super) follower_anchor: Val<Alignment>,
     /// `targetOffset` is a `{ x, y }` object (Flutter's `offset`), held as a
-    /// `Val<JsValue>` because the object can only be field-read WITH a `Context`
-    /// (`FromJs` is context-free by design). Resolved to an `Offset` during
-    /// layout and cached on the element for the subsystem to read.
-    pub(super) target_offset: Option<Val<JsValue>>,
+    /// `Val<Value>` — the native-KV substrate decodes it as a plain data
+    /// `Map`, so the field read at layout time is realm-free.
+    pub(super) target_offset: Option<Val<Value>>,
     pub(super) show_when_unlinked: bool,
     pub(super) child: Option<Rc<dyn View>>,
 }
 
+impl FollowerView {
+    /// Rut-rail constructor (`core::rut_runtime`): explicit anchors +
+    /// `targetOffset` (`{x, y}` native map) + child.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_rut(
+        link: Option<Rc<CompositedLinkState>>,
+        target_anchor: Val<Alignment>,
+        follower_anchor: Val<Alignment>,
+        target_offset: Option<Val<Value>>,
+        show_when_unlinked: bool,
+        child: Option<Rc<dyn View>>,
+    ) -> Self {
+        Self {
+            link,
+            target_anchor,
+            follower_anchor,
+            target_offset,
+            show_when_unlinked,
+            child,
+        }
+    }
+}
+
 impl View for FollowerView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -54,13 +73,12 @@ impl View for FollowerView {
                 resolved_follower_anchor: Alignment::TopLeft,
                 resolved_target_offset: Offset::ZERO,
             }),
-            boa,
         );
         if let Some(state) = &self.link {
             state.follower_node.set(Some(id));
         }
         if let Some(child_spec) = &self.child {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -147,23 +165,21 @@ impl ElementLayout for FollowerElement {
         cx: &mut LayoutContext,
     ) -> Size {
         // Resolve reactive props and cache for the subsystem. `targetOffset`
-        // is a `{ x, y }` object held as `Val<JsValue>` — decode it with the
-        // layout JS face (object field access needs a `Context`).
+        // is a `{ x, y }` map held as `Val<Value>` — field-read off the
+        // native map, no realm needed.
         self.resolved_target_anchor = cx
             .read_val(&self.view.target_anchor)
             .unwrap_or(Alignment::TopLeft);
         self.resolved_follower_anchor = cx
             .read_val(&self.view.follower_anchor)
             .unwrap_or(Alignment::TopLeft);
-        let offset_js: Option<JsValue> = self
+        let offset_value: Option<Value> = self
             .view
             .target_offset
             .as_ref()
             .and_then(|v| cx.read_val(v));
-        self.resolved_target_offset = match &offset_js {
-            Some(v) => decode_offset(v, cx.js.boa_mut()),
-            None => Offset::ZERO,
-        };
+        self.resolved_target_offset =
+            offset_value.as_ref().map(decode_offset).unwrap_or(Offset::ZERO);
 
         // The follower's own offset is assigned by the subsystem each flush
         // (it tracks the target); here we only size + place the child.
@@ -214,98 +230,10 @@ impl ElementRender for FollowerElement {
     }
 }
 
-impl FollowerView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let link = extract_link_state(props, ctx)?;
-        let mut p = JsProps::new(props, ctx);
-        let target_anchor = p
-            .val::<Alignment>("targetAnchor")
-            .unwrap_or(Val::Static(Alignment::TopLeft));
-        let follower_anchor = p
-            .val::<Alignment>("followerAnchor")
-            .unwrap_or(Val::Static(Alignment::TopLeft));
-        let show_when_unlinked = p.opt::<bool>("showWhenUnlinked").unwrap_or(true);
-        let child = p.child("child");
-        // `targetOffset` is a static `{ x, y }` object or a `Val` of one; held
-        // as a raw `Val<JsValue>` and field-decoded at layout time (see
-        // `perform_layout` / `decode_offset`).
-        let target_offset = p.val::<JsValue>("targetOffset");
-        Some(FollowerView {
-            link: Some(link),
-            target_anchor,
-            follower_anchor,
-            target_offset,
-            show_when_unlinked,
-            child,
-        })
-    }
-}
-
-/// Decode a `{ x, y }` JS object into an `Offset`. Requires a `Context`
-/// (object field access), so this runs at layout time via the JS face rather
-/// than in the context-free `FromJs` path.
-fn decode_offset(v: &JsValue, ctx: &mut Context) -> Offset {
-    let Some(obj) = v.as_object() else {
-        return Offset::ZERO;
-    };
-    let x = obj
-        .get(js_string!("x"), ctx)
-        .ok()
-        .and_then(|n| n.as_number())
-        .unwrap_or(0.0);
-    let y = obj
-        .get(js_string!("y"), ctx)
-        .ok()
-        .and_then(|n| n.as_number())
-        .unwrap_or(0.0);
+/// Field-read a `{ x, y }` native map into an `Offset`. Realm-free: the
+/// prop rides the native-KV substrate as a `Value::Map`.
+fn decode_offset(v: &Value) -> Offset {
+    let x = v.get("x").and_then(Value::as_num).unwrap_or(0.0);
+    let y = v.get("y").and_then(Value::as_num).unwrap_or(0.0);
     Offset::new(x, y)
 }
-
-pub(super) static TABLE: crate::core::js_runtime::builder::BuilderTable =
-    crate::core::js_runtime::builder::BuilderTable {
-        methods: &[
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "link",
-                crate::core::js_runtime::builder::setters::link,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "targetAnchor",
-                crate::core::js_runtime::builder::setters::targetAnchor,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "followerAnchor",
-                crate::core::js_runtime::builder::setters::followerAnchor,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "targetOffset",
-                crate::core::js_runtime::builder::setters::targetOffset,
-            ),
-            crate::core::js_runtime::builder::BuilderMethod::new(
-                "showWhenUnlinked",
-                crate::core::js_runtime::builder::setters::showWhenUnlinked,
-            ),
-        ],
-        child: true,
-        children: false,
-    };
-
-crate::core::js_runtime::builder::builder_factory!(tur_follower_factory, tur_follower, &TABLE);
-
-pub(super) fn tur_follower(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let _ = extract_js_ctx(args)?;
-    let props = require_props_object(args, 1, context)?;
-    let spec = FollowerView::from_js(&props, context).ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("CompositedTransformFollower requires a `link` (createLayerLink())"),
-        )
-    })?;
-    Ok(wrap_view(Rc::new(spec), context))
-}
-
-#[allow(dead_code)]
-const _ENSURE_PTR: Ptr = tur_follower as Ptr;

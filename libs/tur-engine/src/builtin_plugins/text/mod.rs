@@ -2,19 +2,19 @@
 //!
 //! Provides text rendering and editing elements (`TextElement`,
 //! `EditableTextElement`, `ParagraphElement`), their controllers
-//! (`TextEditingController`, `UndoController`), the paste + caret-visible
-//! subsystems (`ClipboardPasteSubsystem`, `CaretVisibilitySubsystem`), and
-//! the `extract_layout_data` bridge helper.
+//! (`TextEditingController`, `UndoController` — plain Rust types), the
+//! paste + caret-visible subsystems (`ClipboardPasteSubsystem`,
+//! `CaretVisibilitySubsystem`), and the `extract_layout_data` bridge
+//! helper.
 //!
-//! Installed into `tur:std` by `TurStdPlugin` via [`install_text`],
-//! which registers the boa classes + subsystems and returns the JS factory
-//! fns to be merged into `std_fns`. From JS's perspective Text/Input ship
-//! as part of `tur:std`.
+//! Installed by `TurStdPlugin` via [`install_text`], which registers the
+//! subsystems. Elements materialize pure-Rust views (authored through the
+//! `core::rut_runtime` rows); controllers are shared `Rc<RefCell<...>>`.
 //!
 //! The engine retains only the paint/layout contract types —
 //! `crate::core::text::TextLayoutData` and `crate::core::fonts::FontManager`
 //! — which `Canvas::fill_text_layout` consumes to do the actual drawing.
-//! This plugin produces these structs from JS-side props via
+//! This plugin produces these structs from controller/view state via
 //! `extract_layout_data`. Paste flows through the engine-internal bus:
 //! tur-clipboard's `ClipboardPlatformSubsystem` (registered by
 //! `TurClipboardPlugin`) forwards the embedder's
@@ -25,50 +25,35 @@
 pub mod controller;
 pub mod elements;
 pub mod handlers;
+pub(crate) mod rut_rows;
 pub mod text_layout;
 
 pub use controller::{TextEditingController, UndoController};
+// The controller/undo opaques cross pkg rows OUTSIDE the engine too (the
+// playground's `pg_apply_highlight` borrows the editor controller), so the
+// wrapper is re-exported past the crate-private rows module.
 pub use elements::{EditableTextElement, EditableTextView, InputView, TextElement, TextView};
+pub use rut_rows::{RutTextCtrl, RutUndoCtrl};
 
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
 use crate::error::TurError;
 
-/// Wire text plugin into `tur:std`. Called by `TurStdPlugin`'s
+/// Wire the text plugin's subsystems in. Called by `TurStdPlugin`'s
 /// `register` impl.
 ///
-/// Side effects:
-/// - Registers the boa classes [`TextEditingController`] and
-///   [`UndoController`] on `globalThis`.
-/// - Registers this plugin's [`handlers::ClipboardPasteSubsystem`] (consumes
-///   a `ClipboardPasteEvent` — AppEvent::Custom — forwarded by
-///   tur-clipboard's `ClipboardPlatformSubsystem`) and
-///   [`handlers::CaretVisibilitySubsystem`] (post-subsystem that keeps the
-///   caret visible after keyboard / IME / paste events). Registration order
-///   matters: paste subsystem before caret-visible subsystem, so the latter
-///   observes the post-paste caret.
-///
-/// Returns: the `Text` / `Input` / `createTextEditingController` /
-/// `createUndoController` factory fns, which the caller merges into
-/// `std_fns` before `register_module("tur:std", ...)`.
-pub fn install_text(ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    ctx.register_class::<TextEditingController>()
-        .map_err(|e| TurError::Other(format!("failed to register TextEditingController: {e}")))?;
-    ctx.register_class::<UndoController>()
-        .map_err(|e| TurError::Other(format!("failed to register UndoController: {e}")))?;
-
-    // Subsystems run in registration order, so register the paste subsystem
-    // BEFORE `CaretVisibilitySubsystem`. Both consume a
-    // `ClipboardPasteEvent` (AppEvent::Custom): paste mutates the focused
-    // editable's text + caret, then the caret-visible subsystem observes the
-    // post-paste caret and scrolls if needed. (Engine's `KeyboardSubsystem`
-    // / `ImeSubsystem` are registered even earlier by `TurStdPlugin`, so
-    // keyboard / IME caret moves also land before `CaretVisibilitySubsystem`.)
+/// Side effects — subsystem registration only (order matters):
+/// - [`handlers::ClipboardPasteSubsystem`] BEFORE
+///   [`handlers::CaretVisibilitySubsystem`]. Both consume a
+///   `ClipboardPasteEvent` (AppEvent::Custom): paste mutates the focused
+///   editable's text + caret, then the caret-visible subsystem observes the
+///   post-paste caret and scrolls if needed. (Engine's `KeyboardSubsystem`
+///   / `ImeSubsystem` are registered even earlier by `TurStdPlugin`, so
+///   keyboard / IME caret moves also land before `CaretVisibilitySubsystem`.)
+use crate::core::plugin::PluginRegisterContext;
+pub fn install_text(ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
     ctx.register_subsystem(Box::new(handlers::ClipboardPasteSubsystem));
     ctx.register_subsystem(Box::new(handlers::CaretVisibilitySubsystem));
-
-    let mut fns = Vec::new();
-    fns.extend(elements::paragraph::bridge::fns());
-    fns.extend(elements::editable_text::bridge::fns());
-    Ok(fns)
+    // The text families' `tur_host` rows (the kit wraps them): Text / Input /
+    // spans + the realm-free controllers.
+    ctx.push_rut_ext(std::rc::Rc::new(rut_rows::install_ext));
+    Ok(())
 }

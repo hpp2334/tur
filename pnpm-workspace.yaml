@@ -1,0 +1,4 @@
+packages:
+  - "demo/website"
+allowBuilds:
+  core-js: false

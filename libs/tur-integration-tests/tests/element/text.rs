@@ -332,21 +332,22 @@ fn text_max_lines_no_truncation_when_fits() {
 #[test]
 fn text_layout_is_dpr_invariant() {
     let fixture = r#"
-        import { mount, Container, Text } from "tur:std";
-        mount(Container()
-            .width(164)
-            .height(40)
-            .children([Text({ text: "Last Week Todos" })
-                .fontSize(14)
-                .maxLines(1)
-                .overflow("ellipsis")
-                .build()])
-            .build());
-    "#;
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let b = Container()
+        .width_height(164.0, 40.0)
+        .child(Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis().build());
+    mount(b.build());
+}
+"#;
 
     let measure = |dpr: f64| -> (f64, f64) {
         let mut app = TurTestApp::new_with_dpr(400.0, 300.0, dpr).unwrap();
-        app.eval_module_source(fixture).unwrap();
+        app.load_rut_module(fixture).unwrap();
         app.wait_for_timeout(std::time::Duration::ZERO);
         let rt = app.element_tree();
         let root = rt.root_element().unwrap();

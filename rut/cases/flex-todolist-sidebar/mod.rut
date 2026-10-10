@@ -1,0 +1,38 @@
+// flex-todolist-sidebar: the todolist two-pane shell — a 200px tab
+// sidebar beside a padded content column.
+use tur_kit::flags::{ CrossAlign, MainAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let mut row = Row();
+    // Sidebar: one active tab pill.
+    let mut sidebar = Container().color(0x1A1A2EFF).width_height(200.0, 0.0);
+    let mut tabs = Column();
+    let tab = Container()
+        .color(0x0F3460FF)
+        .padding(12.0)
+        .child(Text().text("TodoList").font_size(14.0).build());
+    tabs.child(tab.build());
+    sidebar.child(tabs.build());
+    row.child(sidebar.build());
+    // Content: heading + list shell.
+    let mut content = Container().padding(16.0);
+    let mut col = Column()
+        .cross_alignment(CrossAlign.Center)
+        .child(Text().text("Todo List").font_size(24.0).build())
+        .child(box_h(16.0));
+    let list = Column()
+        .child(Row().main_alignment(MainAlign.SpaceBetween).child(Text().text("Buy milk").build()).build());
+    col.child(list.build());
+    content.child(col.build());
+    row.child(content.build());
+    mount(row.build());
+}
+
+fn box_h(h: f64) -> View {
+    let b = Container().width_height(0.0, h);
+    return b.build();
+}

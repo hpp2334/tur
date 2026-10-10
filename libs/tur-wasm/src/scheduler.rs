@@ -244,6 +244,19 @@ impl WasmVsyncSource {
 
         Rc::new(Self { inner })
     }
+
+    /// Nudge every subscribed vsync channel immediately (without arming a
+    /// rAF). The main-thread looper parks on `select(vsync, host_rx)`; on
+    /// executors without cross-thread wakes (wasm), a worker-shipped
+    /// `HostMsg` can sit unpicked while the page is quiescent (rAF
+    /// disarmed at quiescence, wakers thread-local). RPC bridges call
+    /// this after issuing a request so the looper re-polls and drains the
+    /// reply (see `HostMsg::DevToolReply`). A nudge while a real rAF is
+    /// pending merely double-ticks — an extra empty flush, deduped by the
+    /// frame fingerprint.
+    pub fn nudge(&self) {
+        self.inner.fire_vsync();
+    }
 }
 
 impl VsyncSource for WasmVsyncSource {
@@ -308,6 +321,16 @@ impl WorkerExecutor for WasmWorkerExecutor {
 
     fn sleep(&self, d: Duration) -> Sleep {
         wasm_sleep(d)
+    }
+
+    /// `wasm_bindgen_futures` task queues are thread-local: a waker fired
+    /// on this worker can never re-poll a task spawned on the host
+    /// thread. RPC replies therefore ride the drained host channel and
+    /// are resolved by `HostBackend::apply_msg` on the awaiting thread
+    /// (see `HostMsg::DevToolReply`) — this is what makes
+    /// `turDevTool.elementTree()` & co. resolve in the browser.
+    fn wakes_host_tasks_cross_thread(&self) -> bool {
+        false
     }
 }
 

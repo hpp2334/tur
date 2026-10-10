@@ -1,0 +1,57 @@
+// drag-redrag-multi: two tiles sharing one lift controller — the
+// multi-tile jigsaw repro. The controller is CAPTURED by the drag
+// mutations (opaques are just values — no stash); per-tile event
+// transcripts render into `tile-events-0` / `tile-events-1` (each tile's
+// mutation captures its own transcript source).
+use tur_kit::flags::{ Align };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
+
+entry fn start() -> u64 {
+    // The shared lift controller — captured by both tiles' mutations.
+    let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
+
+    let mut stack = Stack()
+        .alignment(Align.TopLeft)
+        .child(SizedBox(300.0, 200.0).child(Container().build()).build());
+
+    // Tile 0 at (10, 10); tile 1 at (150, 100).
+    let t0: Readable<str> = source<str>("");
+    stack.child(Positioned().left(10.0).top(10.0).child(tile(ctrl, t0, "tile-0")).build());
+    let t1: Readable<str> = source<str>("");
+    stack.child(Positioned().left(150.0).top(100.0).child(tile(ctrl, t1, "tile-1")).build());
+
+    // Transcript readouts.
+    let t0t = Text().text_bound(t0).query_key("tile-events-0");
+    stack.child(t0t.build());
+    let t1t = Text().text_bound(t1).query_key("tile-events-1");
+    stack.child(t1t.build());
+
+    mount(stack.build());
+    return t0.atom_id();
+}
+
+// One tile: the drag mutations capture the shared controller + the tile's
+// transcript source (state by capture — no id rails). The transcript
+// ACCUMULATES (the test checks down+move are present).
+fn tile(ctrl: AnimCtrl, transcript: Readable<str>, key: str) -> View {
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctrl.forward();
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} down");
+    });
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} move");
+    });
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctrl.reverse();
+        ctx.set<str>(transcript, f"{ctx.get<str>(transcript)} up");
+    });
+
+    let b = Container().width_height(100.0, 60.0).color(0x6366F1FFu64).query_key(key);
+    return PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build();
+}

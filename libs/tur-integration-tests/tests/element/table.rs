@@ -1,4 +1,9 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::render::brush::{Brush, Color};
+use tur_engine::core::render::{CanvasOp, RenderCommand, Renderer};
 use tur_integration_tests::TurTestApp;
 
 /// Helper: load a Table inline with the given body, render, and return the
@@ -6,7 +11,7 @@ use tur_integration_tests::TurTestApp;
 /// so the body can use `store` directly.
 fn setup_table(width: f64, height: f64, source: &str) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
-    app.eval_module_source(source).unwrap();
+    app.load_rut_module(source).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["t"]).expect("queryKey 't' not found");
     (app, ElementNodeId::new(id.as_u64()))
@@ -23,27 +28,56 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 
 /// 3 columns × N rows of empty Containers (content-sized cells) + a 3-cell
 /// header. Cells carry per-column query keys so tests can address them.
-fn table_source(rows: usize, table_opts: &str) -> String {
-    format!(
-        r#"import {{ mount, Table, Container, source }} from "tur:std";
-        const rows$ = source(Array.from({{ length: {rows} }}, (_, i) => ({{ i }})));
-        // Test seam: rewrite the rows atom through the injected store.
-        globalThis.__set = (n) => store.set(rows$, Array.from({{ length: n }}, (_, i) => ({{ i }})));
-        mount(Table({{ queryKey: ["t"], rows: rows$, {table_opts} }})
-            .columns([{{ width: 100 }}, {{ flex: 1, minWidth: 40 }}, {{ flex: 3 }}])
-            .headerBuilder(() => [
-                Container({{ queryKey: ["h0"] }}).build(),
-                Container({{ queryKey: ["h1"] }}).build(),
-                Container({{ queryKey: ["h2"] }}).build(),
-            ])
-            .rowBuilder((item) => [
-                Container({{ queryKey: ["c0-" + item.i] }}).build(),
-                Container({{ queryKey: ["c1-" + item.i] }}).build(),
-                Container({{ queryKey: ["c2-" + item.i] }}).build(),
-            ])
-            .build());
-        "#,
-    )
+fn table_source(rows: usize, _table_opts: &str) -> String {
+    r#"
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
+
+fn cell(key: str) -> View {
+    let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
+    return b.build();
+}
+
+fn header_row(_col: u64) -> View {
+    let col = Column().child(cell("h0")).child(cell("h1")).child(cell("h2"));
+    return col.build();
+}
+
+// The row builder receives `(row, col)` (the RutEntryBuilder face calls
+// it per column; the row spans all three columns, so `col` is ignored).
+fn row_cell(i: u64, _col: u64) -> View {
+    let col = Column().child(cell(f"c0-{i}")).child(cell(f"c1-{i}")).child(cell(f"c2-{i}"));
+    return col.build();
+}
+
+fn rows_of(n: u64) -> ListHandle {
+    let list: ListHandle = list_new();
+    let mut i = 0;
+    while (i < n as i32) {
+        list.push(f"row {i}");
+        i += 1;
+    }
+    return list;
+}
+
+entry fn start() -> u64 {
+    let rows = source<opaque>(rows_of({ROWS_PLACEHOLDER}).raw());
+
+    let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
+
+    let mut t = Table().columns(cols).rows_atom(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
+    mount(t);
+    return rows.atom_id();
+}
+
+fn set_rows(atom: u64, n: f64) {
+    entry_ctx().set<opaque>(atom, rows_of(n as u64).raw());
+}
+"#
+        .replace("{ROWS_PLACEHOLDER}", &rows.to_string())
 }
 
 #[test]
@@ -59,249 +93,286 @@ fn table_mounts_as_tur_table() {
     assert_eq!(t.kind().unwrap(), ElementKind::new("tur_table"));
 }
 
-/// 400px wide, columns [fixed 100, flex 1 (min 40), flex 3] → leftover 300
-/// splits 75 / 225. Header cells sit at x = 0 / 100 / 175.
-#[test]
-fn table_fixed_and_flex_column_widths() {
-    let (app, _id) = setup_table(400.0, 600.0, &table_source(2, ""));
+// ---------------------------------------------------------------------------
+// Declarative stripes + column extents (the `table_stripe` /
+// `table_col_extent` rows).
+// ---------------------------------------------------------------------------
 
-    let expect = [(0.0, 100.0), (100.0, 75.0), (175.0, 225.0)];
-    for (col, (x, w)) in expect.iter().enumerate() {
-        let h = q(&app, &format!("h{col}"));
-        let tree = app.element_tree();
-        let node = tree.get_element(h).unwrap();
-        assert_eq!(node.computed_layout.offset.x, *x, "header col {col} x");
-        assert_eq!(
-            node.computed_layout.size.width, *w,
-            "header col {col} width"
-        );
+/// Renderer that stashes each frame's command batch so tests can inspect
+/// the recorded paint ops (the paint_culling pattern).
+struct RecordingRenderer {
+    last: Rc<RefCell<Vec<RenderCommand>>>,
+}
+
+impl Renderer for RecordingRenderer {
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        *self.last.borrow_mut() = commands.to_vec();
     }
 }
 
-/// The column geometry is shared: body cells in every row land on the same
-/// x offsets / widths as the header cells.
-#[test]
-fn table_rows_share_column_geometry() {
-    let (app, _id) = setup_table(400.0, 600.0, &table_source(3, ""));
+/// Every `FillGeometry` op recorded for `id` this frame, in paint order.
+fn fills_for(
+    cmds: &[RenderCommand],
+    id: ElementNodeId,
+) -> Vec<(
+    tur_engine::core::layout::Offset,
+    tur_engine::core::layout::Geometry,
+    Brush,
+)> {
+    cmds.iter()
+        .filter_map(|c| match c {
+            RenderCommand::Paint { id: pid, ops, .. } if *pid == id => Some(ops),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|op| match op {
+            CanvasOp::FillGeometry {
+                offset,
+                geometry,
+                brush,
+            } => Some((*offset, geometry.clone(), brush.clone())),
+            _ => None,
+        })
+        .collect()
+}
 
-    let expect = [(0.0, 100.0), (100.0, 75.0), (175.0, 225.0)];
-    for row in 0..3 {
-        for (col, (x, w)) in expect.iter().enumerate() {
-            let c = q(&app, &format!("c{col}-{row}"));
-            let tree = app.element_tree();
-            let node = tree.get_element(c).unwrap();
-            assert_eq!(node.computed_layout.offset.x, *x, "row {row} col {col} x");
-            assert_eq!(node.computed_layout.size.width, *w, "row {row} col {col} w");
+/// A stripe table: 4 body rows of 30px-tall colorless cells, no header,
+/// declarative stripes — even rows red, odd rows blue (the cells paint
+/// nothing, so the table's own fills are exactly the stripes).
+const STRIPE_TABLE_RUT: &str = r#"
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ Source, source };
+
+fn body_cell(_row: u64, _col: u64) -> View {
+    return Container().width_height(0.0, 30.0).build();
+}
+
+fn rows_of(n: u64) -> ListHandle {
+    let list: ListHandle = list_new();
+    let mut i: u64 = 0;
+    while (i < n) {
+        list.push(f"r{i}");
+        i = i + 1;
+    }
+    return list;
+}
+
+entry fn start() {
+    let rows = source<opaque>(rows_of(4).raw());
+    let cols = TableCols().extent(300.0);
+    let t = Table()
+        .columns(cols)
+        .rows_atom(rows)
+        .row_builder(body_cell)
+        .stripes(0xFF0000FFu64, 0x0000FFFFu64)
+        .query_key("t")
+        .build();
+    mount(t);
+}
+"#;
+
+#[test]
+fn stripe_rows_paint_per_parity_from_the_element() {
+    let last = Rc::new(RefCell::new(Vec::new()));
+    let mut app = TurTestApp::new_with_renderer(
+        400.0,
+        300.0,
+        Box::new(RecordingRenderer { last: last.clone() }),
+    )
+    .expect("app");
+    app.load_rut_module(STRIPE_TABLE_RUT).expect("mount");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let tid = q(&app, "t");
+    let fills = fills_for(&last.borrow(), tid);
+    assert_eq!(
+        fills.len(),
+        4,
+        "the table element paints one stripe fill per body row, got {fills:?}"
+    );
+    let even = Brush::SolidColor(Color::rgba(255, 0, 0, 255));
+    let odd = Brush::SolidColor(Color::rgba(0, 0, 255, 255));
+    for (i, (offset, geometry, brush)) in fills.iter().enumerate() {
+        let expected = if i % 2 == 0 { &even } else { &odd };
+        assert_eq!(
+            brush, expected,
+            "row {i} stripe must follow row parity (even=red, odd=blue)"
+        );
+        let tur_engine::core::layout::Geometry::Rect(rect) = geometry else {
+            panic!("stripe fill must be a rect, got {geometry:?}")
+        };
+        assert_eq!(rect.width, 400.0, "stripe spans the table's laid width");
+        assert_eq!(rect.height, 30.0, "stripe covers exactly its row");
+        assert_eq!(offset.y, (i as f64) * 30.0, "stripe sits on its row's top");
+    }
+}
+
+#[test]
+fn column_extent_honored_in_layout() {
+    let mut app = TurTestApp::new(400.0, 300.0).expect("app");
+    // The table-basic geometry: a 150 extent column, flex 1, flex 2
+    // (min 120) — the leftover 250 splits 1:2.
+    app.load_rut_module(
+        r#"
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ Source, source };
+
+fn body_cell(_row: u64, _col: u64) -> View {
+    return Container().width_height(0.0, 30.0).build();
+}
+
+entry fn start() {
+    let rows: ListHandle = list_new();
+    rows.push("a");
+    let rows_atom = source<opaque>(rows.raw());
+    let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
+    let t = Table()
+        .columns(cols)
+        .rows_atom(rows_atom)
+        .row_builder(body_cell)
+        .query_key("t")
+        .build();
+    mount(t);
+}
+"#,
+    )
+    .expect("mount");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let tid = q(&app, "t");
+    let tree = app.element_tree();
+    let cells = tree.children_of_element(tid);
+    assert!(
+        cells.len() >= 3,
+        "row 0 lays one cell per column, got {}",
+        cells.len()
+    );
+    // Cells get tight column widths: extent column at 150, the flex pair
+    // splitting the 250 leftover 1:2.
+    let widths: Vec<f64> = cells[..3]
+        .iter()
+        .map(|id| {
+            tree.get_element(*id)
+                .expect("cell")
+                .computed_layout
+                .size
+                .width
+        })
+        .collect();
+    assert_eq!(widths[0], 150.0, "the extent column lays out at its extent");
+    assert!(
+        (widths[1] - 250.0 / 3.0).abs() < 0.01,
+        "flex 1 column takes its share, got {}",
+        widths[1]
+    );
+    assert!(
+        (widths[2] - 500.0 / 3.0).abs() < 0.01,
+        "flex 2 column takes its share, got {}",
+        widths[2]
+    );
+}
+
+// ===========================================================================
+// The table-reactive corpus case: the 300ms fake load, the sortable
+// PLANET/MOONS/GRAVITY headers (both directions), the active-state label
+// markers, and the "Loaded N rows" status line. (boa's empty body is its
+// own defect — Appendix A; the rows WORK here.)
+// ===========================================================================
+
+/// The concatenated span text of the first TextElement under `qk` (the
+/// keyed cell wraps its Text — the countdown get_text pattern, extended
+/// to walk a short subtree).
+fn case_text(app: &TurTestApp, qk: &[&str]) -> String {
+    use tur_engine::builtin_plugins::text::elements::TextElement;
+    let id = app
+        .query_element(qk)
+        .unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
+    let tree = app.element_tree();
+    let mut stack = vec![id];
+    while let Some(id) = stack.pop() {
+        let text = app
+            .with_element(id, |e| {
+                e.cast::<TextElement>()
+                    .map(|t| {
+                        t.spans()
+                            .iter()
+                            .map(|s| s.text.as_str())
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        if !text.is_empty() {
+            return text;
+        }
+        let node = tree.get_element(id).unwrap();
+        for c in &node.children {
+            stack.push(ElementNodeId::new(c.as_u64()));
         }
     }
+    panic!("no text under {qk:?}");
 }
 
-/// With explicit extents the header sits at the top (height 30) and every
-/// body row is 40 tall; rows stack below the header.
-#[test]
-fn table_fixed_extents() {
-    let (app, _id) = setup_table(
-        400.0,
-        600.0,
-        &table_source(2, "headerExtent: 30, rowExtent: 40,"),
-    );
-
-    // Header cells: y = 0, height 30 (tight constraints — height-less
-    // Containers fill the tight extent).
-    for col in 0..3 {
-        let h = q(&app, &format!("h{col}"));
-        let tree = app.element_tree();
-        let node = tree.get_element(h).unwrap();
-        assert_eq!(node.computed_layout.offset.y, 0.0);
-        assert_eq!(node.computed_layout.size.height, 30.0);
-    }
-    // Row 0 at y = 30, row 1 at y = 70.
-    for (row, y) in [(0, 30.0), (1, 70.0)] {
-        let c = q(&app, &format!("c0-{row}"));
-        let tree = app.element_tree();
-        let node = tree.get_element(c).unwrap();
-        assert_eq!(node.computed_layout.offset.y, y, "row {row} y");
-        assert_eq!(node.computed_layout.size.height, 40.0, "row {row} height");
-    }
-}
-
-/// Without extents, each row's height is the max intrinsic cell height.
-#[test]
-fn table_intrinsic_row_height_is_max_cell() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"import { mount, Table, Container, source } from "tur:std";
-        const rows$ = source([{ i: 0 }, { i: 1 }]);
-        mount(Table({ columns: [{ flex: 1 }, { flex: 1 }], rows: rows$ })
-    .queryKey(["t"])
-    .rowSpacing(0)
-    .headerBuilder(() => [Container()
-    .height(30)
-    .queryKey(["h0"])
-    .build(), Container()
-     .height(30)
-     .build()])
-    .rowBuilder((item) => [
-                Container()
-                    .height(20)
-                    .queryKey(["c0-" + item.i])
-                    .build(),
-                Container()
-                    .height(50)
-                    .queryKey(["c1-" + item.i])
-                    .build(),
-            ])
-    .build());
-        "#,
-    )
-    .unwrap();
+fn click_case(app: &mut TurTestApp, qk: &[&str]) {
+    let id = app
+        .query_element(qk)
+        .unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
+    let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
+}
 
-    // Header intrinsic = 30. Row heights = max(20, 50) = 50 → row 1 at 30+50.
-    let h0 = q(&app, "h0");
-    let tree = app.element_tree();
-    let node = tree.get_element(h0).unwrap();
-    assert_eq!(node.computed_layout.size.height, 30.0);
+fn build_table_reactive() -> TurTestApp {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_bundle("table-reactive").unwrap();
+    app
+}
 
-    let c0 = q(&app, "c0-1");
-    let tree = app.element_tree();
-    let node = tree.get_element(c0).unwrap();
+#[test]
+fn table_reactive_loads_rows_after_the_fake_delay() {
+    let mut app = build_table_reactive();
+
+    // Boot: the header + status render, the body is empty (boa's shape).
+    assert_eq!(case_text(&app, &["tr", "status"]), "Loading…");
+    assert!(app.query_element(&["tr", "row0", "c0"]).is_none());
+
+    // The 300ms fake fetch elapses: 8 rows flow in, moons-ascending
+    // (the boot sort state).
+    app.wait_for_timeout(std::time::Duration::from_millis(350));
     assert_eq!(
-        node.computed_layout.offset.y, 80.0,
-        "row 1 top = header 30 + row0 50"
+        case_text(&app, &["tr", "status"]),
+        "Loaded 8 rows · click a header to sort"
     );
-    // The short cell keeps its own intrinsic height (loose constraints).
-    assert_eq!(node.computed_layout.size.height, 20.0);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
+    assert_eq!(case_text(&app, &["tr", "row1", "c0"]), "Venus");
 }
 
-/// Writing a new array to the `rows` source rebuilds the mounted rows
-/// (Each-style rebuild-all): added rows appear, removed rows disappear.
 #[test]
-fn table_reactive_rows_rebuild() {
-    let (mut app, _id) = setup_table(400.0, 600.0, &table_source(2, ""));
+fn table_reactive_headers_sort_both_ways() {
+    let mut app = build_table_reactive();
+    app.wait_for_timeout(std::time::Duration::from_millis(350));
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
 
-    let t = q(&app, "t");
-    let tree = app.element_tree();
-    let node = tree.get_element(t).unwrap();
-    // 3 header cells + 2 rows × 3 cells.
-    assert_eq!(node.children.len(), 9);
+    // PLANET: ascending — the active header carries the ^ marker.
+    click_case(&mut app, &["hdr", "name"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Earth");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET ^");
 
-    // Push a third row.
-    app.eval_js("globalThis.__set(3)");
-    app.wait_for_timeout(std::time::Duration::ZERO);
+    // PLANET again: the direction flips — v, Venus first.
+    click_case(&mut app, &["hdr", "name"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Venus");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET v");
 
-    let t = q(&app, "t");
-    let tree = app.element_tree();
-    let node = tree.get_element(t).unwrap();
-    assert_eq!(node.children.len(), 12, "3 rows × 3 cells + 3 header cells");
-
-    // The new row's cells exist and share column geometry.
-    let c = q(&app, "c2-2");
-    let tree = app.element_tree();
-    let node = tree.get_element(c).unwrap();
-    assert_eq!(node.computed_layout.offset.x, 175.0);
-
-    // Shrink back to 1 row.
-    app.eval_js("globalThis.__set(1)");
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    let t = q(&app, "t");
-    let tree = app.element_tree();
-    let node = tree.get_element(t).unwrap();
-    assert_eq!(node.children.len(), 6, "1 row × 3 cells + 3 header cells");
-    assert!(
-        app.query_element(&["c0-1"]).is_none(),
-        "removed row unmounted"
-    );
-}
-
-/// A row builder returning fewer cells than columns leaves the missing
-/// trailing boxes empty — the present columns are unaffected.
-#[test]
-fn table_missing_cells_leave_empty_box() {
-    let (app, _id) = setup_table(
-        400.0,
-        600.0,
-        r#"import { mount, Table, Container, source } from "tur:std";
-        const rows$ = source([{ i: 0 }, { i: 1 }]);
-        mount(Table({ columns: [{ width: 100 }, { flex: 1 }, { flex: 1 }], rows: rows$ })
-    .queryKey(["t"])
-    .headerBuilder(() => [
-                Container()
-                    .queryKey(["h0"])
-                    .build(),
-                Container()
-                    .queryKey(["h1"])
-                    .build(),
-                Container()
-                    .queryKey(["h2"])
-                    .build(),
-            ])
-    .rowBuilder((item) => [
-                Container()
-                    .queryKey(["c0-" + item.i])
-                    .build(),
-                null,
-                Container()
-                    .queryKey(["c2-" + item.i])
-                    .build(),
-            ])
-    .build());
-        "#,
-    );
-
-    // Present cells keep their column geometry…
-    for row in 0..2 {
-        let c0 = q(&app, &format!("c0-{row}"));
-        let tree = app.element_tree();
-        let node = tree.get_element(c0).unwrap();
-        assert_eq!(node.computed_layout.offset.x, 0.0);
-        assert_eq!(node.computed_layout.size.width, 100.0);
-        let c2 = q(&app, &format!("c2-{row}"));
-        let tree = app.element_tree();
-        let node = tree.get_element(c2).unwrap();
-        // col2 x = 100 + 150 = 250 (leftover 300 split evenly).
-        assert_eq!(node.computed_layout.offset.x, 250.0);
-        assert_eq!(node.computed_layout.size.width, 150.0);
-    }
-    // …and rows have 2 cells, not 3.
-    let t = q(&app, "t");
-    let tree = app.element_tree();
-    let node = tree.get_element(t).unwrap();
-    assert_eq!(node.children.len(), 7, "3 header + 2 rows × 2 cells");
-}
-
-/// `minWidth` clamps the flex distribution even when it overflows the
-/// available width.
-#[test]
-fn table_min_width_clamps_flex_share() {
-    let (app, _id) = setup_table(
-        400.0,
-        600.0,
-        r#"import { mount, Table, Container, source } from "tur:std";
-        const rows$ = source([{}]);
-        mount(Table({ columns: [{ width: 350 }, { flex: 1, minWidth: 80 }], rows: rows$ })
-    .queryKey(["t"])
-    .headerBuilder(() => [
-                Container()
-                    .queryKey(["h0"])
-                    .build(),
-                Container()
-                    .queryKey(["h1"])
-                    .build(),
-            ])
-    .rowBuilder(() => [Container()
-    .queryKey(["c0-0"])
-    .build(), Container()
-     .queryKey(["c1-0"])
-     .build()])
-    .build());
-        "#,
-    );
-
-    let h1 = q(&app, "h1");
-    let tree = app.element_tree();
-    let node = tree.get_element(h1).unwrap();
-    // Leftover is 50 but minWidth forces 80.
-    assert_eq!(node.computed_layout.size.width, 80.0);
-    assert_eq!(node.computed_layout.offset.x, 350.0);
+    // GRAVITY: a new key resets to ascending (Mercury 3.7 wins the tie
+    // over Mars — ties keep their order).
+    click_case(&mut app, &["hdr", "gravity"]);
+    assert_eq!(case_text(&app, &["tr", "row0", "c0"]), "Mercury");
+    assert_eq!(case_text(&app, &["hdr", "gravity"]), "GRAVITY (m/s²) ^");
+    assert_eq!(case_text(&app, &["hdr", "name"]), "PLANET");
 }

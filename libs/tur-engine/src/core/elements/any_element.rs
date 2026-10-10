@@ -1,7 +1,6 @@
 use std::any::Any;
 
 use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
-use boa_engine::Context;
 use vello_common::kurbo::Affine;
 
 use crate::core::element::{ElementKind, ElementNodeId};
@@ -81,14 +80,9 @@ trait Erased: 'static {
 
     fn subscribe(&self, cx: &mut SubscribeCx);
 
-    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
-    fn run_on_focus_changed(
-        &mut self,
-        focused: bool,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    );
-    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
+    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx);
+    fn run_on_focus_changed(&mut self, focused: bool, cx: &mut crate::core::view::SharedViewCx);
+    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx);
 }
 
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
@@ -207,21 +201,16 @@ where
         <Self as ElementSubscribe>::subscribe(self, cx)
     }
 
-    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
-        <Self as Lifecycle>::on_mounted(self, cx, boa);
+    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx) {
+        <Self as Lifecycle>::on_mounted(self, cx);
     }
 
-    fn run_on_focus_changed(
-        &mut self,
-        focused: bool,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
-        <Self as Lifecycle>::on_focus_changed(self, focused, cx, boa);
+    fn run_on_focus_changed(&mut self, focused: bool, cx: &mut crate::core::view::SharedViewCx) {
+        <Self as Lifecycle>::on_focus_changed(self, focused, cx);
     }
 
-    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
-        <Self as Lifecycle>::before_destroy(self, cx, boa);
+    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx) {
+        <Self as Lifecycle>::before_destroy(self, cx);
     }
 }
 
@@ -401,6 +390,14 @@ impl AnyElement {
         self
     }
 
+    /// Chainable wheel-dispatch install (the constructor-level
+    /// [`AnyElement::with_wheel`] twin, for elements built through
+    /// `with_full_interactivity` + the chain builders).
+    pub fn with_wheel_dispatch<E: ElementOnWheel + 'static>(mut self) -> Self {
+        self.on_wheel = Some(wheel_dispatch::<E>);
+        self
+    }
+
     pub fn kind(&self) -> ElementKind {
         self.inner.kind()
     }
@@ -472,31 +469,22 @@ impl AnyElement {
 
     /// Fire the element's `on_mounted` lifecycle hook (called once, right
     /// after the element is inserted into the tree). No-op for most elements.
-    pub fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
-        self.inner.run_on_mounted(cx, boa);
+    pub fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx) {
+        self.inner.run_on_mounted(cx);
     }
 
     /// Fire the element's `on_focus_changed` lifecycle hook (called when the
     /// element gains or loses focus). `focused` is `true` for focus, `false`
     /// for blur. No-op for most elements.
-    pub fn run_on_focus_changed(
-        &mut self,
-        focused: bool,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
-        self.inner.run_on_focus_changed(focused, cx, boa);
+    pub fn run_on_focus_changed(&mut self, focused: bool, cx: &mut crate::core::view::SharedViewCx) {
+        self.inner.run_on_focus_changed(focused, cx);
     }
 
     /// Fire the element's `before_destroy` lifecycle hook (called once,
     /// immediately before the element is removed from the tree).
     /// No-op for most elements.
-    pub fn run_before_destroy(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
-        self.inner.run_before_destroy(cx, boa);
+    pub fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx) {
+        self.inner.run_before_destroy(cx);
     }
 
     pub fn on_keyboard_event(&mut self, cx: &mut ElementOnKeyboardContext, event: &KeyEvent) {

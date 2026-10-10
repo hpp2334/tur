@@ -1,0 +1,146 @@
+// lazy-list-virtualized: the boa "10,000-item Contact List" — fixed
+// 56px rows, only the visible window (+ overscan) mounts. Each row: a
+// colored initials avatar (a rounded Container + Text), the name and the
+// "Item #i of 10000" subtitle on a zebra fill.
+//
+// The name/initials/hue are deterministic per index (the boa generator,
+// palette-string twin: module lets are literals-only in this build, so
+// the name lists and the avatar palette ride pipe-joined strings).
+use tur_kit::flags::{ Align, CrossAlign, MainAlign, MainAxisSize };
+use tur_kit::handles::{ View, mount, str_parse_f64 };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
+
+let ITEM_COUNT: f64 = 10000.0;
+let ITEM_HEIGHT: f64 = 56.0;
+
+// The boa name generator (26 first × 26 last, stride 7).
+let FIRST_NAMES: str = "Asha|Bryn|Cai|Dara|Eva|Finn|Gita|Hugo|Iris|Jin|Kai|Lior|Mira|Noa|Olin|Pia|Quinn|Ren|Suri|Theo|Uma|Vera|Wim|Xan|Yara|Zane";
+let LAST_NAMES: str = "Albright|Bauer|Cohen|Dixon|Eng|Frost|Grant|Hayes|Iyer|Jang|Kerr|Lin|Mehta|Novak|Okafor|Patel|Quinn|Reyes|Shin|Tran|Ueda|Vargas|Wong|Xu|Yoon|Zhou";
+
+// The avatar palette (12 pleasant hues — the hsl(60,55) sweep's twin).
+let HUES: str = "224,86,86|224,128,86|214,169,69|127,176,105|63,167,150|66,158,185|74,127,181|106,103,206|145,99,207|183,99,207|201,93,159|194,91,110";
+
+let TEXT: u64 = 0x0F172AFFu64;
+let TEXT_MUTED: u64 = 0x64748BFFu64;
+let ZEBRA: u64 = 0xF8FAFCFFu64;
+let WHITE: u64 = 0xFFFFFFFFu64;
+
+entry fn start() {
+    let count = source<f64>(ITEM_COUNT);
+
+    let list = LazyList()
+        .item_builder(row)
+        .count(count)
+        .item_extent(ITEM_HEIGHT)
+        .overscan(4)
+        .query_key("lazy-list-virtualized")
+        .build();
+    mount(Expanded().flex(1.0).child(Container().color(WHITE).child(list).build()).build());
+}
+
+// The i'th '|'-separated slot of a data string.
+fn slot(data: str, i: u64) -> str {
+    let n = data.len();
+    let mut start = 0;
+    let mut k = 0;
+    let mut cur: u64 = 0;
+    while (k <= n) {
+        if (k == n || data.code_at(k) == 124) {
+            if (cur == i) {
+                return data.slice(start, k);
+            }
+            cur = cur + 1;
+            start = k + 1;
+        }
+        k = k + 1;
+    }
+    return "";
+}
+
+// The first ',' from `from` (the r,g,b splitter).
+fn idx_of(s: str, from: i32, c: u32) -> i32 {
+    let n = s.len();
+    let mut k = from;
+    while (k < n) {
+        if (s.code_at(k) == c) {
+            return k;
+        }
+        k = k + 1;
+    }
+    return -1;
+}
+
+// The i'th "r,g,b" slot packed as 0xRRGGBBAA.
+fn pal(i: u64) -> u64 {
+    let rgb = slot(HUES, i);
+    let n = rgb.len();
+    let a = idx_of(rgb, 0, 44);
+    let b = idx_of(rgb, a + 1, 44);
+    let r = str_parse_f64(rgb.slice(0, a));
+    let g = str_parse_f64(rgb.slice(a + 1, b));
+    let bl = str_parse_f64(rgb.slice(b + 1, n));
+    return r as u64 * 16777216 + g as u64 * 65536 + bl as u64 * 256 + 255;
+}
+
+// "Asha Bauer" — the deterministic per-index generator.
+fn name_for(i: u64) -> str {
+    let first = slot(FIRST_NAMES, i % 26);
+    let last = slot(LAST_NAMES, (i * 7) % 26);
+    return f"{first} {last}";
+}
+
+// Odd rows carry the faint zebra tint (boa: white / slate-50).
+fn zebra_fill(i: u64) -> u64 {
+    if (i % 2 == 1) {
+        return ZEBRA;
+    }
+    return WHITE;
+}
+
+// The row: initials avatar + name + the "Item #i of 10000" subtitle.
+fn row(i: u64) -> View {
+    let name = name_for(i);
+    let n = name.len();
+    let mut sp = 0;
+    while (sp < n) {
+        if (name.code_at(sp) == 32) {
+            break;
+        }
+        sp = sp + 1;
+    }
+    let initials = f"{name.slice(0, 1)}{name.slice(sp + 1, sp + 2)}";
+    let avatar_bg = pal((i * 11) % 12);
+    let sub = f"Item #{i + 1} of 10000";
+    let avatar = Container()
+        .width_height(36.0, 36.0)
+        .radius(999.0)
+        .color(avatar_bg)
+        .alignment(Align.Center)
+        .child(Text().text(initials).font_size(13.0).color(WHITE).build())
+        .build();
+    let lines = Column()
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Start)
+        .main_axis_size(MainAxisSize.Min)
+        .child(Text().text(name).font_size(13.0).color(TEXT).build())
+        .child(SizedBox(0.0, 2.0).build())
+        .child(Text().text(sub).font_size(11.0).color(TEXT_MUTED).build())
+        .build();
+    let inner = Row()
+        .cross_alignment(CrossAlign.Center)
+        .child(avatar)
+        .child(SizedBox(12.0, 0.0).build())
+        .child(Expanded().flex(1.0).child(lines).build())
+        .build();
+    return Container()
+        .height(ITEM_HEIGHT)
+        .padding(12.0)
+        .color(zebra_fill(i))
+        .query_key("contact-row")
+        .child(inner)
+        .build();
+}

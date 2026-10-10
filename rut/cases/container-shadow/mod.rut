@@ -1,0 +1,16 @@
+// container-shadow: an elevated card — size + color + radius + shadow —
+// around a Text.
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let b = Container()
+        .width_height(200.0, 200.0)
+        .color(0xFFFFFFFFu64)
+        .radius(8.0)
+        .shadow(0x00000050u64, 12.0, 4.0, 4.0)
+        .child(Text().text("Shadow").font_size(16.0).build());
+    mount(b.build());
+}

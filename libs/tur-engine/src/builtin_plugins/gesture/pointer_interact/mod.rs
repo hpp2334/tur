@@ -1,6 +1,5 @@
-pub mod bridge;
 mod element;
 mod layout;
 mod render;
 
-pub use element::{PointerInteractElement, PointerInteractView};
+pub use element::{PointerInteractElement, PointerInteractEvent, PointerInteractView};

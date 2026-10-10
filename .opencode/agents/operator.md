@@ -41,11 +41,10 @@ command below is a plain shell call against the same live page.
 
 ### Reaching the dev server
 
-The dev server runs at `https://localhost:8080/` with a self-signed cert —
-bypass it with `--ignore-https-errors`:
+The dev server runs at `http://localhost:8080/`:
 
 ```sh
-agent-browser open https://localhost:8080/ --ignore-https-errors
+agent-browser open http://localhost:8080/
 agent-browser wait 9000                                  # engine boot + first hosted case
 agent-browser screenshot .agent-browser/op.png
 ```

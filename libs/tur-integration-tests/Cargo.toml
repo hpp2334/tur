@@ -12,12 +12,14 @@ tur-animation = { workspace = true }
 tur-net-capability = { workspace = true }
 tur-filepicker-capability = { workspace = true }
 tur-native = { workspace = true }
-boa_engine = { workspace = true }
 futures = { workspace = true }
 libc = "0.2"
 tokio = { workspace = true }
 
 [dev-dependencies]
+tur-playground = { workspace = true }
+parley = { workspace = true }
+vello_common = { workspace = true }
 image = { workspace = true }
 libtest-mimic = "0.8"
 minifb = "0.28"
@@ -25,6 +27,8 @@ pollster = "0.4"
 raw-window-handle = "0.6"
 thiserror = { workspace = true }
 wgpu = { workspace = true }
+rut-driver = { workspace = true }
+rut-ast = { workspace = true }
 
 # The vello suite keeps `harness = false` (it drives a real GPU surface via
 # minifb); libtest-mimic gives it the standard libtest CLI + wire format so

@@ -3,42 +3,42 @@ use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
-/// Inline bundle that mounts a single `Input` with `obscureText: true`. The
-/// `queryKey` lands on Input's Container wrapper; the editable text is that
-/// container's first child.
+/// Inline bundle that mounts a single `Input` with the obscure flag set
+/// (`el_input_opts` flags bit 1). The `queryKey` lands on Input's Container
+/// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
-    const controller = createTextEditingController({});
-    mount(Container()
-    .children([
-            Input()
-                .controller(controller)
-                .fontSize(14)
-                .width(200)
-                .height(30)
-                .obscureText(true)
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    // flags bit 0 = multiline, bit 1 = obscure.
+    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
+    let keyed = input;
+    let col = Column().child(keyed);
+    mount(col.build());
+}
 "#;
 
+/// The custom-obscuring-character variant: the input builder surface with
+/// `input_obscure` + `input_obscure_char` (the JS `obscureText: true` +
+/// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
-    const controller = createTextEditingController({});
-    mount(Container()
-    .children([
-            Input()
-                .controller(controller)
-                .fontSize(14)
-                .width(200)
-                .height(30)
-                .obscureText(true)
-                .obscuringCharacter("*")
-                .queryKey(["input"])
-                .build(),
-        ])
-    .build());
+
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let input = Input().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
+    mount(input);
+}
 "#;
 
 fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
@@ -111,7 +111,7 @@ fn type_str(app: &mut TurTestApp, s: &str) {
 #[test]
 fn password_masks_typed_text_but_keeps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -137,7 +137,7 @@ fn password_masks_typed_text_but_keeps_value() {
 #[test]
 fn password_backspace_removes_a_mask_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -156,7 +156,7 @@ fn password_backspace_removes_a_mask_char() {
 #[test]
 fn password_empty_value_displays_nothing() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -171,7 +171,7 @@ fn password_empty_value_displays_nothing() {
 #[test]
 fn password_copy_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -202,7 +202,7 @@ fn password_copy_is_suppressed() {
 #[test]
 fn password_cut_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -234,7 +234,7 @@ fn password_cut_is_suppressed() {
 #[test]
 fn password_custom_obscuring_character() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(CUSTOM_CHAR_BUNDLE).unwrap();
+    app.load_rut_module(CUSTOM_CHAR_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -253,7 +253,7 @@ fn password_custom_obscuring_character() {
 #[test]
 fn password_multibyte_value_masks_one_bullet_per_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -291,6 +291,140 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 }
 
 // ---------------------------------------------------------------------------
+// Reactive bindings: `input_obscure_bound` / `input_placeholder_bound`
+// (bindings are methods — `Input().obscure_bound(atom)`; the reveal toggle
+// flips the live atom, not a rebuilt builder).
+// ---------------------------------------------------------------------------
+
+/// The bound-obscure bundle: the obscure flag rides a bool atom (`start`
+/// returns its id — the standard probe channel). `probe_obscure(b)` sets
+/// the atom (nonzero = masked).
+const BOUND_OBSCURE_BUNDLE: &str = r#"
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::input::{ Input };
+
+struct AppContext {
+    obscure: Source<bool>,
+}
+
+entry fn start() -> opaque {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let obscure: Source<bool> = source<bool>(true);
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+        .obscure_bound(obscure)
+        .query_key("input").build();
+    mount(input);
+    return opaque(AppContext { obscure: obscure });
+}
+
+entry fn probe_obscure(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("obscure fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<bool>(c.obscure, b != 0.0);
+}
+"#;
+
+#[test]
+fn obscure_bound_toggles_masking_reactively() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BOUND_OBSCURE_BUNDLE).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    type_str(&mut app, "abc");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(get_value(&app, id), "abc");
+    assert_eq!(
+        get_displayed(&app, id),
+        "•••",
+        "bound obscure starts masked"
+    );
+
+    // The reveal toggle flips the ATOM — the mounted input re-resolves
+    // its obscure flag without any rebuild.
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_f64("probe_obscure", cx, 0.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_displayed(&app, id),
+        "abc",
+        "reveal shows the plain value"
+    );
+    assert_eq!(get_value(&app, id), "abc", "value unchanged by the toggle");
+
+    // And back.
+    app.call_rut_entry_cx_f64("probe_obscure", cx, 1.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_displayed(&app, id),
+        "•••",
+        "masking re-arms from the atom"
+    );
+}
+
+/// The bound-placeholder twin (`Input().placeholder_bound(atom)`): the
+/// placeholder string rides a str atom. The display path (a layout run,
+/// not a TextElement) has no public string probe, so this pins the
+/// reactive plumbing end to end — the atom swap re-resolves through the
+/// same Val/subscribe machinery `obscure_bound` exercises above — plus
+/// the input's value behavior staying intact across swaps.
+const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::input::{ Input };
+
+struct AppContext {
+    hint: Source<str>,
+}
+
+entry fn start() -> opaque {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let hint: Source<str> = source<str>("type here");
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
+        .placeholder_bound(hint)
+        .query_key("input").build();
+    mount(input);
+    return opaque(AppContext { hint: hint });
+}
+
+entry fn probe_hint(cx: opaque) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("placeholder fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<str>(c.hint, "other hint");
+}
+"#;
+
+#[test]
+fn placeholder_bound_swaps_through_the_live_atom() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BOUND_PLACEHOLDER_BUNDLE).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    type_str(&mut app, "val");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    // The placeholder atom swap must re-resolve the input cleanly (no
+    // trap, no stale subtree) and leave the value intact.
+    app.call_rut_entry_cx("probe_hint", app.rut_start_answer()).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    assert_eq!(
+        get_value(&app, id),
+        "val",
+        "value survives the placeholder swap"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Offset translation: a click resolves to a value-byte offset even though the
 // masked display string has a different byte length than the value.
 // ---------------------------------------------------------------------------
@@ -298,7 +432,7 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 #[test]
 fn password_click_resolves_in_value_byte_space() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -352,7 +486,7 @@ fn password_click_resolves_in_value_byte_space() {
 #[test]
 fn password_combining_mark_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -375,7 +509,7 @@ fn password_combining_mark_is_one_bullet() {
 #[test]
 fn password_flag_emoji_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
@@ -392,7 +526,7 @@ fn password_flag_emoji_is_one_bullet() {
 #[test]
 fn password_mixed_graphemes_mask_per_grapheme() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.load_rut_module(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);

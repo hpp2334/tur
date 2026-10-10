@@ -294,6 +294,19 @@ pub trait WorkerExecutor: 'static {
 
     /// Create a Sleep future.
     fn sleep(&self, d: Duration) -> Sleep;
+
+    /// Whether a waker fired on this worker can re-poll a task spawned on
+    /// the HOST thread (the awaiting side of a host↔worker RPC).
+    ///
+    /// Native thread executors: `true` — any thread's wake re-polls the
+    /// task. `wasm_bindgen_futures` (tur-wasm): `false` — its task queues
+    /// are thread-local, so a cross-thread wake never re-polls; RPC
+    /// replies must ride the drained host channel and be resolved on the
+    /// awaiting thread (see `HostMsg::DevToolReply` and
+    /// `HostBackend::apply_msg`).
+    fn wakes_host_tasks_cross_thread(&self) -> bool {
+        true
+    }
 }
 
 /// Worker-side scheduling surface handed to each [`WorkerEntry`] and
@@ -311,6 +324,23 @@ impl WorkerContext {
     /// engine its per-worker scheduling surface.
     pub fn new(executor: Rc<dyn WorkerExecutor>) -> Self {
         Self { executor }
+    }
+
+    /// The wrapped executor (read-only view; lets embedders/tests wrap a
+    /// worker's scheduling surface — e.g. to force the RPC reply
+    /// transport — while delegating the real work).
+    pub fn executor(&self) -> &Rc<dyn WorkerExecutor> {
+        &self.executor
+    }
+
+    /// Whether RPC reply wakers fired on this worker re-poll tasks
+    /// spawned on the host thread (see
+    /// [`WorkerExecutor::wakes_host_tasks_cross_thread`]). Resolved once
+    /// at backend construction; `false` routes `Reply`-based RPC replies
+    /// through the drained host channel so they resolve on the awaiting
+    /// thread.
+    pub fn wakes_host_tasks_cross_thread(&self) -> bool {
+        self.executor.wakes_host_tasks_cross_thread()
     }
 
     /// Spawn a cooperative task on this worker's loop.

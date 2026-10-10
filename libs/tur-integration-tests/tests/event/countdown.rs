@@ -33,24 +33,31 @@ fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
 }
 
 fn find_input_id(app: &TurTestApp) -> ElementNodeId {
+    // The `edit-input` query key lands on the Input's Container wrapper;
+    // walk the wrapper's subtree for the editable (the wrapper's inner
+    // nesting is an Input-implementation detail).
     let wrapper_id = app
         .query_element(&["edit-input"])
         .expect("edit-input not found");
     let wrapper_id = ElementNodeId::new(wrapper_id.as_u64());
     let tree = app.element_tree();
-    let wrapper = tree.get_element(wrapper_id).unwrap();
-    let inner = tree
-        .get_element(ElementNodeId::new(wrapper.children[0].as_u64()))
-        .unwrap();
-    assert_eq!(inner.kind().unwrap(), ElementKind::new("tur_container"));
-    let input_node = tree
-        .get_element(ElementNodeId::new(inner.children[0].as_u64()))
-        .unwrap();
-    assert_eq!(
-        input_node.kind().unwrap(),
-        ElementKind::new("tur_editable_text")
-    );
-    input_node.id
+    let mut stack: Vec<ElementNodeId> = tree
+        .get_element(wrapper_id)
+        .unwrap()
+        .children
+        .iter()
+        .map(|c| ElementNodeId::new(c.as_u64()))
+        .collect();
+    while let Some(id) = stack.pop() {
+        let node = tree.get_element(id).unwrap();
+        if node.kind() == Some(ElementKind::new("tur_editable_text")) {
+            return id;
+        }
+        for c in &node.children {
+            stack.push(ElementNodeId::new(c.as_u64()));
+        }
+    }
+    panic!("no tur_editable_text under edit-input");
 }
 
 fn focus_input(app: &mut TurTestApp, input_id: ElementNodeId) {
@@ -193,5 +200,113 @@ fn countdown_edit_then_start() {
         get_text(&app, &["display"]),
         "0:09",
         "should count down from edited time"
+    );
+}
+
+// The start→edit interleaving: the ticker is live when the edit opens. The
+// ticker must not hold the K_RUNNING stash slot across its awaits (a tap
+// handler firing mid-tick would read an empty slot and write to atom 0 —
+// the clock kept "running" while frozen). Pins the fixed ticker: the edit
+// applies, the clock stops, the display holds.
+#[test]
+fn countdown_edit_while_ticking_stops_the_clock() {
+    let mut app = build_countdown();
+    click_qk(&mut app, &["btn-start"]);
+    advance_seconds(&mut app, 1);
+    assert_eq!(get_text(&app, &["display"]), "0:59");
+
+    click_qk(&mut app, &["btn-edit"]);
+    let input_id = find_input_id(&app);
+    focus_input(&mut app, input_id);
+    app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("Backspace");
+    app.send_key("2");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("0");
+    click_qk(&mut app, &["btn-confirm"]);
+
+    assert_eq!(
+        get_text(&app, &["display"]),
+        "0:20",
+        "should apply the edited time"
+    );
+    // The clock stopped: the Pause button (running=true) unmounted.
+    assert!(
+        app.query_element(&["btn-pause"]).is_none(),
+        "editing must stop the clock"
+    );
+    advance_seconds(&mut app, 2);
+    assert_eq!(
+        get_text(&app, &["display"]),
+        "0:20",
+        "the clock must stay stopped after edit"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The four-state status pill (the round-5 nit: Ready / Running / Paused /
+// Done — the pre-fix pill was binary Ready/Running) + the 72px display.
+// ---------------------------------------------------------------------------
+
+fn pill_text(app: &TurTestApp) -> String {
+    get_text(app, &["status-label"])
+}
+
+#[test]
+fn countdown_pill_boots_ready() {
+    let app = build_countdown();
+    assert_eq!(pill_text(&app), "Ready");
+}
+
+#[test]
+fn countdown_pill_runs_then_pauses_then_resets() {
+    let mut app = build_countdown();
+
+    click_qk(&mut app, &["btn-start"]);
+    assert_eq!(pill_text(&app), "Running");
+
+    // Two ticks in (remaining 58 ≠ initial 60): pausing shows Paused.
+    advance_seconds(&mut app, 2);
+    click_qk(&mut app, &["btn-pause"]);
+    assert_eq!(pill_text(&app), "Paused", "a stopped mid-run clock is Paused");
+
+    click_qk(&mut app, &["btn-reset"]);
+    assert_eq!(pill_text(&app), "Ready", "reset restores remaining == initial");
+}
+
+#[test]
+fn countdown_pill_done_when_drained() {
+    let mut app = build_countdown();
+
+    // Edit to 2 seconds, then run it dry.
+    click_qk(&mut app, &["btn-edit"]);
+    let input_id = find_input_id(&app);
+    focus_input(&mut app, input_id);
+    app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.send_key("Backspace");
+    app.send_key("2");
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    click_qk(&mut app, &["btn-confirm"]);
+
+    click_qk(&mut app, &["btn-start"]);
+    advance_seconds(&mut app, 2);
+
+    assert_eq!(get_text(&app, &["display"]), "0:00");
+    assert_eq!(pill_text(&app), "Done");
+}
+
+#[test]
+fn countdown_display_is_72px_not_96px() {
+    let app = build_countdown();
+    let id = app
+        .query_element(&["display"])
+        .unwrap_or_else(|| panic!("display not found"));
+    let el = app.dev_tool_get_element(id).unwrap();
+    assert!(
+        el.size.1 < 105.0,
+        "the 72px display lays out well under the old 96px line height, got {}",
+        el.size.1
     );
 }

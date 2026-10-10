@@ -1,0 +1,25 @@
+// condition-basic: a Condition whose then-branch renders (pre-built
+// branches swapped by the engine — no rut during flush). The condition
+// rides a typed bool source handle.
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let when = source<bool>(true);
+    let then_box = Container()
+        .width_height(200.0, 100.0)
+        .color(0x303030FF)
+        .query_key("then-branch")
+        .child(Text().text("then-branch").build());
+    let else_box = Container()
+        .width_height(200.0, 100.0)
+        .color(0x501A1AFF)
+        .query_key("else-branch")
+        .child(Text().text("else-branch").build());
+    let c = Condition(when).then(then_box.build()).else_branch(else_box.build()).query_key("condition-basic").build();
+
+    mount(c);
+}

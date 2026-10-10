@@ -12,10 +12,10 @@ members = [
     "libs/tur-filepicker-capability",
     "libs/tur-filepicker-wasm",
     "libs/tur-filepicker-native",
-    "demo/tur-playground-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
     "libs/tur-android",
+    "libs/tur-playground",
     "libs/tur-integration-tests",
     "demo/compose/native",
     "demo/website/native",
@@ -40,11 +40,34 @@ tur-net-native = { path = "libs/tur-net-native" }
 tur-filepicker-capability = { path = "libs/tur-filepicker-capability" }
 tur-filepicker-wasm = { path = "libs/tur-filepicker-wasm" }
 tur-filepicker-native = { path = "libs/tur-filepicker-native" }
-tur-playground-plugin = { path = "demo/tur-playground-plugin", default-features = false }
 tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }
+tur-playground = { path = "libs/tur-playground" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
+
+# rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
+# master (95a6ece) on 2026-10-10. Same nightly pin as this workspace
+# (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c", default-features = false }
+# rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
+# not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
+# from a local path) and never uses the url-dep lane, so it stays off for
+# every target.
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+# The playground's syntax highlighting classifies rut source through the
+# upstream semantic classifier (`pg_highlight`); `normalize` still slices
+# the source tur-side — the same lexer rev the parser rides.
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+# The AST-semantic classifier behind `pg_highlight` — token + name classes
+# over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
+# types, no serde), pinned to the same rev as the engine crates.
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+
 
 num-derive = "0.4"
 num-traits = "0.2"
@@ -60,8 +83,6 @@ async-channel = "2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"
-boa_engine = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
-boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 resvg = "0.47"
 usvg = "0.47"

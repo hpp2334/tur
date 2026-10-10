@@ -1,0 +1,38 @@
+// switch-demo: a toggle switch authored from the gesture + box rows (the
+// Switch widget's corpus twin). The tap is a mutation over the
+// MutationCtx; the thumb's alignment is authored once from the seed value
+// (reads live in ctx bodies, so the static subtree takes the initial
+// state).
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ View, mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };use tur_kit::flags::{ Align };
+
+
+entry fn start() -> u64 {
+    let on: Readable<bool> = source<bool>(true);
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(on, !ctx.get<bool>(on));
+    });
+    let mut col = Column();
+    let track = Container()
+        .width_height(64.0, 32.0)
+        .color(0x22C55EFFu64)
+        .radius(16.0)
+        .padding(4.0)
+        .query_key("switch")
+        .child(thumb(true));
+    col.child(PointerInteract().on_click(b_toggle).query_key("rut/gesture").child(track.build()).build());
+    mount(SizedBox(400.0, 200.0).child(col.build()).build());
+    return on.atom_id();
+}
+
+fn thumb(on: bool) -> View {
+    let knob = Container().width_height(24.0, 24.0).color(0xFFFFFFFFu64).radius(12.0);
+    let side = Container().width_height(32.0, 24.0).alignment(thumb_align(on)).child(knob.build());
+    return side.build();
+}
+
+fn thumb_align(on: bool) -> Align {
+    if (on) {
+        return Align.CenterRight;
+    }
+    return Align.CenterLeft;
+}

@@ -1,0 +1,9 @@
+// container-basic: a padded container around a fixed-size child.
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+
+entry fn start() {
+    let outer = Container().padding(16.0).child(Container().width_height(100.0, 100.0).build());
+    mount(outer.build());
+}

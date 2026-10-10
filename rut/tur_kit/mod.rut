@@ -1,0 +1,86 @@
+// tur_kit — the authored element-construction surface (the kit), a FILE
+// MODULE TREE: this root declares the domain subtrees; every leaf under
+// them is its own module (one class family per leaf). Consumers import
+// through deep use paths (`use tur_kit::layout::flex::{ Column };`); the
+// kit's own cross-file references are dot-qualified positions
+// (`flags.MainAlign`, `handles.View`). Decls-only roots: no content
+// lives in a namespace node.
+
+// tur_kit — the authored element-construction surface (the kit).
+//
+// ONE wrapper class per element over its family's `tur` host-pkg rows:
+// chainable methods (ONE METHOD PER PROP, named after the historical
+// camelCase props in snake_case), `.child(c)` / `.children([...])`
+// appending, and `.build()` as the ONLY terminal (each class's build calls
+// its FAMILY's build row — `Column.build()` → `flex_build`, …).
+//
+// Construction law: build with the class call form — `Column()` /
+// `SizedBox(400.0, 200.0)` — over each class's `[constructor] fn
+// builder()` (the `.builder()` long form stays valid — byte-identical
+// lowering), and CHAIN it: `let c = X().prop(..).child(..);` — never
+// `let mut c` + `c.prop(..);` statement runs.
+//
+// Handler law: GESTURE handlers are MUTATIONS over the MutationCtx —
+// `on_click(mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set(x, v); }))`
+// (the triad: source / derive / mutate, M1; A = nil is the click shape —
+// one fn-type law for every payload). The kit seals the user fn into an
+// opaque box and hands the ROW only the box; the flush's mutation pass
+// invokes it through the dispatch entries (the dispatch module) with a fresh ctx
+// (queued — never synchronously inside the gesture dispatch). The remaining
+// fn-value callback props (on_tap / on_input / on_enter …) keep the
+// sealing law — a named `fn` or anonymous literal, sealed into an opaque
+// box, fired back through the dispatch entries — until the M2 sweep
+// converts them to their typed events. The arity/type check happens at
+// THIS boundary, at compile time. Nothing callable crosses the boundary
+// as a string. `View` is the user-facing view newtype.
+//
+// Reactive law: ONE prop per reactive-capable name over `Readable<T>`
+// (`text(r)`, `color(r)`, `width(r)`, `flex(r)`, `obscure(r)`, …) with a
+// param-type sugar overload for the literal (`text("hi")`,
+// `color(0xFF'u64)`); the `*_bound` twins are the phase-5 migrants (the
+// test snippets still spell them — thin delegates over the unified
+// props). The literal lane is `StaticValue<T>` (`sv(v)`) for the props
+// without a sugar overload. Sources / derives mint through
+// `source<T>(v)` / `derive<T>(fn (ctx: DeriveCtx) -> T)`; ALL reads and
+// writes flow through the ctxs (`DeriveCtx` get-only, `MutationCtx`
+// get + set + run) — the handles carry NO public getter (there is no
+// current store getter).
+//
+// Flag law: every flag family is a NAME-ONLY enum (`Align`, `MainAlign`,
+// `CrossAlign`, `MainAxisSize`, `Clip`, `BorderPosition`, `Axis`,
+// `BoxFit`, `StackFit`, `FlexFit`, `Cursor`, `HitTest`, `SpanFlags`) —
+// no explicit int values. The private exhaustive `when` mappers (`code`)
+// are the SOLE carriers of the row codes (verbatim from the Rust
+// consts); kit methods take the enum and unwrap once at the row
+// (`flex_main_align(self.spec, code(v))`). Cross-family misuse is a
+// compile error. The `tur_host` u64 consts stay pushed for the phase-5
+// test migration; the raw-const method overloads below are the same
+// story.
+//
+// Color law: every `packed: u64` color prop (`color` / `color_bound` /
+// `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
+// packs **`0xRRGGBBAA`** — R in bits 31..24, A in bits 7..0. An OPAQUE
+// color is `0xRRGGBBFF`; passing a bare `0xRRGGBB` shifts the channels
+// (it decodes as a translucent `0x00'GG'BB'??` cyan-ish wash — the law is
+// pinned natively by `tests/element/color_packing_law.rs`).
+//
+// The kit lives OUTSIDE core/ (the layering law): core owns mechanism,
+// each plugin owns its spec + rows, and this module — registered as a
+// compile-session prelude by the standard bundle assembly — is the stable
+// authored surface rut modules import (`use tur_kit::handles::{ mount };`-style deep paths).
+//
+// Shape note: every class holds exactly ONE `spec: opaque` field (the
+// family's host-side spec) — no rut-side containers; the host spec
+// accumulates children through the `*_child` rows.
+
+pub mod handles;
+mod dispatch;
+pub mod reactive;
+pub mod flags;
+pub mod layout;
+pub mod text;
+pub mod gesture;
+pub mod control_flow;
+pub mod scroll;
+pub mod image;
+pub mod virtual_app;

@@ -1,0 +1,118 @@
+// layout/grid_table — the grid families (Grid / TableCols / Table).
+
+use tur_host::{
+  col_fixed, col_flex, cols_new, grid_aspect, grid_build, grid_child, grid_main_extent,
+  grid_max_cross, grid_new, grid_qkey, grid_spacing, table_build, table_col_extent, table_columns,
+  table_header_builder, table_new, table_qkey, table_row_builder, table_rows_atom, table_stripe,
+};
+
+// ---- grid + table ------------------------------------------------------------
+
+pub class Grid {
+  spec: opaque;
+}
+
+impl Grid {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: grid_new() };
+  }
+  pub fn max_cross(mut self, v: f64) -> Self {
+    grid_max_cross(self.spec, v);
+    return self;
+  }
+  pub fn aspect(mut self, v: f64) -> Self {
+    grid_aspect(self.spec, v);
+    return self;
+  }
+  pub fn spacing(mut self, cross: f64, main: f64) -> Self {
+    grid_spacing(self.spec, cross, main);
+    return self;
+  }
+  pub fn main_extent(mut self, v: f64) -> Self {
+    grid_main_extent(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    grid_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    grid_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn children(mut self, cs: [handles.View]) -> Self {
+    for (let c of cs) {
+      grid_child(self.spec, c.inner);
+    }
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(grid_build(self.spec));
+  }
+}
+
+pub class TableCols {
+  spec: opaque;
+}
+
+impl TableCols {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: cols_new() };
+  }
+  pub fn fixed(mut self, w: f64) -> Self {
+    col_fixed(self.spec, w);
+    return self;
+  }
+  pub fn flex(mut self, f: f64, min: f64) -> Self {
+    col_flex(self.spec, f, min);
+    return self;
+  }
+  // The extent-vocabulary twin of `fixed` (the grid `.main_extent` /
+  // lazy `.item_extent` naming): appends a column whose extent (fixed
+  // main-axis size) is w — it takes no flex share.
+  pub fn extent(mut self, w: f64) -> Self {
+    table_col_extent(self.spec, w);
+    return self;
+  }
+}
+
+pub class Table {
+  spec: opaque;
+}
+
+impl Table {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: table_new() };
+  }
+  pub fn columns(mut self, cols: TableCols) -> Self {
+    table_columns(self.spec, cols.spec);
+    return self;
+  }
+  pub fn rows_atom(mut self, r: reactive.Readable<opaque>) -> Self {
+    table_rows_atom(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn row_builder(mut self, cb: fn(u64, u64) -> handles.View) -> Self {
+    table_row_builder(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn header_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
+    table_header_builder(self.spec, opaque(cb));
+    return self;
+  }
+  // Declarative row stripes painted by the element itself (never the
+  // cells): `even` fills even body rows, `odd` fills odd ones. Pass
+  // 0x00000000 for "keep the frame showing through" on a parity.
+  pub fn stripes(mut self, even: u64, odd: u64) -> Self {
+    table_stripe(self.spec, even, odd);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    table_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(table_build(self.spec));
+  }
+}
+

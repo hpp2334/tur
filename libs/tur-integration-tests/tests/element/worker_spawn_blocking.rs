@@ -10,16 +10,14 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use futures::executor::block_on;
+
 use tur_engine::core::plugin::{Plugin, PluginRegisterContext};
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::{TurRuntime, TurStdPlugin};
 use tur_integration_tests::{MutexFixedClock, TestSchedulerDriver};
 use tur_native::NativeFontLoader;
-
-fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> String {
-    futures::executor::block_on(app.eval_js(source))
-}
 
 /// Probe plugin: at register time spawns a worker task that runs `spin_ms`
 /// of CPU work via `AsyncWorkerContext::spawn_blocking`, recording the
@@ -33,7 +31,7 @@ struct BlockingProbePlugin {
 }
 
 impl Plugin for BlockingProbePlugin {
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         let lane_tid = self.lane_tid.clone();
         let blocking_tid = self.blocking_tid.clone();
         let result = self.result.clone();
@@ -154,9 +152,30 @@ fn blocking_work_does_not_stall_lane_cotenants() {
         .build_headless((0.0, 0.0))
         .expect("app B build");
 
-    // B's round-trip must complete well inside A's remaining spin budget.
+    // B's round-trip must complete well inside A's remaining spin budget:
+    // load a trivial rut module on B, then time one entry-rail RPC.
+    block_on(async {
+        app_b
+            .clone()
+            .load_rut_module(
+                r#"
+
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    mount(Text().text("b").build());
+}
+
+entry fn ping(_a: u64, _b: f64) {
+}
+"#,
+            )
+            .await
+            .expect("b module load");
+    });
     let start = Instant::now();
-    assert_eq!(eval_js(&app_b, "6 * 7"), "42");
+    block_on(app_b.call_rut_entry("ping", 6, 7.0)).expect("ping");
     let elapsed = start.elapsed();
     assert!(
         elapsed < Duration::from_millis(500),

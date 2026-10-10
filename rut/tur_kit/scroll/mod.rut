@@ -1,0 +1,133 @@
+// scroll — the scroll + lazy containers (ScrollView / LazyList /
+// LazyGrid).
+
+use tur_host::{
+  lazy_axis, lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis,
+  lazy_grid_build, lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
+  lazy_grid_new, lazy_grid_overscan, lazy_grid_qkey, lazy_grid_spacing, lazy_item_extent,
+  lazy_list_new, lazy_overscan, lazy_qkey, scroll_axis, scroll_build, scroll_child, scroll_new,
+  scroll_offset, scroll_qkey,
+};
+
+// ---- scroll + lazy containers ----------------------------------------------
+
+pub class ScrollView {
+  spec: opaque;
+}
+
+impl ScrollView {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: scroll_new() };
+  }
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    scroll_axis(self.spec, flags.axis_code(v));
+    return self;
+  }
+  pub fn initial_offset(mut self, v: f64) -> Self {
+    scroll_offset(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    scroll_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    scroll_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(scroll_build(self.spec));
+  }
+}
+
+pub class LazyList {
+  spec: opaque;
+}
+
+impl LazyList {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: lazy_list_new() };
+  }
+  pub fn item_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
+    lazy_builder(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn count(mut self, r: reactive.Readable<f64>) -> Self {
+    lazy_count(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    lazy_axis(self.spec, flags.axis_code(v));
+    return self;
+  }
+  pub fn overscan(mut self, v: u64) -> Self {
+    lazy_overscan(self.spec, v);
+    return self;
+  }
+  pub fn item_extent(mut self, v: f64) -> Self {
+    lazy_item_extent(self.spec, v);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    lazy_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(lazy_build(self.spec));
+  }
+}
+
+pub class LazyGrid {
+  spec: opaque;
+}
+
+impl LazyGrid {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: lazy_grid_new() };
+  }
+  pub fn item_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
+    lazy_grid_builder(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn count(mut self, r: reactive.Readable<f64>) -> Self {
+    lazy_grid_count(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    lazy_grid_axis(self.spec, flags.axis_code(v));
+    return self;
+  }
+  pub fn overscan(mut self, v: u64) -> Self {
+    lazy_grid_overscan(self.spec, v);
+    return self;
+  }
+  pub fn max_cross(mut self, v: f64) -> Self {
+    lazy_grid_max_cross(self.spec, v);
+    return self;
+  }
+  pub fn aspect(mut self, v: f64) -> Self {
+    lazy_grid_aspect(self.spec, v);
+    return self;
+  }
+  // The FIXED main-axis cell extent (the boa `mainAxisExtent`): when set
+  // it overrides the aspect math — every cell is exactly `v` tall along
+  // the main axis regardless of the cross size.
+  pub fn item_extent(mut self, v: f64) -> Self {
+    lazy_grid_item_extent(self.spec, v);
+    return self;
+  }
+  // The cell gaps (the boa `crossAxisSpacing` / `mainAxisSpacing` pair):
+  // the pitch grows to cell + gap on each axis.
+  pub fn spacing(mut self, cross: f64, main: f64) -> Self {
+    lazy_grid_spacing(self.spec, cross, main);
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    lazy_grid_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(lazy_grid_build(self.spec));
+  }
+}
+

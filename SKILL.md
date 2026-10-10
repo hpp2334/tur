@@ -20,7 +20,7 @@ vello-hybrid GPU rendering) with a Flutter-like widget/layout model. An
 embedder (website wasm host, Android app, integration-test harness) loads
 the module, hands it the instance store, and drives layout + paint + input.
 This repo contains the engine (`libs/tur-engine`), the animation crate, the
-embedders, and ~60 example cases (`js/packages/tur-test-cases/cases`) — the
+embedders, and ~110 example cases (`rut/cases`) — the
 best documentation is reading those.
 
 ## 2. The module contract (must-follow)
@@ -121,7 +121,7 @@ goes above the rebuild boundary (the enclosing stable view or module level).
 ## 4. Quick starts
 
 Each is a complete module — drop into
-`js/packages/tur-test-cases/cases/<name>/index.ts` and it runs under the
+`rut/cases/<name>/index.rut` and it runs under the
 test harness or any embedder.
 
 ### 4.1 Minimal app — counter (from `cases/counter`)
@@ -277,7 +277,7 @@ t = clipboard.readText();
 t.promise.then((s) => use(s), () => {});
 ```
 
-### 4.4 HTTP fetch (from `demo/playground-view/cases/github-viewer`)
+### 4.4 HTTP fetch (from `rut/cases/github-viewer`)
 
 The response body is **always raw bytes** — decode with `decodeUtf8`. Fetch
 from inside a mutation; the async body captures the ctx:
@@ -526,20 +526,18 @@ generators; there is no `setTimeout`/`setInterval` (use `sleep(ms)`).
 
 ## 8. Where to put code
 
-- **New test/demo case**: `js/packages/tur-test-cases/cases/<name>/index.ts`
-  exporting `function start()`. Split `state.ts` / `views.ts` when large
+- **New test/demo case**: `rut/cases/<name>/index.rut`
+  declaring `entry fn start()`. Split `state.ts` / `views.ts` when large
   (`todolist` pattern — module level is for state shared across views;
   single-view state lives inside the view fn). Regenerate the embedded
-  sources with `node scripts/gen-cases.cjs` (run by prepare-js-fixtures).
+  sources with `node rut/playground/scripts/gen-cases.cjs`.
 - Case code stays **ctx-only**: reads in `derive` closures, writes in
   `mutate` closures, actions composed via `ctx.set(action, …)`.
 
 ## 9. Build / verify workflow
 
 ```sh
-node scripts/prepare-js-fixtures.cjs   # install deps + build JS fixtures (before tests)
-cd js && pnpm build                    # all JS packages
-cd js && pnpm typecheck                # per-package tsc --noEmit (see pitfall 18)
+pnpm install                           # root workspace (demo/website) + biome
 cargo nextest run --workspace          # engine tests (per-test process isolation)
 cargo clippy --workspace -- -D warnings
 ```
@@ -555,5 +553,5 @@ cargo clippy --workspace -- -D warnings
   animation,net,clipboard,filepicker}/src/index.d.ts` — ambient TS types.
 - Engine architecture, module lifecycle internals, virtual apps, plugin/
   capability model: root `AGENTS.md`.
-- Runnable examples: `js/packages/tur-test-cases/cases/` (~60 cases).
+- Runnable examples: `rut/cases/` (~110 cases).
 - Android on-device workflow: `.opencode/skills/android-dev/SKILL.md`.

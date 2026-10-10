@@ -1,0 +1,12 @@
+// text-font-size: a Fragment of 14px and 28px Texts — the root's children
+// stay flat (the fragment is layout-transparent).
+
+use tur_kit::control_flow::control::{ Fragment };
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let small = Text().text("Hello").font_size(14.0);
+    let large = Text().text("Hello").font_size(28.0);
+    mount(Fragment().children([small.build(), large.build()]).build());
+}

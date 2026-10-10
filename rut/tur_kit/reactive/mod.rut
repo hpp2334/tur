@@ -1,0 +1,394 @@
+// reactive — the authored reactive face: the plain-fn derive rail and
+// the mutation rail (source / derive / mutate + the ctxs).
+
+use tur_host::{
+  ctx_bridge, ctx_get_box, ctx_run_box, ctx_set_box, derive_seal, mutate_seal, rs_box_stamp,
+  rs_source_box, rs_watch_mut, rs_watch_start, rs_watch_stop,
+};
+
+// ---- reactive helpers (the C8 substrate's authored face) ------------------
+//
+// The RAW-spelling reactive surface — the sanctioned PLAIN-FN derive rail
+// (the lambda-capturing `derive(fn ...)` spelling trips the upstream
+// duplicate-type-interning bug in large modules; `rs_derive(fmt, dep)`
+// takes a plain fn and serves those modules — the playground's status
+// label is the standing consumer). `rs_derive2`/`rs_watch` died with the
+// phase-5 migration (their users spell `derive<T>`/`watch<T>` now).
+
+// `rs_derive(fmt, dep)` — the str-format rail over a raw f64 dep atom:
+// the boxed derive lane runs the fmt fn with the dep's fresh value on
+// every materialization (the tracked read records the dependency).
+pub fn rs_derive(fmt: fn(f64) -> str, dep: u64) -> u64 {
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    let dep_r: Readable<f64> = Source<f64>.of(ctx_bridge(), dep, false, STAMP_NUM_F64);
+    return opaque(fmt(ctx.get(dep_r)));
+  };
+  return derive_seal(opaque(wrap), TAG_BOX);
+}
+
+// The two-dep twin: `fn(a: f64, b: f64) -> str`.
+pub fn rs_derive2(fmt: fn(f64, f64) -> str, da: u64, db: u64) -> u64 {
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    let da_r: Readable<f64> = Source<f64>.of(ctx_bridge(), da, false, STAMP_NUM_F64);
+    let db_r: Readable<f64> = Source<f64>.of(ctx_bridge(), db, false, STAMP_NUM_F64);
+    return opaque(fmt(ctx.get(da_r), ctx.get(db_r)));
+  };
+  return derive_seal(opaque(wrap), TAG_BOX);
+}
+
+// `rs_watch(atom, cb, report)` — the click-shaped watch surface: the
+// callback crosses as the `(report, watched, seq)` fn the intent drain
+// used to fire; the delivery rides the nil-payload mutation lane now,
+// with the sealed fn invoked through its fresh ctx. (The wrapper seals
+// the fn through `mutate_seal` DIRECTLY — a kit-side `mutate(...)`
+// instantiation perturbs the app unit's mutation dispatch.)
+pub fn rs_watch(atom: u64, cb: fn(u64, u64, f64), report: u64) -> opaque {
+  let fire = fn (_ctx: MutationCtx, _e: nil) -> nil {
+    cb(report, atom, 1.0);
+  };
+  let sealed = mutate_seal(opaque(fire), SEAL_NIL);
+  return rs_watch_mut(atom, sealed);
+}
+
+// ---- the mutation rail (M1 + the generic unification): source / derive /
+// mutate + the ctxs ---------------------------------------------------------
+//
+// Boa's reactive triad, typed and GENERIC: `source<T>(v)` mints a
+// `Readable<T>`, `derive<T>(fn (ctx: DeriveCtx) -> T)` mints a derived
+// `Readable<T>` (dependency auto-tracking through the ctx reads), and
+// `mutate<A>(fn (ctx: MutationCtx, a: A) { ... })` mints the queued
+// mutation the handler pads store — invoked at the flush's mutation pass
+// with a fresh `MutationCtx`, never synchronously inside the gesture
+// dispatch. The kind NEVER rides a method or constructor name — the
+// angle-bracket type argument at the call site is the whole law (the
+// per-kind minters and classes of the earlier spikes are gone).
+//
+// The mechanism is the boxed rail: the kit boxes the value or fn
+// (`opaque(..)` — the erasure box), the engine rows decode the box into
+// the SAME native KV variant the typed rows store (so every existing
+// engine-side read keeps working), and the recovery is `unopaque<T>` —
+// the erasure inverse — inside the generic bodies (rut monomorphizes
+// generics per instantiation, so T is concrete there; the dispatch
+// entries recover the SEALED fns through fixed-type wrappers the mints
+// build — one wrapper type per rail, never a per-kind spelling).
+// `ctx.run<A>(m, a)` QUEUES the invocation (rut's no-reentrancy law: a
+// mutation body runs inside a face call, so a nested synchronous
+// invocation would re-borrow the VM; composition reads its effects
+// through sources). Writing a derived atom is a checked error (the put
+// rejects it through the error rail) — the write-side law.
+
+// The derive-seal tags (the dispatch entry's return kind) and the
+// mutate-seal tags (the payload shape) — mirroring
+// `rut_runtime::seal_tags` (one law, two spellings). The BOX tags are
+// the generic lanes: the wrapper returns / receives an erased box and
+// the kit's probe entries recover the kind + the typed value.
+let TAG_F64: u64 = 0;
+let TAG_STR: u64 = 1;
+let TAG_BOOL: u64 = 2;
+let TAG_BOX: u64 = 3;
+pub(pkg) let SEAL_NIL: u64 = 0;
+pub(pkg) let SEAL_PTR: u64 = 1;
+let SEAL_F64: u64 = 2;
+pub(pkg) let SEAL_ENTER: u64 = 3;
+pub(pkg) let SEAL_EXIT: u64 = 4;
+pub(pkg) let SEAL_KEY: u64 = 5;
+pub(pkg) let SEAL_INPUT: u64 = 6;
+pub(pkg) let SEAL_FOCUS: u64 = 7;
+pub(pkg) let SEAL_BLUR: u64 = 8;
+pub(pkg) let SEAL_MOUNT: u64 = 9;
+let SEAL_BYTES: u64 = 10;
+let SEAL_BOX: u64 = 11;
+
+// The boxed rail's number stamps (the engine's `rs_box_stamp` answers —
+// the KV holds ONE number variant, so the mint reports the width and the
+// read re-stamps the recovered box to match).
+pub(pkg) let STAMP_NUM_F64: u64 = 1;
+let STAMP_NUM_U64: u64 = 2;
+
+// The reactive INTERFACES (the plan's hierarchy — the kind rides the
+// CLASS, never the method name): any type with the members satisfies
+// structurally (rut 442a979: no `impl I for T` — the inherent impl IS
+// the satisfaction).
+pub interface Readable<T> {
+  fn get(self) -> T;
+  fn atom_id(self) -> u64;
+  fn is_derived(self) -> bool;
+}
+
+// The write face — sources satisfy it; StaticValue (the literal lane)
+// does NOT, so `ctx.set` rejects literals at compile time (the
+// write-side law, typed).
+interface Writable<T> {
+  fn put(self, v: T) -> nil;
+}
+
+// A RUNNABLE mutation (nil / typed-arg shapes): `ctx.run<A>`'s param.
+// `seal(tag)` is the pad-facing install half — the pad method knows its
+// payload shape and seals the USER fn under that shape's tag (the tag is
+// data spelled at the pad, never a type-directed dispatch).
+pub interface Mutation<A> {
+  fn atom_id(self) -> u64;
+  fn seal(self, tag: u64) -> u64;
+  fn invoke(self, h: opaque, a: A) -> nil;
+}
+
+// The ONE writable handle class: `h` is the store-bridge marker the rows
+// route through; `atom` the raw id; `stamp` the number lane's width (the
+// boxed rail's one KV collapse — see `source<T>`). `source<T>` mints it;
+// DERIVED atoms are a separate class (`Derived<T>` below — the write face
+// cannot even spell a derived target, and `Source` sheds the old
+// `derived: bool` flag).
+pub class Source<T> {
+  h: opaque;
+  atom: u64;
+  stamp: u64;
+}
+
+impl<T> Source<T> {
+  [constructor] pub fn of(h: opaque, atom: u64, _derived: bool, stamp: u64) -> Self {
+    // The 4-arg crossing (the corpus probe entries spell the legacy
+    // `derived` flag position); the flag is GONE — `derive<T>` mints
+    // `Derived<T>` — and the param is accepted and ignored.
+    return Self { h: h, atom: atom, stamp: stamp };
+  }
+  pub fn get(self) -> T {
+    return unopaque<T>(ctx_get_box(self.h, self.atom, self.stamp));
+  }
+  pub fn put(self, v: T) -> nil {
+    ctx_set_box(self.h, self.atom, opaque(v));
+  }
+  pub fn atom_id(self) -> u64 {
+    return self.atom;
+  }
+  pub fn is_derived(self) -> bool {
+    return false;
+  }
+}
+
+// The computed handle: `derive<T>` mints it; the value MATERIALIZES
+// during flush (the ctx is the only sanctioned reader — there is no
+// current store getter, and a free-floating read outside a ctx face is
+// undefined for a derived). NOT `Writable` — `ctx.set` cannot compile
+// against it.
+pub class Derived<T> {
+  h: opaque;
+  atom: u64;
+  stamp: u64;
+}
+
+impl<T> Derived<T> {
+  [constructor] pub fn of(h: opaque, atom: u64, stamp: u64) -> Self {
+    return Self { h: h, atom: atom, stamp: stamp };
+  }
+  pub fn get(self) -> T {
+    return unopaque<T>(ctx_get_box(self.h, self.atom, self.stamp));
+  }
+  pub fn atom_id(self) -> u64 {
+    return self.atom;
+  }
+  pub fn is_derived(self) -> bool {
+    return true;
+  }
+}
+
+// The literal lane (the next pass's prop unification): a plain value
+// boxed as a readable. NOT Writable — `ctx.set` rejects it at compile
+// time. `sv(v)` mints it with plain inference.
+pub class StaticValue<T> {
+  value: T;
+}
+
+impl<T> StaticValue<T> {
+  [constructor] pub fn of(v: T) -> Self {
+    return Self { value: v };
+  }
+  pub fn get(self) -> T {
+    return self.value;
+  }
+  pub fn atom_id(self) -> u64 {
+    return 0;
+  }
+  pub fn is_derived(self) -> bool {
+    return false;
+  }
+}
+
+pub fn sv<T>(v: T) -> Readable<T> {
+  return StaticValue<T>.of(v);
+}
+
+// The ONE generic mutation class. `f` is the USER fn's box (the pad
+// seals stamp its exact per-A type — the entries downcast it verbatim);
+// `run_atom` is the composition atom, sealed eagerly from the fixed-type
+// wrapper `wrap` (the drain's BOX lane hands it the boxed arg and the
+// wrapper recovers A with `unopaque<A>`). Bodies QUEUE the invocation
+// (the VM's no-reentrancy law: a mutation body runs inside a face call).
+pub class MutationOf<A> {
+  f: opaque;
+  wrap: opaque;
+  run_atom: u64;
+}
+
+impl<A> MutationOf<A> {
+  [constructor] pub fn of(f: opaque, wrap: opaque, run_atom: u64) -> Self {
+    return Self { f: f, wrap: wrap, run_atom: run_atom };
+  }
+  pub fn atom_id(self) -> u64 {
+    return self.run_atom;
+  }
+  // The pad-facing install: seal the USER fn under the pad's payload
+  // shape (the tag is the pad method's own const).
+  pub fn seal(self, tag: u64) -> u64 {
+    return mutate_seal(self.f, tag);
+  }
+  // Composition QUEUES the boxed invocation (the drain's BOX lane).
+  pub fn invoke(self, h: opaque, a: A) -> nil {
+    ctx_run_box(h, self.run_atom, opaque(a));
+  }
+}
+
+// The mutations' ctx (boa's `StoreCtx`): read, write, compose — GENERIC
+// (`ctx.get<T>` / `ctx.set<T>` / `ctx.run<A>`; angle-bracket type args at
+// the call site — the user-surface law; the kind never rides a method
+// name). The per-kind knowledge lives in the handles; the ctx bodies are
+// three one-liners.
+pub class MutationCtx {
+  h: opaque;
+}
+
+impl MutationCtx {
+  // The dispatch entries' + entry_ctx's mint. STILL PUB at this pin: the
+  // corpus cases' raw-atom probe entries spell `over(bridge())` (the
+  // sanctioned probe rail — see `bridge`), and module-private would lock
+  // them out. The TEST fixtures reach the ctx through `entry_ctx()` / the
+  // cx lanes instead; the privatization lands with the corpus probe
+  // rail's retirement.
+  [constructor] pub fn over(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn get<T>(self, r: Readable<T>) -> T {
+    return r.get();
+  }
+  pub fn set<T>(self, s: Writable<T>, v: T) -> nil {
+    s.put(v);
+  }
+  // Composition QUEUES (the VM's no-reentrancy law: a mutation body runs
+  // inside a face call; effects read through sources — boa's
+  // `ctx.set(navigateToRoot)` shape, deferred).
+  pub fn run<A>(self, m: Mutation<A>, a: A) -> nil {
+    m.invoke(self.h, a);
+  }
+}
+
+// The derives' ctx (boa's `ReadonlyStoreCtx`): reads only.
+pub class DeriveCtx {
+  h: opaque;
+}
+
+impl DeriveCtx {
+  // Kit-internal — `derive<T>`'s wrapper mints it at the drain (no
+  // external user spells it; the corpus derives go through the minter).
+  [constructor] pub(pkg) fn over(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn get<T>(self, r: Readable<T>) -> T {
+    return r.get();
+  }
+}
+
+// The entry rail's ctx — the one user-reachable ctx door: control/probe
+// `entry fn` bodies read and write through it (ctxs originate only from
+// the rails, and the entry rail is one: the embedder's entry RPC runs
+// outside the flush, and this is its sanctioned access face). `over` is
+// kit-internal (the dispatch entries' seam); entries mint through here.
+pub fn entry_ctx() -> MutationCtx {
+  return MutationCtx.over(ctx_bridge());
+}
+
+// The store-bridge accessor — the raw-atom PROBE rail's hatch, kept for
+// the corpus cases' probe entries and the playground's one documented
+// upstream-workaround line (the status label's raw `rs_derive`, until the
+// next rut bump). Test FIXTURES use the context-crossing entry contract
+// (AppContext + entry_start + the cx lanes) instead.
+pub fn bridge() -> opaque {
+  return ctx_bridge();
+}
+
+// Mint a source atom (`boa: source<T>(value)`): the value crosses boxed,
+// the engine decodes it into the same native KV variant the typed rows
+// store (existing engine-side reads unchanged), and the stamp records
+// the number lane's width so `get` re-stamps the recovered box
+// losslessly (u64 brush atoms vs f64 counts — the KV's one collapse).
+// The mint answers the CONCRETE class: it satisfies `Readable<T>` and
+// `Writable<T>` both (the iface objects track no concrete origin, so the
+// write face must flow unboxed); `let r: Readable<T> = source<T>(..)`
+// coerces at the annotation as usual.
+pub fn source<T>(v: T) -> Source<T> {
+  let b = opaque(v);
+  let atom = rs_source_box(b);
+  let stamp = rs_box_stamp(b);
+  return Source<T>.of(ctx_bridge(), atom, false, stamp);
+}
+
+// Mint a derived atom whose fn reads through the ctx — dependencies
+// auto-track (boa's `derive<T>((ctx) => ctx.get(x$))`). The fixed-type
+// wrapper calls the user fn and returns the result boxed; the drain's
+// BOX lane recovers kind + value through the kit's probe entries. The
+// ONE derive minter: any arity of deps through `ctx.get`, one spelling.
+// (The mint answers the INTERFACE — the `mutate<A>` shape: the fill
+// demand rides the kit's own return coercion, and the binding sites
+// spell `Readable<T>` on both sides.)
+pub fn derive<T>(f: fn(DeriveCtx) -> T) -> Readable<T> {
+  let wrap = fn (ctx: DeriveCtx) -> opaque {
+    return opaque(f(ctx));
+  };
+  return Derived<T>.of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), STAMP_NUM_F64);
+}
+
+// The watch rail — BOA's model: the cb is a nil-payload MUTATION (the
+// ctx is the delivery vehicle); no event shape, no atom ids, no report
+// slot — nothing of the intent lane leaks into the callback. Semantics:
+// change-only (start never fires), at most once per frame (epoch
+// coalescing), invalidation-based delivery, and the LOOP RULE is
+// engine-enforced (a cb writing its watched atom traps "watch loop
+// detected" at the offending set). `Watch` is a lifecycle object —
+// `.start()` / `.stop()` scope it; drop or stop it with its owner.
+pub class Watch {
+  h: opaque;
+}
+
+impl Watch {
+  [constructor] fn of(h: opaque) -> Self {
+    return Self { h: h };
+  }
+  pub fn start(self) {
+    rs_watch_start(self.h);
+  }
+  pub fn stop(self) {
+    rs_watch_stop(self.h);
+  }
+}
+
+pub fn watch<T>(atom: Readable<T>, cb: Mutation<nil>) -> Watch {
+  // atom_id is pub-grade iface machinery — kit-internal, never a
+  // user spelling.
+  return Watch.of(rs_watch_mut(atom.atom_id(), cb.seal(SEAL_NIL)));
+}
+
+// Mint a mutation (`boa: mutate<A>((ctx, a) => ...)`): the engine
+// invokes the fn at the flush's mutation pass with a fresh
+// `MutationCtx`. The class stores the user fn's box (the pads seal it
+// under their payload shape) and an eagerly-sealed composition atom over
+// the fixed-type wrapper (what `ctx.run<A>` drains). A = nil is the
+// arity-1-looks-like `fn (ctx: MutationCtx, _e: nil)` click shape — one
+// fn-type law for every payload. The mint answers the INTERFACE: the
+// box records its itable at the mint's own boxing site (the fill was
+// proved there — the kit's table), and the itable rides the value.
+pub fn mutate<A>(f: fn(MutationCtx, A)) -> Mutation<A> {
+  let wrap = fn (ctx: MutationCtx, b: opaque) {
+    f(ctx, unopaque<A>(b));
+  };
+  let run_atom = mutate_seal(opaque(wrap), SEAL_BOX);
+  return MutationOf<A>.of(opaque(f), opaque(wrap), run_atom);
+}
+

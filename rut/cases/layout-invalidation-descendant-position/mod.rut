@@ -1,0 +1,29 @@
+// layout-invalidation-descendant-position: a reactive-width container
+// around an end-aligned Row holding a tracker box — the tracker's X must
+// track the width change through the intermediate Row (the divider-drag
+// position-gap repro). The `set_width` probe drives the change (the atom
+// id rides the entry arg — the probe's handles bind at the call site).
+use tur_kit::flags::{ MainAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
+
+entry fn start() -> u64 {
+    let width: Readable<f64> = source<f64>(100.0);
+
+    let mut outer = Container().width_bound(width);
+    let row = Row()
+        .main_alignment(MainAlign.End)
+        .child(Container().width_height(20.0, 20.0).color(0x22C55EFFu64).query_key("tracker").build());
+    outer.child(row.build());
+    mount(outer.build());
+    return width.atom_id();
+}
+
+// The `__setWidth(w)` seam: re-wrap the passed atom and write through the
+// ctx face (a direct store write — no gesture, no extra mark_dirty).
+entry fn set_width(atom: u64, w: f64) {
+    let width = Source<f64>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<f64>(width, w);
+}

@@ -1,0 +1,154 @@
+// layout/flex — the flex families (Column / Row / Expanded / Flexible).
+
+use tur_host::{
+  flex_build, flex_child, flex_column, flex_cross_align, flex_main_align, flex_main_size,
+  flex_qkey, flex_row, flexi_build, flexi_child, flexi_fit, flexi_flex, flexi_flex_bound,
+  flexi_new, flexi_qkey,
+};
+
+// ---- flex (Column / Row) ------------------------------------------------
+
+pub class Column {
+  spec: opaque;
+}
+
+impl Column {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: flex_column() };
+  }
+  // The unified flag prop: the kind rides the VALUE — the enum lane is
+  // the typed spelling, the raw u64 lane is the phase-5 migrant (the
+  // test snippets' consts); a wrong-family value traps at the unbox,
+  // never a silent 0.
+  pub fn main_alignment(mut self, v: flags.MainAlign) -> Self {
+    flex_main_align(self.spec, flags.main_align_code(v));
+    return self;
+  }
+  pub fn cross_alignment(mut self, v: flags.CrossAlign) -> Self {
+    flex_cross_align(self.spec, flags.cross_align_code(v));
+    return self;
+  }
+  pub fn main_axis_size(mut self, v: flags.MainAxisSize) -> Self {
+    flex_main_size(self.spec, flags.main_size_code(v));
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flex_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    flex_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn children(mut self, cs: [handles.View]) -> Self {
+    for (let c of cs) {
+      flex_child(self.spec, c.inner);
+    }
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(flex_build(self.spec));
+  }
+}
+
+pub class Row {
+  spec: opaque;
+}
+
+impl Row {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: flex_row() };
+  }
+  pub fn main_alignment(mut self, v: flags.MainAlign) -> Self {
+    flex_main_align(self.spec, flags.main_align_code(v));
+    return self;
+  }
+  pub fn cross_alignment(mut self, v: flags.CrossAlign) -> Self {
+    flex_cross_align(self.spec, flags.cross_align_code(v));
+    return self;
+  }
+  pub fn main_axis_size(mut self, v: flags.MainAxisSize) -> Self {
+    flex_main_size(self.spec, flags.main_size_code(v));
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flex_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    flex_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn children(mut self, cs: [handles.View]) -> Self {
+    for (let c of cs) {
+      flex_child(self.spec, c.inner);
+    }
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(flex_build(self.spec));
+  }
+}
+
+// ---- flexible items (Expanded / Flexible) --------------------------------
+
+pub class Expanded {
+  spec: opaque;
+}
+
+impl Expanded {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: flexi_new() };
+  }
+  pub fn flex(mut self, v: f64) -> Self {
+    flexi_flex(self.spec, v);
+    return self;
+  }
+  pub fn flex_bound(mut self, r: reactive.Readable<f64>) -> Self {
+    flexi_flex_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flexi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    flexi_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(flexi_build(self.spec));
+  }
+}
+
+pub class Flexible {
+  spec: opaque;
+}
+
+impl Flexible {
+  [constructor] pub fn builder() -> Self {
+    let s = flexi_new();
+    flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot // the child shrink-wraps below its slot
+    return Self { spec: s };
+  }
+  pub fn flex(mut self, v: f64) -> Self {
+    flexi_flex(self.spec, v);
+    return self;
+  }
+  pub fn flex_bound(mut self, r: reactive.Readable<f64>) -> Self {
+    flexi_flex_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    flexi_qkey(self.spec, k);
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    flexi_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(flexi_build(self.spec));
+  }
+}
+

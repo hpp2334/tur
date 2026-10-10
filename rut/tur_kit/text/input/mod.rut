@@ -1,0 +1,95 @@
+// text/input — the editable (Input).
+
+use tur_host::{
+  input_build, input_color, input_controller, input_cursor_color, input_font_family,
+  input_font_size, input_multiline, input_new, input_obscure, input_obscure_bound,
+  input_obscure_char, input_on_input, input_placeholder, input_placeholder_bound,
+  input_placeholder_color, input_qkey, input_size, input_undo,
+};
+
+// ---- input -----------------------------------------------------------------
+
+pub class Input {
+  spec: opaque;
+}
+
+impl Input {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: input_new() };
+  }
+  pub fn controller(mut self, c: handles.TextCtrl) -> Self {
+    input_controller(self.spec, c.raw());
+    return self;
+  }
+  pub fn undo(mut self, u: handles.UndoCtrl) -> Self {
+    input_undo(self.spec, u.raw());
+    return self;
+  }
+  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+    input_size(self.spec, w, h);
+    return self;
+  }
+  pub fn obscure(mut self, v: bool) -> Self {
+    input_obscure(self.spec, v);
+    return self;
+  }
+  // The reactive reveal toggle: masking rides a live bool (the bound
+  // props take the handle).
+  pub fn obscure_bound(mut self, r: reactive.Readable<bool>) -> Self {
+    input_obscure_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn obscure_char(mut self, v: str) -> Self {
+    input_obscure_char(self.spec, v);
+    return self;
+  }
+  pub fn placeholder(mut self, v: str) -> Self {
+    input_placeholder(self.spec, v);
+    return self;
+  }
+  // The reactive placeholder: the hint rides a live str.
+  pub fn placeholder_bound(mut self, r: reactive.Readable<str>) -> Self {
+    input_placeholder_bound(self.spec, r.atom_id());
+    return self;
+  }
+  pub fn color(mut self, packed: u64) -> Self {
+    input_color(self.spec, packed);
+    return self;
+  }
+  pub fn placeholder_color(mut self, packed: u64) -> Self {
+    input_placeholder_color(self.spec, packed);
+    return self;
+  }
+  pub fn cursor_color(mut self, packed: u64) -> Self {
+    input_cursor_color(self.spec, packed);
+    return self;
+  }
+  pub fn font_size(mut self, v: f64) -> Self {
+    input_font_size(self.spec, v);
+    return self;
+  }
+  pub fn multiline(mut self, v: bool) -> Self {
+    input_multiline(self.spec, v);
+    return self;
+  }
+  pub fn font_family(mut self, v: str) -> Self {
+    input_font_family(self.spec, v);
+    return self;
+  }
+  // The on-input rail: every user edit enqueues the sealed mutation with
+  // the typed `InputEvent` (the fresh value + the enter flag). Bind
+  // `.controller(...)` first — the row installs through the builder's
+  // shared controller.
+  pub fn on_input(mut self, m: reactive.Mutation<gesture.pointer.InputEvent>) -> Self {
+    input_on_input(self.spec, m.seal(reactive.SEAL_INPUT));
+    return self;
+  }
+  pub fn query_key(mut self, k: str) -> Self {
+    input_qkey(self.spec, k);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(input_build(self.spec));
+  }
+}
+

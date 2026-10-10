@@ -1,0 +1,15 @@
+[package]
+name = "tur-playground"
+description = "The playground's rut compile service — the `pg_*` host-pkg rows (compile a rut module in-realm, register it as a virtual-app source, answer the source id)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true }
+rut-vm = { workspace = true }
+rut-core = { workspace = true }
+rut-lexer = { workspace = true }
+rut-parser = { workspace = true }
+rut-semantic = { workspace = true }

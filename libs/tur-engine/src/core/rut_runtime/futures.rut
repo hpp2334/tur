@@ -1,0 +1,183 @@
+// VENDORED from rut @3165f93 — rut/futures/futures.rut, unmodified.
+// Provenance law: the typed launcher surface (launch_future / sleep / select2 / select_all / completer) as rut source over the async_host engine rows. Re-vendor on rut bumps if upstream's file changes.
+
+// futures/futures.rut — the standard launcher surface in rut
+// (ruling 8: launch_future / LaunchedFutureHandle / sleep are HOST
+// surface — ordinary code over the closed `Future` class, mounted by
+// each embedder by choice; users may write their own launchers the
+// same way). The engine rows cross the erasure box (`opaque`);
+// this package restores the typed arrow: `opaque(f)` seals the frame
+// on the way out, `opaque.downcast<Future<nil>>` recovers the sleep
+// mint on the way in.
+//
+// `Future<T>` is core's CLOSED engine class (v20): every async
+// producer — an `async fn` call, an `async { }` block, the engine
+// mints below — answers it, and `await` is the in-body consume.
+// `launch_future` is the other consume — the driving loop's trigger —
+// and `sleep` is the one in-tree pender. `select2` / `select_all` are
+// the structured-competition surface (first-ready wins; the losers are
+// cancelled through their own handles), and `completer` is the
+// manually-resolvable future primitive (a plain callback or a
+// one-shot handoff becomes a `Future<T>` the whole await/select
+// vocabulary drives).
+
+use core::{ Future };
+use async_host::{ __launch, __abort, __sleep, __select2, __select_all, __completer, __resolve };
+
+// The launched future's receipt: the frame held by its cell (`?T` is
+// the cell reference — here a one-slot box over the frame).
+// NOT a Future — `await` diagnoses on this type — and not re-launchable
+// (`launch_future` takes a `Future<T>`; the receipt is not one — a type
+// error, never a runtime check: ruling 6). One member: `abort`.
+pub class LaunchedFutureHandle<T> {
+    f: ?Future<T>;
+}
+
+impl<T> LaunchedFutureHandle<T> {
+    // Mark the frame cancelled and re-enqueue it: the probe at its
+    // checkpoint fires the drop path (the frame's locals release in
+    // reverse binding order). `false` when the future already finished
+    // — a completed frame's state is retired, and the engine answers
+    // false on it, so a repeat abort is stable (and harmless).
+    pub fn abort(mut self) -> bool {
+        let f = self.f;
+        if (f == nil) {
+            return false;
+        }
+        // read the cell reference through the box, then seal it: the
+        // engine row takes the frame as an opaque box and unboxes on
+        // its side
+        let g: Future<T> = f;
+        return __abort(opaque(g));
+    }
+}
+
+// The trigger: hand the future to the driving loop, keep the receipt.
+// Consuming like `await` consumes, the future cannot be launched twice
+// AND awaited — the plan's one-consume law; rut does not move, so the
+// shares stay readable, and both paths driving the same frame is a
+// disclosed v1 misuse (the survey's one-future-one-awaiter law).
+pub fn launch_future<T>(f: Future<T>) -> LaunchedFutureHandle<T> {
+    __launch(opaque(f));
+    return LaunchedFutureHandle { f: f };
+}
+
+// The one in-tree pender: a Future<nil> that parks its awaiter until
+// `ms` elapses on the VM's clock (engine-assisted mint; the driving
+// loop's timer queue does the waiting). The mint crosses SEALED under
+// the `Future<nil>` class spelling — the downcast is the recovery.
+pub fn sleep(ms: u32) -> Future<nil> {
+    return opaque.downcast<Future<nil>>(__sleep(ms));
+}
+
+// ---- structured competition -----------------------------------------
+//
+// `select2(a, b)` races two futures and answers the first-ready one.
+// The engine mints the race frame and arms the waker; the LOSERS are
+// cancelled by library law (a loser must not keep running), so the
+// race is safe to compose: `select_all` folds the same row over a
+// cohort and the cascade runs through each member's own cancelled
+// path.
+
+// The race's answer: one of the two winners. rut's enums are the
+// C-style member set (no payloads), so the two-sided answer is an
+// ordinary generic class — private fields, the side readable through
+// the accessors. `left`/`right` hold exactly one side; the other is
+// nil.
+pub class Either2<A, B> {
+    left: ?A;
+    right: ?B;
+}
+
+impl<A, B> Either2<A, B> {
+    // The two constructions — `Either2.a(v)` / `Either2.b(v)`.
+    pub fn a(v: A) -> Self {
+        return Either2 { left: v, right: nil };
+    }
+
+    pub fn b(v: B) -> Self {
+        return Either2 { left: nil, right: v };
+    }
+
+    pub fn is_a(self) -> bool {
+        return self.left != nil;
+    }
+
+    pub fn is_b(self) -> bool {
+        return self.right != nil;
+    }
+
+    // The winning side's value. Reading the losing side is a contract
+    // breach — guard with `is_a` / `is_b` (a nil deref otherwise).
+    pub fn a_value(self) -> A {
+        return self.left;
+    }
+
+    pub fn b_value(self) -> B {
+        return self.right;
+    }
+}
+
+// First-ready over two futures. The call MINTS the race (nothing
+// runs yet) — `await` (or `launch_future`) drives it; the winner's
+// type is the fn signature's `Either2<T, U>`, computed at the call
+// site, never in an impl-target position.
+pub fn select2<T, U>(a: Future<T>, b: Future<U>) -> Future<Either2<T, U>> {
+    return opaque.downcast<Future<Either2<T, U>>>(__select2<T, U>(opaque(a), opaque(b)));
+}
+
+// First-ready over a cohort: the answer is `(i, v)` — the winner's
+// index and value — and every other member is cancelled. Homogeneous:
+// every element answers the same `T`.
+pub fn select_all<T>(futs: [Future<T>]) -> Future<(u32, T)> {
+    return opaque.downcast<Future<(u32, T)>>(__select_all<T>(opaque(futs)));
+}
+
+// ---- the completer: the manually-resolvable future -------------------
+//
+// `completer<T>()` mints a COLD engine future and hands back the
+// resolution RIGHT beside it — the primitive that turns a plain
+// callback into a Future the whole await/select vocabulary drives:
+//
+//   // a PLAIN fn returning a Future; no async block needed:
+//   pub fn fetch(url: str) -> Future<str> {
+//       let (f, done) = completer<str>();
+//       fetch_cb(url, (resp) -> { done.resolve(resp); });
+//       return f;
+//   }
+//
+// The walls hold: the future is engine-minted (the row mints it), the
+// completer is only the right (a `LaunchedFutureHandle` sibling), and
+// one-future-one-awaiter is untouched — `resolve` is a settle, not a
+// second consumer.
+
+// The resolution RIGHT: a closed handle over the minted frame's edge.
+// NOT a Future (await diagnoses on it), one member: `resolve`.
+pub class Completer<T> {
+    f: ?Future<T>;
+}
+
+impl<T> Completer<T> {
+    // Settle the future with its answer: the engine row stores the
+    // value, retires the frame, and wakes the awaiter. `false` when
+    // the future already retired — resolved, cancelled, or abandoned
+    // (the `__abort`-style stability law). ONE resolve: the right
+    // consumes itself.
+    pub fn resolve(mut self, v: T) -> bool {
+        let f = self.f;
+        if (f == nil) {
+            return false;
+        }
+        self.f = nil;
+        let g: Future<T> = f;
+        return __resolve(opaque(g), opaque(v));
+    }
+}
+
+// The mint: a cold `Future<T>` plus the right that settles it. The
+// `type_id<T>()` constant is the linked answer id the engine's frame
+// and seal names derive from.
+pub fn completer<T>() -> (Future<T>, Completer<T>) {
+    let f = opaque.downcast<Future<T>>(__completer<T>(type_id<T>()));
+    return (f, Completer { f: f });
+}

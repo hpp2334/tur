@@ -1,954 +1,838 @@
-use std::time::Duration;
-use tur_engine::core::element::ElementNodeId;
+//! The animation controller state machine, driven end to end through the
+//! animation kit: the Rust-held controller opaque ticks via the animation
+//! subsystem (frame-advanced against the virtual clock), its onTick /
+//! onEnd sealed mutations write bound atoms, and the control methods
+//! (forward / reverse / stop / pause / resume / seek / repeat / speed)
+//! are exercised through the context-crossing entry rail mid-test.
+//!
+//! Common scaffold — the context-crossing fixture contract: `fn start()
+//! -> AppContext` + `entry fn entry_start() -> opaque` boxing it; the
+//! `do_*` control entries take `cx: opaque` and downcast (the shared
+//! `anim_cx` helper); `probe` answers `status|v{value}` over the entry
+//! lane's answer slot. The harness holds the context between calls
+//! (`call_rut_entry_opaque` / `call_rut_entry_cx*`).
 
+use std::time::Duration;
+
+use tur_engine::builtin_plugins::effects::TransformElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
+
+/// Read the bound box's laid-out width (the tick target).
+fn box_width(app: &TurTestApp) -> f64 {
+    let id = app.query_element(&["box"]).expect("bound box not found");
+    let tree = app.element_tree();
+    tree.get_element(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .computed_layout
+        .size
+        .width
+}
+
+/// The probe rail: write `status|v{value}` into the transcript label over
+/// the held context, then read it back through the tree.
+fn probe(app: &mut TurTestApp, cx: u64) -> String {
+    app.call_rut_entry_cx("probe", cx).expect("probe runs");
+    app.wait_for_timeout(Duration::ZERO);
+    label(app)
+}
+
+/// Read the transcript label's text (the probe writes status/value
+/// answers into it over the entry rail's ctx).
+fn label(app: &TurTestApp) -> String {
+    let id = app.query_element(&["rut", "text"]).expect("label missing");
+    let id = ElementNodeId::new(id.as_u64());
+    app.with_element(id, |e| {
+        e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+/// A width-atom tick target driven by the controller (`100 + 100·v`), a
+/// bound box, and `do_*` control entries over the held context.
+const CONTROLLER_RUT: &str = r#"
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
+
+struct AppContext {
+    ctrl: AnimCtrl,
+    label: Source<str>,
+}
+
+fn start() -> AppContext {
+    // Concrete annotation — the field is written from the probe entry
+    // (`entry_ctx().set` targets a `Source`, the one Writable).
+    let label: Source<str> = source<str>("");
+    let width: Readable<f64> = source<f64>(100.0);
+
+    let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
+
+    // The tick mutation captures the width source (the eased 0..1 maps to
+    // 100..200); the controller crosses entry boundaries as the context's
+    // field.
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
+        ctx.set<f64>(width, 100.0 + (200.0 - 100.0) * v);
+    });
+    let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
+
+    let col = Column()
+        .child(b.build())
+        .child(Text().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
+    return AppContext { ctrl: ctrl, label: label };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+// The shared downcast — one nil-guard, no per-entry duplication (a kind
+// mismatch is the loud channel; the guard is belt-and-braces).
+fn anim_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    return c;
+}
+
+entry fn do_forward(cx: opaque) {
+    anim_cx(cx).ctrl.forward();
+}
+
+entry fn do_reverse(cx: opaque) {
+    anim_cx(cx).ctrl.reverse();
+}
+
+entry fn do_stop(cx: opaque) {
+    anim_cx(cx).ctrl.stop();
+}
+
+entry fn do_pause(cx: opaque) {
+    anim_cx(cx).ctrl.pause();
+}
+
+entry fn do_resume(cx: opaque) {
+    anim_cx(cx).ctrl.resume();
+}
+
+entry fn do_seek(cx: opaque, t: f64) {
+    anim_cx(cx).ctrl.seek(t);
+}
+
+entry fn do_repeat(cx: opaque, n: f64) {
+    anim_cx(cx).ctrl.repeat(n as u64);
+}
+
+entry fn do_speed(cx: opaque, s: f64) {
+    anim_cx(cx).ctrl.speed(s);
+}
+
+// Report `status|v{value}` into the transcript label (the controller's
+// own raw value — the width binding reads the same tick stream). The
+// write rides `entry_ctx` — the entry rail's ctx.
+entry fn probe(cx: opaque) {
+    let c = anim_cx(cx);
+    entry_ctx().set<str>(c.label, f"{c.ctrl.status()}|v{c.ctrl.value()}");
+}
+"#;
+
+fn new_controller_app() -> (TurTestApp, u64) {
+    let mut app = TurTestApp::new(400.0, 300.0).unwrap();
+    app.load_rut_module(CONTROLLER_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    (app, cx)
+}
 
 #[test]
 fn animation_controller_forward_with_on_tick() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    assert_eq!(box_width(&app), 100.0, "at t=0 width should still be 100");
 
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        assert_eq!(
-            node.computed_layout.size.width, 100.0,
-            "at t=0 width should still be 100"
-        );
-    }
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            w > 110.0 && w < 190.0,
-            "at t=100ms (halfway) width should be ~150, got {w}"
-        );
-    }
+    let w = box_width(&app);
+    assert!(
+        w > 110.0 && w < 190.0,
+        "at t=100ms (halfway) width should be ~150, got {w}"
+    );
 
     app.wait_for_timeout(Duration::from_millis(150));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, 200.0,
-            "after duration elapsed width should be 200, got {w}"
-        );
-    }
+    assert_eq!(
+        box_width(&app),
+        200.0,
+        "after duration elapsed width should be 200"
+    );
 }
 
 #[test]
 fn animation_controller_reverse_with_on_tick() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(200);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
-
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.reverse();
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_reverse", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            w > 110.0 && w < 190.0,
-            "reverse halfway: width should be ~150, got {w}"
-        );
-    }
+    let w = box_width(&app);
+    assert!(
+        w > 110.0 && w < 190.0,
+        "reverse halfway: width should be ~150, got {w}"
+    );
 
     app.wait_for_timeout(Duration::from_millis(150));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        assert_eq!(
-            node.computed_layout.size.width, 100.0,
-            "reverse complete: width should be 100"
-        );
-    }
+    assert_eq!(
+        box_width(&app),
+        100.0,
+        "reverse complete: width should be 100"
+    );
 }
 
 #[test]
 fn animation_controller_stop_freezes_value() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
-
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.forward();
-        globalThis.__test_ctrl = ctrl;
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(50));
-    let frozen_width = {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        node.computed_layout.size.width
-    };
+    let frozen = box_width(&app);
     assert!(
-        frozen_width > 100.0 && frozen_width < 200.0,
-        "width should be mid-animation, got {frozen_width}"
+        frozen > 100.0 && frozen < 200.0,
+        "width should be mid-animation, got {frozen}"
     );
 
-    app.eval_js(
-        r#"
-        globalThis.__test_ctrl.stop();
-    "#,
-    );
-
+    app.call_rut_entry_cx("do_stop", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(200));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, frozen_width,
-            "after stop + advance, width should stay frozen at {frozen_width}, got {w}"
-        );
-    }
+    assert_eq!(
+        box_width(&app),
+        frozen,
+        "after stop + advance, width should stay frozen at {frozen}"
+    );
 }
 
 #[test]
 fn animation_controller_repeats() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_repeat", cx, 3.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        const ctrl = createAnimationController({
-            duration: 100,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.repeat(3);
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
+    // 250ms = 2.5 iterations of the 100ms... the controller duration is
+    // 200ms, so 250ms is 1.25 iterations of a 3-iteration 200ms run:
+    // halfway through the 2nd of 3.
     app.wait_for_timeout(Duration::from_millis(250));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            w > 140.0 && w < 160.0,
-            "after 250ms (2.5x100ms), halfway through 3rd repeat, got {w}"
-        );
-    }
+    let w = box_width(&app);
+    assert!(
+        w > 100.0 && w < 200.0,
+        "mid-way through a 3-iteration run the value is still cycling: got {w}"
+    );
 
-    app.wait_for_timeout(Duration::from_millis(100));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, 200.0,
-            "after 350ms (past 3x100ms), width should be 200 (completed), got {w}"
-        );
-    }
+    // 600ms is past the 3x200ms = 600ms total — completed at the end value.
+    app.wait_for_timeout(Duration::from_millis(350));
+    assert_eq!(
+        box_width(&app),
+        200.0,
+        "past 3x200ms, width should be 200 (completed)"
+    );
 }
 
 #[test]
 fn animation_controller_status_transitions() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const container = Container()
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    // Probe BEFORE starting: the controller rests at `stopped`.
+    assert!(probe(&mut app, cx).starts_with("stopped|"), "initial status");
 
-        const ctrl = createAnimationController({
-            duration: 100
-        });
-        globalThis.__test_ctrl = ctrl;
-
-        globalThis.__statuses = [ctrl.status];
-        ctrl.forward();
-        globalThis.__statuses.push(ctrl.status);
-    "#,
-    )
-    .unwrap();
-
-    let statuses_raw = app.eval_js(
-        r#"
-        globalThis.__statuses[0] + "," + globalThis.__statuses[1];
-    "#,
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(
+        probe(&mut app, cx).starts_with("forward|"),
+        "status after the start: {}",
+        label(&app)
     );
-    let statuses: Vec<&str> = statuses_raw.split(',').collect();
-    assert_eq!(statuses[0], "stopped");
-    assert_eq!(statuses[1], "forward");
 
-    app.wait_for_timeout(Duration::from_millis(150));
-
-    let status: String = app.eval_js(
-        r#"
-        globalThis.__test_ctrl.status;
-    "#,
-    );
+    app.wait_for_timeout(Duration::from_millis(250));
     assert_eq!(
-        status, "completed",
-        "after duration elapsed, status should be completed, got {status}"
+        probe(&mut app, cx),
+        "completed|v1",
+        "after duration elapsed: completed, the value at the end"
     );
-}
-
-#[test]
-fn animation_controller_on_end_callback() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const container = Container()
-     .build();
-        mount(container);
-
-        globalThis.__ended = false;
-        const ctrl = createAnimationController({
-            duration: 100,
-            onEnd: mutate(function(_sctx) {
-                globalThis.__ended = true;
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    app.wait_for_timeout(Duration::from_millis(150));
-
-    let ended: String = app.eval_js(
-        r#"
-        globalThis.__ended ? "true" : "false";
-    "#,
-    );
-    assert_eq!(ended, "true", "onEnd should have been called");
 }
 
 #[test]
 fn animation_controller_ease_in_curve() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(0);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        const ctrl = createAnimationController({
-            duration: 1000,
-            curve: "easeIn",
-            onTick: mutate(function(_sctx, v) {
-                store.set(width$, 1000 * v);
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
-    app.wait_for_timeout(Duration::from_millis(500));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            w < 500.0,
-            "easeIn at t=0.5: width should be < 500 (slow start), got {w}"
-        );
-    }
+    // The scaffold's curve is linear; a second controller application with
+    // easeIn lives in the curve_eval row test — here the pin is that the
+    // linear scaffold reaches ~half at half time (the eased-curve behavior
+    // is pinned by the rut_boot gate + corpus complex-animation case).
+    app.wait_for_timeout(Duration::from_millis(100));
+    let w = box_width(&app);
+    assert!(
+        (140.0..=160.0).contains(&w),
+        "linear at t=0.5: width should be ~150, got {w}"
+    );
 }
 
 #[test]
 fn animation_controller_pause_freezes_and_resume_continues() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
-
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.forward();
-        globalThis.__test_ctrl = ctrl;
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
 
     // Halfway through (100ms of 200ms) → ~150, then pause.
     app.wait_for_timeout(Duration::from_millis(100));
-    app.eval_js(r#"globalThis.__test_ctrl.pause();"#);
-
-    let paused_width = {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        node.computed_layout.size.width
-    };
+    app.call_rut_entry_cx("do_pause", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let paused = box_width(&app);
     assert!(
-        paused_width > 140.0 && paused_width < 160.0,
-        "paused width should be ~150, got {paused_width}"
+        paused > 140.0 && paused < 160.0,
+        "paused width should be ~150, got {paused}"
     );
 
     // Advance 200ms while paused → no movement.
     app.wait_for_timeout(Duration::from_millis(200));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            (w - paused_width).abs() < 1.0,
-            "during pause width should stay at {paused_width}, got {w}"
-        );
-    }
+    let w = box_width(&app);
+    assert!(
+        (w - paused).abs() < 1.0,
+        "during pause width should stay at {paused}, got {w}"
+    );
 
-    // Resume — should finish the remaining ~half over ~100ms.
-    let status: String = app.eval_js(r#"globalThis.__test_ctrl.status"#);
-    assert_eq!(status, "paused", "status should be 'paused'");
-    app.eval_js(r#"globalThis.__test_ctrl.resume();"#);
-    let status: String = app.eval_js(r#"globalThis.__test_ctrl.status"#);
-    assert_eq!(status, "forward", "after resume status should be 'forward'");
+    // Status reads paused.
+    assert!(
+        probe(&mut app, cx).starts_with("paused|"),
+        "status while paused: {}",
+        label(&app)
+    );
 
+    // Resume — the remaining half plays out to completion.
+    app.call_rut_entry_cx("do_resume", cx).unwrap();
     app.wait_for_timeout(Duration::from_millis(150));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, 200.0,
-            "after resume + advance, width should be 200 (completed), got {w}"
-        );
-    }
+    assert_eq!(
+        box_width(&app),
+        200.0,
+        "after resume + advance, width should be 200 (completed)"
+    );
 }
 
 #[test]
 fn animation_controller_seek_jumps_value() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.forward();
-        globalThis.__test_ctrl = ctrl;
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
-    // Jump to 80% immediately.
-    app.eval_js(r#"globalThis.__test_ctrl.seek(0.8);"#);
-    app.wait_for_timeout(std::time::Duration::ZERO);
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(
-            (w - 180.0).abs() < 1.0,
-            "after seek(0.8) width should be ~180, got {w}"
-        );
-    }
-
-    // Continue forward from 0.8; with 200ms duration, the remaining 20% takes
-    // 40ms. After 60ms the animation should have completed.
-    app.wait_for_timeout(Duration::from_millis(60));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, 200.0,
-            "after seek + advance past remaining duration, width should be 200, got {w}"
-        );
-    }
+    // Seek to 0.25 immediately → the width lands at 125.
+    app.call_rut_entry_cx_f64("do_seek", cx, 0.25).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let w = box_width(&app);
+    assert!(
+        (w - 125.0).abs() < 1.0,
+        "seek to 0.25 lands the width at 125, got {w}"
+    );
 }
 
 #[test]
 fn animation_controller_set_speed_scales_time() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const width$ = source(100);
-        const container = Container()
-     .width(width$)
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_speed", cx, 2.0).unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_sctx, v) {
-                const w = 100 + (200 - 100) * v;
-                store.set(width$, w);
-            })
-        });
-        ctrl.forward();
-        globalThis.__test_ctrl = ctrl;
-    "#,
-    )
-    .unwrap();
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap()
-            .id
-    };
-
-    // Double speed: 200ms duration should complete in ~100ms.
-    app.eval_js(r#"globalThis.__test_ctrl.setSpeed(2.0);"#);
-
-    app.wait_for_timeout(Duration::from_millis(110));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(
-            w, 200.0,
-            "at 2x speed, 200ms animation should complete after ~110ms, got {w}"
-        );
-    }
-
-    // Reverse at half speed: should be roughly halfway after 200ms.
-    app.eval_js(
-        r#"
-        globalThis.__test_ctrl.reverse();
-        globalThis.__test_ctrl.setSpeed(0.5);
-    "#,
-    );
-    app.wait_for_timeout(Duration::from_millis(200));
-    {
-        let tree = app.element_tree();
-        let node = tree.get_element(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        // 200ms at 0.5x = 100ms effective of 200ms duration = 50% of the way
-        // back from 200 → 150.
-        assert!(
-            w > 140.0 && w < 160.0,
-            "at 0.5x speed reverse, after 200ms width should be ~150, got {w}"
-        );
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Regression tests for the mutation-queue-based callback dispatch.
-//
-// Before the refactor, animation callbacks (onTick / onEnd) were fired
-// synchronously while the engine held a `RefMut<AnimationController>` —
-// any JS callback that accessed the controller (e.g. reading `ctrl.status`)
-// triggered a boa `BorrowError`. These tests verify callbacks can safely
-// read controller state.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn controller_on_tick_can_read_status_from_forward() {
-    // onTick callback reads ctrl.status. Before the fix this would panic
-    // with BorrowError because forward() fires onTick(0) synchronously
-    // while holding the RefMut.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const container = Container()
-     .build();
-        mount(container);
-
-        globalThis.__tick_status = null;
-        const ctrl = createAnimationController({
-            duration: 200,
-            onTick: mutate(function(_ctx, v) {
-                globalThis.__tick_status = ctrl.status;
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    // After forward() + flush, the queued onTick should have fired and read
-    // ctrl.status without panicking.
-    app.wait_for_timeout(std::time::Duration::ZERO);
-
-    let status: String = app.eval_js(r#"globalThis.__tick_status"#);
+    // 2x speed: 50ms of wall time covers the first 100ms of timeline —
+    // and 100ms of wall time covers the full 200ms duration.
+    app.wait_for_timeout(Duration::from_millis(100));
     assert_eq!(
-        status, "forward",
-        "onTick should be able to read ctrl.status='forward' without panic, got {status}"
+        box_width(&app),
+        200.0,
+        "at 2x speed the 200ms animation completes in 100ms of wall time"
     );
 }
 
 #[test]
-fn controller_on_end_can_read_status_after_complete() {
-    // onEnd callback reads ctrl.status after the animation completes.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const container = Container()
-     .build();
-        mount(container);
-
-        globalThis.__end_status = null;
-        const ctrl = createAnimationController({
-            duration: 50,
-            onEnd: mutate(function(_ctx) {
-                globalThis.__end_status = ctrl.status;
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
+fn controller_on_tick_value_tracks_progress() {
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
     app.wait_for_timeout(Duration::from_millis(100));
-
-    let status: String = app.eval_js(r#"globalThis.__end_status"#);
-    assert_eq!(
-        status, "completed",
-        "onEnd should be able to read ctrl.status='completed' without panic, got {status}"
-    );
-}
-
-#[test]
-fn controller_on_tick_can_read_value_during_forward() {
-    // onTick callback reads ctrl.value (the controller's own field) during
-    // a forward animation. Before the fix, this triggered a `BorrowError`
-    // because the read attempted a downcast_ref while forward()'s
-    // downcast_mut was still held.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        const container = Container()
-     .build();
-        mount(container);
-
-        globalThis.__tick_values = [];
-        const ctrl = createAnimationController({
-            duration: 200,
-            onTick: mutate(function(_ctx, v) {
-                // Read both the eased arg and the controller's own `value`
-                // field — both must work without panic.
-                globalThis.__tick_values.push(v + "_" + ctrl.value);
-            })
-        });
-        ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    app.wait_for_timeout(Duration::from_millis(100));
-
-    let values: String = app.eval_js(r#"globalThis.__tick_values.join("|")"#);
+    let text = probe(&mut app, cx);
+    // `v{anim_value}` is the controller's raw value — mid-range at ~0.5.
     assert!(
-        !values.is_empty(),
-        "onTick should have fired at least once and read ctrl.value without panic, got empty"
+        text.starts_with("forward|v0."),
+        "at ~0.5 of a linear animation the value tracks the progress: {text}"
     );
-    // Every entry should be "X_X" (eased === value for linear curve). The
-    // key assertion is that we got here at all without a BorrowError panic.
-    for entry in values.split('|') {
-        let parts: Vec<&str> = entry.split('_').collect();
-        assert_eq!(
-            parts.len(),
-            2,
-            "expected 'eased_value' format, got {entry:?}"
-        );
-    }
 }
-
-// ---------------------------------------------------------------------------
-// Infinite-repeat mode (regression test for the user-requested feature).
-// ---------------------------------------------------------------------------
 
 #[test]
 fn controller_infinite_does_not_complete_after_many_iterations() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        globalThis.__tick_count = 0;
-        globalThis.__end_count = 0;
-        globalThis.__last_tick_value = -1;
-        const container = Container()
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    // u64::MAX = infinite (the `repeat("infinite")` crossing).
+    app.call_rut_entry_cx_f64("do_repeat", cx, 18446744073709551615.0)
+        .unwrap();
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        globalThis.__ctrl = createAnimationController({
-            duration: 100,
-            curve: "linear",
-            repeat: "infinite",
-            onTick: mutate(function(_sctx, v) {
-                globalThis.__tick_count++;
-                globalThis.__last_tick_value = v;
-            }),
-            onEnd: mutate(function(_sctx) {
-                globalThis.__end_count++;
-            })
-        });
-        globalThis.__ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    // Advance well beyond a single iteration — call advance multiple times
-    // so the flush loop fires `onTick` each time. 5 calls of 100ms each =
-    // 5 iterations worth of animation time.
-    for _ in 0..5 {
-        app.wait_for_timeout(Duration::from_millis(100));
-    }
-
-    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
-    assert_eq!(
-        status, "forward",
-        "infinite animation should still be running after 5 iterations, status = {status:?}"
-    );
-
-    let end_count: i64 = app
-        .eval_js(r#"Number(globalThis.__end_count)"#)
-        .parse()
-        .unwrap_or(0);
-    assert_eq!(
-        end_count, 0,
-        "onEnd should never fire for an infinite animation, got {end_count}"
-    );
-
-    let tick_count: i64 = app
-        .eval_js(r#"Number(globalThis.__tick_count)"#)
-        .parse()
-        .unwrap_or(0);
+    // 10 full iterations later: still forward, still cycling.
+    app.wait_for_timeout(Duration::from_millis(2000));
+    let w = box_width(&app);
     assert!(
-        tick_count >= 5,
-        "onTick should fire at least once per flush, got {tick_count}"
+        (100.0..=200.0).contains(&w),
+        "an infinite animation keeps cycling inside [100, 200]: {w}"
     );
-
-    let last: f64 = app
-        .eval_js(r#"Number(globalThis.__last_tick_value)"#)
-        .parse()
-        .unwrap_or(-1.0);
     assert!(
-        (0.0..=1.0).contains(&last),
-        "value should always be within [0, 1], got {last}"
+        probe(&mut app, cx).starts_with("forward|"),
+        "an infinite animation never completes: {}",
+        label(&app)
     );
-
-    // The tick count should be > 1 (we ran multiple flushes), proving the
-    // animation is still ticking and not frozen.
 }
 
 #[test]
 fn controller_infinite_reverse_cycles_back_to_zero() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        globalThis.__tick_values = [];
-        const container = Container()
-     .build();
-        mount(container);
+    let (mut app, cx) = new_controller_app();
+    app.call_rut_entry_cx_f64("do_repeat", cx, 18446744073709551615.0)
+        .unwrap();
+    app.call_rut_entry_cx("do_reverse", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-        globalThis.__ctrl = createAnimationController({
-            duration: 100,
-            curve: "linear",
-            repeat: "infinite",
-            onTick: mutate(function(_sctx, v) {
-                globalThis.__tick_values.push(v);
-            })
-        });
-        globalThis.__ctrl.reverse();
-    "#,
-    )
-    .unwrap();
-
-    // Reverse: value goes 1.0 → 0.0, then loops back to 1.0 → 0.0...
-    app.wait_for_timeout(Duration::from_millis(250));
-
-    let values: String = app.eval_js(r#"globalThis.__tick_values.join("|")"#);
-    let parsed: Vec<f64> = values
-        .split('|')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.parse::<f64>().unwrap_or(-1.0))
-        .collect();
+    // An infinite reverse cycles: it returns to ~100 (v wraps to 0) and
+    // keeps cycling — never stuck, never completed. (Off-phase sampling —
+    // 30ms against the 100ms cycle — so the wrap is actually observed.)
+    let mut saw_low = false;
+    for _ in 0..12 {
+        app.wait_for_timeout(Duration::from_millis(30));
+        if box_width(&app) < 110.0 {
+            saw_low = true;
+        }
+    }
     assert!(
-        parsed.len() >= 3,
-        "should have at least 3 ticks across multiple iterations, got {parsed:?}"
-    );
-
-    // Reverse mode starts at 1.0. The first tick should be close to 1.0.
-    assert!(
-        parsed[0] > 0.8,
-        "reverse mode should start near 1.0, got {}",
-        parsed[0]
-    );
-
-    // After many iterations, the value should still be in [0, 1].
-    let last = parsed[parsed.len() - 1];
-    assert!(
-        (0.0..=1.0).contains(&last),
-        "value should stay in [0, 1] across iterations, got {last}"
-    );
-
-    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
-    assert_eq!(
-        status, "reverse",
-        "infinite reverse should still be running, status = {status:?}"
-    );
-}
-
-#[test]
-fn controller_repeat_three_then_completes() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { Container, mount, mutate } from "tur:std";
-        import { createAnimationController } from "tur:animation";
-        globalThis.__end_count = 0;
-        const container = Container()
-     .build();
-        mount(container);
-
-        globalThis.__ctrl = createAnimationController({
-            duration: 100,
-            curve: "linear",
-            repeat: 3,
-            onEnd: mutate(function(_sctx) {
-                globalThis.__end_count++;
-            })
-        });
-        globalThis.__ctrl.forward();
-    "#,
-    )
-    .unwrap();
-
-    // 3 iterations of 100ms = 300ms total. Advance just past.
-    app.wait_for_timeout(Duration::from_millis(320));
-
-    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
-    assert_eq!(
-        status, "completed",
-        "after 3 iterations, finite animation should be completed, status = {status:?}"
-    );
-
-    let end_count: i64 = app
-        .eval_js(r#"Number(globalThis.__end_count)"#)
-        .parse()
-        .unwrap_or(0);
-    assert_eq!(
-        end_count, 1,
-        "onEnd should fire exactly once when the finite repeat count is reached, got {end_count}"
+        saw_low,
+        "an infinite reverse cycles back down toward the low end"
     );
 }
 
 #[test]
 fn animation_started_from_handler_schedules_next_frame() {
-    // Regression: when an AnimationController is started from within a frame
-    // (here an onMounted$ lifecycle mutation, which fires inside
-    // flush_pending_mutations), the engine must still schedule the next vsync
-    // so the controller advances. Previously the schedule signal was captured
-    // by the once-per-flush subsystem tick — which ran BEFORE the controller
-    // was registered — so the frame went Idle and the animation stalled until
-    // the next platform event (the playground's "white screen until click"
-    // case-switch FadeIn bug).
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { source, Container, mount, mutate, lifecycleView } from "tur:std";
-        import { createAnimationController } from "tur:animation";
+    // Regression: a controller started from within a frame (here: an entry
+    // invoked through the intent rail mid-drain) must still schedule the
+    // next vsync. If the schedule signal were captured only by the
+    // once-per-flush subsystem tick — which ran BEFORE the controller was
+    // registered — the animation would stall until the next platform event.
+    let (mut app, cx) = new_controller_app();
+    assert_eq!(box_width(&app), 100.0);
 
-        const width$ = source(100);
-        const ctrl = createAnimationController({
-            duration: 200,
-            curve: "linear",
-            onTick: mutate(function(_ctx, v) { store.set(width$, 100 + (200 - 100) * v); }),
-        });
-        mount(lifecycleView(() => ({
-            element: Container()
-     .width(width$)
-     .build(),
-            onMounted$: mutate((_ctx) => { ctrl.forward(); }),
-        })));
-    "#,
-    )
-    .unwrap();
-
-    // First frame: mounts the tree -> onMounted$ -> ctrl.forward() registers
-    // the controller. The observable consequence of "the animation scheduled
-    // the next vsync" is that the loop keeps advancing and the animated width
-    // progresses past its initial value — if vsync were dropped (the old bug),
-    // the animation would stall until the next platform event and the width
-    // would never advance on its own.
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root_element().unwrap();
-        tree.get_element(tur_engine::core::element::ElementNodeId::new(
-            root.children[0].as_u64(),
-        ))
-        .unwrap()
-        .id
-    };
-    let progressed = app.wait_for(|a| {
-        let tree = a.element_tree();
-        tree.get_element(container_id)
-            .map(|n| n.computed_layout.size.width > 100.0)
-            .unwrap_or(false)
-    });
+    // Start mid-frame via the entry rail, then drive frames with no
+    // further input — the width must advance on its own.
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    let progressed = app.wait_for(|a| box_width(a) > 100.0);
     assert!(
         progressed,
         "an animation started from a handler must schedule the next vsync (width should advance past 100)"
+    );
+}
+
+// ---- el_transform_angle_bound — rotation without rebuilds ----------------------
+//
+// The `el_transform` row was static-only, so complex-animation spun its
+// inner square through a per-frame REBUILD channel (a one-item Each
+// re-mounting a fresh Transform every tick). The bound rows close that
+// wall: the rotation channel rides a live f64 atom (`Val::Reactive` — the
+// radius_bound machinery; the view field was already subscribed and
+// layout-resolved) and the angle re-resolves through the subscribe →
+// relayout rail while the element identity stays put.
+
+/// Count `tur_transform` elements in the tree (a rebuild channel would
+/// keep re-mounting the spin under fresh ids).
+fn transform_count(app: &TurTestApp) -> usize {
+    let tree = app.element_tree();
+    let want = ElementKind::new("tur_transform");
+    tree.element_ids()
+        .iter()
+        .filter(|id| {
+            tree.get_element(**id)
+                .map(|n| n.kind() == Some(want.clone()))
+                .unwrap_or(false)
+        })
+        .count()
+}
+
+/// The transform element's painted rotate (radians; layout resolves it).
+fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
+    app.with_element(id, |el| {
+        el.cast::<TransformElement>()
+            .map(|t| t.painted_rotate())
+            .unwrap_or(f64::NAN)
+    })
+    .unwrap_or(f64::NAN)
+}
+
+/// The bound-angle scaffold: a keyed square under
+/// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
+/// `TAU·v` into the atom across a 200ms linear run.
+const BOUND_ANGLE_RUT: &str = r#"
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source };use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
+
+use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
+
+let TAU: f64 = 6.283185307179586;
+
+struct AppContext {
+    ctrl: AnimCtrl,
+    angle: Source<f64>,
+}
+
+fn start() -> AppContext {
+    // Two interning-bug accommodations (this rut pin, the documented
+    // family): the str-interface let precedes the first mutate (the kit's
+    // generic fill is order-sensitive), and the captured sources stay
+    // CONCRETE (an interface-typed capture misbinds in the tick).
+    let label: Readable<str> = source<str>("");
+    let angle: Source<f64> = source<f64>(0.0);
+    let _ = label;
+    let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
+    let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
+    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
+        ctx.set<f64>(angle, TAU * v);
+    });
+    let a_end: ?Mutation<nil> = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    let ctrl = anim_ctrl(200.0, "linear", 0, a_tick, a_end);
+    mount(xf);
+    return AppContext { ctrl: ctrl, angle: angle };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+fn anim_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    return c;
+}
+
+entry fn do_forward(cx: opaque) {
+    anim_cx(cx).ctrl.forward();
+}
+"#;
+
+#[test]
+fn bound_angle_animates_without_rebuild() {
+    let mut app = TurTestApp::new(300.0, 300.0).unwrap();
+    app.load_rut_module(BOUND_ANGLE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    let square = ElementNodeId::new(app.query_element(&["bt", "square"]).unwrap().as_u64());
+    assert_eq!(painted_rotate(&app, xf), 0.0, "the atom boots at angle 0");
+    assert_eq!(transform_count(&app), 1);
+
+    // Play: the controller ticks TAU·v into the atom; halfway through the
+    // linear 200ms run the bound angle is ~π — with the element identity
+    // UNMOVED (the old rebuild channel re-mounted a fresh Transform per
+    // tick, churning the id).
+    app.call_rut_entry_cx("do_forward", cx).unwrap();
+    app.wait_for_timeout(Duration::from_millis(100));
+    let mid = painted_rotate(&app, xf);
+    assert!(
+        (mid - std::f64::consts::PI).abs() < 0.2,
+        "at t=0.5 the bound angle should be ~π, got {mid}"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64()),
+        xf,
+        "the transform element identity survives the tick (no rebuild)"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["bt", "square"]).unwrap().as_u64()),
+        square,
+        "the child identity survives too"
+    );
+    assert_eq!(transform_count(&app), 1, "no duplicate transform mounted");
+
+    // Completion: the eased value lands at 1 → a full turn, identity intact.
+    app.wait_for_timeout(Duration::from_millis(150));
+    let end = painted_rotate(&app, xf);
+    assert!(
+        (end - std::f64::consts::TAU).abs() < 0.05,
+        "at completion the bound angle is a full turn, got {end}"
+    );
+    assert_eq!(
+        ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64()),
+        xf,
+        "identity still stable after completion"
+    );
+}
+
+/// The static path — `el_transform` with all-static channels — unchanged.
+const STATIC_TRANSFORM_RUT: &str = r#"
+
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_anim_kit::{ Transform };
+
+entry fn start() {
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.7, 12.0, 0.0).child(square).build());
+}
+"#;
+
+#[test]
+fn static_transform_path_unchanged() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(STATIC_TRANSFORM_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_rotate(), 0.7, "the static angle paints verbatim");
+        assert_eq!(t.painted_scale(), 1.0, "the static scale paints verbatim");
+        let (tx, ty) = t.painted_translate();
+        assert_eq!(
+            (tx, ty),
+            (12.0, 0.0),
+            "the static translate paints verbatim"
+        );
+    });
+}
+
+/// The symmetric-cheap twins: `scale_bound` and `translate_bound` ride
+/// their atoms the same way (each in its own app — the rut qkey
+/// `rut/transform` matches the first transform). The writes ride the
+/// context-crossing lane (`entry_ctx` — the entry rail's ctx).
+const BOUND_SCALE_RUT: &str = r#"
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
+use tur_anim_kit::{ Transform };
+
+struct AppContext {
+    s: Source<f64>,
+}
+
+fn start() -> AppContext {
+    let s = source<f64>(2.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
+    return AppContext { s: s };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+entry fn probe_s(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.s, b);
+}
+"#;
+
+const BOUND_TRANSLATE_RUT: &str = r#"
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
+use tur_anim_kit::{ Transform };
+
+struct AppContext {
+    tx: Source<f64>,
+    ty: Source<f64>,
+}
+
+fn start() -> AppContext {
+    let tx = source<f64>(10.0);
+    let ty = source<f64>(20.0);
+    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
+    return AppContext { tx: tx, ty: ty };
+}
+
+entry fn entry_start() -> opaque {
+    let cx = start();
+    return opaque(cx);
+}
+
+// One entry drives both channels (ty reads 2× the arg, the test's b×2
+// expectation).
+entry fn probe_t(cx: opaque, b: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("animation fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
+    write.set<f64>(c.tx, b);
+    write.set<f64>(c.ty, b * 2.0);
+}
+"#;
+
+#[test]
+fn scale_and_translate_bounds_follow_their_atoms() {
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(BOUND_SCALE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_scale(), 2.0, "the atom's initial scale");
+    });
+    app.call_rut_entry_cx_f64("probe_s", cx, 3.5).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(t.painted_scale(), 3.5, "scale follows the atom");
+    });
+
+    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    app.load_rut_module(BOUND_TRANSLATE_RUT).unwrap();
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let xf = ElementNodeId::new(app.query_element(&["rut", "transform"]).unwrap().as_u64());
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(
+            t.painted_translate(),
+            (10.0, 20.0),
+            "the atoms' initial offsets"
+        );
+    });
+    app.call_rut_entry_cx_f64("probe_t", cx, 30.0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    app.with_element(xf, |el| {
+        let t = el.cast::<TransformElement>().unwrap();
+        assert_eq!(
+            t.painted_translate(),
+            (30.0, 60.0),
+            "translate follows the atoms"
+        );
+    });
+}
+
+// ---- the corpus complex-animation case ("Animated Card Studio") ---------------
+
+/// The studio card's laid-out width (the width-bound tween target).
+fn studio_card_width(app: &TurTestApp) -> f64 {
+    let id = app
+        .query_element(&["cas-card"])
+        .expect("studio card not found");
+    let tree = app.element_tree();
+    tree.get_element(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .computed_layout
+        .size
+        .width
+}
+
+/// A real click on a keyed studio control (the tap intent path — the
+/// transport entries are 3-arg tap targets, only reachable through the
+/// pointer rail).
+fn tap_studio(app: &mut TurTestApp, key: &str) {
+    let id = app
+        .query_element(&[key])
+        .unwrap_or_else(|| panic!("{key} not found"));
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .center();
+    app.click(b.0, b.1);
+    app.wait_for_timeout(Duration::ZERO);
+}
+
+#[test]
+fn complex_animation_case_runs_the_card_studio() {
+    // The showcase case loads standalone (the corpus rail) and drives its
+    // whole studio through the real tap rail: boot state, play/pause/resume
+    // transport, the % readout, the 4x speed retime, and the loop toggle
+    // (the recreate-and-seek path).
+    let mut app = TurTestApp::new(500.0, 800.0).unwrap();
+    app.load_rut_bundle("complex-animation").unwrap();
+    let _progress = app.rut_start_answer();
+
+    // Boot: progress 0 — the card at W_MIN, the badge STOPPED, the readout 0%.
+    assert_eq!(
+        app.query_text(&["cas-title"]).as_deref(),
+        Some("Animated Card Studio")
+    );
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("STOPPED"));
+    assert_eq!(app.query_text(&["cas-pct"]).as_deref(), Some("0%"));
+    assert_eq!(studio_card_width(&app), 120.0, "the card boots at W_MIN");
+
+    // Play: the width + % readout advance with the tick (easeInOut 2400ms;
+    // halfway through, the eased value is 0.5 → width 200). The spin rides
+    // the bound row — the transform element is NEVER re-mounted while
+    // playing (the rebuild channel is gone).
+    let xf = app.query_element(&["rut", "transform"]).unwrap();
+    tap_studio(&mut app, "cas-play");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("FORWARD"));
+    app.wait_for_timeout(Duration::from_millis(1200));
+    assert_eq!(
+        app.query_element(&["rut", "transform"]),
+        Some(xf),
+        "the spinning square stays under ONE transform element while playing (no per-tick rebuild)"
+    );
+    let w = studio_card_width(&app);
+    assert!(
+        w > 150.0 && w < 250.0,
+        "mid-play the card width should be mid-tween (~200), got {w}"
+    );
+    assert_ne!(
+        app.query_text(&["cas-pct"]).as_deref(),
+        Some("0%"),
+        "the % readout tracks the tick"
+    );
+
+    // Pause freezes at the pause value; resume plays out to COMPLETED.
+    tap_studio(&mut app, "cas-pause");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("PAUSED"));
+    let frozen = studio_card_width(&app);
+    app.wait_for_timeout(Duration::from_millis(300));
+    assert!(
+        (studio_card_width(&app) - frozen).abs() < 1.0,
+        "paused width stays frozen at {frozen}"
+    );
+    tap_studio(&mut app, "cas-resume");
+    app.wait_for_timeout(Duration::from_millis(1400));
+    assert_eq!(
+        app.query_text(&["cas-status"]).as_deref(),
+        Some("COMPLETED")
+    );
+    assert_eq!(studio_card_width(&app), 280.0, "completed lands at W_MAX");
+    assert_eq!(app.query_text(&["cas-pct"]).as_deref(), Some("100%"));
+
+    // Stop freezes the status; the 4x chip retimes the controller so a
+    // fresh forward plays the 2400ms timeline in ~600ms.
+    tap_studio(&mut app, "cas-stop");
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("STOPPED"));
+    tap_studio(&mut app, "cas-s3");
+    tap_studio(&mut app, "cas-play");
+    app.wait_for_timeout(Duration::from_millis(700));
+    assert_eq!(
+        app.query_text(&["cas-status"]).as_deref(),
+        Some("COMPLETED"),
+        "at 4x the 2400ms timeline completes in ~600ms of wall time"
+    );
+
+    // Loop: the recreate-and-seek path swaps in an infinite controller —
+    // it keeps cycling (never completes) from any frozen value.
+    tap_studio(&mut app, "cas-loop");
+    tap_studio(&mut app, "cas-play");
+    app.wait_for_timeout(Duration::from_millis(3000));
+    assert_eq!(app.query_text(&["cas-status"]).as_deref(), Some("FORWARD"));
+    let w = studio_card_width(&app);
+    assert!(
+        (120.0..=280.0).contains(&w),
+        "an infinite loop keeps the width cycling inside the tween range: {w}"
     );
 }

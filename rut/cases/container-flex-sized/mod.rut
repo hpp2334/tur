@@ -1,0 +1,22 @@
+// container-flex-sized: a Column of fixed-size colored "buttons" with
+// labeled children (the counter-family shapes).
+
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let col = Column().child(qkey_button("btn", "Btn")).child(qkey_button("btn2", "Btn2"));
+    mount(col.build());
+}
+
+// A 100x44 colored pill with a centered 14px label.
+fn qkey_button(key: str, label: str) -> View {
+    let b = Container()
+        .width_height(100.0, 44.0)
+        .color(0x6366F1FFu64)
+        .query_key(key)
+        .child(Text().text(label).font_size(14.0).build());
+    return b.build();
+}

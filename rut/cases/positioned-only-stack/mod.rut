@@ -1,0 +1,18 @@
+// positioned-only-stack: a Stack with ONLY positioned children sizes to
+// the biggest size the incoming constraints allow (Flutter RenderStack).
+
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::layout::stack::{ Positioned, Stack };
+
+entry fn start() {
+    let stack = Stack()
+        .child(Positioned().left(5.0).top(5.0).child(qkey_sized(10.0, 10.0, "dot")).build());
+    mount(Expanded().flex(1.0).child(stack.build()).build());
+}
+
+fn qkey_sized(w: f64, h: f64, key: str) -> View {
+    let b = Container().width_height(w, h).query_key(key);
+    return b.build();
+}

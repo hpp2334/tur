@@ -1,0 +1,40 @@
+// layout-invalidation-reactive-flex: two reactive flex weights — the
+// `set_flex_a` / `set_flex_b` probes flip them (a click would mark extra
+// nodes dirty via the gesture handler and mask the layout-invalidation
+// behavior). The atoms ride the entry args: the pair mints in order, so
+// the b probe addresses a's answer + 1.
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded, Row };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
+
+entry fn start() -> u64 {
+    let flex_a: Readable<f64> = source<f64>(1.0);
+    let flex_b: Readable<f64> = source<f64>(1.0);
+
+    let mut row = Row();
+    let a = Expanded().flex_bound(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
+    row.child(a);
+    let b = Expanded().flex_bound(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
+    row.child(b);
+    mount(row.build());
+    return flex_a.atom_id();
+}
+
+fn qkey_box(key: str, color: u64) -> View {
+    let b = Container().width_height(0.0, 0.0).color(color).query_key(key);
+    return b.build();
+}
+
+// The `__setFlex(a, b)` seams: flip one weight per entry (a direct store
+// write — no gesture, no extra mark_dirty); the atom id rides the entry
+// arg (the probe's handle binds at the call site).
+entry fn set_flex_a(atom: u64, v: f64) {
+    let flex_a = Source<f64>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<f64>(flex_a, v);
+}
+
+entry fn set_flex_b(atom: u64, v: f64) {
+    let flex_b = Source<f64>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<f64>(flex_b, v);
+}

@@ -1,0 +1,33 @@
+// pointer-region-enter-exit-race: two regions sharing one hover atom —
+// moving A->B in a single event must land on "B" (exit-before-enter).
+// The four handlers are mutations over the shared hover source.
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ Cursor, HitTestBehavior };
+
+
+entry fn start() -> u64 {
+    let hover: Readable<str> = source<str>("");
+    let b_a_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set<str>(hover, "A");
+    });
+    let b_a_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set<str>(hover, "");
+    });
+    let b_b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set<str>(hover, "B");
+    });
+    let b_b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set<str>(hover, "");
+    });
+    let mut col = Column();
+
+    let a = Container().width_height(100.0, 50.0).color(0xEF4444FFu64).query_key("a");
+    col.child(MouseRegion().on_enter(b_a_enter).on_exit(b_a_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(a.build()).build());
+
+    let b = Container().width_height(100.0, 50.0).color(0x3B82F6FF).query_key("b");
+    col.child(MouseRegion().on_enter(b_b_enter).on_exit(b_b_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(b.build()).build());
+
+    let t = Text().text_bound(hover).query_key("hover");
+    col.child(t.build());
+    mount(col.build());
+    return hover.atom_id();
+}

@@ -1,0 +1,604 @@
+// todolist: the boa "Tasks" board — a 26px header with the derived
+// "N items · M done" counter, an indigo New Task pill, and task cards
+// (colored checkbox + title/subtitle + X button) in a scrollable list.
+// Tapping a card's checkbox toggles its done state; the X opens the
+// remove-confirm modal (a then_build branch that reads the targeted task
+// at open time); New Task opens the add modal (fresh, blank controllers
+// minted at activation — the modal's buttons capture them).
+//
+// Tasks ride one list source, each item encoded "title|desc|done"; the
+// per-row taps capture the row index (no id rails). Both modals overlay
+// via Condition branches in the root Stack — and unlike the boa
+// reference, NEITHER boots open (the boot-modal bug is not ported).
+use tur_kit::control_flow::control::{ Condition, Each }; use tur_kit::flags::{
+    Align, Axis, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize,
+    StackFit,
+}; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, TextCtrl, UndoCtrl, View, list_new, mount, text_ctrl, undo_ctrl, value_item, value_len }; use tur_kit::image::{ Image, image_resource_svg }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::layout::stack::{ Positioned, Stack }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, mutate, source }; use tur_kit::scroll::{ ScrollView }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
+
+// The boa light palette (Notion / Linear-style).
+let CARD_BG: u64 = 0xFFFFFFFFu64;
+let CARD_BORDER: u64 = 0xE2E8F0FFu64;
+let PAGE_BG: u64 = 0xF8FAFCFFu64;
+let TEXT: u64 = 0x0F172AFFu64;
+let TEXT_MUTED: u64 = 0x64748BFFu64;
+let TEXT_STRIKE: u64 = 0x94A3B8FFu64;
+let ACCENT: u64 = 0x4F46E5FFu64;
+let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+let SUCCESS: u64 = 0x22C55EFFu64;
+let INPUT_BG: u64 = 0xF8FAFCFFu64;
+let INPUT_BORDER: u64 = 0xCBD5E1FFu64;
+let BACKDROP: u64 = 0x0F172A6Eu64;
+let SUBTLE: u64 = 0xF1F5F9FFu64;
+let SUBTLE_FG: u64 = 0x334155FFu64;
+let DANGER: u64 = 0xEF4444FFu64;
+
+// The inline icon SVGs (the boa state.ts icons, single-quoted attrs).
+let SVG_CHECK: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
+let SVG_CLOSE: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#64748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>";
+let SVG_PLUS: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>";
+
+entry fn start() -> u64 {
+    // The board state (all rides by capture — no stash).
+    let tasks = source<opaque>(seed_tasks().raw());
+    let n = source<f64>(0.0);
+    let done = source<f64>(0.0);
+    let add_open = source<bool>(false);
+    let rm_open = source<bool>(false);
+    let rm_tgt = source<f64>(0.0);
+
+    // The icon resources (inline SVG through the image rail; plain u64
+    // resource ids — the builders take them as params).
+    let ico: [u64] = [image_resource_svg(SVG_CHECK), image_resource_svg(SVG_CLOSE), image_resource_svg(SVG_PLUS)];
+
+    // Seed the counters, then hand the header derive its deps.
+    recount(MutationCtx.over(bridge()), tasks, n, done);
+    let count = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"{ctx.get<f64>(n) as u64} items · {ctx.get<f64>(done) as u64} done";
+    });
+
+    let header = Row()
+        .main_alignment(MainAlign.SpaceBetween)
+        .cross_alignment(CrossAlign.Center)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign.Start)
+                .main_axis_size(MainAxisSize.Min)
+                .child(Text().text("Tasks").font_size(26.0).color(TEXT).build())
+                .child(SizedBox(0.0, 4.0).build())
+                .child(Text().text_bound(count).font_size(13.0).color(TEXT_MUTED).query_key("todo-count").build())
+                .build(),
+        )
+        .child(add_button(add_open, ico))
+        .build();
+
+    let scroller = ScrollView()
+        .axis(Axis.Vertical)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign.Stretch)
+                .child(Each(tasks).item_builder(fn (i: u64, s: str) -> View {
+                    return task_row(i, s, tasks, n, done, rm_tgt, rm_open, ico);
+                }).build())
+                .build(),
+        )
+        .build();
+
+    let page = Container()
+        .color(PAGE_BG)
+        .padding(22.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign.Stretch)
+                .child(header)
+                .child(SizedBox(0.0, 18.0).build())
+                .child(Expanded().flex(1.0).child(scroller).build())
+                .build(),
+        )
+        .build();
+
+    // The modals overlay the page; neither boots open (the closed branch
+    // is a zero box — cond_build requires both branches).
+    mount(
+        Stack()
+            .fit(StackFit.Expand)
+            .child(page)
+            .child(
+                Condition(add_open)
+                    .then_build(fn () -> View { return Positioned().left(0.0).top(0.0).right(0.0).bottom(0.0).child(add_modal(tasks, n, done, add_open, ico)).build(); })
+                    .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
+                    .build(),
+            )
+            .child(
+                Condition(rm_open)
+                    .then_build(fn () -> View { return Positioned().left(0.0).top(0.0).right(0.0).bottom(0.0).child(remove_modal(tasks, n, done, rm_tgt, rm_open, ico)).build(); })
+                    .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
+                    .build(),
+            )
+            .build(),
+    );
+    return tasks.atom_id();
+}
+
+// ---- the seed data -------------------------------------------------------------
+
+// The boa state.ts seed list.
+fn seed_tasks() -> ListHandle {
+    let items = list_new();
+    items.push("Buy groceries|Milk, eggs, sourdough, coffee beans|0");
+    items.push("Walk the dog|30 minutes around the park|1");
+    items.push("Finish quarterly report|Q2 numbers + projection slides for Monday's review|0");
+    items.push("Call mom|Birthday planning for Saturday|0");
+    items.push("Read chapter 4|Designing Data-Intensive Applications|0");
+    return items;
+}
+
+// ---- the item parsing (the "title|desc|done" encoding) --------------------------
+
+fn idx_of(s: str, from: i32, c: u32) -> i32 {
+    let n = s.len();
+    let mut k = from;
+    while (k < n) {
+        if (s.code_at(k) == c) {
+            return k;
+        }
+        k = k + 1;
+    }
+    return -1;
+}
+
+fn item_title(s: str) -> str {
+    let p = idx_of(s, 0, 124);
+    if (p < 0) {
+        return s;
+    }
+    return s.slice(0, p);
+}
+
+fn item_desc(s: str) -> str {
+    let a = idx_of(s, 0, 124);
+    if (a < 0) {
+        return "";
+    }
+    let b = idx_of(s, a + 1, 124);
+    if (b < 0) {
+        return "";
+    }
+    return s.slice(a + 1, b);
+}
+
+fn item_done(s: str) -> bool {
+    let n = s.len();
+    if (n == 0) {
+        return false;
+    }
+    return s.code_at(n - 1) == 49;
+}
+
+// ---- the header pieces -----------------------------------------------------------
+
+// The indigo New Task pill (plus glyph + label); its mutation opens the
+// add modal.
+fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
+    let b_open = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(add_open, true);
+    });
+    let face = Container()
+        .padding(10.0)
+        .radius(8.0)
+        .color(ACCENT)
+        .shadow(0x4F46E550u64, 10.0, 0.0, 4.0)
+        .child(
+            Row()
+                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign.Center)
+                .child(icon(ico[2], 13.0))
+                .child(SizedBox(7.0, 0.0).build())
+                .child(Text().text("New Task").font_size(13.0).color(ACCENT_FG).build())
+                .build(),
+        )
+        .build();
+    return MouseRegion()
+        .cursor(Cursor.Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_open)
+                .query_key("todo-add-open")
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// An SVG icon at a display size (the resource id rides by param).
+fn icon(res: u64, size: f64) -> View {
+    return Image(res).width(size).height(size).build();
+}
+
+// ---- the task card ---------------------------------------------------------------
+
+fn task_row(i: u64, s: str, tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
+            rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let title = item_title(s);
+    let desc = item_desc(s);
+    let is_done = item_done(s);
+    let card = Container()
+        .radius(10.0)
+        .padding(14.0)
+        .color(CARD_BG)
+        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .shadow(0x0F172A14u64, 6.0, 0.0, 1.0)
+        .child(
+            Row()
+                .cross_alignment(CrossAlign.Start)
+                .child(checkbox(i, is_done, tasks, n, done, ico))
+                .child(SizedBox(12.0, 0.0).build())
+                .child(Expanded().flex(1.0).child(title_block(title, desc, is_done)).build())
+                .child(SizedBox(8.0, 0.0).build())
+                .child(delete_button(i, rm_tgt, rm_open, ico))
+                .build(),
+        )
+        .build();
+    return Column()
+        .cross_alignment(CrossAlign.Stretch)
+        .main_axis_size(MainAxisSize.Min)
+        .child(row_spacer(i))
+        .child(card)
+        .build();
+}
+
+// The 10px gutter between cards (none above the first).
+fn row_spacer(i: u64) -> View {
+    if (i > 0) {
+        return SizedBox(0.0, 10.0).build();
+    }
+    return SizedBox(0.0, 0.0).build();
+}
+
+// The done toggle: a 20px rounded box — green with a check when done, a
+// bordered empty square otherwise. The tap captures the row index.
+fn checkbox(i: u64, done: bool, tasks: Readable<opaque>, n: Readable<f64>,
+            done_count: Readable<f64>, ico: [u64]) -> View {
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
+        toggle_task(ctx, tasks, i);
+        recount(ctx, tasks, n, done_count);
+    });
+    return MouseRegion()
+        .cursor(Cursor.Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_toggle)
+                .query_key("todo-check")
+                .child(checkbox_face(done, ico))
+                .build(),
+        )
+        .build();
+}
+
+fn checkbox_face(done: bool, ico: [u64]) -> View {
+    if (done) {
+        return Container()
+            .width_height(20.0, 20.0)
+            .radius(6.0)
+            .color(SUCCESS)
+            .alignment(Align.Center)
+            .child(icon(ico[0], 13.0))
+            .build();
+    }
+    return Container()
+        .width_height(20.0, 20.0)
+        .radius(6.0)
+        .color(CARD_BG)
+        .border(INPUT_BORDER, 1.5, BorderPosition.Inside)
+        .build();
+}
+
+// The title + optional subtitle; done tasks mute the title.
+fn title_block(title: str, desc: str, done: bool) -> View {
+    let mut fg = TEXT;
+    if (done) {
+        fg = TEXT_STRIKE;
+    }
+    let t = Text().text(title).font_size(14.0).color(fg).build();
+    if (desc == "") {
+        return Column()
+            .cross_alignment(CrossAlign.Start)
+            .main_axis_size(MainAxisSize.Min)
+            .child(t)
+            .build();
+    }
+    return Column()
+        .cross_alignment(CrossAlign.Start)
+        .main_axis_size(MainAxisSize.Min)
+        .child(t)
+        .child(SizedBox(0.0, 3.0).build())
+        .child(Text().text(desc).font_size(12.0).color(TEXT_MUTED).build())
+        .build();
+}
+
+// The X button (opens the remove-confirm modal for this row — the index
+// rides the capture).
+fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let b_rm = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(rm_tgt, i as f64);
+        ctx.set<bool>(rm_open, true);
+    });
+    let face = Container()
+        .width_height(26.0, 26.0)
+        .radius(6.0)
+        .color(SUBTLE)
+        .alignment(Align.Center)
+        .child(icon(ico[1], 13.0))
+        .build();
+    return MouseRegion()
+        .cursor(Cursor.Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_rm)
+                .query_key("todo-delete")
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// ---- the modals -------------------------------------------------------------------
+
+// The modal shell: a scrim (tap = dismiss) around a card that swallows
+// its own taps (both handlers ride by parameter).
+fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: View) -> View {
+    let inner = PointerInteract()
+        .behavior(HitTestBehavior.Opaque)
+        .on_click(swallow)
+        .child(card)
+        .build();
+    let scrim = Container().color(BACKDROP).alignment(Align.Center).child(inner).build();
+    return PointerInteract()
+        .behavior(HitTestBehavior.Opaque)
+        .on_click(scrim_tap)
+        .child(scrim)
+        .build();
+}
+
+// A standard modal button (the boa Button).
+fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> View {
+    let face = Container()
+        .padding(9.0)
+        .radius(7.0)
+        .color(bg)
+        .child(Text().text(label).font_size(13.0).color(fg).build())
+        .build();
+    return MouseRegion()
+        .cursor(Cursor.Pointer)
+        .child(
+            PointerInteract()
+                .on_click(m)
+                .query_key(key)
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// A labelled field (the boa Field): the caption over the bordered input.
+fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: str) -> View {
+    return Column()
+        .cross_alignment(CrossAlign.Stretch)
+        .main_axis_size(MainAxisSize.Min)
+        .child(Text().text(caption).font_size(11.0).color(TEXT_MUTED).build())
+        .child(SizedBox(0.0, 6.0).build())
+        .child(
+            Container()
+                .radius(7.0)
+                .padding(9.0)
+                .color(INPUT_BG)
+                .border(INPUT_BORDER, 1.0, BorderPosition.Inside)
+                .child(
+                    Input()
+                        .controller(ctrl)
+                        .undo(undo)
+                        .placeholder(placeholder)
+                        .font_size(14.0)
+                        .color(TEXT)
+                        .placeholder_color(TEXT_MUTED)
+                        .cursor_color(ACCENT)
+                        .query_key(key)
+                        .width_height(0.0, 22.0)
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+}
+
+// The add modal — built at ACTIVATION, so its controllers mint fresh and
+// blank every open; the buttons CAPTURE them (no stash round-trip).
+fn add_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
+             add_open: Readable<bool>, ico: [u64]) -> View {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let dctrl = text_ctrl();
+    let undo2 = undo_ctrl();
+
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(add_open, false);
+    });
+    // Add Task: the non-empty title appends a fresh open task, then the
+    // modal closes (the composed close is an inline write).
+    let b_submit = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let title = trim(ctrl.text());
+        if (title == "") {
+            return;
+        }
+        let desc = trim(dctrl.text());
+        append_task(ctx, tasks, f"{title}|{desc}|0");
+        recount(ctx, tasks, n, done);
+        ctx.set<bool>(add_open, false);
+    });
+
+    let card = Container()
+        .width(380.0)
+        .radius(14.0)
+        .padding(22.0)
+        .color(CARD_BG)
+        .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign.Stretch)
+                .main_axis_size(MainAxisSize.Min)
+                .child(Text().text("New Task").font_size(17.0).color(TEXT).build())
+                .child(SizedBox(0.0, 16.0).build())
+                .child(field("Title", "What needs doing?", ctrl, undo, "todo-add-title"))
+                .child(SizedBox(0.0, 14.0).build())
+                .child(field("Description", "Optional details", dctrl, undo2, "todo-add-desc"))
+                .child(SizedBox(0.0, 20.0).build())
+                .child(
+                    Row()
+                        .main_alignment(MainAlign.End)
+                        .main_axis_size(MainAxisSize.Min)
+                        .child(modal_button("todo-add-cancel", "Cancel", SUBTLE, SUBTLE_FG, b_cancel))
+                        .child(SizedBox(8.0, 0.0).build())
+                        .child(modal_button("todo-add-submit", "Add Task", ACCENT, ACCENT_FG, b_submit))
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    return modal_shell(b_cancel, swallow, card);
+}
+
+// The remove-confirm modal — built at ACTIVATION for the targeted task
+// (the branch reads the live target off the source).
+fn remove_modal(tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>,
+                rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let read = MutationCtx.over(bridge());
+    let target = read.get<f64>(rm_tgt) as u64;
+    let item = value_item(read.get<opaque>(tasks), target);
+    let title = item_title(item);
+    // Bound-quote locals: f-string braces take no escape sequences.
+    let q: str = "\"";
+    let said = f"{q}{title}{q} will be permanently removed.";
+
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(rm_open, false);
+    });
+    // Remove for real: rebuild the list without the target, recount, close.
+    let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let old = ctx.get<opaque>(tasks);
+        let fresh = list_new();
+        let count = value_len(old);
+        let mut k: u64 = 0;
+        while (k < count) {
+            if (k != target) {
+                fresh.push(value_item(old, k));
+            }
+            k = k + 1;
+        }
+        ctx.set<opaque>(tasks, fresh.raw());
+        recount(ctx, tasks, n, done);
+        ctx.set<bool>(rm_open, false);
+    });
+
+    let card = Container()
+        .width(340.0)
+        .radius(14.0)
+        .padding(22.0)
+        .color(CARD_BG)
+        .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign.Stretch)
+                .main_axis_size(MainAxisSize.Min)
+                .child(Text().text("Remove task?").font_size(16.0).color(TEXT).build())
+                .child(SizedBox(0.0, 8.0).build())
+                .child(Text().text(said).font_size(13.0).color(TEXT_MUTED).query_key("todo-rm-msg").build())
+                .child(SizedBox(0.0, 18.0).build())
+                .child(
+                    Row()
+                        .main_alignment(MainAlign.End)
+                        .main_axis_size(MainAxisSize.Min)
+                        .child(modal_button("todo-rm-cancel", "Cancel", SUBTLE, SUBTLE_FG, b_cancel))
+                        .child(SizedBox(8.0, 0.0).build())
+                        .child(modal_button("todo-rm-confirm", "Remove", DANGER, ACCENT_FG, b_confirm))
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    return modal_shell(b_cancel, swallow, card);
+}
+
+// ---- the list writes -------------------------------------------------------------
+
+// Checkbox tap helper: flip the row's done flag (rewrite the list source —
+// the Each rebuilds; the derive recount follows).
+fn toggle_task(ctx: MutationCtx, tasks: Readable<opaque>, idx: u64) {
+    let old = ctx.get<opaque>(tasks);
+    let count = value_len(old);
+    let fresh = list_new();
+    let mut k: u64 = 0;
+    while (k < count) {
+        let item = value_item(old, k);
+        if (k == idx) {
+            let body = item.slice(0, item.len() - 1);
+            if (item_done(item)) {
+                fresh.push(f"{body}0");
+            } else {
+                fresh.push(f"{body}1");
+            }
+        } else {
+            fresh.push(item);
+        }
+        k = k + 1;
+    }
+    ctx.set<opaque>(tasks, fresh.raw());
+}
+
+// The add-modal append (the encoded row arrives prebuilt).
+fn append_task(ctx: MutationCtx, tasks: Readable<opaque>, row: str) {
+    let old = ctx.get<opaque>(tasks);
+    let fresh = list_new();
+    let count = value_len(old);
+    let mut k: u64 = 0;
+    while (k < count) {
+        fresh.push(value_item(old, k));
+        k = k + 1;
+    }
+    fresh.push(row);
+    ctx.set<opaque>(tasks, fresh.raw());
+}
+
+// ---- the counters -------------------------------------------------------------------
+
+// Recount items + dones off the live list (the header derive's deps).
+fn recount(ctx: MutationCtx, tasks: Readable<opaque>, n: Readable<f64>, done: Readable<f64>) {
+    let old = ctx.get<opaque>(tasks);
+    let count = value_len(old);
+    let mut dones: u64 = 0;
+    let mut k: u64 = 0;
+    while (k < count) {
+        if (item_done(value_item(old, k))) {
+            dones = dones + 1;
+        }
+        k = k + 1;
+    }
+    ctx.set<f64>(n, count as f64);
+    ctx.set<f64>(done, dones as f64);
+}
+
+// ASCII trim (the spaces around a draft).
+fn trim(s: str) -> str {
+    let n = s.len();
+    let mut a = 0;
+    while (a < n && s.code_at(a) == 32) {
+        a = a + 1;
+    }
+    let mut b = n;
+    while (b > a && s.code_at(b - 1) == 32) {
+        b = b - 1;
+    }
+    return s.slice(a, b);
+}

@@ -3,7 +3,6 @@ const path = require("path");
 const fs = require("fs");
 
 const root = path.join(__dirname, "..");
-const jsDir = path.join(root, "js");
 const distDir = path.join(root, "demo", "website", "dist");
 const projectName = "tur-website";
 
@@ -21,8 +20,8 @@ function getWranglerBin() {
   return bin;
 }
 
-run("pnpm install", { cwd: jsDir });
-run("pnpm build", { cwd: jsDir });
+run("pnpm install");
+run("pnpm build");
 
 if (!fs.existsSync(distDir)) {
   console.error(`dist directory not found: ${distDir}`);

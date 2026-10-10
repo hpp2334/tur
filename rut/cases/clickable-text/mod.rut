@@ -1,0 +1,22 @@
+// clickable-text: a PointerInteract wrapping a bound Text — the click
+// swaps the atom's content. The handler is a MUTATION over the
+// MutationCtx (the triad: source / derive / mutate); the source binds by
+// capture — no ids, no stash.
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let content: Readable<str> = source<str>("before");
+    let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<str>(content, "after");
+    });
+    let col = Column().cross_alignment(CrossAlign.Start);
+    let t = Text().text_bound(content).query_key("click-text");
+    col.child(PointerInteract().on_click(b_click).child(t.build()).build());
+    mount(col.build());
+    return content.atom_id();
+}

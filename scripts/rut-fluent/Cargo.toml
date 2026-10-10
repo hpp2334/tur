@@ -1,0 +1,12 @@
+[package]
+name = "rut-fluent"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "3165f9373bac04c77493d0331cdf7c7d72b3b85f" }
+
+[workspace]

@@ -40,7 +40,7 @@ fn text_run_brushes(cmds: &[RenderCommand]) -> Vec<[u8; 4]> {
 }
 
 fn mount(app: &mut TurTestApp, source: &str) {
-    app.eval_module_source(source).expect("mount");
+    app.load_rut_module(source).expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
@@ -59,14 +59,15 @@ fn placeholder_default_is_default_text_color_mixed_50pct_alpha() {
     mount(
         &mut app,
         r#"
-        import { mount, Input } from "tur:std";
-        mount(Input()
-            .placeholder("hint")
-            .fontSize(20)
-            .width(300)
-            .height(40)
-            .build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let input = Input().placeholder("hint").font_size(20.0).width_height(300.0, 40.0);
+    mount(input.build());
+}
+"#,
     );
 
     let brushes = text_run_brushes(&last.borrow());
@@ -92,15 +93,19 @@ fn placeholder_default_follows_explicit_text_color() {
     mount(
         &mut app,
         r#"
-        import { mount, Input, createColor } from "tur:std";
-        mount(Input()
-            .placeholder("hint")
-            .color(createColor(20, 60, 220, 255))
-            .fontSize(20)
-            .width(300)
-            .height(40)
-            .build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let input = Input()
+        .placeholder("hint")
+        .color(0x143CDCFFu64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
+    mount(input.build());
+}
+"#,
     );
 
     let brushes = text_run_brushes(&last.borrow());
@@ -126,15 +131,19 @@ fn placeholder_default_multiplies_existing_alpha() {
     mount(
         &mut app,
         r#"
-        import { mount, Input, createColor } from "tur:std";
-        mount(Input()
-            .placeholder("hint")
-            .color(createColor(0, 0, 0, 200))
-            .fontSize(20)
-            .width(300)
-            .height(40)
-            .build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let input = Input()
+        .placeholder("hint")
+        .color(0x000000C8u64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
+    mount(input.build());
+}
+"#,
     );
 
     let brushes = text_run_brushes(&last.borrow());
@@ -159,16 +168,20 @@ fn explicit_placeholder_color_wins() {
     mount(
         &mut app,
         r#"
-        import { mount, Input, createColor } from "tur:std";
-        mount(Input()
-            .placeholder("hint")
-            .color(createColor(20, 60, 220, 255))
-            .placeholderColor(createColor(0, 128, 0, 255))
-            .fontSize(20)
-            .width(300)
-            .height(40)
-            .build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let input = Input()
+        .placeholder("hint")
+        .color(0x143CDCFFu64)
+        .placeholder_color(0x008000FFu64)
+        .font_size(20.0)
+        .width_height(300.0, 40.0);
+    mount(input.build());
+}
+"#,
     );
 
     let brushes = text_run_brushes(&last.borrow());

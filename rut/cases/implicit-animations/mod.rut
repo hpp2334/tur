@@ -1,0 +1,145 @@
+// implicit-animations: the Animated* twin — one shared controller eases
+// 0..1 and the a_tick mutation maps the eased progress into the box's
+// animated channels (color_bound sky-blue→indigo, radius_bound 12→40, the
+// SHADOW BLUR bound 16→32 over the static [0,8] offset, the slide
+// left_bound 30→160 and the label's opacity 0.45→1.0). The card itself is
+// FIXED 150×160 (only the decoration animates — the boa
+// AnimatedContainer retarget). The toggle flips the `expanded` atom and
+// retargets the controller (forward/reverse) — the
+// ImplicitlyAnimatedWidget retarget, case-side. The tick and the toggle
+// are MUTATIONS over the channel handles they capture — no ids, no
+// stash; the boot brush seed rides the root Lifecycle's on_mount.
+//
+// Pure kit: every channel is a bound prop over the progress the tick
+// writes — the animation rows end-to-end with no per-channel controllers.
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::control_flow::lifecycle::{ Lifecycle };
+use tur_kit::flags::{ Align, CrossAlign, MainAlign, MainAxisSize };
+use tur_kit::gesture::pointer::{ MountEvent, PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_anim_kit::{ AnimCtrl, Opacity, anim_ctrl, color_tween_lerp, tween_lerp };
+
+// The tween endpoints (the boa card, retargeted compact ↔ expanded). The
+// card box is FIXED 150×160 — the boa AnimatedContainer animates only the
+// decoration.
+let R_MIN: f64 = 12.0;
+let R_MAX: f64 = 40.0;
+let X_MIN: f64 = 30.0;
+let X_MAX: f64 = 160.0;
+let A_MIN: f64 = 0.45;
+let A_MAX: f64 = 1.0;
+let B_MIN: f64 = 16.0;
+let B_MAX: f64 = 32.0;
+let BLUE: u64 = 0x0EA5E9FFu64; // compact — the sky-blue state
+let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
+
+entry fn start() -> u64 {
+    let expanded: Readable<bool> = source<bool>(false);
+    let progress: Readable<f64> = source<f64>(0.0);
+    let color: Readable<u64> = source<u64>(0);
+    let blur: Readable<f64> = source<f64>(B_MIN);
+    let radius: Readable<f64> = source<f64>(R_MIN);
+    let left: Readable<f64> = source<f64>(X_MIN);
+    let fade: Readable<f64> = source<f64>(A_MIN);
+
+    // The tick: eased progress → every animated channel (the channels
+    // ride by capture).
+    let a_tick = mutate<f64>(fn (ctx: MutationCtx, t: f64) {
+        ctx.set<f64>(blur, tween_lerp(B_MIN, B_MAX, t));
+        ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, t));
+        ctx.set<f64>(left, tween_lerp(X_MIN, X_MAX, t));
+        ctx.set<f64>(fade, tween_lerp(A_MIN, A_MAX, t));
+        ctx.set<u64>(color, color_tween_lerp(BLUE, INDIGO, t));
+    });
+    let ctrl = anim_ctrl(600.0, "easeInOut", 1, a_tick, nil);
+
+    // The toggle: flip the state atom, then retarget the shared
+    // controller — forward plays toward the expanded state, reverse back
+    // to compact.
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(expanded, !ctx.get<bool>(expanded));
+        if (ctx.get<bool>(expanded)) {
+            ctrl.forward();
+        } else {
+            ctrl.reverse();
+        }
+    });
+
+    // The boot brush seed (the compact sky-blue state; the f64 channels
+    // seed at their mints above). The lifecycle surface delivers the
+    // typed `MountEvent`.
+    let seed = mutate<MountEvent>(fn (ctx: MutationCtx, _ev: MountEvent) {
+        ctx.set<u64>(color, BLUE);
+    });
+
+    // The Compact↔Expanded label rides the state atom (a Condition swap).
+    let label = Condition(expanded)
+        .then_build(fn () -> View { return Text().text("Expanded").font_size(18.0).color(0xFFFFFFFFu64).build(); })
+        .else_build(fn () -> View { return Text().text("Compact").font_size(18.0).color(0xFFFFFFFFu64).build(); })
+        .build();
+
+    // The animated box: the FIXED 150×160 card (the boa AnimatedContainer
+    // shape — only the decoration animates); color + radius ride their
+    // atoms, the shadow is the static [0,8] offset with the bound blur.
+    let box_inner = Container()
+        .width(150.0)
+        .height(160.0)
+        .color_bound(color)
+        .radius_bound(radius)
+        .shadow(0x0F172A78u64, 16.0, 0.0, 8.0)
+        .shadow_blur_bound(blur)
+        .alignment(Align.Center)
+        .query_key("animated-box")
+        .child(label)
+        .build();
+    let faded = Opacity(1.0).bound(fade).child(box_inner).build();
+
+    // The slide channel: the box glides left ↔ right inside the canvas
+    // (the boa AnimatedPositioned).
+    let card = Stack()
+        .child(SizedBox(340.0, 220.0).build())
+        .child(Positioned().left_bound(left).top(30.0).child(faded).build())
+        .build();
+
+    let toggle = PointerInteract()
+        .on_click(b_toggle)
+        .query_key("implicit-toggle")
+        .child(
+            Container()
+                .padding(10.0)
+                .radius(8.0)
+                .color(0x1E293BFFu64)
+                .child(
+                    Condition(expanded)
+                        .then_build(fn () -> View { return Text().text("◀ Compact").font_size(12.0).color(0xE2E8F0FFu64).build(); })
+                        .else_build(fn () -> View { return Text().text("Expand ▶").font_size(12.0).color(0xE2E8F0FFu64).build(); })
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+
+    let col = Column()
+        .main_alignment(MainAlign.Center)
+        .cross_alignment(CrossAlign.Center)
+        .main_axis_size(MainAxisSize.Min)
+        .child(Text().text("Implicit Animations").font_size(16.0).color(0x0F172AFFu64).query_key("implicit-title").build())
+        .child(SizedBox(0.0, 4.0).build())
+        .child(Text().text("AnimatedContainer · AnimatedOpacity · AnimatedPositioned").font_size(10.0).color(0x64748BFFu64).build())
+        .child(SizedBox(0.0, 24.0).build())
+        .child(card)
+        .child(SizedBox(0.0, 24.0).build())
+        .child(Row().main_axis_size(MainAxisSize.Min).child(toggle).build())
+        .build();
+
+    // The root Lifecycle fires the brush seed at mount (a transparent
+    // pass-through around the unchanged page chain).
+    let page = Expanded().flex(1.0).child(Container().color(0xF8FAFCFFu64).child(col).build()).build();
+    mount(Lifecycle().on_mount(seed).child(page).build());
+    return expanded.atom_id();
+}

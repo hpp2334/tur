@@ -11,42 +11,36 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn flex_degenerate_unbounded_cases_degrade_finitely() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import {
-            mount,
-            Column,
-            CrossAxisAlignment,
-            Expanded,
-            Row,
-            SizedBox,
-        } from "tur:std";
 
-        mount(Column()
-    .children([
-                // Stretch Row under an unbounded cross axis (non-flex child
-                // of a Column): Stretch degrades to loose cross.
-                Row()
-                    .crossAlignment(CrossAxisAlignment.Stretch)
-                    .queryKey(["stretch-row"])
-                    .children([SizedBox()
-    .width(50)
-    .build()])
-                    .build(),
-                // Expanded inside a Column with unbounded height: the flex
-                // child lays out as inflexible (natural size), never a
-                // zero slot and never infinity.
-                Column()
-                    .queryKey(["flex-col"])
-                    .children([Expanded()
-    .child(SizedBox()
-     .height(50)
-     .build())
-    .build()])
-                    .build(),
-            ])
-    .build());
-    "#,
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+
+entry fn start() {
+    let mut col = Column();
+
+    // Stretch Row under an unbounded cross axis (non-flex child of a
+    // Column): Stretch degrades to loose cross.
+    let stretch_row = Row()
+        .query_key("stretch-row")
+        .cross_alignment(CrossAlign.Stretch)
+        .child(SizedBox(50.0, 0.0).child(Container().build()).build());
+    col.child(stretch_row.build());
+
+    // Expanded inside a Column with unbounded height: the flex child lays
+    // out as inflexible (natural size), never a zero slot and never
+    // infinity.
+    let mut flex_col = Column().query_key("flex-col");
+    let sized = Container().width_height(10.0, 50.0);
+    flex_col.child(Expanded().flex(1.0).child(sized.build()).build());
+    col.child(flex_col.build());
+
+    mount(col.build());
+}
+"#,
     )
     .unwrap();
 

@@ -1,23 +1,24 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::object::builtins::{JsArray, JsFunction};
-use boa_engine::{Context, JsValue};
-
 use crate::core::edgy::reactive::AnyReadable;
+use crate::core::edgy::value::Value;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{View, ViewCx, extract_view, read_atom_raw};
+use crate::core::rut_runtime::{RutHandles, VmFace, opaque_to_view};
+use crate::core::view::{View, ViewCx};
+use rut_vm::OpaqueRef;
 
 // ---------------------------------------------------------------------------
-// EachView — render one child per item of a reactive array.
+// EachView — render one child per item of a list.
 //
-// `items` is an atom (source or derived) holding a JS array. `build` is a JS
-// function `(item, index) => Element` invoked once per item to produce
-// that item's subtree. Whenever the `items` atom changes, the mounted item
-// subtrees are rebuilt.
+// `items` is either a reactive atom (a native `Value::List`) or a static
+// list authored at start time. `build` is the rut-native item builder: a
+// kit-sealed fn box (`opaque(cb)`) fired through the guarded VM face via
+// the kit's `__tur_cb_build2` dispatch entry (fuel-capped, depth-limited,
+// no-mount-guarded, traps reported — the same flush-time-call law the
+// derive rows formalize). Whenever the `items` atom changes, the mounted
+// item subtrees are rebuilt.
 //
 // EachView is a **fragment**: it hosts its item subtrees in the tree, but
 // the enclosing flex lays those items out directly as its own children —
@@ -26,64 +27,94 @@ use crate::core::view::{View, ViewCx, extract_view, read_atom_raw};
 // content-sized, with no greedy fill.
 // ---------------------------------------------------------------------------
 
+/// The item-builder entry: the sealed fn box + everything a guarded face
+/// call needs (the row captures `face` / `handles` off the boot handles).
+#[derive(Clone)]
+pub struct EachBuilder {
+    pub cb: OpaqueRef,
+    pub face: Rc<VmFace>,
+    pub handles: Rc<RutHandles>,
+}
+
+impl EachBuilder {
+    /// Resolve the item spec for `(index, item)`. Items cross the
+    /// dispatch entry as strings (the C2 gate's shape; structured items
+    /// ride the value rows).
+    fn build(&self, index: u64, item: &Value) -> Option<Rc<dyn View>> {
+        let item_str = item.as_str().unwrap_or_default();
+        let handle: Result<OpaqueRef, _> = self.face.call(
+            &self.handles,
+            "__tur_cb_build2",
+            (self.cb.clone(), index, item_str),
+        );
+        // Face calls report their own traps (error rail); a failed item
+        // degrades to "not built".
+        handle.ok().and_then(|h| opaque_to_view(&h))
+    }
+}
+
 #[derive(Clone)]
 pub struct EachView {
-    items: AnyReadable,
-    build: JsFunction,
+    /// The reactive items atom (a native `Value::List`) — when bound, the
+    /// mounted items rebuild on every change.
+    items: Option<AnyReadable>,
+    /// Static items (no atom bound) — authored at start time.
+    items_static: Vec<Value>,
+    build: EachBuilder,
     query_key: Option<Vec<String>>,
 }
 
-/// Invoke the JS `build(item, index)` closure, returning the produced spec.
-fn build_item_spec(
-    builder: &JsFunction,
-    item: &JsValue,
-    index: u64,
-    boa: &mut Context,
-) -> Option<Rc<dyn View>> {
-    let result = builder
-        .call(
-            &JsValue::undefined(),
-            &[item.clone(), JsValue::from(index as f64)],
-            boa,
-        )
-        .ok()?;
-    extract_view(&result)
-}
-
 impl EachView {
-    /// Read the current `items` array from the store and build one child per
-    /// entry under `fragment_id`. Returns the built children in array order.
-    fn build_items(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        fragment_id: FragmentNodeId,
-    ) -> Vec<NodeId> {
-        let raw = read_atom_raw(cx, self.items, boa);
-        let Some(arr) = raw
-            .as_object()
-            .and_then(|o| JsArray::from_object(o.clone()).ok())
-        else {
+    /// Rut-rail constructor (`core::rut_runtime`): a reactive list atom or
+    /// static items + the entry-fn item builder.
+    pub fn new_rut(
+        items: Option<AnyReadable>,
+        items_static: Vec<Value>,
+        build: EachBuilder,
+    ) -> Self {
+        EachView {
+            items,
+            items_static,
+            build,
+            query_key: Some(vec!["rut".to_string(), "each".to_string()]),
+        }
+    }
+
+    /// Read the current items (the atom when bound, else the static list)
+    /// and build one child per entry under `fragment_id`. Returns the built
+    /// children in array order.
+    fn build_items(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
+        let Some(atom) = self.items else {
+            return self.build_from(cx, &self.items_static, fragment_id);
+        };
+        let store = cx.store_read_only();
+        let value = store.read(atom);
+        let Value::List(items) = &value else {
             return Vec::new();
         };
-        let len = arr.length(boa).unwrap_or(0);
+        self.build_from(cx, items, fragment_id)
+    }
 
-        let mut out = Vec::with_capacity(len as usize);
-        for i in 0..len as i64 {
-            let Ok(item) = arr.at(i, boa) else {
-                continue;
-            };
-            let Some(spec) = build_item_spec(&self.build, &item, i as u64, boa) else {
-                continue;
-            };
-            out.push(spec.build(cx, boa, NodeId::from(fragment_id)));
+    /// Build the item specs into the tree under `fragment_id` (each
+    /// auto-links to the fragment).
+    fn build_from(
+        &self,
+        cx: &mut dyn ViewCx,
+        items: &[Value],
+        fragment_id: FragmentNodeId,
+    ) -> Vec<NodeId> {
+        let mut out = Vec::with_capacity(items.len());
+        for (index, item) in items.iter().enumerate() {
+            if let Some(spec) = self.build.build(index as u64, item) {
+                out.push(spec.build(cx, NodeId::from(fragment_id)));
+            }
         }
         out
     }
 }
 
 impl View for EachView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
@@ -107,7 +138,7 @@ impl View for EachView {
         cx.insert_fragment(host);
 
         // Build items under `frag_id` — each auto-links to the fragment.
-        self.build_items(cx, boa, frag_id);
+        self.build_items(cx, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -137,33 +168,20 @@ impl FragmentKind for EachFragment {
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        cx.subscribe_readable(self.view.items);
+        if let Some(atom) = self.view.items {
+            cx.subscribe_readable(atom);
+        }
     }
 
     fn perform_update(
         &mut self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
         // Rebuild-all reconciliation: tear down every previously mounted item
         // and rebuild from the current array. Simple and correct; the item
-        // subtrees are stateless widgets so rebuilding them is cheap.
-        Some(self.view.build_items(cx, boa, fragment_id))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl EachView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        Some(EachView {
-            items: p.readable("items")?,
-            build: p.function("build")?,
-            query_key: p.query_key("queryKey"),
-        })
+        // subtrees are stateless widgets so rebuilding them is cheap. The
+        // builder entries run through the guarded face — flush-safe.
+        Some(self.view.build_items(cx, fragment_id))
     }
 }

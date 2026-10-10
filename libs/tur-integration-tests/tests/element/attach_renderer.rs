@@ -26,13 +26,13 @@ use tur_native::NativeFontLoader;
 /// the remaining flex space) so a resize dirties it and flushes ship real
 /// render batches.
 const SOURCE: &str = r##"
-import { Container, createColor, mount } from "tur:std";
-export function start() {
-  mount(Container()
-    .width(40)
-    .height(40)
-    .color(createColor(51, 102, 153, 255))
-    .build());
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+
+entry fn start() {
+    let b = Container().width_height(40.0, 40.0).color(0x336699FFu64);
+    mount(b.build());
 }
 "##;
 
@@ -120,7 +120,7 @@ fn renderer_slot_attach_detach_cycle() {
 
     // The module mounts + the tree paints — while detached the batches are
     // discarded (no renderer to receive them; no panic).
-    block_on(app.load_module(SOURCE)).expect("module load");
+    block_on(app.load_rut_module(SOURCE)).expect("module load");
     pump_quiet(&driver, &frame_rx);
     assert_eq!(
         app.render_to_pixels(),

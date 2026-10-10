@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use boa_engine::context::time::Clock;
+use tur_engine::core::clock::Clock;
 use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::manager::AnimationManager;
@@ -76,9 +76,9 @@ impl Subsystem for AnimationSubsystem {
         let id = cx.frame_id();
         if id != self.last_frame {
             self.last_frame = id;
-            let now_ms = self.clock.now().millis_since_epoch();
+            let now_ms = self.clock.now_millis() as u64;
             let mut mgr = self.manager.borrow_mut();
-            mgr.tick_controllers(now_ms, cx.boa);
+            mgr.tick_controllers(now_ms);
             // Ticking may have enqueued `onTick`/`onEnd` mutations + updated
             // controller values; mark dirty so this frame lays out the new
             // state. (The enqueued mutations also keep the loop iterating.)

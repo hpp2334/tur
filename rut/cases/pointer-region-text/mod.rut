@@ -1,0 +1,31 @@
+// pointer-region-text: a MouseRegion whose enter/exit writes the bound
+// label inside a padded, centered surface. The handlers are mutations
+// over the MutationCtx; the state source rides by capture.
+use tur_kit::flags::{ Align, CrossAlign, Cursor, HitTestBehavior };
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let state: Readable<str> = source<str>("idle");
+    let b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set<str>(state, "entered");
+    });
+    let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set<str>(state, "exited");
+    });
+    let mut col = Column().cross_alignment(CrossAlign.Start);
+
+    let b = Container()
+        .width_height(100.0, 50.0)
+        .color(0xCCCCCCFFu64)
+        .alignment(Align.Center)
+        .child(Text().text_bound(state).query_key("region-text").build());
+
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor.Auto).behavior(HitTestBehavior.Opaque).child(b.build()).build());
+    mount(col.build());
+    return state.atom_id();
+}

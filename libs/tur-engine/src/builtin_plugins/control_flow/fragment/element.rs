@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::js_runtime::JsProps;
 use crate::core::view::{Lifecycle, View, ViewCx};
 
 // ---------------------------------------------------------------------------
@@ -21,14 +17,29 @@ pub struct FragmentView {
     query_key: Option<Vec<String>>,
 }
 
+impl FragmentView {
+    /// Rut-rail constructor (`core::rut_runtime`): a transparent group.
+    pub fn new_rut(children: Vec<Rc<dyn View>>) -> Self {
+        Self {
+            children,
+            query_key: None,
+        }
+    }
+
+    /// Append one child (the `frag_child` row).
+    pub(crate) fn push_child(&mut self, child: Rc<dyn View>) {
+        self.children.push(child);
+    }
+}
+
 impl View for FragmentView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         // FragmentElement is truly transparent — no node is created. Children are
         // built directly under the parent. This matches React FragmentElement
         // semantics and keeps the tree flat for tests that navigate
         // root.children directly.
         for child_spec in &self.children {
-            child_spec.build(cx, boa, parent);
+            child_spec.build(cx, parent);
         }
         parent
     }
@@ -50,18 +61,3 @@ impl crate::core::layout::ElementSubscribe for FragmentElement {}
 impl Lifecycle for FragmentElement {}
 
 impl ElementTrace for FragmentElement {}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl FragmentView {
-    /// Build a `FragmentView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FragmentView {
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
-    }
-}

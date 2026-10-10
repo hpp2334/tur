@@ -1,6 +1,8 @@
 # tur
 
-A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
+A JavaScript-free rendering engine built on vello-hybrid and the **rut** scripting VM
+(rut-lexer / rut-parser / rut-vm). Modules are **rut** sources: they call into the
+engine through the `tur_host` pkg rows registered by engine plugins.
 
 ## Roleplay
 
@@ -12,1013 +14,204 @@ Clean design and architecture.
 
 ## Module lifecycle contract
 
-`load_module(source)` (on the app handle — `TurApp::load_module` is the string-based entry; `TurApp::load_module_source` is the handle-based engine wrapper for Rust-side-registered sources) is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
+`load_rut_module` (on the app handle; `TurApp::load_rut_module_source` is the
+handle-based twin) is the ONLY module entry (plus `load_rut_bundle` in the test
+harness). A loaded module MUST export `entry fn start()`:
 
-- The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree (draining its `before_destroy` lifecycle before clearing it), then evaluates the new module and calls its `start({ store })`.
-- Missing / non-function `start` fails the load (`ModuleError::Eval`); a throwing `start` fails it too. `start` returning undefined is fine (no cleanup).
-- The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: the tree is **instance-owned** (created at build, permanently bound to the instance store; `mount(view)` builds the root against it), and module teardown drains the root's lifecycle and clears the root (the next module starts root-less). A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
+- The engine parses the new module FIRST (a broken reload never destroys the
+  running module's tree — the parse error is reported to the embedder), then
+  runs the previous module's `entry fn stop()` (if present) and clears any
+  leftover root tree (draining its `before_destroy` lifecycle), then boots the
+  new module and invokes `start`. `start` may return a `u64` answer — the
+  module's return value, readable via `TurApp::rut_start_answer` (the standard
+  probe channel: modules return their label/binding atom ids).
+- The root-tree lifecycle is ENGINE-OWNED: `tur_host::mount(view)` stashes the root
+  (a pure-Rust `Rc<dyn View>` — no script runtime anywhere in the tree); the
+  engine applies it and module teardown clears it. A module's `stop` only
+  disposes its own non-tree resources.
 - Cleanup also runs (best-effort) at instance destroy.
+- The script runtime is the rut VM: it is driven by the worker pump
+  (`run_ready()` before each flush — never inside a flush iteration). The VM's
+  virtual clock syncs to the engine clock; task traps surface through the
+  runtime-error rail (`HostMsg::RuntimeError`) — never a silent stall.
+- Fuel/heap: the VM is arity- and type-checked at the row boundary (row decls
+  are typed: `u64` / `f64` / `str` / `bytes` / `bool` / `opaque`); a row call
+  mismatching its declaration is a compile-time parse error, not a runtime
+  surprise.
 
-Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start({ store })` that stashes the instance store (typed module-level holder — the case store passes it through when invoking a compiled case's own `start`), mounts the Shell (`mount(Shell)`), dispatches the one boot mutation that needs a writer (the `now$` ticker), and returns its cancellation as the module cleanup — no store is created or saved anywhere, and all playground code is ctx-only: `derive` closures read, `mutate` closures write, and side-effecting actions are `mutate` declarations composed by dispatching one another via `ctx.set(action, …args)`; every test case (`tur-test-cases/cases` + playground-local cases) authors the contract itself — `export function start(...)` with `mount(view)` inside (plain cases take no args; the few test-seam cases register their `globalThis.__*` hooks inside `start({ store })`, closing over the injected store — no `globalThis.__store` stash); the in-realm case compiler (`compile.ts`) intercepts the `tur:std` `mount` import in embedded code and rebinds it to publish the root into the viewer pane instead of replacing the playground's mounted root (an entry `export default` is rejected with a clear "export `function start()`" error); `scripts/gen-cases.cjs` embeds case sources verbatim (no rewrites); `tur-test-cases` dist is the case source itself — native `start`, no rspack wrapper. The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source` — the wrapper's `start({ store })` binds the fixture body's `store` name); contract tests use `load_module_raw`.
+Entry points follow the contract: the test corpus
+(`rut/cases` + the playground-local cases) authors
+`entry fn start()` that builds its tree through the **kit** (`use
+tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
+engine with `mount(root.build())`, plus probe `entry fn`s the test
+drives via `call_rut_entry`. The playground is a rut module
+(`playground.rut` + the generated `cases_gen.rut` registry, compiled by the
+`pg_compile` rut service); the website boots it via `loadAndRunRutModule`.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  demo/website (web embedder app — @tur-ng/website)            │
-│  Thin browser host: loads the tur WASM + the           │
-│  playground-view bundle. Co-located with its own        │
-│  wasm cdylib (demo/website/native → tur-website).       │
+│  demo/website (@tur-ng/website)                     │
+│  Thin browser host: loads the tur WASM and feeds    │
+│  playgroundSource() to loadAndRunRutModule.         │
+│  Co-located with its own wasm cdylib                │
+│  (demo/website/native → tur-website).               │
 ├─────────────────────────────────────────────────────┤
-│  demo/playground-view (@tur-ng/playground-view)           │
-│  The playground view: UI built with tur:animation +     │
-│  tur:std (Sidebar/Editor/Viewer) + inlined case         │
-│  sources. A reusable view the website renders.          │
+│  rut modules (playground.rut + the case corpus)     │
+│  authored through the kit prelude (tur_kit — the    │
+│  builder classes); element builders materialize     │
+│  pure-Rust views.                                   │
+└──────────────────────┬──────────────────────────────┘
+                       │ rut host-pkg rows (`tur_host::…`)
+┌──────────────────────▼──────────────────────────────┐
+│  libs/tur-engine (unified engine crate)             │
+│  core/        engine infrastructure (no plugin deps)│
+│  rut_runtime/ the `tur_host` pkg mechanism: RutView,│
+│               RutHandles, HostPkg wiring, mount,    │
+│               the rs_* store rows, entry rails      │
+│  builtin_plugins/ feature bundles — subsystems +    │
+│               their OWN family rows + rut_rows.rs   │
+│               (text, scroll, gesture, image,        │
+│               virtual_app …); each element family's │
+│               spec struct + rows live here          │
+│  kit/         registers the kit pkg (rut/tur_kit/   │
+│               — the authored builder surface);      │
+│               outside core/                         │
+│  renderer/vello WebGL2 + wgpu backends              │
 ├─────────────────────────────────────────────────────┤
-│  js/packages/tur-test-cases                          │
-│  ~60 test cases in cases/ — each calls into           │
-│  tur:std directly                            │
-└──────────────────────┬──────────────────────────────┘
-                       │ JS bridge API
-┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-engine (unified engine crate)               │
-│  ├── core/         (engine infrastructure — NO         │
-│  │                  dependency on builtin_plugins/*)   │
-│  │   ├── app/      (TurAppInternal + FrameOutcome +    │
-│  │   │             AppEvent/AppEventQueue + mount()   │
-│  │   │             mount + RootView/RootElement        │
-│  │   │             generic-root wrapper)               │
-│  │   ├── virtual_app/ (the engine seam for hosting    │
-│  │   │             nested instances: VirtualHost —    │
-│  │   │             the instance's host-side CORE      │
-│  │   │             (VirtualAppId identity + backend   │
-│  │   │             rails + recursive children map);   │
-│  │   │             TurApp = thin public facade;       │
-│  │   │             spawns children from the same      │
-│  │   │             TurRuntime via internal            │
-│  │   │             spawn_hosted_instance;             │
-│  │   │             ForwardingRenderer                 │
-│  │   │             ships child batches back to the    │
-│  │   │             PARENT WORKER as AppEvent::Custom  │
-│  │   │             VirtualFrameEvent; VirtualShell    │
-│  │   │             shares the parent vsync;           │
-│  │   │             HostMsg::VirtualControl is the     │
-│  │   │             only new message variant, routed   │
-│  │   │             by the looper)                     │
-│  │   ├── elements/ (AnyElement, ElementObject,         │
-│  │   │             ElementTree with layout+paint —     │
-│  │   │             instance-owned, born-bound to the   │
-│  │   │             instance store)                     │
-│  │   ├── render/   (PaintContext, Renderer,            │
-│  │   │             ElementRender trait + brush/         │
-│  │   │             Color/Brush/GradientStop + JS        │
-│  │   │             bindings)                            │
-│  │   ├── layout/   (ElementLayout, ElementSubscribe,   │
-│  │   │             LayoutContext, primitives)          │
-│  │   ├── capability/ (Capability trait, Capabilities,  │
-│  │   │             CapabilityDecls — type-keyed        │
-│  │   │             service registry)                   │
-│  │   ├── js_runtime/ (boa plumbing: TurInstanceContext,      │
-│  │   │             JsProps, FnEntry, module_loader,    │
-│  │   │             opaque, js_value)                   │
-│  │   ├── dev/      (turDevTool bridge)                 │
-│  │   ├── edgy/     (reactive substrate: Store/Source/  │
-│  │   │             Derived/MutationHandle + mutation   │
-│  │   │             queue + source/derive/mutate/get/   │
-│  │   │             set/view JS bridge — the engine's   │
-│  │   │             own tur:core)               │
-│  │   ├── focus/    (FocusManager + Focusable trait +   │
-│  │   │             BlurEvent/FocusEvent/FocusChange)   │
-│  │   ├── screen/   (Screen = pure data: logical_size  │
-│  │   │             + dpr; ResizeSubsystem owns the     │
-│  │   │             viewportSize$ backing + write rail) │
-│  │   ├── shell/    (the app↔OS interactive layer:      │
-│  │   │             Shell trait [set_cursor +           │
-│  │   │             request_text_input] + NoopShell +   │
-│  │   │             TextInputState + Cursor enum +      │
-│  │   │             ShellEvent ingress — per-instance,  │
-│  │   │             host-thread, provided at build via  │
-│  │   │             `TurAppBuilder::shell`)             │
-│  │   ├── platform/ (PlatformEvent envelope { Shell(    │
-│  │   │             ShellEvent), Custom } + key_event:   │
-│  │   │             KeyEvent/Modifiers/KeydownEvent/    │
-│  │   │             KeyupEvent — input events from the  │
-│  │   │             host only)                          │
-│  │   ├── subsystem.rs (Subsystem trait + flush_pre/post_layout hooks)   │
-│  │   ├── text/     (TextLayoutData, FontManager —      │
-│  │   │             paint/layout contract types only)   │
-│  │   ├── image_resource.rs (ImageResourceId,           │
-│  │   │             ImageResourceMap, ImageResource —   │
-│  │   │             paint/layout contract types only)   │
-│  │   └── plugin.rs (Plugin trait + PluginRegisterContext) │
-│  ├── builtin_plugins/ (feature bundles — each exposes  │
-│  │                      one pub install_xxx(ctx))      │
-│  │   ├── std.rs    (TurStdPlugin — the orchestrator    │
-│  │   │             that calls every install_xxx and    │
-│  │   │             merges FnEntry into tur:std)│
-│  │   ├── console.rs (global console.log/warn/error/    │
-│  │   │               info/debug)                       │
-│  │   ├── control_flow/ (Condition/Switch/Each/Fragment)│
-│  │   ├── focus/     (Focusable widget — manager is in  │
-│  │   │               core::focus)                      │
-│  │   ├── gesture/   (MouseRegion + PointerInteract +   │
-│  │   │               GestureSubsystem + PointerSubsystem)│
-│  │   ├── input/     (KeyboardSubsystem + ImeSubsystem —│
-│  │   │               event types are in core::platform)│
-│  │   ├── layout/    (Column/Row/Expanded/Stack/        │
-│  │   │               Positioned/Container/SizedBox +   │
-│  │   │               layout enums)                     │
-│  │   ├── lifecycle/ (lifecycleView)                    │
-│  │   ├── text/      (TextElement, EditableTextElement, │
-│  │   │               ParagraphElement, controllers,    │
-│  │   │               ClipboardPasteSubsystem,          │
-│  │   │               CaretVisibilitySubsystem)         │
-│  │   ├── image/     (ImageElement + PNG/JPEG/SVG       │
-│  │   │               decoders)                         │
-│  │   ├── scroll/    (ScrollView, Scrollbar,            │
-│  │   │               ScrollController, ScrollSubsystem)│
-│  │   ├── lazy_container/ (LazyList + LazyListController)│
-│  │   └── virtual_app/ (VirtualAppView element +        │
-│  │                   createModuleSource /              │
-│  │                   createVirtualAppController        │
-│  │                   bridges + VirtualAppSubsystem —   │
-│  │                   the plugin half of                │
-│  │                   core::virtual_app; the element's  │
-│  │                   own paint replays the child's     │
-│  │                   batch with existing ops)          │
-│  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
-│  └── renderer/noop  (NoopRenderer, logs tree stats)    │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-animation (standalone crate)                 │
-│  Registered via TurAnimationPlugin. Owns               │
-│  AnimationManager + Clock (ticks on each flush via     │
-│  the Subsystem hook). Exposes tur:animation     │
-│  (combined native+JS module: Opacity, Transform,        │
-│  createAnimationController + AnimatedContainer/Opacity/ │
-│  Positioned, Tween, ColorTween) + internal hidden       │
-│  tur:animation/native (ctx-bound fns only).             │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│  Capability surfaces:                                  │
-│  ┌─ Inlined into tur-engine (plugin + contract types): │
-│  │  • Clipboard   — `builtin_plugins::clipboard`       │
-│  │    (ClipboardBackend trait + Clipboard cap +        │
-│  │    tur:clipboard + engine-internal          │
-│  │    subsystems + event payloads)                     │
-│  └─ External capability crates (split per domain):     │
-│     ├── tur-net-capability (Http + HttpBackend trait + │
-│     │   tur:net — `request`/`requestStream` bridge fns │
-│     │   returning `Task<T> = { promise, cancel() }`;   │
-│     │   response body is ALWAYS raw bytes (decode      │
-│     │   with `decodeUtf8`); `requestStream` takes      │
-│     │   `backpressure: { value, unit }` (no cap,       │
-│     │   default 20 MiB); task.cancel() wire-aborts a   │
-│     │   stream) │
-│     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
-│     ├── tur-net-native         (NativeHttp via reqwest on a│
-│     │   user-provided tokio runtime — the only crate that │
-│     │   touches tokio; engine core is tokio-free.       │
-│     │   request_stream is byte-budgeted: a Semaphore    │
-│     │   caps in-flight bytes (backpressure option,      │
-│     │   default 20 MiB) between socket and JS — the     │
-│     │   producer parks on acquire_many → real TCP       │
-│     │   backpressure)  │
-│     ├── tur-filepicker-capability (FilePicker +         │
-│     │   FilePickerBackend trait + tur:filepicker bridge │
-│     │   — opt-in, requires a backend)                    │
-│     ├── tur-filepicker-wasm   (WasmFilePicker via web-sys)│
-│     └── tur-filepicker-native (NativeFilePicker via rfd)│
-│  Backend crates for the inlined Clipboard cap:         │
-│     ├── tur-clipboard-wasm  (WasmClipboard; re-exports │
-│     │   Clipboard/ClipboardBackend/TurClipboardPlugin) │
-│     └── tur-clipboard-native (NativeClipboard via      │
-│         arboard; same re-exports + HostExecutor; │
-│         new(&cx) self-hops each read/write to the host thread)    │
-│  Embedders register backends via .capability(|cx|...): │
-│    the closure receives &HostExecutor -- backends │
-│    needing the host thread take cx (NativeClipboard self-hops);   │
-│    the rest ignore it (WasmClipboard/Http/FilePicker). │
-│    Engine creates the channel internally in build();   │
-│    no no builder wiring needed.    │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-wasm (pure rlib — the reusable wasm embedder) │
-│  No #[wasm_bindgen] surface, no playground code.       │
-│  Owns all DOM wiring + the WebGL2 renderer + WasmClock  │
-│  / WasmFontLoader / WasmShell + the standard            │
-│  capability backends (WasmClipboard / WasmHttp /        │
-│  WasmFilePicker).                                       │
-│  Exposes WasmAppHandle::create(WasmAppConfig) — a        │
-│  builder taking a `configure` callback (extra plugins)   │
-│  + optional after-frame hook. The host cdylib wraps it.  │
-│  Composes the default plugin chain:                       │
-│  TurStdPlugin → TurAnimationPlugin → TurClipboardPlugin │
-│  → TurNetPlugin → TurFilePickerPlugin.                   │
+│  libs/tur-animation (standalone crate)              │
+│  AnimationSubsystem + the `tur_host` pkg's animation│
+│  rows (anim_ctrl / el_opacity / tween / curve) —    │
+│  Rust-held controllers ticked by the subsystem.     │
 ├─────────────────────────────────────────────────────┤
-│  demo/website/native (tur-website cdylib — the host .so) │
-│  The website's own wasm entry: wraps WasmAppHandle,      │
-│  adds TurPlaygroundPlugin (swc compiler only). File IO  │
-│  now lives in tur:filepicker (registered by tur-wasm).  │
-│  Exports #[wasm_bindgen] TurWebsiteApp (create /         │
-│  create_in / loadAndRunModule / dev_tool) → tur_website.js.│
-│  Mirrors tur-android (rlib) + demo/compose/native (cdylib).│
+│  Capability surfaces: Clipboard / Http / FilePicker │
+│  (backend crates per platform) + their `tur_host` pkg│
+│  rows (clipboard_read / net_request / pick_file).   │
+├─────────────────────────────────────────────────────┤
+│  libs/tur-wasm (pure rlib — the reusable wasm       │
+│  embedder) + demo/website/native (the host cdylib). │
+│  libs/tur-android (rlib embedder glue) +            │
+│  demo/compose (the Android playground app).         │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &HostExecutor| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal host-thread channel) and receives an `HostExecutor` — the engine's host-thread hop. Backends that need to run OS-API calls on the host thread (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_host(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The **shell** (cursor output + text-input requests + the window's frame clock) is per-instance and NOT a capability — it targets a specific window, so it's supplied at construction via `TurAppBuilder::shell(Box<dyn Shell>)` (defaults to `NoopShell`, whose clock never fires); the worker ships deduped egress to the host thread as `HostMsg::Shell(ShellCommand)`:
+Embedders register swappable backends (clipboard, http, filepicker) on the
+runtime builder: `.capability(|cx| Ok(Http::new(backend)))`. Plugins declare
+hard deps via `requires` (fail-fast at `build()`); `TurNetPlugin` is the
+exception — it feature-detects `Http` at `register` and skips pushing the net
+rows when absent. The `tur_host` pkg rows reach capabilities at call time through
+`RutHandles.inst.capability()`.
 
-```rust
-let ui = WorkerPoolHandle::new("ui", 4);              // at most 4 shared workers
-let daemon = WorkerPoolHandle::new("daemon", 2);      // at most 2 shared workers
-let runtime = TurRuntime::builder()
-    .worker_spawner(host)                     // required — Rc<dyn WorkerSpawner>
-    .host_loop(loop_)                         // required — Rc<dyn HostLoop>
-    .font_loader(Rc::new(WasmFontLoader::new()))
-    .clock(Rc::new(WasmClock))
-    .worker_pool(ui.clone())                   // register pools (required per app)
-    .worker_pool(daemon.clone())
-    .capability(|_| Ok(Clipboard::new(WasmClipboard)))   // tur-clipboard-wasm
-    .capability(|_| Ok(Http::new(WasmHttp)))             // tur-net-wasm
-    .capability(|_| Ok(FilePicker::new(WasmFilePicker))) // tur-filepicker-wasm
-    // A backend that needs host-thread access takes the context:
-    //   .capability(|cx| Ok(Clipboard::new(NativeClipboard::new(cx)?)))
-    .plugin(TurStdPlugin)
-    .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
-    .plugin(TurClipboardPlugin)                  // requires: Clipboard
-    .plugin(TurNetPlugin)                        // Http optional (skips tur:net if absent)
-    .plugin(TurFilePickerPlugin)                 // requires: FilePicker
-    .build()?;                                    // Rc<TurRuntime>
+### Reactive substrate
 
-// Spawn isolated instances (each its own JS realm + renderer), each into a
-// declared pool (apps in one pool share ≤ max_workers workers; different
-// pools never share threads):
-let (app, looper) = runtime
-    .app_builder()
-    .worker_pool(ui)                              // required — explicit assignment
-    // Optional: define build-time per-instance data readable/updateable by
-    // plugins/bridge fns via `TurInstanceContext::data::<T>()` /
-    // `with_data::<T, _>(f)` / `update::<T>(v)`. Each type may be defined
-    // exactly once (duplicate `define` panics). The closure RUNS ON THE
-    // WORKER (right after the instance is constructed, before any plugin
-    // `register`), so values built fresh in the body never cross the
-    // main↔worker boundary.
-    //   .instance_data(|cx| {
-    //       cx.define::<PluginId>(PluginId("com.example.foo".into()));
-    //   })
-    .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
-    .shell(Box::new(WasmShell { canvas, state }))       // per-instance OS surface
-    .build()?;                                    // (Rc<TurApp>, TurAppLooper)
-
-// Spawn the autonomous frame loop exactly once per instance (the future
-// is 'static; `run` consumes the looper by value, so double-spawn is a
-// compile error):
-//   spawn_local(looper.run());
-
-// Or a headless instance (no rendering):
-let (headless, headless_looper) = runtime
-    .app_builder()
-    .worker_pool(daemon)                          // heavy daemons share 2 threads
-    .build_headless((0.0, 0.0))?;
-```
-
-- `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
-  newtype (`Clipboard`, `Http`, `FilePicker`).
-- `HostExecutor` (`core::plugin`, re-exported at the crate root) — the
-  engine's `Send + Sync + Clone` host-thread hop (the host thread is the
-  platform main thread). The engine creates the
-  channel internally in `build()` and spawns the drain on the host thread, so
-  **no embedder wiring is required**. OS-API backends receive a clone at
-  construction (via the capability closure) and self-hop; plugin/bridge code
-  reaches the same channel via `PluginRegisterContext::to_host_executor()`. The raw
-  `HostTask`/`HostDrain`/`host_channel()` live `pub(crate)` in
-  `core::scheduler` (the plugin layer
-  wraps the sender — dependency direction: plugin → scheduler, never reverse).
-- `Plugin::requires(&mut CapabilityDecls)` — declare hard deps; the builder
-  validates them BEFORE any plugin's `register` runs, so missing capabilities
-  fail fast at `build()` with a clear error. (`TurNetPlugin` is the exception —
-  it feature-detects `Http` at `register` and skips `tur:net` if absent, rather
-  than declaring `requires`; `TurClipboardPlugin` / `TurFilePickerPlugin` use
-  the strict `requires` form.)
-- `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
-  time (bridge fns) or event dispatch time (subsystems via
-  `SubsystemFlushContext.capabilities`).
-- **Per-instance data** (build-time `InstanceDataCx::define::<T>(value)` →
-  runtime `TurInstanceContext::update::<T>(value)` /
-  `data::<T>()` / `with_data::<T, _>(f)`) — typed worker-side metadata with
-  a strict **build-time define / runtime update+read** split:
-  - **Build time** (`TurAppBuilder::instance_data(|cx| cx.define::<T>(v))`):
-    the ONLY way to introduce a new `TypeId` into the map. The closure runs
-    on the worker (right after `TurInstanceContext` is constructed, before
-    any plugin `register`), so values built fresh in the body never cross
-    the host↔worker boundary; only captured values need `Send`. Each type
-    may be defined exactly once per instance — duplicate `define` panics
-    (fail-fast). Plugins see all defined slots as already-present at
-    `register` time.
-  - **Runtime** (`TurInstanceContext::update::<T>(v)`): replace an existing
-    value; panics if the `TypeId` was NOT defined at build time (catches
-    missing `define` immediately).
-  - **Runtime read** (`data::<T>()` returns `Option<T>` (requires `T: Clone`);
-    `with_data::<T, _>(f)` is the no-`Clone`-bound ref-callback path).
-  Carries secure, JS-unforgeable identity (e.g. a host `PluginId` so a
-  `storage.get(key)` bridge can resolve the calling plugin without trusting
-  JS args). Mirrors the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId,
-  Box<dyn Any>>>>` inside `TurInstanceContext`, shared across every cheap clone.
-  Lives entirely in the worker.
-- **Plugin state** (register-phase
-  `PluginRegisterContext::define_plugin_state::<T>(Rc<T>)` → runtime
-  `TurInstanceContext::plugin_state::<T>() -> Option<Rc<T>>`) — the channel
-  for plugin-owned per-instance state that ctx-bound bridge fns reach
-  through `args[0]` (`extract_js_ctx`). Register-phase define rides a
-  collector **owned by `PluginRegisterContext`** (the subsystems pattern):
-  after the last plugin registers the builder consumes it
-  (`into_parts(self) -> (subsystems, plugin_state)`) and installs the
-  finished map once (`install_plugin_state`) into a shared
-  `Rc<OnceCell<…>>` slot — there is **no runtime write path at all** and no
-  freeze flag; immutability is enforced by ownership. Duplicate defines
-  panic. This is what lets every plugin bridge be a
-  **plain `FnEntry` fn pointer** — no `NativeFunction` closures (the
-  `register_module` closures escape hatch is removed). Per-object method
-  state (store `{get,set}`, `Task.cancel`, `eventBus.on/send`) instead rides
-  the JS object's `JsData` payload and is read off `this`, cloning out of
-  the payload before running JS. The only closure natives left live in
-  `core/js_runtime/module_loader` — the module-assembly + ctx-prepend
-  mechanism itself.
-- Convention: capability newtypes use base names (`Clipboard`, `Http`,
-  `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
-  `HttpBackend`, `FilePickerBackend`). The shell is NOT a capability (see
-  `core::shell` above) — it targets a specific window, not the process,
-  and is supplied per-instance at construction.
-
-
-### Reactive substrate (plugin-facing atom minting)
-
-The reactive substrate (`core::edgy`) is engine-owned per-instance infrastructure
-(like `mutation_queue` / `clock` / `event_bus`), NOT a swappable cross-cutting
-backend. Plugins mint reactive atoms from Rust via the narrow
-`ReactiveBridgeStore` face returned by `PluginRegisterContext::reactive()` (or
-`TurInstanceContext::reactive()` from inside a bridge fn):
-
-```rust
-fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-    let bridge = ctx.reactive();
-
-    // Mint a source. Initial value is a JsValue (the store is type-erased to
-    // JsValue at runtime; Source<T>'s T is a type-level marker only).
-    let clock: Source<JsValue> = bridge.decl_source(JsValue::new(0.0));
-
-    // Expose to JS — handles cross the boundary via IntoJs (opaque JsObject).
-    // JS reads via `store.get(mySource)`; the value materializes into the
-    // instance store (like every atom).
-    let js_handle = clock.into_js(ctx.boa_mut());
-    ctx.register_global("clock$", js_handle);
-
-    // A subsystem that publishes ENGINE ENVIRONMENT truth follows the
-    // `viewportSize$` pattern: the backing's single value home is the
-    // INSTANCE store — published via the ordinary `set_source` write rail
-    // (no tree chase, works pre- and post-mount) — and the public handle
-    // is a derive whose closure reads the backing through a captured
-    // engine read face (`bridge.read_only()`), so every read path
-    // resolves the same live value.
-    ctx.register_subsystem(Box::new(ClockSubsystem { source: clock }));
-    Ok(())
-}
-```
-
-The JS side is unchanged — atoms minted by Rust are indistinguishable from
-atoms minted by JS. JS reads/writes via `store.get(atom)` /
-`store.set(source, v)` / `store.set(mutation, ...args)` /
-`watch(atom, cb)`.
-
-**The store is the KV.** JS `source(v)` / `derive(fn)` / `mutate(fn)` return
-*pure declarations* — no state is stored at call time; the seed (initial
-value / closure) lives in the instance-wide registry. Each instance has
-exactly ONE store — created by the engine and handed to the module's
-`start({ store })` (`createStore` is not exported); the store materializes
-each declaration on first read/write. `mount(view)` builds the tree against
-that store (free module-level `get`/`set` exports are gone, and there is no
-`getStore()` either: reactive access outside a closure goes through the
-closure ctx of `derive`/`mutate`, which the
-engine binds to the instance store — code needing reactive access in helpers
-or `async` fn bodies threads/captures that ctx; side-effecting helpers
-are declared as mutations themselves and dispatched via
-`ctx.set(action, …args)` — the flush's fixed-point loop drains nested
-dispatches within the same frame, so composing actions costs no latency).
-The machinery (`SharedReactive`) holds no store references and no values —
-every read/write/invoke takes the caller's store per call, and atom values
-live only in the store KV. Atom ids come
-from one per-instance counter, so the derived graph / subscriber index /
-flush state are shared (a write invalidates every cached copy — via
-per-atom invalidation generations: the store's cached slot records the
-generation it was computed at, and a mismatch or missing slot forces a
-recompute). Engine environment atoms (`viewportSize$`) follow the
-**engine rail**: the backing source's single value home is the instance
-store (written with the ordinary `set_source` path JS `store.set` uses),
-and the public handle is a derive whose closure reads the backing through a
-captured engine read face — so every read path resolves the same live
-value, and cache coherence rides the same generation rail as any derive.
-
-**Rust-native closures** (`build_derive` / `build_mutate`) skip the `{get, set}`
-JsObject round-trip that JS `derive(fn)` / `mutate(fn)` closures pay. The
-closure receives a typed capability face directly:
-
-- `bridge.build_derive(F)` where `F: Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue>`
-  — read-only face; reads inside the closure flow through `ReactiveCore::read`,
-  so the auto-dependency tracker (`tracker_stack`) records them as it would for
-  a JS closure. No manual dep declaration.
-- `bridge.build_mutate(F)` where `F: Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue>`
-  — read+write face + the user-supplied args verbatim (no JsObject prepended).
-
-```rust
-let flag: Source<JsValue> = bridge.source(JsValue::new(false));
-let flag_for_closure = flag;
-let bridge_for_closure = bridge.clone();
-let toggle = bridge.build_mutate(move |b, _args, boa| {
-    let current = b.read(Readable::from(flag_for_closure), boa).as_boolean().unwrap_or(false);
-    bridge_for_closure.set_source(flag_for_closure, JsValue::new(!current));
-    Ok(JsValue::undefined())
-});
-// JS invokes via `store.set(globalThis.toggle)` — invoke_mutation detects the
-// MutateRust variant and hands the closure the bridge face + user args.
-```
-
-Implementation notes:
-- The `Js` and Rust closure variants share the seed registry as a `Closure`
-  enum (`Js(JsFunction)` / `DeriveRust(Rc<dyn Fn>)` / `MutateRust(Rc<dyn Fn>)`);
-  the kind is encoded in the variant so cross-kind dispatch is unreachable
-  via the public API (handle types `Derived<T>` vs `Mutation` make it
-  impossible to mismatch; defensive panics guard engine bugs).
-- `invoke_mutation` builds the per-store `{get, set}` JsObject **internally**
-  only for `Js`-variant closures. Callers pass user args verbatim (no
-  prepend) — see `core::edgy/reactive/store.rs::SharedReactive::invoke_mutation_by_id`.
-- Rust closures are `Rc<dyn Fn>` (not `Box<dyn Fn>`) so the existing
-  clone-out-before-call discipline (matching `JsFunction::clone()`) is
-  preserved — this is what makes nested `ensure_computed` (a derive closure
-  reading another derived) safe under RefCell.
-- Closures are `!Send` (`Rc`-captured); they live entirely on the worker
-  thread. Matches the `Rc<RefCell<...>>` discipline throughout the substrate
-  and the `!Send` `JsFunction` path.
-- **`watch`** (`edgy::watch`, bridge fn in the same table): a non-element
-  subscriber over any source/derived. `watch(atom, cb)` takes a
-  caller-supplied `Mutation` handle (`mutate((ctx) => …)` — the same
-  convention as `onTick`/`onUpdate$`), registers it directly in the
-  `WatcherRegistry` (on `SharedReactive`, next to the subscriber graph),
-  and returns `{ start$, stop$ }` control mutations (Rust-closure
-  `build_mutate`s — the closures hold `Weak`s so no Rc cycle). Delivery:
-  `flush_reactive` asks `Store::watch_dispatch()` for due callbacks and
-  pushes them onto the mutation queue — same rail, same frame. Semantics:
-  change-only (`start$` does not fire the callback; it materializes the
-  watched atom once so a never-computed derived can't fire spuriously),
-  idempotent start/stop, and at most one delivery per watcher per flush
-  epoch (`frame_id`) — the convergence backstop. Loop guard: while a
-  watcher callback is invoking, `write_by_id` rejects (JS error at the call
-  site) any write whose dependents closure reaches a delivering watcher's
-  watched atom — a callback must not write what it watches.
+`core::edgy` — the reactive substrate is native: the store KV holds `Value`
+(scalars / strings / lists / maps / opaque handles), sources / derives /
+mutations are atom ids over one per-instance counter, and rut modules address
+them by raw id (the `rs_*` rows: `rs_source_str` / `rs_set_f64` /
+`rs_derive` / `rs_watch` …). Rust plugins mint atoms via
+`PluginRegisterContext::reactive()` (`build_derive` / `build_mutate` — Rust
+closures over the read/write faces). Engine environment atoms
+(`viewportSize$`) follow the same rail (a backing source + a derive handle).
 
 ### Multi-instance model (TurRuntime + TurApp)
 
-The engine has a **one runtime, many instances** architecture:
-
-- **`TurRuntime`** (`tur-engine::core::runtime`) — the shared, created-once
-  substrate. Owns the `FontContext` (system-font discovery + preset fonts, built
-  once — each instance clones it cheaply; `FontContext`/`fontique::Collection`/
-  `System` are all `Arc`-backed), the `Clock` (one shared time source), the
-  `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
-  registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
-- **`TurApp` + `TurAppLooper`** — an isolated instance spawned from a
-  runtime via `runtime.app_builder().worker_pool(pool).renderer(...).build()`
-  (rendering, attached to a surface) or
-  `runtime.app_builder().worker_pool(pool).build_headless(viewport)` (no
-  rendering — JS + capabilities + events only, backed by `NoopRenderer`).
-  Both terminals return `(Rc<TurApp>, TurAppLooper)`: the **app handle**
-  carries the mid-loop `&self` surface (input, RPC, `destroy`), the
-  **looper** owns the worker→host message stream and drives the
-  autonomous frame loop via `run(self)` — by value, so the returned
-  future is `'static` (spawnable / type-erasable) and a second `run` is a
-  compile error. Pre-run loop config (`set_after_frame_hook`) is
-  exclusive `&mut self` on the looper.
-  Each instance gets its own boa `Context` (JS realm), element tree,
-  reactive store, focus manager, event queues, subsystems, screen, and
-  frame clock (per-instance cadence — supplied by the shell: the engine
-  takes it once via `Shell::take_vsync` at construction and subscribes
-  there; e.g. Android's shell binds a Choreographer source to the
-  instance's own JNI `FrameLoop`). Plugins are re-registered into each
-  instance's fresh realm (the same plugin objects — `register` takes
-  `&self`, so no factory needed).
-
-The `Plugin` trait has two phases: `compile` (called once on the runtime —
-pre-validate/cache) and `register` (called per instance — into the fresh boa
-`Context`). boa `Module`s are realm-bound, so the actual JS parse happens per
-instance in `register`; `compile` is the seam for future caching + fail-fast
-validation. The renderer and the shell are **not** on the runtime
-builder — they're the per-instance builder's `renderer(...)` argument +
-optional `shell(...)` (one renderer + one shell per surface/window,
-supplied at construction since they target a specific window).
-
-### Scheduling contract (single-role traits, worker vocabulary)
-
-`tur-engine::core::scheduler` defines four **single-role** traits — no
-main/worker thread concepts, no `block_on`, every method live on every
-platform (zero `panic!`/`unimplemented!` stubs):
-
-- `WorkerSpawner` (runtime-level, required on the builder) —
-  `spawn_worker(pool, entry) -> WorkerTicket`: host one app loop in a pool.
-  The `entry` closure runs on the chosen worker, receives a `WorkerContext`,
-  builds the `!Send` backend there, returns the app's run-loop future (the
-  platform drives it for the worker's lifetime). **Readiness contract**:
-  implementations that can block (native) return only after the entry's
-  synchronous prologue (backend construction + plugin `register`) completed —
-  so `app_builder().build(...)` returning guarantees plugin-level side
-  effects are observable; wasm returns immediately (the JS main thread can't
-  block) and embedders confirm readiness via the first RPC await. The native
-  rendezvous lives in `NativeWorkerPools::spawn_app` (a `started_tx` handshake
-  per `LaneMsg::SpawnApp`), NOT in the engine — `HostBackend::new` is
-  platform-uniform. `WorkerTicket` = per-app
-  slot claim: `join()` signals that app's loop completion + `wake()` is the
-  cross-thread kick called after every host→worker send (no-op native,
-  `postMessage(0)` wasm).
-- `VsyncSource` (per-instance) — `subscribe()` + `request_frame()` frame
-  cadence. Supplied by the instance's shell: the engine takes it once via
-  `Shell::take_vsync` at construction and subscribes the loop's tick
-  stream there (`NoopVsyncSource` never fires — loop progresses on worker
-  messages only).
-- `HostLoop` (runtime-level, required) — `spawn_local` on the host thread (the platform main thread);
-  roots the engine-internal main-thread drain (the `HostExecutor`
-  hop) + embedder main-thread tasks.
-- `WorkerExecutor` (worker-side surface inside `WorkerContext`) —
-  `spawn_local` (cooperative task on the worker's own loop), `sleep`
-  (platform timer), and `spawn_blocking` (CPU-heavy/blocking work OFF the
-  worker's loop so co-tenant apps on a shared worker keep running). Native:
-  dedicated OS thread whose completion re-queues the awaiting task via its
-  normal waker; wasm: trait-default own cooperative task on the event loop
-  (the honest approximation). Worker-side code NEVER `block_on`s — that
-  would stall every co-tenant on the worker.
-
-Builder wiring (replaces the old single `.scheduler(driver)`):
-
-```rust
-TurRuntime::builder()
-    .worker_spawner(host)   // Rc<dyn WorkerSpawner>
-    .main_loop(loop_)       // Rc<dyn HostLoop>
-    …
-// (frame cadence is NOT runtime-level — each app's shell carries its
-//  window's VsyncSource, handed over at app build via Shell::take_vsync)
-```
-
-Every app is spawned **into a named worker pool**
-(`WorkerPoolHandle::new(name, max_workers)`, registered via
-`TurRuntimeBuilder::worker_pool`, assigned — **required** — via
-`TurAppBuilder::worker_pool`, identity-checked by Arc pointer). All apps in
-one pool share at most `max_workers` workers; apps in different pools never
-share workers — the motivating case: heavy headless daemons in a small
-`daemon` pool can't stall UI rendering in a `ui` pool. A cap ≥ the app count
-degenerates to one-worker-per-app (the historical default; `usize::MAX` for
-"dedicated"). Engine-side (`core/scheduler/pool.rs`) the handle is inert
-data; the engine only validates registration + assignment:
-
-- **Native** — `tur_native::worker_pool::NativeWorkerPools` (implements
-  `WorkerSpawner`; constructed with a `LaneTimerFactory` — the platform's
-  sleep-only timer seam, `LaneTimer { sleep }`): at most `max_workers`
-  "tur-lane" OS threads per pool; grow-to-cap-then-least-loaded assignment.
-  App state (`boa::Context`, `Rc`s) is `!Send`, so each app's `worker_loop`
-  is pinned to one lane for life — sharing = multiple app loops
-  cooperatively scheduled on one thread (task table + cross-thread-safe
-  ready queue + condvar; `sleep` delegates to the `LaneTimer`; panics
-  contained per app; `WorkerTicket::join` joins that app's loop, not the
-  thread). tur-android (`crate::scheduler::worker_spawner(handle)` with
-  `TokioLaneTimer`) + the test harness (virtual-clock `LaneTimer`) use it
-  directly as their `WorkerSpawner`.
-- **Wasm** — `tur-wasm`'s `WasmWorkerSpawner`: at most `max_workers` Web
-  Workers per pool; extra apps are delivered into the least-loaded worker as
-  tagged `{t:"tur-factory", ptr}` messages and hosted cooperatively on its
-  JS event loop (multi-tenant workers — see `worker_spawn.rs`).
-  `WasmVsyncSource` (rAF, carried by `WasmShell`) / `WasmMainLoop`
-  (`wasm_bindgen_futures`) / `WasmWorkerExecutor` (setTimeout sleep;
-  default spawn_blocking) fill the other roles.
-- Android runs the host side on a dedicated **tur-host thread**
-  (`tur-android`'s `host_thread`): every JNI op is marshalled onto its FIFO
-  op queue, so the Android main thread only posts work (the Choreographer
-  callback is a trivial post; per-frame GPU encode/present, instance builds
-  — wgpu adapter/device + the lane handshake — module loads, and teardown
-  all run off-main). `AndroidHostLoop` holds a task list polled from each
-  instance's `pump_loop` on that thread; task wakers + the loop waker post a
-  poll-only pump op **directly onto the tur-host queue** (no
-  main-Handler/Kotlin hop; `FrameLoop.requestPump()` → JNI `pumpMessages`
-  remains as the fallback). This roots the engine's host-thread drain,
-  which previously sat on an unpumped `LocalPool` and could never advance.
-  The Choreographer is armed ONLY by `AndroidVsyncSource::request_frame`
-  (the engine's `FrameOutcome.schedule == Vsync` decision) — never by
-  message wakes. Arming on messages would ping-pong worker↔host at display
-  refresh rate forever (each pump ships a `FrameOutcome`, whose channel
-  wake would re-arm the next frame), burning a full engine flush per
-  display frame even fully idle.
-- **Instance lifecycle on Android** (`tur-android`) is **two-phase
-  (initialize → attach)**, the Flutter engine/view model:
-  `createInstance` builds the instance with **no surface** (JS realm,
-  worker lane, plugins — nothing Android's surface lifecycle can
-  invalidate), so a destroy racing the build is an ordered no-op.
-  `attachInstance` (from `surfaceCreated`) is the ONLY op that touches a
-  window — acquire `ANativeWindow`, wgpu surface/adapter/device,
-  `VelloRenderer::init_surface`, then `TurApp::attach_renderer` — and by
-  FIFO construction it runs only when the instance exists.
-  `detachInstance` (from `surfaceDestroyed`) drops the renderer FIRST then
-  releases the window ref (a paired acquire/release; attach/detach is
-  repeatable — surface recreation re-attaches without rebuilding the JS
-  realm). `destroy`/`destroySettled` (the fenced variant; Kotlin pair
-  `TurInstance.closeBlocking()`) drop the instance itself, running the
-  loaded module's cleanup via the engine's `Destroy` message. Residual
-  dead-window races inside the attach op (a window dying between
-  `surfaceCreated` and the op) degrade: the `VelloRenderer` installs a
-  log-not-panic `on_uncaptured_error` policy and keeps `init_surface`
-  fallible only for capability discovery (see the renderer's "wgpu error
-  policy" module docs) — no wgpu-reported error can abort the host
-  process. Engine-side seam: the host-side renderer is a replaceable
-  `Option` slot (`TurApp::attach_renderer` / `detach_renderer`;
-  `build_headless` = initialize-without-renderer).
-- `tur-native` is **native-only** (root `compile_error!` on wasm32);
-  `WasmRuntimeConfig::pools` / `WasmAppConfig::pool` + `WasmRuntime::default_pool`
-  expose pools to wasm hosts; `AndroidRuntime::default_worker_pool` + the
-  `default_worker_pool` param on `AndroidInstance::build` expose them to
-  the Compose path.
-
-Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
-`WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +
-`rememberTurRuntime` (Compose). The integration tests under
-`tests/element/multi_instance.rs` pin the isolation guarantees;
-`tests/element/worker_pool.rs` pins the pool contract (sharing, cap,
-cross-pool isolation, lifecycle); `tests/element/worker_spawn_blocking.rs`
-pins `spawn_blocking` (off-thread + co-tenant non-stall);
-`tests/element/vsync_source.rs` pins shell-supplied per-instance frame
-clocks (incl. the fail-fast when a shell hands back none).
-
+One runtime, many instances (unchanged from the JS era except every instance
+hosts a rut VM instead of a JS realm): `TurRuntime` owns fonts / clock /
+capabilities / plugins; `app_builder()…build()` spawns an isolated instance
+(own rut VM, tree, store, focus manager, subsystems) onto a worker lane;
+`build_headless` for no-render instances. `VirtualAppView` hosts nested
+instances (child = a full engine instance; its batch replays into the
+parent's). Pinned by `tests/element/multi_instance.rs`,
+`worker_pool.rs`, `worker_spawn_blocking.rs`.
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Flexible`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Text`, `Input`, `Paragraph`, `Image`, `Svg`, `VirtualAppView` (all in `tur-engine::builtin_plugins::*`) · `Opacity`, `Transform` (tur-animation)
+`Column`, `Row`, `Expanded`, `Flexible`, `Stack`, `Positioned`, `SizedBox`,
+`Container`, `Grid`, `Table`, `PointerInteract`, `MouseRegion`, `Focusable`,
+`Text`, `Input`, `Paragraph`, `Image`, `Svg`, `VirtualAppView`,
+`Opacity`, `Transform` (animation rows), `ScrollView`, `Scrollbar`,
+`LazyList`, `LazyGrid`, `Condition`, `Switch`, `Each`, `Fragment`.
 
-### Virtual app model
+### Flutter-like layout model
 
-Every tur instance is a **virtual app**; what differs is only *who hosts it*. The embedder hosts the root (canvas/DOM/JNI as its host surface, via `TurRuntime::app_builder()`); a `VirtualAppView` element hosts a child (the element as its host surface, via the JS API). Nesting composes — a child can host its own `VirtualAppView` (bounded by pool caps). JS surface on `tur:std`: `createModuleSource(source) -> ModuleSourceHandle` (opaque handle — the string never crosses the JS API again), `forWorkerPool(name) -> WorkerPoolHandle` (resolves a registered pool **eagerly** — the very handle the embedder registered, shipped to the worker at instance build; unknown name throws at the call site), `createVirtualAppController({ source, pool?, keepAlive?, onRuntimeError$? })` (a **lazy declaration** with `status$` / `errorMsg$` readables + the `destroy$` control mutation, dispatched via `store.set`; `pool` is handle-only — a `WorkerPoolHandle` from `forWorkerPool`, default the auto-registered `"virtual"` pool; `onRuntimeError$` is an optional `Mutation` notified of runtime JS errors inside the child — throws from mutations/view closures/factories/microtasks/async callbacks + promise rejections with no handler at end of turn — receiving a reconstructed parent-realm `Error`, never firing for load/start failures and never flipping `status$`; the rail is engine-wide: worker-side capture funnels into `core::app::runtime_error`'s `RuntimeErrorReporter` riding the boa Context as host-defined data, plus `PromiseRejectionHandler` hooks implementing the standard `promise_rejection_tracker`), and `VirtualAppView({ app$: Readable<Controller | null> }).background(…).width(…).height(…).fallback(…).errorView(…).build()` — binding materializes the child, unbinding destroys it (unless `keepAlive`); new code = `destroy$` + a new controller with a new source (no in-place reload).
+Unchanged: flex Column/Row with Expanded/Flexible (tight/loose), Stack +
+Positioned, Container sizing, degenerate-case degradation with one error log,
+ScrollView = SingleChildScrollView semantics, LazyList/LazyGrid = ListView
+semantics, Flutter-parity hit testing (`HitTestSelf`), render dedup via batch
+fingerprints.
 
-The seam (engine core, `core::virtual_app`): a `VirtualHost` — the **instance's host-side core**: its [`VirtualAppId`] identity (`ROOT` for embedder-hosted instances, a parent-minted token for element-hosted children — assigned through the engine-internal `TurRuntime::spawn_hosted_instance`, never a builder option), the backend rails (it wraps the parent's `HostBackend` — worker sender + wake; later egress milestones will reach the parent's shell rail through it), the destroyed flag, and the children it hosts (a recursive `HashMap<VirtualAppId, Rc<VirtualHost>>` — hosting nests as the same type, bounded by pool caps). `TurApp` is a thin public facade over the core (one `Rc<VirtualHost>` field + forwarders; `TurApp::id()` exposes the identity); `TurAppLooper` routes `HostMsg::VirtualControl` straight to the core (`HostBackend::apply_msg` never sees one). Children spawn from the **same `TurRuntime`** into the pool the controller's `WorkerPoolHandle` names (default `"virtual"`, auto-registered, cap 2, overridable; resolved worker-side by `forWorkerPool`, carried by the spawn control). The child's `Renderer` is a `ForwardingRenderer` — each painted batch (+ image uploads) ships back to the **parent's worker** as an `AppEvent::Custom` `VirtualFrameEvent` (status rides the same rail as `VirtualStatusEvent`). The child's `VirtualShell` hands it the **parent's vsync source** (both loopers wake on the same tick). **Input forwarding**: pointer (down/up/move) + wheel events over a host element forward into its child via `VirtualAppSubsystem::handle_platform_event` — hit-test the parent tree, translate to child-local coordinates (`position − host origin`), ship a `VirtualControl::PlatformEvent`; an interactive element in front of every host consumes the event instead, and the child composes gestures in its own arena (key/IME stay parent-side until the child-focus milestone). The render model is untouched: the host element's **own paint** replays the child's `RenderCommandBatch` with existing canvas ops (per command: push child transform → ops, image ids re-keyed into the parent's `ImageResource` space → pop), clipped to the element rect. Layout-driven resize: `VirtualAppSubsystem` ships the element's final rect (`flush_post_layout`, the CompositedTransform precedent; re-shipped once the child reports `Running` — the first ship can race the spawn). `TurApp::destroy` tears down hosted children first (each child's module cleanup runs in its own worker); children surface as `Rc<TurApp>` **facades** via `TurApp::virtual_apps()` (minted per call — identity lives on the core, so compare `id()` not `Rc::ptr_eq`; test/advanced accessor — driving a child is identical to driving the root). Pinned by `tests/element/virtual_app.rs`.
+### Rendering
 
-Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
+vello-hybrid, two backends: WebGL2 (`WebGlVelloRenderer`, wasm) and wgpu
+(`VelloRenderer`, native) + a noop renderer. The worker records a
+`RenderCommandBatch`; the host applies + presents it at the render commit
+point (frame-deduped by content fingerprint).
 
-### Animation model (Flutter-aligned)
+### Module runtime
 
-Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hooks (`flush_pre_layout` / `flush_post_layout`) + `Clock` accessor — no animation code is in `tur-engine`.
+The rut VM (rut-vm): compiled modules run as tasks with a virtual clock
+synced to the engine clock (`run_ready` at pump level). Async engine APIs
+(clipboard / net / filepicker) are `pkg_async_fn!` rows returning
+`Completer`s — rut code `await`s them through the `async_host` weave
+(`launch_future` + `await`). The engine's derive/watch rows (`rs_derive`,
+`rs_watch`) call back into the VM through the guarded sync face during flush
+(never while the flush holds tree borrows; a mount attempt inside a derive
+traps and reports through the error rail).
 
-- **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, four methods, all defaulting to no-op:
-  - `fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order, **before** the layout step. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
-  - `fn flush_post_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — same cadence + registration order, but **after** the layout step, so it reads the freshly-laid-out tree (`computed_layout`, `absolute_affine_of`). Used for layout-derived recomputation — e.g. `CompositedTransformSubsystem` maps each target's world position onto its follower with final geometry + the follower's just-resolved anchor cache. Without this phase a follower read zero/stale sizes on the first frame and only self-corrected on the next input event (tap/click) — see `follower_correct_on_first_frame_non_topleft_anchor`.
-  - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard platform-bridge).
-  - `fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent)` — called per drained engine-internal event, every fixed-point iteration, in registration order. Used by scroll-chaining / scroll-to / clipboard-write / clipboard-paste / caret-visibility subsystems.
+### Debugging the playground
 
-  `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, the capability registry, plus the engine-signalling channels `mark_dirty` / `request_paint` / `request_frame` and the `frame_id()` self-gate. These channels are bundled in `FlushSignals` (built once per `flush()` and shared with every context constructed that call).
-- **`Curve`** (`tur-animation::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
-- **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
-- **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `tur:animation`.
-- **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
-- **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. The retarget is detected inline in each channel's `derive` closure — it probes `ctx.get(target)` (throws for non-atoms, so static props pass through), compares against the last-seen target, and on change rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
-
-`tur-animation` registers ONE combined consumer-facing module `tur:animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
-
-### Text model
-
-Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_text(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
-
-- **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; the text plugin only produces these structs.
-- **`extract_layout_data(props) -> TextLayoutData`** (`builtin_plugins/text/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
-- **Elements** (`builtin_plugins/text/elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
-- **Controllers** (`builtin_plugins/text/controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
-- **Post-event caret visibility** (`builtin_plugins/text/handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `builtin_plugins/input/{subsystem.rs,ime.rs}` no longer call caret-scroll directly.
-- **Paste dispatch** (embedder → tur-clipboard → text plugin): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `builtin_plugins::clipboard::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. The text plugin's `ClipboardPasteSubsystem` (`builtin_plugins/text/handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits). The event payload types themselves live in `builtin_plugins::clipboard::event` (clipboard-plugin-owned; cross-plugin via `pub(in crate::builtin_plugins)`).
-
-JS surface is unchanged — `tur:std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
-
-### Image model
-
-Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_image(ctx: &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
-
-- **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; the image plugin only produces these structs.
-- **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
-- **Decoders** (`builtin_plugins/image/decode`): `decode_image_bytes(&[u8])` (PNG/JPEG via the `image` crate) and `decode_svg(&str)` (rasterised via `usvg` + `resvg`). The `image` / `resvg` / `usvg` deps live in `tur-engine`'s Cargo.toml.
-- **Element** (`builtin_plugins/image/element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurInstanceContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
-- **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind.
-- **Id ranges are disjoint by construction**: worker-minted ids (`ImageManager::allocate`) count **up** from 0; host-minted ids count **down** from `HOST_IMAGE_ID_BASE = 1 << 53` (a `debug_assert` guards the worker counter). The base keeps every host id ≤ 2⁵³, i.e. exactly representable as the f64 the id crosses the JS number boundary with — a base above 2⁵³ would alias early host ids in JS.
-
-JS surface: `tur:std` exports `Image` / `createImageResource` / `createSvgResource` / `imageResourceHandle`. Resource handles are the opaque `ImageResourceHandle` (same `JsData` payload pattern as `ModuleSourceHandle`); `Image().resourceId(...)` accepts the handle **or** a plain number (legacy numeric atoms keep working).
-
-**Host-side registration** (`TurApp::register_image(image: ImageResource) -> ImageResourceId`, host-thread, synchronous): the embedder builds the resource itself (`ImageResource::from_rgba`, or a decode in the embedder crate — keeps `core → builtin_plugins` clean) and hands JS only the handle — pixel bytes never enter the JS realm. Host-side it retains the Blob + uploads to the renderer (the same `retain_and_upload` rail as the `UploadImage` arm, no `HostMsg` needed); the worker is told only the natural size via the fire-and-forget `WorkerMsg::RegisterImageMetadata`. **FIFO guarantee**: the shared worker channel processes the metadata before any later message that could expose the id to JS (`EventBusToJs`, `LoadModule`), so a fresh registration always validates. JS wraps the delivered numeric id via `imageResourceHandle(id)` (validated — an unknown id throws instead of rendering zero-sized). Pinned by `tests/element/host_image.rs`.
-
-### Domain traits
-
-Each element implements these focused traits:
-
-- `ElementOnUpdate` — JS property mutation (`set_prop`)
-- `ElementLayout` — layout (`perform_layout`: measure children, compute own size, assign child offsets in one pass)
-- `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
-- `ElementSubscribe` — declares which reactive atoms the node depends on (`subscribe`), so a reactive flush can mark it dirty for re-layout. Runs as an explicit phase after `perform_layout` for dirty nodes.
-
-Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits). Paste is **not** an element trait — it flows through a `ClipboardPasteEvent` (inside `AppEvent::Custom`) + tur-text's `ClipboardPasteSubsystem` (see [Text model](#text-model)).
-
-### Data flow
-
-1. JS calls `globalThis.__tur.*` → bridge creates `AnyElement` in `ElementTree`
-2. `ElementTree::compute_layout()` lays out dirty nodes: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the store's atom→subscriber index)
-3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
-4. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
-5. The worker records the paint walk into a `RenderCommandBatch`; `HostBackend` applies it host-side via `Renderer::render_commands` + `present`
+The whole playground renders to a single `<canvas>` — tur renders its own UI.
+The dev tool is engine-native: `TurApp::dev_tool_element_tree` /
+`dev_tool_get_element` / `dev_tool_frame_stats` / `set_host_frame_timing`
+(serialize on the worker — see `core::dev` — and surface as the page-level
+`turDevTool` global's methods returning JSON strings). Drive the browser with
+the `agent-browser` CLI; delegate seeing + canvas input to the operator
+subagent. `elementTree()` shapes are unchanged from the JS era.
 
 ## Directory structure
 
 ```
 libs/
-  tur-engine/                # Unified engine crate
-    src/
-      core/                  # Engine infrastructure — NO dependency on
-                             #   builtin_plugins/* (strict boundary)
-        app/                 # TurAppInternal + FrameOutcome + AppEvent/
-                             #   AppEventQueue + mount() entry +
-                             #   RootView/RootElement generic-root wrapper +
-                             #   module_source.rs (ModuleSourceRegistry —
-                             #   engine-owned shared Arc<str> source store
-                             #   for handle-based module loading)
-        virtual_app/         # The engine seam for hosting nested instances:
-                             #   VirtualHost (the instance's host-side core:
-                             #   VirtualAppId identity + backend rails +
-                             #   recursive children map; TurApp is the thin
-                             #   public facade; children spawn from the same
-                             #   TurRuntime via spawn_hosted_instance) +
-                             #   ForwardingRenderer (batches ship to
-                             #   the PARENT WORKER as VirtualFrameEvent) +
-                             #   VirtualShell (shares the parent vsync) +
-                             #   VirtualControl/Status/Frame event types
-        async_/              # CompletionQueue/CompletionHandle (pending
-                             #   completion invocations drained each flush)
-                             #   + executor (TurJobExecutor — boa
-                             #   JobExecutor impl)
-          scheduler/           # Platform scheduling contract (single-role
-                               #   traits, worker vocabulary, no thread
-                               #   concepts, no block_on): mod.rs —
-                               #   WorkerSpawner (host app loops in pools) +
-                               #   VsyncSource (per-instance cadence,
-                               #   shell-supplied) + NoopVsyncSource +
-                               #   HostLoop (main-thread tasks) +
-                               #   WorkerExecutor/WorkerContext (worker-side
-                               #   spawn_local/spawn_blocking/sleep) +
-                               #   WorkerEntry/WorkerTicket +
-                               #   Sleep/VsyncEvents/SpawnError/TaskHandle/
-                               #   track_spawn + the raw host-thread hop
-                               #   mechanics (pub(crate) HostTask/HostDrain/
-                               #   host_channel — the plugin-layer
-                               #   HostExecutor wraps the sender) ·
-                               #   pool.rs — WorkerPoolHandle (the inert pool
-                               #   declaration registered on the runtime
-                               #   builder + assigned per app; pooling itself
-                               #   is platform-implemented)
-        capability.rs        # Capability trait, Capabilities view,
-                             #   CapabilityDecls
-        dev/                 # Dev tooling: turDevTool bridge
-        edgy/                # Reactive substrate: reactive/ (SharedReactive
-                             #   shared per instance + the instance
-                             #   StoreKv + Source/Derived/AnyReadable
-                             #   handles) +
-                             #   mutation/ (MutationHandle/
-                             #   PendingMutationInvocationQueue) +
-                             #   source/derive/mutate/watch/view bridge +
-                             #   watch/
-                             #   (WatcherRegistry — non-element
-                             #   subscribers: start$/stop$ handles,
-                             #   epoch coalescing, loop guard)
-        element.rs           # ElementKind / ElementNodeId / NodeId /
-                             #   FragmentNodeId
-        elements/            # AnyElement, ElementObject, ElementTree
-                             #   (instance-owned — created at build,
-                             #   born-bound to the instance store)
-        focus/               # FocusManager + Focusable trait +
-                             #   BlurEvent/FocusEvent/FocusChange
-                             #   (engine contract — the Focusable *widget*
-                             #   lives in builtin_plugins/focus)
-        fonts.rs             # FontManager + FontLoader (used by
-                             #   Canvas::fill_text_layout)
-        hit_test/            # hit-test primitives
-        image_resource.rs    # ImageResourceId / ImageResourceMap /
-                             #   ImageResource (paint/layout contract)
-        js_runtime/          # boa runtime plumbing: TurInstanceContext, JsProps,
-                             #   FnEntry/ConstEntry, module_loader
-                             #   (build_native_module/bound_native),
-                             #   opaque (BoaOpaque),
-                             #   js_value (FromJs/IntoJs).
-                             #   Shared by every bridge fn engine-wide.
-        layout/              # ElementLayout, ElementSubscribe, LayoutContext,
-                             #   primitives (Constraints/Offset/Size/
-                             #   EdgeInsets/Axis/MainAxisAlignment/…),
-                             #   SubscribeCx
-        shell/              # Shell trait (set_cursor + request_text_input
-                             #   + take_vsync) + NoopShell + TextInputState
-                             #   + Cursor + ShellEvent — the app↔OS
-                             #   interactive layer (incl. the frame clock)
-        platform/            # PlatformEvent envelope { Shell(ShellEvent),
-                             #   Custom } + PlatformEventQueue (raw input
-                             #   from embedder) +
-                             #   key_event.rs (KeyEvent/Modifiers/
-                             #   KeyEventType/KeydownEvent/KeyupEvent —
-                             #   engine contract types)
-        plugin.rs            # Plugin trait (register + requires) +
-                             #   PluginRegisterContext (register-phase
-                             #   only — its subsystem collector is frozen
-                             #   into the instance after the last plugin
-                             #   registers) + CompileContext + HostExecutor
-                             #   (Send+Sync+Clone host-thread hop — wraps the
-                             #   scheduler's pub(crate) channel sender; the
-                             #   engine creates the channel internally in
-                             #   build() so no embedder wiring is needed) +
-                             #   HostRunFuture + PluginRegisterContext::to_host_executor()
-        render/              # PaintContext, Renderer, ElementRender trait,
-                             #   Canvas + brush/ (Color/Brush/GradientStop/
-                             #   RGB types + JS bindings)
-        screen/              # Screen = pure data (logical_size + dpr) +
-                             #   ResizeSubsystem (owns the viewportSize$
-                             #   backing + the instance store's write
-                             #   rail; minted & registered by TurStdPlugin)
-        frame_env/          # FrameEnv (clock + pointer + cursor-resolve
-                             #   state) + PaintEnv + CursorSink
-        subsystem.rs         # Subsystem trait (flush_pre_layout +
-                             #   flush_post_layout + handle_platform_event +
-                             #   handle_app_event) +
-                             #   SubsystemFlushContext + FlushSignals
-                             #   (subsystems signal via cx.mark_dirty /
-                             #    request_paint / request_frame; flush
-                             #    returns () — no SubsystemOutcome)
-        text/                # TextLayoutData + LineInfo + TextRunData
-                             #   (paint/layout contract types only — the
-                             #   text plugin produces them)
-        view/                # View/ViewCx/SharedViewCx + Val<T> + Lifecycle
-      builtin_plugins/       # Feature bundles — each exposes ONE
-                             #   `pub fn install_xxx(ctx) -> Result<Vec<FnEntry>, TurError>`
-                             #   so `core/` cannot import from this tree
-        std.rs               # TurStdPlugin — the orchestrator that calls
-                             #   every install_xxx and merges FnEntry into
-                             #   tur:std
-        clipboard/           # Clipboard capability + ClipboardBackend trait +
-                             #   TurClipboardPlugin + tur:clipboard +
-                             #   event payloads + engine-internal subsystems
-                             #   (inlined from former tur-clipboard-capability
-                             #   crate). Public surface (Clipboard /
-                             #   ClipboardBackend / TurClipboardPlugin /
-                             #   platform_paste) re-exported at tur_engine
-                             #   crate root.
-        console.rs           # Global `console` object (log/warn/error/info/
-                             #   debug) — install_console registers globals
-        control_flow/        # Condition, Switch, Each, Fragment
-        focus/               # Focusable widget (manager + trait are in core)
-        gesture/             # MouseRegion + PointerInteract +
-                             #   GestureSubsystem + PointerSubsystem
-        image/               # ImageElement + ImageView + PNG/JPEG/SVG
-                             #   decoders (inlined from former tur-image crate)
-        input/               # KeyboardSubsystem + ImeSubsystem (event types
-                             #   are in core::platform::key_event)
-        layout/              # Column/Row (flex), Expanded/Flexible (flex
-                             #   item, FlexFit tight/loose), Stack,
-                             #   Positioned,
-                             #   Container/SizedBox + JS layout enums
-                             #   (Axis/MainAxisAlignment/…)
-        lazy_container/      # LazyList + LazyListController (inlined from
-                             #   former tur-lazy-container crate)
-        lifecycle/           # lifecycleView (mount/unmount callbacks)
-        scroll/              # ScrollView, Scrollbar, ScrollController,
-                             #   ScrollSubsystem (inlined from former
-                             #   tur-scroll crate)
-        virtual_app/         # VirtualAppView element + createModuleSource /
-                             #   createVirtualAppController bridges +
-                             #   VirtualAppSubsystem (plugin half of
-                             #   core/virtual_app)
-        text/                # TextElement, EditableTextElement,
-                             #   ParagraphElement, controllers,
-                             #   ClipboardPasteSubsystem,
-                             #   CaretVisibilitySubsystem (inlined from
-                             #   former tur-text crate)
-      renderer/
-        vello/               # VelloRenderer (GPU painting)
-        noop/                # NoopRenderer (logging)
-  tur-animation/             # Animation subsystem (manager/controller/event +
-                             #   Opacity/Transform effects + JS widgets +
-                             #   Curve/NumTween/ColorTween) — registered via
-                             #   TurAnimationPlugin, exposes
-                             #   `tur:animation` (combined native+JS
-                             #   module) + internal `tur:animation/native`
-                             #   (ctx-bound fns only)
-  tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend —
-                             #   re-exports Clipboard/ClipboardBackend/
-                             #   TurClipboardPlugin from tur_engine
-  tur-clipboard-native/      # NativeClipboard (arboard) backend — same
-                             #   re-exports + HostExecutor.
-                             #   NativeClipboard::new(&HostExecutor)
-                             #   stores it and self-hops each read/write to
-                             #   main (macOS NSPasteboard needs main-thread)
-  tur-net-capability/        # HttpBackend trait + Http cap + tur:net —
-                              #   `request`/`requestStream` bridge fns, both
-                              #   returning `Task<T> = { promise, cancel() }`
-                              #   (cancel wire-aborts a stream); per-request
-                              #   bufferBytes backpressure
-  tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
-   tur-net-native/            # NativeHttp (reqwest) backend — runs each request
-                              #   on a user-provided tokio runtime (Handle) and
-                              #   bridges results back via oneshot/mpsc; the only
-                              #   crate in the workspace that touches tokio.
-                              #   request_stream is byte-budgeted: a Semaphore
-                              #   caps in-flight bytes between socket + JS
-                              #   (backpressure option, default 20 MiB) —
-                              #   the producer parks on acquire_many →
-                              #   TCP backpressure
-   tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
-                             #   registers the process JavaVM for per-call attach
-   tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan
-                             #   over an Android Surface + the JNI event/loop
-                             #   bridge. Provides `ops::create_with_plugins`
-                             #   (engine build with an injectable plugin set +
-                             #   Android-default capabilities) + the standard-op
-                             #   `pub fn`s + the `standard_jni_exports!()` macro
-                             #   that generates `Java_org_tur_TurNative_*`
-                             #   trampolines inside an app's own cdylib. No
-                             #   plugins hardcoded (was: cdylib with demo plugin).
-    tur-wasm/                  # Pure reusable rlib (NOT a cdylib): the wasm
-                              #   embedder lib. Owns all DOM wiring + the
-                              #   WebGL2 renderer + WasmClock / WasmFontLoader /
-                              #   WasmShell + standard capability backends
-                              #   (WasmClipboard / WasmHttp / WasmFilePicker). NO
-                              #   #[wasm_bindgen] surface, NO playground code.
-                              #   Exposes WasmAppHandle::create(WasmAppConfig)
-                              #   (a builder with a `configure` callback for
-                              #   extra plugins + an optional after-frame hook).
-                              #   The host cdylib (demo/website/native) wraps it.
-    tur-integration-tests/     # integration test harness + cases
-    tur-native/                # native-only platform integrations (root
-                               #   compile_error! on wasm32): NativeFontLoader
-                               #   (system fonts) + worker_pool (the native
-                               #   WorkerSpawner: NativeWorkerPools with capped
-                               #   shared lane threads + LaneTimer sleep seam
-                               #   + dedicated-thread spawn_blocking)
-    tur-filepicker-capability/ # FilePicker capability + FilePickerBackend trait
-                              #   + tur:filepicker bridge (exports `filePicker`
-                              #   { pick, saveFile }). Opt-in: requires a real
-                              #   backend (no no-op default).
-    tur-filepicker-wasm/       # WasmFilePicker backend (web-sys <input type=file>
-                              #   + <a download>).
-    tur-filepicker-native/     # NativeFilePicker backend (rfd async dialog).
- integrations/
-   compose/                    # Pure-Kotlin Compose AAR (`org.tur`): TurView +
-                              #   TurRuntime + TurInstance + FrameLoop + InputMapper + TurNative
-                              #   (external-fun bridge). Ships NO .so — accepts
-                              #   a runtime handle via TurRuntimeFactory (the app
-                              #   loads its own .so and builds the engine).
- demo/
-   tur-playground-plugin/       # playground-only plugin (TurPlaygroundPlugin —
-                              #   registers tur-ext/demo-helper: swc compiler
-                              #   services; file IO lives in tur:filepicker)
-   compose/                    # Android playground app: MainActivity + DemoNative
-                              #   (loads libtur_demo.so, declares createEngine) +
-                              #   the gradle cargo-ndk pipeline
-      native/                   # `tur-demo` cdylib crate: the app's .so. Links
-                              #   tur-android (rlib) + standard_jni_exports!() +
-                              #   a createEngine fn with the demo plugin set
-                              #   (Std+Animation+Clipboard+Net+FilePicker+
-                              #   DemoHelper). The template users copy for their
-                              #   own app's .so.
-   website/                    # Web host app (@tur-ng/website): thin browser
-                              #   wrapper that loads the wasm + the
-                              #   playground-view bundle. Its rspack runs
-                              #   wasm-pack on `native/` + bundles
-                              #   playground-view's dist/impl.js.
-      native/                   # `tur-website` cdylib: the host .wasm. Wraps
-                              #   tur-wasm's WasmAppHandle + adds
-                              #   TurPlaygroundPlugin (swc compiler only). File
-                              #   IO lives in tur:filepicker (registered by
-                              #   tur-wasm).
-                              #   Exports #[wasm_bindgen] TurWebsiteApp
-                              #   (create / create_in / loadAndRunModule /
-                              #   dev_tool) → tur_website.js. The wasm mirror
-                              #   of demo/compose/native.
-   playground-view/            # @tur-ng/playground-view: the playground UI
-                              #   bundle built with tur:animation + tur:std
-                              #   (Sidebar/Editor/Viewer) + inlined case
-                              #   sources. A reusable view the website
-                              #   renders. Owns the playground-only cases
-                              #   (cases/ — compiler-bridge-demo, github-viewer)
-                              #   + the folded-in @tur-ng/demo-helper types.
- js/
-   packages/
-     tur-animation/            # Ambient TS types for `tur:animation`
-                              #   (runtime provided by tur-animation crate)
-     tur-core/                # Ambient TS types for `tur:core`
-                              #   (engine-owned reactive primitives)
-     tur-test-cases/          # Test cases (cases/, ~60 cases) — pure
+  tur-engine/          # unified engine crate (core + builtin_plugins +
+                       #   kit/ + renderer/vello + rut_runtime)
+  tur-animation/       # animation subsystem + `tur_host` pkg animation rows
+                       #   (+ rut/tur_anim_kit/ — the Opacity/Transform wrappers)
+  tur-clipboard-*/     # capability + wasm/native/android backends
+  tur-net-*/           # capability + wasm/native backends
+  tur-filepicker-*/    # capability + wasm/native backends
+  tur-native/          # native-only platform integrations (fonts, worker pools)
+  tur-wasm/            # the reusable wasm embedder rlib
+  tur-android/         # the Android embedder glue rlib
+  tur-integration-tests/ # harness + integration corpus
+demo/
+  website/             # the web host app + native/ (tur-website cdylib)
+  compose/             # Android playground app + native/ (tur-demo cdylib)
+rut/                   # all rut package sources (pure rut — no build step;
+                       #   every pkg dir carries its rut.jsonc manifest)
+  cases/               # the shared case corpus (<name>/mod.rut + the
+                       #   generated <name>/rut.jsonc + README)
+  tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
+                       #   test-pinned tur_host.d.rut decl snapshot (the Rust
+                       #   rows stay compile truth; bless:
+                       #   TUR_BLESS_TUR_HOST_DECL=1)
+  tur_kit/             # the authored builder surface — a FILE-MODULE
+                       #   TREE: mod.rut (decls only) + the 17 leaf modules
+                       #   under domain dirs (handles, dispatch, reactive,
+                       #   flags, layout/{flex,box,stack,grid_table},
+                       #   text/{core,input}, gesture/{pointer,focus},
+                       #   control_flow/{lifecycle,control}, scroll, image,
+                       #   virtual_app); embedded by tur-engine/src/kit/mod.rs
+                       #   as a Pkg.mods tree (the embed mirrors the disk
+                       #   tree — pinned by tur_host_decl)
+  tur_anim_kit/        # the animation kit (kit.rut; embedded by
+                       #   tur-animation/src/kit.rs)
+  tur_net_kit/         # the net kit (kit.rut; embedded by
+                       #   tur-net-capability/src/kit.rs)
+  playground/          # mod.rut + cases_gen.rut + showcase.json +
+                       #   scripts/gen-cases.cjs
 ```
 
 ## Commands
@@ -1028,160 +221,226 @@ libs/
 ```sh
 cargo build --workspace
 cargo nextest run --workspace            # test runner: per-test process isolation
-cargo test --workspace --doc --locked    # doctests (nextest doesn't run these)
+cargo test --workspace --doc --locked    # doctests
 cargo clippy --workspace -- -D warnings
-```
-
-Tests run under **cargo-nextest** (config: `.config/nextest.toml`; CI uses `--profile ci` with `retries = 2` so an intermittent flake is reported but doesn't fail the run). Each test executes in its own process — a wedged or crashing test can't take down its binary's siblings. Doctests stay on `cargo test --doc`.
-
-**Before running tests**, prepare JS fixtures (install deps, generate TS types, build JS):
-
-```sh
-node scripts/prepare-js-fixtures.cjs
-```
-
-**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo nextest run --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo nextest run --workspace`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { painted, schedule }`) to inspect the schedule decision directly.
-
-### tur-website (wasm)
-
-The website's wasm entry is `demo/website/native` (a cdylib that wraps the pure `tur-wasm` rlib). Build it directly:
-
-```sh
-cd demo/website/native && wasm-pack build --target web
 cargo clippy --target wasm32-unknown-unknown -p tur-wasm -p tur-website -- -D warnings
 ```
 
-### website (web host)
+Tests run under cargo-nextest (`.config/nextest.toml`; CI uses `--profile ci`
+with retries = 2). The rut case corpus needs no build step — cases are plain
+`.rut` sources read from disk (`load_rut_bundle` / the website embeds them at
+compile time).
 
-The website is the browser host app. Building it automatically runs `wasm-pack` (on `demo/website/native`), builds the playground-view bundle, and copies WASM assets + the compiled `impl.js` into the output:
+**Workflow (TDD):** for engine bug fixes, write a failing test under
+`libs/tur-integration-tests/tests/` first (rut fixtures — see the corpus
+README for the fixture conventions), confirm red, then make it green.
+
+### tur-website (wasm)
 
 ```sh
-cd js && pnpm build
-cd demo/website && pnpm build
-# Or use the rspack dev server
-cd demo/website && pnpm dev
-# → https://localhost:8080/ (self-signed cert)
+cd demo/website/native && wasm-pack build --target web
+cd demo/website && pnpm build      # bundles + copies the wasm
+cd demo/website && pnpm dev        # → http://localhost:8080/
+cd demo/website && pnpm dev:tunnel # → https://local-tur.hpp2334.com (cloudflared `tur-local`)
 ```
 
-The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` + `Cross-Origin-Resource-Policy: same-origin`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `in-tree worker_spawn`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`. COEP value must be `require-corp`, NOT `credentialless` — `credentialless` is Chromium-only (Firefox desktop + Android never implemented it and silently ignore it, so `crossOriginIsolated` stays false).
+The dev server sets COOP/COEP headers (required by the multithreaded wasm
+backend — `SharedArrayBuffer` + workers; COEP must be `require-corp`).
+`dev:tunnel` serves the playground over a public custom domain via the
+`cloudflared.yml` next to the config (one-time `cloudflared tunnel login` /
+`create` / `route dns` setup — see that file's header).
 
-### JS (js/ workspace — also covers demo/website + demo/playground-view)
+### JS tooling (repo root)
+
+The pnpm workspace + lint tooling live at the repo root (`demo/website` is
+the only workspace package; biome lint + the website build run from root).
 
 ```sh
 pnpm install
-pnpm build            # build all packages (incl. website + playground-view)
-pnpm lint             # biome lint across js/ + demo/website + demo/playground-view
+pnpm lint
 ```
 
-### Per-package JS builds
+### Android
 
-```sh
-cd demo/playground-view && pnpm build
-cd js/packages/tur-test-cases && pnpm build
-```
-
-### Android (on-device debug)
-
-Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), install/launch, and the **macOS Sequoia `adb` local-network block** workaround (Apple-signed `python3` localhost proxy — Sequoia silently denies the third-party `adb` daemon LAN access with `No route to host`) live in the **`android-dev` skill** at `.opencode/skills/android-dev/SKILL.md`. Load it (`@android-dev`) whenever working with `tur-android` / `demo/compose` on a device or emulator.
+Android build + device debugging live in the **`android-dev` skill** at
+`.opencode/skills/android-dev/SKILL.md`.
 
 ## Conventions
 
 - Rust edition 2024, MSRV 1.91
-- JS: TypeScript strict mode, ESNext modules, rspack bundling
-- **Element construction (JS) uses the builder pattern**: `Xxx({ ...required })` (or `Xxx()`) returns a chainable builder — one method per prop (camelCase, same key as the historical prop; `Each.build` → `.itemBuilder`, `Table.build`/`buildHeader` → `.rowBuilder`/`.headerBuilder`), `.children([...])` appends, `.child(el)` sets the single child, and `.build()` materializes the `Element` (required-prop validation fires there). Machinery: `core/js_runtime/builder.rs` (per-element `BuilderTable` beside each bridge's `from_js`; methods on one shared prototype per element per realm; all plain fn pointers). Controllers/factories (`createScrollController`, `createVirtualAppController({ ... })`, `lifecycleView(fn)`, …) keep their object/positional forms. Migration codemod: `scripts/migrate-builder-codemod.mjs` (+ `--rust` for fixtures in raw strings); straggler audit: `scripts/audit-builder-legacy.mjs`.
-- Linting: biome
-- Layout: Flutter-inspired (Column, Row, Expanded, Flexible, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, `Expanded` fills remaining space (`FlexFit.tight`: the child is forced to fill its slot), `Flexible` caps at the slot (`FlexFit.loose`: at most the slot, smaller allowed — the child shrink-wraps below it; `.fit(FlexFit.Tight)` opts into Expanded semantics; in Flutter `Expanded` literally IS `Flexible(fit: FlexFit.tight)`), Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior). Non-flex children of a Column/Row receive **unbounded main-axis constraints** (matching Flutter's `RenderFlex`, which passes only the cross axis down): a nested flex's default `MainAxisSize.max` degenerates to content size, so nested Columns/Rows shrink-wrap — filling the parent's main axis requires `Expanded`/`Flexible` or an explicit size. For the same reason, an ellipsizing `Text` in a Row needs an `Expanded`/`Flexible` wrapper to receive a finite width budget (a bare non-flex child gets an unbounded main axis and cannot ellipsize — in Flutter too). Degenerate layouts (Stretch under an unbounded cross axis, `StackFit.expand`/`Positioned` edge-pairs under unbounded axes) degrade gracefully instead of Flutter's layout errors, but log one `tracing::error!` per element instance. Flex children under an unbounded main axis follow Flutter's `canFlex == false` mechanics: they lay out as INFLEXIBLE (unbounded main passed through, actual sizes feeding `MainAxisSize.min` shrink-wrap — the legal `Flexible` + `MainAxisSize.min` pill shape); the tight-fit / `MainAxisSize.max` shape Flutter rejects degrades the same way with a one-time error log. A Text width budget of exactly 0 is a real budget (a collapsed slot ellipsizes to the `…` glyph — its internal layout never runs unbounded). `ScrollView` follows `SingleChildScrollView` semantics: it sizes itself to `constraints.constrain(child.size)` — shrink-wrapped to its content on both axes, filling only under tight constraints (`Expanded`) and showing full content under unbounded ones; make scroll content fill the width with a `crossAlignment: Stretch` content Column. `LazyList`/`LazyGrid` keep ListView semantics (require + fill bounded constraints; unbounded collapses to a zero viewport with an error log).
-- Stack/Positioned (Flutter `RenderStack` parity): the Stack is sized by its **non-positioned** children only; positioned children are then laid out in a second pass constrained per-axis by the stack's final size, so `Positioned` edge anchors resolve against the STACK (`left`/`top` win; else `x = stack_w − right − child_w`, same for `bottom`; an opposing edge pair implies the extent `stack − l − r`). A positioned-only Stack sizes to `constraints.biggest` (bounded axes; unbounded axes shrink-wrap to the positioned children). Full-bleed overlay stacks therefore need a full-size non-positioned layer — `Stack().fit(StackFit.Expand).children([background, …, Positioned(…).build()]).build()` (the countdown case is the reference).
-- Hit-testing (Flutter `RenderBox.hitTest` parity): an element absorbs a hit only if a **child** absorbed or the element itself opts in via `ElementRender::hit_test_self` → `HitTestSelf::{Opaque, Translucent, Defer}` (default `Defer` — invisible wrappers are transparent, so hits fall through to what's behind). Opaque: painted surfaces (Text/Paragraph, EditableText, Image/Svg, Container **iff it paints** — color/border/shadow, Table iff chrome, the visible-track Scrollbar), scroll viewports (ScrollView/LazyList/LazyGrid — the Scrollable's opaque listener), VirtualAppView (host surface), and PointerInteract/MouseRegion with the default `HitTestBehavior.Opaque` (a bare `PointerInteract()` stays clickable; `Translucent` joins the hit path without blocking what's behind). `hit_test_bounds` (the containment gate) is a separate trait method. The hit path is the root→absorber chain (+ translucent members); the wheel router, gesture dispatch (mouse broadcasts to the whole path; touch probes top-down), pointer-region enter/exit, focus clear-on-click, and virtual-app input forwarding all consume that path.
-- Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlVelloRenderer`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`VelloRenderer`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint the element tree into a vello-hybrid `Scene`; each backend wraps it with its own renderer + `Renderer` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
-- JS engine: boa_engine (pure Rust, compiles to wasm32)
-- Bridge fns are **plain fn pointers only** (`FnEntry`, ctx-bound: `args[0]`
-  is the `TurInstanceContext`, user args start at index 1). Per-instance
-  plugin state → `define_plugin_state` / `plugin_state::<T>()`; per-object
-  method state → the JS object's `JsData` payload read off `this`. No
-  `NativeFunction` closures in bridges (see "Plugin state" under the
-  Capability registry section).
-- Async JS model: every async engine API returns `Task<T> = { promise, cancel() }` (`sleep`, `clipboard.*`, `request`/`requestStream`, `filePicker.*`). Compose with plain `async`/`await` or `.promise.then` — never generators (`launch` is gone). `cancel()` aborts what the op can abort (a sleep timer, an unpolled/in-flight request, a stream download) and **rejects the promise with a `CancelError`** (`isCancelError(e)`); the debounce idiom pairs `.then(onOk, () => {})` so the no-op rejection handler IS the cancelled branch.
-- No separate RenderTree — layout and paint happen directly on ElementTree
-- When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
-- Publishable npm packages (the `@tur-ng/*` packages under `js/packages/` that carry a `publishConfig` block — `tur-core`, `tur-std`, `tur-animation`, `tur-clipboard`, `tur-net`): whenever you modify one, bump its **patch** version by exactly +1 over the latest version **published on the npm registry** (`npm view <pkg-name> version`, e.g. `npm view @tur-ng/std version` → set the branch's `version` to that + one patch). Do **not** use `main`'s `version` as the baseline — `main` frequently drifts ahead of the registry (e.g. `main` holds `0.1.0` while `@tur-ng/std` is published at `0.0.2`), so it yields wrong numbers. Never bump twice on the same branch for the same change; never bump minor/major unless asked.
+- Layout: Flutter-inspired (see the layout notes above; unchanged).
+- **Host-pkg rows are the ONLY script surface**: every `tur_host::…` call is a
+  typed row — a `pkg_fn!`/`pkg_async_fn!` body + a `decl_rows` entry. The
+  decl (compile-time) and body (runtime) signatures must agree exactly.
+- **Every rut pkg dir carries a `rut.jsonc`** (the manifest grammar: the
+  pinned rut checkout's docs, `reference/project-structure.md`): `name`
+  (bare `[a-zA-Z0-9_]+` — kebab dir names sanitize to underscores for the
+  per-case manifests); the body is the FILE-MODULE TREE — the root module
+  is `mod.rut` beside the manifest and `mod NAME;` mounts `NAME/mod.rut`
+  (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly);
+  `type: "host"` + `entry.type` for a pure-declaration pkg. `tur_host`'s
+  decl surface is
+  the GENERATED `rut/tur_host/tur_host.d.rut` snapshot — the Rust rows
+  stay compile truth; the pin test (`tur_host_decl`) diffs the snapshot
+  against the live standard session and fails on drift (regenerate
+  deliberately: `TUR_BLESS_TUR_HOST_DECL=1`). The per-case manifests are
+  generated the same way (`TUR_BLESS_CASE_MANIFESTS=1`).
+- **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
+  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
+  exceptions live in the test's commented allowlist: the playground's
+  pg_*/rs_derive/second-use-line accommodations, the generated
+  `cases_gen.rut`, github-viewer's net row, and the corpora's named
+  raw-row probes); `rs_derive|rs_derive2|rs_watch` have no call sites
+  outside the kit's wrappers (the authored spelling is
+  `derive<T>`/`watch<T>`); and the deleted stash rows
+  (`st_put|st_take|stf_put|stf_take`) have zero spellings anywhere.
+- **The kit is THE element construction surface** (`rut/tur_kit/` — a
+  FILE-MODULE TREE: the root `mod.rut` is DECLS-ONLY (the `pub mod`
+  edges — no content lives in a namespace node) and the 17 leaf modules
+  sit under domain dirs — handles, dispatch, reactive, flags,
+  layout/{flex, box, stack, grid_table}, text/{core, input},
+  gesture/{pointer, focus}, control_flow/{lifecycle, control}, scroll,
+  image, virtual_app; every flat `<name>.rut` is gone — a loose file
+  beside a module dir is a loud loader error); the engine embed
+  (`tur-engine/src/kit/mod.rs`) hands the tree to the compiler through
+  `rut_driver::Pkg::mods` (`tur_kit_mods()` / `tur_kit_pkg()`) and the
+  `tur_host_decl` pin test diffs the embedded set against the disk tree;
+  animation wrappers in `rut/tur_anim_kit/kit.rut`):
+  one wrapper CLASS per element over its family's rows — chainable,
+  ONE METHOD PER PROP, names = the historical camelCase props in rut
+  snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
+  `obscure`, …). Construction is the class call form `X()` over the
+  `[constructor] fn builder()` (`Row()`, `SizedBox(400.0, 200.0)`) — the
+  `.builder()` long form stays valid (byte-identical lowering) — and
+  construction is CHAINED, never statement-mutated
+  (`let c = X().prop(..).child(..);`, not `let mut c` + `c.prop(..)` runs).
+  `.child(c)` / `.children([…])` append children; `.build()`
+  is the ONLY terminal and calls the FAMILY's build row (`Column.build()` →
+  `flex_build`, `Text.build()` → `text_build`). Required-prop validation
+  stays in the rows/View constructors. **Handlers are mutations**
+  (`on_click(mutate(fn (ctx: MutationCtx) { … }))` over the MutationCtx —
+  the boa triad: source / derive / mutate; writes flow through `ctx.set_*`,
+  composition through `ctx.run*`, state by capture); fn-values are the
+  SUBSTRATE (the branch builders stay plain fn literals —
+  `Each(items).item_builder(fn (i: u64, item: str) -> View { … })` —
+  sealed into opaque boxes rut-side, fired through the infra dispatch
+  entries); the arity/type check happens at the kit boundary at compile
+  time. Nothing callable ever crosses the boundary as a string or a
+  closure. Case modules declare `entry fn` ONLY for `start` (+ deliberate
+  test/embedder probes — `entry` = a published contract, never a
+  callback). Async journeys are PLAIN RUT: `launch_future(work(handles…))`
+  over ordinary params — the launching mutation hands its own
+  `MutationCtx` along as a plain value when the body needs access (a
+  launch site with no ctx of its own — `start`, the boot rail — mints
+  the entry rail's ctx, `entry_ctx()`); `await sleep` rides the futures
+  prelude. No `TaskCtx`/`spawn`/`Task`; the stash rails (`st_*` /
+  `stf_*`) are DELETED (state crosses as `AppContext` fields — see the
+  fixture contract below). Reactive bindings are methods, not variants:
+  the literal keeps the base
+  prop (`Text().text("hi")`, `Container().color(0x…u64)`), the reactive
+  lane is the `*_bound` method over `Readable<T>` (`Text().text_bound(r)`,
+  `Container().color_bound(r)`, `Expanded().flex_bound(r)`). The
+  unified one-name-over-`Readable<T>` law (base prop takes the handle,
+  `sv`/sugar for literals, the `*_bound` twins gone) is blocked on
+  param-type overloads — rut at this pin rejects duplicate fn/method
+  names outright; it lands with the compiler feature. Flags are per-family
+  NAME-ONLY enums on the kit (`Align`, `MainAlign`, `CrossAlign`,
+  `MainAxisSize`, `StackFit`, `Axis`, `BoxFit`, `BorderPosition`, `Clip`,
+  `HitTestBehavior`, `SpanFlags`, `Cursor`): kit methods take the enum and
+  unwrap once at the row (`flex_main_align(self.spec, code(v))`) — the
+  mappers are the sole carriers of the row codes (the `tur_host` u64
+  const pushes are deleted). The kit hides row churn from call sites;
+  the rows are the boundary.
+- **The kit's import laws** (the file-module tree's two doors): INSIDE
+  the kit there are no `use tur_kit` lines — cross-file references are
+  dot-qualified positions over full-from-root mod paths
+  (`flags.MainAlign`, `flags.main_align_code(v)`, `handles.View`,
+  `reactive.Readable<T>`, `gesture.pointer.InputEvent`), and each leaf's
+  `use tur_host` line carries exactly the rows THAT leaf calls (uses
+  bind per file — a sibling's use never leaks). Consumer-reachable names
+  are `pub`; kit-internal cross-file plumbing is `pub(pkg)` (the flags
+  code-mappers, the SEAL_* tags, `View.raw()`, `DeriveCtx.over`);
+  file-local helpers stay private — the crossing gate is LIVE at this
+  pin (`only pub names cross packages`), so a `pub(pkg)` name in a
+  consumer's use list is a loud compile error. OUTSIDE the kit,
+  consumers import through DEEP paths — one grouped use line per module,
+  names ASCII-sorted: `use tur_kit::flags::{ Align, MainAlign };` /
+  `use tur_kit::layout::flex::{ Column, Row };` (a name's import path IS
+  its home; there are no re-exports). The braceless single-name leaf is
+  refused on 1-segment mod paths (`use tur_kit::handles::mount;` parses
+  as `use pkg::A::B;`) — keep the braces: `use
+  tur_kit::handles::{ mount };`.
+- **The layering law**: `core/` owns MECHANISM, never elements. Zero
+  references to `builtin_plugins`, zero element/view names, no shared builder
+  contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
+  rows). Every element family is complete unto itself, owned by the plugin
+  that owns its view type: its spec struct, its constructor row, its setter
+  rows, its `*_child` row, its `*_qkey` row, and its own `*_build` terminal
+  (family-prefixed names: `flex_*`, `box_*`, `text_*`, `input_*`, `stack_*`,
+  `pos_*`, `scroll_*`, `lazy_*`, `each_*`, `cond_*`, `switch_*`, `pi_*`,
+  `mr_*`, `focus_*`, `img_*`, `va_*`, …) — each installed via its own
+  `rut_rows.rs` + `push_rut_ext` (the tur-animation installer pattern). The
+  kit lives OUTSIDE `core/` and is registered by the standard plugin set
+  (`TurStdPlugin` prelude), never by core. Pinned by
+  `libs/tur-integration-tests/tests/layering.rs`.
+- Module fixtures in tests: `load_rut_module` (inline) / `load_rut_bundle`
+  (corpus); state probes are `entry fn`s, bound labels (query keys),
+  dev-tool tree queries, or controller rows — never a script realm poke.
+- **The context-crossing fixture contract** (inline test fixtures): the
+  module builds an `AppContext` record and the EMBEDDER holds it between
+  entry calls — no stash, no raw-atom args. `fn start() -> AppContext` +
+  `entry fn entry_start() -> opaque` boxing it (boot defers to the
+  embedder's first probe), OR the eager twin `entry fn start() -> opaque`
+  (the engine boots it at load; the slot token IS the
+  `rut_start_answer`). Control entries take `cx: opaque` and downcast —
+  `opaque.downcast<AppContext>(cx)` behind a shared `*_cx(cx)` helper
+  (the nil-guard is belt-and-braces; a kind mismatch is the loud
+  channel) — and writes ride `entry_ctx()` (the entry rail's ctx).
+  Harness: `call_rut_entry_opaque("entry_start")` → the context token;
+  `call_rut_entry_cx` / `_cx_u64` / `_cx_f64` / `_cx_str` drive the
+  control entries. Mirrors become `cx` fields or answered values (a
+  `-> str` probe). Real-input driving (clicks/keys) stays for genuine
+  gesture tests. The corpus CASES keep `entry fn start() -> u64` +
+  atom-arg probe entries (the playground embeds them; their boot must be
+  eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
+- Known upstream rut bug (pin 80b56c6, the duplicate-boot-scope
+  type-interning family): some module-shape edits trip it — kit fn/row
+  resolution collapses ("argument N is X, Y expected" far from the edit)
+  or an interface-typed capture misbinds at runtime ("no impl for
+  interface slot N"). Accommodations that hold: keep captured sources
+  CONCRETE-annotated (`Source<T>`, not `Readable<T>`) when they cross
+  ctx calls or struct fields; make import-list deltas single-name; an
+  interface-annotated `let` before the first `mutate` seeds the table;
+  the playground keeps a second `use tur_host` line (load-bearing). The
+  playground's status label spells its derive through `rs_derive` (the
+  plain-fn rail) for the same reason.
+- Linting: biome (root workspace; `pnpm lint` at the repo root).
+- Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
+  workspace are gone; `@tur-ng/website` remains (the private website shell).
+- Async: capability rows are async functions awaited through the rut weave;
+  cancel rides the task opaque's cancel row (`net_stream` + `task_cancel`).
+- Runtime errors: VM task traps + face traps ship as
+  `HostMsg::RuntimeError{report}` to the embedder (see
+  `core::app::runtime_error`); the virtual-app status rail reports child
+  boot/runtime failures through `va_status` / `va_error`.
 
-### Renderer trait
+## Renderer trait
 
-The `Renderer` trait is defined in `tur-engine::core::render`. The renderer
-lives on the host thread (owned by `HostBackend`); the worker ships it a
-`RenderCommandBatch` (one frame's recorded paint ops):
-
-```rust
-pub trait Renderer {
-    fn render_commands(&mut self, commands: &[RenderCommand]);
-    fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
-    fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
-    fn upload_image_resource(&mut self, _id: ImageResourceId, _image: &ImageResource) {}
-    fn render_to_pixels(&mut self) -> Option<(u32, u32, Vec<u8>)> { None }
-}
-```
-
-Use `VelloRenderer` (wgpu, native) or `WebGlVelloRenderer` (wasm) for GPU
-rendering, or `NoopRenderer` for debug logging.
+Unchanged (see `tur-engine::core::render`): `render_commands` + `present` +
+`resize` + `upload_image_resource` + `render_to_pixels`.
 
 ## Debugging the playground (main agent + operator)
 
-The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly with the `agent-browser` CLI (Vercel's browser automation CLI for agents, run from the shell — `agent-browser skills get core --full` is the canonical command reference) and delegates seeing + driving to the **operator** subagent (Task tool, `operator` type — `.opencode/agents/operator.md`): a multimodal agent that reads screenshots AND operates the playground browser itself (open, screenshot, canvas input, last-resort turDevTool inspection). agent-browser keeps the browser alive in a background daemon, so open → inspect → click → screenshot are successive shell commands against the same live page.
-
-### Start the dev server
-
-```sh
-node scripts/prepare-js-fixtures.cjs    # build JS fixtures once
-cd demo/website && pnpm dev
-# → https://localhost:8080/ (self-signed cert)
-```
-
-The dev server runs over HTTPS with a self-signed cert — pass `--ignore-https-errors` when opening it (no other cert plumbing needed):
-
-```sh
-agent-browser open https://localhost:8080/ --ignore-https-errors
-agent-browser wait 9000    # engine boot + first hosted case
-```
-
-### Drive the canvas
-
-1. `eval` reads exact element rects: `agent-browser eval "(async () => JSON.parse(await globalThis.turDevTool.elementTree()))()"`. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `(async () => JSON.parse(await globalThis.turDevTool.getElement(id)))()`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
-2. Click with real input at viewport coordinates: `agent-browser mouse move 30 200 && agent-browser mouse down && agent-browser mouse up`. Synthetic dispatch also works, but wrap it in an IIFE — plain top-level `const` in `eval` collides with page-level bindings: `agent-browser eval "(() => { const c = document.querySelector('canvas'); c.dispatchEvent(new MouseEvent('mousedown', { clientX: 30, clientY: 200, bubbles: true })); c.dispatchEvent(new MouseEvent('mouseup', { clientX: 30, clientY: 200, bubbles: true })); })()"`. Keyboard: `agent-browser focus canvas && agent-browser press Enter` (or focus the hidden `<textarea>` when an `EditableText` has focus).
-3. Confirm the result: re-run the turDevTool evals, or `agent-browser screenshot .agent-browser/check.png` and read the image. `agent-browser console` / `agent-browser errors` dump captured page output.
-4. `eval` returns the expression's value and awaits promises automatically — never write a bare top-level `await` (syntax error); wrap `await` / multi-statement code in an async IIFE as above. Add `--json` for machine-readable output.
-
-### Verify visually with the operator
-
-`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot and either read it yourself or pass the file path to the **operator** subagent (Task tool, `operator` type) with a focused PASS/FAIL question — or hand the whole see → act → see journey to it. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since color perception is unreliable.
-
-### Stop the dev server after verification
-
-Once visual verification is done, close the browser and **kill the dev server**:
-
-```sh
-agent-browser close         # shut down the automation browser
-lsof -ti:8080 | xargs kill  # (or pkill -f "rspack dev")
-```
-
-Do not leave the dev server running — it holds port 8080 and rebuilds wasm on every watch cycle.
-
-### Clean up screenshots after verification
-
-Save screenshots under the gitignored `.agent-browser/` directory (paths resolve relative to the invoking shell's cwd) — never the workspace root. After every visual-verification round, remove them:
-
-```sh
-rm -rf .agent-browser    # scratch screenshots only; the dir is gitignored
-```
-
-Verify with `git status` — only the intended source changes should remain. Never commit a screenshot.
+Start the dev server (`cd demo/website && pnpm dev` →
+http://localhost:8080/ — open with `agent-browser open
+http://localhost:8080/`), drive the canvas via
+`agent-browser mouse/eval/press` + `turDevTool.elementTree()` (JSON — the
+shapes are unchanged), verify colors by sampling pixels, and shut the server
+down afterwards (`lsof -ti:8080 | xargs kill`, `rm -rf .agent-browser`).
+Screenshots go under the gitignored `.agent-browser/` and are never committed.
 
 ## Invoking the git-end subagent
 
-When the user asks to commit/push/PR (e.g. `@git-end`, "commit and push", "open a PR"), dispatch the **git-end** subagent via the Task tool with `subagent_type: "git-end"` and the fixed prompt:
-
-```
-You are git-end agent.
-```
-
-Do not append anything else — the agent's workflow lives in `.opencode/agents/git-end.md`.
+When the user asks to commit/push/PR (e.g. `@git-end`), dispatch the
+**git-end** subagent with the fixed prompt `You are git-end agent.` — its
+workflow lives in `.opencode/agents/git-end.md`.

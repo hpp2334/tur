@@ -1,4 +1,6 @@
-use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
+use crate::core::edgy::mutation::{
+    MutationHandle, MutationPayload, PendingMutationInvocationQueue,
+};
 use crate::core::platform::ImeEvent;
 use std::cell::Cell;
 
@@ -18,7 +20,7 @@ impl<'a> ElementOnImeContext<'a> {
         }
     }
 
-    pub fn push_event<E: IntoJsArgs>(&mut self, mutation: MutationHandle<E>, event: E) {
+    pub fn push_event<E: MutationPayload>(&mut self, mutation: MutationHandle<E>, event: E) {
         self.mutation_queue.push(mutation, event);
     }
 

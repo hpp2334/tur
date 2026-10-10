@@ -1,0 +1,11 @@
+// tur_kit — the authored element-construction surface. The kit is ONE
+// module: `mod.rut` beside this manifest (the walk's root module) — the
+// materialized '\n'-join of the authored files. The engine embed
+// (tur-engine/src/kit/mod.rs) embeds the same bytes — the tur_host_decl
+// pin test diffs the two.
+{
+  "name": "tur_kit",
+  "deps": {
+    "tur_host": { "path": "../tur_host" }
+  }
+}

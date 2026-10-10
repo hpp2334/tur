@@ -49,6 +49,64 @@ use crate::core::shell::{Cursor, TextInputState};
 /// monomorphic.
 pub type TreeRunner = Box<dyn FnOnce(&NodeTreeData, &FocusManager) + Send + 'static>;
 
+/// Which dev-tool snapshot the worker should serialize (see `core::dev`).
+#[derive(Debug, Clone, Copy)]
+pub enum DevToolRequest {
+    /// The root node's JSON snapshot.
+    ElementTree,
+    /// One node's JSON snapshot by raw id.
+    GetElement(u64),
+    /// The per-instance frame-stats JSON snapshot.
+    FrameStats,
+}
+
+/// The engine→rut entry rail's argument shape — the two crossing lanes:
+/// the legacy `(u64, f64)` probe rail and the context-crossing lane (the
+/// fixture contract: the module answers its `AppContext` as an opaque,
+/// the embedder holds the slot token, and control entries take it back).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RutEntryArgs {
+    /// `entry fn(u64, f64)` — the legacy probe rail (corpus-case probes;
+    /// atom ids ride the args).
+    Nums { a: u64, b: f64 },
+    /// `entry fn()` — the no-arg probe (the fixture contract's lazy
+    /// `entry fn entry_start() -> opaque` boot; the answer crosses back
+    /// through the answer slot as [`RutEntryAnswer::Opaque`]).
+    None,
+    /// `entry fn(opaque)` — the held context only.
+    Cx(u64),
+    /// `entry fn(opaque, u64)` — the context + a scalar.
+    CxU64(u64, u64),
+    /// `entry fn(opaque, f64)` — the context + a float.
+    CxF64(u64, f64),
+}
+
+/// The entry RPC's answer slot — `tur_start_answer`'s channel extended to
+/// the shapes a probe answers. Opaque answers are slot tokens over
+/// worker-held contexts (the embedder never sees a raw heap handle).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RutEntryAnswer {
+    Nil,
+    /// An answered opaque: the worker-side slot token. Pass it back
+    /// through [`RutEntryArgs::Cx`]/[`RutEntryArgs::CxU64`]/[
+    /// `RutEntryArgs::CxF64`].
+    Opaque(u64),
+    U64(u64),
+    F64(f64),
+    Str(String),
+}
+
+impl RutEntryAnswer {
+    /// The opaque token out of an `Opaque` answer (the fixture contract's
+    /// `entry_start` boot: the harness holds the context token).
+    pub fn opaque_token(self) -> Option<u64> {
+        match self {
+            RutEntryAnswer::Opaque(token) => Some(token),
+            _ => None,
+        }
+    }
+}
+
 /// host → worker channel sender. Unbounded — the host side pushes input
 /// (platform events, wake, RPC requests) and the worker drains them in
 /// arrival order.
@@ -76,25 +134,44 @@ pub enum WorkerMsg {
     /// emits [`HostMsg::RenderCommands`] (if it painted) and
     /// [`HostMsg::FrameOutcome`].
     Wake,
-    /// Parse + load + evaluate a JS module, then invoke its `start()`
-    /// export (the module lifecycle contract: `start` returns an optional
-    /// cleanup function that runs before the next load or at destroy).
-    /// Reply carries the parse/eval outcome. `Arc<str>` because module
-    /// sources can be large (the playground ships multi-KB compiled JS) —
-    /// `Arc` lets the message be duplicated cheaply if needed (e.g.
-    /// dev-tool logging).
-    LoadModule {
+    /// Parse + compile + boot a **rut** module and invoke its `entry fn
+    /// start()` (the module lifecycle contract: `entry fn stop()` — when
+    /// present — runs before the next load and at destroy). Reply carries
+    /// the parse/boot outcome. `Arc<str>` because module sources can be
+    /// large (the playground ships multi-KB bundles) — `Arc` lets the
+    /// message be duplicated cheaply if needed.
+    LoadRutModule {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
-    /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
-    /// on the worker, converts the result to its display string, and replies.
-    /// Production code uses `LoadModule`; this is for tests
-    /// that read JS-side state via `globalThis.__x = ...`.
-    EvalJs {
-        source: Arc<str>,
+    /// Call a named `entry fn` on the loaded rut module — the
+    /// engine→rut event rail. Two lanes: the legacy `(u64, f64)` probe
+    /// (a missing entry is a successful no-op — event rails are optional)
+    /// and the context-crossing lane (`RutEntryArgs::Cx*` — the answered
+    /// `AppContext` token passing back into control entries; loud on a
+    /// missing entry, since a control entry that does not exist is an
+    /// embedder bug). The reply carries the answer slot.
+    CallRutEntry {
+        name: Arc<str>,
+        args: RutEntryArgs,
+        reply: ReplySender<Result<RutEntryAnswer, ModuleError>>,
+    },
+    /// Read the loaded rut module's `entry fn start() -> u64` answer
+    /// (0 when `start` returns nil or no rut module is loaded).
+    RutStartAnswer {
+        reply: ReplySender<u64>,
+    },
+    /// Dev-tool snapshot request (the E3 rut-row surface): the worker
+    /// serializes the requested view of its live state to a JSON string
+    /// (see `core::dev`).
+    DevTool {
+        req: DevToolRequest,
         reply: ReplySender<String>,
     },
+    /// Frame-timing toggle (the host-side `setHostFrameTiming`): the worker
+    /// mirrors its `FrameStats.host_timing_enabled` flag so
+    /// `frameStats()` reports it and the flush records per-frame timings.
+    FrameTimingEnabled { enabled: bool },
     /// Test-only: run a closure against the worker's live `NodeTreeData`
     /// AND `FocusManager` — everything needed to reconstruct the former
     /// per-field focus/dev-tool queries (`focused_cursor_rect`,
@@ -106,14 +183,16 @@ pub enum WorkerMsg {
     /// .spans()`). The closure ships its result via a reply channel it
     /// captures, so the enum stays monomorphic.
     WithTree { runner: TreeRunner },
-    /// Event bus — embedder → JS bytes on `channel_id`. Worker pushes into the
-    /// `EventBus` `embedder_to_js` queue; `EmbedderBusSubsystem` drains it on the
-    /// next flush and delivers to JS `eventBus.on` callbacks registered on
-    /// `channel_id`.
-    EventBusToJs { channel_id: u64, payload: Vec<u8> },
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
+    /// Clear the instance's focus. Sent by a hosting parent through the
+    /// virtual-app control rail ([`VirtualControl::ClearFocus`] — a
+    /// pointer click elsewhere in the parent took focus away from the
+    /// hosted child): keys are focus-routed, so a blurred child must
+    /// release its focused element or it would keep consuming (invisible)
+    /// keystrokes. Drives a flush like [`WorkerMsg::Wake`].
+    BlurFocus,
     /// Host-registered image receipt (`TurApp::register_image`): the host
     /// minted the id (host range — see
     /// [`HOST_IMAGE_ID_BASE`](crate::core::image_resource::HOST_IMAGE_ID_BASE)),
@@ -121,8 +200,8 @@ pub enum WorkerMsg {
     /// ships the worker only the natural size so layout + paint can serve
     /// the id. Fire-and-forget with no Reply: the host side is already
     /// committed, and the shared FIFO worker channel guarantees this is
-    /// processed before any later message that could hand the id to JS
-    /// (`EventBusToJs`, `LoadModule`).
+    /// processed before any later message that could hand the id to module
+    /// code.`
     RegisterImageMetadata {
         id: crate::core::image_resource::ImageResourceId,
         size: crate::core::layout::Size,
@@ -191,11 +270,6 @@ pub enum HostMsg {
     /// to the embedder-supplied [`Shell`](crate::core::shell::Shell)
     /// inside `apply_msg`.
     Shell(ShellCommand),
-    /// Event bus — JS → embedder bytes on `channel_id`. Worker ships one
-    /// `HostMsg` per `eventBus.send` dispatch; `HostBackend` dispatches to
-    /// handlers registered on `channel_id` on the host-side
-    /// `EventBusHandle`.
-    EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
     /// Virtual-app control (spawn / resize / platform-event / destroy a
     /// hosted child instance) — routed by `TurAppLooper` (the drain point)
     /// straight to the instance's
@@ -204,9 +278,9 @@ pub enum HostMsg {
     /// flows back through `WorkerMsg::AppEvent(AppEvent::custom(...))`, so
     /// this is the only virtual-app message variant.
     VirtualControl(crate::core::virtual_app::VirtualControl),
-    /// A JS runtime error no caller could observe (a throwing handler /
-    /// view closure / microtask / async callback, or a promise rejection
-    /// with no handler at end of turn). Routed by `TurAppLooper` to the
+    /// A module runtime error no caller could observe (a trapping entry /
+    /// view closure / derive / async task, or fuel exhaustion). Routed by
+    /// `TurAppLooper` to the
     /// instance's [`VirtualHost`](crate::core::virtual_app::VirtualHost):
     /// an element-hosted child forwards it to its parent's worker
     /// (`VirtualErrorEvent` → the controller's `onRuntimeError$`); the
@@ -214,6 +288,14 @@ pub enum HostMsg {
     RuntimeError {
         report: crate::core::app::runtime_error::RuntimeErrorReport,
     },
+    /// The instance's focus changed (its own `FocusManager` gained or
+    /// cleared a focused element). Routed by `TurAppLooper` to the
+    /// instance's [`VirtualHost`](crate::core::virtual_app::VirtualHost):
+    /// an element-hosted child forwards it to its parent's worker
+    /// (`VirtualFocusEvent` — the parent's focus manager learns "focus
+    /// sits inside this host", which is what makes key routing work); the
+    /// embedder-hosted root has no parent — dropped there.
+    FocusChanged { focused: bool },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
     /// Enable/disable host-side frame-timing collection (the per-frame
@@ -221,6 +303,17 @@ pub enum HostMsg {
     /// `turDevTool.setHostFrameTiming(...)` bridge; `HostBackend` applies it
     /// to its local gate.
     FrameTimingEnabled(bool),
+    /// A dev-tool snapshot reply, shipped worker → host so the JSON is
+    /// resolved on the MAIN thread (wasm only — see `worker_loop`'s
+    /// intercept). A oneshot waker fired on the worker thread can never
+    /// re-poll a main-thread `wasm_bindgen_futures` task (thread-local
+    /// task queues), so the reply must ride this drained channel:
+    /// `HostBackend::apply_msg` runs on main, and firing the oneshot
+    /// there wakes the awaiting task on the thread that spawned it.
+    DevToolReply {
+        reply: ReplySender<String>,
+        json: String,
+    },
 }
 
 /// A deduped shell-layer request shipped worker → host inside
@@ -238,14 +331,14 @@ pub enum ShellCommand {
     RequestTextInput(TextInputState),
 }
 
-/// Error returned from module load / eval RPCs.
+/// Error returned from module load / entry-call RPCs.
 #[derive(Debug, thiserror::Error)]
 pub enum ModuleError {
-    /// JS parse failure (syntax error, etc.).
-    #[error("JS parse error: {0}")]
+    /// Parse failure (syntax / compile diagnostics).
+    #[error("module parse error: {0}")]
     Parse(String),
-    /// JS evaluation failure (thrown error, etc.).
-    #[error("JS evaluation error: {0}")]
+    /// Boot / evaluation failure (a trapping `start`, a missing entry, …).
+    #[error("module evaluation error: {0}")]
     Eval(String),
     /// Worker task dropped before replying.
     #[error("worker gone")]
@@ -293,24 +386,24 @@ impl fmt::Debug for WorkerMsg {
         match self {
             Self::PlatformEvent(_) => f.debug_tuple("PlatformEvent").finish_non_exhaustive(),
             Self::Wake => write!(f, "Wake"),
-            Self::LoadModule { source, .. } => f
-                .debug_struct("LoadModule")
+            Self::LoadRutModule { source, .. } => f
+                .debug_struct("LoadRutModule")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
-            Self::EvalJs { source, .. } => f
-                .debug_struct("EvalJs")
-                .field("source_len", &source.len())
+            Self::CallRutEntry { name, args, .. } => f
+                .debug_struct("CallRutEntry")
+                .field("name", &name.as_ref())
+                .field("args", args)
                 .finish_non_exhaustive(),
-            Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
-            Self::EventBusToJs {
-                channel_id,
-                payload,
-            } => f
-                .debug_struct("EventBusToJs")
-                .field("channel_id", channel_id)
-                .field("len", &payload.len())
+            Self::RutStartAnswer { .. } => f.write_str("RutStartAnswer"),
+            Self::DevTool { req, .. } => f.debug_struct("DevTool").field("req", req).finish(),
+            Self::FrameTimingEnabled { enabled } => f
+                .debug_struct("FrameTimingEnabled")
+                .field("enabled", enabled)
                 .finish(),
+            Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
+            Self::BlurFocus => f.write_str("BlurFocus"),
             Self::RegisterImageMetadata { id, .. } => {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
             }
@@ -339,18 +432,15 @@ impl fmt::Debug for HostMsg {
             Self::UploadImage { id, .. } => f.debug_tuple("UploadImage").field(id).finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
             Self::Shell(cmd) => f.debug_tuple("Shell").field(cmd).finish(),
-            Self::EventBusToEmbedder {
-                channel_id,
-                payload,
-            } => f
-                .debug_struct("EventBusToEmbedder")
-                .field("channel_id", channel_id)
-                .field("len", &payload.len())
-                .finish(),
             Self::VirtualControl(c) => f.debug_tuple("VirtualControl").field(c).finish(),
             Self::RuntimeError { report } => f.debug_tuple("RuntimeError").field(report).finish(),
+            Self::FocusChanged { focused } => f
+                .debug_struct("FocusChanged")
+                .field("focused", focused)
+                .finish(),
             Self::Destroyed => write!(f, "Destroyed"),
             Self::FrameTimingEnabled(on) => f.debug_tuple("FrameTimingEnabled").field(on).finish(),
+            Self::DevToolReply { .. } => f.write_str("DevToolReply"),
         }
     }
 }
@@ -387,13 +477,13 @@ mod tests {
     use super::*;
 
     /// `Arc<str>` is the canonical source carrier — verify it round-trips
-    /// through `WorkerMsg::LoadModule` without clone friction.
+    /// through `WorkerMsg::LoadRutModule` without clone friction.
     #[test]
     fn load_module_carries_arc_str() {
         let (tx, _rx) = Reply::<Result<(), ModuleError>>::pair();
-        let source: Arc<str> = Arc::from("export const x = 1;");
-        let msg = WorkerMsg::LoadModule { source, reply: tx };
-        assert!(matches!(msg, WorkerMsg::LoadModule { .. }));
+        let source: Arc<str> = Arc::from("entry fn start() {}");
+        let msg = WorkerMsg::LoadRutModule { source, reply: tx };
+        assert!(matches!(msg, WorkerMsg::LoadRutModule { .. }));
     }
 
     /// `ModuleError` Display strings are stable (used for diagnostics).
@@ -401,11 +491,11 @@ mod tests {
     fn module_error_display() {
         assert_eq!(
             ModuleError::Parse("syn".into()).to_string(),
-            "JS parse error: syn"
+            "module parse error: syn"
         );
         assert_eq!(
             ModuleError::Eval("run".into()).to_string(),
-            "JS evaluation error: run"
+            "module evaluation error: run"
         );
         assert_eq!(ModuleError::WorkerGone.to_string(), "worker gone");
     }

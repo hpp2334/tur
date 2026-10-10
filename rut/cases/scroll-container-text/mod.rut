@@ -1,0 +1,17 @@
+// scroll-container-text: a padded unsized Container sized from its Text
+// child inside a vertical ScrollView's content Column.
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let b = Container()
+        .padding(48.0)
+        .query_key("container")
+        .child(Text().text("Empty State").font_size(24.0).build());
+    let col = Column().child(b.build());
+    mount(ScrollView().axis(Axis.Vertical).child(col.build()).build());
+}

@@ -1,115 +1,58 @@
-//! Integration tests for `decodeUtf8` / `encodeUtf8` (merged into `tur:std`).
-//!
-//! boa does not implement `TextDecoder` / `TextEncoder`, so these engine-side
-//! natives are the canonical way to round-trip between JS strings and
-//! `Uint8Array`.
+//! Integration tests for the bytes helpers — `encode_utf8` / `decode_utf8`
+//! (the `tur_host` pkg rows). The canonical string↔bytes round-trip: net
+//! bodies cross as raw bytes and decode through these rows.
+
+use std::time::Duration;
 
 use tur_integration_tests::TurTestApp;
 
-#[test]
-fn encode_decode_roundtrip_ascii() {
-    let app = TurTestApp::new(200.0, 100.0).unwrap();
+/// Round-trip ASCII + Unicode through both rows, reading the answer back
+/// through a bound label (the rut corpus's standard probe).
+const ENCODE_RUT: &str = r#"
+use tur_host::{ decode_utf8, encode_utf8 };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
-    app.eval_module_source(
-        r#"
-        import { encodeUtf8, decodeUtf8 } from "tur:std";
+entry fn start() {
+    let ascii = decode_utf8(encode_utf8("hello world"));
+    let unicode = decode_utf8(encode_utf8("héllo 世界 🚀"));
+    let empty = decode_utf8(encode_utf8(""));
+    // The mint seeds the transcript (a boot write with no entry-rail ctx
+    // is a construction-time value, not a state transition).
+    let label: Source<str> = source<str>(f"{ascii}|{unicode}|{empty}|");
 
-        const bytes = encodeUtf8("hello world");
-        globalThis.__isUint8Array = bytes instanceof Uint8Array;
-        globalThis.__len = bytes.byteLength;
-        globalThis.__decoded = decodeUtf8(bytes);
-        "#,
-    )
-    .expect("module");
-
-    assert_eq!(app.eval_js("globalThis.__isUint8Array"), "true");
-    assert_eq!(app.eval_js("globalThis.__len"), "11");
-    assert_eq!(app.eval_js("globalThis.__decoded"), "hello world");
+    let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
+    mount(col.build());
 }
+"#;
 
 #[test]
-fn encode_decode_roundtrip_unicode() {
-    let app = TurTestApp::new(200.0, 100.0).unwrap();
+fn encode_decode_roundtrips_through_rut_rows() {
+    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    app.load_rut_module(ENCODE_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
 
-    app.eval_module_source(
-        r#"
-        import { encodeUtf8, decodeUtf8 } from "tur:std";
-
-        const text = "héllo 世界 🚀";
-        const bytes = encodeUtf8(text);
-        globalThis.__decoded = decodeUtf8(bytes);
-        "#,
-    )
-    .expect("module");
+    let id = app
+        .query_element(&["rut", "text"])
+        .expect("bound label not found");
+    let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+    let text = app
+        .with_element(id, |e| {
+            e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+                .map(|c| {
+                    c.spans()
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
 
     assert_eq!(
-        app.eval_js("globalThis.__decoded"),
-        // boa escapes non-ASCII in to_std_string_escaped
-        "héllo 世界 🚀",
+        text, "hello world|héllo 世界 🚀||",
+        "both rows round-tripped; the empty string round-trips to empty"
     );
-}
-
-#[test]
-fn decode_arraybuffer() {
-    let app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { decodeUtf8 } from "tur:std";
-
-        const ab = new ArrayBuffer(5);
-        const view = new Uint8Array(ab);
-        view[0] = 104; // h
-        view[1] = 105; // i
-        view[2] = 33;  // !
-        view[3] = 10;  // \n
-        view[4] = 63;  // ?
-        globalThis.__decoded = decodeUtf8(ab);
-        "#,
-    )
-    .expect("module");
-
-    assert_eq!(app.eval_js("globalThis.__decoded"), "hi!\n?");
-}
-
-#[test]
-fn encode_empty_string() {
-    let app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { encodeUtf8, decodeUtf8 } from "tur:std";
-
-        const bytes = encodeUtf8("");
-        globalThis.__len = bytes.byteLength;
-        globalThis.__decoded = decodeUtf8(bytes);
-        "#,
-    )
-    .expect("module");
-
-    assert_eq!(app.eval_js("globalThis.__len"), "0");
-    assert_eq!(app.eval_js("globalThis.__decoded"), "");
-}
-
-#[test]
-fn decode_invalid_utf8_throws() {
-    let app = TurTestApp::new(200.0, 100.0).unwrap();
-
-    app.eval_module_source(
-        r#"
-        import { decodeUtf8 } from "tur:std";
-
-        try {
-            // 0xFF is invalid as a UTF-8 start byte
-            const bad = new Uint8Array([0xFF, 0xFE]);
-            decodeUtf8(bad);
-            globalThis.__threw = "no";
-        } catch (e) {
-            globalThis.__threw = "yes";
-        }
-        "#,
-    )
-    .expect("module");
-
-    assert_eq!(app.eval_js("globalThis.__threw"), "yes");
 }

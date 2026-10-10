@@ -1,0 +1,23 @@
+// composited-transform-follower-under-transform: the FOLLOWER's ancestor
+// carries a paint-only translate (50, 30) — the subsystem solves
+// parent_world^-1 * translate so the follower lands on the target (100, 80).
+use tur_kit::flags::{ Align };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
+use tur_anim_kit::{ Transform };
+
+entry fn start() {
+    let link = layer_link();
+    let mut stack = Stack()
+        .child(SizedBox(400.0, 600.0).child(Container().build()).build());
+    let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
+    let target = CompositedTarget().link(link).child(target_child).build();
+    stack.child(Positioned().left(100.0).top(80.0).child(target).build());
+    let red = Container().width_height(20.0, 20.0).color(0xFF0000FFu64);
+    let follower = CompositedFollower().link(link).target_anchor(Align.TopLeft).follower_anchor(Align.TopLeft).child(red.build()).build();
+    let transformed = Transform(1.0, 0.0, 50.0, 30.0).child(follower).build();
+    stack.child(transformed);
+    mount(stack.build());
+}

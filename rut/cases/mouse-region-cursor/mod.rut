@@ -1,0 +1,25 @@
+// mouse-region-cursor: a MouseRegion whose cursor + enter/exit drive the
+// shell cursor and the bound state label. The handlers are mutations over
+// the MutationCtx; the state source rides by capture — no ids, no stash.
+use tur_kit::flags::{ Cursor, HitTestBehavior };
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let state: Readable<str> = source<str>("");
+    let b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
+        ctx.set<str>(state, "entered");
+    });
+    let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
+        ctx.set<str>(state, "exited");
+    });
+    let mut col = Column();
+    let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).query_key("mr-state").build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor.ColResize).behavior(HitTestBehavior.Opaque).child(b.build()).build());
+    mount(col.build());
+    return state.atom_id();
+}

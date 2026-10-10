@@ -1,0 +1,49 @@
+// drag-with-lift: the jigsaw piece mechanic — pointer-down drives a lift
+// animation (forward on down, reverse on up). The controller is CAPTURED
+// by the drag mutations (opaques are just values — no stash); the last
+// gesture phase renders into the `last-event` Text.
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_anim_kit::{ AnimCtrl, anim_ctrl };
+
+entry fn start() -> u64 {
+    let phase: Readable<str> = source<str>("");
+
+    // The bare lift controller (no channels to drive — the mechanics ride
+    // forward/reverse).
+    let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
+
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctrl.forward();
+        ctx.set<str>(phase, "down");
+    });
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctx.set<str>(phase, "move");
+    });
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        ctrl.reverse();
+        ctx.set<str>(phase, "up");
+    });
+
+    let b = Container()
+        .width_height(80.0, 40.0)
+        .query_key("lift-target")
+        .child(Text().text("piece").build());
+    let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build();
+
+    let phase_t = Text().text_bound(phase).query_key("last-event").build();
+    let root = Column().child(pad).child(phase_t);
+    mount(root.build());
+    return phase.atom_id();
+}
+
+// The `__resetDrag` seam (the lift keeps settling; only the transcript
+// clears). The atom id rides the entry arg.
+entry fn reset(atom: u64, _b: f64) {
+    let phase = Source<str>.of(bridge(), atom, false, 1);
+    MutationCtx.over(bridge()).set<str>(phase, "");
+}

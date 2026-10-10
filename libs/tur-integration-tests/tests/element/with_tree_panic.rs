@@ -11,10 +11,16 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn with_element_panic_propagates_to_test_thread() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container } from "tur:std";
-        mount(Container().width(50).height(50).queryKey(["c"]).build());
+        
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+
+        entry fn start() {
+            let b = Container().width_height(50.0, 50.0).query_key("c");
+            mount(b.build());
+        }
         "#,
     )
     .unwrap();
@@ -45,10 +51,15 @@ fn with_element_panic_propagates_to_test_thread() {
 #[test]
 fn with_element_assert_failure_propagates() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container } from "tur:std";
-        mount(Container().width(50).height(50).queryKey(["c"]).build());
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+
+        entry fn start() {
+            let b = Container().width_height(50.0, 50.0).query_key("c");
+            mount(b.build());
+        }
         "#,
     )
     .unwrap();

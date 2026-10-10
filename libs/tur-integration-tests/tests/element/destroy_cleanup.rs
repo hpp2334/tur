@@ -18,17 +18,21 @@ use tur_engine::renderer::noop::NoopRenderer;
 use tur_integration_tests::{TestSchedulerDriver, TestShell};
 use tur_native::NativeFontLoader;
 
-/// The module under test: `start()` returns a cleanup that registers an SVG
-/// resource — a synchronous host-visible effect (one `UploadImage` ship).
+/// The module under test: `entry fn stop()` (the cleanup contract — it runs
+/// best-effort at destroy) registers an image resource — a synchronous
+/// host-visible effect (one `UploadImage` ship).
 const SOURCE: &str = r#"
-import { createSvgResource } from "tur:std";
-export function start() {
-  return () => {
-    createSvgResource(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">' +
-      '<rect width="4" height="4" fill="red"/></svg>'
-    );
-  };
+use tur_kit::image::{ image_resource_solid };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+
+entry fn start() {
+    let b = Container().width_height(10.0, 10.0);
+    mount(b.build());
+}
+
+entry fn stop() {
+    image_resource_solid(4, 4, 0xFF0000FFu64);
 }
 "#;
 
@@ -58,7 +62,7 @@ fn module_cleanup_runs_at_destroy() {
     let app = Rc::new(app);
     driver.spawn_local(Box::pin(looper.run()));
 
-    block_on(app.load_module(SOURCE)).expect("module load");
+    block_on(app.load_rut_module(SOURCE)).expect("module load");
     assert_eq!(
         app.image_resource_count(),
         0,

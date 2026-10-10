@@ -1,0 +1,4 @@
+// text — the text families' namespace (decls only).
+
+pub mod core;
+pub mod input;

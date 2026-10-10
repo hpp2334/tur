@@ -1,0 +1,22 @@
+// positioned-right-bottom: edge anchors resolve against the STACK's own
+// final size (200x300), not the incoming constraints (Flutter parity).
+
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
+
+fn sized(w: f64, h: f64, key: str) -> View {
+    let mut b = Container().width_height(w, h);
+    if (key != "") {
+        b.query_key(key);
+    }
+    return b.build();
+}
+
+entry fn start() {
+    let stack = Stack()
+        .child(sized(200.0, 300.0, ""))
+        .child(Positioned().right(8.0).bottom(8.0).child(sized(60.0, 24.0, "rb-pill")).build())
+        .child(Positioned().left(10.0).right(10.0).child(sized(0.0, 20.0, "lr-pair")).build());
+    mount(stack.build());
+}

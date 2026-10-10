@@ -1,0 +1,18 @@
+// expanded-multiple: two Expanded children sharing the main axis evenly.
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
+
+fn box_wh(w: f64, h: f64) -> View {
+    let b = Container().width_height(w, h);
+    return b.build();
+}
+
+entry fn start() {
+    let col = Column()
+        .cross_alignment(CrossAlign.Start)
+        .child(Expanded().flex(1.0).child(box_wh(0.0, 0.0)).build())
+        .child(Expanded().flex(1.0).child(box_wh(0.0, 0.0)).build());
+    mount(col.build());
+}

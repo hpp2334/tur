@@ -1,0 +1,19 @@
+// row-cross-center-in-column: a min-size centering Row in a Column.
+use tur_kit::flags::{ CrossAlign, MainAxisSize };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+
+entry fn start() {
+    let col = Column()
+        .cross_alignment(CrossAlign.Start)
+        .child(Row().cross_alignment(CrossAlign.Center).main_axis_size(MainAxisSize.Min).child(box_wh(20.0, 20.0)).child(box_wh(40.0, 10.0)).build())
+        .child(box_wh(0.0, 30.0))
+        .child(box_wh(0.0, 20.0));
+    mount(col.build());
+}
+
+fn box_wh(w: f64, h: f64) -> View {
+    let b = Container().width_height(w, h);
+    return b.build();
+}

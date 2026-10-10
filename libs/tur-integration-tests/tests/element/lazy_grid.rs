@@ -1,23 +1,34 @@
 use tur_engine::builtin_plugins::lazy_container::LazyGridElement;
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Build a 10,000-item virtualized grid inline: 400x600 viewport,
 /// maxCrossAxisExtent 100 → 4 columns of 100x100 cells, stride 100.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({ itemCount: 10000, maxCrossAxisExtent: 100 })
-    .axis(0)
-    .overscan(2)
-    .queryKey(["lg"])
-    .builder((i) => Container()
-     .color(createColor(200, 200, 200, 255))
-     .build())
-    .build());
-        "#,
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(10000.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return count.atom_id();
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -138,27 +149,49 @@ fn lazy_grid_scroll_shifts_visible_window() {
 #[test]
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
-        r#"
-        import { mount, LazyGrid, Container, createColor, source } from "tur:std";
-        const count$ = source(100);
-        mount(LazyGrid({ itemCount: count$, maxCrossAxisExtent: 100 })
-            .axis(0)
-            .overscan(2)
-            .queryKey(["lg"])
-            .builder((i) => Container()
-                .color(createColor(200, 200, 200, 255))
-                .build())
-            .build());
-        globalThis.__setCount = (n) => store.set(count$, n);
-        "#,
+    app.load_rut_module(
+        r#"use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
+    return b.build();
+}
+
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(100.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return opaque(AppContext { count: count });
+}
+
+struct AppContext {
+    count: Source<f64>,
+}
+
+// The test drives count changes through the entry rail.
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-grid fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
+    let cx = app.rut_start_answer();
     let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
 
     // Shrink 100 → 8 (2 rows of 4 columns).
-    app.eval_js("globalThis.__setCount(8)");
+    app.call_rut_entry_cx_f64("set_count", cx, 8.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -173,7 +206,7 @@ fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     // Grow back 8 → 100 (25 rows): the viewport window (6 visible rows × 4
     // columns + overscan) must re-mount, and the content extent must cover
     // all 25 rows again.
-    app.eval_js("globalThis.__setCount(100)");
+    app.call_rut_entry_cx_f64("set_count", cx, 100.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(id, |e| {
         let lg = e.cast::<LazyGridElement>().unwrap();
@@ -241,22 +274,123 @@ fn lazy_grid_scroll_clamps_at_content_end() {
     assert!(scroll > 0.0);
 }
 
+// ===========================================================================
+// The boa lazy-grid-scroll surface: a FIXED main extent + cross/main gaps.
+// `item_extent` overrides the aspect math (cell_main = extent); `spacing`
+// insets the pitch — stride = extent + main gap, cross pitch = cell + gap.
+// ===========================================================================
+
+/// 400×600 viewport, maxCross 120 → 4 columns of (400 − 3·6)/4 = 95.5px,
+/// fixed 60px rows, 6px gaps: cell 1 at x = 95.5+6, cell 4 at y = 60+6.
+#[test]
+fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    return Container().color(0xC8C8C8FFu64).build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(5000.0);
+    let grid = LazyGrid()
+        .item_builder(cell)
+        .count(count)
+        .max_cross(120.0)
+        .item_extent(60.0)
+        .spacing(6.0, 6.0)
+        .overscan(2)
+        .query_key("lg")
+        .build();
+    mount(Expanded().flex(1.0).child(grid).build());
+    return count.atom_id();
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    let cell_of = |app: &TurTestApp, logical: u64| -> (f64, f64, f64, f64) {
+        let child_ids: Vec<_> = {
+            let tree = app.element_tree();
+            tree.get_element(id).unwrap().children.to_vec()
+        };
+        let mut found: Option<NodeId> = None;
+        for child_id in child_ids {
+            let index = with_lg(app, id, move |lg| lg.visible_index_of(child_id));
+            if index == Some(logical) {
+                found = Some(child_id);
+                break;
+            }
+        }
+        let child = found.expect("cell should be mounted");
+        let tree = app.element_tree();
+        let node = tree
+            .get_element(ElementNodeId::new(child.as_u64()))
+            .unwrap();
+        (
+            node.computed_layout.offset.x,
+            node.computed_layout.offset.y,
+            node.computed_layout.size.width,
+            node.computed_layout.size.height,
+        )
+    };
+
+    // Cell 0: 95.5×60 at the origin (the fixed extent overrides the aspect).
+    let (x0, y0, w0, h0) = cell_of(&app, 0);
+    assert!(
+        (x0 - 0.0).abs() < 0.5 && (y0 - 0.0).abs() < 0.5,
+        "cell 0 sits at the origin, got ({x0}, {y0})"
+    );
+    assert!(
+        (w0 - 95.5).abs() < 0.5 && (h0 - 60.0).abs() < 0.5,
+        "cell 0 is (400-18)/4 = 95.5 wide and the fixed 60 tall, got {w0}×{h0}"
+    );
+
+    // Cell 1: one cross pitch right (cell + 6px gap).
+    let (x1, _, _, _) = cell_of(&app, 1);
+    assert!((x1 - 101.5).abs() < 0.5, "cell 1 x = 95.5 + 6, got {x1}");
+
+    // Cell 4: one main pitch down (extent + 6px gap).
+    let (_, y4, _, _) = cell_of(&app, 4);
+    assert!((y4 - 66.0).abs() < 0.5, "cell 4 y = 60 + 6, got {y4}");
+}
+
 /// Horizontal axis: cross axis = height → 6 rows of cells, scroll along x.
 #[test]
 fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, LazyGrid, Container, createColor } from "tur:std";
-        mount(LazyGrid({ itemCount: 1000, maxCrossAxisExtent: 100 })
-    .axis(1)
-    .overscan(1)
-    .queryKey(["lg"])
-    .builder((i) => Container()
-     .color(createColor(180, 180, 220, 255))
-     .build())
-    .build());
-        "#,
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    let b = Container().width_height(100.0, 100.0).color(0xB4B4DCFFu64);
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(1000.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).axis(Axis.Horizontal).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return count.atom_id();
+}
+"#,
     )
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -314,4 +448,140 @@ fn lazy_grid_parent_children_count_matches_mounted() {
             "parent.children.len() ({parent_count}) should equal mounted count ({built})"
         );
     }
+}
+
+// ===========================================================================
+// Column-count ceil semantics (Flutter parity): maxCrossAxisExtent is an
+// inclusive UPPER bound on the cell cross size, so count = ceil(cross /
+// maxExtent) — floor minted 2 columns of 217.5px in a 435px viewport where
+// Flutter/boa produce 3 columns of 145px.
+// ===========================================================================
+
+/// 435px wide viewport, maxCrossAxisExtent 150 → ceil(435/150) = 3 columns
+/// of 145px each.
+#[test]
+fn lazy_grid_column_count_ceils_max_extent_division() {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    let b = Container().width_height(145.0, 145.0).color(0xC8C8C8FFu64);
+    return b.build();
+}
+
+entry fn start() -> u64 {
+    let count: Readable<f64> = source<f64>(12.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return count.atom_id();
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
+    assert_eq!(cols, 3, "435/150 must ceil to 3 columns (floor gives 2)");
+
+    // First mounted row (children are logical-index ordered): cells 145 wide
+    // at x = 0, 145, 290.
+    let tree = app.element_tree();
+    let lg = tree.get_element(id).unwrap();
+    let row: Vec<(f64, f64)> = lg.children[..3]
+        .iter()
+        .map(|&c| {
+            let n = tree.get_element(ElementNodeId::new(c.as_u64())).unwrap();
+            (n.computed_layout.size.width, n.computed_layout.offset.x)
+        })
+        .collect();
+    assert_eq!(
+        row,
+        vec![(145.0, 0.0), (145.0, 145.0), (145.0, 290.0)],
+        "first row must be 3 cells of 145px at column offsets"
+    );
+}
+
+/// Exact-multiple boundary: 435/145 = 3.0 exactly must stay 3 columns (a
+/// float fuzz above the integer would ceil to a phantom 4th), across an
+/// item-count change — `total_lines = item_count.div_ceil(count)` and the
+/// remount path must key off the same stable count.
+#[test]
+fn lazy_grid_exact_multiple_stays_at_exact_count() {
+    let mut app = TurTestApp::new(435.0, 600.0).unwrap();
+    app.load_rut_module(
+        r#"
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyGrid };
+
+fn cell(i: u64) -> View {
+    let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);
+    return b.build();
+}
+
+entry fn start() -> opaque {
+    let count: Source<f64> = source<f64>(6.0);
+    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
+    let lg = lg;
+    let root = Expanded().flex(1.0).child(lg).build();
+    mount(root);
+    return opaque(AppContext { count: count });
+}
+
+struct AppContext {
+    count: Source<f64>,
+}
+
+// The test drives count changes through the entry rail.
+entry fn set_count(cx: opaque, n: f64) {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("lazy-grid fixture: cx is not an AppContext");
+    }
+    entry_ctx().set<f64>(c.count, n);
+}
+"#,
+    )
+    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let cx = app.rut_start_answer();
+    let id = ElementNodeId::new(app.query_element(&["lg"]).unwrap().as_u64());
+
+    // 6 items / 3 columns = exactly 2 rows; maxScrollExtent clamps at 0
+    // (2*145 = 290 < 600 viewport).
+    let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
+    assert_eq!(cols, 3, "435/145 = 3.0 exactly must stay 3 columns");
+
+    // 30 items / 3 columns = exactly 10 rows → 10*145 - 600 = 850.
+    app.call_rut_entry_cx_f64("set_count", cx, 30.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.with_element(id, |e| {
+        let lg = e.cast::<LazyGridElement>().unwrap();
+        assert_eq!(
+            lg.cross_axis_count(),
+            3,
+            "count change must not re-derive the column count (still exactly 3)"
+        );
+        let max = lg.max_scroll_extent();
+        let expected = 10.0 * 145.0 - 600.0;
+        assert!(
+            (max - expected).abs() < 1.0,
+            "content extent must cover exactly 10 rows of 145px \
+             (maxScrollExtent ≈ {expected}), got {max}"
+        );
+    })
+    .unwrap();
 }

@@ -116,3 +116,85 @@ fn positioned_only_stack_sizes_to_constraints_biggest() {
     assert_eq!(pos_node.computed_layout.offset.x, 5.0);
     assert_eq!(pos_node.computed_layout.offset.y, 5.0);
 }
+
+// ---------------------------------------------------------------------------
+// pos_left_bound / pos_top_bound — the reactive anchors (the Phase-9
+// jigsaw hand-off: drag-to-move writes the live atom; the Positioned
+// re-resolves its offset). Unlike `pos_left`'s authoring idiom (0 =
+// absent — the `pos_left` row's doc), a BOUND anchor is present verbatim:
+// 0 is a real coordinate (a piece parked at the origin).
+// ---------------------------------------------------------------------------
+
+const BOUND_ANCHORS_RUT: &str = r#"
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+
+struct AppContext {
+    x: Source<f64>,
+    y: Source<f64>,
+}
+
+entry fn start() -> opaque {
+    let x: Source<f64> = source<f64>(30.0);
+    let y: Source<f64> = source<f64>(40.0);
+    let stack = Stack().query_key("pos/board").child(
+        Positioned().left_bound(x).top_bound(y)
+            .child(Container().width_height(50.0, 50.0).query_key("pos/pill").build())
+            .build(),
+    ).build();
+    mount(stack);
+    return opaque(AppContext { x: x, y: y });
+}
+
+fn pos_cx(cx: opaque) -> AppContext {
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("positioned fixture: cx is not an AppContext");
+    }
+    return c;
+}
+
+entry fn probe_x(cx: opaque, b: f64) {
+    entry_ctx().set<f64>(pos_cx(cx).x, b);
+}
+
+entry fn probe_y(cx: opaque, b: f64) {
+    entry_ctx().set<f64>(pos_cx(cx).y, b);
+}
+"#;
+
+#[test]
+fn positioned_bound_anchors_follow_the_live_atom() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(BOUND_ANCHORS_RUT).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let pos_id = positioned_parent_of(&app, &["pos", "pill"]);
+    let rt = app.element_tree();
+    let pos_node = rt.get_element(pos_id).unwrap();
+    assert_eq!(pos_node.computed_layout.offset.x, 30.0);
+    assert_eq!(pos_node.computed_layout.offset.y, 40.0);
+
+    // Drag-to-move shape: the write lands on the atom, the anchor
+    // re-resolves — the Phase-9 jigsaw rail.
+    let x_atom = app.rut_start_answer();
+    app.call_rut_entry_cx_f64("probe_x", x_atom, 137.5).unwrap();
+    app.call_rut_entry_cx_f64("probe_y", x_atom, 12.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let rt = app.element_tree();
+    let pos_node = rt.get_element(pos_id).unwrap();
+    assert_eq!(pos_node.computed_layout.offset.x, 137.5);
+    assert_eq!(pos_node.computed_layout.offset.y, 12.0);
+
+    // A bound anchor's 0 is a REAL zero (not the authoring row's
+    // 0-is-absent idiom): a piece parked at the origin stays put.
+    app.call_rut_entry_cx_f64("probe_x", x_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_y", x_atom, 0.0).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    let rt = app.element_tree();
+    let pos_node = rt.get_element(pos_id).unwrap();
+    assert_eq!(pos_node.computed_layout.offset.x, 0.0);
+    assert_eq!(pos_node.computed_layout.offset.y, 0.0);
+}

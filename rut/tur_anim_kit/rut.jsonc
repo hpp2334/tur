@@ -1,0 +1,11 @@
+// tur_anim_kit — the animation capability's kit prelude (the authored
+// face over the tur-animation plugin's `tur_host` rows). Owned by the
+// plugin that owns the rows (the layering law applied to the kit);
+// embedded by tur-animation/src/kit.rs.
+{
+  "name": "tur_anim_kit",
+  "deps": {
+    "tur_host": { "path": "../tur_host" },
+    "tur_kit": { "path": "../tur_kit" }
+  }
+}

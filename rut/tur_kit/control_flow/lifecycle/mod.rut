@@ -1,0 +1,31 @@
+// control_flow/lifecycle — the lifecycle family (Lifecycle).
+
+use tur_host::{
+  lc_before_destroy, lc_build, lc_child, lc_new, lc_on_mount,
+};
+
+pub class Lifecycle {
+  spec: opaque;
+}
+
+impl Lifecycle {
+  [constructor] pub fn builder() -> Self {
+    return Self { spec: lc_new() };
+  }
+  pub fn on_mount(mut self, m: reactive.Mutation<gesture.pointer.MountEvent>) -> Self {
+    lc_on_mount(self.spec, m.seal(reactive.SEAL_MOUNT));
+    return self;
+  }
+  pub fn before_destroy(mut self, cb: fn(u64, u64, f64)) -> Self {
+    lc_before_destroy(self.spec, opaque(cb));
+    return self;
+  }
+  pub fn child(mut self, c: handles.View) -> Self {
+    lc_child(self.spec, c.inner);
+    return self;
+  }
+  pub fn build(self) -> handles.View {
+    return handles.View(lc_build(self.spec));
+  }
+}
+

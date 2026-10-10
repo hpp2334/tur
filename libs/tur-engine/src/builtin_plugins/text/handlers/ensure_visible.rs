@@ -12,7 +12,7 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 
 /// Post-subsystem that keeps the caret on screen after text-moving events
-/// (keyboard, IME, clipboard-paste). Registered by [`crate::install_text_feature`]
+/// (keyboard, IME, clipboard-paste). Registered by [`crate::builtin_plugins::text::install_text`]
 /// after the engine's `KeyboardSubsystem` / `ImeSubsystem` (for keyboard /
 /// IME caret moves) and after tur-text's `ClipboardPasteSubsystem` (for paste
 /// caret moves), so by the time this subsystem runs the focused editable's
@@ -76,6 +76,17 @@ pub fn ensure_caret_visible(cx: &mut SubsystemFlushContext<'_>) {
             return;
         };
         let Some(scroll_id) = nearest_scroll_ancestor(&tree, focused) else {
+            // No ScrollView ancestor: a multiline editable scrolls ITSELF
+            // (the playground's bare-Input editor). `reveal_cursor` is a
+            // no-op for anything else.
+            if let Some(node) = tree.get_element(focused)
+                && let Some(ref element) = node.element
+                && let Some(editable) = element.cast::<EditableTextElement>()
+                && editable.reveal_cursor()
+            {
+                drop(tree);
+                cx.request_paint();
+            }
             return;
         };
         // Absolute Y of the caret and of the scroll viewport, obtained by

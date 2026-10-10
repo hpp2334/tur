@@ -1,0 +1,64 @@
+// pointer-interact-nested: nested gesture pads — the opaque inner blocks
+// the outer, the translucent inner lets both fire. The result labels are
+// derived readables over the two counter pairs; every tap is a mutation
+// capturing its counter (no ids, no stash).
+use tur_kit::flags::{ CrossAlign, HitTestBehavior, MainAxisSize };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let outer_o: Readable<f64> = source<f64>(0.0);
+    let inner_o = source<f64>(0.0);
+    let outer_t = source<f64>(0.0);
+    let inner_t = source<f64>(0.0);
+    let d_o = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"opaque:{ctx.get<f64>(outer_o) as u64}/{ctx.get<f64>(inner_o) as u64}";
+    });
+    let d_t = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"translucent:{ctx.get<f64>(outer_t) as u64}/{ctx.get<f64>(inner_t) as u64}";
+    });
+
+    // The named mutations — each captures its own counter.
+    let b_outer_o = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(outer_o, ctx.get<f64>(outer_o) + 1.0);
+    });
+    let b_inner_o = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(inner_o, ctx.get<f64>(inner_o) + 1.0);
+    });
+    let b_outer_t = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(outer_t, ctx.get<f64>(outer_t) + 1.0);
+    });
+    let b_inner_t = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(inner_t, ctx.get<f64>(inner_t) + 1.0);
+    });
+
+    let mut col = Column().cross_alignment(CrossAlign.Start).main_axis_size(MainAxisSize.Min);
+
+    // Opaque pair: the inner (opaque) absorbs the click.
+    let mut outer_box = Container().width_height(80.0, 40.0).query_key("outer-opaque");
+    let mut inner_row = Row();
+    let inner_box = Container().width_height(60.0, 30.0).query_key("inner-opaque");
+    inner_row.child(PointerInteract().on_click(b_inner_o).child(inner_box.build()).build());
+    outer_box.child(inner_row.build());
+    col.child(PointerInteract().on_click(b_outer_o).child(outer_box.build()).build());
+
+    // Translucent pair: the inner joins the path; the outer fires too.
+    let mut outer_t_box = Container().width_height(80.0, 40.0).query_key("outer-translucent");
+    let mut t_row = Row();
+    let inner_t_box = Container().width_height(60.0, 30.0).query_key("inner-translucent");
+    t_row.child(PointerInteract().on_click(b_inner_t).behavior(HitTestBehavior.Translucent).child(inner_t_box.build()).build());
+    outer_t_box.child(t_row.build());
+    col.child(PointerInteract().on_click(b_outer_t).child(outer_t_box.build()).build());
+
+    let ro = Text().text_bound(d_o).query_key("result-opaque");
+    col.child(ro.build());
+    let rt = Text().text_bound(d_t).query_key("result-translucent");
+    col.child(rt.build());
+
+    mount(col.build());
+    return outer_o.atom_id();
+}

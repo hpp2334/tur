@@ -1,0 +1,13 @@
+
+use tur_kit::handles::{ mount }; use tur_kit::text::core::{ Spans, Text };use tur_kit::flags::{ SpanFlags };
+
+
+entry fn start() {
+    let mut t = Text().text("").font_size(14.0);
+    let spans = Spans()
+        .add("Hello ", 0.0, 0, 0.0, SpanFlags.None)
+        .add("Bold", 0.0, 0, 700.0, SpanFlags.None)
+        .add(" World", 0.0, 0, 0.0, SpanFlags.None);
+    t.spans(spans);
+    mount(t.build());
+}

@@ -39,11 +39,18 @@ fn identical_frames_render_once() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container().height(50).color(createColor(255, 0, 0, 255)).build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+
+entry fn start() {
+    let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
+    mount(b.build());
+}
+"#,
     )
     .expect("mount");
     // Drive the initial paint through.
@@ -77,31 +84,51 @@ fn changed_content_reapplies() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    // Visible container + a source-driven color so the test can flip it.
-    app.eval_module_source(
+    // Visible container + a brush atom so the test can flip it.
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor, source, derive } from "tur:std";
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
 
-        const red$ = source(255);
+struct AppContext {
+    color: Source<u64>,
+}
 
-        export function start({ store }) {
-            Object.assign(globalThis, {
-                __setRed: (v) => { store.set(red$, v); },
-            });
-            mount(Container()
-                .height(50)
-                .color(derive((ctx) => createColor(ctx.get(red$) | 0, 0, 0, 255)))
-                .build());
-        }
-        "#,
+entry fn start() -> opaque {
+    // The boot brush seeds at the mint.
+    let color: Source<u64> = source<u64>(0xFF0000FFu64);
+
+    let b = Container().width_height(100.0, 50.0).color_bound(color);
+    mount(b.build());
+    return opaque(AppContext { color: color });
+}
+
+entry fn do_set(cx: opaque, v: f64) {
+    // 0 clears the brush (the decode refuses 0 — the prop resolves
+    // absent); the container repaints unpainted (the batch differs
+    // either way).
+    let c = opaque.downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("dedup fixture: cx is not an AppContext");
+    }
+    let write = entry_ctx();
+    if (v == 0.0) {
+        write.set<u64>(c.color, 0);
+    } else {
+        write.set<u64>(c.color, 0x00FF00FFu64);
+    }
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);
+    let cx = app.rut_start_answer();
     let after_initial = *calls.borrow();
     assert!(after_initial >= 1);
 
     // Flip the color: the batch differs → must apply.
-    app.eval_js("globalThis.__setRed(0)");
+    app.call_rut_entry_cx_f64("do_set", cx, 0.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let after_flip = *calls.borrow();
     assert!(
@@ -131,11 +158,21 @@ fn attach_resets_dedup() {
         last_len: Rc::new(RefCell::new(0)),
     };
     let app = TurTestApp::new_with_renderer(300.0, 300.0, Box::new(renderer)).expect("app");
-    app.eval_module_source(
+    app.load_rut_module(
         r#"
-        import { mount, Container, createColor } from "tur:std";
-        mount(Container().height(50).color(createColor(255, 0, 0, 255)).build());
-        "#,
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+
+entry fn start() {
+    let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
+    mount(b.build());
+}
+"#,
     )
     .expect("mount");
     app.wait_for_timeout(std::time::Duration::ZERO);

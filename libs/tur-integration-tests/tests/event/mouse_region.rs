@@ -123,8 +123,10 @@ fn reactive_cursor_updates() {
     assert_eq!(app.take_current_cursor(), Some(Cursor::Default));
 
     // Flip the cursor source and re-hover — the cursor must update after a
-    // relayout re-resolves the prop.
-    app.eval_js("globalThis.__setCursor('ew-resize')");
+    // relayout re-resolves the prop. (The rut corpus's `set_cursor` probe
+    // takes the cursor atom + a cursor-code crossing; 27 = `ew-resize`.)
+    let cursor_atom = app.rut_start_answer();
+    app.call_rut_entry("set_cursor", cursor_atom, 27.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);

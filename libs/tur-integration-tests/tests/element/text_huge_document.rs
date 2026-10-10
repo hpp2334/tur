@@ -16,32 +16,30 @@ use tur_integration_tests::TurTestApp;
 
 /// 4000 lines ≈ 168 KiB of text — well past the 65 535-byte wrap.
 const HUGE_EDITOR: &str = r##"
-import { mount, ScrollView, Input } from "tur:std";
+use tur_host::{ tctrl_push_span };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
-const spans = [];
-for (let i = 0; i < 4000; i++) {
-    spans.push({ content: "const value" + i + " = " + i + "; // line " + i + "\n" });
+entry fn start() {
+    let ctrl = text_ctrl();
+    let mut i = 0;
+    while (i < 4000) {
+        tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
+        i += 1;
+    }
+
+    let input = Input().controller(ctrl).width_height(100000.0, 4000.0).font_size(14.0).query_key("ed").build();
+    let scroller = ScrollView().axis(Axis.Vertical).child(input).query_key("scroll").build();
+    mount(scroller);
 }
-globalThis.__spans = spans;
-globalThis.__ctrl = new globalThis.TextEditingController();
-globalThis.__ctrl.setSpans(spans);
-mount(ScrollView()
-    .queryKey(["scroll"])
-    .child(Input()
-     .controller(globalThis.__ctrl)
-     .multiline(true)
-     .fontFamily("monospace")
-     .fontSize(14)
-     .queryKey(["ed"])
-     .build())
-    .build());
 "##;
 
 #[test]
 fn huge_document_layout_and_paint_does_not_panic() {
     let mut app = TurTestApp::new(400.0, 600.0).expect("app");
-    app.eval_module_source(HUGE_EDITOR)
-        .expect("load huge editor");
+    app.load_rut_module(HUGE_EDITOR).expect("load huge editor");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Layout + paint the whole document repeatedly (scroll offsets change

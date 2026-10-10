@@ -1,0 +1,45 @@
+// mouse-region-reactive-cursor: the cursor resolves from a str atom each
+// layout — flipping the atom re-resolves the cursor on hover. The
+// enter/exit rails are (empty) mutations; the `set_cursor` probe writes
+// the raw atom id the entry rail hands it through the kit's bridge/over
+// probe rail (the sanctioned raw-atom hatch).
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ HitTestBehavior };
+
+
+entry fn start() -> u64 {
+    let cursor: Readable<str> = source<str>("pointer");
+    let state = source<str>("");
+    let b_enter = mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) {
+    });
+    let b_exit = mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) {
+    });
+    let mut col = Column();
+    let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());
+    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(HitTestBehavior.Opaque).child(b.build()).build());
+    let ct = Text().text_bound(cursor).query_key("cursor-atom");
+    col.child(ct.build());
+    mount(col.build());
+    return cursor.atom_id();
+}
+
+entry fn set_cursor(cursor: u64, code: f64) {
+    // code indexes the standard keyword table (the test passes the enum
+    // position of the cursor it wants). The entry rail crosses the raw
+    // cursor-atom id; the probe rail re-wraps it as a Source<str> and the
+    // mutation ctx writes it.
+    let name = cursor_name(code as u64);
+    let rail: Readable<str> = Source<str>.of(bridge(), cursor, false, 1);
+    MutationCtx.over(bridge()).set(rail, name);
+}
+
+// The standard CSS keyword for a cursor code (the el_mouse_region_bound
+// decode reads the same table).
+fn cursor_name(code: u64) -> str {
+    if (code == 27) {
+        return "ew-resize";
+    }
+    if (code == 5) {
+        return "pointer";
+    }
+    return "default";
+}

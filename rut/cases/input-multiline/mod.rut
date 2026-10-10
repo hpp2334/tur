@@ -1,0 +1,12 @@
+// input-multiline: a multiline editable with an explicit size.
+use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::box::{ Container };
+use tur_kit::text::input::{ Input };
+
+entry fn start() {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let outer = Container()
+        .child(Input().controller(ctrl).undo(undo).width_height(300.0, 400.0).multiline(true).build());
+    mount(outer.build());
+}

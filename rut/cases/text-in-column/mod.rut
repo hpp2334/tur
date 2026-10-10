@@ -1,0 +1,14 @@
+// text-in-column: two Texts stacked in a start-aligned Column.
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let mut col = Column().cross_alignment(CrossAlign.Start);
+    let first = Text().text("First").font_size(14.0);
+    let second = Text().text("Second").font_size(14.0);
+    col.child(first.build());
+    col.child(second.build());
+    mount(col.build());
+}

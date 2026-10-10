@@ -12,7 +12,19 @@ use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn last_event(app: &TurTestApp) -> String {
-    app.eval_js("globalThis.__getLastEvent()")
+    app.query_text(&["last-event"]).unwrap_or_default()
+}
+
+fn tile_events(app: &TurTestApp, idx: u32) -> String {
+    app.query_text(&[Box::leak(format!("tile-events-{idx}").into_boxed_str())])
+        .unwrap_or_default()
+}
+
+fn reset_drag(app: &TurTestApp) {
+    // The phase atom rides the entry arg (the probe's handle binds at the
+    // call site).
+    let phase = app.rut_start_answer();
+    let _ = app.call_rut_entry("reset", phase, 0.0);
 }
 
 /// Drive a touch down → moves → up sequence with explicit, increasing
@@ -52,8 +64,11 @@ fn second_touch_drag_after_release_still_registers() {
     touch_drag(&mut app, (cx, cy), (cx + 30.0, cy + 30.0), 4);
 
     // After the second drag the deltas should be non-zero (the second drag's
-    // moves registered). drag-delta-tracking exposes deltas via __getDragInfo.
-    let s = app.eval_js("globalThis.__getDragInfo()");
+    // moves registered). drag-delta-tracking exposes deltas via its bound
+    // `drag-info` Text.
+    let s = app
+        .query_text(&["drag-info"])
+        .unwrap_or_default();
     let parts: Vec<f64> = s
         .split(',')
         .map(|p| p.trim().parse().unwrap_or(9999.0))
@@ -89,7 +104,7 @@ fn drag_with_lift_second_drag_after_release_registers() {
 
     // Immediately start a second drag (the lift's reverse animation is still
     // settling — LIFT_MS = 180ms, well within the second drag's window).
-    app.eval_js("globalThis.__resetDrag()");
+    reset_drag(&app);
     touch_drag(&mut app, (cx, cy), (cx + 30.0, cy + 30.0), 4);
 
     assert_eq!(
@@ -128,7 +143,7 @@ fn multi_tile_second_drag_on_other_tile_registers() {
 
     // First drag: tile 0 (exceeds slop → drag wins → down/move/up).
     touch_drag(&mut app, (cx0, cy0), (cx0 + 40.0, cy0 + 40.0), 4);
-    let ev0 = app.eval_js("globalThis.__getTileEvents(0)");
+    let ev0 = tile_events(&app, 0);
     assert!(
         ev0.contains("down") && ev0.contains("move"),
         "first drag on tile 0 should fire down+move; events were {ev0}"
@@ -137,10 +152,10 @@ fn multi_tile_second_drag_on_other_tile_registers() {
     // Immediately start a second drag on tile 1. Tile 0's reverse lift is
     // still settling (LIFT_MS = 180ms), so the shared `liftCtrl.forward()` in
     // tile 1's onPointerDown fires mid-reverse.
-    app.eval_js("globalThis.__resetDrag()");
+    reset_drag(&app);
     touch_drag(&mut app, (cx1, cy1), (cx1 + 40.0, cy1 + 40.0), 4);
 
-    let ev1 = app.eval_js("globalThis.__getTileEvents(1)");
+    let ev1 = tile_events(&app, 1);
     assert!(
         ev1.contains("down") && ev1.contains("move"),
         "second drag on tile 1 should fire down+move (jigsaw multi-tile bug); events were {ev1}"

@@ -1,0 +1,65 @@
+// password-input: the boa design — a plain Input, a password Input, and
+// a live `value: "…"` readout of the password controller's true text.
+// Typing renders bullets in the password field while the controller keeps
+// the real value (the on-input mutation feeds the readout from the typed
+// `InputEvent`). A seeded "hunter2" boots the field; the mask is static
+// (boa's obscureText — no reveal affordance; the value echo is the only
+// truth channel). The content column is start-aligned.
+//
+// Phase-2 note: this case is typed in the playground VIEWER too — the
+// va-child keyboard rail forwards real keys into the focused child input.
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::gesture::pointer::{ InputEvent };
+use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
+
+entry fn start() -> u64 {
+    let value: Readable<str> = source<str>("value: \"hunter2\"");
+    let ctrl = text_ctrl();
+    ctrl.set_text("hunter2");
+    let undo = undo_ctrl();
+
+    // The on-input rail: the typed event carries the fresh true text; the
+    // controller is captured (the readout wraps it as value: "…").
+    let q: str = "\"";
+    let b_value = mutate<InputEvent>(fn (ctx: MutationCtx, ev: InputEvent) {
+        ctx.set<str>(value, f"value: {q}{ev.value}{q}");
+    });
+
+    let plain = Input()
+        .controller(text_ctrl())
+        .undo(undo_ctrl())
+        .placeholder("Plain")
+        .font_size(16.0)
+        .width_height(240.0, 38.0)
+        .query_key("plain")
+        .build();
+    let password = Input()
+        .controller(ctrl)
+        .undo(undo)
+        .placeholder("Password")
+        .obscure(true)
+        .on_input(b_value)
+        .font_size(16.0)
+        .width_height(240.0, 38.0)
+        .query_key("password")
+        .build();
+
+    let col = Column()
+        .cross_alignment(CrossAlign.Start)
+        .child(Text().text("Password Input").font_size(18.0).color(0x0F172AFFu64).query_key("password-title").build())
+        .child(SizedBox(0.0, 12.0).build())
+        .child(plain)
+        .child(SizedBox(0.0, 12.0).build())
+        .child(password)
+        .child(SizedBox(0.0, 12.0).build())
+        .child(Text().text_bound(value).font_size(12.0).color(0x64748BFFu64).query_key("password-value").build())
+        .build();
+
+    mount(Container().padding(32.0).child(col).build());
+    return value.atom_id();
+}

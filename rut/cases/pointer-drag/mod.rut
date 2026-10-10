@@ -1,0 +1,44 @@
+// pointer-drag: a gesture pad reporting down/move/up — the phase label
+// and the last position ride two bound sources; the drag mutations
+// receive the typed `PointerEvent` (state by capture, data by argument).
+use tur_kit::flags::{ Align, CrossAlign };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let phase: Readable<str> = source<str>("idle");
+    let pos: Readable<str> = source<str>("0,0");
+
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "down");
+    });
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "move");
+    });
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
+        ctx.set<str>(pos, f"{ev.global.x as u64},{ev.global.y as u64}");
+        ctx.set<str>(phase, "up");
+    });
+
+    let mut col = Column().cross_alignment(CrossAlign.Start);
+
+    let b = Container()
+        .width_height(100.0, 50.0)
+        .color(0xCCCCCCFFu64)
+        .alignment(Align.Center)
+        .child(Text().text_bound(phase).query_key("drag-phase").build());
+
+    col.child(PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build());
+
+    let pos_t = Text().text_bound(pos).query_key("drag-pos");
+    col.child(pos_t.build());
+
+    mount(col.build());
+    return phase.atom_id();
+}

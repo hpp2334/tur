@@ -1,17 +1,14 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::core::render::brush::Color;
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::builtin_plugins::layout::ContainerView;
-use crate::core::edgy::reactive::AnyReadable;
+use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
+use crate::core::edgy::reactive::Readable;
 use crate::core::element::NodeId;
-use crate::core::js_runtime::JsProps;
+use crate::core::render::brush::Color;
 use crate::core::view::{Val, View, ViewCx};
 
 use super::element::{ContextMenuEvent, EditableTextView};
-use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};
 
 // ---------------------------------------------------------------------------
 // InputView — composes a ContainerElement (sizing/border wrapper) with a single
@@ -23,9 +20,8 @@ use crate::builtin_plugins::text::controller::{TextEditingController, UndoContro
 pub struct InputView {
     width: Option<Val<f64>>,
     height: Option<Val<f64>>,
-    controller: Option<JsObject>,
-    controller_atom: Option<AnyReadable>,
-    undo_controller: Option<JsObject>,
+    controller: Option<Rc<RefCell<TextEditingController>>>,
+    undo_controller: Option<Rc<RefCell<UndoController>>>,
     placeholder: Option<Val<String>>,
     color: Option<Val<Color>>,
     placeholder_color: Option<Val<Color>>,
@@ -41,10 +37,9 @@ pub struct InputView {
 }
 
 impl View for InputView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let editable = Rc::new(EditableTextView {
             controller: self.controller.clone(),
-            controller_atom: self.controller_atom,
             undo_controller: self.undo_controller.clone(),
             placeholder: self.placeholder.clone(),
             color: self.color.clone(),
@@ -66,32 +61,88 @@ impl View for InputView {
             query_key: self.query_key.clone(),
             ..Default::default()
         };
-        container_spec.build(cx, boa, parent)
+        container_spec.build(cx, parent)
     }
 }
 
 impl InputView {
-    /// Build an `InputView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
+    /// An all-defaults builder (`core::rut_runtime`'s `el_input_new` row):
+    /// every prop unset; the setter rows mutate it in place and `el_build`
+    /// materializes it.
+    pub(crate) fn empty_rut() -> Self {
         InputView {
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            controller: p.opaque::<TextEditingController>("controller"),
-            controller_atom: p.readable("controller"),
-            undo_controller: p.opaque::<UndoController>("undoController"),
-            placeholder: p.val::<String>("placeholder"),
-            color: p.val::<Color>("color"),
-            placeholder_color: p.val::<Color>("placeholderColor"),
-            cursor_color: p.val::<Color>("cursorColor"),
-            font_size: p.val::<f64>("fontSize"),
-            font_family: p.val::<String>("fontFamily"),
-            font_weight: p.val::<f64>("fontWeight"),
-            multiline: p.val::<bool>("multiline"),
-            obscure_text: p.val::<bool>("obscureText"),
-            obscuring_character: p.val::<String>("obscuringCharacter"),
-            on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
-            query_key: p.query_key("queryKey"),
+            width: None,
+            height: None,
+            controller: None,
+            undo_controller: None,
+            placeholder: None,
+            color: None,
+            placeholder_color: None,
+            cursor_color: None,
+            font_size: None,
+            font_family: None,
+            font_weight: None,
+            multiline: None,
+            obscure_text: None,
+            obscuring_character: None,
+            on_context_menu: None,
+            query_key: None,
         }
+    }
+
+    // -- rut builder setters (`core::rut_runtime`'s input_* rows) ---------
+
+    pub(crate) fn set_width(&mut self, v: f64) {
+        self.width = Some(Val::Static(v));
+    }
+    pub(crate) fn set_height(&mut self, v: f64) {
+        self.height = Some(Val::Static(v));
+    }
+    pub(crate) fn set_placeholder_str(&mut self, v: String) {
+        self.placeholder = Some(Val::Static(v));
+    }
+    pub(crate) fn set_placeholder_reactive(&mut self, r: Readable<String>) {
+        self.placeholder = Some(Val::Reactive(r));
+    }
+    pub(crate) fn set_color(&mut self, v: crate::core::render::brush::Color) {
+        self.color = Some(Val::Static(v));
+    }
+    pub(crate) fn set_placeholder_color(&mut self, v: crate::core::render::brush::Color) {
+        self.placeholder_color = Some(Val::Static(v));
+    }
+    pub(crate) fn set_cursor_color(&mut self, v: crate::core::render::brush::Color) {
+        self.cursor_color = Some(Val::Static(v));
+    }
+    pub(crate) fn set_font_size(&mut self, v: f64) {
+        self.font_size = Some(Val::Static(v));
+    }
+    pub(crate) fn set_controller(&mut self, c: Rc<RefCell<TextEditingController>>) {
+        self.controller = Some(c);
+    }
+    /// The shared controller, if one is bound (the `input_on_input` row
+    /// installs its intent mutation through this).
+    pub(crate) fn controller(&self) -> Option<Rc<RefCell<TextEditingController>>> {
+        self.controller.clone()
+    }
+    pub(crate) fn set_undo(&mut self, u: Rc<RefCell<UndoController>>) {
+        self.undo_controller = Some(u);
+    }
+    pub(crate) fn set_query_key(&mut self, key: Vec<String>) {
+        self.query_key = Some(key);
+    }
+    pub(crate) fn set_obscure(&mut self, v: bool) {
+        self.obscure_text = Some(Val::Static(v));
+    }
+    pub(crate) fn set_obscure_reactive(&mut self, r: Readable<bool>) {
+        self.obscure_text = Some(Val::Reactive(r));
+    }
+    pub(crate) fn set_multiline(&mut self, v: bool) {
+        self.multiline = Some(Val::Static(v));
+    }
+    pub(crate) fn set_obscuring_character_str(&mut self, v: String) {
+        self.obscuring_character = Some(Val::Static(v));
+    }
+    pub(crate) fn set_font_family_str(&mut self, v: String) {
+        self.font_family = Some(Val::Static(v));
     }
 }

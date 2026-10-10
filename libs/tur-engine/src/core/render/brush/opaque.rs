@@ -1,36 +1,42 @@
+use crate::core::edgy::value::{FromValue, Value, type_error};
 use crate::core::render::brush::{Brush, Color};
-use boa_engine::JsValue;
-use boa_gc::{Finalize, Trace};
 
-use crate::core::js_runtime::js_value::{FromJs, type_error};
-
-#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct ColorOpaque(pub Color);
-
-#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct BrushOpaque(pub Brush);
-
-impl FromJs for Color {
-    fn from_js(v: &JsValue) -> Result<Self, boa_engine::JsError> {
-        v.as_object()
-            .and_then(|obj| obj.downcast_ref::<ColorOpaque>().map(|c| c.0))
-            .ok_or_else(|| type_error("a Color handle"))
+// Native-KV decode: colors/brushes cross the reactive substrate as the
+// packed `0xRRGGBBAA` u64 held plainly (`Value::Num`), or — legacy — as
+// the wrapped engine Color/Brush handle (`Value::Opaque`, the identity
+// lane). `0` packs no channels: the decode refuses it, so a seeded 0
+// resolves to "absent" (the bound prop's clear), the same law the
+// brush write rows spelled.
+impl FromValue for Color {
+    fn from_value(v: &Value) -> Result<Self, String> {
+        if let Some(n) = v.as_num() {
+            if n == 0.0 {
+                return Err(type_error("a nonzero packed color (0 clears)"));
+            }
+            return Ok(Color::from_packed(n as u64));
+        }
+        v.as_opaque()
+            .and_then(|o| o.downcast_ref::<Color>().copied())
+            .ok_or_else(|| type_error("a packed color or a Color handle"))
     }
 }
 
-impl FromJs for Brush {
-    fn from_js(v: &JsValue) -> Result<Self, boa_engine::JsError> {
-        let Some(obj) = v.as_object() else {
-            return Err(type_error("a Brush or Color handle"));
+impl FromValue for Brush {
+    fn from_value(v: &Value) -> Result<Self, String> {
+        if let Some(n) = v.as_num() {
+            if n == 0.0 {
+                return Err(type_error("a nonzero packed color (0 clears)"));
+            }
+            return Ok(Brush::SolidColor(Color::from_packed(n as u64)));
+        }
+        let Some(o) = v.as_opaque() else {
+            return Err(type_error("a packed color, a Brush or a Color handle"));
         };
-        if let Some(b) = obj.downcast_ref::<BrushOpaque>() {
-            return Ok(b.0.clone());
+        if let Some(b) = o.downcast_ref::<Brush>() {
+            return Ok(b.clone());
         }
-        if let Some(c) = obj.downcast_ref::<ColorOpaque>() {
-            return Ok(Brush::SolidColor(c.0));
-        }
-        Err(type_error("a Brush or Color handle"))
+        o.downcast_ref::<Color>()
+            .map(|c| Brush::SolidColor(*c))
+            .ok_or_else(|| type_error("a packed color, a Brush or a Color handle"))
     }
 }

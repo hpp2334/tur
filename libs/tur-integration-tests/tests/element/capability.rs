@@ -37,7 +37,7 @@ impl Plugin for NeedsCounterPlugin {
     fn requires(&self, decls: &mut CapabilityDecls) {
         decls.need::<CountersCapability>();
     }
-    fn register(&self, _ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+    fn register(&self, _ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         Ok(())
     }
 }
@@ -53,7 +53,7 @@ fn capability_round_trip_via_plugin() {
         seen: Arc<Mutex<Option<CountersCapability>>>,
     }
     impl Plugin for CapturePlugin {
-        fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+        fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
             *self.seen.lock().unwrap() = ctx.capability().of::<CountersCapability>();
             Ok(())
         }

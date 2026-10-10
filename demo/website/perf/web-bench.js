@@ -1,7 +1,7 @@
 // Web render-performance bench — real browser, real WebGL2 raster path.
 //
 // Run: start the dev server (`cd demo/website && pnpm dev`), open
-// https://localhost:8080 with agent-browser (`--ignore-https-errors`), then
+// http://localhost:8080 with agent-browser, then
 // `agent-browser eval "$(cat demo/website/perf/web-bench.js)"`. Prints a
 // summary via console.log and resolves to the results object (readable with
 // `--json`).

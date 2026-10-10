@@ -1,0 +1,12 @@
+
+use tur_kit::handles::{ mount }; use tur_kit::text::core::{ Spans, Text };use tur_kit::flags::{ SpanFlags };
+
+
+entry fn start() {
+    let mut t = Text().text("").font_size(20.0);
+    let spans = Spans()
+        .add("Inherited", 0.0, 0xFF0000FFu64, 0.0, SpanFlags.None)
+        .add("Override", 10.0, 0x00FF00FFu64, 0.0, SpanFlags.None);
+    t.spans(spans);
+    mount(t.build());
+}

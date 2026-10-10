@@ -4,13 +4,12 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::core::layout::Constraints;
-use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 
 use crate::core::app::frame_stats::{FrameTimingParts, estimate_batch_bytes};
 use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
+use crate::core::clock::Clock;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
@@ -25,7 +24,7 @@ use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {
-    /// The instance-owned tree (shared with [`TurInstanceContext`]) —
+    /// The instance-owned tree (shared with the [`InstanceContext`]) —
     /// created at build born-bound to the instance store. Layout / paint /
     /// event dispatch operate on it directly; before the first `mount` it is
     /// simply rootless (empty layout, empty paint — the historical
@@ -45,19 +44,14 @@ pub struct TurAppContext {
     /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
     /// spawn Rust futures (clipboard writes, etc.) at dispatch time.
     pub(crate) worker_ctx: WorkerContext,
-    /// Cheap-cloned completion handle — cloned from
-    /// `TurAppInternal::completion_handle`. Surfaced to subsystems so
-    /// spawned futures can push promise-settle closures for `flush()` to
-    /// drain under `&mut Context`.
-    pub(crate) completion_handle: CompletionHandle,
     /// Capability registry view, shared with `TurInstanceContext.capabilities`.
     /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
     /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
     /// time.
     pub(crate) capabilities: Capabilities,
     /// FrameEnv layer: clock, pointer position, and cursor output (pushed to the
-    /// embedder via a callback installed by a plugin). Owns the time source
-    /// shared with the boa `Context`. See [`FrameEnv`].
+    /// embedder via a callback installed by a plugin). Owns the time source.
+    /// See [`FrameEnv`].
     pub(crate) frame_env: FrameEnv,
     /// Retained record canvas for [`Self::build_render_batch`] — the worker
     /// keeps ONE recording canvas across frames (op-log Vec + transform/clip
@@ -84,7 +78,6 @@ impl TurAppContext {
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
         worker_ctx: WorkerContext,
-        completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
     ) -> Self {
@@ -100,7 +93,6 @@ impl TurAppContext {
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             worker_ctx,
-            completion_handle,
             capabilities,
             frame_env: FrameEnv::new(clock),
             recording: None,
@@ -113,7 +105,6 @@ impl TurAppContext {
     /// the cursor is resolved during paint (not in a subsystem).
     pub fn dispatch_platform_event(
         &mut self,
-        boa: &mut boa_engine::Context,
         event: &PlatformEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
@@ -130,7 +121,6 @@ impl TurAppContext {
         }
 
         let mut cx = SubsystemFlushContext {
-            boa,
             element_tree: self.element_tree.clone(),
             focus_manager: self.focus_manager.clone(),
             mutation_queue: self.mutation_queue.clone(),
@@ -139,7 +129,6 @@ impl TurAppContext {
             screen: &mut self.screen,
             need_paint,
             worker_ctx: &self.worker_ctx,
-            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,
@@ -154,14 +143,12 @@ impl TurAppContext {
     /// [`Subsystem::handle_app_event`].
     pub fn dispatch_app_event(
         &mut self,
-        boa: &mut boa_engine::Context,
         event: &AppEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
         signals: &crate::core::subsystem::FlushSignals<'_>,
     ) {
         let mut cx = SubsystemFlushContext {
-            boa,
             element_tree: self.element_tree.clone(),
             focus_manager: self.focus_manager.clone(),
             mutation_queue: self.mutation_queue.clone(),
@@ -170,7 +157,6 @@ impl TurAppContext {
             screen: &mut self.screen,
             need_paint,
             worker_ctx: &self.worker_ctx,
-            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,
@@ -181,7 +167,7 @@ impl TurAppContext {
         }
     }
 
-    pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: &mut boa_engine::Context) {
+    pub fn layout(&mut self, dirty: Rc<Cell<bool>>) {
         let (width, height) = self.screen.logical_size;
         let constraints = Constraints {
             min_width: width,
@@ -201,7 +187,6 @@ impl TurAppContext {
             node_tree,
             self.mutation_queue.clone(),
             dirty,
-            boa,
         );
     }
 

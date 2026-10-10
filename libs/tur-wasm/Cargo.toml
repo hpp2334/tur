@@ -15,7 +15,6 @@ tur-animation = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
 tur-filepicker-wasm = { workspace = true }
-boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
 tracing = { workspace = true }
 tracing-wasm = { workspace = true }
@@ -30,6 +29,7 @@ web-sys = { workspace = true, features = [
     "Node",
     "EventTarget",
     "Event",
+    "AddEventListenerOptions",
     "MouseEvent",
     "KeyboardEvent",
     "CompositionEvent",

@@ -1,0 +1,14 @@
+// tur_host — the engine's host pkg: a pure declaration surface whose
+// `host fn`s the embedding Rust binds at boot. The Rust rows are the
+// compile truth (tur-engine/src/core/rut_runtime: the in-memory decl pkg
+// assembled from `tur_decl_pkg()` + every plugin's RutPkgExt rows, the
+// bodies installed by `install_tur_pkg`); this `.d.rut` is the GENERATED
+// decl snapshot of that surface — regenerate it with the
+// `tur_host_decl_snapshot` test's bless mode (`TUR_BLESS_TUR_HOST_DECL=1
+// cargo nextest run -p tur-integration-tests tur_host_decl`), never by
+// hand. The diff test fails when the Rust rows drift from the snapshot.
+{
+  "name": "tur_host",
+  "type": "host",
+  "entry": { "type": "./tur_host.d.rut" }
+}

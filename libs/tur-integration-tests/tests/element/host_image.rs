@@ -15,7 +15,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use tur_engine::EventBus;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_engine::core::image_resource::{HOST_IMAGE_ID_BASE, ImageResource, ImageResourceId};
@@ -93,19 +92,27 @@ fn host_image_lays_out_at_natural_size() {
 
     // The root Column gives the image an unbounded main axis, so with no
     // explicit height the element sizes to the registered natural height (2).
-    app.eval_module_source(&format!(
+    // The host-minted id crosses to the module through the entry rail.
+    app.load_rut_module(
         r#"
-        import {{ Column, imageResourceHandle, Image, mount, view }} from "tur:std";
-        const handle = imageResourceHandle({});
-        export function start() {{
-            mount(view(() => Column().children([
-                Image().resourceId(handle).width(4).build(),
-            ]).build()));
-        }}
-        "#,
-        id.as_u64()
-    ))
+
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
+
+entry fn start() {
+}
+
+entry fn mount_host(host_id: u64, _b: f64) {
+    let col = Column().child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+    mount(col.build());
+}
+"#,
+    )
     .expect("load module");
+    app.call_rut_entry("mount_host", id.as_u64(), 0.0)
+        .expect("mount host image");
     app.wait_for_timeout(Duration::ZERO);
 
     let tree = app.element_tree();
@@ -132,23 +139,30 @@ fn host_and_js_image_ids_coexist() {
     let host_id = app
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
-    app.eval_module_source(&format!(
+    app.load_rut_module(
         r#"
-        import {{ Column, createImageResource, imageResourceHandle, Image, mount, view }} from "tur:std";
-        const pngBytes = new Uint8Array({png:?});
-        const jsHandle = createImageResource(pngBytes);   // worker-minted id
-        const hostHandle = imageResourceHandle({host_id}); // host-minted id
-        export function start() {{
-            mount(view(() => Column().children([
-                Image().resourceId(jsHandle).width(1).build(),
-                Image().resourceId(hostHandle).width(4).build(),
-            ]).build()));
-        }}
-        "#,
-        png = PNG_1X1,
-        host_id = host_id.as_u64(),
-    ))
+use tur_kit::image::{ image_resource_solid };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
+
+entry fn start() {
+}
+
+// One worker-minted + one host-registered id, mounted side by side.
+entry fn mount_both(host_id: u64, _b: f64) {
+    let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
+    let col = Column()
+        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+    mount(col.build());
+}
+"#,
+    )
     .expect("load module");
+    app.call_rut_entry("mount_both", host_id.as_u64(), 0.0)
+        .expect("mount both");
     app.wait_for_timeout(Duration::ZERO);
 
     assert!(
@@ -158,89 +172,14 @@ fn host_and_js_image_ids_coexist() {
     let count = app.with_app(|a| a.image_resource_count());
     assert_eq!(
         count, 2,
-        "both resources retained host-side (1 JS-shipped + 1 host-registered)"
+        "both resources retained host-side (1 worker-minted + 1 host-registered)"
     );
 
     let tree = app.element_tree();
     let sizes = image_sizes(&tree);
     assert_eq!(sizes.len(), 2, "both images mounted");
-    assert_eq!(sizes[0].1, 1.0, "JS-decoded 1×1 natural height");
+    assert_eq!(sizes[0].1, 1.0, "worker-minted 1×1 natural height");
     assert_eq!(sizes[1].1, 2.0, "host-registered 4×2 natural height");
-}
-
-/// The delivery rail: the host emits the id over the event bus (f64 bits),
-/// JS decodes + wraps it — `imageResourceHandle` validating against the
-/// worker's metadata proves the FIFO guarantee (metadata registered before
-/// the id can reach JS). A module loaded afterwards mounts it.
-#[test]
-fn host_image_handle_via_event_bus() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-
-    let rgba = vec![10u8; 3 * 5 * 4];
-    let host_id = app
-        .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 3, 5).expect("rgba dims")));
-
-    app.eval_module_source(
-        r#"
-        import { eventBus, imageResourceHandle } from "tur:std";
-        globalThis.__wrapped = false;
-        eventBus.on(7, (payload) => {
-            const id = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
-                .getFloat64(0, true);
-            globalThis.__hostHandle = imageResourceHandle(id); // throws if the id is unknown
-            globalThis.__wrapped = true;
-        });
-        "#,
-    )
-    .expect("load module");
-
-    let bus = EventBus::of(app.app()).expect("event bus");
-    bus.emit_to_js(7, (host_id.as_u64() as f64).to_le_bytes().to_vec());
-    app.wait_for(|a| a.eval_js("globalThis.__wrapped") == "true");
-
-    // Mount it in a fresh module: the handle survives the reload (same realm)
-    // and drives a natural-sized image.
-    app.eval_module_source(
-        r#"
-        import { Column, Image, mount, view } from "tur:std";
-        const handle = globalThis.__hostHandle;
-        export function start() {
-            mount(view(() => Column().children([
-                Image().resourceId(handle).width(3).build(),
-            ]).build()));
-        }
-        "#,
-    )
-    .expect("load module");
-    app.wait_for_timeout(Duration::ZERO);
-
-    let tree = app.element_tree();
-    let sizes = image_sizes(&tree);
-    assert_eq!(sizes.len(), 1, "bus-delivered handle mounted");
-    assert_eq!(
-        sizes[0].1, 5.0,
-        "natural height via the host-registered metadata"
-    );
-}
-
-/// `imageResourceHandle` validates: an id the worker never heard of is a
-/// loud module-load error, not a silent zero-sized image.
-#[test]
-fn image_resource_handle_rejects_unknown_id() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-
-    let err = app
-        .eval_module_source(
-            r#"
-            import { imageResourceHandle } from "tur:std";
-            const handle = imageResourceHandle(424242);
-            "#,
-        )
-        .expect_err("unknown id must fail the load");
-    assert!(
-        err.to_string().contains("unknown image resource"),
-        "error should name the problem, got: {err}"
-    );
 }
 
 /// Detach → attach: the freshly attached renderer paints every
@@ -262,28 +201,33 @@ fn reattach_ensures_retained_images_before_first_frame() {
     )
     .unwrap();
 
-    // Both retention rails: one host-registered + one JS-decoded image.
+    // Both retention rails: one host-registered + one worker-minted image.
     let rgba = vec![7u8; 4 * 2 * 4];
     let host_id = app
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
-    app.eval_module_source(&format!(
-        r#"
-        import {{ Column, createImageResource, imageResourceHandle, Image, mount, view }} from "tur:std";
-        const pngBytes = new Uint8Array({png:?});
-        const jsHandle = createImageResource(pngBytes);     // worker-minted id
-        const hostHandle = imageResourceHandle({host_id});  // host-minted id
-        export function start() {{
-            mount(view(() => Column().children([
-                Image().resourceId(jsHandle).width(1).build(),
-                Image().resourceId(hostHandle).width(4).build(),
-            ]).build()));
-        }}
-        "#,
-        png = PNG_1X1,
-        host_id = host_id.as_u64(),
-    ))
+    app.load_rut_module(
+        r#"use tur_kit::image::{ image_resource_solid };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
+
+entry fn start() {
+}
+
+entry fn mount_both(host_id: u64, _b: f64) {
+    let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
+    let col = Column()
+        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+    mount(col.build());
+}
+"#,
+    )
     .expect("load module");
+    app.call_rut_entry("mount_both", host_id.as_u64(), 0.0)
+        .expect("mount both");
     app.wait_for_timeout(Duration::ZERO);
 
     let count = app.with_app(|a| a.image_resource_count());
@@ -360,19 +304,27 @@ fn reattach_uploads_only_painted_images() {
         })
         .collect();
 
-    app.eval_module_source(&format!(
+    app.load_rut_module(
         r#"
-        import {{ Column, imageResourceHandle, Image, mount, view }} from "tur:std";
-        const handle = imageResourceHandle({});
-        export function start() {{
-            mount(view(() => Column().children([
-                Image().resourceId(handle).width(4).build(),
-            ]).build()));
-        }}
-        "#,
-        ids[0].as_u64(),
-    ))
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+
+entry fn start() {
+}
+
+entry fn mount_one(id: u64, _b: f64) {
+    mount(Image(id).width(4.0).fit(BoxFit.Fill).build());
+}
+"#,
+    )
     .expect("load module");
+    app.call_rut_entry("mount_one", ids[0].as_u64(), 0.0)
+        .expect("mount one");
     app.wait_for_timeout(Duration::ZERO);
 
     let count = app.with_app(|a| a.image_resource_count());
@@ -400,4 +352,45 @@ fn reattach_uploads_only_painted_images() {
         vec![&format!("upload:{}", ids[0].as_u64())],
         "only the painted image may be ensured on the fresh renderer, got {log:?}"
     );
+}
+
+/// The rut twin of the boa `createSvgResource`: an SVG string authored in
+/// the module rasterises worker-side and registers through the same rail
+/// as `img_res_bytes` — the id mints in the worker range, the declared
+/// size crosses the metadata rail, and the pixel Blob is retained
+/// host-side. (The playground toolbar's ▶ / ↻ icons ride this row.)
+#[test]
+fn image_resource_svg_row_registers_a_worker_minted_resource() {
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(
+        r##"
+use tur_kit::image::{ image_resource_svg };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
+
+entry fn start() {
+}
+
+entry fn mount_svg(_a: u64, _b: f64) {
+    let id = image_resource_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
+    mount(Column().child(Image(id).width(10.0).fit(BoxFit.Fill).build()).build());
+}
+"##,
+    )
+    .expect("load module");
+    app.call_rut_entry("mount_svg", 0, 0.0).expect("mount svg");
+    app.wait_for_timeout(Duration::ZERO);
+
+    let tree = app.element_tree();
+    let sizes = image_sizes(&tree);
+    assert_eq!(sizes.len(), 1, "exactly one image mounted");
+    assert_eq!(sizes[0].0, 10.0, "explicit width");
+    assert_eq!(
+        sizes[0].1, 24.0,
+        "natural height from the SVG's declared size (the decode + metadata rail)"
+    );
+    let count = app.with_app(|a| a.image_resource_count());
+    assert_eq!(count, 1, "the rasterised resource is retained host-side");
 }
