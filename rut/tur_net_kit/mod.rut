@@ -1,4 +1,4 @@
-// tur_net_kit.rut — the net capability's kit prelude (the authored face
+// tur_net_kit (mod.rut) — the net capability's kit prelude (the authored face
 // over this plugin's `tur` host-pkg rows). Owned by the plugin that owns
 // the rows (the layering law applied to the kit): registered as a
 // compile-session prelude next to the rows, so plugin sets without the

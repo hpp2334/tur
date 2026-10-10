@@ -1,4 +1,4 @@
-// tur_anim_kit.rut — the animation family's kit wrappers (the authored
+// tur_anim_kit (mod.rut) — the animation family's kit wrappers (the authored
 // surface over the `tur` host pkg's animation rows: `el_opacity` /
 // `el_opacity_bound` / `el_transform` / the bound transform twins). Owned
 // by the plugin that owns the rows (the layering law applied to the kit

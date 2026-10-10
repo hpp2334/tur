@@ -4,7 +4,6 @@
 // embedded by tur-animation/src/kit.rs.
 {
   "name": "tur_anim_kit",
-  "entry": { "lib": "./kit.rut" },
   "deps": {
     "tur_host": { "path": "../tur_host" },
     "tur_kit": { "path": "../tur_kit" }

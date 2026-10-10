@@ -755,7 +755,7 @@ impl TurTestApp {
     }
 
     /// Load the **rut** case `name` from the shared case corpus
-    /// (`rut/cases/<name>/index.rut`) through the
+    /// (`rut/cases/<name>/mod.rut`) through the
     /// rut rail — the Phase-4 twin of [`Self::load_bundle`].
     ///
     /// The corpus's per-case contract (see the corpus README): the module
@@ -772,7 +772,7 @@ impl TurTestApp {
         let path = workspace_root
             .join("rut/cases")
             .join(name)
-            .join("index.rut");
+            .join("mod.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         self.load_rut_module(&source)?;
         // Same quiescence drive as `load_bundle`: settle the initial render

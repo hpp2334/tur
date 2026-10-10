@@ -78,7 +78,7 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
     // label's raw `rs_derive`, and the load-bearing second `use tur_host`
     // line (the duplicate-boot-scope interning bug).
     (
-        "rut/playground/playground.rut",
+        "rut/playground/mod.rut",
         "the playground: pg_* rows + the status label's rs_derive + the \
          load-bearing second use line (upstream interning bug)",
     ),
@@ -93,7 +93,7 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
     // this large module (documented at the import; migrate at the next
     // rut bump — the tur_net_kit::net_request wrapper exists).
     (
-        "rut/cases/github-viewer/index.rut",
+        "rut/cases/github-viewer/mod.rut",
         "the net row stays raw: the tur_net_kit import trips the upstream \
          interning bug in this module (see the import note)",
     ),
@@ -158,7 +158,7 @@ const RAW_RAIL_CALL_EXCEPTIONS: &[(&str, &str)] = &[
         "the wrappers' home (the sanctioned plain-fn rail)",
     ),
     (
-        "rut/playground/playground.rut",
+        "rut/playground/mod.rut",
         "the status label (the documented upstream workaround)",
     ),
     (

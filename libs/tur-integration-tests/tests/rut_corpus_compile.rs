@@ -3,8 +3,9 @@
 //! plugin set (the callback rail's corpus-wide pin — a case that
 //! regressions to a stringly-typed callback or a stale row name fails
 //! here, per case, with its own load error), and every case directory
-//! must carry its GENERATED `rut.jsonc` manifest (name + entry + the
-//! tur_kit dep) — the manifest grammar lives upstream
+//! must carry its GENERATED `rut.jsonc` manifest (name + the
+//! tur_kit dep; the root module is the walk's `mod.rut`) — the manifest
+//! grammar lives upstream
 //! (`rut_driver::parse_manifest`); the generator is this test's bless
 //! mode, so the manifests are an artifact, never hand-edited prose.
 
@@ -24,8 +25,9 @@ fn workspace_root() -> std::path::PathBuf {
 }
 
 /// The generated per-case manifest — deterministic text, byte-pinned (the
-/// shape the loader + the editor dep-walk read: `entry.lib` = the case's
-/// index, `deps` = the kit at its sibling path). The manifest `name` is a
+/// shape the loader + the editor dep-walk read: the root module is the
+/// walk's `mod.rut`, `deps` = the kit at its sibling path). The manifest
+/// `name` is a
 /// USE-PATH name — the grammar allows bare `[a-zA-Z0-9_]+` only — so a
 /// kebab-case dir name sanitizes to underscores (the name is nominal for
 /// a leaf case; nothing imports it).
@@ -37,7 +39,7 @@ fn case_manifest_text(dir_name: &str) -> String {
          tur-integration-tests\n// every_corpus_case) — regenerate, never \
          hand-edit. The name is the grammar's\n// bare form of the dir name \
          (kebab -> underscores; nominal for a leaf case).\n{{\n  \"name\": \
-         \"{name}\",\n  \"entry\": {{ \"lib\": \"./index.rut\" }},\n  \
+         \"{name}\",\n  \
          \"deps\": {{ \"tur_kit\": {{ \"path\": \"../../tur_kit\" }} }}\n}}\n"
     )
 }
@@ -49,7 +51,7 @@ fn every_corpus_case_has_a_manifest_and_compiles_against_the_standard_kit() {
         .expect("cases dir")
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().to_string())
-        .filter(|n| cases_dir.join(n).join("index.rut").exists())
+        .filter(|n| cases_dir.join(n).join("mod.rut").exists())
         .collect();
     names.sort();
 
@@ -104,11 +106,6 @@ fn every_corpus_case_has_a_manifest_and_compiles_against_the_standard_kit() {
             Some(name.replace('-', "_").as_str()),
             "{name}: manifest name (the dir's bare form)"
         );
-        assert_eq!(
-            m.entry.lib.as_deref(),
-            Some("./index.rut"),
-            "{name}: manifest entry"
-        );
         assert!(
             m.deps.contains_key("tur_kit"),
             "{name}: the manifest deps carry the kit"
@@ -120,7 +117,7 @@ fn every_corpus_case_has_a_manifest_and_compiles_against_the_standard_kit() {
     // present).
     let mut failures = Vec::new();
     for name in &names {
-        let source = std::fs::read_to_string(cases_dir.join(name).join("index.rut")).unwrap();
+        let source = std::fs::read_to_string(cases_dir.join(name).join("mod.rut")).unwrap();
         let app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
         if let Err(e) = app.load_rut_module(&source) {
             failures.push(format!("{name}: {e}"));

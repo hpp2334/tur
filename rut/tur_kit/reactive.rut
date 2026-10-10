@@ -256,10 +256,10 @@ pub class MutationCtx {
 impl MutationCtx {
   // The dispatch entries' + entry_ctx's mint. STILL PUB at this pin: the
   // corpus cases' raw-atom probe entries spell `over(bridge())` (the
-  // sanctioned probe rail — see `bridge`), and pub(mod) would lock them
-  // out. The TEST fixtures reach the ctx through `entry_ctx()` / the cx
-  // lanes instead; the privatization lands with the corpus probe rail's
-  // retirement.
+  // sanctioned probe rail — see `bridge`), and module-private would lock
+  // them out. The TEST fixtures reach the ctx through `entry_ctx()` / the
+  // cx lanes instead; the privatization lands with the corpus probe
+  // rail's retirement.
   [constructor] pub fn over(h: opaque) -> Self {
     return Self { h: h };
   }
@@ -285,7 +285,7 @@ pub class DeriveCtx {
 impl DeriveCtx {
   // Kit-internal — `derive<T>`'s wrapper mints it at the drain (no
   // external user spells it; the corpus derives go through the minter).
-  [constructor] pub(mod) fn over(h: opaque) -> Self {
+  [constructor] fn over(h: opaque) -> Self {
     return Self { h: h };
   }
   pub fn get<T>(self, r: Readable<T>) -> T {
@@ -355,7 +355,7 @@ pub class Watch {
 }
 
 impl Watch {
-  [constructor] pub(mod) fn of(h: opaque) -> Self {
+  [constructor] fn of(h: opaque) -> Self {
     return Self { h: h };
   }
   pub fn start(self) {
@@ -367,7 +367,7 @@ impl Watch {
 }
 
 pub fn watch<T>(atom: Readable<T>, cb: Mutation<nil>) -> Watch {
-  // atom_id is pub(mod)-grade iface machinery — kit-internal, never a
+  // atom_id is pub-grade iface machinery — kit-internal, never a
   // user spelling.
   return Watch.of(rs_watch_mut(atom.atom_id(), cb.seal(SEAL_NIL)));
 }

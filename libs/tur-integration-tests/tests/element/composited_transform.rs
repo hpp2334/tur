@@ -308,7 +308,7 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
         .and_then(|p| p.parent())
         .expect("failed to resolve workspace root");
     let source = std::fs::read_to_string(
-        workspace_root.join("rut/cases/composited-transform-follower-anchor/index.rut"),
+        workspace_root.join("rut/cases/composited-transform-follower-anchor/mod.rut"),
     )
     .unwrap();
     app.with_app(|a| {

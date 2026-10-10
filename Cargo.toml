@@ -47,25 +47,25 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# master (80b56c66) on 2026-10-09. Same nightly pin as this workspace
+# master (95a6ece) on 2026-10-10. Same nightly pin as this workspace
 # (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde", default-features = false }
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "80b56c666e6b01a0de8e9bfac431b9d7b0738bde" }
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
 
 
 num-derive = "0.4"

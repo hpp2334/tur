@@ -1,5 +1,5 @@
 //! The playground gate (Phase B rail + Phase C toolbar): the playground
-//! module (`playground.rut` + the generated `cases_gen.rut`, the same
+//! module (`mod.rut` + the generated `cases_gen.rut`, the same
 //! concatenation the website's `playgroundSource()` loads) runs a case in
 //! a hosted child instance through a bound `VirtualAppView`.
 //!
@@ -20,7 +20,7 @@ use tur_engine::core::shell::Cursor;
 use tur_integration_tests::TurTestApp;
 use tur_playground::TurRutPlaygroundPlugin;
 
-const PLAYGROUND_RUT: &str = include_str!("../../../rut/playground/playground.rut");
+const PLAYGROUND_RUT: &str = include_str!("../../../rut/playground/mod.rut");
 const CASES_GEN_RUT: &str = include_str!("../../../rut/playground/cases_gen.rut");
 
 /// The website's concatenation (`playgroundSource()`): one loadable module.
@@ -69,7 +69,7 @@ fn case_index(name: &str) -> u64 {
 
 /// A showcase case's original source (what Reset restores).
 fn case_source(name: &str) -> String {
-    std::fs::read_to_string(cases_dir().join(name).join("index.rut"))
+    std::fs::read_to_string(cases_dir().join(name).join("mod.rut"))
         .unwrap_or_else(|e| panic!("case `{name}` source: {e}"))
 }
 

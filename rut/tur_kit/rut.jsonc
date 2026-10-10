@@ -1,31 +1,10 @@
 // tur_kit — the authored element-construction surface. The kit is ONE
-// module spliced from these files: entry.lib first, then entry.libs in
-// listed order, '\n'-joined (the manifest order is the canonical splice).
-// The engine embed (tur-engine/src/kit/mod.rs, TUR_KIT_FILES) mirrors
-// this list exactly — the tur_host_decl pin test diffs the two.
+// module: `mod.rut` beside this manifest (the walk's root module) — the
+// materialized '\n'-join of the authored files. The engine embed
+// (tur-engine/src/kit/mod.rs) embeds the same bytes — the tur_host_decl
+// pin test diffs the two.
 {
   "name": "tur_kit",
-  "entry": {
-    "lib": "./handles.rut",
-    "libs": [
-      "./flags.rut",
-      "./dispatch.rut",
-      "./reactive.rut",
-      "./flex.rut",
-      "./box.rut",
-      "./stack.rut",
-      "./text.rut",
-      "./input.rut",
-      "./image.rut",
-      "./grid_table.rut",
-      "./scroll_lazy.rut",
-      "./gesture.rut",
-      "./focus.rut",
-      "./lifecycle.rut",
-      "./control.rut",
-      "./virtual_app.rut"
-    ]
-  },
   "deps": {
     "tur_host": { "path": "../tur_host" }
   }

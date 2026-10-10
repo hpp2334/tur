@@ -157,7 +157,7 @@ impl View {
   // The kit machinery's erase hatch (kit-internal — not on the pkg
   // surface): the one place a built view goes back to the raw opaque
   // the mount row takes.
-  pub(mod) fn raw(self) -> opaque {
+  fn raw(self) -> opaque {
     return self.inner;
   }
 }
@@ -199,7 +199,7 @@ pub class MapHandle(opaque);
 
 impl MapHandle {
   // Kit machinery only — nothing outside needs the map's raw yet.
-  pub(mod) fn raw(self) -> opaque {
+  fn raw(self) -> opaque {
     return self.inner;
   }
   pub fn set(self, key: str, value: str) {

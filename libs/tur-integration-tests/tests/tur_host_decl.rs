@@ -9,11 +9,10 @@
 //!    suite until the snapshot is deliberately regenerated (bless mode:
 //!    `TUR_BLESS_TUR_HOST_DECL=1`). The snapshot must also keep lowering
 //!    as a decl module whose row set is EXACTLY the live one.
-//! 2. `rut/tur_kit/rut.jsonc` — the kit manifest's `entry.lib` +
-//!    `entry.libs` must equal the engine embed's splice list
-//!    (`tur_engine::kit::TUR_KIT_FILES`), and every listed file must
-//!    exist. The embed joins the same files in the same order — one
-//!    module, byte-for-byte the same law the rut loader applies.
+//! 2. `rut/tur_kit/rut.jsonc` — the kit manifest parses with NO repealed
+//!    entry keys (the root module is the walk's `mod.rut`), and the
+//!    engine's embedded kit source is byte-identical to
+//!    `rut/tur_kit/mod.rut` on disk.
 //! 3. `rut/tur_host/rut.jsonc` — the host pkg's manifest must declare
 //!    `type = "host"` and the snapshot as its `entry.type`.
 
@@ -134,37 +133,26 @@ fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {
 
 #[test]
 fn kit_manifest_splice_matches_the_embed() {
-    let manifest_text =
-        std::fs::read_to_string(workspace_root().join("rut/tur_kit/rut.jsonc")).unwrap();
+    let kit_dir = workspace_root().join("rut/tur_kit");
+    let manifest_text = std::fs::read_to_string(kit_dir.join("rut.jsonc")).unwrap();
     let manifest = parse_manifest(&manifest_text).expect("the kit manifest parses");
     assert_eq!(manifest.name.as_deref(), Some("tur_kit"));
     assert!(
         matches!(manifest.pkg_type, PkgType::Lib),
         "the kit is a lib pkg"
     );
-    let mut listed = Vec::new();
-    if let Some(lib) = &manifest.entry.lib {
-        listed.push(lib.trim_start_matches("./").to_string());
-    }
     assert!(
-        !listed.is_empty(),
-        "the kit manifest declares entry.lib (the multi-lib base)"
+        manifest.legacy_entry.lib.is_none() && manifest.legacy_entry.libs.is_empty(),
+        "the kit manifest spells the REPEALED entry.lib/entry.libs keys — \
+         the root module is the walk's mod.rut"
     );
-    for l in &manifest.entry.libs {
-        listed.push(l.trim_start_matches("./").to_string());
-    }
+    let embedded = tur_engine::kit::TUR_KIT_RUT;
+    let on_disk = std::fs::read_to_string(kit_dir.join("mod.rut")).expect("rut/tur_kit/mod.rut");
     assert_eq!(
-        listed,
-        tur_engine::kit::TUR_KIT_FILES.to_vec(),
-        "the kit manifest's splice order must equal the engine embed's \
-         TUR_KIT_FILES (one module, byte-for-byte the same '\\n'-join)"
+        embedded, on_disk,
+        "the engine's embedded kit source must be byte-identical to \
+         rut/tur_kit/mod.rut (one module, one splice)"
     );
-    for f in &listed {
-        assert!(
-            workspace_root().join("rut/tur_kit").join(f).is_file(),
-            "the kit manifest lists `{f}`, which does not exist"
-        );
-    }
 }
 
 #[test]

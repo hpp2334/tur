@@ -23,7 +23,7 @@ use wasm_bindgen::prelude::*;
 use tur_playground::TurRutPlaygroundPlugin;
 
 #[cfg(target_arch = "wasm32")]
-pub const PLAYGROUND_RUT: &str = include_str!("../../../../rut/playground/playground.rut");
+pub const PLAYGROUND_RUT: &str = include_str!("../../../../rut/playground/mod.rut");
 #[cfg(target_arch = "wasm32")]
 pub const CASES_GEN_RUT: &str = include_str!("../../../../rut/playground/cases_gen.rut");
 

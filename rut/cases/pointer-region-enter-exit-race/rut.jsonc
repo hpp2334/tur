@@ -4,6 +4,5 @@
 // bare form of the dir name (kebab -> underscores; nominal for a leaf case).
 {
   "name": "pointer_region_enter_exit_race",
-  "entry": { "lib": "./index.rut" },
   "deps": { "tur_kit": { "path": "../../tur_kit" } }
 }

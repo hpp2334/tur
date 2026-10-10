@@ -4,7 +4,7 @@
 //! it as a compile-session prelude next to its rows.
 
 /// The net kit's rut source.
-pub const NET_KIT_RUT: &str = include_str!("../../../rut/tur_net_kit/kit.rut");
+pub const NET_KIT_RUT: &str = include_str!("../../../rut/tur_net_kit/mod.rut");
 
 /// The kit as a compile pkg (spec `tur_net_kit`).
 pub fn net_kit_pkg() -> rut_driver::Pkg {
