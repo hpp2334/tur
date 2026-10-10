@@ -1,6 +1,10 @@
 // composited-transform-basic: default TopLeft/TopLeft anchors, zero
 // targetOffset — the follower lands on the target's top-left (100, 80).
-use tur_kit::{ Align, CompositedFollower, CompositedTarget, Container, Positioned, SizedBox, Stack, layer_link, mount };
+use tur_kit::flags::{ Align };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 
 entry fn start() {
     let link = layer_link();

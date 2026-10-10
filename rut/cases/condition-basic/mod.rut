@@ -1,7 +1,11 @@
 // condition-basic: a Condition whose then-branch renders (pre-built
 // branches swapped by the engine — no rut during flush). The condition
 // rides a typed bool source handle.
-use tur_kit::{ Condition, Container, Source, Text, mount, source };
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let when = source<bool>(true);

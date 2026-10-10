@@ -1,7 +1,9 @@
 // positioned-right-bottom: edge anchors resolve against the STACK's own
 // final size (200x300), not the incoming constraints (Flutter parity).
 
-use tur_kit::{ Container, Positioned, Stack, mount };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
 
 fn sized(w: f64, h: f64, key: str) -> View {
     let mut b = Container().width_height(w, h);

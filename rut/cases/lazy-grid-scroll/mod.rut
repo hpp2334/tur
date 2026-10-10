@@ -3,7 +3,10 @@
 // mainAxisExtent) with 6px cross/main gaps, max cross 120, overscan 2.
 // Wheeling mounts only the visible window; the ramp IS the show (boa's
 // dark zebra is gone).
-use tur_kit::{ Container, LazyGrid, Source, mount, source };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
     return Container().color(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0)).build();

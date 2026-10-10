@@ -1,6 +1,10 @@
 // flex-todolist-sidebar: the todolist two-pane shell — a 200px tab
 // sidebar beside a padded content column.
-use tur_kit::{ Column, Container, CrossAlign, MainAlign, Row, Text, mount };
+use tur_kit::flags::{ CrossAlign, MainAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let mut row = Row();

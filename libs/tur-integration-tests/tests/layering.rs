@@ -154,7 +154,7 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
 /// since phase 4/5; definitions are skipped, not excepted).
 const RAW_RAIL_CALL_EXCEPTIONS: &[(&str, &str)] = &[
     (
-        "rut/tur_kit/reactive.rut",
+        "rut/tur_kit/reactive/",
         "the wrappers' home (the sanctioned plain-fn rail)",
     ),
     (

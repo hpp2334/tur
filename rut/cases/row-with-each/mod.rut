@@ -1,6 +1,12 @@
 // row-with-each: an Each inside a content-sized Row — the Row must not
 // inflate to the parent Column's height (the regression the test pins).
-use tur_kit::{ Column, Container, CrossAlign, Each, Expanded, Row, SizedBox, Source, Text, list_new, mount, source };
+use tur_kit::control_flow::control::{ Each };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ View, list_new, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
 fn item(_i: u64, s: str) -> View {
     let t = Text().text(s).font_size(13.0);

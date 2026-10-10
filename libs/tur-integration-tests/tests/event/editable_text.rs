@@ -539,7 +539,9 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
 use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -554,7 +556,9 @@ entry fn start() {
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -567,7 +571,9 @@ entry fn start() {
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -745,7 +751,9 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -798,7 +806,9 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -836,9 +846,17 @@ fn empty_colored_span_does_not_panic() {
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
-use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -936,7 +954,9 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -1062,7 +1082,9 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 // on visual line 0 because the non-multiline hit-test path dropped the y
 // coordinate. Mirrors CLICK_SOFTWRAP_BUNDLE minus the multiline flag.
 const CLICK_SOFTWRAP_SINGLE_BUNDLE: &str = r#"use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

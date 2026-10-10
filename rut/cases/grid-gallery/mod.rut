@@ -18,7 +18,18 @@
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur_kit::{ Column, Container, CrossAlign, Cursor, DeriveCtx, Expanded, Grid, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, bridge, derive, mount, mutate, source };
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::layout::grid_table::{ Grid };
+use tur_kit::reactive::{
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, mutate, source,
+};
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
 
 // The boa palette (deep slate page, indigo active chips).
 let PAGE_BG: u64 = 0x0F172AFFu64;

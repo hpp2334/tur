@@ -6,7 +6,9 @@
 //
 // The child loop feeding `.child()` runs BEFORE the single `.build()`
 // (build-then-mutate stays out; repetition is just the loop).
-use tur_kit::{ Container, Grid, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Grid };
 
 entry fn start() {
     let mut grid = Grid().max_cross(140.0).spacing(8.0, 8.0).query_key("grid-basic");

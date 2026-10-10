@@ -1,4 +1,4 @@
-//! The `tur_host` decl-surface pin + the kit splice pin.
+//! The `tur_host` decl-surface pin + the kit tree pin.
 //!
 //! Three artifacts are pinned here against the LIVE engine session:
 //!
@@ -11,8 +11,8 @@
 //!    as a decl module whose row set is EXACTLY the live one.
 //! 2. `rut/tur_kit/rut.jsonc` — the kit manifest parses with NO repealed
 //!    entry keys (the root module is the walk's `mod.rut`), and the
-//!    engine's embedded kit source is byte-identical to
-//!    `rut/tur_kit/mod.rut` on disk.
+//!    kit's FILE-MODULE TREE on disk (every directory's `mod.rut`) is
+//!    byte-identical to the engine's embedded `Pkg.mods` tree.
 //! 3. `rut/tur_host/rut.jsonc` — the host pkg's manifest must declare
 //!    `type = "host"` and the snapshot as its `entry.type`.
 
@@ -132,7 +132,7 @@ fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {
 }
 
 #[test]
-fn kit_manifest_splice_matches_the_embed() {
+fn kit_tree_matches_the_embed() {
     let kit_dir = workspace_root().join("rut/tur_kit");
     let manifest_text = std::fs::read_to_string(kit_dir.join("rut.jsonc")).unwrap();
     let manifest = parse_manifest(&manifest_text).expect("the kit manifest parses");
@@ -146,13 +146,66 @@ fn kit_manifest_splice_matches_the_embed() {
         "the kit manifest spells the REPEALED entry.lib/entry.libs keys — \
          the root module is the walk's mod.rut"
     );
-    let embedded = tur_engine::kit::TUR_KIT_RUT;
-    let on_disk = std::fs::read_to_string(kit_dir.join("mod.rut")).expect("rut/tur_kit/mod.rut");
+
+    // The disk tree: every directory under rut/tur_kit (the root
+    // included) carries exactly one mod.rut; no flat `<name>.rut` files
+    // remain; rut.jsonc is the only non-mod.rut file allowed.
+    let mut disk: std::collections::BTreeMap<String, String> = Default::default();
+    fn walk(dir: &Path, rel: &str, disk: &mut std::collections::BTreeMap<String, String>) {
+        let mod_rut = dir.join("mod.rut");
+        assert!(
+            mod_rut.is_file(),
+            "{} must carry mod.rut (one directory, one module)",
+            dir.display()
+        );
+        disk.insert(
+            rel.to_string(),
+            std::fs::read_to_string(&mod_rut).expect("read mod.rut"),
+        );
+        for entry in std::fs::read_dir(dir).expect("read_dir") {
+            let entry = entry.expect("dir entry");
+            let name = entry.file_name().to_string_lossy().to_string();
+            if entry.path().is_dir() {
+                let child = if rel.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{rel}/{name}")
+                };
+                walk(&entry.path(), &child, disk);
+            } else {
+                assert!(
+                    name == "mod.rut" || name == "rut.jsonc",
+                    "unexpected file {} under rut/tur_kit — the tree carries \
+                     only mod.rut files + the manifest (a flat <name>.rut is \
+                     a loud loader error)",
+                    entry.path().display()
+                );
+            }
+        }
+    }
+    walk(&kit_dir, "", &mut disk);
+
+    // The embed: {"" → TUR_KIT_ROOT} ∪ {mod path → text}. The compiler
+    // already errors loudly on decl/row mismatch — the byte-diff is the
+    // pin.
+    let embedded: std::collections::BTreeMap<String, String> = tur_engine::kit::tur_kit_mods()
+        .into_iter()
+        .map(|(path, _vis, text)| (path.to_string(), text.to_string()))
+        .collect();
     assert_eq!(
-        embedded, on_disk,
-        "the engine's embedded kit source must be byte-identical to \
-         rut/tur_kit/mod.rut (one module, one splice)"
+        disk.len(),
+        embedded.len(),
+        "module-count drift between rut/tur_kit and the embed: disk {:?} vs embed {:?}",
+        disk.keys().collect::<Vec<_>>(),
+        embedded.keys().collect::<Vec<_>>()
     );
+    for (path, text) in &disk {
+        assert_eq!(
+            embedded.get(path).map(String::as_str),
+            Some(text.as_str()),
+            "rut/tur_kit module `{path}` drifted from the engine's embed"
+        );
+    }
 }
 
 #[test]

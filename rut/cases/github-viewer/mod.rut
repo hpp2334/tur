@@ -35,7 +35,17 @@ use futures::launch_future;
 // resolution). Migrate to `tur_net_kit::net_request` (the wrapper exists)
 // at the next rut bump.
 use tur_host::{ net_request };
-use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, Switch, Text, image_resource_svg, list_new, mount, mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
+use tur_kit::control_flow::control::{ Condition, Each, Switch };
+use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAlign, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ ListHandle, TextCtrl, UndoCtrl, View, list_new, mount, str_parse_f64, text_ctrl, undo_ctrl };
+use tur_kit::image::{ Image, image_resource_svg };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
 
 // The state bundle (the sources every journey reads and writes — handles
 // bind at the launch site, captures stay rut-side).

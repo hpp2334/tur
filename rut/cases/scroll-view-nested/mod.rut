@@ -1,7 +1,11 @@
 // scroll-view-nested: a vertical ScrollView inside a horizontal one. The
 // outer sits in a Row — `Expanded` supplies the bounded viewport (non-flex
 // flex children get unbounded main-axis constraints, Flutter parity).
-use tur_kit::{ Axis, Column, Container, CrossAlign, Expanded, Row, ScrollView, SizedBox, mount };
+use tur_kit::flags::{ Axis, CrossAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
     let mut row = Row().child(SizedBox(200.0, 0.0).child(Container().build()).build());

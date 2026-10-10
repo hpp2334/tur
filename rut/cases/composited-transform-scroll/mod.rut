@@ -1,7 +1,13 @@
 // composited-transform-scroll: the target lives inside a scrollable
 // (content offset y=100); scrolling moves the target and the follower
 // tracks it.
-use tur_kit::{ Align, Axis, Column, CompositedFollower, CompositedTarget, Container, Positioned, ScrollView, SizedBox, Stack, layer_link, mount };
+use tur_kit::flags::{ Align, Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 
 entry fn start() {
     let link = layer_link();

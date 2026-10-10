@@ -234,7 +234,9 @@ fn container_with_shadow() {
 // ---------------------------------------------------------------------------
 
 const RADIUS_BOUND_RUT: &str = r#"
-use tur_kit::{ Container, MutationCtx, Source, entry_ctx, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
 
 struct AppContext {
     r: Source<f64>,

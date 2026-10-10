@@ -7,7 +7,7 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const HELLO_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column()
@@ -20,7 +20,7 @@ entry fn start() {
 /// The `entry fn stop` cleanup contract: stop runs on reload, and the new
 /// module's tree replaces the old one.
 const HELLO_RUT_V2: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     mount(Text().text("v2 root").build());
@@ -83,7 +83,7 @@ fn rut_module_mounts_a_tree() {
 /// `el_text_bound`; an engine→rut entry call mutates the atom; the
 /// existing reactive flush re-renders the Text.
 const COUNTER_RUT: &str = r#"
-use tur_kit::{ Column, Source, Text, entry_ctx, mount, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Source, entry_ctx, source }; use tur_kit::text::core::{ Text };
 
 struct AppContext {
     atom: Source<str>,
@@ -144,7 +144,7 @@ fn rut_reactive_atom_rebinds_text() {
 /// click queues an intent; the pump drains it into `entry fn ts_click`,
 /// which mutates the bound atom — the full interactive loop, all rut.
 /// The button's `id` IS the atom id (the callback's first argument).
-const BUTTON_RUT: &str = r#"use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+const BUTTON_RUT: &str = r#"use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let atom: Readable<str> = source<str>("taps: 0");
@@ -192,7 +192,7 @@ fn rut_button_click_mutates_bound_text() {
 /// callbacks), a bound reactive label, and cleanup — the rut twin of the
 /// JS counter case. Callbacks receive (count_atom, label_atom, seq).
 const COUNTER_APP_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let label: Readable<str> = source<str>("Count: 0");
@@ -250,7 +250,7 @@ fn rut_counter_app_full_journey() {
 /// Stack+Positioned, and `condition` with pre-built branches toggled by a
 /// button — all authored in rut.
 const CONDITION_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Condition, Container, Expanded, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Source, Stack, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::control_flow::control::{ Condition }; use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column, Expanded }; use tur_kit::layout::stack::{ Positioned, Stack }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let on: Readable<bool> = source<bool>(true);
@@ -327,7 +327,7 @@ fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f
 /// Scroll + styled-text gate: a scroll viewport wrapping tall styled
 /// content — the long-list pattern every real app needs.
 const SCROLL_RUT: &str = r#"
-use tur_kit::{ Axis, Column, Expanded, ScrollView, Text, mount };
+use tur_kit::flags::{ Axis }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column, Expanded }; use tur_kit::scroll::{ ScrollView }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let mut col = Column();
@@ -383,7 +383,7 @@ fn rut_scroll_view_with_styled_rows() {
 /// realm anywhere: every row speaks native `Value`s.
 const LIST_MAP_RUT: &str = r#"
 use tur_host::{ rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_set_str, rs_set_value, rs_source_value, rs_value_get, rs_value_item, rs_value_len };
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 // The string join: read the list atom back through the substrate rows
 // (len + item) and fold it into the bound label's str atom. (The label
@@ -504,7 +504,7 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
 use tur_host::{ tctrl_paste, tctrl_select, tctrl_text };
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Input, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
 
 entry fn start() -> u64 {
     let ctrl = text_ctrl();
@@ -596,7 +596,7 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 /// reconciliation runs during flush — the guarded face call), and the item
 /// builder entry authors each row.
 const EACH_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Each, ListHandle, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, View, list_new, mount, mutate, source };
+use tur_kit::control_flow::control::{ Each }; use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ ListHandle, TextCtrl, UndoCtrl, View, list_new, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 fn item_row(i: u64, item: str) -> View {
     let col = Column()
@@ -698,7 +698,7 @@ fn rut_each_maps_a_list_atom_and_rebuilds_on_change() {
 /// mounts rows outside the initial build set — flush-time face calls on
 /// the remount path.
 const LAZY_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Expanded, LazyList, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, View, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, View, mount }; use tur_kit::layout::flex::{ Column, Expanded }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::scroll::{ LazyList }; use tur_kit::text::core::{ Text };
 
 fn lazy_row(i: u64) -> View {
     let col = Column().child(Text().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
@@ -763,7 +763,7 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
 /// the tree geometry; a second box (SizedBox) pins the exact size.
 const CONTAINER_FULL_RUT: &str = r#"
 
-use tur_kit::{ Column, Container, PointerInteract, SizedBox, Text, mount };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let styled = Container()
@@ -839,7 +839,9 @@ fn rut_container_full_surface_and_sizedbox() {
 /// carries the transcript; every handler captures it — no id rails.
 const GESTURE_RUT: &str = r#"
 use tur_host::{ focus_request };
-use tur_kit::{ Align, Axis, BlurEvent, BorderPosition, Clip, Column, FocusEvent, Focusable, KeydownEvent, MouseButton, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::focus::{ Focusable }; use tur_kit::gesture::pointer::{
+    BlurEvent, FocusEvent, KeydownEvent, MouseButton, PointerEvent, PointerInteract,
+}; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let label: Readable<str> = source<str>("");
@@ -997,7 +999,7 @@ fn rut_gesture_focus_key_payloads_realm_free() {
 /// the atom); the atom drives an Opacity. The label records the tween /
 /// curve helper answers at start.
 const ANIM_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ Opacity, anim_ctrl, color_tween_lerp, curve_eval, tween_lerp };
 
 entry fn start() {
@@ -1072,7 +1074,9 @@ fn rut_animation_controller_ticks_into_opacity() {
 const ASYNC_RUT: &str = r#"
 use futures::launch_future;
 use tur_host::{ clipboard_read, clipboard_write, decode_utf8, net_request };
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, entry_ctx, mount, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source }; use tur_kit::text::core::{ Text };use tur_kit::gesture::focus::{ Focusable };
+use tur_kit::gesture::pointer::{ BlurEvent, FocusEvent, KeydownEvent, MouseButton, PointerInteract };
+
 
 // Plain rut async — ordinary params (the ctx rides along as a VALUE, the
 // RunContext stays injected and unspelled). The launch site is `start`
@@ -1137,7 +1141,7 @@ fn rut_async_clipboard_and_net_request() {
 const STREAM_RUT: &str = r#"
 use futures::launch_future;
 use tur_host::{ clipboard_write, task_cancel };
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, Mutation, MutationCtx, Readable, Source, Text, TextCtrl, UndoCtrl, entry_ctx, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text };
 use tur_net_kit::{ net_stream };
 
 entry fn start() {
@@ -1215,7 +1219,7 @@ fn rut_net_stream_chunks_cross_as_records() {
 /// controller rides the opaque stash (the poll entry reads it back); the
 /// child's lifecycle flips the status rail the rows read natively.
 const VAPP_RUT: &str = r#"
-use tur_kit::{ Column, Lifecycle, MountEvent, Mutation, MutationCtx, Readable, Source, Text, VAppCtrl, VirtualApp, entry_ctx, mount, mutate, source, virtual_app_controller, virtual_app_source };
+use tur_kit::control_flow::lifecycle::{ Lifecycle }; use tur_kit::gesture::pointer::{ MountEvent }; use tur_kit::handles::{ VAppCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text }; use tur_kit::virtual_app::{ VirtualApp, virtual_app_controller, virtual_app_source };
 
 struct AppContext {
     ctrl: VAppCtrl,
@@ -1224,7 +1228,7 @@ struct AppContext {
 
 fn start() -> AppContext {
     let label: Source<str> = source<str>("");
-    let src = virtual_app_source("\nuse tur_kit::{ Text, mount };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
+    let src = virtual_app_source("\nuse tur_kit::handles::{ mount }; use tur_kit::text::core::{ Text };\nentry fn start() {\nmount(Text().text(\"child here\").build());\n}");
     let ctrl: VAppCtrl = virtual_app_controller(src);
 
     // The lifecycle surfaces: on_mount is a mutation over the typed
@@ -1381,7 +1385,10 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 /// the flush (the guarded face call). A second derived (`d2`) chains two
 /// deps. A watcher reports changes into a transcript atom.
 const DERIVED_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, Watch, derive, mount, mutate, source, watch };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, derive, entry_ctx, mutate, source,
+    watch,
+}; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let count = source<f64>(0.0);
@@ -1429,7 +1436,7 @@ fn d2(a: f64, b: f64) -> str {
 /// derived falls back to Nil — and the frame never wedges (the healthy
 /// derive beside it keeps materializing).
 const DERIVED_NO_MOUNT_RUT: &str = r#"
-use tur_kit::{ Align, Axis, BorderPosition, Clip, Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, TextCtrl, UndoCtrl, derive, mount, mutate, source };
+use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let count = source<f64>(0.0);

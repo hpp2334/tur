@@ -1,10 +1,14 @@
-// stack.rut — the stack families (Stack / Positioned).
-// Split file 7/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs).
+// layout/stack — the stack families (Stack / Positioned).
+
+use tur_host::{
+  pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_left_bound, pos_new, pos_right,
+  pos_top, pos_top_bound, pos_width, stack_align, stack_build, stack_child, stack_fit, stack_new,
+  stack_qkey,
+};
 
 // ---- stack + positioned ---------------------------------------------------
 
-class Stack {
+pub class Stack {
   spec: opaque;
 }
 
@@ -12,34 +16,34 @@ impl Stack {
   [constructor] pub fn builder() -> Self {
     return Self { spec: stack_new() };
   }
-  pub fn alignment(mut self, v: Align) -> Self {
-    stack_align(self.spec, align_code(v));
+  pub fn alignment(mut self, v: flags.Align) -> Self {
+    stack_align(self.spec, flags.align_code(v));
     return self;
   }
-  pub fn fit(mut self, v: StackFit) -> Self {
-    stack_fit(self.spec, stack_fit_code(v));
+  pub fn fit(mut self, v: flags.StackFit) -> Self {
+    stack_fit(self.spec, flags.stack_fit_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     stack_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     stack_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       stack_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(stack_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(stack_build(self.spec));
   }
 }
 
-class Positioned {
+pub class Positioned {
   spec: opaque;
 }
 
@@ -58,11 +62,11 @@ impl Positioned {
   // The reactive anchors (drag-to-move writes the live atom; a bound
   // anchor's 0 is a real coordinate, same as the static rows — anchors
   // are verbatim, absence is never calling the row).
-  pub fn left_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn left_bound(mut self, r: reactive.Readable<f64>) -> Self {
     pos_left_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn top_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn top_bound(mut self, r: reactive.Readable<f64>) -> Self {
     pos_top_bound(self.spec, r.atom_id());
     return self;
   }
@@ -82,12 +86,12 @@ impl Positioned {
     pos_height(self.spec, v);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     pos_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(pos_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(pos_build(self.spec));
   }
 }
 

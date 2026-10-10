@@ -239,7 +239,11 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 fn row(i: u64) -> View {
     let b = Container()
@@ -315,7 +319,11 @@ entry fn start() -> u64 {
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_kit::{ Container, LazyList, Mutation, MutationCtx, Readable, Source, Text, View, mount, source };
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 fn row(i: u64) -> View {
     let b = Container()
@@ -785,7 +793,11 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 struct AppContext {
     count: Source<f64>,
@@ -837,7 +849,11 @@ entry fn set_count(cx: opaque, n: f64) {
 fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 struct AppContext {
     count: Source<f64>,
@@ -914,7 +930,11 @@ entry fn set_count(cx: opaque, n: f64) {
 fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_kit::{ Container, LazyList, Source, Text, View, entry_ctx, mount, source };
+        r#"use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 struct AppContext {
     count: Source<f64>,

@@ -1,7 +1,10 @@
 // container-flex-sized: a Column of fixed-size colored "buttons" with
 // labeled children (the counter-family shapes).
 
-use tur_kit::{ Column, Container, Text, mount };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column().child(qkey_button("btn", "Btn")).child(qkey_button("btn2", "Btn2"));

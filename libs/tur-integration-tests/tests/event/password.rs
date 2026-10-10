@@ -8,7 +8,10 @@ use tur_integration_tests::TurTestApp;
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
 
-use tur_kit::{ Column, Input, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -26,7 +29,9 @@ entry fn start() {
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
 
-use tur_kit::{ Input, MutationCtx, Readable, Source, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -295,7 +300,9 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 /// returns its id — the standard probe channel). `probe_obscure(b)` sets
 /// the atom (nonzero = masked).
 const BOUND_OBSCURE_BUNDLE: &str = r#"
-use tur_kit::{ Input, Source, TextCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::input::{ Input };
 
 struct AppContext {
     obscure: Source<bool>,
@@ -367,7 +374,9 @@ fn obscure_bound_toggles_masking_reactively() {
 /// same Val/subscribe machinery `obscure_bound` exercises above — plus
 /// the input's value behavior staying intact across swaps.
 const BOUND_PLACEHOLDER_BUNDLE: &str = r#"
-use tur_kit::{ Input, Source, TextCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::input::{ Input };
 
 struct AppContext {
     hint: Source<str>,

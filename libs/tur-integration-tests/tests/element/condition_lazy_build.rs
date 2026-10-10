@@ -18,7 +18,11 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
-use tur_kit::{ Column, Condition, MutationCtx, Readable, Source, Text, entry_ctx, mount, source };
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source };
+use tur_kit::text::core::{ Text };
 
 struct AppContext {
     open: Source<bool>,
@@ -129,7 +133,11 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
-use tur_kit::{ Column, MutationCtx, Source, Switch, Text, entry_ctx, mount, source };
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
+use tur_kit::text::core::{ Text };
 
 struct AppContext {
     tab: Source<str>,

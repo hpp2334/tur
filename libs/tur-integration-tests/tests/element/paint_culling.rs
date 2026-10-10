@@ -43,7 +43,11 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Axis, Column, Container, ScrollView, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
 
 fn item(i: u64) -> View {
     let b = Container().width_height(10.0, 100.0).color(0xFF0000FFu64).query_key(f"item/{i}");
@@ -184,7 +188,9 @@ fn no_clip_means_no_culling() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Axis, Container, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
 
 entry fn start() {
     let b = Container().width_height(100.0, 100.0).color(0x0080FFFF).query_key("onscreen");

@@ -1,7 +1,13 @@
 // drag-over-text: a Positioned -> Transform -> PointerInteract -> Text
 // piece — a non-selectable Text must not steal touch drags from the
 // PointerInteract beneath. The down count renders into `down-count`.
-use tur_kit::{ Align, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
+use tur_kit::flags::{ Align };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Stack };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ Transform };
 
 entry fn start() -> u64 {

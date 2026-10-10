@@ -66,7 +66,8 @@ fn text_input_requests_fire_on_editable_focus() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

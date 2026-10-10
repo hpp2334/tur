@@ -3,7 +3,10 @@
 // nodes dirty via the gesture handler and mask the layout-invalidation
 // behavior). The atoms ride the entry args: the pair mints in order, so
 // the b probe addresses a's answer + 1.
-use tur_kit::{ Container, Expanded, MutationCtx, Readable, Row, Source, bridge, mount, source };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded, Row };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
 
 entry fn start() -> u64 {
     let flex_a: Readable<f64> = source<f64>(1.0);

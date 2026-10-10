@@ -68,7 +68,10 @@ fn mount(app: &TurTestApp) {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Column, Container, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column()
@@ -133,9 +136,11 @@ fn host_frame_timing_is_opt_in() {
     app.set_host_frame_timing(true);
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
 
-use tur_kit::{ Container, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
 
 entry fn start() {
     let b = Container().width_height(100.0, 10.0).color(0xFF0000FFu64);

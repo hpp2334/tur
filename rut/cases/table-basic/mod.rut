@@ -10,7 +10,12 @@
 // Row extents stay intrinsic so the wrapped notes are never clipped.
 // (Module lets are literals-only in this build, so the planet data rides
 // pipe-joined strings.)
-use tur_kit::{ Container, Expanded, Source, Table, TableCols, Text, list_new, mount, source };
+use tur_kit::handles::{ View, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Expanded };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
 // The planet data (pipe-joined slots — the row builder indexes by row).
 let P_NAME: str = "Mercury|Venus|Earth|Mars|Jupiter|Saturn";

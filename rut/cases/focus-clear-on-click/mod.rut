@@ -1,7 +1,12 @@
 // focus-clear-on-click: a focused Input above a PointerInteract button —
 // clicking the button clears focus (the gesture handler's outside-click
 // path).
-use tur_kit::{ Column, Input, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source, text_ctrl, undo_ctrl };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
 
 entry fn start() -> u64 {
     let clicks: Readable<f64> = source<f64>(0.0);

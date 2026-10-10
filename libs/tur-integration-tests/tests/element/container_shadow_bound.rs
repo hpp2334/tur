@@ -14,7 +14,9 @@ use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_integration_tests::TurTestApp;
 
 const SHADOW_BOUND_RUT: &str = r#"
-use tur_kit::{ Container, Source, entry_ctx, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
 
 struct AppContext {
     color: Source<u64>,
@@ -59,7 +61,9 @@ entry fn resteepen(cx: opaque) {
 "#;
 
 const STATIC_SHADOW_RUT: &str = r#"
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
 
 entry fn start() -> u64 {
     let dy: Readable<f64> = source<f64>(12.0);

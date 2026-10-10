@@ -10,7 +10,15 @@
 //
 // Deterministic per-index sizes via the boa sine-hash (math_sin is the
 // engine's only trig row — exactly what the hash needs).
-use tur_kit::{ Align, Axis, Column, Condition, Container, CrossAlign, Cursor, Each, Expanded, LazyList, ListHandle, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, list_new, math_sin, mount, mutate, source, str_parse_f64 };
+use tur_kit::control_flow::control::{ Condition, Each };
+use tur_kit::flags::{ Align, Axis, CrossAlign, Cursor, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ ListHandle, View, list_new, math_sin, mount, str_parse_f64 };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 let ITEM_COUNT: f64 = 2000.0;
 

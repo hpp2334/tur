@@ -3,7 +3,13 @@
 // dressed to the boa design: the slate page, the 36px "Count: N" readout
 // (a derive over the count source) and the centered 100×44 indigo pill
 // row.
-use tur_kit::{ Align, Column, Container, CrossAlign, DeriveCtx, MainAlign, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, derive, mount, mutate, source };
+use tur_kit::flags::{ Align, CrossAlign, MainAlign };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(0.0);

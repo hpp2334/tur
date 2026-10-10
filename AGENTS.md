@@ -191,22 +191,26 @@ demo/
   compose/             # Android playground app + native/ (tur-demo cdylib)
 rut/                   # all rut package sources (pure rut — no build step;
                        #   every pkg dir carries its rut.jsonc manifest)
-  cases/               # the shared case corpus (<name>/index.rut + the
+  cases/               # the shared case corpus (<name>/mod.rut + the
                        #   generated <name>/rut.jsonc + README)
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
                        #   test-pinned tur_host.d.rut decl snapshot (the Rust
                        #   rows stay compile truth; bless:
                        #   TUR_BLESS_TUR_HOST_DECL=1)
-  tur_kit/             # the authored builder surface — a MULTI-FILE module
-                       #   spliced per rut.jsonc (handles, flags, dispatch,
-                       #   reactive, then one file per element family);
-                       #   embedded by tur-engine/src/kit/mod.rs (the embed
-                       #   mirrors the manifest splice — pinned)
+  tur_kit/             # the authored builder surface — a FILE-MODULE
+                       #   TREE: mod.rut (decls only) + the 17 leaf modules
+                       #   under domain dirs (handles, dispatch, reactive,
+                       #   flags, layout/{flex,box,stack,grid_table},
+                       #   text/{core,input}, gesture/{pointer,focus},
+                       #   control_flow/{lifecycle,control}, scroll, image,
+                       #   virtual_app); embedded by tur-engine/src/kit/mod.rs
+                       #   as a Pkg.mods tree (the embed mirrors the disk
+                       #   tree — pinned by tur_host_decl)
   tur_anim_kit/        # the animation kit (kit.rut; embedded by
                        #   tur-animation/src/kit.rs)
   tur_net_kit/         # the net kit (kit.rut; embedded by
                        #   tur-net-capability/src/kit.rs)
-  playground/          # playground.rut + cases_gen.rut + showcase.json +
+  playground/          # mod.rut + cases_gen.rut + showcase.json +
                        #   scripts/gen-cases.cjs
 ```
 
@@ -271,9 +275,11 @@ Android build + device debugging live in the **`android-dev` skill** at
 - **Every rut pkg dir carries a `rut.jsonc`** (the manifest grammar: the
   pinned rut checkout's docs, `reference/project-structure.md`): `name`
   (bare `[a-zA-Z0-9_]+` — kebab dir names sanitize to underscores for the
-  per-case manifests), `entry.lib` + `entry.libs` (the canonical
-  '\n'-splice order — one module, one namespace), `type: "host"` +
-  `entry.type` for a pure-declaration pkg. `tur_host`'s decl surface is
+  per-case manifests); the body is the FILE-MODULE TREE — the root module
+  is `mod.rut` beside the manifest and `mod NAME;` mounts `NAME/mod.rut`
+  (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly);
+  `type: "host"` + `entry.type` for a pure-declaration pkg. `tur_host`'s
+  decl surface is
   the GENERATED `rut/tur_host/tur_host.d.rut` snapshot — the Rust rows
   stay compile truth; the pin test (`tur_host_decl`) diffs the snapshot
   against the live standard session and fails on drift (regenerate
@@ -289,12 +295,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   `derive<T>`/`watch<T>`); and the deleted stash rows
   (`st_put|st_take|stf_put|stf_take`) have zero spellings anywhere.
 - **The kit is THE element construction surface** (`rut/tur_kit/` — a
-  MULTI-FILE module: `rut.jsonc`'s `entry.lib` + `entry.libs` list the
-  files (handles, flags, dispatch, reactive, flex, box, stack, text,
-  input, image, grid_table, scroll_lazy, gesture, focus, lifecycle,
-  control, virtual_app) and their canonical '\n'-splice order; the engine
-  embed (`tur-engine/src/kit/mod.rs`) mirrors the same list and the
-  `tur_host_decl` pin test diffs the two;
+  FILE-MODULE TREE: the root `mod.rut` is DECLS-ONLY (the `pub mod`
+  edges — no content lives in a namespace node) and the 17 leaf modules
+  sit under domain dirs — handles, dispatch, reactive, flags,
+  layout/{flex, box, stack, grid_table}, text/{core, input},
+  gesture/{pointer, focus}, control_flow/{lifecycle, control}, scroll,
+  image, virtual_app; every flat `<name>.rut` is gone — a loose file
+  beside a module dir is a loud loader error); the engine embed
+  (`tur-engine/src/kit/mod.rs`) hands the tree to the compiler through
+  `rut_driver::Pkg::mods` (`tur_kit_mods()` / `tur_kit_pkg()`) and the
+  `tur_host_decl` pin test diffs the embedded set against the disk tree;
   animation wrappers in `rut/tur_anim_kit/kit.rut`):
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
@@ -341,6 +351,25 @@ Android build + device debugging live in the **`android-dev` skill** at
   mappers are the sole carriers of the row codes (the `tur_host` u64
   const pushes are deleted). The kit hides row churn from call sites;
   the rows are the boundary.
+- **The kit's import laws** (the file-module tree's two doors): INSIDE
+  the kit there are no `use tur_kit` lines — cross-file references are
+  dot-qualified positions over full-from-root mod paths
+  (`flags.MainAlign`, `flags.main_align_code(v)`, `handles.View`,
+  `reactive.Readable<T>`, `gesture.pointer.InputEvent`), and each leaf's
+  `use tur_host` line carries exactly the rows THAT leaf calls (uses
+  bind per file — a sibling's use never leaks). Consumer-reachable names
+  are `pub`; kit-internal cross-file plumbing is `pub(pkg)` (the flags
+  code-mappers, the SEAL_* tags, `View.raw()`, `DeriveCtx.over`);
+  file-local helpers stay private — the crossing gate is LIVE at this
+  pin (`only pub names cross packages`), so a `pub(pkg)` name in a
+  consumer's use list is a loud compile error. OUTSIDE the kit,
+  consumers import through DEEP paths — one grouped use line per module,
+  names ASCII-sorted: `use tur_kit::flags::{ Align, MainAlign };` /
+  `use tur_kit::layout::flex::{ Column, Row };` (a name's import path IS
+  its home; there are no re-exports). The braceless single-name leaf is
+  refused on 1-segment mod paths (`use tur_kit::handles::mount;` parses
+  as `use pkg::A::B;`) — keep the braces: `use
+  tur_kit::handles::{ mount };`.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`

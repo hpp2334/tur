@@ -30,7 +30,11 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
-use tur_kit::{ Column, Container, ListHandle, MutationCtx, Source, Table, TableCols, entry_ctx, list_new, mount, source };
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
 
 fn cell(key: str) -> View {
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
@@ -136,7 +140,10 @@ fn fills_for(
 /// declarative stripes — even rows red, odd rows blue (the cells paint
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
-use tur_kit::{ Container, ListHandle, Source, Table, TableCols, list_new, mount, source };
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ Source, source };
 
 fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();
@@ -209,7 +216,10 @@ fn column_extent_honored_in_layout() {
     // (min 120) — the leftover 250 splits 1:2.
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, ListHandle, Source, Table, TableCols, list_new, mount, source };
+use tur_kit::handles::{ ListHandle, list_new, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{ Source, source };
 
 fn body_cell(_row: u64, _col: u64) -> View {
     return Container().width_height(0.0, 30.0).build();

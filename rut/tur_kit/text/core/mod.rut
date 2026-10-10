@@ -1,10 +1,14 @@
-// text.rut — the text family (Text / Spans).
-// Split file 8/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs).
+// text/core — the text family (Text / Spans).
+
+use tur_host::{
+  span_add, spans_new, text_bind, text_bind_derived, text_build, text_clip, text_color,
+  text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey, text_selectable,
+  text_size, text_spans, text_text, text_weight,
+};
 
 // ---- text family (Text / spans) -------------------------------------------
 
-class Text {
+pub class Text {
   spec: opaque;
 }
 
@@ -19,7 +23,7 @@ impl Text {
   // The ONE reactive text prop (a prop never has a twin): the handle's
   // kind selects the bind row — a source binds directly, a derived binds
   // through the derive rail.
-  pub fn text_bound(mut self, r: Readable<str>) -> Self {
+  pub fn text_bound(mut self, r: reactive.Readable<str>) -> Self {
     if (r.is_derived()) {
       text_bind_derived(self.spec, r.atom_id());
     } else {
@@ -67,12 +71,12 @@ impl Text {
     text_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(text_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(text_build(self.spec));
   }
 }
 
-class Spans {
+pub class Spans {
   spec: opaque;
 }
 
@@ -80,8 +84,8 @@ impl Spans {
   [constructor] pub fn builder() -> Self {
     return Self { spec: spans_new() };
   }
-  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, flags: SpanFlags) -> Self {
-    span_add(self.spec, text, size, packed, weight, span_flags_code(flags));
+  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, span_flags: flags.SpanFlags) -> Self {
+    span_add(self.spec, text, size, packed, weight, flags.span_flags_code(span_flags));
     return self;
   }
 }

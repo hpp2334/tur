@@ -1,6 +1,8 @@
 // positioned-basic: a positioned child anchored (10, 20) inside a Stack.
 
-use tur_kit::{ Container, Positioned, Stack, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
 
 entry fn start() {
     let mut stack = Stack();

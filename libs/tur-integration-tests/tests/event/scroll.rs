@@ -118,7 +118,13 @@ fn wheel_scrolls_the_playground_sidebar_shape() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Axis, Column, Container, CrossAlign, Expanded, MutationCtx, Readable, ScrollView, Source, Text, mount, source };
+use tur_kit::flags::{ Axis, CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let header = Container().padding(14.0)
@@ -219,7 +225,11 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_kit::{ Axis, Container, CrossAlign, ScrollView, Source, entry_ctx, mount, source };
+use tur_kit::flags::{ Axis, CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ ScrollView };
 
 struct AppContext {
     height: Source<f64>,

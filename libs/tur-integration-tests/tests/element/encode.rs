@@ -10,7 +10,10 @@ use tur_integration_tests::TurTestApp;
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
 use tur_host::{ decode_utf8, encode_utf8 };
-use tur_kit::{ Column, Source, Text, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let ascii = decode_utf8(encode_utf8("hello world"));

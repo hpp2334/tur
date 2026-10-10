@@ -14,7 +14,10 @@ fn flex_degenerate_unbounded_cases_degrade_finitely() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Column, Container, CrossAlign, Expanded, Row, SizedBox, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
 
 entry fn start() {
     let mut col = Column();

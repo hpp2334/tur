@@ -1,6 +1,5 @@
-// flags.rut — the per-family NAME-ONLY enums + the row-code mappers.
-// Split file 2/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs; the engine embed joins the same list).
+// flags — the per-family NAME-ONLY enums + the row-code mappers (the
+// kit-internal sole carriers of the row codes).
 
 // ---- flags (the per-family enums + the row-code mappers) -------------------
 //
@@ -47,7 +46,7 @@ pub enum Cursor {
 
 // THE row contract — the only place the numbers live. One mapper per
 // family (the compiler has no overloads — the names carry the family).
-fn align_code(a: Align) -> u64 {
+pub(pkg) fn align_code(a: Align) -> u64 {
   return when (a) {
     Align.TopLeft -> 0,     Align.TopCenter -> 1,    Align.TopRight -> 2,
     Align.CenterLeft -> 3,  Align.Center -> 4,       Align.CenterRight -> 5,
@@ -55,7 +54,7 @@ fn align_code(a: Align) -> u64 {
   };
 }
 
-fn main_align_code(a: MainAlign) -> u64 {
+pub(pkg) fn main_align_code(a: MainAlign) -> u64 {
   return when (a) {
     MainAlign.Start -> 0,        MainAlign.Center -> 1,
     MainAlign.End -> 2,          MainAlign.SpaceBetween -> 3,
@@ -63,64 +62,64 @@ fn main_align_code(a: MainAlign) -> u64 {
   };
 }
 
-fn cross_align_code(a: CrossAlign) -> u64 {
+pub(pkg) fn cross_align_code(a: CrossAlign) -> u64 {
   return when (a) {
     CrossAlign.Start -> 0, CrossAlign.Center -> 1,
     CrossAlign.End -> 2,   CrossAlign.Stretch -> 3,
   };
 }
 
-fn main_size_code(a: MainAxisSize) -> u64 {
+pub(pkg) fn main_size_code(a: MainAxisSize) -> u64 {
   return when (a) {
     MainAxisSize.Max -> 0, MainAxisSize.Min -> 1,
   };
 }
 
-fn stack_fit_code(a: StackFit) -> u64 {
+pub(pkg) fn stack_fit_code(a: StackFit) -> u64 {
   return when (a) {
     StackFit.Loose -> 0, StackFit.Expand -> 1, StackFit.Passthrough -> 2,
   };
 }
 
-fn axis_code(a: Axis) -> u64 {
+pub(pkg) fn axis_code(a: Axis) -> u64 {
   return when (a) {
     Axis.Vertical -> 0, Axis.Horizontal -> 1,
   };
 }
 
-fn box_fit_code(a: BoxFit) -> u64 {
+pub(pkg) fn box_fit_code(a: BoxFit) -> u64 {
   return when (a) {
     BoxFit.Fill -> 0, BoxFit.Contain -> 1, BoxFit.Cover -> 2,
     BoxFit.FitWidth -> 3, BoxFit.FitHeight -> 4, BoxFit.None -> 5,
   };
 }
 
-fn border_pos_code(a: BorderPosition) -> u64 {
+pub(pkg) fn border_pos_code(a: BorderPosition) -> u64 {
   return when (a) {
     BorderPosition.Inside -> 0, BorderPosition.Center -> 1, BorderPosition.Outside -> 2,
   };
 }
 
-fn clip_code(a: Clip) -> u64 {
+pub(pkg) fn clip_code(a: Clip) -> u64 {
   return when (a) {
     Clip.None -> 0, Clip.HardEdge -> 1, Clip.AntiAlias -> 2,
     Clip.AntiAliasWithSaveLayer -> 3,
   };
 }
 
-fn hit_test_code(a: HitTestBehavior) -> u64 {
+pub(pkg) fn hit_test_code(a: HitTestBehavior) -> u64 {
   return when (a) {
     HitTestBehavior.Opaque -> 0, HitTestBehavior.Translucent -> 1,
   };
 }
 
-fn span_flags_code(a: SpanFlags) -> u64 {
+pub(pkg) fn span_flags_code(a: SpanFlags) -> u64 {
   return when (a) {
     SpanFlags.None -> 0, SpanFlags.Italic -> 1, SpanFlags.Underline -> 2,
   };
 }
 
-fn cursor_code(a: Cursor) -> u64 {
+pub(pkg) fn cursor_code(a: Cursor) -> u64 {
   return when (a) {
     Cursor.Auto -> 0, Cursor.Default -> 1, Cursor.None -> 2,
     Cursor.ContextMenu -> 3, Cursor.Help -> 4, Cursor.Pointer -> 5,

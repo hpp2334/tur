@@ -10,7 +10,7 @@
 // pass delivers it with the task-scoped ctx.
 
 use tur_host::{ net_request_raw, net_stream_mut };
-use tur_kit::{ Mutation, mutate };
+use tur_kit::reactive::{ Mutation, mutate };
 
 // The seal tag the stream installs under — the kit spells the same
 // number as its own const (rut_runtime::seal_tags; one law, two

@@ -1,7 +1,6 @@
-// dispatch.rut — the callback rail's fire half: the infra dispatch
-// entries, the mutation rail's dispatch entries, and the boxed
-// derive-lane probes. Split file 3/17 of tur_kit (the splice order IS
-// rut.jsonc's entry.lib + entry.libs).
+// dispatch — the callback rail's fire half: the infra dispatch entries,
+// the mutation rail's dispatch entries, and the boxed derive-lane probes
+// (kit-internal — the engine's drains call the entries directly).
 
 // ---- the infra dispatch entries (the callback rail's fire half) ----------
 //
@@ -45,22 +44,22 @@ entry fn __tur_cb_ptr2(cb: opaque, a: u64, b: u64, lx: f64, ly: f64, gx: f64, gy
 // (fresh read of live state). The user fn answers a `View`; the entry
 // UNWRAPS it — the engine drain decodes the raw view opaque.
 entry fn __tur_cb_build0(cb: opaque) -> opaque {
-  let f = opaque.downcast<fn() -> View>(cb);
+  let f = opaque.downcast<fn() -> handles.View>(cb);
   return f().raw();
 }
 
 entry fn __tur_cb_build1(cb: opaque, i: u64) -> opaque {
-  let f = opaque.downcast<fn(u64) -> View>(cb);
+  let f = opaque.downcast<fn(u64) -> handles.View>(cb);
   return f(i).raw();
 }
 
 entry fn __tur_cb_build2(cb: opaque, i: u64, item: str) -> opaque {
-  let f = opaque.downcast<fn(u64, str) -> View>(cb);
+  let f = opaque.downcast<fn(u64, str) -> handles.View>(cb);
   return f(i, item).raw();
 }
 
 entry fn __tur_cb_build2i(cb: opaque, i: u64, col: u64) -> opaque {
-  let f = opaque.downcast<fn(u64, u64) -> View>(cb);
+  let f = opaque.downcast<fn(u64, u64) -> handles.View>(cb);
   return f(i, col).raw();
 }
 
@@ -84,81 +83,81 @@ entry fn __tur_cb_str2(cb: opaque, a: f64, b: f64) -> str {
 // mutation pass's contract (`mutation_entries` in rut_runtime).
 
 entry fn __tur_cb_mnil(cb: opaque, h: opaque) {
-  let f = opaque.downcast<fn(MutationCtx, nil)>(cb);
-  f(MutationCtx.over(h), nil);
+  let f = opaque.downcast<fn(reactive.MutationCtx, nil)>(cb);
+  f(reactive.MutationCtx.over(h), nil);
 }
 
 entry fn __tur_cb_mptr(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64, btn: u64) {
-  let f = opaque.downcast<fn(MutationCtx, PointerEvent)>(cb);
-  f(MutationCtx.over(h), PointerEvent.of(Point.at(lx, ly), Point.at(gx, gy), mouse_button_of(btn)));
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.PointerEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.PointerEvent.of(gesture.pointer.Point.at(lx, ly), gesture.pointer.Point.at(gx, gy), gesture.pointer.mouse_button_of(btn)));
 }
 
 entry fn __tur_cb_mf64(cb: opaque, h: opaque, a: f64) {
-  let f = opaque.downcast<fn(MutationCtx, f64)>(cb);
-  f(MutationCtx.over(h), a);
+  let f = opaque.downcast<fn(reactive.MutationCtx, f64)>(cb);
+  f(reactive.MutationCtx.over(h), a);
 }
 
 // The boxed composition lane: the drain hands the erasure box the kit's
 // `invoke` built; the SEALED box is the mint's fixed-type wrapper, which
 // recovers A and calls the user fn. One entry for every A.
 entry fn __tur_cb_mbox(cb: opaque, h: opaque, b: opaque) {
-  let f = opaque.downcast<fn(MutationCtx, opaque)>(cb);
-  f(MutationCtx.over(h), b);
+  let f = opaque.downcast<fn(reactive.MutationCtx, opaque)>(cb);
+  f(reactive.MutationCtx.over(h), b);
 }
 
 entry fn __tur_cb_menter(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
-  let f = opaque.downcast<fn(MutationCtx, EnterEvent)>(cb);
-  f(MutationCtx.over(h), EnterEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.EnterEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.EnterEvent.of(gesture.pointer.Point.at(lx, ly), gesture.pointer.Point.at(gx, gy)));
 }
 
 entry fn __tur_cb_mexit(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
-  let f = opaque.downcast<fn(MutationCtx, ExitEvent)>(cb);
-  f(MutationCtx.over(h), ExitEvent.of(Point.at(lx, ly), Point.at(gx, gy)));
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.ExitEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.ExitEvent.of(gesture.pointer.Point.at(lx, ly), gesture.pointer.Point.at(gx, gy)));
 }
 
 entry fn __tur_cb_mkey(cb: opaque, h: opaque, key: str, code: str, mods: u64) {
-  let f = opaque.downcast<fn(MutationCtx, KeydownEvent)>(cb);
-  f(MutationCtx.over(h), KeydownEvent.of(key, code, mods));
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.KeydownEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.KeydownEvent.of(key, code, mods));
 }
 
 entry fn __tur_cb_minput(cb: opaque, h: opaque, value: str, enter: bool) {
-  let f = opaque.downcast<fn(MutationCtx, InputEvent)>(cb);
-  f(MutationCtx.over(h), InputEvent.of(value, enter));
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.InputEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.InputEvent.of(value, enter));
 }
 
 entry fn __tur_cb_mfocus(cb: opaque, h: opaque) {
-  let f = opaque.downcast<fn(MutationCtx, FocusEvent)>(cb);
-  f(MutationCtx.over(h), FocusEvent.of());
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.FocusEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.FocusEvent.of());
 }
 
 entry fn __tur_cb_mblur(cb: opaque, h: opaque) {
-  let f = opaque.downcast<fn(MutationCtx, BlurEvent)>(cb);
-  f(MutationCtx.over(h), BlurEvent.of());
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.BlurEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.BlurEvent.of());
 }
 
 entry fn __tur_cb_mmount(cb: opaque, h: opaque) {
-  let f = opaque.downcast<fn(MutationCtx, MountEvent)>(cb);
-  f(MutationCtx.over(h), MountEvent.of());
+  let f = opaque.downcast<fn(reactive.MutationCtx, gesture.pointer.MountEvent)>(cb);
+  f(reactive.MutationCtx.over(h), gesture.pointer.MountEvent.of());
 }
 
 entry fn __tur_cb_mbytes(cb: opaque, h: opaque, data: bytes) {
-  let f = opaque.downcast<fn(MutationCtx, bytes)>(cb);
-  f(MutationCtx.over(h), data);
+  let f = opaque.downcast<fn(reactive.MutationCtx, bytes)>(cb);
+  f(reactive.MutationCtx.over(h), data);
 }
 
 entry fn __tur_cb_derive_f64(cb: opaque, h: opaque) -> f64 {
-  let f = opaque.downcast<fn(DeriveCtx) -> f64>(cb);
-  return f(DeriveCtx.over(h));
+  let f = opaque.downcast<fn(reactive.DeriveCtx) -> f64>(cb);
+  return f(reactive.DeriveCtx.over(h));
 }
 
 entry fn __tur_cb_derive_str(cb: opaque, h: opaque) -> str {
-  let f = opaque.downcast<fn(DeriveCtx) -> str>(cb);
-  return f(DeriveCtx.over(h));
+  let f = opaque.downcast<fn(reactive.DeriveCtx) -> str>(cb);
+  return f(reactive.DeriveCtx.over(h));
 }
 
 entry fn __tur_cb_derive_bool(cb: opaque, h: opaque) -> bool {
-  let f = opaque.downcast<fn(DeriveCtx) -> bool>(cb);
-  return f(DeriveCtx.over(h));
+  let f = opaque.downcast<fn(reactive.DeriveCtx) -> bool>(cb);
+  return f(reactive.DeriveCtx.over(h));
 }
 
 // ---- the boxed derive lane (the GENERIC surface) ---------------------------
@@ -170,8 +169,8 @@ entry fn __tur_cb_derive_bool(cb: opaque, h: opaque) -> bool {
 // rut_runtime (one law, two spellings).
 
 entry fn __tur_cb_derive_box(cb: opaque, h: opaque) -> opaque {
-  let f = opaque.downcast<fn(DeriveCtx) -> opaque>(cb);
-  return f(DeriveCtx.over(h));
+  let f = opaque.downcast<fn(reactive.DeriveCtx) -> opaque>(cb);
+  return f(reactive.DeriveCtx.over(h));
 }
 
 entry fn __tur_cb_derive_kind(b: opaque) -> u64 {

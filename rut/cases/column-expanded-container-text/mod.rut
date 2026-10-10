@@ -1,7 +1,10 @@
 // column-expanded-container-text: a padded unsized Container sized from
 // its Text child, wrapped in Expanded inside a max Column.
 
-use tur_kit::{ Column, Container, Expanded, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let mut col = Column();

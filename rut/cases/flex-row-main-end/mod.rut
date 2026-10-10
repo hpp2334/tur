@@ -1,5 +1,8 @@
 // flex-row-main-end: two fixed-width children pinned to the main-axis end.
-use tur_kit::{ Container, CrossAlign, MainAlign, Row, mount };
+use tur_kit::flags::{ CrossAlign, MainAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
 
 fn box_wh(w: f64, h: f64) -> View {
     let b = Container().width_height(w, h);

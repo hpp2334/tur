@@ -42,7 +42,9 @@ fn identical_frames_render_once() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
@@ -85,7 +87,9 @@ fn changed_content_reapplies() {
     // Visible container + a brush atom so the test can flip it.
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, Source, entry_ctx, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
 
 struct AppContext {
     color: Source<u64>,
@@ -157,8 +161,12 @@ fn attach_resets_dedup() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);

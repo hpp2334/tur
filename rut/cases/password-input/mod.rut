@@ -8,7 +8,14 @@
 //
 // Phase-2 note: this case is typed in the playground VIEWER too — the
 // va-child keyboard rail forwards real keys into the focused child input.
-use tur_kit::{ Column, Container, CrossAlign, Input, InputEvent, Mutation, MutationCtx, Readable, SizedBox, Source, Text, mount, mutate, source, text_ctrl, undo_ctrl };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::gesture::pointer::{ InputEvent };
+use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
 
 entry fn start() -> u64 {
     let value: Readable<str> = source<str>("value: \"hunter2\"");

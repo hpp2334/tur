@@ -50,7 +50,11 @@ fn center(app: &TurTestApp, key: &[&str]) -> (f64, f64) {
 }
 
 const RAIL_RUT: &str = r#"
-use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(0.0);
@@ -98,7 +102,11 @@ fn fn_value_callbacks_fire_through_the_infra_dispatch() {
 }
 
 const WRONG_ARITY_RUT: &str = r#"
-use tur_kit::{ Column, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     // A nil-arg mutation handed to the typed-arg pad — the shapes
@@ -124,7 +132,11 @@ fn wrong_arity_callback_fails_to_compile() {
 }
 
 const EACH_RAIL_RUT: &str = r#"
-use tur_kit::{ Column, Each, ListHandle, Source, Text, View, list_new, mount, source };
+use tur_kit::control_flow::control::{ Each };
+use tur_kit::handles::{ ListHandle, View, list_new, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let list: ListHandle = list_new();
@@ -167,7 +179,10 @@ fn each_item_builder_takes_a_fn_value() {
 
 const ANIM_RAIL_RUT: &str = r#"
 
-use tur_kit::{ Column, Mutation, MutationCtx, Readable, Source, Text, mount, mutate, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ anim_ctrl_tick };
 
 entry fn start() {

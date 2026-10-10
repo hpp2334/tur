@@ -1,10 +1,14 @@
-// grid_table.rut — the grid families (Grid / TableCols / Table).
-// Split file 11/17 of tur_kit (the splice order IS rut.jsonc's
-// entry.lib + entry.libs).
+// layout/grid_table — the grid families (Grid / TableCols / Table).
+
+use tur_host::{
+  col_fixed, col_flex, cols_new, grid_aspect, grid_build, grid_child, grid_main_extent,
+  grid_max_cross, grid_new, grid_qkey, grid_spacing, table_build, table_col_extent, table_columns,
+  table_header_builder, table_new, table_qkey, table_row_builder, table_rows_atom, table_stripe,
+};
 
 // ---- grid + table ------------------------------------------------------------
 
-class Grid {
+pub class Grid {
   spec: opaque;
 }
 
@@ -32,22 +36,22 @@ impl Grid {
     grid_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     grid_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       grid_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(grid_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(grid_build(self.spec));
   }
 }
 
-class TableCols {
+pub class TableCols {
   spec: opaque;
 }
 
@@ -72,7 +76,7 @@ impl TableCols {
   }
 }
 
-class Table {
+pub class Table {
   spec: opaque;
 }
 
@@ -84,15 +88,15 @@ impl Table {
     table_columns(self.spec, cols.spec);
     return self;
   }
-  pub fn rows_atom(mut self, r: Readable<opaque>) -> Self {
+  pub fn rows_atom(mut self, r: reactive.Readable<opaque>) -> Self {
     table_rows_atom(self.spec, r.atom_id());
     return self;
   }
-  pub fn row_builder(mut self, cb: fn(u64, u64) -> View) -> Self {
+  pub fn row_builder(mut self, cb: fn(u64, u64) -> handles.View) -> Self {
     table_row_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn header_builder(mut self, cb: fn(u64) -> View) -> Self {
+  pub fn header_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
     table_header_builder(self.spec, opaque(cb));
     return self;
   }
@@ -107,8 +111,8 @@ impl Table {
     table_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(table_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(table_build(self.spec));
   }
 }
 

@@ -57,7 +57,8 @@ fn container_color_packs_rrggbbaa() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Container, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
 
 entry fn start() {
     mount(Container().width_height(40.0, 40.0).color(0x11223344u64).build());

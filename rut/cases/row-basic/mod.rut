@@ -1,5 +1,8 @@
 // row-basic: two fixed-width children laid out horizontally.
-use tur_kit::{ Container, CrossAlign, Row, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
 
 fn box_w(w: f64) -> View {
     let b = Container().width_height(w, 0.0);

@@ -1,10 +1,15 @@
-// box.rut — the container family (Container / SizedBox).
-// Split file 6/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs).
+// layout/box — the container family (Container / SizedBox).
+
+use tur_host::{
+  box_align, box_border, box_build, box_child, box_clip, box_color, box_color_bound, box_height,
+  box_height_bound, box_new, box_padding, box_qkey, box_radius, box_radius_bound, box_shadow,
+  box_shadow_blur_bound, box_shadow_color_bound, box_shadow_dy_bound, box_size, box_width,
+  box_width_bound, sizedbox_build, sizedbox_child, sizedbox_new, sizedbox_qkey,
+};
 
 // ---- container family (Container / SizedBox) ------------------------------
 
-class Container {
+pub class Container {
   spec: opaque;
 }
 
@@ -32,26 +37,26 @@ impl Container {
     box_color(self.spec, packed);
     return self;
   }
-  pub fn color_bound(mut self, r: Readable<u64>) -> Self {
+  pub fn color_bound(mut self, r: reactive.Readable<u64>) -> Self {
     box_color_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn width_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn width_bound(mut self, r: reactive.Readable<f64>) -> Self {
     box_width_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn height_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn height_bound(mut self, r: reactive.Readable<f64>) -> Self {
     box_height_bound(self.spec, r.atom_id());
     return self;
   }
   // The reactive corner radius (animated radius rides a derive of the
   // progress atom).
-  pub fn radius_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn radius_bound(mut self, r: reactive.Readable<f64>) -> Self {
     box_radius_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn border(mut self, packed: u64, width: f64, position: BorderPosition) -> Self {
-    box_border(self.spec, packed, width, border_pos_code(position));
+  pub fn border(mut self, packed: u64, width: f64, position: flags.BorderPosition) -> Self {
+    box_border(self.spec, packed, width, flags.border_pos_code(position));
     return self;
   }
   pub fn radius(mut self, r: f64) -> Self {
@@ -65,46 +70,46 @@ impl Container {
   // The reactive shadow channels — per-state piece glows (the jigsaw drag
   // states) and eased blur (the implicit-animations shadow) ride atoms, not
   // rebuilds. The bound dy wins over the static offset's y.
-  pub fn shadow_color_bound(mut self, r: Readable<u64>) -> Self {
+  pub fn shadow_color_bound(mut self, r: reactive.Readable<u64>) -> Self {
     box_shadow_color_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn shadow_blur_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn shadow_blur_bound(mut self, r: reactive.Readable<f64>) -> Self {
     box_shadow_blur_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn shadow_dy_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn shadow_dy_bound(mut self, r: reactive.Readable<f64>) -> Self {
     box_shadow_dy_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn alignment(mut self, v: Align) -> Self {
-    box_align(self.spec, align_code(v));
+  pub fn alignment(mut self, v: flags.Align) -> Self {
+    box_align(self.spec, flags.align_code(v));
     return self;
   }
-  pub fn clip(mut self, v: Clip) -> Self {
-    box_clip(self.spec, clip_code(v));
+  pub fn clip(mut self, v: flags.Clip) -> Self {
+    box_clip(self.spec, flags.clip_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     box_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     box_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       box_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(box_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(box_build(self.spec));
   }
 }
 
-class SizedBox {
+pub class SizedBox {
   spec: opaque;
 }
 
@@ -112,7 +117,7 @@ impl SizedBox {
   [constructor] pub fn builder(w: f64, h: f64) -> Self {
     return Self { spec: sizedbox_new(w, h) };
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     sizedbox_child(self.spec, c.inner);
     return self;
   }
@@ -120,8 +125,8 @@ impl SizedBox {
     sizedbox_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(sizedbox_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(sizedbox_build(self.spec));
   }
 }
 

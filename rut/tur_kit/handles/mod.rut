@@ -1,0 +1,205 @@
+// handles — the nominal handles (View / the store + controller handles),
+// the mount door, and the shared value/math helpers.
+
+use tur_host::{
+  ctx_bridge, math_cos_raw, math_sin_raw, mount_raw, rs_list_new, rs_list_push, rs_map_new,
+  rs_map_set, rs_value_get, rs_value_item, rs_value_len, str_parse_f64_raw, tctrl_new,
+  tctrl_set_text, tctrl_text, undo_new, va_destroy, va_error, va_status, va_status_atom,
+};
+
+// The async launch rail's typed surface (the `futures` package rides the
+// same run chain the kit compiles in).
+use core::{ Future };
+
+// The user-facing view newtype: built views cross kit signatures as
+// `View` (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
+//
+// The vocabulary law: biz signatures spell WHAT a value is — views say
+// `View`, handles say their type — and bare `opaque` stays infra-only
+// (row decls, the dispatch entries, kit internals). `View` and the data
+// handles are NOMINAL newtypes (`class X(opaque)` — the compiler-provided
+// `X(v)` is the construction, the `inner` field is private), so a
+// TextCtrl can never be confused with another handle and the rows they
+// wrap surface as METHODS, never as raw row calls in biz code. The kit
+// wraps every row answer (`View(flex_build(..))`) and unwraps every row
+// arg (`c.inner`) — a raw view opaque never crosses a kit signature.
+//
+// Host-seam note: the compiler-provided `X(v)` ctors and the `raw()`
+// hatches stay pub — their remaining consumers are the row-probe fixtures
+// (the pg rails' `ctrl.raw()` erase) and complex-animation's
+// replaceable-controller slot. The STASH consumers are gone (the
+// context-crossing entry contract); a further privatization pass lands
+// with complex-animation's AppContext restructure.
+pub class View(opaque);
+
+impl View {
+  // The kit machinery's erase hatch (kit-internal — not on the pkg
+  // surface): the one place a built view goes back to the raw opaque
+  // the mount row takes.
+  pub(pkg) fn raw(self) -> opaque {
+    return self.inner;
+  }
+}
+
+// The one mount door users reach — the unwrap happens HERE, never at a
+// call site (the row takes the raw RutView opaque). The body calls the
+// `mount_raw` twin because this fn's own name shadows the row's.
+pub fn mount(v: View) {
+  mount_raw(v.raw());
+}
+
+// A structured store list (`list_new`; the `.push` / `.len` / `.item`
+// method surface). The store lane still crosses as the raw opaque (the
+// KV holds structured values as host opaques), so `raw()` is pub for
+// the `source<opaque>(handles.raw())` crossings.
+pub class ListHandle(opaque);
+
+impl ListHandle {
+  // The boxed store lane's erase (the `source<opaque>(list.raw())`
+  // crossing) — stays pub: the store holds structured values as host
+  // opaques, so a list into a source IS the typed shape.
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn push(self, item: str) {
+    rs_list_push(self.inner, item);
+  }
+  pub fn len(self) -> u64 {
+    return rs_value_len(self.inner);
+  }
+  pub fn item(self, i: u64) -> str {
+    return rs_value_item(self.inner, i);
+  }
+}
+
+// A structured store map (`map_new`; the `.set` / `.get` / `.len`
+// method surface).
+pub class MapHandle(opaque);
+
+impl MapHandle {
+  // Kit machinery only — nothing outside needs the map's raw yet.
+  fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn set(self, key: str, value: str) {
+    rs_map_set(self.inner, key, value);
+  }
+  pub fn get(self, key: str) -> str {
+    return rs_value_get(self.inner, key);
+  }
+  pub fn len(self) -> u64 {
+    return rs_value_len(self.inner);
+  }
+}
+
+// A virtual-app source (`virtual_app_source` / `virtual_app_source_handle`;
+// `virtual_app_controller`).
+pub class VAppSource(opaque);
+
+// The text-input controller (`tctrl_new` / `tctrl_set_text` /
+// `tctrl_text`; `Input.controller`). Mint with `text_ctrl()`.
+pub class TextCtrl(opaque);
+
+impl TextCtrl {
+  // The row-probe erase (the pg highlight rails + the span probes take
+  // the raw opaque). Kit fns mint; only the raw ROWS need this.
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn set_text(self, s: str) {
+    tctrl_set_text(self.inner, s);
+  }
+  pub fn text(self) -> str {
+    return tctrl_text(self.inner);
+  }
+}
+
+// Mint the input's text controller.
+pub fn text_ctrl() -> TextCtrl {
+  return TextCtrl(tctrl_new());
+}
+
+// The input undo controller (`undo_new`; `Input.undo`). Mint with
+// `undo_ctrl()`.
+pub class UndoCtrl(opaque);
+
+impl UndoCtrl {
+  // The row-probe erase (the undo rows take the raw opaque).
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+}
+
+// Mint the input's undo controller.
+pub fn undo_ctrl() -> UndoCtrl {
+  return UndoCtrl(undo_new());
+}
+
+// A virtual-app controller (`va_controller`; `VirtualAppView.controller`).
+pub class VAppCtrl(opaque);
+
+impl VAppCtrl {
+  // Kit machinery — the virtual-app rows take the raw opaque.
+  pub fn raw(self) -> opaque {
+    return self.inner;
+  }
+  pub fn status(self) -> str {
+    return va_status(self.inner);
+  }
+  pub fn status_atom(self) -> u64 {
+    return va_status_atom(self.inner);
+  }
+  // The public read: the controller's status rail as a typed Source<str>
+  // (the playground's watch rides it — no raw atom ids in biz code).
+  pub fn status_source(self) -> reactive.Source<str> {
+    return reactive.Source<str>.of(ctx_bridge(), va_status_atom(self.inner), false, reactive.STAMP_NUM_F64);
+  }
+  pub fn error(self) -> str {
+    return va_error(self.inner);
+  }
+  pub fn destroy(self) {
+    va_destroy(self.inner);
+  }
+}
+
+// The structured-value data ops (the list/map builders the case code
+// folds into sources; the STATE writes go through the ctx, never these).
+// Minting WRAPS: the handle is nominal, the rows take `h.inner` inside
+// the class methods (`.push` / `.set` / …).
+pub fn list_new() -> ListHandle {
+  return ListHandle(rs_list_new());
+}
+
+pub fn map_new() -> MapHandle {
+  return MapHandle(rs_map_new());
+}
+
+// The raw-opaque readers (the store's read-back lane: `ctx.get<opaque>`
+// recovers the structured value as a bare opaque — these take it
+// directly). The handle-typed surface is the classes' methods.
+pub fn value_len(v: opaque) -> u64 {
+  return rs_value_len(v);
+}
+
+pub fn value_item(v: opaque, index: u64) -> str {
+  return rs_value_item(v, index);
+}
+
+pub fn value_get(v: opaque, key: str) -> str {
+  return rs_value_get(v, key);
+}
+// str -> f64 parse (0 on failure) — the edit-field confirm path.
+pub fn str_parse_f64(s: str) -> f64 {
+  return str_parse_f64_raw(s);
+}
+
+// Trig helpers (f64 radians in/out) — the pure-math rows the orbit /
+// wave shapes feed a progress atom through.
+pub fn math_sin(x: f64) -> f64 {
+  return math_sin_raw(x);
+}
+
+pub fn math_cos(x: f64) -> f64 {
+  return math_cos_raw(x);
+}
+

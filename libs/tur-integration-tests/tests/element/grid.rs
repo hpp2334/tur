@@ -15,7 +15,9 @@ fn setup_grid(
     app.load_rut_module(&format!(
         r#"
 
-use tur_kit::{{ Container, Grid, mount }};
+use tur_kit::handles::{{ mount }};
+use tur_kit::layout::box::{{ Container }};
+use tur_kit::layout::grid_table::{{ Grid }};
 
 fn tile() -> View {{
     let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);

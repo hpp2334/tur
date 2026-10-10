@@ -10,8 +10,9 @@
 use tur_integration_tests::TurTestApp;
 
 const MATH_RUT: &str = r#"
-use tur_kit::{ math_cos, math_sin };
-use tur_kit::{ Text, mount };
+use tur_kit::handles::{ math_cos, math_sin };
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let sin_mils = (math_sin(0.5) * 1000.0 + 0.5) as u64;

@@ -10,7 +10,10 @@
 // per-row taps capture the row index (no id rails). Both modals overlay
 // via Condition branches in the root Stack — and unlike the boa
 // reference, NEITHER boots open (the boot-modal bug is not ported).
-use tur_kit::{ Align, Axis, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx, Each, Expanded, HitTestBehavior, Image, Input, ListHandle, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Positioned, Readable, Row, ScrollView, SizedBox, Source, Stack, StackFit, Text, bridge, image_resource_svg, list_new, mount, mutate, source, text_ctrl, undo_ctrl, value_item, value_len };
+use tur_kit::control_flow::control::{ Condition, Each }; use tur_kit::flags::{
+    Align, Axis, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize,
+    StackFit,
+}; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, TextCtrl, UndoCtrl, View, list_new, mount, text_ctrl, undo_ctrl, value_item, value_len }; use tur_kit::image::{ Image, image_resource_svg }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::layout::stack::{ Positioned, Stack }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, mutate, source }; use tur_kit::scroll::{ ScrollView }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
 
 // The boa light palette (Notion / Linear-style).
 let CARD_BG: u64 = 0xFFFFFFFFu64;

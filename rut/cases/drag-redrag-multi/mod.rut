@@ -3,7 +3,13 @@
 // mutations (opaques are just values — no stash); per-tile event
 // transcripts render into `tile-events-0` / `tile-events-1` (each tile's
 // mutation captures its own transcript source).
-use tur_kit::{ Align, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, mount, mutate, source };
+use tur_kit::flags::{ Align };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 entry fn start() -> u64 {

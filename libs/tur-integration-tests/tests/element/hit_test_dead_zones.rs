@@ -74,7 +74,14 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 
 const SCROLL_BTN_RUT: &str = r#"
 
-use tur_kit::{ Align, Column, Container, CrossAlign, Cursor, DeriveCtx, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, ScrollView, SizedBox, Source, Text, derive, mount, mutate, source };
+use tur_kit::flags::{ Align, CrossAlign, Cursor };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let taps: Readable<f64> = source<f64>(0.0);
@@ -176,7 +183,13 @@ fn scroll_view_button_taps_unscrolled_when_in_view() {
 
 const STACK_PIECE_SINGLE_BUILD_RUT: &str = r#"
 
-use tur_kit::{ Align, Container, CrossAlign, Cursor, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
+use tur_kit::flags::{ Align, CrossAlign, Cursor };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
@@ -216,7 +229,13 @@ entry fn start() -> u64 {
 // below for the verdict this shape exists to isolate.
 const STACK_PIECE_DOUBLE_BUILD_RUT: &str = r#"
 
-use tur_kit::{ Align, Container, CrossAlign, Cursor, DeriveCtx, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, SizedBox, Source, Stack, Text, derive, mount, mutate, source };
+use tur_kit::flags::{ Align, CrossAlign, Cursor };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");

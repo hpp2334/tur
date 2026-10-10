@@ -43,7 +43,11 @@ fn rect(app: &TurTestApp, key: &[&str]) -> (f64, f64, f64, f64) {
 
 const FIXED_HEADER_RUT: &str = r#"
 
-use tur_kit::{ Column, Container, CrossAlign, Text, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     // The lazy-grid-gallery header shape, with the size the audit assumed:
@@ -92,7 +96,11 @@ fn fixed_size_column_child_honored() {
 
 const UNSET_WIDTH_HEADER_RUT: &str = r#"
 
-use tur_kit::{ Column, Container, CrossAlign, Text, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     // The table-reactive shape verbatim: header `width_height(0, 32)` (0 =

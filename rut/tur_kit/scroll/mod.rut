@@ -1,10 +1,17 @@
-// scroll_lazy.rut — the scroll + lazy containers (ScrollView /
-// LazyList / LazyGrid). Split file 12/17 of tur_kit (the splice order IS
-// rut.jsonc's entry.lib + entry.libs).
+// scroll — the scroll + lazy containers (ScrollView / LazyList /
+// LazyGrid).
+
+use tur_host::{
+  lazy_axis, lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis,
+  lazy_grid_build, lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
+  lazy_grid_new, lazy_grid_overscan, lazy_grid_qkey, lazy_grid_spacing, lazy_item_extent,
+  lazy_list_new, lazy_overscan, lazy_qkey, scroll_axis, scroll_build, scroll_child, scroll_new,
+  scroll_offset, scroll_qkey,
+};
 
 // ---- scroll + lazy containers ----------------------------------------------
 
-class ScrollView {
+pub class ScrollView {
   spec: opaque;
 }
 
@@ -12,8 +19,8 @@ impl ScrollView {
   [constructor] pub fn builder() -> Self {
     return Self { spec: scroll_new() };
   }
-  pub fn axis(mut self, v: Axis) -> Self {
-    scroll_axis(self.spec, axis_code(v));
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    scroll_axis(self.spec, flags.axis_code(v));
     return self;
   }
   pub fn initial_offset(mut self, v: f64) -> Self {
@@ -24,16 +31,16 @@ impl ScrollView {
     scroll_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     scroll_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(scroll_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(scroll_build(self.spec));
   }
 }
 
-class LazyList {
+pub class LazyList {
   spec: opaque;
 }
 
@@ -41,16 +48,16 @@ impl LazyList {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_list_new() };
   }
-  pub fn item_builder(mut self, cb: fn(u64) -> View) -> Self {
+  pub fn item_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
     lazy_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn count(mut self, r: Readable<f64>) -> Self {
+  pub fn count(mut self, r: reactive.Readable<f64>) -> Self {
     lazy_count(self.spec, r.atom_id());
     return self;
   }
-  pub fn axis(mut self, v: Axis) -> Self {
-    lazy_axis(self.spec, axis_code(v));
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    lazy_axis(self.spec, flags.axis_code(v));
     return self;
   }
   pub fn overscan(mut self, v: u64) -> Self {
@@ -65,12 +72,12 @@ impl LazyList {
     lazy_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(lazy_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(lazy_build(self.spec));
   }
 }
 
-class LazyGrid {
+pub class LazyGrid {
   spec: opaque;
 }
 
@@ -78,16 +85,16 @@ impl LazyGrid {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lazy_grid_new() };
   }
-  pub fn item_builder(mut self, cb: fn(u64) -> View) -> Self {
+  pub fn item_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
     lazy_grid_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn count(mut self, r: Readable<f64>) -> Self {
+  pub fn count(mut self, r: reactive.Readable<f64>) -> Self {
     lazy_grid_count(self.spec, r.atom_id());
     return self;
   }
-  pub fn axis(mut self, v: Axis) -> Self {
-    lazy_grid_axis(self.spec, axis_code(v));
+  pub fn axis(mut self, v: flags.Axis) -> Self {
+    lazy_grid_axis(self.spec, flags.axis_code(v));
     return self;
   }
   pub fn overscan(mut self, v: u64) -> Self {
@@ -119,8 +126,8 @@ impl LazyGrid {
     lazy_grid_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(lazy_grid_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(lazy_grid_build(self.spec));
   }
 }
 

@@ -8,7 +8,11 @@ use tur_integration_tests::TurTestApp;
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
 use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Column, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

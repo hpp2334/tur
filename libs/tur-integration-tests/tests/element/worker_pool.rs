@@ -313,7 +313,9 @@ entry fn busy(_a: u64, _b: f64) {
     // return after it finished.
     futures::executor::block_on(ui_app.load_rut_module(
         r#"
-use tur_kit::{ Mutation, Readable, Source, Text, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ Mutation, Readable, Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("42");

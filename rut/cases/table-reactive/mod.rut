@@ -17,7 +17,16 @@
 // brush source (the corpus's brush law — bound colors are sources the
 // mutations repaint).
 use futures::{ launch_future, sleep };
-use tur_kit::{ Column, Container, CrossAlign, Cursor, DeriveCtx, Expanded, ListHandle, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, SizedBox, Source, Table, TableCols, Text, bridge, derive, entry_ctx, list_new, mount, mutate, source, str_parse_f64, value_item, value_len };
+use tur_kit::flags::{ CrossAlign, Cursor };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ ListHandle, View, list_new, mount, str_parse_f64, value_item, value_len };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::layout::grid_table::{ Table, TableCols };
+use tur_kit::reactive::{
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, entry_ctx, mutate, source,
+};
+use tur_kit::text::core::{ Text };
 
 // The boa palette (dark slate table on the #0b1220 frame).
 let HDR_ON: u64 = 0x334155FFu64;

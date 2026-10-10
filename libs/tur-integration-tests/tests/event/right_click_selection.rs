@@ -4,7 +4,9 @@ use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
 
-use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

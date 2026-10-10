@@ -9,7 +9,10 @@ use tur_integration_tests::TurTestApp;
 /// lower byte-identically to their long-form member calls.
 const CTOR_FORM_RUT: &str = r#"
 
-use tur_kit::{ Column, Row, SizedBox, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ Opacity };
 
 entry fn start() {

@@ -7,7 +7,9 @@ use tur_integration_tests::TurTestApp;
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
 
-use tur_kit::{ Column, Container, Expanded, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
 
 entry fn start() {
     let fill_builder = Container().color(0x404040FFu64);

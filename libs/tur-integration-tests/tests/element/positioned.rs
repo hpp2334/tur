@@ -126,7 +126,10 @@ fn positioned_only_stack_sizes_to_constraints_biggest() {
 // ---------------------------------------------------------------------------
 
 const BOUND_ANCHORS_RUT: &str = r#"
-use tur_kit::{ Container, Positioned, Source, Stack, entry_ctx, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Source, entry_ctx, source };
 
 struct AppContext {
     x: Source<f64>,

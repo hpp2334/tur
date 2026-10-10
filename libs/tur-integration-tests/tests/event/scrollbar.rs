@@ -7,7 +7,11 @@ use tur_integration_tests::TurTestApp;
 /// as `globalThis.__ctrl` so the test can drive `jumpTo` directly.
 const SCROLLBAR_BUNDLE: &str = r#"
 use tur_host::{ rs_source_f64 };
-use tur_kit::{ Axis, Column, Container, ScrollView, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::scroll::{ ScrollView };
 
 entry fn start() -> u64 {
     let mut content = Column();

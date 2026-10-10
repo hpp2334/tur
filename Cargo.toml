@@ -62,6 +62,7 @@ rut-std = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e42
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
 rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "95a6ece51255b14b30e424d901a7bc82d512699c" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.

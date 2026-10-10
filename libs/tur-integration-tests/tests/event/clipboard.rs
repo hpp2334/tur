@@ -56,7 +56,9 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
 
-use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
@@ -189,6 +191,7 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
         get_text(&app, id),
         "heo",
         "Cmd+X should delete the selection from the buffer"
+use tur_kit::flags::{ Cursor };
     );
     assert_eq!(
         get_cursor(&app, id),

@@ -1,7 +1,10 @@
-// reactive.rut — the C8 substrate's authored face: the plain-fn derive
-// rail and the mutation rail (source / derive / mutate + the ctxs).
-// Split file 4/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs).
+// reactive — the authored reactive face: the plain-fn derive rail and
+// the mutation rail (source / derive / mutate + the ctxs).
+
+use tur_host::{
+  ctx_bridge, ctx_get_box, ctx_run_box, ctx_set_box, derive_seal, mutate_seal, rs_box_stamp,
+  rs_source_box, rs_watch_mut, rs_watch_start, rs_watch_stop,
+};
 
 // ---- reactive helpers (the C8 substrate's authored face) ------------------
 //
@@ -83,30 +86,30 @@ let TAG_F64: u64 = 0;
 let TAG_STR: u64 = 1;
 let TAG_BOOL: u64 = 2;
 let TAG_BOX: u64 = 3;
-let SEAL_NIL: u64 = 0;
-let SEAL_PTR: u64 = 1;
+pub(pkg) let SEAL_NIL: u64 = 0;
+pub(pkg) let SEAL_PTR: u64 = 1;
 let SEAL_F64: u64 = 2;
-let SEAL_ENTER: u64 = 3;
-let SEAL_EXIT: u64 = 4;
-let SEAL_KEY: u64 = 5;
-let SEAL_INPUT: u64 = 6;
-let SEAL_FOCUS: u64 = 7;
-let SEAL_BLUR: u64 = 8;
-let SEAL_MOUNT: u64 = 9;
+pub(pkg) let SEAL_ENTER: u64 = 3;
+pub(pkg) let SEAL_EXIT: u64 = 4;
+pub(pkg) let SEAL_KEY: u64 = 5;
+pub(pkg) let SEAL_INPUT: u64 = 6;
+pub(pkg) let SEAL_FOCUS: u64 = 7;
+pub(pkg) let SEAL_BLUR: u64 = 8;
+pub(pkg) let SEAL_MOUNT: u64 = 9;
 let SEAL_BYTES: u64 = 10;
 let SEAL_BOX: u64 = 11;
 
 // The boxed rail's number stamps (the engine's `rs_box_stamp` answers —
 // the KV holds ONE number variant, so the mint reports the width and the
 // read re-stamps the recovered box to match).
-let STAMP_NUM_F64: u64 = 1;
+pub(pkg) let STAMP_NUM_F64: u64 = 1;
 let STAMP_NUM_U64: u64 = 2;
 
 // The reactive INTERFACES (the plan's hierarchy — the kind rides the
 // CLASS, never the method name): any type with the members satisfies
 // structurally (rut 442a979: no `impl I for T` — the inherent impl IS
 // the satisfaction).
-interface Readable<T> {
+pub interface Readable<T> {
   fn get(self) -> T;
   fn atom_id(self) -> u64;
   fn is_derived(self) -> bool;
@@ -123,7 +126,7 @@ interface Writable<T> {
 // `seal(tag)` is the pad-facing install half — the pad method knows its
 // payload shape and seals the USER fn under that shape's tag (the tag is
 // data spelled at the pad, never a type-directed dispatch).
-interface Mutation<A> {
+pub interface Mutation<A> {
   fn atom_id(self) -> u64;
   fn seal(self, tag: u64) -> u64;
   fn invoke(self, h: opaque, a: A) -> nil;
@@ -285,7 +288,7 @@ pub class DeriveCtx {
 impl DeriveCtx {
   // Kit-internal — `derive<T>`'s wrapper mints it at the drain (no
   // external user spells it; the corpus derives go through the minter).
-  [constructor] fn over(h: opaque) -> Self {
+  [constructor] pub(pkg) fn over(h: opaque) -> Self {
     return Self { h: h };
   }
   pub fn get<T>(self, r: Readable<T>) -> T {

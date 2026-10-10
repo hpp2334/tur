@@ -93,8 +93,13 @@ pub fn static_tree(frames: usize) {
     app.load_rut_module(
         r##"
 use tur_host::{ rs_get_f64, rs_set_f64, rs_source_f64 };
-use tur_kit::{ Axis, Column, Container, Row, TextCtrl, UndoCtrl, mount };
-use tur_kit::{ Axis, TextCtrl, UndoCtrl, mount, rs_derive };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::reactive::{ rs_derive };
 
 fn label(v: f64) -> str {
     return f"t={v as u64}";
@@ -140,7 +145,11 @@ pub fn scrolled_list(frames: usize) {
     app.load_rut_module(
         r##"
 
-use tur_kit::{ Axis, Column, Container, Expanded, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
     let mut content = Column();
@@ -203,7 +212,10 @@ pub fn animated_opacity(frames: usize) {
     app.load_rut_module(
         r##"
 use tur_host::{ rs_set_f64, rs_source_f64 };
-use tur_kit::{ Axis, Column, Container, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
 
@@ -275,7 +287,10 @@ pub fn long_editor(frames: usize) {
     app.load_rut_module(
         r##"
 use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Input, ScrollView, TextCtrl, UndoCtrl, mount };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

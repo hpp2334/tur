@@ -21,10 +21,18 @@
 // brush/str/bool sources repainted by the mutations (sync_chrome) and
 // the ticker's Done write — the corpus's brush law.
 use futures::{ launch_future, sleep };
-use tur_kit::{ Align, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx,
-    HitTestBehavior, Input, MainAlign, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract,
-    Readable, Row, SizedBox, Source, Stack, StackFit, Text, TextCtrl, UndoCtrl, derive, mount,
-    mutate, source, str_parse_f64, text_ctrl, undo_ctrl };
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::flags::{
+    Align, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize, StackFit,
+};
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, View, mount, str_parse_f64, text_ctrl, undo_ctrl };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::layout::stack::{ Stack };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
 
 // The generation guard: a shared cell (a struct field written through
 // `mut` bindings) — the non-reactive scratch the ticker pins.

@@ -1,6 +1,9 @@
 // flex-nested-sidebar: a 200px sidebar Column beside a content Column in
 // a Row (the classic two-pane shape).
-use tur_kit::{ Column, Container, CrossAlign, Row, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
 
 entry fn start() {
     let mut row = Row();

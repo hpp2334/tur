@@ -1,6 +1,9 @@
 // row-cross-center: a 200x36 container centering a row of two boxes on
 // the cross axis.
-use tur_kit::{ Container, CrossAlign, Row, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
 
 entry fn start() {
     let outer = Container()

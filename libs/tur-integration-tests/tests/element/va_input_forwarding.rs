@@ -22,7 +22,9 @@ use tur_integration_tests::TurTestApp;
 /// through the child facade. The controller rides the answered context
 /// (`AppContext`) — no stash, no raw rows.
 const CHILD_SRC: &str = r#"
-use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::input::{ Input };
 
 struct ChildCx {
     ctrl: TextCtrl,
@@ -67,7 +69,8 @@ fn parent_module(child_src: &str) -> String {
         .replace('\n', "\\n");
     format!(
         r#"
-use tur_kit::{{ VirtualApp, mount, virtual_app_controller, virtual_app_source }};
+use tur_kit::handles::{{ mount }};
+use tur_kit::virtual_app::{{ VirtualApp, virtual_app_controller, virtual_app_source }};
 
 entry fn start() {{
     let src = virtual_app_source("{escaped}");
@@ -284,7 +287,13 @@ fn va_child_loses_focus_when_the_parent_clicks_away() {
 /// host) overflows, keyed for the offset probe.
 const WHEEL_CHILD_SRC: &str = r#"
 
-use tur_kit::{ Axis, Column, Container, MutationCtx, Readable, ScrollView, Source, Text, TextCtrl, UndoCtrl, mount, source };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let rows = Column();

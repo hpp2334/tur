@@ -25,7 +25,11 @@ fn setup_row_flex_item_ex(
     let source = format!(
         r#"
 
-use tur_kit::{{ Container, Expanded, Flexible, MainAxisSize, Row, Text, mount }};
+use tur_kit::flags::{{ MainAxisSize }};
+use tur_kit::handles::{{ mount }};
+use tur_kit::layout::box::{{ Container }};
+use tur_kit::layout::flex::{{ Expanded, Flexible, Row }};
+use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
     let mut row = Row().query_key("row");
@@ -181,7 +185,10 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ Container, Flexible, Row, SizedBox, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Flexible, Row };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let mut pill = Row()
@@ -282,9 +289,15 @@ fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Flexible, Row };
+use tur_kit::text::core::{ Text };
 
-use tur_kit::{ Column, Container, Flexible, Row, SizedBox, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Flexible, Row };
+use tur_kit::text::core::{ Text };
 
 fn long_label() -> View {
     let txt = Text()
@@ -369,9 +382,15 @@ fn flexible_zero_remaining_slot_paints_within_budget() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
-use tur_kit::{ Container, Flexible, Row, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Flexible, Row };
+use tur_kit::text::core::{ Text };
 
-use tur_kit::{ Container, Flexible, Row, Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Flexible, Row };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let mut row = Row().child(Container().width_height(400.0, 40.0).build());

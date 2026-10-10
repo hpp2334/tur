@@ -724,7 +724,8 @@ fn joined(spans: &[(String, u64)]) -> String {
 /// controller rides the answered context (the entry-cx contract).
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
 use tur_host::{ pg_apply_highlight, pg_highlight };
-use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::input::{ Input };use tur_kit::reactive::{ source };
+
 
 struct EditorCx {
     ctrl: TextCtrl,
@@ -892,7 +893,7 @@ fn playground_highlights_on_load_and_the_spans_survive_editing() {
 /// kit's `.on_input(name, id)` (the `input_on_input` row). Every user
 /// edit delivers the named entry with the row's id crossing.
 const INPUT_ON_INPUT_MODULE: &str = r#"
-use tur_kit::{ Column, Input, InputEvent, Mutation, MutationCtx, Readable, Source, Text, entry_ctx, mount, mutate, source, text_ctrl, undo_ctrl };
+use tur_kit::gesture::pointer::{ InputEvent }; use tur_kit::handles::{ mount, text_ctrl, undo_ctrl }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let text: Source<str> = source<str>("cold");
@@ -1231,7 +1232,7 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
 
 const SPACING_ROWS_MODULE: &str = r#"
 use tur_host::{ pg_apply_highlight, pg_highlight };
-use tur_kit::{ Column, Input, TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();

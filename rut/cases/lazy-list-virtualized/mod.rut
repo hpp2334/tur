@@ -6,7 +6,13 @@
 // The name/initials/hue are deterministic per index (the boa generator,
 // palette-string twin: module lets are literals-only in this build, so
 // the name lists and the avatar palette ride pipe-joined strings).
-use tur_kit::{ Align, Column, Container, CrossAlign, Expanded, LazyList, MainAlign, MainAxisSize, Row, SizedBox, Source, Text, mount, source, str_parse_f64 };
+use tur_kit::flags::{ Align, CrossAlign, MainAlign, MainAxisSize };
+use tur_kit::handles::{ View, mount, str_parse_f64 };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyList };
+use tur_kit::text::core::{ Text };
 
 let ITEM_COUNT: f64 = 10000.0;
 let ITEM_HEIGHT: f64 = 56.0;

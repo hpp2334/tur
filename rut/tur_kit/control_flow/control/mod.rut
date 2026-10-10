@@ -1,10 +1,16 @@
-// control.rut — the control-flow families (Switch / Condition / Each /
-// Fragment). Split file 16/17 of tur_kit (the splice order IS
-// rut.jsonc's entry.lib + entry.libs).
+// control_flow/control — the control-flow families (Switch / Condition /
+// Each / Fragment).
+
+use tur_host::{
+  cond_build, cond_else, cond_else_build, cond_new, cond_qkey, cond_then, cond_then_build,
+  each_build, each_builder, each_new, frag_build, frag_child, frag_new, switch_build, switch_case,
+  switch_case_build, switch_fallback, switch_new, switch_qkey, switch_value_derived,
+  switch_value_source,
+};
 
 // ---- control flow (Switch / Condition / Each / Fragment) ---------------------
 
-class Switch {
+pub class Switch {
   spec: opaque;
 }
 
@@ -14,7 +20,7 @@ impl Switch {
   }
   // The ONE reactive value prop: the handle's kind selects the row
   // (source binds directly, a derived through the derive rail).
-  pub fn value(mut self, r: Readable<str>) -> Self {
+  pub fn value(mut self, r: reactive.Readable<str>) -> Self {
     if (r.is_derived()) {
       switch_value_derived(self.spec, r.atom_id());
     } else {
@@ -24,17 +30,17 @@ impl Switch {
   }
   // Appends one case — the historical `cases` prop's crossing (`case` is
   // a reserved word in rut).
-  pub fn cases(mut self, key: str, branch: View) -> Self {
+  pub fn cases(mut self, key: str, branch: handles.View) -> Self {
     switch_case(self.spec, key, branch.inner);
     return self;
   }
   // The lazy case twin: the branch is a FN VALUE, invoked when the key
   // activates (fresh read of live state).
-  pub fn case_build(mut self, key: str, cb: fn() -> View) -> Self {
+  pub fn case_build(mut self, key: str, cb: fn() -> handles.View) -> Self {
     switch_case_build(self.spec, key, opaque(cb));
     return self;
   }
-  pub fn fallback(mut self, branch: View) -> Self {
+  pub fn fallback(mut self, branch: handles.View) -> Self {
     switch_fallback(self.spec, branch.inner);
     return self;
   }
@@ -42,24 +48,24 @@ impl Switch {
     switch_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(switch_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(switch_build(self.spec));
   }
 }
 
-class Condition {
+pub class Condition {
   spec: opaque;
 }
 
 impl Condition {
-  [constructor] pub fn builder(r: Readable<bool>) -> Self {
+  [constructor] pub fn builder(r: reactive.Readable<bool>) -> Self {
     return Self { spec: cond_new(r.atom_id()) };
   }
-  pub fn then(mut self, branch: View) -> Self {
+  pub fn then(mut self, branch: handles.View) -> Self {
     cond_then(self.spec, branch.inner);
     return self;
   }
-  pub fn else_branch(mut self, branch: View) -> Self {
+  pub fn else_branch(mut self, branch: handles.View) -> Self {
     cond_else(self.spec, branch.inner);
     return self;
   }
@@ -67,11 +73,11 @@ impl Condition {
   // at activation and re-invoked at every re-activation — the built
   // subtree reads LIVE state each time it mounts (the boa callback
   // semantic; e.g. a modal reads the draft at open time).
-  pub fn then_build(mut self, cb: fn() -> View) -> Self {
+  pub fn then_build(mut self, cb: fn() -> handles.View) -> Self {
     cond_then_build(self.spec, opaque(cb));
     return self;
   }
-  pub fn else_build(mut self, cb: fn() -> View) -> Self {
+  pub fn else_build(mut self, cb: fn() -> handles.View) -> Self {
     cond_else_build(self.spec, opaque(cb));
     return self;
   }
@@ -79,29 +85,29 @@ impl Condition {
     cond_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(cond_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(cond_build(self.spec));
   }
 }
 
-class Each {
+pub class Each {
   spec: opaque;
 }
 
 impl Each {
-  [constructor] pub fn builder(r: Readable<opaque>) -> Self {
+  [constructor] pub fn builder(r: reactive.Readable<opaque>) -> Self {
     return Self { spec: each_new(r.atom_id()) };
   }
-  pub fn item_builder(mut self, cb: fn(u64, str) -> View) -> Self {
+  pub fn item_builder(mut self, cb: fn(u64, str) -> handles.View) -> Self {
     each_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn build(self) -> View {
-    return View(each_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(each_build(self.spec));
   }
 }
 
-class Fragment {
+pub class Fragment {
   spec: opaque;
 }
 
@@ -109,18 +115,18 @@ impl Fragment {
   [constructor] pub fn builder() -> Self {
     return Self { spec: frag_new() };
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     frag_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       frag_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(frag_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(frag_build(self.spec));
   }
 }
 

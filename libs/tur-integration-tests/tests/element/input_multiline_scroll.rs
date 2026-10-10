@@ -24,7 +24,8 @@ use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl };
+use tur_kit::text::input::{ Input };
 
 struct EditorCx {
     ctrl: TextCtrl,
@@ -71,7 +72,8 @@ entry fn set_short_text(cx: opaque) {
 
 /// A single-line control with the same geometry — the negative control.
 const SINGLE_LINE_RUT: &str = r#"
-use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl };
+use tur_kit::text::input::{ Input };
 
 struct EditorCx {
     ctrl: TextCtrl,

@@ -24,7 +24,12 @@ use tur_integration_tests::TurTestApp;
 /// reach the editable's max_width constraint; the bound wrapper can).
 const LONG_EDITOR: &str = r##"
 use tur_host::{ tctrl_push_span };
-use tur_kit::{ Axis, Container, Input, Source, ScrollView, entry_ctx, mount, source, text_ctrl };
+use tur_kit::flags::{ Axis };
+use tur_kit::handles::{ mount, text_ctrl };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::input::{ Input };
 
 struct AppContext {
     width: Source<f64>,

@@ -160,7 +160,8 @@ fn blocking_work_does_not_stall_lane_cotenants() {
             .load_rut_module(
                 r#"
 
-use tur_kit::{ Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     mount(Text().text("b").build());

@@ -20,7 +20,8 @@
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur_kit::{ Column, Container, CrossAlign, Cursor, Each, Expanded, LazyGrid, ListHandle, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, SizedBox, Source, Text, bridge, list_new, mount, mutate, source };
+use tur_kit::control_flow::control::{ Each }; use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize }; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, View, list_new, mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source }; use tur_kit::scroll::{ LazyGrid }; use tur_kit::text::core::{ Text };use tur_kit::layout::grid_table::{ Grid };
+
 
 // The boa palette (the deep-slate gallery chrome).
 let PAGE_BG: u64 = 0x0F172AFFu64;

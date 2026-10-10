@@ -1,6 +1,10 @@
 // column-stretch-container-text: Column(crossAlignment: Stretch) around a
 // padded unsized Container + Text — full-width colored strip.
-use tur_kit::{ Column, Container, CrossAlign, Text, mount };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column()

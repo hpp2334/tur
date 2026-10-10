@@ -1,5 +1,8 @@
 // lazy-list-basic: a 20-row virtualized vertical list (50px rows).
-use tur_kit::{ Container, LazyList, Source, mount, source };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyList };
 
 fn row(i: u64) -> View {
     let mut b = Container().width_height(400.0, 50.0);

@@ -1,10 +1,14 @@
-// flex.rut — the flex families (Column / Row / Expanded / Flexible).
-// Split file 5/17 of tur_kit (the splice order IS rut.jsonc's entry.lib +
-// entry.libs).
+// layout/flex — the flex families (Column / Row / Expanded / Flexible).
+
+use tur_host::{
+  flex_build, flex_child, flex_column, flex_cross_align, flex_main_align, flex_main_size,
+  flex_qkey, flex_row, flexi_build, flexi_child, flexi_fit, flexi_flex, flexi_flex_bound,
+  flexi_new, flexi_qkey,
+};
 
 // ---- flex (Column / Row) ------------------------------------------------
 
-class Column {
+pub class Column {
   spec: opaque;
 }
 
@@ -16,38 +20,38 @@ impl Column {
   // the typed spelling, the raw u64 lane is the phase-5 migrant (the
   // test snippets' consts); a wrong-family value traps at the unbox,
   // never a silent 0.
-  pub fn main_alignment(mut self, v: MainAlign) -> Self {
-    flex_main_align(self.spec, main_align_code(v));
+  pub fn main_alignment(mut self, v: flags.MainAlign) -> Self {
+    flex_main_align(self.spec, flags.main_align_code(v));
     return self;
   }
-  pub fn cross_alignment(mut self, v: CrossAlign) -> Self {
-    flex_cross_align(self.spec, cross_align_code(v));
+  pub fn cross_alignment(mut self, v: flags.CrossAlign) -> Self {
+    flex_cross_align(self.spec, flags.cross_align_code(v));
     return self;
   }
-  pub fn main_axis_size(mut self, v: MainAxisSize) -> Self {
-    flex_main_size(self.spec, main_size_code(v));
+  pub fn main_axis_size(mut self, v: flags.MainAxisSize) -> Self {
+    flex_main_size(self.spec, flags.main_size_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     flex_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     flex_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       flex_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(flex_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(flex_build(self.spec));
   }
 }
 
-class Row {
+pub class Row {
   spec: opaque;
 }
 
@@ -55,40 +59,40 @@ impl Row {
   [constructor] pub fn builder() -> Self {
     return Self { spec: flex_row() };
   }
-  pub fn main_alignment(mut self, v: MainAlign) -> Self {
-    flex_main_align(self.spec, main_align_code(v));
+  pub fn main_alignment(mut self, v: flags.MainAlign) -> Self {
+    flex_main_align(self.spec, flags.main_align_code(v));
     return self;
   }
-  pub fn cross_alignment(mut self, v: CrossAlign) -> Self {
-    flex_cross_align(self.spec, cross_align_code(v));
+  pub fn cross_alignment(mut self, v: flags.CrossAlign) -> Self {
+    flex_cross_align(self.spec, flags.cross_align_code(v));
     return self;
   }
-  pub fn main_axis_size(mut self, v: MainAxisSize) -> Self {
-    flex_main_size(self.spec, main_size_code(v));
+  pub fn main_axis_size(mut self, v: flags.MainAxisSize) -> Self {
+    flex_main_size(self.spec, flags.main_size_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     flex_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     flex_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [View]) -> Self {
+  pub fn children(mut self, cs: [handles.View]) -> Self {
     for (let c of cs) {
       flex_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> View {
-    return View(flex_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(flex_build(self.spec));
   }
 }
 
 // ---- flexible items (Expanded / Flexible) --------------------------------
 
-class Expanded {
+pub class Expanded {
   spec: opaque;
 }
 
@@ -100,7 +104,7 @@ impl Expanded {
     flexi_flex(self.spec, v);
     return self;
   }
-  pub fn flex_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn flex_bound(mut self, r: reactive.Readable<f64>) -> Self {
     flexi_flex_bound(self.spec, r.atom_id());
     return self;
   }
@@ -108,16 +112,16 @@ impl Expanded {
     flexi_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     flexi_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(flexi_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(flexi_build(self.spec));
   }
 }
 
-class Flexible {
+pub class Flexible {
   spec: opaque;
 }
 
@@ -131,7 +135,7 @@ impl Flexible {
     flexi_flex(self.spec, v);
     return self;
   }
-  pub fn flex_bound(mut self, r: Readable<f64>) -> Self {
+  pub fn flex_bound(mut self, r: reactive.Readable<f64>) -> Self {
     flexi_flex_bound(self.spec, r.atom_id());
     return self;
   }
@@ -139,12 +143,12 @@ impl Flexible {
     flexi_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(mut self, c: handles.View) -> Self {
     flexi_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(flexi_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(flexi_build(self.spec));
   }
 }
 

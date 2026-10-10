@@ -3,7 +3,8 @@
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the kit's bridge/over
 // probe rail (the sanctioned raw-atom hatch).
-use tur_kit::{ Column, Container, EnterEvent, ExitEvent, MouseRegion, Mutation, MutationCtx, Readable, Source, Text, bridge, mount, mutate, source };
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ HitTestBehavior };
+
 
 entry fn start() -> u64 {
     let cursor: Readable<str> = source<str>("pointer");

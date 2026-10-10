@@ -2,7 +2,13 @@
 // the outer, the translucent inner lets both fire. The result labels are
 // derived readables over the two counter pairs; every tap is a mutation
 // capturing its counter (no ids, no stash).
-use tur_kit::{ Column, Container, CrossAlign, DeriveCtx, MainAxisSize, Mutation, MutationCtx, PointerInteract, Readable, Row, Source, Text, derive, mount, mutate, source };
+use tur_kit::flags::{ CrossAlign, HitTestBehavior, MainAxisSize };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let outer_o: Readable<f64> = source<f64>(0.0);

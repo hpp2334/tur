@@ -2,7 +2,11 @@
 // (the VDivider pattern). The scratch points ride f64 sources captured by
 // the drag mutations; the transcript source renders "dsx,dsy,dlx,dly" for
 // the test to parse.
-use tur_kit::{ Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, bridge, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let info: Readable<str> = source<str>("0,0,0,0");

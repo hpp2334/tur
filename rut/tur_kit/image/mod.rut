@@ -1,8 +1,11 @@
-// image.rut — the image family (Image + the image-resource minters).
-// Split file 10/17 of tur_kit (the splice order IS rut.jsonc's entry.lib
-// + entry.libs).
+// image — the image family (Image + the image-resource minters).
 
-class Image {
+use tur_host::{
+  img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_res_svg,
+  img_width,
+};
+
+pub class Image {
   spec: opaque;
 }
 
@@ -18,16 +21,16 @@ impl Image {
     img_height(self.spec, v);
     return self;
   }
-  pub fn fit(mut self, v: BoxFit) -> Self {
-    img_fit(self.spec, box_fit_code(v));
+  pub fn fit(mut self, v: flags.BoxFit) -> Self {
+    img_fit(self.spec, flags.box_fit_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     img_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> View {
-    return View(img_build(self.spec));
+  pub fn build(self) -> handles.View {
+    return handles.View(img_build(self.spec));
   }
 }
 // Register an encoded image resource (PNG/JPEG) — the `createImageResource`

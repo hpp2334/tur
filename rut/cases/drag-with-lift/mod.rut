@@ -2,7 +2,12 @@
 // animation (forward on down, reverse on up). The controller is CAPTURED
 // by the drag mutations (opaques are just values — no stash); the last
 // gesture phase renders into the `last-event` Text.
-use tur_kit::{ Column, Container, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, bridge, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source };
+use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 entry fn start() -> u64 {

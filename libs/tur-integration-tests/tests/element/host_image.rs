@@ -96,7 +96,10 @@ fn host_image_lays_out_at_natural_size() {
     app.load_rut_module(
         r#"
 
-use tur_kit::{ BoxFit, Column, Image, mount };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
 
 entry fn start() {
 }
@@ -138,8 +141,11 @@ fn host_and_js_image_ids_coexist() {
 
     app.load_rut_module(
         r#"
-use tur_kit::{ image_resource_solid };
-use tur_kit::{ BoxFit, Column, Image, mount };
+use tur_kit::image::{ image_resource_solid };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
 
 entry fn start() {
 }
@@ -201,8 +207,11 @@ fn reattach_ensures_retained_images_before_first_frame() {
         .with_app(|a| a.register_image(ImageResource::from_rgba(&rgba, 4, 2).expect("rgba dims")));
 
     app.load_rut_module(
-        r#"use tur_kit::{ image_resource_solid };
-use tur_kit::{ BoxFit, Column, Image, mount };
+        r#"use tur_kit::image::{ image_resource_solid };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
 
 entry fn start() {
 }
@@ -297,9 +306,13 @@ fn reattach_uploads_only_painted_images() {
 
     app.load_rut_module(
         r#"
-use tur_kit::{ BoxFit, Image, mount };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
 
-use tur_kit::{ BoxFit, Image, mount };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
 
 entry fn start() {
 }
@@ -351,8 +364,11 @@ fn image_resource_svg_row_registers_a_worker_minted_resource() {
     let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r##"
-use tur_kit::{ image_resource_svg };
-use tur_kit::{ BoxFit, Column, Image, mount };
+use tur_kit::image::{ image_resource_svg };
+use tur_kit::flags::{ BoxFit };
+use tur_kit::handles::{ mount };
+use tur_kit::image::{ Image };
+use tur_kit::layout::flex::{ Column };
 
 entry fn start() {
 }

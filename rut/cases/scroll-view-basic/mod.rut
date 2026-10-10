@@ -1,5 +1,6 @@
 // scroll-view-basic: a vertical scroll viewport around a 3x200 column.
-use tur_kit::{ Axis, Column, Container, CrossAlign, ScrollView, mount };
+use tur_kit::flags::{ Axis, CrossAlign }; use tur_kit::handles::{ View, mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::scroll::{ ScrollView };use tur_kit::reactive::{ sv };
+
 
 entry fn start() {
     let content = Column()

@@ -1,6 +1,7 @@
 // text-ellipsis: the long line ellipsized at two lines.
 
-use tur_kit::{ Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let t = Text()

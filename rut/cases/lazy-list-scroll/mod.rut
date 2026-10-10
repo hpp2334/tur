@@ -1,6 +1,9 @@
 // lazy-list-scroll: a 100-row virtualized list (wheeling mounts rows
 // outside the initial build set).
-use tur_kit::{ Container, LazyList, Source, mount, source };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, source };
+use tur_kit::scroll::{ LazyList };
 
 fn row(i: u64) -> View {
     let mut b = Container().width_height(400.0, 50.0);

@@ -9,7 +9,15 @@
 // three cards ride a `Switch` on the mirrored mode string ("1" / "2" /
 // "3") — a maxLines change swaps in a freshly authored card row (the same
 // structural-swap trick the boa explorer used for its download button).
-use tur_kit::{ BorderPosition, Column, Container, CrossAlign, Cursor, DeriveCtx, MainAxisSize, MouseRegion, Mutation, MutationCtx, PointerInteract, Readable, Row, ScrollView, SizedBox, Source, SpanFlags, Spans, Switch, Text, derive, mount, mutate, source };
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::flags::{ BorderPosition, CrossAlign, Cursor, MainAxisSize, SpanFlags };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Spans, Text };
 
 // The boa palette (slate text on a soft page, indigo accent).
 let PAGE_BG: u64 = 0xF8FAFCFFu64;

@@ -1,6 +1,7 @@
 // text-basic: a single 14px Text as the root child.
 
-use tur_kit::{ Text, mount };
+use tur_kit::handles::{ mount };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let t = Text().text("Hello").font_size(14.0);

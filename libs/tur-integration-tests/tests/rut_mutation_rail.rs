@@ -58,7 +58,7 @@ fn element_center(app: &TurTestApp, key: &'static str) -> (f64, f64) {
 
 const COUNTER_RUT: &str = r#"
 
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, derive, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let n: Readable<f64> = source<f64>(0.0);
@@ -104,7 +104,7 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
 // ---------------------------------------------------------------------------
 
 const QUEUED_RUT: &str = r#"
-use tur_kit::{ Column, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Text, Watch, mount, mutate, source, watch };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Watch, mutate, source, watch }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let log: Source<str> = source<str>("");
@@ -182,7 +182,7 @@ fn b_mutations_drain_queued_in_order_and_the_watch_observes_the_write() {
 
 const RUN_RUT: &str = r#"
 
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, derive, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let out: Readable<f64> = source<f64>(0.0);
@@ -262,7 +262,7 @@ fn d_ctx_run_composes_and_return_values_flow() {
 
 const TOGGLE_RUT: &str = r#"
 
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, derive, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let expanded: Readable<bool> = source<bool>(true);
@@ -338,7 +338,7 @@ fn e_ctx_reads_reach_sources_and_derives() {
 
 const DRAG_RUT: &str = r#"
 
-use tur_kit::{ Column, DeriveCtx, MouseButton, Mutation, MutationCtx, PointerEvent, PointerInteract, Readable, Source, Text, derive, mount, mutate, source };
+use tur_kit::gesture::pointer::{ MouseButton, PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let log: Readable<str> = source<str>("");
@@ -463,7 +463,8 @@ fn g_clicks_never_remount_the_tree() {
 const SPAWN_RUT: &str = r#"
 use futures::launch_future;
 use tur_host::{ clipboard_read, clipboard_write };
-use tur_kit::{ Column, MutationCtx, Readable, Source, Text, entry_ctx, mount, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source }; use tur_kit::text::core::{ Text };use tur_kit::gesture::pointer::{ PointerInteract };
+
 
 // Plain rut async — ordinary params; the ctx (minted at the launch site —
 // start is the boot rail) rides along as a VALUE and works across awaits.
@@ -521,7 +522,7 @@ fn launched_task_reads_and_writes_through_its_ctx_across_awaits() {
 
 const GENERIC_RUT: &str = r#"
 
-use tur_kit::{ Column, DeriveCtx, Mutation, MutationCtx, PointerInteract, Readable, Source, Text, derive, mount, mutate, source };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let n = source<f64>(0.0);

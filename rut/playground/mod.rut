@@ -87,13 +87,29 @@
 // documented upstream family. Revisit at the next rut bump.)
 use tur_host::mount_raw;
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
-use tur_kit::{ Align, BorderPosition, Column, Condition, Container, CrossAlign, Cursor, DeriveCtx,
-    Each, EnterEvent, ExitEvent, Expanded, Image, Input, InputEvent, Axis, MainAlign, MainAxisSize,
-    MouseRegion, Mutation, MutationCtx, PointerEvent, PointerInteract, Positioned, Readable, Row,
-    ScrollView, SizedBox, Source, Stack, StackFit, Switch, Text, TextCtrl, UndoCtrl, VAppCtrl,
-    VirtualApp, Watch, bridge, derive, entry_ctx, image_resource_svg, list_new, mount, mutate, text_ctrl,
-    undo_ctrl, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
-    virtual_app_source_handle, watch };
+use tur_kit::control_flow::control::{ Condition, Each, Switch };
+use tur_kit::flags::{
+    Align, Axis, BorderPosition, Clip, CrossAlign, Cursor, MainAlign, MainAxisSize, StackFit,
+};
+use tur_kit::gesture::pointer::{
+    EnterEvent, ExitEvent, InputEvent, MouseRegion, PointerEvent, PointerInteract,
+};
+use tur_kit::handles::{ TextCtrl, UndoCtrl, VAppCtrl, list_new, mount, text_ctrl, undo_ctrl };
+use tur_kit::image::{ Image, image_resource_svg };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate,
+    rs_derive, source, watch,
+};
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
+use tur_kit::virtual_app::{
+    VirtualApp, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
+    virtual_app_source_handle,
+};
 use tur_host::{ mount_raw, pg_apply_highlight, pg_compile, pg_compile_diags, pg_highlight };
 
 // ---- design tokens ---------------------------------------------------------
@@ -344,7 +360,7 @@ fn probe_cx(cx: opaque) -> AppContext {
 // destroy-then-spawn swap's unconditional target, and the status watch's
 // first rail.
 fn seed_controller() -> VAppCtrl {
-    let seed = virtual_app_source("use tur_kit::{ mount };\nentry fn start() {\n}\n");
+    let seed = virtual_app_source("use tur_kit::handles::{ View, mount };\nentry fn start() {\n}\n");
     return virtual_app_controller(seed);
 }
 

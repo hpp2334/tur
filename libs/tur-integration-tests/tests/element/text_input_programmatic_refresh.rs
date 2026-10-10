@@ -15,7 +15,8 @@ use tur_engine::core::elements::{DevNodeData, TraceValue};
 use tur_integration_tests::TurTestApp;
 
 const EDITOR_RUT: &str = r#"
-use tur_kit::{ Input, TextCtrl, mount, text_ctrl };
+use tur_kit::handles::{ TextCtrl, mount, text_ctrl };
+use tur_kit::text::input::{ Input };
 
 struct EditorCx {
     ctrl: TextCtrl,

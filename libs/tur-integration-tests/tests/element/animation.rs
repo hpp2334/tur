@@ -58,7 +58,7 @@ fn label(app: &TurTestApp) -> String {
 /// A width-atom tick target driven by the controller (`100 + 100·v`), a
 /// bound box, and `do_*` control entries over the held context.
 const CONTROLLER_RUT: &str = r#"
-use tur_kit::{ Column, Container, Mutation, MutationCtx, Readable, Source, Text, entry_ctx, mount, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
 struct AppContext {
@@ -479,7 +479,9 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 /// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source };use tur_kit::layout::flex::{ Column };
+use tur_kit::text::core::{ Text };
+
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
 
 let TAU: f64 = 6.283185307179586;
@@ -579,7 +581,7 @@ fn bound_angle_animates_without_rebuild() {
 /// The static path — `el_transform` with all-static channels — unchanged.
 const STATIC_TRANSFORM_RUT: &str = r#"
 
-use tur_kit::{ Container, Mutation, MutationCtx, Readable, Source, mount, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
 use tur_anim_kit::{ Transform };
 
 entry fn start() {
@@ -612,7 +614,7 @@ fn static_transform_path_unchanged() {
 /// `rut/transform` matches the first transform). The writes ride the
 /// context-crossing lane (`entry_ctx` — the entry rail's ctx).
 const BOUND_SCALE_RUT: &str = r#"
-use tur_kit::{ Container, Mutation, MutationCtx, Source, entry_ctx, mount, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
 use tur_anim_kit::{ Transform };
 
 struct AppContext {
@@ -641,7 +643,7 @@ entry fn probe_s(cx: opaque, b: f64) {
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
-use tur_kit::{ Container, Mutation, MutationCtx, Source, entry_ctx, mount, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
 use tur_anim_kit::{ Transform };
 
 struct AppContext {

@@ -3,7 +3,11 @@
 // track the width change through the intermediate Row (the divider-drag
 // position-gap repro). The `set_width` probe drives the change (the atom
 // id rides the entry arg — the probe's handles bind at the call site).
-use tur_kit::{ Container, MainAlign, MutationCtx, Readable, Row, Source, bridge, mount, source };
+use tur_kit::flags::{ MainAlign };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
 
 entry fn start() -> u64 {
     let width: Readable<f64> = source<f64>(100.0);

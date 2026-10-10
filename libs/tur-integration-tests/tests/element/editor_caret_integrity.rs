@@ -28,7 +28,12 @@ use tur_integration_tests::TurTestApp;
 const ZERO: Duration = Duration::ZERO;
 
 const EDITOR_RUT: &str = r#"
-use tur_kit::{ Clip, Container, Input, Source, Switch, TextCtrl, UndoCtrl, entry_ctx, mount, source, text_ctrl, undo_ctrl };
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::flags::{ Clip };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::input::{ Input };
 
 struct EditorCx {
     ctrl: TextCtrl,

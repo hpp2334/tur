@@ -78,7 +78,9 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 fn id_module(value: &str) -> String {
     format!(
         r#"
-use tur_kit::{{ Source, Text, entry_ctx, mount, source }};
+use tur_kit::handles::{{ mount }};
+use tur_kit::reactive::{{ Source, entry_ctx, source }};
+use tur_kit::text::core::{{ Text }};
 
 struct IdCx {{
     atom: Source<str>,
@@ -165,7 +167,9 @@ fn instances_have_isolated_element_trees() {
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("only-in-A");
@@ -208,7 +212,9 @@ fn headless_instance_runs_rut_without_rendering() {
 
     // The module boots; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
@@ -244,7 +250,9 @@ fn build_headless_runs_engine_on_worker() {
 
     // The module boots via the worker RPC path.
     futures::executor::block_on(app.load_rut_module(
-        r#"use tur_kit::{ Mutation, MutationCtx, Readable, Source, Text, mount, source };
+        r#"use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("7");
@@ -279,7 +287,9 @@ fn many_instances_share_one_runtime() {
         futures::executor::block_on(app.load_rut_module(format!(
             r#"
 
-use tur_kit::{{ Readable, Text, mount, source }};
+use tur_kit::handles::{{ mount }};
+use tur_kit::reactive::{{ Readable, source }};
+use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
     let atom: Readable<str> = source<str>("{i}");
@@ -483,7 +493,9 @@ fn platform_events_route_to_the_correct_instance() {
     // Mount a full-width box in each (the root sizes with the viewport).
     let module = r#"
 
-use tur_kit::{ Container, MutationCtx, Readable, Source, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let b = Container().width_height(10.0, 10.0).color(0x336699FFu64);
@@ -538,7 +550,9 @@ fn reactive_stores_are_isolated_per_instance() {
     // "A2" — the write lands in A's own store.
     futures::executor::block_on(app_a.load_rut_module(
         r#"
-use tur_kit::{ Source, Text, entry_ctx, mount, source };
+use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::text::core::{ Text };
 
 struct FlipCx {
     atom: Source<str>,
