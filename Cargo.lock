@@ -3360,6 +3360,7 @@ dependencies = [
  "rut-ast",
  "rut-core",
  "rut-driver",
+ "rut-lexer",
  "rut-parser",
  "rut-std",
  "rut-vm",
