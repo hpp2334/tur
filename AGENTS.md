@@ -15,7 +15,9 @@ Clean design and architecture.
 ## Module lifecycle contract
 
 `load_rut_module` (on the app handle; `TurApp::load_rut_module_source` is the
-handle-based twin) is the ONLY module entry (plus `load_rut_bundle` in the test
+handle-based twin and `load_rut_module_files` the multi-file twin over
+`RutModuleFiles` — a root + the declared mods map) is the ONLY module entry
+(plus `load_rut_bundle` in the test
 harness). A loaded module MUST export `entry fn start()`:
 
 - The engine parses the new module FIRST (a broken reload never destroys the
@@ -45,8 +47,9 @@ Entry points follow the contract: the test corpus
 tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
 engine with `mount(root.build())`, plus probe `entry fn`s the test
 drives via `call_rut_entry`. The playground is a rut module
-(`playground.rut` + the generated `cases_gen.rut` registry, compiled by the
-`pg_compile` rut service); the website boots it via `loadAndRunRutModule`.
+(`playground/mod.rut` + the generated `cases_gen.rut` registry, compiled by
+the `pg_compile` rut service over the file set staged through `pg_files_put`);
+the website boots it via `loadAndRunRutModule`.
 
 ## Architecture
 
@@ -191,8 +194,11 @@ demo/
   compose/             # Android playground app + native/ (tur-demo cdylib)
 rut/                   # all rut package sources (pure rut — no build step;
                        #   every pkg dir carries its rut.jsonc manifest)
-  cases/               # the shared case corpus (<name>/mod.rut + the
-                       #   generated <name>/rut.jsonc + README)
+  cases/               # the shared case corpus (declared <name>/mod.rut
+                       #   trees — single-file cases + the three showcase
+                       #   splits: github-viewer 7 files, todolist 5,
+                       #   grid-gallery 3 — + the generated <name>/rut.jsonc
+                       #   + README)
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
                        #   test-pinned decl MODULE TREE (mod.d.rut root +
                        #   NAME/mod.d.rut per module — store/, ctx/,
@@ -234,8 +240,9 @@ cargo clippy --target wasm32-unknown-unknown -p tur-wasm -p tur-website -- -D wa
 
 Tests run under cargo-nextest (`.config/nextest.toml`; CI uses `--profile ci`
 with retries = 2). The rut case corpus needs no build step — cases are plain
-`.rut` sources read from disk (`load_rut_bundle` / the website embeds them at
-compile time).
+`.rut` sources read from disk as DECLARED module trees (the
+`read_case_files` / `walkModTree` declaration-following walkers; the website
+embeds them at compile time).
 
 **Workflow (TDD):** for engine bug fixes, write a failing test under
 `libs/tur-integration-tests/tests/` first (rut fixtures — see the corpus
@@ -307,7 +314,11 @@ Android build + device debugging live in the **`android-dev` skill** at
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
-  `cases_gen.rut`, github-viewer's net row, and the corpora's named
+  `cases_gen.rut`, github-viewer's DIR-SCOPED exception over
+  `rut/cases/github-viewer/` — the raw `tur_host::net` row stays because
+  the net-kit migration is blocked by the upstream cross-package
+  async-fn resolution gap, detail at the case's import sites — and the
+  corpora's named
   raw-row probes); `rs_derive|rs_derive2|rs_watch` have no call sites
   outside the kit's wrappers (the authored spelling is
   `derive<T>`/`watch<T>`); and the deleted stash rows
@@ -429,9 +440,13 @@ Android build + device debugging live in the **`android-dev` skill** at
   or an interface-typed capture misbinds at runtime ("no impl for
   interface slot N"). Accommodations that hold: keep captured sources
   CONCRETE-annotated (`Source<T>`, not `Readable<T>`) when they cross
-  ctx calls or struct fields; make import-list deltas single-name; an
+  ctx calls, struct fields, or write-path chains (the `Writable`
+  origin-loss shape); make import-list deltas single-name; an
   interface-annotated `let` before the first `mutate` seeds the table;
-  the playground keeps a second `use tur_host` line (load-bearing). The
+  the playground keeps a second `use tur_host` line (load-bearing); a
+  split tree whose CHILD carries a `tur_host` use while the root
+  carries none needs a root anchor `use tur_host` line (github-viewer's).
+  The
   playground's status label spells its derive through `rs_derive` (the
   plain-fn rail) for the same reason.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
