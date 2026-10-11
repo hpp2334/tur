@@ -73,6 +73,17 @@ fn case_source(name: &str) -> String {
         .unwrap_or_else(|e| panic!("case `{name}` source: {e}"))
 }
 
+/// A showcase case FILE's original source: `path` is the registry's mod
+/// path ("" = the root `mod.rut`, i.e. `case_source`). Mirrors
+/// `pg_case_file_source`'s disk read.
+fn case_file_source(name: &str, path: &str) -> String {
+    if path.is_empty() {
+        return case_source(name);
+    }
+    std::fs::read_to_string(cases_dir().join(name).join(path).join("mod.rut"))
+        .unwrap_or_else(|e| panic!("case `{name}`/{path} source: {e}"))
+}
+
 fn cases_dir() -> std::path::PathBuf {
     workspace_root().join("rut/cases")
 }
@@ -161,11 +172,19 @@ fn editor_text(app: &TurTestApp) -> String {
 
 fn focus_editor(app: &mut TurTestApp) {
     let id = editor_editable(app);
-    // Click inside the VISIBLE editor region (the pane's left half) — the
-    // editable's own bounds can reach under the viewer pane in split
-    // mode, where the click would hit the viewer instead.
+    // Click inside the VISIBLE editor region: the pane's left half at the
+    // editable's vertical center, CLAMPED into the pane (the editable
+    // hugs its content, so a long source's center lies below the window —
+    // and under the viewer pane in split mode a raw click would hit the
+    // viewer instead).
     let b = app.get_element_absolute_bounds(id).unwrap();
-    let (cx, cy) = (b.left + 60.0, (b.top + b.bottom) / 2.0);
+    let pane = app
+        .get_element_absolute_bounds(ElementNodeId::new(
+            app.query_element(&["editor-pane"]).unwrap().as_u64(),
+        ))
+        .unwrap();
+    let cy = ((b.top + b.bottom) / 2.0).clamp(pane.top + 20.0, pane.bottom - 20.0);
+    let (cx, cy) = (b.left + 60.0, cy);
     app.click(cx, cy);
     app.wait_for_timeout(Duration::ZERO);
 }
@@ -307,8 +326,9 @@ fn playground_sidebar_rows_are_full_width_left_aligned_pills() {
     let cx = app.rut_start_answer();
 
     // The row's qk sits on the padding-8 wrapper: full sidebar width (the
-    // full-width inset pill law), natural boa pitch (2 + 8 + pill + 8 ≈
-    // 47.5 with the 13px label).
+    // full-width inset pill law), natural pitch (2 + 8 + pill + 8 = 43
+    // with the 13px label's 19px line box — measured against the ported
+    // metrics, the boa ~47.5 estimate assumed a taller line box).
     let id = app
         .query_element(&["row", "counter"])
         .expect("the showcase row's query key");
@@ -318,8 +338,8 @@ fn playground_sidebar_rows_are_full_width_left_aligned_pills() {
     assert_eq!(b.right - b.left, 200.0, "the row spans the sidebar");
     let h = b.bottom - b.top;
     assert!(
-        (44.0..=52.0).contains(&h),
-        "the row pitch is the boa ~47.5: {h}"
+        (41.0..=46.0).contains(&h),
+        "the row pitch is the natural 43: {h}"
     );
 }
 
@@ -394,6 +414,151 @@ fn playground_viewer_compiles_the_net_riding_github_viewer() {
         node.size.0 > 0.0 && node.size.1 > 0.0,
         "the hosting element kept its layout: {:?}",
         node.size
+    );
+}
+
+// ---- Phase 7: the per-case file list + the edit cache --------------------------
+// A multi-file case opens its declared files indented under the selected
+// case row (`file/<label>` query keys); a file tap swaps the editor (the
+// `select_file` probe — no auto-run on a switch); edits cache per
+// case+file so switches never lose text; Run compiles the WHOLE staged
+// tree; Reset restores every file from the registry and re-runs.
+
+#[test]
+fn playground_multi_file_case_opens_its_file_list() {
+    let app = playground_app();
+    let cx = app.rut_start_answer();
+
+    // A single-file case shows NO file rows (the sublist is gated on a
+    // declared count > 1).
+    app.call_rut_entry_cx_u64("select", cx, case_index("counter"))
+        .unwrap();
+    assert!(wait_for_state(&app, "ready"));
+    assert!(
+        app.query_element(&["file", "mod.rut"]).is_none(),
+        "a single-file case shows no file rows"
+    );
+
+    // github-viewer (7 declared files) opens the indented list: the root
+    // row plus every declared child, addressed by the display label
+    // (file/<mod path>/mod.rut).
+    app.call_rut_entry_cx_u64("select", cx, case_index("github-viewer"))
+        .unwrap();
+    assert!(wait_for_state(&app, "ready"));
+    assert!(
+        app.query_element(&["file", "mod.rut"]).is_some(),
+        "the root file row"
+    );
+    for child in ["explorer", "json", "landing", "state", "theme", "ui"] {
+        assert!(
+            app.query_element(&["file", child, "mod.rut"]).is_some(),
+            "the {child}/mod.rut file row"
+        );
+    }
+}
+
+#[test]
+fn playground_file_tap_swaps_the_editor_text() {
+    let app = playground_app();
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("github-viewer"))
+        .unwrap();
+    assert!(wait_for_state(&app, "ready"));
+    assert_eq!(
+        editor_text(&app),
+        case_source("github-viewer"),
+        "the root file loads first"
+    );
+
+    // The declared order is the registry's sorted mod paths: "" then
+    // explorer..ui — index 1 is explorer/mod.rut.
+    app.call_rut_entry_cx_u64("select_file", cx, 1).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editor_text(&app),
+        case_file_source("github-viewer", "explorer"),
+        "the tapped file's source filled the editor"
+    );
+
+    // Back to the root.
+    app.call_rut_entry_cx_u64("select_file", cx, 0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(editor_text(&app), case_source("github-viewer"));
+}
+
+#[test]
+fn playground_run_compiles_the_whole_tree_after_a_file_switch() {
+    let mut app = playground_app();
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("todolist"))
+        .unwrap();
+    assert!(wait_for_state(&app, "ready"));
+
+    // Switch the edited file to a child (the Run must skip IT in the
+    // staging and compile the root text instead — the tree still resolves
+    // every declared mod).
+    app.call_rut_entry_cx_u64("select_file", cx, 1).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(editor_text(&app), case_file_source("todolist", "data"));
+
+    // Run: the WHOLE tree compiles (the staged children + the root text)
+    // and the child settles back to ready.
+    click_qk(&mut app, &["run"]);
+    assert!(
+        wait_for_state(&app, "ready"),
+        "the whole-tree run never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+}
+
+#[test]
+fn playground_file_edit_cache_survives_switches_and_reset_restores() {
+    let mut app = playground_app();
+    let cx = app.rut_start_answer();
+    app.call_rut_entry_cx_u64("select", cx, case_index("github-viewer"))
+        .unwrap();
+    assert!(wait_for_state(&app, "ready"));
+
+    // Auto-run off: the only runs below are the explicit ones.
+    click_qk(&mut app, &["autorun"]);
+    app.wait_for_timeout(Duration::ZERO);
+
+    // Edit the root file.
+    focus_editor(&mut app);
+    app.send_key("x");
+    app.wait_for_timeout(Duration::ZERO);
+    let edited = editor_text(&app);
+    assert_ne!(
+        edited,
+        case_source("github-viewer"),
+        "the keystroke landed"
+    );
+
+    // Switch away: the untouched child shows its registry text.
+    app.call_rut_entry_cx_u64("select_file", cx, 1).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editor_text(&app),
+        case_file_source("github-viewer", "explorer"),
+        "the untouched child shows its registry text"
+    );
+
+    // Switch back: the cached edit survives the round trip.
+    app.call_rut_entry_cx_u64("select_file", cx, 0).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editor_text(&app),
+        edited,
+        "the edited root text survived the file switches"
+    );
+
+    // Reset: every file restores from the registry and the case re-runs.
+    click_qk(&mut app, &["reset"]);
+    assert!(wait_for_state(&app, "ready"));
+    assert_eq!(
+        editor_text(&app),
+        case_source("github-viewer"),
+        "Reset restored the registry text"
     );
 }
 
