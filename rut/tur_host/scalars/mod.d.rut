@@ -1,0 +1,8 @@
+// tur_host/scalars — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn str_parse_f64(p1: str) -> f64;
+pub host fn math_sin(p1: f64) -> f64;
+pub host fn math_cos(p1: f64) -> f64;
+pub host fn str_parse_f64_raw(p1: str) -> f64;
+pub host fn math_sin_raw(p1: f64) -> f64;
+pub host fn math_cos_raw(p1: f64) -> f64;

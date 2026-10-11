@@ -36,7 +36,7 @@ pub(crate) fn install_decl_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) 
 /// Declare the composited rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("composited", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("ct_link_new", vec![], TY_OPAQUE),
@@ -79,7 +79,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // Mint + register a link (the JS factory's twin — the subsystem
     // recomputes only registered links).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ct_link_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_link_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let registry = h
             .inst
             .plugin_state::<LayerLinkRegistry>()
@@ -95,18 +95,18 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- target -------------------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "ct_target_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_target_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, CtTargetSpec { link: None, child: None })?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "ct_target_link", (Opaque<CtTargetSpec>, Opaque<RutLayerLink>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>, link: Opaque<RutLayerLink>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_target_link", (Opaque<CtTargetSpec>, Opaque<RutLayerLink>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>, link: Opaque<RutLayerLink>| {
         let link = link.with(|l| l.0.clone())?;
         b.with_mut(vm, |_vm, s| s.link = Some(link))
     });
-    rut_vm::pkg_fn!(pkg, "ct_target_child", (Opaque<CtTargetSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_target_child", (Opaque<CtTargetSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "ct_target_build", (Opaque<CtTargetSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_target_build", (Opaque<CtTargetSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CtTargetSpec>| {
         let view = b.with(|s| {
             Rc::new(TargetView::new_rut(s.link.clone(), s.child.clone())) as Rc<dyn crate::core::view::View>
         })?;
@@ -114,19 +114,19 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- follower -----------------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "ct_follower_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, CtFollowerSpec { link: None, target_anchor: None, follower_anchor: None, offset: None, child: None })?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_link", (Opaque<CtFollowerSpec>, Opaque<RutLayerLink>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, link: Opaque<RutLayerLink>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_link", (Opaque<CtFollowerSpec>, Opaque<RutLayerLink>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, link: Opaque<RutLayerLink>| {
         let link = link.with(|l| l.0.clone())?;
         b.with_mut(vm, |_vm, s| s.link = Some(link))
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_target_anchor", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, a: u64| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_target_anchor", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, a: u64| {
         b.with_mut(vm, |_vm, s| s.target_anchor = Some(Val::Static(alignment_of(a))))
     });
     // Reactive-anchor twin: the target anchor resolves from an atom (the
     // atom holds the Alignment enum code; a button flips it).
-    rut_vm::pkg_fn!(pkg, "ct_follower_target_anchor_bound", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_target_anchor_bound", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| {
             s.target_anchor = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
                 crate::core::edgy::reactive::Source::<Alignment>::from_id(
@@ -135,17 +135,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             )));
         })
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_follower_anchor", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, a: u64| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_follower_anchor", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, a: u64| {
         b.with_mut(vm, |_vm, s| s.follower_anchor = Some(Val::Static(alignment_of(a))))
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_offset", (Opaque<CtFollowerSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, ox: f64, oy: f64| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_offset", (Opaque<CtFollowerSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, ox: f64, oy: f64| {
         b.with_mut(vm, |_vm, s| s.offset = Some((ox, oy)))
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_child", (Opaque<CtFollowerSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_child", (Opaque<CtFollowerSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "ct_follower_build", (Opaque<CtFollowerSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>| {
+    rut_vm::pkg_fn!(pkg, "composited::ct_follower_build", (Opaque<CtFollowerSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>| {
         let view = b.with(|s| {
             let target_anchor = s.target_anchor.clone().expect("ct_follower_build: no target anchor");
             let follower_anchor = s.follower_anchor.clone().expect("ct_follower_build: no follower anchor");

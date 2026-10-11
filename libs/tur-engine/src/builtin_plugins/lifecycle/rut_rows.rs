@@ -24,7 +24,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the lifecycle rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("control_flow/lifecycle", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("lc_new", vec![], TY_OPAQUE),
@@ -69,7 +69,7 @@ fn lifecycle_mutation(handles: &Rc<RutHandles>, id: u64, cb: OpaqueRef) -> Optio
 /// Install the lifecycle-row bodies (the installer's boot half).
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lc_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "control_flow::lifecycle::lc_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
         let spec = LcSpec { on_mounted: None, before_destroy: None, child: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
@@ -77,20 +77,20 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // lc_on_mount(spec, atom) — the sealed on-mount mutation (the element
     // enqueues it at the mount lifecycle point; the flush's mutation pass
     // invokes it with the ctx + the typed `MountEvent`).
-    rut_vm::pkg_fn!(pkg, "lc_on_mount", (Opaque<LcSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "control_flow::lifecycle::lc_on_mount", (Opaque<LcSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, atom: u64| {
         let m = Some(MutationHandle::<()>::new(crate::core::rut_runtime::mutation_of(atom)));
         b.with_mut(vm, |_vm, s| s.on_mounted = m)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lc_before_destroy", (Opaque<LcSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "control_flow::lifecycle::lc_before_destroy", (Opaque<LcSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, cb: OpaqueRef| {
         let m = lifecycle_mutation(&h, 1, cb);
         b.with_mut(vm, |_vm, s| s.before_destroy = m)
     });
-    rut_vm::pkg_fn!(pkg, "lc_child", (Opaque<LcSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::lifecycle::lc_child", (Opaque<LcSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "lc_build", (Opaque<LcSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::lifecycle::lc_build", (Opaque<LcSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LcSpec>| {
         let view = b.with(|s| {
             let child = s.child.clone().expect("lc_build: no child");
             Rc::new(LifecycleView {

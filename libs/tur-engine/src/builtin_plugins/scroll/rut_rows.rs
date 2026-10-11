@@ -24,7 +24,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the scroll rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("scroll", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("scroll_new", vec![], TY_OPAQUE),
@@ -48,30 +48,30 @@ pub(crate) struct ScrollSpec {
 
 /// Install the scroll-row bodies (the installer's boot half).
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, _handles: &std::rc::Rc<crate::core::rut_runtime::RutHandles>) {
-    rut_vm::pkg_fn!(pkg, "scroll_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         let spec = ScrollSpec { axis: None, initial_offset: None, query_key: None, child: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     // scroll_axis(spec, AXIS_*) — the wheel-driven viewport's direction
     // (the JS `axis` prop twin; default vertical).
-    rut_vm::pkg_fn!(pkg, "scroll_axis", (Opaque<ScrollSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_axis", (Opaque<ScrollSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, v: u64| {
         let axis = if v == 1 { Axis::Horizontal } else { Axis::Vertical };
         b.with_mut(vm, |_vm, s| s.axis = Some(axis))
     });
     // scroll viewport with a one-shot initial offset (the JS controller's
     // `initialOffset` twin — applied after the first content layout).
-    rut_vm::pkg_fn!(pkg, "scroll_offset", (Opaque<ScrollSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_offset", (Opaque<ScrollSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.initial_offset = Some(v))
     });
-    rut_vm::pkg_fn!(pkg, "scroll_child", (Opaque<ScrollSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_child", (Opaque<ScrollSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "scroll_qkey", (Opaque<ScrollSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_qkey", (Opaque<ScrollSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "scroll_build", (Opaque<ScrollSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>| {
+    rut_vm::pkg_fn!(pkg, "scroll::scroll_build", (Opaque<ScrollSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ScrollSpec>| {
         let view = b.with(|s| {
             let child = s.child.clone().expect("scroll_build: no child");
             let mut view = ScrollViewView::new_rut(s.axis.map(Val::Static), child);

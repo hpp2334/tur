@@ -49,7 +49,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // `on_click` uses — constructing the `MutationCtx` over the bridge.
     // No intent push, no report param, no click-lane borrowing.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_watch_mut", (u64, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, atom: u64, sealed: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_watch_mut", (u64, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, atom: u64, sealed: u64| {
         let (start, stop) = h.store.bridge().register_watch(
             Readable::from(Source::<Value>::from_id(AtomId(atom as u32))).to_any(),
             mutation_of(sealed),
@@ -60,7 +60,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // rs_watch_start / rs_watch_stop — the control mutations invoked
     // through the store rail (realm-free: Rust closures).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_watch_start", (Opaque<RutWatch>,) -> (), move |_vm: &mut rut_vm::interp::Vm, w: Opaque<RutWatch>| {
+    rut_vm::pkg_fn!(pkg, "store::rs_watch_start", (Opaque<RutWatch>,) -> (), move |_vm: &mut rut_vm::interp::Vm, w: Opaque<RutWatch>| {
         let start = w.with(|w| w.start)?;
         h.store
             .bridge()
@@ -69,7 +69,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_watch_stop", (Opaque<RutWatch>,) -> (), move |_vm: &mut rut_vm::interp::Vm, w: Opaque<RutWatch>| {
+    rut_vm::pkg_fn!(pkg, "store::rs_watch_stop", (Opaque<RutWatch>,) -> (), move |_vm: &mut rut_vm::interp::Vm, w: Opaque<RutWatch>| {
         let stop = w.with(|w| w.stop)?;
         h.store
             .bridge()

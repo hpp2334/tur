@@ -1,9 +1,10 @@
 // layout/grid_table — the grid families (Grid / TableCols / Table).
 
-use tur_host::{
+use tur_host::layout::grid_table::{
   col_fixed, col_flex, cols_new, grid_aspect, grid_build, grid_child, grid_main_extent,
-  grid_max_cross, grid_new, grid_qkey, grid_spacing, table_build, table_col_extent, table_columns,
-  table_header_builder, table_new, table_qkey, table_row_builder, table_rows_atom, table_stripe,
+  grid_max_cross, grid_new, grid_qkey, grid_spacing, table_build, table_col_extent,
+  table_columns, table_header_builder, table_new, table_qkey, table_row_builder, table_rows_atom,
+  table_stripe,
 };
 
 // ---- grid + table ------------------------------------------------------------

@@ -37,7 +37,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the virtual-app rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("virtual_app", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("va_create_source", vec![TY_STR], TY_OPAQUE),
@@ -100,7 +100,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // va_create_source(src) -> opaque — register a string-authored child
     // module source (the `createModuleSource` twin).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_create_source", (&str,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: &str| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_create_source", (&str,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: &str| {
         let id = state(&h)?.create_source(std::sync::Arc::from(src.to_string()));
         Ok(Opaque::alloc(vm, RutSource(id))?.handle().clone())
     });
@@ -108,7 +108,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // va_source_handle(id) -> opaque — lift a Rust-registered source id
     // (e.g. the u64 `pg_compile` answers) into the source handle.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_source_handle", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_source_handle", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, id: u64| {
         state(&h)?
             .resolve_source(id)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "va_source_handle: unknown source"))?;
@@ -117,7 +117,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // va_controller(src) -> opaque — the lazy declaration (default pool).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_controller", (Opaque<RutSource>,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: Opaque<RutSource>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_controller", (Opaque<RutSource>,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, src: Opaque<RutSource>| {
         let source_id = src.with(|s| s.0)?;
         let st = state(&h)?;
         let resolved = st
@@ -137,17 +137,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- the VirtualApp element spec -------------------------------------
-    rut_vm::pkg_fn!(pkg, "va_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         let spec = VaSpec { app: None, width: None, height: None, query_key: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     // Static controller binding.
-    rut_vm::pkg_fn!(pkg, "va_controller_set", (Opaque<VaSpec>, Opaque<RutController>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_controller_set", (Opaque<VaSpec>, Opaque<RutController>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         b.with_mut(vm, |_vm, s| s.app = Some(Val::Static(VirtualControllerRef(base))))
     });
     // Reactive controller binding (unbind destroys unless keepAlive).
-    rut_vm::pkg_fn!(pkg, "va_bind", (Opaque<VaSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_bind", (Opaque<VaSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| {
             s.app = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
                 crate::core::edgy::reactive::Source::<VirtualControllerRef>::from_id(
@@ -156,18 +156,18 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             )));
         })
     });
-    rut_vm::pkg_fn!(pkg, "va_size", (Opaque<VaSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, w: f64, hh: f64| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_size", (Opaque<VaSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, w: f64, hh: f64| {
         b.with_mut(vm, |_vm, s| {
             s.width = if w > 0.0 { Some(Val::Static(w)) } else { None };
             s.height = if hh > 0.0 { Some(Val::Static(hh)) } else { None };
         })
     });
-    rut_vm::pkg_fn!(pkg, "va_qkey", (Opaque<VaSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_qkey", (Opaque<VaSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_build", (Opaque<VaSpec>,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_build", (Opaque<VaSpec>,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, b: Opaque<VaSpec>| {
         let st = state(&h)?;
         let view = b.with(|s| {
             Rc::new(VirtualAppView {
@@ -188,7 +188,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // (the reactive `app$` crossing with nothing bound yet; the decode
     // fails and the element stays unbound until a `va_app_set`).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_app_atom", () -> u64, move |_vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_app_atom", () -> u64, move |_vm: &mut rut_vm::interp::Vm| {
         let atom = h
             .store
             .bridge()
@@ -201,7 +201,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // controller ref (the reactive `app$` crossing: Nil clears the binding,
     // a fresh controller re-binds).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_bind_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_bind_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         let atom = h
             .store
@@ -213,7 +213,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     // va_app_set(atom, ctrl) / va_app_clear(atom) — bind / unbind.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_app_set", (u64, Opaque<RutController>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_app_set", (u64, Opaque<RutController>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         h.store
             .bridge()
@@ -226,7 +226,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("va_app_set: {e}")))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_app_clear", (u64,) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_app_clear", (u64,) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64| {
         h.store
             .bridge()
             .set_source(
@@ -242,7 +242,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // reactive atom id (a watchable edgy source: `rs_watch` it and the
     // idle→spawning→running/error transitions deliver as intents).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_status_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_status_atom", (Opaque<RutController>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         let st = state(&h)?;
         let record = st
@@ -253,7 +253,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // va_destroy(ctrl) — the destroy$ twin.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_destroy", (Opaque<RutController>,) -> (), move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_destroy", (Opaque<RutController>,) -> (), move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         state(&h)?.destroy(base);
         Ok(())
@@ -261,7 +261,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // va_status(ctrl) -> str — the reactive status rail read natively.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_status", (Opaque<RutController>,) -> String, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_status", (Opaque<RutController>,) -> String, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         let st = state(&h)?;
         let Some(record) = st.record(base) else {
@@ -273,7 +273,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // va_error(ctrl) -> str — the error-message rail.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "va_error", (Opaque<RutController>,) -> String, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
+    rut_vm::pkg_fn!(pkg, "virtual_app::va_error", (Opaque<RutController>,) -> String, move |_vm: &mut rut_vm::interp::Vm, ctrl: Opaque<RutController>| {
         let base = ctrl.with(|c| c.0)?;
         let st = state(&h)?;
         let Some(record) = st.record(base) else {

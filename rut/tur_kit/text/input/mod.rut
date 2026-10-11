@@ -1,6 +1,6 @@
 // text/input — the editable (Input).
 
-use tur_host::{
+use tur_host::text::input::{
   input_build, input_color, input_controller, input_cursor_color, input_font_family,
   input_font_size, input_multiline, input_new, input_obscure, input_obscure_bound,
   input_obscure_char, input_on_input, input_placeholder, input_placeholder_bound,

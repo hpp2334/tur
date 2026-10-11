@@ -1,12 +1,15 @@
 // virtual_app — the embedding families (VirtualApp + the composited
 // target/follower pair with its LayerLink) + the virtual-app helpers.
 
-use tur_host::{
+use tur_host::composited::{
   ct_follower_build, ct_follower_child, ct_follower_follower_anchor, ct_follower_link,
-  ct_follower_new, ct_follower_offset, ct_follower_target_anchor, ct_follower_target_anchor_bound,
-  ct_link_new, ct_target_build, ct_target_child, ct_target_link, ct_target_new, va_app_atom,
-  va_app_clear, va_app_set, va_bind, va_build, va_controller, va_controller_set, va_create_source,
-  va_new, va_qkey, va_size, va_source_handle,
+  ct_follower_new, ct_follower_offset, ct_follower_target_anchor,
+  ct_follower_target_anchor_bound, ct_link_new, ct_target_build, ct_target_child, ct_target_link,
+  ct_target_new,
+};
+use tur_host::virtual_app::{
+  va_app_atom, va_app_clear, va_app_set, va_bind, va_build, va_controller, va_controller_set,
+  va_create_source, va_new, va_qkey, va_size, va_source_handle,
 };
 
 pub class VirtualApp {

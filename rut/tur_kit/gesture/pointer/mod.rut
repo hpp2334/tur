@@ -1,7 +1,7 @@
 // gesture/pointer — the gesture family: the typed event prelude +
 // PointerInteract / MouseRegion.
 
-use tur_host::{
+use tur_host::gesture::pointer::{
   mr_behavior, mr_build, mr_child, mr_cursor, mr_cursor_bound, mr_new, mr_on_enter, mr_on_exit,
   pi_behavior, pi_build, pi_child, pi_mut_down, pi_mut_move, pi_mut_up, pi_new, pi_on_click,
   pi_on_context_menu, pi_qkey,

@@ -1,6 +1,6 @@
 // text/core — the text family (Text / Spans).
 
-use tur_host::{
+use tur_host::text::core::{
   span_add, spans_new, text_bind, text_bind_derived, text_build, text_clip, text_color,
   text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey, text_selectable,
   text_size, text_spans, text_text, text_weight,

@@ -9,7 +9,7 @@
 // ... })`; each chunk enqueues the invocation and the flush's mutation
 // pass delivers it with the task-scoped ctx.
 
-use tur_host::{ net_request_raw, net_stream_mut };
+use tur_host::net::{ net_request_raw, net_stream_mut };
 use tur_kit::reactive::{ Mutation, mutate };
 
 // The seal tag the stream installs under — the kit spells the same

@@ -382,7 +382,7 @@ fn rut_scroll_view_with_styled_rows() {
 /// reads the whole value back, rebuilds it, writes it, and re-joins. No JS
 /// realm anywhere: every row speaks native `Value`s.
 const LIST_MAP_RUT: &str = r#"
-use tur_host::{ rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_set_str, rs_set_value, rs_source_value, rs_value_get, rs_value_item, rs_value_len };
+use tur_host::store::{ rs_get_str, rs_get_value, rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_set_str, rs_set_value, rs_source_value, rs_value_get, rs_value_item, rs_value_len };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
 
 // The string join: read the list atom back through the substrate rows
@@ -503,7 +503,7 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// undo rows. The interactive half (keyboard / IME into the focused
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
-use tur_host::{ tctrl_paste, tctrl_select, tctrl_text };
+use tur_host::text::input::{ tctrl_paste, tctrl_select, tctrl_text };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
 
 entry fn start() -> u64 {
@@ -838,7 +838,7 @@ fn rut_container_full_surface_and_sizedbox() {
 /// `KeydownEvent` / `FocusEvent` / `BlurEvent` mutations. One log source
 /// carries the transcript; every handler captures it — no id rails.
 const GESTURE_RUT: &str = r#"
-use tur_host::{ focus_request };
+use tur_host::gesture::focus::{ focus_request };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::focus::{ Focusable }; use tur_kit::gesture::pointer::{
     BlurEvent, FocusEvent, KeydownEvent, MouseButton, PointerEvent, PointerInteract,
 }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source }; use tur_kit::text::core::{ Text };
@@ -1073,7 +1073,8 @@ fn rut_animation_controller_ticks_into_opacity() {
 /// (`launch_future` + `await`; the pump's `run_ready` drives it).
 const ASYNC_RUT: &str = r#"
 use futures::launch_future;
-use tur_host::{ clipboard_read, clipboard_write, decode_utf8, net_request };
+use tur_host::clipboard::{ clipboard_read, clipboard_write, decode_utf8 };
+use tur_host::net::{ net_request };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source }; use tur_kit::text::core::{ Text };use tur_kit::gesture::focus::{ Focusable };
 use tur_kit::gesture::pointer::{ BlurEvent, FocusEvent, KeydownEvent, MouseButton, PointerInteract };
 
@@ -1140,7 +1141,8 @@ fn rut_async_clipboard_and_net_request() {
 /// opaque's cancel row runs (idempotent after completion).
 const STREAM_RUT: &str = r#"
 use futures::launch_future;
-use tur_host::{ clipboard_write, task_cancel };
+use tur_host::clipboard::{ clipboard_write };
+use tur_host::net::{ task_cancel };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source }; use tur_kit::text::core::{ Text };
 use tur_net_kit::{ net_stream };
 

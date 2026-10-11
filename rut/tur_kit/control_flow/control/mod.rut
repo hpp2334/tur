@@ -1,10 +1,10 @@
 // control_flow/control — the control-flow families (Switch / Condition /
 // Each / Fragment).
 
-use tur_host::{
+use tur_host::control_flow::control::{
   cond_build, cond_else, cond_else_build, cond_new, cond_qkey, cond_then, cond_then_build,
-  each_build, each_builder, each_new, frag_build, frag_child, frag_new, switch_build, switch_case,
-  switch_case_build, switch_fallback, switch_new, switch_qkey, switch_value_derived,
+  each_build, each_builder, each_new, frag_build, frag_child, frag_new, switch_build,
+  switch_case, switch_case_build, switch_fallback, switch_new, switch_qkey, switch_value_derived,
   switch_value_source,
 };
 

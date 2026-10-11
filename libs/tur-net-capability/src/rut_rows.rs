@@ -80,7 +80,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             ("task_cancel", vec![TY_OPAQUE], TY_NIL, false),
         ]
         .into_iter()
-        .map(|(n, p, r, a)| rut_driver::HostRow::root(n, p, r, a)),
+        .map(|(n, p, r, a)| tur_engine::core::rut_runtime::host_row_at("net", n, p, r, a)),
     );
 
     let Some(handles) = cx.handles else {
@@ -93,7 +93,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // decode with `decode_utf8`). An error completes as empty bytes with
     // the message stashed on the task (net_status / net_error read it).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "net_request", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
+    rut_vm::pkg_async_fn!(pkg, "net::net_request", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
         net_request_body(h.clone(), url, method)
     });
 
@@ -102,16 +102,16 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // name), which shadows the row's name — the wrapper body reaches the
     // row through this alias.
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "net_request_raw", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
+    rut_vm::pkg_async_fn!(pkg, "net::net_request_raw", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
         net_request_body(h.clone(), url, method)
     });
 
     // net_status(task) -> u64 — the stashed HTTP status (0 = no response).
-    rut_vm::pkg_fn!(pkg, "net_status", (Opaque<RutNetTask>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
+    rut_vm::pkg_fn!(pkg, "net::net_status", (Opaque<RutNetTask>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
         t.with(|t| Ok(*t.status.borrow() as u64))?
     });
     // net_error(task) -> str — the failure message ("" on success).
-    rut_vm::pkg_fn!(pkg, "net_error", (Opaque<RutNetTask>,) -> String, move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
+    rut_vm::pkg_fn!(pkg, "net::net_error", (Opaque<RutNetTask>,) -> String, move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
         t.with(|t| Ok(t.error.borrow().clone()))?
     });
 
@@ -120,7 +120,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // receives `(ctx, chunk: bytes)` at the flush's mutation pass); the
     // returned task's `task_cancel` wire-aborts the download.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "net_stream_mut", (&str, &str, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, url: &str, method: &str, chunk_atom: u64| {
+    rut_vm::pkg_fn!(pkg, "net::net_stream_mut", (&str, &str, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, url: &str, method: &str, chunk_atom: u64| {
         let Some(http) = h.inst.capability().of::<Http>() else {
             return Err(rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "no http capability"));
         };
@@ -174,7 +174,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
 
     // task_cancel(task) — aborts the spawned drive (a stream download
     // wire-aborts: the backend stream future drops mid-flight).
-    rut_vm::pkg_fn!(pkg, "task_cancel", (Opaque<RutNetTask>,) -> (), move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
+    rut_vm::pkg_fn!(pkg, "net::task_cancel", (Opaque<RutNetTask>,) -> (), move |_vm: &mut rut_vm::interp::Vm, t: Opaque<RutNetTask>| {
         t.with(|t| {
             t.handle.abort();
         })?;

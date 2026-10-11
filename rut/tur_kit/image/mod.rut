@@ -1,6 +1,6 @@
 // image — the image family (Image + the image-resource minters).
 
-use tur_host::{
+use tur_host::image::{
   img_build, img_fit, img_height, img_new, img_qkey, img_res_bytes, img_res_solid, img_res_svg,
   img_width,
 };

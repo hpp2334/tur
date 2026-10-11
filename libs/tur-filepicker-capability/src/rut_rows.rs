@@ -14,7 +14,8 @@ use crate::{FilePicker, PickOptions};
 /// cosmetic — the spike's precedent.)
 #[allow(clippy::needless_question_mark)]
 pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
-    cx.decl.extend(vec![rut_driver::HostRow::root(
+    cx.decl.extend(vec![tur_engine::core::rut_runtime::host_row_at(
+        "filepicker",
         "pick_file",
         vec![],
         TY_STR,
@@ -30,7 +31,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // pick_file() -> str — the first picked file's name ("" when
     // cancelled/denied, matching the JS bridge's empty-Vec degradation).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "pick_file", () -> String, move || {
+    rut_vm::pkg_async_fn!(pkg, "filepicker::pick_file", () -> String, move || {
         let done = rut_vm::Completer::<String>::new();
         let Some(picker) = h.inst.capability().of::<FilePicker>() else {
             done.complete(String::new());

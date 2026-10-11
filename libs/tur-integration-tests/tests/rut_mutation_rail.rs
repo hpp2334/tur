@@ -462,7 +462,7 @@ fn g_clicks_never_remount_the_tree() {
 
 const SPAWN_RUT: &str = r#"
 use futures::launch_future;
-use tur_host::{ clipboard_read, clipboard_write };
+use tur_host::clipboard::{ clipboard_read, clipboard_write };
 use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source }; use tur_kit::text::core::{ Text };use tur_kit::gesture::pointer::{ PointerInteract };
 
 

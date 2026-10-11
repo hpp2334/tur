@@ -194,9 +194,15 @@ rut/                   # all rut package sources (pure rut — no build step;
   cases/               # the shared case corpus (<name>/mod.rut + the
                        #   generated <name>/rut.jsonc + README)
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
-                       #   test-pinned tur_host.d.rut decl snapshot (the Rust
-                       #   rows stay compile truth; bless:
-                       #   TUR_BLESS_TUR_HOST_DECL=1)
+                       #   test-pinned decl MODULE TREE (mod.d.rut root +
+                       #   NAME/mod.d.rut per module — store/, ctx/,
+                       #   scalars/, clipboard/, layout/{flex,flexi,stack,
+                       #   pos,box,grid_table}/, text/{core,input}/,
+                       #   gesture/{pointer,focus}/, control_flow/{control,
+                       #   lifecycle}/, scroll/, image/, composited/,
+                       #   virtual_app/, anim/, net/) — the Rust rows stay
+                       #   compile truth; bless:
+                       #   TUR_BLESS_TUR_HOST_DECL=1
   tur_kit/             # the authored builder surface — a FILE-MODULE
                        #   TREE: mod.rut (decls only) + the 17 leaf modules
                        #   under domain dirs (handles, dispatch, reactive,
@@ -277,14 +283,26 @@ Android build + device debugging live in the **`android-dev` skill** at
   (bare `[a-zA-Z0-9_]+` — kebab dir names sanitize to underscores for the
   per-case manifests); the body is the FILE-MODULE TREE — the root module
   is `mod.rut` beside the manifest and `mod NAME;` mounts `NAME/mod.rut`
-  (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly);
-  `type: "host"` + `entry.type` for a pure-declaration pkg. `tur_host`'s
-  decl surface is
-  the GENERATED `rut/tur_host/tur_host.d.rut` snapshot — the Rust rows
-  stay compile truth; the pin test (`tur_host_decl`) diffs the snapshot
+  (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly).
+  A `type: "host"` pkg organizes its surface as a DECL MODULE TREE the
+  same way: `mod.d.rut` beside the manifest is the auto-discovered root
+  (lib parity — the manifest's `entry.type` is OPTIONAL; when spelled it
+  wins, NEITHER present is a loud error, and a `mod.rut` beside a host
+  manifest stays refused), each `pub mod NAME;` mounts `NAME/mod.d.rut`
+  beside it, recursive (`net/tls` nests under `net`). The rows carry
+  their module paths (`HostRow { path, .. }` — slash-separated relative
+  to the pkg root), the VM bodies register under the scope-relative
+  spelling the path derives (`rel_name()` → `layout::flex::flex_build`),
+  and consumers bind the tree (`use tur_host::layout::flex::{
+  flex_build };`; root rows stay flat — `use tur_host::{ mount };`).
+  `tur_host`'s decl surface is
+  the GENERATED `rut/tur_host/` tree — the Rust rows
+  stay compile truth; the pin test (`tur_host_decl`) diffs the tree
   against the live standard session and fails on drift (regenerate
-  deliberately: `TUR_BLESS_TUR_HOST_DECL=1`). The per-case manifests are
-  generated the same way (`TUR_BLESS_CASE_MANIFESTS=1`).
+  deliberately: `TUR_BLESS_TUR_HOST_DECL=1` — bless writes the whole
+  file set and removes stale `.d.rut` files; never touch `rut.jsonc`).
+  The per-case manifests are generated the same way
+  (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
@@ -353,9 +371,11 @@ Android build + device debugging live in the **`android-dev` skill** at
   the rows are the boundary.
 - **The kit's import laws** (the file-module tree's two doors): INSIDE
   the kit there are no `use tur_kit` lines — cross-file references are
-  dot-qualified positions over full-from-root mod paths
-  (`flags.MainAlign`, `flags.main_align_code(v)`, `handles.View`,
-  `reactive.Readable<T>`, `gesture.pointer.InputEvent`), and each leaf's
+  dot-qualified positions over full-from-root mod paths spelled with
+  `::` (the path separator law this pin landed: `flags::MainAlign`,
+  `flags::main_align_code(v)`, `handles::View`,
+  `reactive::Readable<T>`, `gesture::pointer::InputEvent`), and each
+  leaf's
   `use tur_host` line carries exactly the rows THAT leaf calls (uses
   bind per file — a sibling's use never leaks). Consumer-reachable names
   are `pub`; kit-internal cross-file plumbing is `pub(pkg)` (the flags
@@ -403,7 +423,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (pin 80b56c6, the duplicate-boot-scope
+- Known upstream rut bug (pin 3b4d2cc, the duplicate-boot-scope
   type-interning family): some module-shape edits trip it — kit fn/row
   resolution collapses ("argument N is X, Y expected" far from the edit)
   or an interface-typed capture misbinds at runtime ("no impl for

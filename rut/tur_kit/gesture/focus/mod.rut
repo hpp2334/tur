@@ -1,6 +1,6 @@
 // gesture/focus — the focus family (Focusable).
 
-use tur_host::{
+use tur_host::gesture::focus::{
   focus_build, focus_child, focus_new, focus_on_blur, focus_on_focus, focus_on_key_down,
 };
 

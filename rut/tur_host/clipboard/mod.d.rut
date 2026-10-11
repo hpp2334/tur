@@ -1,0 +1,6 @@
+// tur_host/clipboard — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host async fn clipboard_read() -> str;
+pub host async fn clipboard_write(p1: str);
+pub host fn decode_utf8(p1: bytes) -> str;
+pub host fn encode_utf8(p1: str) -> bytes;

@@ -7,7 +7,7 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-use tur_host::{ tctrl_push_span };
+use tur_host::text::input::{ tctrl_push_span };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };

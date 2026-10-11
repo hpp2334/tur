@@ -27,7 +27,9 @@ pub fn decl_rows() -> Vec<rut_driver::HostRow> {
         ("encode_utf8", vec![TY_STR], TY_BYTES, false),
     ]
     .into_iter()
-    .map(|(n, p, r, a)| rut_driver::HostRow::root(n, p, r, a))
+    .map(|(n, p, r, a)| {
+        crate::core::rut_runtime::host_row_at("clipboard", n, p, r, a)
+    })
     .collect()
 }
 
@@ -41,7 +43,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // clipboard_read() -> str — resolves with the platform text (empty when
     // denied/unavailable — the same degradation the JS bridge documents).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard_read", () -> String, move || {
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read", () -> String, move || {
         let done = rut_vm::Completer::new();
         let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
             done.complete(String::new());
@@ -58,7 +60,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // clipboard_write(s: str) -> () — resolves when the write lands (a
     // missing capability completes immediately — the no-op degradation).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard_write", (&str,) -> (), move |text: &str| {
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write", (&str,) -> (), move |text: &str| {
         let done = rut_vm::Completer::<()>::new();
         let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
             done.complete(());
@@ -75,10 +77,10 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- bytes helpers (the response-body decode path) ------------------
-    rut_vm::pkg_fn!(pkg, "decode_utf8", (&[u8],) -> String, |_vm: &mut rut_vm::interp::Vm, bytes: &[u8]| {
+    rut_vm::pkg_fn!(pkg, "clipboard::decode_utf8", (&[u8],) -> String, |_vm: &mut rut_vm::interp::Vm, bytes: &[u8]| {
         Ok(String::from_utf8_lossy(bytes).into_owned())
     });
-    rut_vm::pkg_fn!(pkg, "encode_utf8", (&str,) -> Vec<u8>, |_vm: &mut rut_vm::interp::Vm, text: &str| {
+    rut_vm::pkg_fn!(pkg, "clipboard::encode_utf8", (&str,) -> Vec<u8>, |_vm: &mut rut_vm::interp::Vm, text: &str| {
         Ok(text.as_bytes().to_vec())
     });
 }

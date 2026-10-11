@@ -41,7 +41,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the control-flow rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("control_flow/control", n, p, r, false)
     };
     cx.decl.extend(vec![
         // condition
@@ -103,7 +103,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ---- condition ---------------------------------------------------------
     // conditional: both branches authored at start time; the swap is pure
     // engine (the factory clones a pre-built Rc — no rut during flush).
-    rut_vm::pkg_fn!(pkg, "cond_new", (u64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, when: u64| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_new", (u64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, when: u64| {
         let spec = CondSpec {
             condition: Val::Reactive(readable_of::<bool>(when)),
             then_child: None,
@@ -112,11 +112,11 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "cond_then", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_then", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.then_child = Some(Rc::new(Prebuilt(child))))
     });
-    rut_vm::pkg_fn!(pkg, "cond_else", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_else", (Opaque<CondSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.else_child = Some(Rc::new(Prebuilt(child))))
     });
@@ -125,20 +125,20 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // invoked at activation (fresh read of live state), re-invoked at
     // every re-activation.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "cond_then_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_then_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
         let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
         b.with_mut(vm, |_vm, s| s.then_child = Some(factory))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "cond_else_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_else_build", (Opaque<CondSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, cb: OpaqueRef| {
         let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
         b.with_mut(vm, |_vm, s| s.else_child = Some(factory))
     });
-    rut_vm::pkg_fn!(pkg, "cond_qkey", (Opaque<CondSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_qkey", (Opaque<CondSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "cond_build", (Opaque<CondSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::cond_build", (Opaque<CondSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<CondSpec>| {
         let view = b.with(|s| {
             let then_factory = s.then_child.clone().expect("cond_build: no then branch");
             let else_factory = s.else_child.clone().expect("cond_build: no else branch");
@@ -154,7 +154,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- switch ------------------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "switch_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let view = SwitchView::new_rut(
             Val::Reactive(Readable::Source(Source::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(AtomId(0)))),
             Vec::new(),
@@ -162,7 +162,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         );
         Ok(Opaque::alloc(vm, view)?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "switch_value_source", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_value_source", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
         b.with_mut(vm, |_vm, s| {
             s.set_value(Val::Reactive(Readable::Source(
                 Source::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(AtomId(atom as u32)),
@@ -170,14 +170,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         })
     });
     // The derived-value twin: the switch reads a Derived<SwitchKey> atom.
-    rut_vm::pkg_fn!(pkg, "switch_value_derived", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_value_derived", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
         b.with_mut(vm, |_vm, s| {
             s.set_value(Val::Reactive(Readable::Derived(
                 Derived::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(AtomId(atom as u32)),
             )));
         })
     });
-    rut_vm::pkg_fn!(pkg, "switch_case", (Opaque<SwitchView>, &str, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_case", (Opaque<SwitchView>, &str, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let key = crate::builtin_plugins::control_flow::SwitchKey(Value::str(key));
         b.with_mut(vm, |_vm, s| s.push_case(key, Rc::new(Prebuilt(child))))
@@ -185,20 +185,20 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // switch_case_build — the lazy case twin: the branch is a kit-sealed
     // fn box, invoked when the key activates.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "switch_case_build", (Opaque<SwitchView>, &str, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_case_build", (Opaque<SwitchView>, &str, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str, cb: OpaqueRef| {
         let key = crate::builtin_plugins::control_flow::SwitchKey(Value::str(key));
         let factory = Rc::new(super::BranchBuilder { cb, face: h.face.clone(), handles: h.clone() });
         b.with_mut(vm, |_vm, s| s.push_case(key, factory))
     });
-    rut_vm::pkg_fn!(pkg, "switch_fallback", (Opaque<SwitchView>, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_fallback", (Opaque<SwitchView>, Opaque<RutView>) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.set_fallback(Rc::new(Prebuilt(child))))
     });
-    rut_vm::pkg_fn!(pkg, "switch_qkey", (Opaque<SwitchView>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_qkey", (Opaque<SwitchView>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.set_query_key(key))
     });
-    rut_vm::pkg_fn!(pkg, "switch_build", (Opaque<SwitchView>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::switch_build", (Opaque<SwitchView>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>| {
         let view = b.with(|s| Rc::new(s.clone()) as Rc<dyn crate::core::view::View>)?;
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
@@ -208,7 +208,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // kit-sealed fn box `fn(index, item) -> opaque`, fired through the
     // kit's `__tur_cb_build2` dispatch entry.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "each_new", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::each_new", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = &h;
         let spec = EachSpec {
             items: Some(Readable::Source(
@@ -219,7 +219,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "each_builder", (Opaque<EachSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::each_builder", (Opaque<EachSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>, cb: OpaqueRef| {
         let _ = vm;
         let builder = EachBuilder {
             cb,
@@ -228,7 +228,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         };
         b.with_mut(vm, |_vm, s| s.builder = Some(builder))
     });
-    rut_vm::pkg_fn!(pkg, "each_build", (Opaque<EachSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::each_build", (Opaque<EachSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<EachSpec>| {
         let view = b.with(|s| {
             Rc::new(EachView::new_rut(
                 s.items,
@@ -242,14 +242,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ---- fragment ------------------------------------------------------------
     // layout-transparent group — children build directly under the parent
     // (the JS Fragment twin; keeps test-navigated trees flat).
-    rut_vm::pkg_fn!(pkg, "frag_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::frag_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, FragmentView::new_rut(Vec::new()))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "frag_child", (Opaque<FragmentView>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FragmentView>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::frag_child", (Opaque<FragmentView>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FragmentView>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.push_child(child))
     });
-    rut_vm::pkg_fn!(pkg, "frag_build", (Opaque<FragmentView>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<FragmentView>| {
+    rut_vm::pkg_fn!(pkg, "control_flow::control::frag_build", (Opaque<FragmentView>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<FragmentView>| {
         let view = b.with(|s| Rc::new(s.clone()) as Rc<dyn crate::core::view::View>)?;
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });

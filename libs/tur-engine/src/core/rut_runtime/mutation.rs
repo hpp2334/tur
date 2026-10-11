@@ -56,7 +56,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // classes' `h`; the kit's `entry_ctx()` and async launches build
     // their ctxs over one).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_bridge", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_bridge", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
         Ok(Opaque::alloc(vm, CtxBridge)?.handle().clone())
     });
@@ -64,21 +64,21 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ctx_get_f64(h, atom) -> f64 — the TRACKED read (inside a derive
     // materialization the read records its dependency).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_f64", (Opaque<CtxBridge>, u64) -> f64, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_f64", (Opaque<CtxBridge>, u64) -> f64, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         match h.store.read_only().read(super::readable_of::<f64>(atom)).as_num() {
             Some(n) => Ok(n),
             None => Ok(0.0),
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_str", (Opaque<CtxBridge>, u64) -> String, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_str", (Opaque<CtxBridge>, u64) -> String, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         match h.store.read_only().read(super::readable_of::<String>(atom)).as_str() {
             Some(s) => Ok(s.to_string()),
             None => Ok(String::new()),
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_bool", (Opaque<CtxBridge>, u64) -> bool, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_bool", (Opaque<CtxBridge>, u64) -> bool, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         match h.store.read_only().read(super::readable_of::<bool>(atom)).as_bool() {
             Some(b) => Ok(b),
             None => Ok(false),
@@ -89,7 +89,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // only source atoms accept writes (a derived target is a checked
     // error — the trap rides the error rail).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_f64", (Opaque<CtxBridge>, u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: f64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_f64", (Opaque<CtxBridge>, u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: f64| {
         checked_writable(&h, atom)
             .and_then(|()| {
                 h.store
@@ -99,7 +99,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_f64: {e}")))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_str", (Opaque<CtxBridge>, u64, &str) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: &str| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_str", (Opaque<CtxBridge>, u64, &str) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: &str| {
         checked_writable(&h, atom)
             .and_then(|()| {
                 h.store
@@ -109,7 +109,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("ctx_set_str: {e}")))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_bool", (Opaque<CtxBridge>, u64, bool) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: bool| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_bool", (Opaque<CtxBridge>, u64, bool) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: bool| {
         checked_writable(&h, atom)
             .and_then(|()| {
                 h.store
@@ -123,12 +123,12 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // list/map atoms' ctx face; the write side is guarded like the
     // scalars').
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_value", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_value", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
         Ok(Opaque::alloc(vm, super::RutValue(value))?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_value", (Opaque<CtxBridge>, u64, Opaque<super::RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: Opaque<super::RutValue>| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_value", (Opaque<CtxBridge>, u64, Opaque<super::RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: Opaque<super::RutValue>| {
         let value = v.with(|v| v.0.clone())?;
         checked_writable(&h, atom)
             .and_then(|()| {
@@ -148,7 +148,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // rides a source atom as `Value::Opaque`, guarded like the other
     // writes.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_opaque", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_opaque", (Opaque<CtxBridge>, u64) -> rut_vm::OpaqueRef, move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
         let any = match value.as_opaque() {
             Some(a) => a,
@@ -160,7 +160,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_opaque", (Opaque<CtxBridge>, u64, rut_vm::OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, o: rut_vm::OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_opaque", (Opaque<CtxBridge>, u64, rut_vm::OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, o: rut_vm::OpaqueRef| {
         checked_writable(&h, atom)
             .and_then(|()| {
                 h.store
@@ -176,7 +176,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // rut's no-reentrancy law. The queued invocation drains at the next
     // mutation pass (boa's `ctx.set(navigateToRoot)` shape, deferred).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_run_nil", (Opaque<CtxBridge>, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_run_nil", (Opaque<CtxBridge>, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64| {
         let m = MutationHandle::<()>::new(mutation_of(atom));
         h.mutation_queue.borrow_mut().push(m, ());
         h.dirty.set(true);
@@ -187,7 +187,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // in the flush's invocation result (composition reads effects through
     // sources — there is no synchronous return across the VM boundary).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_run_f64", (Opaque<CtxBridge>, u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, a: f64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_run_f64", (Opaque<CtxBridge>, u64, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, a: f64| {
         let m = MutationHandle::<ValueArgs>::new(mutation_of(atom));
         h.mutation_queue.borrow_mut().push(m, ValueArgs(vec![Value::Num(a)]));
         h.dirty.set(true);
@@ -202,7 +202,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // picks the number lane's width (the KV's one collapse — see
     // [`super::STAMP_NUM_U64`]); every other kind stamps by its variant.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_get_box", (Opaque<CtxBridge>, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, stamp: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_get_box", (Opaque<CtxBridge>, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, stamp: u64| {
         let value = h.store.read_only().read(super::readable_of::<Value>(atom));
         super::seal_box(vm, &value, stamp)
     });
@@ -210,7 +210,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // decodes into the same native variant the typed rows store (the
     // write-side law applies — only source atoms accept writes).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_set_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_set_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, v: OpaqueRef| {
         let value = super::boxed_to_value(vm, &v)?;
         checked_writable(&h, atom)
             .and_then(|()| {
@@ -225,7 +225,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // whose tag lands here); the payload decodes in the drain's MUT_BOX
     // branch and the wrapper recovers A with `unopaque<A>`.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "ctx_run_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, b: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "ctx::ctx_run_box", (Opaque<CtxBridge>, u64, OpaqueRef) -> (), move |_vm: &mut rut_vm::interp::Vm, _bridge: Opaque<CtxBridge>, atom: u64, b: OpaqueRef| {
         let m = MutationHandle::<ValueArgs>::new(mutation_of(atom));
         h.mutation_queue
             .borrow_mut()
@@ -241,7 +241,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // event) and calls the user's fn (one entry per shape — the kit owns
     // the shapes, the engine owns the queue law).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "mutate_seal", (OpaqueRef, u64) -> u64, move |vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, tag: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::mutate_seal", (OpaqueRef, u64) -> u64, move |vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, tag: u64| {
         let marker = Opaque::alloc(vm, CtxBridge)?.handle().clone();
         let h2 = h.clone();
         let mutation = h.store.bridge().build_mutate(move |_bridge, args| {
@@ -372,7 +372,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // tracker frame is up, so dependencies auto-record (the rs_derive_cb
     // machinery's first-class twin).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "derive_seal", (OpaqueRef, u64) -> u64, move |vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, tag: u64| {
+    rut_vm::pkg_fn!(pkg, "ctx::derive_seal", (OpaqueRef, u64) -> u64, move |vm: &mut rut_vm::interp::Vm, cb: OpaqueRef, tag: u64| {
         let marker = Opaque::alloc(vm, CtxBridge)?.handle().clone();
         let h2 = h.clone();
         let derived = h.store.bridge().build_derive(move |_read| {

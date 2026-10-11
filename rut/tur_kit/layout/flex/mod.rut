@@ -1,9 +1,11 @@
 // layout/flex — the flex families (Column / Row / Expanded / Flexible).
 
-use tur_host::{
+use tur_host::layout::flex::{
   flex_build, flex_child, flex_column, flex_cross_align, flex_main_align, flex_main_size,
-  flex_qkey, flex_row, flexi_build, flexi_child, flexi_fit, flexi_flex, flexi_flex_bound,
-  flexi_new, flexi_qkey,
+  flex_qkey, flex_row,
+};
+use tur_host::layout::flexi::{
+  flexi_build, flexi_child, flexi_fit, flexi_flex, flexi_flex_bound, flexi_new, flexi_qkey,
 };
 
 // ---- flex (Column / Row) ------------------------------------------------

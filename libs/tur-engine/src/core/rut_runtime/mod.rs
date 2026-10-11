@@ -44,7 +44,7 @@ mod decl_gen;
 mod derive;
 mod mutation;
 
-pub use decl_gen::{render_tur_host_decl, tur_host_surface};
+pub use decl_gen::{mount_host_tree, render_tur_host_decl_tree, tur_host_surface};
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
@@ -198,95 +198,117 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 // their view types and arrive through the [`RutPkgExt`] seam.
 // ---------------------------------------------------------------------------
 
+/// A module-path row — `HostRow::root`'s twin for a `pub mod` member.
+/// `path` is the mod path relative to the pkg root (slash-separated:
+/// `"store"`, `"layout/flex"`); the registration spelling derives from
+/// it (`HostRow::rel_name` → `store::rs_source_str`), so the VM body
+/// registration keys and the generated decl tree all come from this one
+/// string. The shared helper: the rows live in several crates (the
+/// engine + the capability/animation crates), all through
+/// `tur_engine::core::rut_runtime`.
+pub fn host_row_at(
+    path: &str,
+    name: &str,
+    params: Vec<TypeId>,
+    ret: TypeId,
+    is_async: bool,
+) -> rut_driver::HostRow {
+    let mut row = rut_driver::HostRow::root(name, params, ret, is_async);
+    row.path = path.to_string();
+    row
+}
+
 /// The in-memory `tur_host` pkg (the DECL side): the mechanism surface
 /// rut code compiles against. Offered to the run chain — no filesystem
 /// involved. Plugin families extend it through their pushed
 /// [`RutPkgExt`]s (decl rows + consts).
 pub fn tur_decl_pkg() -> rut_driver::Pkg {
-    let row = |name: &str, params: Vec<TypeId>, ret: TypeId| {
-        rut_driver::HostRow::root(name, params, ret, false)
+    // `path` first: every row spells its module in the tree (`""` = the
+    // root surface — mount only).
+    let row = |path: &str, name: &str, params: Vec<TypeId>, ret: TypeId| {
+        host_row_at(path, name, params, ret, false)
     };
     let host_funcs: Vec<rut_driver::HostRow> = vec![
         // stash the root — the engine applies it after `start` returns
-        row("mount", vec![TY_OPAQUE], TY_NIL),
+        row("", "mount", vec![TY_OPAQUE], TY_NIL),
         // The kit's twin spelling (see the mount bodies below): same
         // decl, same body — the kit's own `mount` wrapper shadows the
         // row name, so its body calls this alias.
-        row("mount_raw", vec![TY_OPAQUE], TY_NIL),
+        row("", "mount_raw", vec![TY_OPAQUE], TY_NIL),
         // reactive rails: str / f64 / bool scalars over the native KV
-        row("rs_source_str", vec![TY_STR], TY_U64),
-        row("rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
-        row("rs_get_str", vec![TY_U64], TY_STR),
-        row("rs_source_f64", vec![], TY_U64),
-        row("rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
-        row("rs_get_f64", vec![TY_U64], TY_F64),
-        row("rs_source_bool", vec![TY_BOOL], TY_U64),
-        row("rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
-        row("rs_get_bool", vec![TY_U64], TY_BOOL),
+        row("store", "rs_source_str", vec![TY_STR], TY_U64),
+        row("store", "rs_set_str", vec![TY_U64, TY_STR], TY_NIL),
+        row("store", "rs_get_str", vec![TY_U64], TY_STR),
+        row("store", "rs_source_f64", vec![], TY_U64),
+        row("store", "rs_set_f64", vec![TY_U64, TY_F64], TY_NIL),
+        row("store", "rs_get_f64", vec![TY_U64], TY_F64),
+        row("store", "rs_source_bool", vec![TY_BOOL], TY_U64),
+        row("store", "rs_set_bool", vec![TY_U64, TY_BOOL], TY_NIL),
+        row("store", "rs_get_bool", vec![TY_U64], TY_BOOL),
         // structured values (list/map atoms over the native-KV substrate)
-        row("rs_list_new", vec![], TY_OPAQUE),
-        row("rs_list_push", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("rs_map_new", vec![], TY_OPAQUE),
-        row("rs_map_set", vec![TY_OPAQUE, TY_STR, TY_STR], TY_NIL),
-        row("rs_source_value", vec![TY_OPAQUE], TY_U64),
-        row("rs_set_value", vec![TY_U64, TY_OPAQUE], TY_NIL),
-        row("rs_get_value", vec![TY_U64], TY_OPAQUE),
-        row("rs_value_len", vec![TY_OPAQUE], TY_U64),
-        row("rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
-        row("rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
+        row("store", "rs_list_new", vec![], TY_OPAQUE),
+        row("store", "rs_list_push", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        row("store", "rs_map_new", vec![], TY_OPAQUE),
+        row("store", "rs_map_set", vec![TY_OPAQUE, TY_STR, TY_STR], TY_NIL),
+        row("store", "rs_source_value", vec![TY_OPAQUE], TY_U64),
+        row("store", "rs_set_value", vec![TY_U64, TY_OPAQUE], TY_NIL),
+        row("store", "rs_get_value", vec![TY_U64], TY_OPAQUE),
+        row("store", "rs_value_len", vec![TY_OPAQUE], TY_U64),
+        row("store", "rs_value_item", vec![TY_OPAQUE, TY_U64], TY_STR),
+        row("store", "rs_value_get", vec![TY_OPAQUE, TY_STR], TY_STR),
         // brush atoms (nonzero packed color sets, 0 clears)
-        row("rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
+        row("store", "rs_set_brush", vec![TY_U64, TY_U64], TY_NIL),
         // C8 — the watch rail (the guarded flush-time delivery; the
         // callback is the kit-sealed `Mutation<nil>` composition atom).
         // The str-typed derive rows are gone — the kit's `derive<T>`
         // mints through `derive_seal`'s boxed lane.
-        row("rs_watch_mut", vec![TY_U64, TY_U64], TY_OPAQUE),
-        row("rs_watch_start", vec![TY_OPAQUE], TY_NIL),
-        row("rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
+        row("store", "rs_watch_mut", vec![TY_U64, TY_U64], TY_OPAQUE),
+        row("store", "rs_watch_start", vec![TY_OPAQUE], TY_NIL),
+        row("store", "rs_watch_stop", vec![TY_OPAQUE], TY_NIL),
         // the boxed rail — the GENERIC source lane: an erased rut value
         // crosses as an opaque box, the engine decodes it into the same
         // native KV variant the typed rows write (the box's payload kind
         // picks the variant; `rs_box_stamp` reports the number lane so
         // the read can re-stamp u64 vs f64 boxes losslessly).
-        row("rs_source_box", vec![TY_OPAQUE], TY_U64),
-        row("rs_box_stamp", vec![TY_OPAQUE], TY_U64),
-        row("ctx_get_box", vec![TY_OPAQUE, TY_U64, TY_U64], TY_OPAQUE),
-        row("ctx_set_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx_run_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("store", "rs_source_box", vec![TY_OPAQUE], TY_U64),
+        row("store", "rs_box_stamp", vec![TY_OPAQUE], TY_U64),
         // M1 — the mutation rail: the ctx read/write/compose rows + the
         // mutation/derive sealers (the write-side twin of the C8 face).
-        row("ctx_bridge", vec![], TY_OPAQUE),
-        row("ctx_get_f64", vec![TY_OPAQUE, TY_U64], TY_F64),
-        row("ctx_get_str", vec![TY_OPAQUE, TY_U64], TY_STR),
-        row("ctx_get_bool", vec![TY_OPAQUE, TY_U64], TY_BOOL),
-        row("ctx_get_value", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
-        row("ctx_get_opaque", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
-        row("ctx_set_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
-        row("ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
-        row("ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
-        row("ctx_set_value", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx_set_opaque", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
-        row("mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
-        row("derive_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
-        row("str_parse_f64", vec![TY_STR], TY_F64),
+        row("ctx", "ctx_get_box", vec![TY_OPAQUE, TY_U64, TY_U64], TY_OPAQUE),
+        row("ctx", "ctx_set_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx", "ctx_run_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx", "ctx_bridge", vec![], TY_OPAQUE),
+        row("ctx", "ctx_get_f64", vec![TY_OPAQUE, TY_U64], TY_F64),
+        row("ctx", "ctx_get_str", vec![TY_OPAQUE, TY_U64], TY_STR),
+        row("ctx", "ctx_get_bool", vec![TY_OPAQUE, TY_U64], TY_BOOL),
+        row("ctx", "ctx_get_value", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
+        row("ctx", "ctx_get_opaque", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
+        row("ctx", "ctx_set_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
+        row("ctx", "ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
+        row("ctx", "ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
+        row("ctx", "ctx_set_value", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx", "ctx_set_opaque", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row("ctx", "ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        row("ctx", "ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
+        row("ctx", "mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
+        row("ctx", "derive_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
         // pure math (f64 radians in/out) — the orbit / wave case shapes
-        row("math_sin", vec![TY_F64], TY_F64),
-        row("math_cos", vec![TY_F64], TY_F64),
+        row("scalars", "str_parse_f64", vec![TY_STR], TY_F64),
+        row("scalars", "math_sin", vec![TY_F64], TY_F64),
+        row("scalars", "math_cos", vec![TY_F64], TY_F64),
         // The kit wrappers' twin spellings (the `mount_raw` pattern): the
         // kit defines its own `math_sin` / `math_cos` / `str_parse_f64`
         // (the authored surface's names), which shadow the row names —
         // the wrapper bodies reach the rows through these aliases.
-        row("str_parse_f64_raw", vec![TY_STR], TY_F64),
-        row("math_sin_raw", vec![TY_F64], TY_F64),
-        row("math_cos_raw", vec![TY_F64], TY_F64),
+        row("scalars", "str_parse_f64_raw", vec![TY_STR], TY_F64),
+        row("scalars", "math_sin_raw", vec![TY_F64], TY_F64),
+        row("scalars", "math_cos_raw", vec![TY_F64], TY_F64),
     ];
     // C6 — async capabilities (clipboard + bytes helpers; the async rows
     // ride the driver's five-row family expansion).
     let mut funcs = host_funcs;
     funcs.extend(async_caps::decl_rows());
-    rut_driver::Pkg {
+    let mut pkg = rut_driver::Pkg {
         spec: "tur_host".to_string(),
         namespace: Some("tur_host".to_string()),
         body: PkgBody::Host {
@@ -298,7 +320,12 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
             root_surface: None,
         },
         ..Default::default()
-    }
+    };
+    // The rows' module tree (the qualified-use walk's map — a hand-built
+    // pkg without it is flat by the compiler's law). Re-mounted after
+    // the exts' rows merge (see `RutRuntime::compile`).
+    decl_gen::mount_host_tree(&mut pkg);
+    pkg
 }
 
 /// The bodies. `handles` is the per-instance bridge state the rows close
@@ -354,13 +381,13 @@ fn install_tur_pkg(
     // machinery: a bound Text re-renders on `rs_set_*` with zero new
     // engine code.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_source_str", (&str,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: &str| {
+    rut_vm::pkg_fn!(pkg, "store::rs_source_str", (&str,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: &str| {
         let _ = vm;
         let s: Source<Value> = h.store.bridge().decl_source(Value::str(v));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_set_str", (u64, &str) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: &str| {
+    rut_vm::pkg_fn!(pkg, "store::rs_set_str", (u64, &str) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: &str| {
         let _ = vm;
         h.store
             .bridge()
@@ -368,13 +395,13 @@ fn install_tur_pkg(
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_str: {e}")))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_source_f64", () -> u64, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "store::rs_source_f64", () -> u64, move |vm: &mut rut_vm::interp::Vm| {
         let _ = vm;
         let s: Source<Value> = h.store.bridge().decl_source(Value::Num(0.0));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_get_f64", (u64,) -> f64, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_get_f64", (u64,) -> f64, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
         match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
             Some(ScalarRead::Num(n)) => Ok(n),
@@ -382,7 +409,7 @@ fn install_tur_pkg(
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_get_str", (u64,) -> String, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
         match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
             Some(ScalarRead::Str(s)) => Ok(s),
@@ -390,7 +417,7 @@ fn install_tur_pkg(
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_set_f64", (u64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: f64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_set_f64", (u64, f64) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: f64| {
         let _ = vm;
         h.store
             .bridge()
@@ -399,13 +426,13 @@ fn install_tur_pkg(
     });
     // bool atoms (the condition rail's driver)
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_source_bool", (bool,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: bool| {
+    rut_vm::pkg_fn!(pkg, "store::rs_source_bool", (bool,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: bool| {
         let _ = vm;
         let s: Source<Value> = h.store.bridge().decl_source(Value::Bool(v));
         Ok(s.id().0 as u64)
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_get_bool", (u64,) -> bool, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_get_bool", (u64,) -> bool, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let _ = vm;
         match h.store.read_value(AtomId(atom as u32)).as_ref().and_then(ScalarRead::from_value) {
             Some(ScalarRead::Bool(b)) => Ok(b),
@@ -413,7 +440,7 @@ fn install_tur_pkg(
         }
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_set_bool", (u64, bool) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: bool| {
+    rut_vm::pkg_fn!(pkg, "store::rs_set_bool", (u64, bool) -> (), move |vm: &mut rut_vm::interp::Vm, atom: u64, v: bool| {
         let _ = vm;
         h.store
             .bridge()
@@ -430,10 +457,10 @@ fn install_tur_pkg(
     //   let v = rs_list_new();  rs_list_push(v, "a");
     //   let atom = rs_source_value(v);   rs_set_value(atom, rs_list_new());
     //   let got = rs_get_value(atom);    rs_value_len(got)
-    rut_vm::pkg_fn!(pkg, "rs_list_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "store::rs_list_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, RutValue(Value::list(Vec::new())))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "rs_list_push", (Opaque<RutValue>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, item: &str| {
+    rut_vm::pkg_fn!(pkg, "store::rs_list_push", (Opaque<RutValue>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, item: &str| {
         v.with_mut(vm, |_vm, v| {
             let items = match &v.0 {
                 Value::List(items) => items.as_ref().clone(),
@@ -443,10 +470,10 @@ fn install_tur_pkg(
         })?;
         Ok(())
     });
-    rut_vm::pkg_fn!(pkg, "rs_map_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "store::rs_map_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         Ok(Opaque::alloc(vm, RutValue(Value::map(Vec::<(Rc<str>, Value)>::new())))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "rs_map_set", (Opaque<RutValue>, &str, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str, item: &str| {
+    rut_vm::pkg_fn!(pkg, "store::rs_map_set", (Opaque<RutValue>, &str, &str) -> (), move |vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str, item: &str| {
         v.with_mut(vm, |_vm, v| {
             let mut entries = match &v.0 {
                 Value::Map(entries) => entries.as_ref().clone(),
@@ -458,7 +485,7 @@ fn install_tur_pkg(
         Ok(())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_source_value", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
+    rut_vm::pkg_fn!(pkg, "store::rs_source_value", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
         let value = v.with(|v| v.0.clone())?;
         let s: Source<Value> = h.store.bridge().decl_source(value);
         Ok(s.id().0 as u64)
@@ -475,7 +502,7 @@ fn install_tur_pkg(
     // to its native value, any other host box rides the opaque lane
     // (the controller-slot shape).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_source_box", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "store::rs_source_box", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
         let value = boxed_to_value(vm, &v)?;
         let s: Source<Value> = h.store.bridge().decl_source(value);
         Ok(s.id().0 as u64)
@@ -483,7 +510,7 @@ fn install_tur_pkg(
     // The number lane's stamp (the one KV collapse): `1` — the box held
     // an f64 (reads re-stamp f64), `2` — a u64 / i64 (reads re-stamp the
     // integer width), `0` — not a number (the read stamps by KV kind).
-    rut_vm::pkg_fn!(pkg, "rs_box_stamp", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "store::rs_box_stamp", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
         Ok(match rut_vm::rut_box_payload(vm, &v) {
             Ok((_, rut_vm::Value::F64(_))) => STAMP_NUM_F64,
             Ok((_, rut_vm::Value::I64(_))) => STAMP_NUM_U64,
@@ -492,7 +519,7 @@ fn install_tur_pkg(
     });
 
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_set_value", (u64, Opaque<RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, v: Opaque<RutValue>| {
+    rut_vm::pkg_fn!(pkg, "store::rs_set_value", (u64, Opaque<RutValue>) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, v: Opaque<RutValue>| {
         let value = v.with(|v| v.0.clone())?;
         h.store
             .bridge()
@@ -500,11 +527,11 @@ fn install_tur_pkg(
             .map_err(|e| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, format!("rs_set_value: {e}")))
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_get_value", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_get_value", (u64,) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, atom: u64| {
         let value = h.store.read_value(AtomId(atom as u32)).unwrap_or(Value::Nil);
         Ok(Opaque::alloc(vm, RutValue(value))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "rs_value_len", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
+    rut_vm::pkg_fn!(pkg, "store::rs_value_len", (Opaque<RutValue>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>| {
         let len = v.with(|v| match &v.0 {
             Value::List(items) => items.len() as u64,
             Value::Map(entries) => entries.len() as u64,
@@ -512,7 +539,7 @@ fn install_tur_pkg(
         })?;
         Ok(len)
     });
-    rut_vm::pkg_fn!(pkg, "rs_value_item", (Opaque<RutValue>, u64) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, index: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_value_item", (Opaque<RutValue>, u64) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, index: u64| {
         let item = v.with(|v| match &v.0 {
             Value::List(items) => items
                 .get(index as usize)
@@ -522,7 +549,7 @@ fn install_tur_pkg(
         })?;
         Ok(item.unwrap_or_default())
     });
-    rut_vm::pkg_fn!(pkg, "rs_value_get", (Opaque<RutValue>, &str) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "store::rs_value_get", (Opaque<RutValue>, &str) -> String, move |_vm: &mut rut_vm::interp::Vm, v: Opaque<RutValue>, key: &str| {
         let item = v.with(|v| v.0.get(key).and_then(Value::as_str).map(str::to_string))?;
         Ok(item.unwrap_or_default())
     });
@@ -531,7 +558,7 @@ fn install_tur_pkg(
     // fails and the prop resolves to absent). The set color wraps the
     // engine's Color opaque (the `FromValue for Brush` decode).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "rs_set_brush", (u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, color: u64| {
+    rut_vm::pkg_fn!(pkg, "store::rs_set_brush", (u64, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, atom: u64, color: u64| {
         let value = if color == 0 {
             crate::core::edgy::Value::Nil
         } else {
@@ -546,26 +573,26 @@ fn install_tur_pkg(
 
     // ---- parse helper -------------------------------------------------------
     // str -> f64 parse (0 on failure) — the edit-field confirm path.
-    rut_vm::pkg_fn!(pkg, "str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
+    rut_vm::pkg_fn!(pkg, "scalars::str_parse_f64", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
         Ok(s.trim().parse::<f64>().unwrap_or(0.0))
     });
     // Trig helpers (f64 radians in/out) — the pure-math rows. No instance
     // state, no reactivity: a case derives motion from them (the orbit /
     // wave shapes feed them a progress atom and format the result).
-    rut_vm::pkg_fn!(pkg, "math_sin", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+    rut_vm::pkg_fn!(pkg, "scalars::math_sin", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
         Ok(x.sin())
     });
-    rut_vm::pkg_fn!(pkg, "math_cos", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+    rut_vm::pkg_fn!(pkg, "scalars::math_cos", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
         Ok(x.cos())
     });
     // The kit wrappers' twin spellings — SAME bodies (see the decl note).
-    rut_vm::pkg_fn!(pkg, "str_parse_f64_raw", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
+    rut_vm::pkg_fn!(pkg, "scalars::str_parse_f64_raw", (&str,) -> f64, |_vm: &mut rut_vm::interp::Vm, s: &str| {
         Ok(s.trim().parse::<f64>().unwrap_or(0.0))
     });
-    rut_vm::pkg_fn!(pkg, "math_sin_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+    rut_vm::pkg_fn!(pkg, "scalars::math_sin_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
         Ok(x.sin())
     });
-    rut_vm::pkg_fn!(pkg, "math_cos_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
+    rut_vm::pkg_fn!(pkg, "scalars::math_cos_raw", (f64,) -> f64, |_vm: &mut rut_vm::interp::Vm, x: f64| {
         Ok(x.cos())
     });
 
@@ -1024,6 +1051,10 @@ impl RutRuntime {
             host_funcs.extend(ext_decl);
             consts.extend(ext_consts);
         }
+        // The exts' rows merged — re-mount the module tree so the
+        // plugins' families are reachable through their `pub mod`
+        // paths (`use tur_host::layout::flex::{ flex_build };`).
+        decl_gen::mount_host_tree(&mut tur_pkg);
         // The async weave (the Future machinery + the launch/sleep rows) —
         // offered to EVERY target: the decl surface lowers from the vendored
         // upstream `.d.rut` (wasm has no filesystem — the old disk-bound

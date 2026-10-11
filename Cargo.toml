@@ -67,6 +67,10 @@ rut-ast = { git = "https://github.com/hpp2334/rut", rev = "3b4d2ccda51c45263ceb9
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
 rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0" }
+# The native pkg-dir walker/loader (`load_path_session` — the REAL
+# discovery lane the tur_host decl-tree pin test loads the committed
+# tree through). Pinned to the same rev as the engine crates.
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0", default-features = false }
 
 
 num-derive = "0.4"

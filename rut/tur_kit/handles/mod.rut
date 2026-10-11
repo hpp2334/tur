@@ -1,11 +1,14 @@
 // handles — the nominal handles (View / the store + controller handles),
 // the mount door, and the shared value/math helpers.
 
-use tur_host::{
-  ctx_bridge, math_cos_raw, math_sin_raw, mount_raw, rs_list_new, rs_list_push, rs_map_new,
-  rs_map_set, rs_value_get, rs_value_item, rs_value_len, str_parse_f64_raw, tctrl_new,
-  tctrl_set_text, tctrl_text, undo_new, va_destroy, va_error, va_status, va_status_atom,
+use tur_host::{ mount_raw };
+use tur_host::ctx::{ ctx_bridge };
+use tur_host::scalars::{ math_cos_raw, math_sin_raw, str_parse_f64_raw };
+use tur_host::store::{
+  rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_value_get, rs_value_item, rs_value_len,
 };
+use tur_host::text::input::{ tctrl_new, tctrl_set_text, tctrl_text, undo_new };
+use tur_host::virtual_app::{ va_destroy, va_error, va_status, va_status_atom };
 
 // The async launch rail's typed surface (the `futures` package rides the
 // same run chain the kit compiles in).

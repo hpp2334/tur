@@ -1,10 +1,8 @@
 // reactive — the authored reactive face: the plain-fn derive rail and
 // the mutation rail (source / derive / mutate + the ctxs).
 
-use tur_host::{
-  ctx_bridge, ctx_get_box, ctx_run_box, ctx_set_box, derive_seal, mutate_seal, rs_box_stamp,
-  rs_source_box, rs_watch_mut, rs_watch_start, rs_watch_stop,
-};
+use tur_host::ctx::{ ctx_bridge, ctx_get_box, ctx_run_box, ctx_set_box, derive_seal, mutate_seal };
+use tur_host::store::{ rs_box_stamp, rs_source_box, rs_watch_mut, rs_watch_start, rs_watch_stop };
 
 // ---- reactive helpers (the C8 substrate's authored face) ------------------
 //

@@ -33,7 +33,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the image rows + `BoxFit` consts (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("image", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("img_res_bytes", vec![TY_BYTES], TY_U64),
@@ -70,7 +70,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // Decode + register an encoded image (PNG/JPEG) — the same decode +
     // upload rail the JS `createImageResource` bridge rides.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "img_res_bytes", (&[u8],) -> u64, move |_vm: &mut rut_vm::interp::Vm, bytes: &[u8]| {
+    rut_vm::pkg_fn!(pkg, "image::img_res_bytes", (&[u8],) -> u64, move |_vm: &mut rut_vm::interp::Vm, bytes: &[u8]| {
         let image = decode_image_bytes(bytes)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_bytes: decode failed (supported: PNG, JPEG)"))?;
         Ok(h.inst.register_image(image).as_u64())
@@ -78,7 +78,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // A solid w×h RGBA resource (fixture-friendly synthetic image).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "img_res_solid", (u64, u64, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, w: u64, hh: u64, color: u64| {
+    rut_vm::pkg_fn!(pkg, "image::img_res_solid", (u64, u64, u64) -> u64, move |_vm: &mut rut_vm::interp::Vm, w: u64, hh: u64, color: u64| {
         let (r, g, b, a) = (
             ((color >> 24) & 0xFF) as u8,
             ((color >> 16) & 0xFF) as u8,
@@ -99,14 +99,14 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // (the toolbar icons ride this): same worker-side raster + register
     // rail as `img_res_bytes`, the declared size crossing as metadata.
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "img_res_svg", (&str,) -> u64, move |_vm: &mut rut_vm::interp::Vm, svg: &str| {
+    rut_vm::pkg_fn!(pkg, "image::img_res_svg", (&str,) -> u64, move |_vm: &mut rut_vm::interp::Vm, svg: &str| {
         let image = decode_svg(svg)
             .ok_or_else(|| rut_vm::Trap::new(rut_vm::TrapKind::Invalid, "img_res_svg: rasterise failed"))?;
         Ok(h.inst.register_image(image).as_u64())
     });
 
     // ---- the image spec family ------------------------------------------
-    rut_vm::pkg_fn!(pkg, "img_new", (u64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, res: u64| {
+    rut_vm::pkg_fn!(pkg, "image::img_new", (u64,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, res: u64| {
         let spec = ImgSpec {
             resource_id: Some(Val::Static(ImageResourceRef(res))),
             width: None,
@@ -116,20 +116,20 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "img_width", (Opaque<ImgSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "image::img_width", (Opaque<ImgSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.width = (v > 0.0).then_some(Val::Static(v)))
     });
-    rut_vm::pkg_fn!(pkg, "img_height", (Opaque<ImgSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "image::img_height", (Opaque<ImgSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.height = (v > 0.0).then_some(Val::Static(v)))
     });
-    rut_vm::pkg_fn!(pkg, "img_fit", (Opaque<ImgSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "image::img_fit", (Opaque<ImgSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.fit = Some(Val::Static(box_fit_of(v))))
     });
-    rut_vm::pkg_fn!(pkg, "img_qkey", (Opaque<ImgSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "image::img_qkey", (Opaque<ImgSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "img_build", (Opaque<ImgSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>| {
+    rut_vm::pkg_fn!(pkg, "image::img_build", (Opaque<ImgSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<ImgSpec>| {
         let view = b.with(|s| {
             Rc::new(ImageView {
                 resource_id: s.resource_id.clone(),

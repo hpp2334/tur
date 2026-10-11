@@ -1,12 +1,12 @@
 // scroll — the scroll + lazy containers (ScrollView / LazyList /
 // LazyGrid).
 
-use tur_host::{
+use tur_host::scroll::{
   lazy_axis, lazy_build, lazy_builder, lazy_count, lazy_grid_aspect, lazy_grid_axis,
-  lazy_grid_build, lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent, lazy_grid_max_cross,
-  lazy_grid_new, lazy_grid_overscan, lazy_grid_qkey, lazy_grid_spacing, lazy_item_extent,
-  lazy_list_new, lazy_overscan, lazy_qkey, scroll_axis, scroll_build, scroll_child, scroll_new,
-  scroll_offset, scroll_qkey,
+  lazy_grid_build, lazy_grid_builder, lazy_grid_count, lazy_grid_item_extent,
+  lazy_grid_max_cross, lazy_grid_new, lazy_grid_overscan, lazy_grid_qkey, lazy_grid_spacing,
+  lazy_item_extent, lazy_list_new, lazy_overscan, lazy_qkey, scroll_axis, scroll_build,
+  scroll_child, scroll_new, scroll_offset, scroll_qkey,
 };
 
 // ---- scroll + lazy containers ----------------------------------------------

@@ -1,9 +1,11 @@
 // layout/stack — the stack families (Stack / Positioned).
 
-use tur_host::{
+use tur_host::layout::pos::{
   pos_bottom, pos_build, pos_child, pos_height, pos_left, pos_left_bound, pos_new, pos_right,
-  pos_top, pos_top_bound, pos_width, stack_align, stack_build, stack_child, stack_fit, stack_new,
-  stack_qkey,
+  pos_top, pos_top_bound, pos_width,
+};
+use tur_host::layout::stack::{
+  stack_align, stack_build, stack_child, stack_fit, stack_new, stack_qkey,
 };
 
 // ---- stack + positioned ---------------------------------------------------

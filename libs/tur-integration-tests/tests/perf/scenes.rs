@@ -92,7 +92,7 @@ pub fn static_tree(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ rs_get_f64, rs_set_f64, rs_source_f64 };
+use tur_host::store::{ rs_get_f64, rs_set_f64, rs_source_f64 };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::box::{ Container };
@@ -211,7 +211,7 @@ pub fn animated_opacity(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ rs_set_f64, rs_source_f64 };
+use tur_host::store::{ rs_set_f64, rs_source_f64 };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::box::{ Container };
@@ -286,7 +286,7 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
-use tur_host::{ tctrl_push_span };
+use tur_host::text::input::{ tctrl_push_span };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::scroll::{ ScrollView };

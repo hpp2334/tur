@@ -9,7 +9,7 @@ use tur_integration_tests::TurTestApp;
 /// Round-trip ASCII + Unicode through both rows, reading the answer back
 /// through a bound label (the rut corpus's standard probe).
 const ENCODE_RUT: &str = r#"
-use tur_host::{ decode_utf8, encode_utf8 };
+use tur_host::clipboard::{ decode_utf8, encode_utf8 };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::reactive::{ Source, source };

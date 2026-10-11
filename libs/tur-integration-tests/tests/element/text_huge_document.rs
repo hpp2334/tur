@@ -16,7 +16,7 @@ use tur_integration_tests::TurTestApp;
 
 /// 4000 lines ≈ 168 KiB of text — well past the 65 535-byte wrap.
 const HUGE_EDITOR: &str = r##"
-use tur_host::{ tctrl_push_span };
+use tur_host::text::input::{ tctrl_push_span };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::scroll::{ ScrollView };

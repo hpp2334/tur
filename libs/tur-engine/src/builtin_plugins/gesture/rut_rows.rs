@@ -38,45 +38,49 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 }
 
 /// Declare the gesture rows + flag consts (the installer's decl half).
+/// The families split across the tree's `gesture` domain: the pointer
+/// rows under `gesture/pointer`, the focus rows under `gesture/focus`
+/// (the path IS the registration spelling and the generated decl
+/// tree's file).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
-    let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+    let grow = |path: &str, n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
+        crate::core::rut_runtime::host_row_at(path, n, p, r, false)
     };
     cx.decl.extend(vec![
         // pointer interact
-        row("pi_new", vec![], TY_OPAQUE),
+        grow("gesture/pointer", "pi_new", vec![], TY_OPAQUE),
         // The M2 mutation surface: every pad stores SEALED mutations
         // (`mutate` / `mutate_ev` mint them); the dispatch enqueues the
         // invocation and the flush's mutation pass invokes the closure
         // with the ctx + the typed event (the plan's queued law). The
         // legacy fn-box rows (pi_on_tap / on_down / on_move / on_up and
         // the id / ids payload rails) died with the M2 corpus sweep.
-        row("pi_on_click", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_mut_down", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_mut_move", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_mut_up", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_on_context_menu", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("pi_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
-        row("pi_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
-        row("pi_build", vec![TY_OPAQUE], TY_OPAQUE),
+        grow("gesture/pointer", "pi_on_click", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_mut_down", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_mut_move", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_mut_up", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_on_context_menu", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "pi_qkey", vec![TY_OPAQUE, TY_STR], TY_NIL),
+        grow("gesture/pointer", "pi_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        grow("gesture/pointer", "pi_build", vec![TY_OPAQUE], TY_OPAQUE),
         // mouse region
-        row("mr_new", vec![], TY_OPAQUE),
-        row("mr_on_enter", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("mr_on_exit", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("mr_cursor", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("mr_cursor_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("mr_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("mr_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
-        row("mr_build", vec![TY_OPAQUE], TY_OPAQUE),
+        grow("gesture/pointer", "mr_new", vec![], TY_OPAQUE),
+        grow("gesture/pointer", "mr_on_enter", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "mr_on_exit", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "mr_cursor", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "mr_cursor_bound", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "mr_behavior", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/pointer", "mr_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        grow("gesture/pointer", "mr_build", vec![TY_OPAQUE], TY_OPAQUE),
         // focusable
-        row("focus_new", vec![], TY_OPAQUE),
-        row("focus_on_key_down", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("focus_on_focus", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("focus_on_blur", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("focus_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
-        row("focus_build", vec![TY_OPAQUE], TY_OPAQUE),
-        row("focus_request", vec![TY_U64], TY_NIL),
+        grow("gesture/focus", "focus_new", vec![], TY_OPAQUE),
+        grow("gesture/focus", "focus_on_key_down", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/focus", "focus_on_focus", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/focus", "focus_on_blur", vec![TY_OPAQUE, TY_U64], TY_NIL),
+        grow("gesture/focus", "focus_child", vec![TY_OPAQUE, TY_OPAQUE], TY_NIL),
+        grow("gesture/focus", "focus_build", vec![TY_OPAQUE], TY_OPAQUE),
+        grow("gesture/focus", "focus_request", vec![TY_U64], TY_NIL),
     ]);
     // (No flag consts: `HitTestBehavior` / `Cursor` are the kit's
     // name-only enums — the exhaustive `when` mappers in tur_kit are the
@@ -137,7 +141,7 @@ fn pad_mutation<E>(atom: u64) -> Option<MutationHandle<E>> {
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ---- pointer interact -------------------------------------------------
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "pi_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
         let spec = PiSpec {
             behavior: None,
@@ -154,38 +158,38 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // The mutation surface: each pad stores the SEALED mutation (the atom
     // id is the crossing — the closure the flush's mutation pass invokes
     // carries the kit adapter + the ctx wiring).
-    rut_vm::pkg_fn!(pkg, "pi_on_click", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_on_click", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
         let m = pad_mutation::<PointerInteractEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_click = m)
     });
-    rut_vm::pkg_fn!(pkg, "pi_mut_down", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_mut_down", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
         let m = pad_mutation::<PointerInteractEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_pointer_down = m)
     });
-    rut_vm::pkg_fn!(pkg, "pi_mut_move", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_mut_move", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
         let m = pad_mutation::<PointerInteractEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_pointer_move = m)
     });
-    rut_vm::pkg_fn!(pkg, "pi_mut_up", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_mut_up", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
         let m = pad_mutation::<PointerInteractEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_pointer_up = m)
     });
-    rut_vm::pkg_fn!(pkg, "pi_on_context_menu", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_on_context_menu", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, atom: u64| {
         let m = pad_mutation::<PointerInteractEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_context_menu = m)
     });
-    rut_vm::pkg_fn!(pkg, "pi_behavior", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_behavior", (Opaque<PiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.behavior = Some(Val::Static(behavior_of(v))))
     });
-    rut_vm::pkg_fn!(pkg, "pi_qkey", (Opaque<PiSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_qkey", (Opaque<PiSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, key: &str| {
         let key: Vec<String> = key.split('/').map(str::to_string).collect();
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "pi_child", (Opaque<PiSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_child", (Opaque<PiSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "pi_build", (Opaque<PiSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::pi_build", (Opaque<PiSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<PiSpec>| {
         let view = b.with(|s| {
             Rc::new(PointerInteractView {
                 behavior: s.behavior.clone(),
@@ -202,35 +206,35 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- mouse region -------------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "mr_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         let spec = MrSpec { behavior: None, cursor: None, on_enter: None, on_exit: None, child: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "mr_on_enter", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_on_enter", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
         let m = pad_mutation::<PointerRegionEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_enter = m)
     });
-    rut_vm::pkg_fn!(pkg, "mr_on_exit", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_on_exit", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
         let m = pad_mutation::<PointerRegionEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_exit = m)
     });
     // Static cursor (`0` = `Auto`).
-    rut_vm::pkg_fn!(pkg, "mr_cursor", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_cursor", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.cursor = Some(Val::Static(cursor_of(v))))
     });
     // Reactive cursor: resolved from a str atom each layout re-resolve
     // (`Cursor: FromValue` decodes the standard keyword).
-    rut_vm::pkg_fn!(pkg, "mr_cursor_bound", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_cursor_bound", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| s.cursor = Some(Val::Reactive(readable_of::<Cursor>(atom))))
     });
-    rut_vm::pkg_fn!(pkg, "mr_behavior", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_behavior", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.behavior = Some(Val::Static(behavior_of(v))))
     });
-    rut_vm::pkg_fn!(pkg, "mr_child", (Opaque<MrSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_child", (Opaque<MrSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "mr_build", (Opaque<MrSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>| {
+    rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_build", (Opaque<MrSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>| {
         let view = b.with(|s| {
             Rc::new(MouseRegionView {
                 behavior: s.behavior.clone(),
@@ -244,27 +248,27 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
 
     // ---- focusable ------------------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "focus_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_new", () -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm| {
         let spec = FocusSpec { on_key_down: None, on_focus: None, on_blur: None, child: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "focus_on_key_down", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_on_key_down", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
         let m = pad_mutation::<KeydownEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_key_down = m)
     });
-    rut_vm::pkg_fn!(pkg, "focus_on_focus", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_on_focus", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
         let m = pad_mutation::<FocusEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_focus = m)
     });
-    rut_vm::pkg_fn!(pkg, "focus_on_blur", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_on_blur", (Opaque<FocusSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, atom: u64| {
         let m = pad_mutation::<BlurEvent>(atom);
         b.with_mut(vm, |_vm, s| s.on_blur = m)
     });
-    rut_vm::pkg_fn!(pkg, "focus_child", (Opaque<FocusSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_child", (Opaque<FocusSpec>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         b.with_mut(vm, |_vm, s| s.child = Some(child))
     });
-    rut_vm::pkg_fn!(pkg, "focus_build", (Opaque<FocusSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_build", (Opaque<FocusSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<FocusSpec>| {
         let view = b.with(|s| {
             Rc::new(FocusableView {
                 on_key_down: s.on_key_down,
@@ -280,7 +284,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // Programmatic focus: the FocusChange flush resolves the on_focus /
     // on_blur mutations next frame (the `requestFocus` bridge's twin).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "focus_request", (u64,) -> (), move |_vm: &mut rut_vm::interp::Vm, node: u64| {
+    rut_vm::pkg_fn!(pkg, "gesture::focus::focus_request", (u64,) -> (), move |_vm: &mut rut_vm::interp::Vm, node: u64| {
         h.focus_manager
             .borrow_mut()
             .set_focus(crate::core::element::ElementNodeId::new(node));

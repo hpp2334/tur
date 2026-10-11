@@ -1,29 +1,34 @@
-//! The `tur_host` decl-surface pin + the kit tree pin.
+//! The `tur_host` decl-TREE pin + the kit tree pin.
 //!
 //! Three artifacts are pinned here against the LIVE engine session:
 //!
-//! 1. `rut/tur_host/tur_host.d.rut` — the GENERATED snapshot of the
-//!    standard session's merged `tur_host` surface (`tur_decl_pkg()` +
-//!    every plugin's RutPkgExt rows). The Rust rows stay the compile
-//!    truth; this test rebuilds the text and diffs it — drift fails the
-//!    suite until the snapshot is deliberately regenerated (bless mode:
-//!    `TUR_BLESS_TUR_HOST_DECL=1`). The snapshot must also keep lowering
-//!    as a decl module whose row set is EXACTLY the live one.
+//! 1. `rut/tur_host/` — the GENERATED decl MODULE TREE of the standard
+//!    session's merged `tur_host` surface (`tur_decl_pkg()` + every
+//!    plugin's RutPkgExt rows): a `mod.d.rut` root (the auto-discovered
+//!    default root beside the manifest — the manifest spells no
+//!    `entry`) plus one `NAME/mod.d.rut` per module, recursive
+//!    (`layout/flex/mod.d.rut` nests under `layout`). The Rust rows
+//!    stay the compile truth; this test rebuilds the file set and diffs
+//!    it — drift fails the suite until the tree is deliberately
+//!    regenerated (bless mode: `TUR_BLESS_TUR_HOST_DECL=1`). The
+//!    committed tree must also load through the driver's REAL discovery
+//!    lane with a row set EXACTLY the live one (paths included).
 //! 2. `rut/tur_kit/rut.jsonc` — the kit manifest parses with NO repealed
 //!    entry keys (the root module is the walk's `mod.rut`), and the
 //!    kit's FILE-MODULE TREE on disk (every directory's `mod.rut`) is
 //!    byte-identical to the engine's embedded `Pkg.mods` tree.
 //! 3. `rut/tur_host/rut.jsonc` — the host pkg's manifest must declare
-//!    `type = "host"` and the snapshot as its `entry.type`.
+//!    `type = "host"` and NO `entry` (the `mod.d.rut` root is the
+//!    default).
 
 use std::path::{Path, PathBuf};
 
 use rut_driver::bundle::{PkgType, parse_manifest};
-use rut_driver::{PkgBody, lower_decl_module};
+use rut_driver::PkgBody;
 use tur_animation::TurAnimationPlugin;
 use tur_engine::core::capability::Capabilities;
 use tur_engine::core::plugin::Plugin;
-use tur_engine::core::rut_runtime::{render_tur_host_decl, tur_host_surface};
+use tur_engine::core::rut_runtime::{render_tur_host_decl_tree, tur_host_surface};
 use tur_engine::core::runtime::probe_register_rut_pkg_exts;
 use tur_engine::{TurClipboardPlugin, TurStdPlugin};
 use tur_integration_tests::{RecordingClipboard, RecordingHttp};
@@ -60,48 +65,138 @@ fn standard_capabilities() -> Capabilities {
     caps
 }
 
-fn live_surface_text() -> String {
-    let exts = probe_register_rut_pkg_exts(
+fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {
+    probe_register_rut_pkg_exts(
         &standard_plugins(),
         standard_capabilities(),
         (400.0, 600.0),
     )
-    .expect("the standard session's register probe");
-    assert!(
-        exts.len() >= 10,
-        "the standard session should push every family's ext, got {}",
-        exts.len()
-    );
-    render_tur_host_decl(&exts)
+    .expect("the standard session's register probe")
 }
 
 #[test]
-fn tur_host_decl_snapshot_matches_the_standard_session() {
-    let live = live_surface_text();
-    let snapshot = workspace_root().join("rut/tur_host/tur_host.d.rut");
+fn tur_host_decl_tree_matches_the_standard_session() {
+    let live = render_tur_host_decl_tree(&probe_exts());
+    assert!(
+        live.len() > 10,
+        "the tree renderer answered {} files — the pkg is a MODULE TREE",
+        live.len()
+    );
+    let pkg_dir = workspace_root().join("rut/tur_host");
     if std::env::var("TUR_BLESS_TUR_HOST_DECL").is_ok() {
-        std::fs::write(&snapshot, &live).expect("bless: write the snapshot");
-        eprintln!("blessed {}", snapshot.display());
+        for (rel, text) in &live {
+            let path = pkg_dir.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).expect("bless: mkdir");
+            std::fs::write(&path, text).expect("bless: write the module file");
+            eprintln!("blessed {}", path.display());
+        }
+        // Stale generated files out: any `.d.rut` NOT in the current set
+        // goes (the old flat `tur_host.d.rut`, a renamed module's file).
+        // rut.jsonc is never touched.
+        let live_set: std::collections::BTreeSet<String> =
+            live.iter().map(|(rel, _)| rel.clone()).collect();
+        fn walk(
+            dir: &Path,
+            rel: &str,
+            live_set: &std::collections::BTreeSet<String>,
+            stale: &mut Vec<PathBuf>,
+        ) {
+            for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let child_rel = if rel.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{rel}/{name}")
+                };
+                if entry.path().is_dir() {
+                    walk(&entry.path(), &child_rel, live_set, stale);
+                } else if name.ends_with(".d.rut") && !live_set.contains(&child_rel) {
+                    stale.push(entry.path());
+                }
+            }
+        }
+        let mut stale = Vec::new();
+        walk(&pkg_dir, "", &live_set, &mut stale);
+        for path in stale {
+            std::fs::remove_file(&path).expect("bless: remove the stale generated file");
+            eprintln!("removed stale {}", path.display());
+        }
         return;
     }
-    let committed = std::fs::read_to_string(&snapshot)
-        .expect("rut/tur_host/tur_host.d.rut is committed (see the test header)");
-    assert!(
-        committed == live,
-        "the committed tur_host.d.rut drifted from the Rust rows — regenerate \
-         deliberately: TUR_BLESS_TUR_HOST_DECL=1 cargo nextest run -p \
-         tur-integration-tests tur_host_decl"
-    );
 
-    // The snapshot keeps lowering as a decl module whose row set is
-    // EXACTLY the live surface (name + arity + types + async lane).
-    let lowered = lower_decl_module(&committed, &std::collections::BTreeMap::new(), "tur_host.d.rut")
-        .expect("the committed snapshot parses as a decl surface");
-    let PkgBody::Host { host_funcs, .. } = lowered.body else {
-        panic!("lower_decl_module answered a non-host pkg");
+    // The disk walk: every directory under rut/tur_host carries a
+    // mod.d.rut (rut.jsonc beside the root only); the walked set
+    // {rel path → bytes} is EXACTLY the renderer's file set.
+    let mut disk: std::collections::BTreeMap<String, String> = Default::default();
+    fn walk_dir(dir: &Path, rel: &str, disk: &mut std::collections::BTreeMap<String, String>) {
+        let mod_d = dir.join("mod.d.rut");
+        assert!(
+            mod_d.is_file(),
+            "{} must carry mod.d.rut (one directory, one decl module)",
+            dir.display()
+        );
+        // the key is the renderer's rel path (`mod.d.rut` at the root,
+        // `NAME/mod.d.rut` under it)
+        let key = if rel.is_empty() {
+            "mod.d.rut".to_string()
+        } else {
+            format!("{rel}/mod.d.rut")
+        };
+        disk.insert(key, std::fs::read_to_string(&mod_d).expect("read mod.d.rut"));
+        for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if entry.path().is_dir() {
+                let child = if rel.is_empty() {
+                    name
+                } else {
+                    format!("{rel}/{name}")
+                };
+                walk_dir(&entry.path(), &child, disk);
+            } else {
+                assert!(
+                    name == "mod.d.rut" || name == "rut.jsonc",
+                    "unexpected file {} under rut/tur_host — the tree carries \
+                     only mod.d.rut files + the manifest (a stray generated \
+                     file is a bless-mode miss)",
+                    entry.path().display()
+                );
+            }
+        }
+    }
+    walk_dir(&pkg_dir, "", &mut disk);
+    let live_map: std::collections::BTreeMap<String, String> = live
+        .iter()
+        .map(|(rel, text)| (rel.clone(), text.clone()))
+        .collect();
+    assert_eq!(
+        disk.len(),
+        live_map.len(),
+        "module-count drift between rut/tur_host and the renderer: disk \
+         {:?} vs live {:?}",
+        disk.keys().collect::<Vec<_>>(),
+        live_map.keys().collect::<Vec<_>>()
+    );
+    for (rel, text) in &disk {
+        assert_eq!(
+            live_map.get(rel).map(String::as_str),
+            Some(text.as_str()),
+            "rut/tur_host/{rel} drifted from the Rust rows — regenerate \
+             deliberately: TUR_BLESS_TUR_HOST_DECL=1 cargo nextest run -p \
+             tur-integration-tests tur_host_decl"
+        );
+    }
+
+    // The committed tree keeps LOWERING with a row set EXACTLY the live
+    // surface (path + name + arity + types + async lane) — through the
+    // driver's REAL discovery lane (a directory walk, the same mount the
+    // playground's on-disk pkgs ride).
+    let session = rut_native::load_path_session(&pkg_dir)
+        .expect("the committed tur_host tree loads through the real walk");
+    let mounted = session.pkg("tur_host").expect("the tur_host pkg mounts");
+    let PkgBody::Host { host_funcs, .. } = &mounted.body else {
+        panic!("the loaded tur_host pkg answered a non-host body");
     };
-    let (live_rows, live_consts) =
-        tur_host_surface(&probe_exts());
+    let (live_rows, live_consts) = tur_host_surface(&probe_exts());
     assert!(
         live_consts.is_empty(),
         "the standard session grew const rows — the surface grammar has no \
@@ -110,23 +205,23 @@ fn tur_host_decl_snapshot_matches_the_standard_session() {
     assert_eq!(
         host_funcs.len(),
         live_rows.len(),
-        "row-count drift between the snapshot and the live surface"
+        "row-count drift between the committed tree and the live surface"
     );
-    for (row, lrow) in host_funcs.iter().zip(live_rows.iter()) {
-        assert_eq!(row.name, lrow.name, "row order/name drift");
-        assert_eq!(row.params, lrow.params, "param drift on `{}`", row.name);
-        assert_eq!(row.ret, lrow.ret, "return drift on `{}`", row.name);
-        assert_eq!(row.is_async, lrow.is_async, "async drift on `{}`", row.name);
+    let key = |r: &rut_driver::HostRow| format!("{}/{}", r.path, r.name);
+    let mounted_by_key: std::collections::BTreeMap<String, &rut_driver::HostRow> =
+        host_funcs.iter().map(|r| (key(r), r)).collect();
+    for lrow in &live_rows {
+        let row = mounted_by_key.get(&key(lrow)).unwrap_or_else(|| {
+            panic!(
+                "the committed tree is missing the live row `{}` (path `{}`)",
+                lrow.name, lrow.path
+            )
+        });
+        assert_eq!(row.path, lrow.path, "module-path drift on `{}`", lrow.name);
+        assert_eq!(row.params, lrow.params, "param drift on `{}`", lrow.name);
+        assert_eq!(row.ret, lrow.ret, "return drift on `{}`", lrow.name);
+        assert_eq!(row.is_async, lrow.is_async, "async drift on `{}`", lrow.name);
     }
-}
-
-fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {
-    probe_register_rut_pkg_exts(
-        &standard_plugins(),
-        standard_capabilities(),
-        (400.0, 600.0),
-    )
-    .expect("the standard session's register probe")
 }
 
 #[test]
@@ -207,24 +302,22 @@ fn kit_tree_matches_the_embed() {
 }
 
 #[test]
-fn tur_host_manifest_declares_the_snapshot() {
-    let manifest_text =
-        std::fs::read_to_string(workspace_root().join("rut/tur_host/rut.jsonc")).unwrap();
+fn tur_host_manifest_declares_the_tree() {
+    let pkg_dir = workspace_root().join("rut/tur_host");
+    let manifest_text = std::fs::read_to_string(pkg_dir.join("rut.jsonc")).unwrap();
     let manifest = parse_manifest(&manifest_text).expect("the tur_host manifest parses");
     assert_eq!(manifest.name.as_deref(), Some("tur_host"));
     assert!(
         matches!(manifest.pkg_type, PkgType::Host),
         "tur_host declares type = \"host\" (the kind is never inferred)"
     );
-    assert_eq!(
-        manifest.entry.type_path.as_deref(),
-        Some("./tur_host.d.rut"),
-        "the decl surface IS the generated, test-pinned snapshot"
+    assert!(
+        manifest.entry.type_path.is_none(),
+        "the tur_host manifest spells NO entry — `mod.d.rut` beside the \
+         manifest is the auto-discovered default root (lib parity)"
     );
     assert!(
-        workspace_root()
-            .join("rut/tur_host/tur_host.d.rut")
-            .is_file(),
-        "the declared snapshot exists"
+        pkg_dir.join("mod.d.rut").is_file(),
+        "the default root surface exists"
     );
 }

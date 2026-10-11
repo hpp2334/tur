@@ -36,7 +36,7 @@ pub fn install(
     manager: Rc<std::cell::RefCell<crate::manager::AnimationManager>>,
 ) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        tur_engine::core::rut_runtime::host_row_at("anim", n, p, r, false)
     };
     cx.decl.extend(vec![
         row("el_opacity", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),
@@ -115,7 +115,7 @@ pub fn install(
     };
 
     // ---- effect rows -----------------------------------------------------
-    rut_vm::pkg_fn!(pkg, "el_opacity", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, value: f64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_opacity", (f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, value: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(OpacityView::new_rut(
             Some(tur_engine::core::view::Val::Static(value as f32)),
@@ -124,7 +124,7 @@ pub fn install(
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
     // An opacity bound to an f64 atom — the onTick rail's consumer.
-    rut_vm::pkg_fn!(pkg, "el_opacity_bound", (u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, atom: u64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_opacity_bound", (u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, atom: u64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(OpacityView::new_rut(
             Some(tur_engine::core::view::Val::Reactive(readable_of::<f32>(atom))),
@@ -132,7 +132,7 @@ pub fn install(
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "el_transform", (f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_transform", (f64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Static(scale)),
@@ -146,7 +146,7 @@ pub fn install(
     // The bound twins (`Val::Reactive` on the bound channel — the
     // `el_opacity_bound` law): the element subscribes the atom, layout
     // re-resolves `painting`, and the subtree never re-mounts.
-    rut_vm::pkg_fn!(pkg, "el_transform_angle_bound", (f64, u64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate_atom: u64, tx: f64, ty: f64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_transform_angle_bound", (f64, u64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate_atom: u64, tx: f64, ty: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Static(scale)),
@@ -157,7 +157,7 @@ pub fn install(
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "el_transform_scale_bound", (u64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale_atom: u64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_transform_scale_bound", (u64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale_atom: u64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(scale_atom))),
@@ -168,7 +168,7 @@ pub fn install(
         ));
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
-    rut_vm::pkg_fn!(pkg, "el_transform_translate_bound", (f64, f64, u64, u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate: f64, tx_atom: u64, ty_atom: u64, child: Opaque<RutView>| {
+    rut_vm::pkg_fn!(pkg, "anim::el_transform_translate_bound", (f64, f64, u64, u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate: f64, tx_atom: u64, ty_atom: u64, child: Opaque<RutView>| {
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Static(scale)),
@@ -186,7 +186,7 @@ pub fn install(
     // progress; the flush's mutation pass invokes the kit-sealed closure
     // with the ctx (the tick fn's `(ctx, v: f64)` crossing).
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_ctrl_mut", (f64, &str, u64, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, duration_ms: f64, curve: &str, repeat: u64, on_tick: u64, on_end: u64| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_ctrl_mut", (f64, &str, u64, u64, u64) -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm, duration_ms: f64, curve: &str, repeat: u64, on_tick: u64, on_end: u64| {
         let mut ctrl = AnimationController::new(duration_ms.max(1.0) as u64, curve_of(curve));
         ctrl.set_repeat_mode(repeat_of(repeat));
         if on_tick != 0 {
@@ -209,7 +209,7 @@ pub fn install(
     //      manager; the RefCell borrow never spans the register) ----------
     let h = handles.clone();
     let reg = register_into.clone();
-    rut_vm::pkg_fn!(pkg, "anim_forward", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_forward", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().forward_at(now);
@@ -218,7 +218,7 @@ pub fn install(
     });
     let h = handles.clone();
     let reg = register_into.clone();
-    rut_vm::pkg_fn!(pkg, "anim_reverse", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_reverse", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().reverse_at(now);
@@ -226,7 +226,7 @@ pub fn install(
         Ok(())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_pause", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_pause", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().pause_at(now);
@@ -234,7 +234,7 @@ pub fn install(
     });
     let h = handles.clone();
     let reg = register_into.clone();
-    rut_vm::pkg_fn!(pkg, "anim_resume", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_resume", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         let active = {
@@ -247,31 +247,31 @@ pub fn install(
         }
         Ok(())
     });
-    rut_vm::pkg_fn!(pkg, "anim_stop", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_stop", (Opaque<RutAnimCtrl>,) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().stop_now();
         Ok(())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_seek", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_seek", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, t: f64| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().seek_to(t, now);
         Ok(())
     });
-    rut_vm::pkg_fn!(pkg, "anim_value", (Opaque<RutAnimCtrl>,) -> f64, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_value", (Opaque<RutAnimCtrl>,) -> f64, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         c.with(|c| Ok(c.0.borrow().value()))?
     });
-    rut_vm::pkg_fn!(pkg, "anim_status", (Opaque<RutAnimCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_status", (Opaque<RutAnimCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>| {
         c.with(|c| Ok(c.0.borrow().status_name().to_string()))?
     });
-    rut_vm::pkg_fn!(pkg, "anim_repeat", (Opaque<RutAnimCtrl>, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, repeat: u64| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_repeat", (Opaque<RutAnimCtrl>, u64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, repeat: u64| {
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().set_repeat_mode(repeat_of(repeat));
         Ok(())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "anim_speed", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, speed: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::anim_speed", (Opaque<RutAnimCtrl>, f64) -> (), move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutAnimCtrl>, speed: f64| {
         let now = h.clock.now_millis() as u64;
         let rc = c.with(|c| c.0.clone())?;
         rc.borrow_mut().set_speed_to(speed, now);
@@ -279,16 +279,16 @@ pub fn install(
     });
 
     // ---- tween + curve helpers (pure math) ------------------------------
-    rut_vm::pkg_fn!(pkg, "tween_lerp", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::tween_lerp", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
         Ok(NumTween::new(begin, end).lerp(t))
     });
     // The kit wrappers' twin spellings — SAME bodies (see the decl note).
-    rut_vm::pkg_fn!(pkg, "tween_lerp_raw", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::tween_lerp_raw", (f64, f64, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, begin: f64, end: f64, t: f64| {
         Ok(NumTween::new(begin, end).lerp(t))
     });
     // Component-wise u8 lerp — the same math as `Color::lerp` (the
     // `ColorTween` payload), over the packed 0xRRGGBBAA crossing form.
-    rut_vm::pkg_fn!(pkg, "color_tween_lerp", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::color_tween_lerp", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
         let t = t.clamp(0.0, 1.0);
         let ch = |x: u64, y: u64| -> u64 {
             if t == 0.0 {
@@ -309,7 +309,7 @@ pub fn install(
         Ok(mix(begin, end))
     });
     // The kit wrappers' twin spelling — SAME body (see the decl note).
-    rut_vm::pkg_fn!(pkg, "color_tween_lerp_raw", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::color_tween_lerp_raw", (u64, u64, f64) -> u64, |_vm: &mut rut_vm::interp::Vm, begin: u64, end: u64, t: f64| {
         let t = t.clamp(0.0, 1.0);
         let ch = |x: u64, y: u64| -> u64 {
             if t == 0.0 {
@@ -329,10 +329,10 @@ pub fn install(
         };
         Ok(mix(begin, end))
     });
-    rut_vm::pkg_fn!(pkg, "curve_eval_raw", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::curve_eval_raw", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
         Ok(curve_of(curve).transform(t))
     });
-    rut_vm::pkg_fn!(pkg, "curve_eval", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
+    rut_vm::pkg_fn!(pkg, "anim::curve_eval", (&str, f64) -> f64, |_vm: &mut rut_vm::interp::Vm, curve: &str, t: f64| {
         Ok(curve_of(curve).transform(t))
     });
 }

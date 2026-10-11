@@ -1,6 +1,6 @@
 // control_flow/lifecycle — the lifecycle family (Lifecycle).
 
-use tur_host::{
+use tur_host::control_flow::lifecycle::{
   lc_before_destroy, lc_build, lc_child, lc_new, lc_on_mount,
 };
 

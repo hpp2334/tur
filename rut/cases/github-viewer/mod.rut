@@ -34,7 +34,7 @@ use futures::launch_future;
 // single-name form, a second use line — still collapses kit-fn
 // resolution). Migrate to `tur_net_kit::net_request` (the wrapper exists)
 // at the next rut bump.
-use tur_host::{ net_request };
+use tur_host::net::{ net_request };
 use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAlign, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };

@@ -2606,6 +2606,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rut-native"
+version = "0.1.0"
+source = "git+https://github.com/hpp2334/rut?rev=3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0#3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0"
+dependencies = [
+ "rut-core",
+ "rut-driver",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "rut-parser"
 version = "0.1.0"
 source = "git+https://github.com/hpp2334/rut?rev=3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0#3b4d2ccda51c45263ceb9f87c8b9e04302fb48c0"
@@ -3408,6 +3418,7 @@ dependencies = [
  "raw-window-handle",
  "rut-ast",
  "rut-driver",
+ "rut-native",
  "thiserror 2.0.18",
  "tokio",
  "tur-animation",

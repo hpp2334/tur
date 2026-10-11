@@ -26,7 +26,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the lazy rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        rut_driver::HostRow::root(n, p, r, false)
+        crate::core::rut_runtime::host_row_at("scroll", n, p, r, false)
     };
     cx.decl.extend(vec![
         // lazy list
@@ -91,34 +91,34 @@ fn qkey_of(key: &str) -> Vec<String> {
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // ---- lazy list ---------------------------------------------------------
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_list_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_list_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
         let spec = LazyListSpec { builder: None, count: None, axis: None, overscan: None, item_extent: None, query_key: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_builder", (Opaque<LazyListSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_builder", (Opaque<LazyListSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, cb: OpaqueRef| {
         let _ = vm;
         let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_count", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_count", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| s.count = Some(Val::Reactive(readable_of::<u64>(atom))))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_axis", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_axis", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.axis = Some(axis_of(v)))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_overscan", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_overscan", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.overscan = Some(v))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_item_extent", (Opaque<LazyListSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_item_extent", (Opaque<LazyListSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.item_extent = if v > 0.0 { Some(v) } else { None })
     });
-    rut_vm::pkg_fn!(pkg, "lazy_qkey", (Opaque<LazyListSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_qkey", (Opaque<LazyListSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, key: &str| {
         let key = qkey_of(key);
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_build", (Opaque<LazyListSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_build", (Opaque<LazyListSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>| {
         let view = b.with(|s| {
             Rc::new(LazyListView::new_rut(
                 s.builder.clone().expect("lazy_build: no item builder"),
@@ -134,50 +134,50 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     // ---- lazy grid ----------------------------------------------------------
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_grid_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_new", () -> rut_vm::OpaqueRef, move |vm: &mut rut_vm::interp::Vm| {
         let _ = &h;
         let spec = LazyGridSpec { builder: None, count: None, axis: None, overscan: None, max_cross: None, aspect: None, item_extent: None, cross_spacing: None, main_spacing: None, query_key: None };
         Ok(Opaque::alloc(vm, spec)?.handle().clone())
     });
     let h = handles.clone();
-    rut_vm::pkg_fn!(pkg, "lazy_grid_builder", (Opaque<LazyGridSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cb: OpaqueRef| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_builder", (Opaque<LazyGridSpec>, OpaqueRef) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cb: OpaqueRef| {
         let _ = vm;
         let entry = RutEntryBuilder { cb, face: h.face.clone(), handles: h.clone() };
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_count", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, atom: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_count", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, atom: u64| {
         b.with_mut(vm, |_vm, s| s.count = Some(Val::Reactive(readable_of::<u64>(atom))))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_axis", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_axis", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.axis = Some(axis_of(v)))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_overscan", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: u64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_overscan", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: u64| {
         b.with_mut(vm, |_vm, s| s.overscan = Some(v))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_max_cross", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_max_cross", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.max_cross = Some(v))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_aspect", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_aspect", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.aspect = if v > 0.0 { Some(v) } else { None })
     });
     // lazy_grid_item_extent — the FIXED main-axis cell extent (the boa
     // `mainAxisExtent`): overrides the aspect math (cell_main = extent).
-    rut_vm::pkg_fn!(pkg, "lazy_grid_item_extent", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_item_extent", (Opaque<LazyGridSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: f64| {
         b.with_mut(vm, |_vm, s| s.item_extent = if v > 0.0 { Some(v) } else { None })
     });
     // lazy_grid_spacing — the cross/main cell gaps (the boa
     // `crossAxisSpacing` / `mainAxisSpacing` pair).
-    rut_vm::pkg_fn!(pkg, "lazy_grid_spacing", (Opaque<LazyGridSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cross: f64, main: f64| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_spacing", (Opaque<LazyGridSpec>, f64, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, cross: f64, main: f64| {
         b.with_mut(vm, |_vm, s| {
             s.cross_spacing = if cross > 0.0 { Some(cross) } else { None };
             s.main_spacing = if main > 0.0 { Some(main) } else { None };
         })
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_qkey", (Opaque<LazyGridSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, key: &str| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_qkey", (Opaque<LazyGridSpec>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, key: &str| {
         let key = qkey_of(key);
         b.with_mut(vm, |_vm, s| s.query_key = Some(key))
     });
-    rut_vm::pkg_fn!(pkg, "lazy_grid_build", (Opaque<LazyGridSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>| {
+    rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_build", (Opaque<LazyGridSpec>,) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>| {
         let view = b.with(|s| {
             Rc::new(LazyGridView::new_rut(
                 s.builder.clone().expect("lazy_grid_build: no item builder"),
