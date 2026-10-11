@@ -981,6 +981,20 @@ fn run_case(ctx: MutationCtx, cx: AppContext) {
 fn do_run(ctx: MutationCtx, mut cx: AppContext) {
     let src = cx.ctrl.text();
 
+    // The multi-file rail: stage the selected case's declared mod children
+    // (pg_files_put accumulates; pg_compile consumes the staged set with
+    // the editor text as the root — file 0 never stages, the root rides
+    // the argument). A root-only case (or a cleared selection) stages
+    // nothing — the historical single-string compile.
+    let name = ctx.get<str>(cx.selected);
+    let n = pg_case_file_count(name);
+    let mut i: u64 = 1;
+    while (i < n) {
+        let p = pg_case_file_path(name, i);
+        pg_files_put(p, pg_case_file_source(name, p));
+        i = i + 1;
+    }
+
     let id = pg_compile(src);
     if (id == 0) {
         let diags = pg_compile_diags();
