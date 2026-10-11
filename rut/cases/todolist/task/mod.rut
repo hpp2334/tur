@@ -1,0 +1,182 @@
+// task — the task-card pieces: the row (card + gutter), the done
+// checkbox, the title/subtitle block, the X delete button, and the
+// header's New Task pill. The palette + icons live in theme/, the list
+// writes in data/.
+
+use tur_kit::flags::{ Align, BorderPosition, CrossAlign, Cursor, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ View };
+use tur_kit::image::{ Image };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, mutate };
+use tur_kit::text::core::{ Text };
+
+// The indigo New Task pill (plus glyph + label); its mutation opens the
+// add modal.
+pub fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
+    let b_open = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(add_open, true);
+    });
+    let face = Container()
+        .padding(10.0)
+        .radius(8.0)
+        .color(theme::ACCENT)
+        .shadow(0x4F46E550u64, 10.0, 0.0, 4.0)
+        .child(
+            Row()
+                .main_axis_size(MainAxisSize::Min)
+                .cross_alignment(CrossAlign::Center)
+                .child(icon(ico[2], 13.0))
+                .child(SizedBox(7.0, 0.0).build())
+                .child(Text().text("New Task").font_size(13.0).color(theme::ACCENT_FG).build())
+                .build(),
+        )
+        .build();
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_open)
+                .query_key("todo-add-open")
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// An SVG icon at a display size (the resource id rides by param).
+fn icon(res: u64, size: f64) -> View {
+    return Image(res).width(size).height(size).build();
+}
+
+// ---- the task card ---------------------------------------------------------------
+
+// The row-card entry (root-composed per Each item). The tasks/n/done
+// handles stay CONCRETE-annotated (`Source<T>`) — they flow into the
+// data/ journeys as plain cross-module params (the write-origin law);
+// rm_tgt/rm_open only cross as closure captures (Readable carries them).
+pub fn task_row(i: u64, s: str, tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
+            rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let title = data::item_title(s);
+    let desc = data::item_desc(s);
+    let is_done = data::item_done(s);
+    let card = Container()
+        .radius(10.0)
+        .padding(14.0)
+        .color(theme::CARD_BG)
+        .border(theme::CARD_BORDER, 1.0, BorderPosition::Inside)
+        .shadow(0x0F172A14u64, 6.0, 0.0, 1.0)
+        .child(
+            Row()
+                .cross_alignment(CrossAlign::Start)
+                .child(checkbox(i, is_done, tasks, n, done, ico))
+                .child(SizedBox(12.0, 0.0).build())
+                .child(Expanded().flex(1.0).child(title_block(title, desc, is_done)).build())
+                .child(SizedBox(8.0, 0.0).build())
+                .child(delete_button(i, rm_tgt, rm_open, ico))
+                .build(),
+        )
+        .build();
+    return Column()
+        .cross_alignment(CrossAlign::Stretch)
+        .main_axis_size(MainAxisSize::Min)
+        .child(row_spacer(i))
+        .child(card)
+        .build();
+}
+
+// The 10px gutter between cards (none above the first).
+fn row_spacer(i: u64) -> View {
+    if (i > 0) {
+        return SizedBox(0.0, 10.0).build();
+    }
+    return SizedBox(0.0, 0.0).build();
+}
+
+// The done toggle: a 20px rounded box — green with a check when done, a
+// bordered empty square otherwise. The tap captures the row index.
+fn checkbox(i: u64, done: bool, tasks: Source<opaque>, n: Source<f64>,
+        done_count: Source<f64>, ico: [u64]) -> View {
+    let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
+        data::toggle_task(ctx, tasks, i);
+        data::recount(ctx, tasks, n, done_count);
+    });
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_toggle)
+                .query_key("todo-check")
+                .child(checkbox_face(done, ico))
+                .build(),
+        )
+        .build();
+}
+
+fn checkbox_face(done: bool, ico: [u64]) -> View {
+    if (done) {
+        return Container()
+            .width_height(20.0, 20.0)
+            .radius(6.0)
+            .color(theme::SUCCESS)
+            .alignment(Align::Center)
+            .child(icon(ico[0], 13.0))
+            .build();
+    }
+    return Container()
+        .width_height(20.0, 20.0)
+        .radius(6.0)
+        .color(theme::CARD_BG)
+        .border(theme::INPUT_BORDER, 1.5, BorderPosition::Inside)
+        .build();
+}
+
+// The title + optional subtitle; done tasks mute the title.
+fn title_block(title: str, desc: str, done: bool) -> View {
+    let mut fg = theme::TEXT;
+    if (done) {
+        fg = theme::TEXT_STRIKE;
+    }
+    let t = Text().text(title).font_size(14.0).color(fg).build();
+    if (desc == "") {
+        return Column()
+            .cross_alignment(CrossAlign::Start)
+            .main_axis_size(MainAxisSize::Min)
+            .child(t)
+            .build();
+    }
+    return Column()
+        .cross_alignment(CrossAlign::Start)
+        .main_axis_size(MainAxisSize::Min)
+        .child(t)
+        .child(SizedBox(0.0, 3.0).build())
+        .child(Text().text(desc).font_size(12.0).color(theme::TEXT_MUTED).build())
+        .build();
+}
+
+// The X button (opens the remove-confirm modal for this row — the index
+// rides the capture).
+fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let b_rm = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<f64>(rm_tgt, i as f64);
+        ctx.set<bool>(rm_open, true);
+    });
+    let face = Container()
+        .width_height(26.0, 26.0)
+        .radius(6.0)
+        .color(theme::SUBTLE)
+        .alignment(Align::Center)
+        .child(icon(ico[1], 13.0))
+        .build();
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_rm)
+                .query_key("todo-delete")
+                .child(face)
+                .build(),
+        )
+        .build();
+}
