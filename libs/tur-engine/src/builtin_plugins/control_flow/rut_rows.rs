@@ -21,7 +21,7 @@ use crate::builtin_plugins::control_flow::each::{EachBuilder, EachView};
 use crate::builtin_plugins::control_flow::{ConditionView, FragmentView, SwitchView};
 use crate::core::edgy::reactive::{AnyReadable, AtomId, Derived, Readable, Source};
 use crate::core::edgy::value::Value;
-use crate::core::rut_runtime::{RutHandles, RutView, readable_of};
+use crate::core::rut_runtime::{RutHandles, RutView, guard_atom_lane, readable_of};
 use crate::core::view::Val;
 
 use rut_vm::{Opaque, OpaqueRef};
@@ -163,6 +163,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         Ok(Opaque::alloc(vm, view)?.handle().clone())
     });
     rut_vm::pkg_fn!(pkg, "control_flow::control::switch_value_source", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
+        guard_atom_lane(atom, "control_flow::control::switch_value_source")?;
         b.with_mut(vm, |_vm, s| {
             s.set_value(Val::Reactive(Readable::Source(
                 Source::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(AtomId(atom as u32)),
@@ -171,6 +172,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     // The derived-value twin: the switch reads a Derived<SwitchKey> atom.
     rut_vm::pkg_fn!(pkg, "control_flow::control::switch_value_derived", (Opaque<SwitchView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<SwitchView>, atom: u64| {
+        guard_atom_lane(atom, "control_flow::control::switch_value_derived")?;
         b.with_mut(vm, |_vm, s| {
             s.set_value(Val::Reactive(Readable::Derived(
                 Derived::<crate::builtin_plugins::control_flow::SwitchKey>::from_id(AtomId(atom as u32)),

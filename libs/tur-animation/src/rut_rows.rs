@@ -17,7 +17,7 @@ use std::rc::Rc;
 use rut_core::types::{TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64};
 use rut_vm::Opaque;
 use tur_engine::builtin_plugins::effects::{OpacityView, TransformView};
-use tur_engine::core::rut_runtime::{RutView, readable_of};
+use tur_engine::core::rut_runtime::{RutView, guard_atom_lane, readable_of};
 
 use crate::controller::{AnimationController, RepeatMode};
 use crate::curve::Curve;
@@ -125,6 +125,7 @@ pub fn install(
     });
     // An opacity bound to an f64 atom — the onTick rail's consumer.
     rut_vm::pkg_fn!(pkg, "anim::el_opacity_bound", (u64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, atom: u64, child: Opaque<RutView>| {
+        guard_atom_lane(atom, "anim::el_opacity_bound")?;
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(OpacityView::new_rut(
             Some(tur_engine::core::view::Val::Reactive(readable_of::<f32>(atom))),
@@ -147,6 +148,7 @@ pub fn install(
     // `el_opacity_bound` law): the element subscribes the atom, layout
     // re-resolves `painting`, and the subtree never re-mounts.
     rut_vm::pkg_fn!(pkg, "anim::el_transform_angle_bound", (f64, u64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale: f64, rotate_atom: u64, tx: f64, ty: f64, child: Opaque<RutView>| {
+        guard_atom_lane(rotate_atom, "anim::el_transform_angle_bound")?;
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Static(scale)),
@@ -158,6 +160,7 @@ pub fn install(
         Ok(Opaque::alloc(vm, RutView(view))?.handle().clone())
     });
     rut_vm::pkg_fn!(pkg, "anim::el_transform_scale_bound", (u64, f64, f64, f64, Opaque<RutView>) -> rut_vm::OpaqueRef, |vm: &mut rut_vm::interp::Vm, scale_atom: u64, rotate: f64, tx: f64, ty: f64, child: Opaque<RutView>| {
+        guard_atom_lane(scale_atom, "anim::el_transform_scale_bound")?;
         let child = child.with(|v| v.0.clone())?;
         let view = Rc::new(TransformView::new_rut(
             Some(tur_engine::core::view::Val::Reactive(readable_of::<f64>(scale_atom))),

@@ -114,6 +114,11 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
         "the async capability rows (clipboard_read/write) probed raw",
     ),
     (
+        "tests/rut_atom_lane_guard.rs",
+        "the atom-only bind lanes probed raw (the atom-0 sv() guard — the \
+         kit's Readable face can't spell the hazard)",
+    ),
+    (
         "tests/perf/scenes.rs",
         "raw-rail perf probes: rs_get/set/source_f64 + the tctrl_push_span \
          span lane",

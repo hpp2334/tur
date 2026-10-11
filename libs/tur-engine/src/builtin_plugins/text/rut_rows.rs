@@ -24,7 +24,7 @@ use crate::builtin_plugins::text::elements::paragraph::TextOverflow;
 use crate::builtin_plugins::text::{InputView, TextView};
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
-use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
+use crate::core::rut_runtime::{RutHandles, RutView, color_of, guard_atom_lane, readable_of};
 use crate::core::view::Val;
 
 use rut_vm::Opaque;
@@ -311,6 +311,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     // Bind to a str SOURCE atom — re-renders when the atom changes.
     rut_vm::pkg_fn!(pkg, "text::core::text_bind", (Opaque<TextView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, atom: u64| {
+        guard_atom_lane(atom, "text::core::text_bind")?;
         b.with_mut(vm, |_vm, t| {
             t.text = Some(Val::Reactive(Readable::Source(
                 Source::<String>::from_id(AtomId(atom as u32)),
@@ -319,6 +320,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     // Bind to a DERIVED str atom (the `rs_derive` consumer twin).
     rut_vm::pkg_fn!(pkg, "text::core::text_bind_derived", (Opaque<TextView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, derived: u64| {
+        guard_atom_lane(derived, "text::core::text_bind_derived")?;
         b.with_mut(vm, |_vm, t| {
             t.text = Some(Val::Reactive(Readable::Derived(
                 Derived::<String>::from_id(AtomId(derived as u32)),
@@ -409,6 +411,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // input_placeholder_bound(builder, atom) — the reactive placeholder
     // twin (a str atom drives the hint).
     rut_vm::pkg_fn!(pkg, "text::input::input_placeholder_bound", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, atom: u64| {
+        guard_atom_lane(atom, "text::input::input_placeholder_bound")?;
         let r = Readable::Source(Source::<String>::from_id(AtomId(atom as u32)));
         b.with_mut(vm, |_vm, s| s.set_placeholder_reactive(r))
     });
@@ -436,6 +439,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // (bindings are methods, the `text_bound` law): the mounted input
     // re-resolves masking whenever the bool atom flips.
     rut_vm::pkg_fn!(pkg, "text::input::input_obscure_bound", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, atom: u64| {
+        guard_atom_lane(atom, "text::input::input_obscure_bound")?;
         let r = readable_of::<bool>(atom);
         b.with_mut(vm, |_vm, s| s.set_obscure_reactive(r))
     });

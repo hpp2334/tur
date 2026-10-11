@@ -67,6 +67,21 @@ pub fn readable_of<T>(atom: u64) -> Readable<T> {
     Readable::Source(source_of(atom))
 }
 
+/// The atom-only bind lanes' shared guard. `sv(...)` structurally
+/// satisfies `Readable<T>` with `atom_id() == 0` (the counter starts at
+/// 1), so a static value slipping into a bind row would silently bind
+/// atom 0 — garbage the lane can never observe. Every atom-only lane
+/// traps on it instead (the static twins are the literal props).
+pub fn guard_atom_lane(atom: u64, row: &str) -> Result<(), rut_vm::Trap> {
+    if atom == 0 {
+        return Err(rut_vm::Trap::new(
+            rut_vm::TrapKind::Invalid,
+            format!("{row}: static value on an atom-only lane — bind a source/derive, not sv()"),
+        ));
+    }
+    Ok(())
+}
+
 /// `0xRRGGBBAA` packed color → engine `Color` (the packed-color crossing
 /// every styled row family shares).
 pub fn color_of(packed: u64) -> Color {

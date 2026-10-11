@@ -8,7 +8,7 @@ use std::rc::Rc;
 use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
 use crate::builtin_plugins::lazy_container::{LazyGridView, LazyListView};
 use crate::core::layout::Axis;
-use crate::core::rut_runtime::{RutHandles, RutView, readable_of};
+use crate::core::rut_runtime::{RutHandles, RutView, guard_atom_lane, readable_of};
 use crate::core::view::Val;
 
 use rut_vm::{Opaque, OpaqueRef};
@@ -103,6 +103,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
     rut_vm::pkg_fn!(pkg, "scroll::lazy_count", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, atom: u64| {
+        guard_atom_lane(atom, "scroll::lazy_count")?;
         b.with_mut(vm, |_vm, s| s.count = Some(Val::Reactive(readable_of::<u64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "scroll::lazy_axis", (Opaque<LazyListSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyListSpec>, v: u64| {
@@ -146,6 +147,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.builder = Some(entry))
     });
     rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_count", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, atom: u64| {
+        guard_atom_lane(atom, "scroll::lazy_grid_count")?;
         b.with_mut(vm, |_vm, s| s.count = Some(Val::Reactive(readable_of::<u64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "scroll::lazy_grid_axis", (Opaque<LazyGridSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<LazyGridSpec>, v: u64| {

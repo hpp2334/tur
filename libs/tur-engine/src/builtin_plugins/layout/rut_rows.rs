@@ -25,7 +25,7 @@ use crate::core::layout::{
     MainAxisSize, StackFit,
 };
 use crate::core::render::brush::{Brush, Color};
-use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
+use crate::core::rut_runtime::{RutHandles, RutView, color_of, guard_atom_lane, readable_of};
 use crate::core::view::{Val, View};
 
 use rut_vm::{Opaque, OpaqueRef};
@@ -367,24 +367,31 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.clip_behavior = Some(Val::Static(clip_of(c))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_width_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, w_atom: u64| {
+        guard_atom_lane(w_atom, "layout::box::box_width_bound")?;
         b.with_mut(vm, |_vm, s| s.width = Some(Val::Reactive(readable_of::<f64>(w_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_height_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, h_atom: u64| {
+        guard_atom_lane(h_atom, "layout::box::box_height_bound")?;
         b.with_mut(vm, |_vm, s| s.height = Some(Val::Reactive(readable_of::<f64>(h_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_color_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, color_atom: u64| {
+        guard_atom_lane(color_atom, "layout::box::box_color_bound")?;
         b.with_mut(vm, |_vm, s| s.color = Some(Val::Reactive(readable_of::<Brush>(color_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_radius_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, r_atom: u64| {
+        guard_atom_lane(r_atom, "layout::box::box_radius_bound")?;
         b.with_mut(vm, |_vm, s| s.border_radius = Some(Val::Reactive(readable_of::<f64>(r_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_shadow_color_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, color_atom: u64| {
+        guard_atom_lane(color_atom, "layout::box::box_shadow_color_bound")?;
         b.with_mut(vm, |_vm, s| s.shadow_color = Some(Val::Reactive(readable_of::<Color>(color_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_shadow_blur_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, blur_atom: u64| {
+        guard_atom_lane(blur_atom, "layout::box::box_shadow_blur_bound")?;
         b.with_mut(vm, |_vm, s| s.shadow_blur = Some(Val::Reactive(readable_of::<f64>(blur_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_shadow_dy_bound", (Opaque<ContainerView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, dy_atom: u64| {
+        guard_atom_lane(dy_atom, "layout::box::box_shadow_dy_bound")?;
         b.with_mut(vm, |_vm, s| s.shadow_dy = Some(Val::Reactive(readable_of::<f64>(dy_atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::box::box_child", (Opaque<ContainerView>, Opaque<RutView>) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<ContainerView>, child: Opaque<RutView>| {
@@ -448,9 +455,11 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // static rows: 0 is a real coordinate — a piece parked at the origin
     // stays put (the box_width_bound law).
     rut_vm::pkg_fn!(pkg, "layout::pos::pos_left_bound", (Opaque<PositionedSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, atom: u64| {
+        guard_atom_lane(atom, "layout::pos::pos_left_bound")?;
         b.with_mut(vm, |_vm, s| s.left = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::pos::pos_top_bound", (Opaque<PositionedSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, atom: u64| {
+        guard_atom_lane(atom, "layout::pos::pos_top_bound")?;
         b.with_mut(vm, |_vm, s| s.top = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::pos::pos_width", (Opaque<PositionedSpec>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<PositionedSpec>, v: f64| {
@@ -486,6 +495,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.flex = Some(Val::Static(v)))
     });
     rut_vm::pkg_fn!(pkg, "layout::flexi::flexi_flex_bound", (Opaque<FlexiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FlexiSpec>, atom: u64| {
+        guard_atom_lane(atom, "layout::flexi::flexi_flex_bound")?;
         b.with_mut(vm, |_vm, s| s.flex = Some(Val::Reactive(readable_of::<f64>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "layout::flexi::flexi_fit", (Opaque<FlexiSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<FlexiSpec>, v: u64| {
@@ -574,6 +584,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         b.with_mut(vm, |_vm, s| s.columns = columns)
     });
     rut_vm::pkg_fn!(pkg, "layout::grid_table::table_rows_atom", (Opaque<TableSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TableSpec>, atom: u64| {
+        guard_atom_lane(atom, "layout::grid_table::table_rows_atom")?;
         b.with_mut(vm, |_vm, s| {
             s.rows = Some(
                 Readable::Source(Source::<crate::core::edgy::Value>::from_id(AtomId(atom as u32)))

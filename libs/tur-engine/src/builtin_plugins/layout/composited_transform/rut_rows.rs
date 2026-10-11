@@ -16,7 +16,7 @@ use crate::builtin_plugins::layout::composited_transform::target::TargetView;
 use crate::builtin_plugins::layout::LayerLinkRegistry;
 use crate::core::edgy::value::Value;
 use crate::core::layout::Alignment;
-use crate::core::rut_runtime::{RutHandles, RutView};
+use crate::core::rut_runtime::{RutHandles, RutView, guard_atom_lane};
 use crate::core::view::Val;
 
 use rut_vm::Opaque;
@@ -127,6 +127,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // Reactive-anchor twin: the target anchor resolves from an atom (the
     // atom holds the Alignment enum code; a button flips it).
     rut_vm::pkg_fn!(pkg, "composited::ct_follower_target_anchor_bound", (Opaque<CtFollowerSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<CtFollowerSpec>, atom: u64| {
+        guard_atom_lane(atom, "composited::ct_follower_target_anchor_bound")?;
         b.with_mut(vm, |_vm, s| {
             s.target_anchor = Some(Val::Reactive(crate::core::edgy::reactive::Readable::Source(
                 crate::core::edgy::reactive::Source::<Alignment>::from_id(

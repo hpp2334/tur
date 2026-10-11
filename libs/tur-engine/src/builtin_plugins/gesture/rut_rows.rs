@@ -22,7 +22,7 @@ use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::layout::HitTestBehavior;
 use crate::core::view::Val;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
-use crate::core::rut_runtime::{RutHandles, RutView, readable_of};
+use crate::core::rut_runtime::{RutHandles, RutView, guard_atom_lane, readable_of};
 use crate::core::shell::Cursor;
 
 use rut_vm::Opaque;
@@ -225,6 +225,7 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // Reactive cursor: resolved from a str atom each layout re-resolve
     // (`Cursor: FromValue` decodes the standard keyword).
     rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_cursor_bound", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, atom: u64| {
+        guard_atom_lane(atom, "gesture::pointer::mr_cursor_bound")?;
         b.with_mut(vm, |_vm, s| s.cursor = Some(Val::Reactive(readable_of::<Cursor>(atom))))
     });
     rut_vm::pkg_fn!(pkg, "gesture::pointer::mr_behavior", (Opaque<MrSpec>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<MrSpec>, v: u64| {
