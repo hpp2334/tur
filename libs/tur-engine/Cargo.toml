@@ -21,6 +21,7 @@ webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 [dependencies]
 # rut scripting engine (github.com/hpp2334/rut) — the boa replacement seam
 rut-core = { workspace = true }
+rut-lexer = { workspace = true }
 rut-parser = { workspace = true }
 rut-driver = { workspace = true }
 rut-ast = { workspace = true }
