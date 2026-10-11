@@ -78,16 +78,16 @@ impl VirtualAppId {
 /// [`HostMsg::VirtualControl`] (the only new `HostMsg` variant; there is no
 /// generic custom path in this direction — mirrors `HostMsg::Shell`).
 pub enum VirtualControl {
-    /// Build a child instance in `pool` and load `source` into it. The pool
-    /// is an already-resolved [`WorkerPoolHandle`] — minted worker-side by
-    /// `forWorkerPool(name)` (default `"virtual"`), so it is the very
-    /// handle the embedder registered. The module outcome surfaces
+    /// Build a child instance in `pool` and load the module file tree into
+    /// it. The pool is an already-resolved [`WorkerPoolHandle`] — minted
+    /// worker-side by `forWorkerPool(name)` (default `"virtual"`), so it is
+    /// the very handle the embedder registered. The module outcome surfaces
     /// asynchronously as a [`VirtualStatusEvent`], not via a reply
     /// (matching the wasm readiness model where real readiness is confirmed
     /// by the first RPC await).
     Spawn {
         token: VirtualAppId,
-        source: Arc<str>,
+        files: crate::core::rut_runtime::RutModuleFiles,
         pool: WorkerPoolHandle,
     },
     /// The host element's on-screen rect changed (deduped by the sender).
@@ -122,10 +122,11 @@ pub enum VirtualControl {
 impl std::fmt::Debug for VirtualControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Spawn { token, source, .. } => f
+            Self::Spawn { token, files, .. } => f
                 .debug_struct("Spawn")
                 .field("token", token)
-                .field("source_len", &source.len())
+                .field("root_len", &files.root.len())
+                .field("mods", &files.mods.len())
                 .finish(),
             Self::Resize {
                 token,
@@ -449,10 +450,10 @@ impl VirtualHost {
         match control {
             VirtualControl::Spawn {
                 token,
-                source,
+                files,
                 pool,
             } => {
-                self.spawn_child(token, source, pool);
+                self.spawn_child(token, files, pool);
             }
             VirtualControl::Resize {
                 token,
@@ -581,7 +582,12 @@ impl VirtualHost {
         }
     }
 
-    fn spawn_child(&self, token: VirtualAppId, source: Arc<str>, pool: WorkerPoolHandle) {
+    fn spawn_child(
+        &self,
+        token: VirtualAppId,
+        files: crate::core::rut_runtime::RutModuleFiles,
+        pool: WorkerPoolHandle,
+    ) {
         debug_assert!(
             token != VirtualAppId::ROOT,
             "ROOT is reserved for embedder-hosted instances"
@@ -640,7 +646,7 @@ impl VirtualHost {
                     // never surface a stale Running/Error over "destroyed".
                     let host_for_load = child_host.clone();
                     self.host_loop.spawn_local(Box::pin(async move {
-                        let outcome = app_for_load.load_rut_module(source).await;
+                        let outcome = app_for_load.load_rut_module_files(files).await;
                         if host_for_load.is_destroyed() {
                             return; // retired mid-load — lifecycle, not a status
                         }
@@ -666,7 +672,7 @@ impl VirtualHost {
                 // liveness gate skips the status write, matching the wasm
                 // arm (retire already settled the record).
                 let (state, detail) =
-                    match futures::executor::block_on(app_for_load.load_rut_module(source)) {
+                    match futures::executor::block_on(app_for_load.load_rut_module_files(files)) {
                         Ok(()) => (VirtualStatusState::Running, None),
                         Err(e) => (VirtualStatusState::Error, Some(e.to_string())),
                     };

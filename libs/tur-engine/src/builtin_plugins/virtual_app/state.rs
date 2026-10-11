@@ -23,10 +23,11 @@ use crate::core::edgy::reactive::{ReactiveBridgeStore, Source};
 use crate::core::edgy::value::Value;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommandBatch;
+use crate::core::rut_runtime::RutModuleFiles;
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::virtual_app::{VirtualAppId, VirtualControl};
 
-/// Stable per-controller identity carried by the author-side opaque (the
+    /// Stable per-controller identity carried by the author-side opaque (the
 /// rut rows wrap the bare `u64`; this newtype is the typed view the
 /// element's `app$` val decodes to).
 #[derive(Debug, Clone)]
@@ -74,7 +75,9 @@ pub(crate) struct ControllerRecord {
     /// Resolved target pool (a `forWorkerPool` handle or the default
     /// `"virtual"` pool, resolved at controller creation).
     pub pool: WorkerPoolHandle,
-    pub source: Arc<str>,
+    /// The module file tree the controller hosts (root + `mod` children —
+    /// a string-authored controller is the root-only shape).
+    pub files: RutModuleFiles,
     /// The `onRuntimeError$` mutation (optional) — dispatched when the
     /// hosted child reports a runtime JS error.
     pub on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
@@ -114,7 +117,7 @@ pub struct VirtualState {
     pub(crate) host_tx: HostTx,
     pub(crate) bridge: ReactiveBridgeStore,
     next_id: Cell<u64>,
-    sources: RefCell<HashMap<u64, Arc<str>>>,
+    sources: RefCell<HashMap<u64, RutModuleFiles>>,
     pub(crate) controllers: RefCell<HashMap<u64, Rc<ControllerRecord>>>,
     /// incarnation token → controller base (for status-event routing).
     tokens: RefCell<HashMap<u64, u64>>,
@@ -142,13 +145,21 @@ impl VirtualState {
 
     // ── module sources ────────────────────────────────────────────────
 
-    pub fn create_source(&self, source: Arc<str>) -> u64 {
+    /// Register a module FILE TREE (root + `mod` children) and mint its
+    /// handle id. The general [`Self::create_source`] shape.
+    pub fn create(&self, files: RutModuleFiles) -> u64 {
         let id = self.alloc_id();
-        self.sources.borrow_mut().insert(id, source);
+        self.sources.borrow_mut().insert(id, files);
         id
     }
 
-    pub(crate) fn resolve_source(&self, handle: u64) -> Option<Arc<str>> {
+    /// Register a single-string source — the root-only [`Self::create`]
+    /// shape (the string-authored rail: `va_create_source`, `pg_compile`).
+    pub fn create_source(&self, source: Arc<str>) -> u64 {
+        self.create(RutModuleFiles::from(source))
+    }
+
+    pub(crate) fn resolve_source(&self, handle: u64) -> Option<RutModuleFiles> {
         self.sources.borrow().get(&handle).cloned()
     }
 
@@ -156,7 +167,7 @@ impl VirtualState {
 
     pub(crate) fn create_controller(
         &self,
-        source: Arc<str>,
+        files: RutModuleFiles,
         pool: WorkerPoolHandle,
         keep_alive: bool,
         on_runtime_error: Option<MutationHandle<RuntimeErrorArg>>,
@@ -173,7 +184,7 @@ impl VirtualState {
                 error_msg,
                 keep_alive,
                 pool,
-                source,
+                files,
                 on_runtime_error,
                 error_dispatch_frame: Cell::new(u64::MAX),
                 current: Cell::new(None),
@@ -246,7 +257,7 @@ impl VirtualState {
         self.set_status(base, "spawning", "");
         self.send_control(VirtualControl::Spawn {
             token,
-            source: record.source.clone(),
+            files: record.files.clone(),
             pool: record.pool.clone(),
         });
     }

@@ -137,11 +137,12 @@ pub enum WorkerMsg {
     /// Parse + compile + boot a **rut** module and invoke its `entry fn
     /// start()` (the module lifecycle contract: `entry fn stop()` — when
     /// present — runs before the next load and at destroy). Reply carries
-    /// the parse/boot outcome. `Arc<str>` because module sources can be
-    /// large (the playground ships multi-KB bundles) — `Arc` lets the
-    /// message be duplicated cheaply if needed.
+    /// the parse/boot outcome. `Arc<RutModuleFiles>` because module file
+    /// sets can be large (the playground ships multi-file trees) — `Arc`
+    /// lets the message be duplicated cheaply if needed; a root-only set
+    /// is the historical single-string shape.
     LoadRutModule {
-        source: Arc<str>,
+        files: Arc<crate::core::rut_runtime::RutModuleFiles>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
     /// Call a named `entry fn` on the loaded rut module — the
@@ -386,9 +387,10 @@ impl fmt::Debug for WorkerMsg {
         match self {
             Self::PlatformEvent(_) => f.debug_tuple("PlatformEvent").finish_non_exhaustive(),
             Self::Wake => write!(f, "Wake"),
-            Self::LoadRutModule { source, .. } => f
+            Self::LoadRutModule { files, .. } => f
                 .debug_struct("LoadRutModule")
-                .field("source_len", &source.len())
+                .field("root_len", &files.root.len())
+                .field("mods", &files.mods.len())
                 .finish_non_exhaustive(),
             Self::CallRutEntry { name, args, .. } => f
                 .debug_struct("CallRutEntry")
@@ -476,13 +478,14 @@ const _: fn() = || {
 mod tests {
     use super::*;
 
-    /// `Arc<str>` is the canonical source carrier — verify it round-trips
-    /// through `WorkerMsg::LoadRutModule` without clone friction.
+    /// `Arc<RutModuleFiles>` is the canonical file-set carrier — verify it
+    /// round-trips through `WorkerMsg::LoadRutModule` without clone friction.
     #[test]
     fn load_module_carries_arc_str() {
         let (tx, _rx) = Reply::<Result<(), ModuleError>>::pair();
-        let source: Arc<str> = Arc::from("entry fn start() {}");
-        let msg = WorkerMsg::LoadRutModule { source, reply: tx };
+        let files: Arc<crate::core::rut_runtime::RutModuleFiles> =
+            Arc::new(crate::core::rut_runtime::RutModuleFiles::from("entry fn start() {}"));
+        let msg = WorkerMsg::LoadRutModule { files, reply: tx };
         assert!(matches!(msg, WorkerMsg::LoadRutModule { .. }));
     }
 

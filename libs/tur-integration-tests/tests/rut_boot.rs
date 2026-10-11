@@ -1558,3 +1558,75 @@ fn read_rut_f64(app: &TurTestApp) -> f64 {
     })
     .unwrap_or(0.0)
 }
+
+// ---------------------------------------------------------------------------
+// Multi-file modules — the `RutModuleFiles` rail (root + `mod` children)
+// ---------------------------------------------------------------------------
+
+/// A two-file module: the root declares `mod landing;` and calls into it
+/// (same-pkg module-path qualification); the child provides the string.
+const MULTI_ROOT: &str = r#"
+use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::core::{ Text };
+
+mod landing;
+
+entry fn start() {
+    let col = Column().child(Text().text(landing::banner()).query_key("rut/text").build());
+    mount(col.build());
+}
+"#;
+
+const MULTI_LANDING: &str = r#"
+pub fn banner() -> str { return "hello from the tree"; }
+"#;
+
+#[test]
+fn rut_module_files_mount_a_tree() {
+    let mut files = tur_engine::core::rut_runtime::RutModuleFiles::from(MULTI_ROOT);
+    files
+        .mods
+        .insert(std::sync::Arc::from("landing"), std::sync::Arc::from(MULTI_LANDING));
+
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module_files(files).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    // The child's fn crossed: the root authored its Text from it.
+    assert_eq!(rut_bound_text(&app), "hello from the tree");
+    let root = app.dev_tool_element_tree().expect("root mounted by the multi-file module");
+    assert_eq!(root.children.len(), 1, "one root child (the Column)");
+}
+
+/// A child file with a syntax error: the parse-first contract fails the
+/// load BEFORE teardown, and the diag names the file it lives in
+/// (`broken/mod.rut:` — the concat-order attribution).
+const ATTRIB_ROOT: &str = r#"
+mod broken;
+
+entry fn start() {}
+"#;
+
+const ATTRIB_BROKEN: &str = "pub fn oops() -> i32 { let x: i32 = ; }";
+
+#[test]
+fn rut_module_files_broken_child_names_the_file() {
+    let mut files = tur_engine::core::rut_runtime::RutModuleFiles::from(ATTRIB_ROOT);
+    files
+        .mods
+        .insert(std::sync::Arc::from("broken"), std::sync::Arc::from(ATTRIB_BROKEN));
+
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
+    // The module mounts nothing (it never boots) — the point is the error.
+    app.load_rut_module(HELLO_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+
+    let err = app.load_rut_module_files(files).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("broken/mod.rut:"),
+        "the diag names the broken child file: {msg}"
+    );
+    // Parse-first: the running tree survives the failed multi-file load.
+    let root = app.dev_tool_element_tree().expect("tree survives the broken reload");
+    assert_eq!(root.children.len(), 1, "the previous tree is still mounted");
+}

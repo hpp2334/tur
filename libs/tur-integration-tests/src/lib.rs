@@ -1421,6 +1421,14 @@ impl TurTestApp {
         block_on(self.inner.load_rut_module(source))
     }
 
+    /// Rut-rail module load over a whole file tree (root + `mod` children).
+    pub fn load_rut_module_files(
+        &self,
+        files: tur_engine::core::rut_runtime::RutModuleFiles,
+    ) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_files(files))
+    }
+
     /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
     /// loaded rut module. A missing entry is a successful no-op.
     pub fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {

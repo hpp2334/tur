@@ -33,6 +33,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use futures::StreamExt;
 
@@ -41,6 +42,7 @@ use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, W
 use crate::core::clock::Clock;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::image_resource::{ImageResource, ImageResourceId};
+use crate::core::rut_runtime::RutModuleFiles;
 use crate::core::render::{
     RenderCommand, RenderCommandBatch, Renderer, fingerprint_batch, referenced_image_ids,
 };
@@ -130,9 +132,9 @@ impl WorkerBackend {
     ///
     /// The whole path — parse, boot, `start`, and `apply_root` (the
     /// rut-built tree is pure Rust `Rc<dyn View>`) — is script-runtime-free.
-    fn load_rut_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+    fn load_rut_module_inner(&self, files: &RutModuleFiles) -> Result<(), ModuleError> {
         let exts = self.internal.instance.rut_pkg_exts.borrow().clone();
-        crate::core::rut_runtime::RutRuntime::parse_check(source, &exts)?;
+        crate::core::rut_runtime::RutRuntime::parse_check_files(files, &exts)?;
 
         // Module lifecycle contract: run the previous module's cleanup +
         // clear its leftover root tree before the new module runs.
@@ -142,7 +144,8 @@ impl WorkerBackend {
         let inputs = crate::core::rut_runtime::RutRealmInputs {
             clock: self.internal.app_context.borrow().frame_env.clock(),
         };
-        let mut rut = crate::core::rut_runtime::RutRuntime::boot(source, js.clone(), inputs, exts)?;
+        let mut rut =
+            crate::core::rut_runtime::RutRuntime::boot_files(files, js.clone(), inputs, exts)?;
 
         // Apply the root the module's `start` stashed via `tur_host::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).
@@ -253,8 +256,8 @@ impl WorkerBackend {
                 // `worker_loop` (record-only, no pump); this arm only keeps
                 // the dispatch exhaustive.
             }
-            WorkerMsg::LoadRutModule { source, reply } => {
-                let res = self.load_rut_module_inner(&source);
+            WorkerMsg::LoadRutModule { files, reply } => {
+                let res = self.load_rut_module_inner(&files);
                 self.wake_if_dirty();
                 reply.send(res);
             }
@@ -1014,7 +1017,8 @@ impl HostBackend {
         rx.rx.await.expect("reply sender dropped without firing")
     }
 
-    /// Module load — the RPC entry behind [`TurApp::load_rut_module`].
+    /// Module load — the RPC entry behind [`TurApp::load_rut_module`]
+    /// (single-string, the root-only [`Self::load_rut_module_files`] shape).
     ///
     /// Cancellation-tolerant by design: the caller can be an element-hosted
     /// child whose host was destroyed while the load was in flight (the
@@ -1031,10 +1035,21 @@ impl HostBackend {
     ) -> Result<(), ModuleError> {
         let source = source.into();
         tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
+        self.load_rut_module_files(RutModuleFiles::from(source)).await
+    }
+
+    /// Module load over a whole file tree — the RPC entry behind
+    /// [`TurApp::load_rut_module_files`]. Same lifecycle and
+    /// cancellation contract as [`Self::load_rut_module`].
+    pub(crate) async fn load_rut_module_files(
+        &self,
+        files: RutModuleFiles,
+    ) -> Result<(), ModuleError> {
+        let files = Arc::new(files);
         let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
         let _ = self
             .worker_tx
-            .unbounded_send(WorkerMsg::LoadRutModule { source, reply: tx });
+            .unbounded_send(WorkerMsg::LoadRutModule { files, reply: tx });
         self.wake_worker();
         match rx.rx.await {
             Ok(res) => res,

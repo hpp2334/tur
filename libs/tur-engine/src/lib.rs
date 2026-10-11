@@ -152,6 +152,22 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
+    /// Rut-rail module load over a whole file tree: compile + boot the
+    /// mounted module (root + `mod` children — a multi-file MAIN unit) and
+    /// invoke its `entry fn start()`. A root-only
+    /// [`RutModuleFiles`](crate::core::rut_runtime::RutModuleFiles) is the
+    /// [`Self::load_rut_module`] shape.
+    pub async fn load_rut_module_files(
+        &self,
+        files: crate::core::rut_runtime::RutModuleFiles,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module_files(files)
+            .await
+            .map_err(TurError::from)
+    }
+
     /// Handle-based rut load: resolve `handle` in `registry` and compile +
     /// boot it via [`Self::load_rut_module`]. The natural pair for
     /// [`ModuleSourceRegistry`] — embedders that register sources Rust-side
