@@ -42,9 +42,11 @@ use rut_vm::interp::{CallArgs, Ret, Vm};
 mod async_caps;
 mod decl_gen;
 mod derive;
+mod module_files;
 mod mutation;
 
 pub use decl_gen::{mount_host_tree, render_tur_host_decl_tree, tur_host_surface};
+pub use module_files::RutModuleFiles;
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
@@ -73,9 +75,12 @@ pub fn color_of(packed: u64) -> Color {
 
 /// The boxed rail's number stamps (`rs_box_stamp` / `ctx_get_box`): the
 /// KV holds ONE number variant, so the mint reports the box's integer- vs
-/// float-ness and the read re-stamps the recovered box to match.
+/// float-ness and the read re-stamps the recovered box to match. The two
+/// integer lanes differ in the box's TYPE TAG (`unopaque<i64>` traps on a
+/// `TY_U64`-sealed box and vice versa), so i64 carries its own stamp.
 pub const STAMP_NUM_F64: u64 = 1;
 pub const STAMP_NUM_U64: u64 = 2;
+pub const STAMP_NUM_I64: u64 = 3;
 
 /// Open a rut erasure box (or unwrap a host box) into the native KV
 /// value — the boxed rail's decode, shared by `rs_source_box` and
@@ -88,7 +93,7 @@ pub(crate) fn boxed_to_value(vm: &Vm, h: &OpaqueRef) -> Result<Value, rut_vm::Tr
     match rut_vm::rut_box_payload(vm, h) {
         Ok((_, v)) => match v {
             rut_vm::Value::Nil => Ok(Value::Nil),
-            rut_vm::Value::I64(n) => Ok(Value::Num(n as u64 as f64)),
+            rut_vm::Value::I64(n) => Ok(Value::Num(n as f64)),
             rut_vm::Value::F64(f) => Ok(Value::Num(f)),
             rut_vm::Value::Bool(b) => Ok(Value::Bool(b)),
             rut_vm::Value::Str(s) => Ok(Value::str(s)),
@@ -127,15 +132,18 @@ fn seal_opaque_box(vm: &mut Vm, owned: OpaqueRef) -> Result<OpaqueRef, rut_vm::T
 /// Seal a native KV value back into a rut erasure box the calling rut
 /// code can `unopaque<T>` — the boxed rail's encode, `ctx_get_box`'s
 /// body. `stamp` picks the number lane's width (`STAMP_NUM_F64` /
-/// `STAMP_NUM_U64`); every other kind stamps by its KV variant.
+/// `STAMP_NUM_U64` / `STAMP_NUM_I64`); every other kind stamps by its KV
+/// variant.
 pub(crate) fn seal_box(vm: &mut Vm, value: &Value, stamp: u64) -> Result<OpaqueRef, rut_vm::Trap> {
-    use rut_core::types::{TY_BOOL, TY_BYTES, TY_NIL, TY_STR};
+    use rut_core::types::{TY_BOOL, TY_BYTES, TY_I64, TY_NIL, TY_STR};
     match value {
         Value::Nil => vm.seal_opaque(rut_vm::Slot::null(), TY_NIL),
         Value::Bool(b) => vm.seal_opaque(rut_vm::Slot::bool(*b), TY_BOOL),
         Value::Num(n) => {
             if stamp == STAMP_NUM_U64 {
                 vm.seal_opaque(rut_vm::Slot::int(*n as i64), TY_U64)
+            } else if stamp == STAMP_NUM_I64 {
+                vm.seal_opaque(rut_vm::Slot::int(*n as i64), TY_I64)
             } else {
                 vm.seal_opaque(rut_vm::Slot::float(*n), TY_F64)
             }
@@ -508,12 +516,13 @@ fn install_tur_pkg(
         Ok(s.id().0 as u64)
     });
     // The number lane's stamp (the one KV collapse): `1` — the box held
-    // an f64 (reads re-stamp f64), `2` — a u64 / i64 (reads re-stamp the
-    // integer width), `0` — not a number (the read stamps by KV kind).
+    // an f64 (reads re-stamp f64), `2` — a u64 (reads re-stamp the u64
+    // tag), `3` — an i64 (reads re-stamp the i64 tag), `0` — not a
+    // number (the read stamps by KV kind).
     rut_vm::pkg_fn!(pkg, "store::rs_box_stamp", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
         Ok(match rut_vm::rut_box_payload(vm, &v) {
             Ok((_, rut_vm::Value::F64(_))) => STAMP_NUM_F64,
-            Ok((_, rut_vm::Value::I64(_))) => STAMP_NUM_U64,
+            Ok((_, rut_vm::Value::I64(_))) => STAMP_NUM_I64,
             _ => 0,
         })
     });
@@ -1003,6 +1012,36 @@ pub struct RutRuntime {
     entry_slot_next: std::cell::Cell<u64>,
 }
 
+/// Attribute compile diags to their file and join them into one error
+/// string. Diag spans are byte offsets into the CONCATENATED unit text —
+/// the layout `GraphCompiler::ensure_source` builds: the root first, then
+/// the mods in BTreeMap path order, each preceded by a single `'\n'` seam.
+/// Mirror that table exactly (root at 0 named `mod.rut`, each child at
+/// `prev_end + 1` named `<path>/mod.rut` — the `ModInputs::display`
+/// spelling) and attribute each diag to the file its span falls in.
+fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> String {
+    let mut table: Vec<(usize, String)> = vec![(0, "mod.rut".to_string())];
+    let mut off = files.root.len();
+    for (path, text) in &files.mods {
+        // BTreeMap = path order — the concat order's other half
+        table.push((off + 1, format!("{path}/mod.rut")));
+        off += 1 + text.len();
+    }
+    diags
+        .iter()
+        .map(|d| {
+            let file = table
+                .iter()
+                .rev()
+                .find(|(o, _)| d.span.lo as usize >= *o)
+                .map(|(_, f)| f.clone())
+                .unwrap_or_else(|| "mod.rut".into());
+            format!("{file}: {}", d.msg)
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 impl RutRuntime {
     /// Convert an opaque handle minted by a rut row (`RutView`) back into
     /// the materialized view — the item-builder face's crossing back from
@@ -1012,11 +1051,15 @@ impl RutRuntime {
         v.with(|v| Some(v.0.clone())).ok()?
     }
     /// Assemble a fresh session (core + the in-memory `tur_host` decl pkg +
-    /// every extension's prelude modules) and compile `source` against it.
-    /// Split from [`Self::boot`] so a syntactically-broken module fails
-    /// BEFORE any teardown runs (the parse-first contract).
-    fn compile(
-        source: &str,
+    /// every extension's prelude modules) and compile a module file tree
+    /// against it. Split from [`Self::boot_files`] so a syntactically-broken
+    /// module fails BEFORE any teardown runs (the parse-first contract).
+    /// A root-only [`RutModuleFiles`] is the historical single-string shape.
+    ///
+    /// Exposed for the embedder-side parse rails ([`Self::parse_check_files`],
+    /// the playground's `pg_compile`): the compile half of the load contract.
+    fn compile_files(
+        files: &RutModuleFiles,
         exts: &[RutPkgExt],
     ) -> Result<
         (
@@ -1073,6 +1116,25 @@ impl RutRuntime {
         // competition rows) — upstream's `futures` inline package, rut
         // source over the `__*` engine rows (vendored alongside).
         let futures = rut_driver::Pkg::source("futures", include_str!("futures.rut"));
+        // The app pkg: the file tree mounted (the root the body, the mods
+        // the declared children — an empty `files.mods` is the historical
+        // single-string shape, byte-identical).
+        let rows: std::collections::BTreeMap<String, String> = files
+            .mods
+            .iter()
+            .map(|(p, t)| (p.to_string(), t.to_string()))
+            .collect();
+        let mods = rut_driver::mods::mount_rows(&files.root, &rows, rut_driver::Mode::Impl, "mod.rut")
+            .map_err(|e| format!("mount module tree: {e}"))?;
+        let app = rut_driver::Pkg {
+            spec: "app".to_string(),
+            body: PkgBody::Source {
+                text: files.root.to_string(),
+                is_decl: false,
+            },
+            mods,
+            ..Default::default()
+        };
         // The run chain: offer the pkgs (first-offer-wins), root at the app
         // source. `core` is auto-offered by `.compile()`; the host-row
         // snapshot for the boot-side installs comes from the same offer set
@@ -1084,15 +1146,14 @@ impl RutRuntime {
             .pkg(tur_pkg)
             .pkg(async_host)
             .pkg(futures)
-            .pkg(rut_driver::Pkg::source("app", source))
+            .pkg(app)
             .entrypoint("app");
         for pkg in preludes {
             run = run.pkg(pkg);
         }
         let compiled = run.compile().map_err(|e| e.msg)?;
         if !compiled.graph.diags.is_empty() {
-            let msgs: Vec<String> = compiled.graph.diags.iter().map(|d| d.msg.clone()).collect();
-            return Err(msgs.join("; "));
+            return Err(render_diags(&compiled.graph.diags, files));
         }
         let prog = compiled
             .graph
@@ -1108,20 +1169,39 @@ impl RutRuntime {
         source: &str,
         exts: &[RutPkgExt],
     ) -> Result<(), crate::core::app::ModuleError> {
-        Self::compile(source, exts)
+        Self::parse_check_files(&RutModuleFiles::from(source), exts)
+    }
+
+    /// [`Self::parse_check`] over a whole file tree.
+    pub fn parse_check_files(
+        files: &RutModuleFiles,
+        exts: &[RutPkgExt],
+    ) -> Result<(), crate::core::app::ModuleError> {
+        Self::compile_files(files, exts)
             .map(|_| ())
             .map_err(crate::core::app::ModuleError::Parse)
     }
 
-    /// Bind bodies, verify the join, boot the VM, and invoke `start`.
+    /// Bind bodies, verify the join, boot the VM, and invoke `start` —
+    /// the root-only [`Self::boot_files`] shape.
     pub fn boot(
         source: &str,
         js_ctx: InstanceContext,
         inputs: RutRealmInputs,
         exts: Vec<RutPkgExt>,
     ) -> Result<Self, crate::core::app::ModuleError> {
+        Self::boot_files(&RutModuleFiles::from(source), js_ctx, inputs, exts)
+    }
+
+    /// [`Self::boot`] over a whole file tree.
+    pub fn boot_files(
+        files: &RutModuleFiles,
+        js_ctx: InstanceContext,
+        inputs: RutRealmInputs,
+        exts: Vec<RutPkgExt>,
+    ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) =
-            Self::compile(source, &exts).map_err(crate::core::app::ModuleError::Parse)?;
+            Self::compile_files(files, &exts).map_err(crate::core::app::ModuleError::Parse)?;
 
         let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
@@ -1575,3 +1655,69 @@ pub struct RutPkgCx<'a> {
 /// push one during `register`; both the compile (decl) and boot (bodies)
 /// phases drain them.
 pub type RutPkgExt = Rc<dyn Fn(&mut RutPkgCx<'_>)>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rut_lexer::diag::Diag;
+    use rut_lexer::span::Span;
+    use std::sync::Arc;
+
+    /// Two files concatenated exactly as `ensure_source` does: root, then
+    /// one `'\n'` seam, then the child. A diag inside the child's range
+    /// attributes to `<child>/mod.rut`.
+    #[test]
+    fn attributes_child_diags_by_concat_offset() {
+        let root = "mod landing;\nentry fn start() {}\n"; // 33 bytes
+        let child = "pub fn banner() -> str { return 1; }\n"; // 37 bytes
+        let mut files = RutModuleFiles::from(root);
+        files.mods.insert(Arc::from("landing"), Arc::from(child));
+
+        // span.lo 0 → the root; span.lo inside the child's range
+        // (root.len() + 1 = 34 … ) → the child file
+        let diags = vec![
+            Diag::new(Span::new(10, 14), "root-side problem"),
+            Diag::new(Span::new(40, 44), "child-side problem"),
+        ];
+        let rendered = render_diags(&diags, &files);
+        assert_eq!(rendered, "mod.rut: root-side problem; landing/mod.rut: child-side problem");
+    }
+
+    /// Two children: the SECOND file's range must win over the first's
+    /// (the reverse scan picks the nearest preceding offset — the table
+    /// order is the concat order).
+    #[test]
+    fn attributes_second_child_past_the_first() {
+        let root = "mod a;\nmod b;\n"; // 14 bytes
+        let a_text = "pub fn one() -> i32 { return 1; }\n"; // 34 bytes
+        let b_text = "pub fn two() -> i32 { return ; }\n"; // 32 bytes
+        let mut files = RutModuleFiles::from(root);
+        files.mods.insert(Arc::from("a"), Arc::from(a_text));
+        files.mods.insert(Arc::from("b"), Arc::from(b_text));
+
+        // concat layout: root [0..14), seam 14, a [15..49), seam 49,
+        // b [50..82). A diag at 60 lives in b.
+        let diags = vec![Diag::new(Span::new(20, 22), "in a"), Diag::new(Span::new(60, 62), "in b")];
+        let rendered = render_diags(&diags, &files);
+        assert_eq!(rendered, "a/mod.rut: in a; b/mod.rut: in b");
+    }
+
+    /// A root-only files (the single-string shape): everything attributes
+    /// to `mod.rut` — the historical un-prefixed join's spelling.
+    #[test]
+    fn root_only_attributes_to_mod_rut() {
+        let files = RutModuleFiles::from("entry fn start() {}\n");
+        let diags = vec![Diag::new(Span::new(5, 9), "boom")];
+        assert_eq!(render_diags(&diags, &files), "mod.rut: boom");
+    }
+
+    /// A span BEFORE the first child seam (e.g. a synthetic `Span::new(0,0)`
+    /// from the collection's loud half) attributes to the root.
+    #[test]
+    fn zero_span_attributes_to_the_root() {
+        let mut files = RutModuleFiles::from("mod a;\n");
+        files.mods.insert(Arc::from("a"), Arc::from("pub fn x() {}\n"));
+        let diags = vec![Diag::new(Span::new(0, 0), "`mod a;` mounted at root")];
+        assert_eq!(render_diags(&diags, &files), "mod.rut: `mod a;` mounted at root");
+    }
+}

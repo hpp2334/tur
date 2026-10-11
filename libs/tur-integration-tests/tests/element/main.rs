@@ -33,6 +33,7 @@ mod math_rows;
 mod multi_instance;
 mod paint_culling;
 mod positioned;
+mod reactive_boxed_i64;
 mod render_dedup;
 mod rich_text;
 mod rich_text_perf;

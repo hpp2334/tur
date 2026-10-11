@@ -2,7 +2,8 @@
 // interactive loop (button → mutation queue → ctx.set → re-render),
 // dressed to the boa design: the slate page, the 36px "Count: N" readout
 // (a derive over the count source) and the centered 100×44 indigo pill
-// row.
+// row. The count is an i64 — the box rail's i64 lane (the engine's
+// STAMP_NUM_I64) keeps the -1 walk negative instead of wrapping.
 use tur_kit::flags::{ Align, CrossAlign, MainAlign };
 use tur_kit::gesture::pointer::{ PointerInteract };
 use tur_kit::handles::{ View, mount };
@@ -12,18 +13,22 @@ use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, der
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
-    let count: Readable<f64> = source<f64>(0.0);
+    // The capture stays CONCRETE (`Source<i64>`): the known upstream
+    // interface-slot interning bug misbinds a fresh `Readable<i64>`
+    // annotation at boot (the concrete class carries the inherent
+    // `get`, no interface slot involved).
+    let count: Source<i64> = source<i64>(0);
     let label: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
-        return f"Count: {ctx.get<f64>(count) as u64}";
+        return f"Count: {ctx.get<i64>(count)}";
     });
 
     // The named mutations (boa's named `mutate(...)` values); the source
     // rides by capture.
     let b_inc = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+        ctx.set<i64>(count, ctx.get<i64>(count) + 1);
     });
     let b_dec = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<f64>(count, ctx.get<f64>(count) - 1.0);
+        ctx.set<i64>(count, ctx.get<i64>(count) - 1);
     });
 
     let col = Column()

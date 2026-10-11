@@ -99,9 +99,11 @@ let SEAL_BOX: u64 = 11;
 
 // The boxed rail's number stamps (the engine's `rs_box_stamp` answers —
 // the KV holds ONE number variant, so the mint reports the width and the
-// read re-stamps the recovered box to match).
+// read re-stamps the recovered box to match; the two integer lanes
+// differ in the box's TYPE TAG).
 pub(pkg) let STAMP_NUM_F64: u64 = 1;
 let STAMP_NUM_U64: u64 = 2;
+let STAMP_NUM_I64: u64 = 3;
 
 // The reactive INTERFACES (the plan's hierarchy — the kind rides the
 // CLASS, never the method name): any type with the members satisfies
