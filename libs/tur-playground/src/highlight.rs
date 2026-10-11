@@ -88,7 +88,8 @@ fn classify(ty: TokenType, text: &str) -> u64 {
         TokenType::Operator => CODE_OPERATOR,
         TokenType::EnumMember => CODE_LITERAL,
         TokenType::Function | TokenType::Method => CODE_FUNCTION,
-        TokenType::Type | TokenType::Enum | TokenType::Class | TokenType::Interface => CODE_TYPE,
+        TokenType::Type | TokenType::Enum | TokenType::Class | TokenType::Interface
+        | TokenType::Namespace => CODE_TYPE,
         TokenType::Variable | TokenType::Parameter | TokenType::Property => CODE_FG,
     }
 }
@@ -375,10 +376,10 @@ mod tests {
 
     #[test]
     fn capitalized_path_segs_follow_the_type_convention() {
-        let spans = highlight_spans("fn go(c: Color) {\n    let r = Color.Red;\n}\n");
+        let spans = highlight_spans("fn go(c: Color) {\n    let r = Color::Red;\n}\n");
         let got = rgbs(&spans);
-        // The value position has no resolution yet — capitalized prefix
-        // segs read as types, a capitalized last seg as an enum member.
+        // The `::` path law: capitalized path segs read as types, a
+        // capitalized last seg as an enum member (`.` is value access only).
         assert!(
             got.iter().all(|(t, c)| t != "Color" || *c == TYPE),
             "every `Color` run colors as a type: {got:?}"

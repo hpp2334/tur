@@ -69,7 +69,7 @@ fn start() -> EditorCx {
         .build();
     let pane = Container().child(editor).build();
     let slot = Switch().value(mode)
-        .cases("view", Container().width(0.0).height(0.0).clip(Clip.HardEdge).child(pane).build())
+        .cases("view", Container().width(0.0).height(0.0).clip(Clip::HardEdge).child(pane).build())
         .cases("split", Container().width(200.0).child(pane).build())
         .fallback(Container().width(400.0).child(pane).build())
         .query_key("slot")
@@ -84,7 +84,7 @@ entry fn entry_start() -> opaque {
 }
 
 fn editor_cx(cx: opaque) -> EditorCx {
-    let c = opaque.downcast<EditorCx>(cx);
+    let c = opaque::downcast<EditorCx>(cx);
     if (c == nil) {
         panic("editor fixture: cx is not an EditorCx");
     }

@@ -17,8 +17,8 @@ let CAPTION_FG: u64 = 0x94A3B8FFu64;
 
 entry fn start() {
     let page = Column()
-        .cross_alignment(CrossAlign.Start)
-        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign::Start)
+        .main_axis_size(MainAxisSize::Min)
         .child(Text().text("aspect 2:1 (10 cells)").font_size(11.0).color(CAPTION_FG).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(aspect_grid())

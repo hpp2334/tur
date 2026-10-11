@@ -21,7 +21,7 @@ entry fn start() -> u64 {
         content.child(b.build());
         i += 1;
     }
-    let mut scroller = ScrollView().axis(Axis.Vertical).child(content.build()).query_key("scroll").build();
+    let mut scroller = ScrollView().axis(Axis::Vertical).child(content.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
     return rs_source_f64();

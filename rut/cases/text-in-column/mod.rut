@@ -5,7 +5,7 @@ use tur_kit::layout::flex::{ Column };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut col = Column().cross_alignment(CrossAlign.Start);
+    let mut col = Column().cross_alignment(CrossAlign::Start);
     let first = Text().text("First").font_size(14.0);
     let second = Text().text("Second").font_size(14.0);
     col.child(first.build());

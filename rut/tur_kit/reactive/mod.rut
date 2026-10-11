@@ -20,7 +20,7 @@ use tur_host::{
 // every materialization (the tracked read records the dependency).
 pub fn rs_derive(fmt: fn(f64) -> str, dep: u64) -> u64 {
   let wrap = fn (ctx: DeriveCtx) -> opaque {
-    let dep_r: Readable<f64> = Source<f64>.of(ctx_bridge(), dep, false, STAMP_NUM_F64);
+    let dep_r: Readable<f64> = Source<f64>::of(ctx_bridge(), dep, false, STAMP_NUM_F64);
     return opaque(fmt(ctx.get(dep_r)));
   };
   return derive_seal(opaque(wrap), TAG_BOX);
@@ -29,8 +29,8 @@ pub fn rs_derive(fmt: fn(f64) -> str, dep: u64) -> u64 {
 // The two-dep twin: `fn(a: f64, b: f64) -> str`.
 pub fn rs_derive2(fmt: fn(f64, f64) -> str, da: u64, db: u64) -> u64 {
   let wrap = fn (ctx: DeriveCtx) -> opaque {
-    let da_r: Readable<f64> = Source<f64>.of(ctx_bridge(), da, false, STAMP_NUM_F64);
-    let db_r: Readable<f64> = Source<f64>.of(ctx_bridge(), db, false, STAMP_NUM_F64);
+    let da_r: Readable<f64> = Source<f64>::of(ctx_bridge(), da, false, STAMP_NUM_F64);
+    let db_r: Readable<f64> = Source<f64>::of(ctx_bridge(), db, false, STAMP_NUM_F64);
     return opaque(fmt(ctx.get(da_r), ctx.get(db_r)));
   };
   return derive_seal(opaque(wrap), TAG_BOX);
@@ -214,7 +214,7 @@ impl<T> StaticValue<T> {
 }
 
 pub fn sv<T>(v: T) -> Readable<T> {
-  return StaticValue<T>.of(v);
+  return StaticValue<T>::of(v);
 }
 
 // The ONE generic mutation class. `f` is the USER fn's box (the pad
@@ -302,7 +302,7 @@ impl DeriveCtx {
 // outside the flush, and this is its sanctioned access face). `over` is
 // kit-internal (the dispatch entries' seam); entries mint through here.
 pub fn entry_ctx() -> MutationCtx {
-  return MutationCtx.over(ctx_bridge());
+  return MutationCtx::over(ctx_bridge());
 }
 
 // The store-bridge accessor — the raw-atom PROBE rail's hatch, kept for
@@ -327,7 +327,7 @@ pub fn source<T>(v: T) -> Source<T> {
   let b = opaque(v);
   let atom = rs_source_box(b);
   let stamp = rs_box_stamp(b);
-  return Source<T>.of(ctx_bridge(), atom, false, stamp);
+  return Source<T>::of(ctx_bridge(), atom, false, stamp);
 }
 
 // Mint a derived atom whose fn reads through the ctx — dependencies
@@ -342,7 +342,7 @@ pub fn derive<T>(f: fn(DeriveCtx) -> T) -> Readable<T> {
   let wrap = fn (ctx: DeriveCtx) -> opaque {
     return opaque(f(ctx));
   };
-  return Derived<T>.of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), STAMP_NUM_F64);
+  return Derived<T>::of(ctx_bridge(), derive_seal(opaque(wrap), TAG_BOX), STAMP_NUM_F64);
 }
 
 // The watch rail — BOA's model: the cb is a nil-payload MUTATION (the
@@ -372,7 +372,7 @@ impl Watch {
 pub fn watch<T>(atom: Readable<T>, cb: Mutation<nil>) -> Watch {
   // atom_id is pub-grade iface machinery — kit-internal, never a
   // user spelling.
-  return Watch.of(rs_watch_mut(atom.atom_id(), cb.seal(SEAL_NIL)));
+  return Watch::of(rs_watch_mut(atom.atom_id(), cb.seal(SEAL_NIL)));
 }
 
 // Mint a mutation (`boa: mutate<A>((ctx, a) => ...)`): the engine
@@ -389,6 +389,6 @@ pub fn mutate<A>(f: fn(MutationCtx, A)) -> Mutation<A> {
     f(ctx, unopaque<A>(b));
   };
   let run_atom = mutate_seal(opaque(wrap), SEAL_BOX);
-  return MutationOf<A>.of(opaque(f), opaque(wrap), run_atom);
+  return MutationOf<A>::of(opaque(f), opaque(wrap), run_atom);
 }
 

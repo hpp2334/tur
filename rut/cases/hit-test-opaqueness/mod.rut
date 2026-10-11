@@ -22,7 +22,7 @@ entry fn start() -> u64 {
         ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
     });
 
-    let mut stack = Stack().alignment(Align.TopLeft);
+    let mut stack = Stack().alignment(Align::TopLeft);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
     let target = Container()
@@ -40,7 +40,7 @@ entry fn start() -> u64 {
 
     // A translucent MouseRegion over the right half (x 200..400).
     let region_child = SizedBox(200.0, 600.0).child(Container().build()).query_key("region").build();
-    let region = MouseRegion().cursor(Cursor.Auto).behavior(HitTestBehavior.Translucent).child(region_child).build();
+    let region = MouseRegion().cursor(Cursor::Auto).behavior(HitTestBehavior::Translucent).child(region_child).build();
     stack.child(Positioned().left(200.0).width(200.0).height(600.0).child(region).build());
 
     mount(stack.build());

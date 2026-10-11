@@ -3,7 +3,7 @@
 // them is its own module (one class family per leaf). Consumers import
 // through deep use paths (`use tur_kit::layout::flex::{ Column };`); the
 // kit's own cross-file references are dot-qualified positions
-// (`flags.MainAlign`, `handles.View`). Decls-only roots: no content
+// (`flags::MainAlign`, `handles::View`). Decls-only roots: no content
 // lives in a namespace node.
 
 // tur_kit — the authored element-construction surface (the kit).

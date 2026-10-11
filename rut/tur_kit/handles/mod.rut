@@ -51,7 +51,7 @@ pub fn mount(v: View) {
 // A structured store list (`list_new`; the `.push` / `.len` / `.item`
 // method surface). The store lane still crosses as the raw opaque (the
 // KV holds structured values as host opaques), so `raw()` is pub for
-// the `source<opaque>(handles.raw())` crossings.
+// the `source<opaque>(handles::raw())` crossings.
 pub class ListHandle(opaque);
 
 impl ListHandle {
@@ -151,8 +151,8 @@ impl VAppCtrl {
   }
   // The public read: the controller's status rail as a typed Source<str>
   // (the playground's watch rides it — no raw atom ids in biz code).
-  pub fn status_source(self) -> reactive.Source<str> {
-    return reactive.Source<str>.of(ctx_bridge(), va_status_atom(self.inner), false, reactive.STAMP_NUM_F64);
+  pub fn status_source(self) -> reactive::Source<str> {
+    return reactive::Source<str>::of(ctx_bridge(), va_status_atom(self.inner), false, reactive::STAMP_NUM_F64);
   }
   pub fn error(self) -> str {
     return va_error(self.inner);

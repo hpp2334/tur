@@ -7,9 +7,9 @@ use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 
 entry fn start() {
-    let mut col = Column().cross_alignment(CrossAlign.Start);
+    let mut col = Column().cross_alignment(CrossAlign::Start);
     let row = Row()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(box_w(100.0))
         .child(box_w(8.0))
         .child(Expanded().flex(1.0).child(box_w(0.0)).build());

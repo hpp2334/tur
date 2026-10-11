@@ -13,7 +13,7 @@ fn box_h(h: f64) -> View {
 
 entry fn start() {
     let col = Column()
-        .main_axis_size(MainAxisSize.Min)
+        .main_axis_size(MainAxisSize::Min)
         .child(box_h(300.0))
         .child(box_h(300.0))
         .child(box_h(300.0));

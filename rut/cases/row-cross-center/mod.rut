@@ -9,7 +9,7 @@ entry fn start() {
     let outer = Container()
         .width_height(200.0, 36.0)
         .padding(0.0)
-        .child(Row().cross_alignment(CrossAlign.Center).child(box_wh(20.0, 20.0)).child(box_wh(40.0, 10.0)).build());
+        .child(Row().cross_alignment(CrossAlign::Center).child(box_wh(20.0, 20.0)).child(box_wh(40.0, 10.0)).build());
     mount(outer.build());
 }
 

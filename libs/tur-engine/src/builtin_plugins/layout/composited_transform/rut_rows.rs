@@ -36,7 +36,7 @@ pub(crate) fn install_decl_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) 
 /// Declare the composited rows (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        (n.to_string(), p, r, false)
+        rut_driver::HostRow::root(n, p, r, false)
     };
     cx.decl.extend(vec![
         row("ct_link_new", vec![], TY_OPAQUE),

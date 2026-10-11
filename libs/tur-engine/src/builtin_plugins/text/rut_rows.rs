@@ -27,6 +27,7 @@ use crate::core::edgy::reactive::{AtomId, Derived, Readable, Source};
 use crate::core::rut_runtime::{RutHandles, RutView, color_of, readable_of};
 use crate::core::view::Val;
 
+use rut_driver::HostRow;
 use rut_vm::Opaque;
 
 /// The pkg-extension payload: decl rows at compile time, bodies at boot.
@@ -43,174 +44,174 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     cx.decl.extend(vec![
         // text family
-        ("text_new".to_string(), vec![], TY_OPAQUE, false),
-        (
-            "text_text".to_string(),
+        HostRow::root("text_new", vec![], TY_OPAQUE, false),
+        HostRow::root(
+            "text_text",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        (
-            "text_bind".to_string(),
+        HostRow::root(
+            "text_bind",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "text_bind_derived".to_string(),
+        HostRow::root(
+            "text_bind_derived",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "text_size".to_string(),
+        HostRow::root(
+            "text_size",
             vec![TY_OPAQUE, TY_F64],
             TY_NIL,
             false,
         ),
-        (
-            "text_weight".to_string(),
+        HostRow::root(
+            "text_weight",
             vec![TY_OPAQUE, TY_F64],
             TY_NIL,
             false,
         ),
-        (
-            "text_color".to_string(),
+        HostRow::root(
+            "text_color",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "text_max_lines".to_string(),
+        HostRow::root(
+            "text_max_lines",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        ("text_clip".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        ("text_ellipsis".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        (
-            "text_overflow_visible".to_string(),
+        HostRow::root("text_clip", vec![TY_OPAQUE], TY_NIL, false),
+        HostRow::root("text_ellipsis", vec![TY_OPAQUE], TY_NIL, false),
+        HostRow::root(
+            "text_overflow_visible",
             vec![TY_OPAQUE],
             TY_NIL,
             false,
         ),
-        (
-            "text_selectable".to_string(),
+        HostRow::root(
+            "text_selectable",
             vec![TY_OPAQUE, TY_BOOL],
             TY_NIL,
             false,
         ),
-        (
-            "text_qkey".to_string(),
+        HostRow::root(
+            "text_qkey",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        ("text_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
+        HostRow::root("text_build", vec![TY_OPAQUE], TY_OPAQUE, false),
         // rich-text spans
-        ("spans_new".to_string(), vec![], TY_OPAQUE, false),
-        (
-            "span_add".to_string(),
+        HostRow::root("spans_new", vec![], TY_OPAQUE, false),
+        HostRow::root(
+            "span_add",
             vec![TY_OPAQUE, TY_STR, TY_F64, TY_U64, TY_F64, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "text_spans".to_string(),
+        HostRow::root(
+            "text_spans",
             vec![TY_OPAQUE, TY_OPAQUE],
             TY_NIL,
             false,
         ),
         // input family
-        ("input_new".to_string(), vec![], TY_OPAQUE, false),
-        (
-            "input_controller".to_string(),
+        HostRow::root("input_new", vec![], TY_OPAQUE, false),
+        HostRow::root(
+            "input_controller",
             vec![TY_OPAQUE, TY_OPAQUE],
             TY_NIL,
             false,
         ),
-        (
-            "input_undo".to_string(),
+        HostRow::root(
+            "input_undo",
             vec![TY_OPAQUE, TY_OPAQUE],
             TY_NIL,
             false,
         ),
-        (
-            "input_size".to_string(),
+        HostRow::root(
+            "input_size",
             vec![TY_OPAQUE, TY_F64, TY_F64],
             TY_NIL,
             false,
         ),
-        (
-            "input_placeholder".to_string(),
+        HostRow::root(
+            "input_placeholder",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        (
-            "input_color".to_string(),
+        HostRow::root(
+            "input_color",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "input_placeholder_color".to_string(),
+        HostRow::root(
+            "input_placeholder_color",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "input_cursor_color".to_string(),
+        HostRow::root(
+            "input_cursor_color",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "input_font_size".to_string(),
+        HostRow::root(
+            "input_font_size",
             vec![TY_OPAQUE, TY_F64],
             TY_NIL,
             false,
         ),
         // the password twin's surface: the obscure toggle + the configurable
         // obscuring character (the JS `obscureText` / `obscuringCharacter`).
-        (
-            "input_obscure".to_string(),
+        HostRow::root(
+            "input_obscure",
             vec![TY_OPAQUE, TY_BOOL],
             TY_NIL,
             false,
         ),
         // the reactive obscure toggle (`Input().obscure_bound(atom)` — the
         // reveal flip rides a live bool atom, no rebuild).
-        (
-            "input_obscure_bound".to_string(),
+        HostRow::root(
+            "input_obscure_bound",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "input_obscure_char".to_string(),
+        HostRow::root(
+            "input_obscure_char",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
         // the reactive placeholder twin (`placeholder_bound`).
-        (
-            "input_placeholder_bound".to_string(),
+        HostRow::root(
+            "input_placeholder_bound",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
         // the multiline toggle (the JS `multiline: true` twin).
-        (
-            "input_multiline".to_string(),
+        HostRow::root(
+            "input_multiline",
             vec![TY_OPAQUE, TY_BOOL],
             TY_NIL,
             false,
         ),
         // the font family (the JS `Input().fontFamily(...)` twin — the code
         // editor pins `"monospace"` so caret math sees uniform glyphs).
-        (
-            "input_font_family".to_string(),
+        HostRow::root(
+            "input_font_family",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
@@ -219,64 +220,64 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         // atom)` installs the sealed on-input mutation on the builder's
         // shared controller; every user edit enqueues its invocation with
         // the typed `InputEvent` (value + enter).
-        (
-            "input_on_input".to_string(),
+        HostRow::root(
+            "input_on_input",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
             false,
         ),
-        (
-            "input_qkey".to_string(),
+        HostRow::root(
+            "input_qkey",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        ("input_build".to_string(), vec![TY_OPAQUE], TY_OPAQUE, false),
+        HostRow::root("input_build", vec![TY_OPAQUE], TY_OPAQUE, false),
         // controllers (realm-minted, method rows)
-        ("tctrl_new".to_string(), vec![], TY_OPAQUE, false),
-        ("undo_new".to_string(), vec![], TY_OPAQUE, false),
-        ("tctrl_text".to_string(), vec![TY_OPAQUE], TY_STR, false),
-        (
-            "tctrl_set_text".to_string(),
+        HostRow::root("tctrl_new", vec![], TY_OPAQUE, false),
+        HostRow::root("undo_new", vec![], TY_OPAQUE, false),
+        HostRow::root("tctrl_text", vec![TY_OPAQUE], TY_STR, false),
+        HostRow::root(
+            "tctrl_set_text",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        (
-            "tctrl_push_span".to_string(),
+        HostRow::root(
+            "tctrl_push_span",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        (
-            "tctrl_delete_selection".to_string(),
+        HostRow::root(
+            "tctrl_delete_selection",
             vec![TY_OPAQUE],
             TY_NIL,
             false,
         ),
-        (
-            "tctrl_insert_text".to_string(),
+        HostRow::root(
+            "tctrl_insert_text",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        ("tctrl_cursor".to_string(), vec![TY_OPAQUE], TY_U64, false),
-        (
-            "tctrl_select".to_string(),
+        HostRow::root("tctrl_cursor", vec![TY_OPAQUE], TY_U64, false),
+        HostRow::root(
+            "tctrl_select",
             vec![TY_OPAQUE, TY_U64, TY_U64],
             TY_NIL,
             false,
         ),
-        ("tctrl_clear".to_string(), vec![TY_OPAQUE], TY_NIL, false),
-        (
-            "tctrl_paste".to_string(),
+        HostRow::root("tctrl_clear", vec![TY_OPAQUE], TY_NIL, false),
+        HostRow::root(
+            "tctrl_paste",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
         ),
-        ("undo_can_undo".to_string(), vec![TY_OPAQUE], TY_BOOL, false),
-        ("undo_can_redo".to_string(), vec![TY_OPAQUE], TY_BOOL, false),
-        ("undo_clear".to_string(), vec![TY_OPAQUE], TY_NIL, false),
+        HostRow::root("undo_can_undo", vec![TY_OPAQUE], TY_BOOL, false),
+        HostRow::root("undo_can_redo", vec![TY_OPAQUE], TY_BOOL, false),
+        HostRow::root("undo_clear", vec![TY_OPAQUE], TY_NIL, false),
     ]);
     // (No flag consts: the span flags are the kit's name-only
     // `SpanFlags` enum — the `when` mapper in tur_kit is the sole

@@ -30,7 +30,7 @@ entry fn start() {
     let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
     let input = input;
     let col = Column().child(input);
-    let mut scroller = ScrollView().axis(Axis.Vertical).child(col.build()).query_key("scroll").build();
+    let mut scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
 }

@@ -89,7 +89,7 @@ entry fn start() -> u64 {
         .build();
 
     let page = Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(table)
         .child(SizedBox(0.0, 12.0).build())
         .child(Text().text_bound(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build())
@@ -107,7 +107,7 @@ fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
                taps: [Mutation<nil>]) -> View {
     let i: i32 = col as i32;
     return MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(
             PointerInteract()
                 .on_click(taps[i])
@@ -272,7 +272,7 @@ fn str_less(a: str, b: str) -> bool {
 // at build time (the grid_of precedent — builders read live state). The
 // name column is emphasized (boa's `Cell(row.name, true)`).
 fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
-    let read = MutationCtx.over(bridge());
+    let read = MutationCtx::over(bridge());
     let item = value_item(read.get<opaque>(rows), row);
     let text = slot(item, col);
     let mut fg: u64 = CELL_FG;

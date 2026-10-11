@@ -159,7 +159,7 @@ entry fn start() {
         content.child(b.build());
         i += 1;
     }
-    let scroller = ScrollView().axis(Axis.Vertical).initial_offset(0.0).child(content.build()).build();
+    let scroller = ScrollView().axis(Axis::Vertical).initial_offset(0.0).child(content.build()).build();
     let root = Column().child(Expanded().flex(1.0).child(scroller).build());
     mount(root.build());
 }
@@ -302,7 +302,7 @@ entry fn start() {
 
     let input = Input().controller(ctrl).width_height(100000.0, 10000.0).font_size(14.0).build();
     input.query_key("ed");
-    let scroller = ScrollView().axis(Axis.Vertical).initial_offset(0.0).child(input).build();
+    let scroller = ScrollView().axis(Axis::Vertical).initial_offset(0.0).child(input).build();
     scroller.query_key("scroll");
     mount(scroller);
 }

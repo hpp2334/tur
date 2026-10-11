@@ -6,8 +6,8 @@ use tur_kit::layout::flex::{ Column, Row };
 
 entry fn start() {
     let col = Column()
-        .cross_alignment(CrossAlign.Start)
-        .child(Row().cross_alignment(CrossAlign.Center).main_axis_size(MainAxisSize.Min).child(box_wh(20.0, 20.0)).child(box_wh(40.0, 10.0)).build())
+        .cross_alignment(CrossAlign::Start)
+        .child(Row().cross_alignment(CrossAlign::Center).main_axis_size(MainAxisSize::Min).child(box_wh(20.0, 20.0)).child(box_wh(40.0, 10.0)).build())
         .child(box_wh(0.0, 30.0))
         .child(box_wh(0.0, 20.0));
     mount(col.build());

@@ -14,7 +14,7 @@ entry fn start() -> u64 {
     let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(content, "after");
     });
-    let col = Column().cross_alignment(CrossAlign.Start);
+    let col = Column().cross_alignment(CrossAlign::Start);
     let t = Text().text_bound(content).query_key("click-text");
     col.child(PointerInteract().on_click(b_click).child(t.build()).build());
     mount(col.build());

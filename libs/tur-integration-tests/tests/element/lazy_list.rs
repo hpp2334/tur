@@ -817,7 +817,7 @@ entry fn start() -> opaque {
 }
 
 entry fn set_count(cx: opaque, n: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("lazy-list fixture: cx is not an AppContext");
     }
@@ -873,7 +873,7 @@ entry fn start() -> opaque {
 }
 
 entry fn set_count(cx: opaque, n: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("lazy-list fixture: cx is not an AppContext");
     }
@@ -954,7 +954,7 @@ entry fn start() -> opaque {
 }
 
 entry fn set_count(cx: opaque, n: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("lazy-list fixture: cx is not an AppContext");
     }

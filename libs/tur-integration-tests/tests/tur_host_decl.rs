@@ -95,7 +95,7 @@ fn tur_host_decl_snapshot_matches_the_standard_session() {
 
     // The snapshot keeps lowering as a decl module whose row set is
     // EXACTLY the live surface (name + arity + types + async lane).
-    let lowered = lower_decl_module(&committed, "tur_host.d.rut")
+    let lowered = lower_decl_module(&committed, &std::collections::BTreeMap::new(), "tur_host.d.rut")
         .expect("the committed snapshot parses as a decl surface");
     let PkgBody::Host { host_funcs, .. } = lowered.body else {
         panic!("lower_decl_module answered a non-host pkg");
@@ -112,13 +112,11 @@ fn tur_host_decl_snapshot_matches_the_standard_session() {
         live_rows.len(),
         "row-count drift between the snapshot and the live surface"
     );
-    for ((name, ptys, ret, is_async), (lname, lptys, lret, lis_async)) in
-        host_funcs.iter().zip(live_rows.iter())
-    {
-        assert_eq!(name, lname, "row order/name drift");
-        assert_eq!(ptys, lptys, "param drift on `{name}`");
-        assert_eq!(ret, lret, "return drift on `{name}`");
-        assert_eq!(is_async, lis_async, "async drift on `{name}`");
+    for (row, lrow) in host_funcs.iter().zip(live_rows.iter()) {
+        assert_eq!(row.name, lrow.name, "row order/name drift");
+        assert_eq!(row.params, lrow.params, "param drift on `{}`", row.name);
+        assert_eq!(row.ret, lrow.ret, "return drift on `{}`", row.name);
+        assert_eq!(row.is_async, lrow.is_async, "async drift on `{}`", row.name);
     }
 }
 

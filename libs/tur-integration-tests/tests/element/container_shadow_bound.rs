@@ -42,7 +42,7 @@ entry fn start() -> opaque {
 }
 
 fn shadow_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("shadow fixture: cx is not an AppContext");
     }

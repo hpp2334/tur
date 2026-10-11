@@ -10,7 +10,7 @@ entry fn start() {
         .width_height(200.0, 200.0)
         .padding(16.0)
         .color(0xFFFFFFFFu64)
-        .border(0x000000FFu64, 2.0, BorderPosition.Inside)
+        .border(0x000000FFu64, 2.0, BorderPosition::Inside)
         .radius(8.0)
         .child(Text().text("Border").font_size(16.0).build())
         .query_key("border-container");

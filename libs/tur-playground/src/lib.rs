@@ -26,6 +26,7 @@ mod highlight;
 
 use std::rc::Rc;
 
+use rut_driver::HostRow;
 use rut_vm::Opaque;
 
 use tur_engine::builtin_plugins::text::{RutTextCtrl, controller::SpanData};
@@ -49,26 +50,26 @@ impl Plugin for TurRutPlaygroundPlugin {
 
 fn install(cx: &mut RutPkgCx<'_>) {
     cx.decl.extend(vec![
-        (
-            "pg_compile".to_string(),
+        HostRow::root(
+            "pg_compile",
             vec![rut_core::types::TY_STR],
             rut_core::types::TY_U64,
             false,
         ),
-        (
-            "pg_compile_diags".to_string(),
+        HostRow::root(
+            "pg_compile_diags",
             vec![],
             rut_core::types::TY_STR,
             false,
         ),
-        (
-            "pg_highlight".to_string(),
+        HostRow::root(
+            "pg_highlight",
             vec![rut_core::types::TY_STR],
             rut_core::types::TY_OPAQUE,
             false,
         ),
-        (
-            "pg_apply_highlight".to_string(),
+        HostRow::root(
+            "pg_apply_highlight",
             vec![rut_core::types::TY_OPAQUE, rut_core::types::TY_OPAQUE],
             rut_core::types::TY_NIL,
             false,

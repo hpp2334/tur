@@ -28,7 +28,7 @@ entry fn start() -> u64 {
     });
 
     let mut stack = Stack()
-        .alignment(Align.TopLeft)
+        .alignment(Align::TopLeft)
         .child(SizedBox(400.0, 400.0).child(Container().build()).build());
 
     let label = Text().text("drag me").font_size(14.0);

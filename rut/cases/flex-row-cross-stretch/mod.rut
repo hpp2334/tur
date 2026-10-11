@@ -12,7 +12,7 @@ fn box_wh(w: f64, h: f64) -> View {
 
 entry fn start() {
     let row = Row()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(box_wh(50.0, 0.0))
         .child(box_wh(30.0, 0.0));
     mount(row.build());

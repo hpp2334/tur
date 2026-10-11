@@ -193,7 +193,7 @@ use tur_kit::text::core::{ Text };
 entry fn start() {
     let mut pill = Row()
         .query_key("pill")
-        .main_axis_size(MainAxisSize.Min)
+        .main_axis_size(MainAxisSize::Min)
         .child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
     let txt = Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis();
@@ -311,14 +311,14 @@ fn long_label() -> View {
 entry fn start() {
     let long_row = Row()
         .query_key("long-row")
-        .main_axis_size(MainAxisSize.Min)
+        .main_axis_size(MainAxisSize::Min)
         .child(Container().width_height(100.0, 40.0).build())
         .child(Flexible().flex(1.0).child(long_label()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
     let short_row = Row()
         .query_key("short-row")
-        .main_axis_size(MainAxisSize.Min)
+        .main_axis_size(MainAxisSize::Min)
         .child(Container().width_height(100.0, 40.0).build())
         .child(Flexible().flex(1.0).child(Text().text("Hi").build()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());

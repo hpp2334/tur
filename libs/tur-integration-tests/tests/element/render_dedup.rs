@@ -108,7 +108,7 @@ entry fn do_set(cx: opaque, v: f64) {
     // 0 clears the brush (the decode refuses 0 — the prop resolves
     // absent); the container repaints unpainted (the batch differs
     // either way).
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("dedup fixture: cx is not an AppContext");
     }

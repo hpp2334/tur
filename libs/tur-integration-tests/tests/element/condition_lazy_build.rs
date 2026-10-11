@@ -55,7 +55,7 @@ entry fn start() -> opaque {
 
 // The probe seam's downcast (one nil-guard, shared).
 fn cond_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("cond fixture: cx is not an AppContext");
     }
@@ -165,7 +165,7 @@ entry fn start() -> opaque {
 }
 
 entry fn probe_tab(cx: opaque, flag: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("switch fixture: cx is not an AppContext");
     }

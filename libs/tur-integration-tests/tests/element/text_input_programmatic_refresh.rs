@@ -35,7 +35,7 @@ entry fn entry_start() -> opaque {
 }
 
 fn editor_cx(cx: opaque) -> EditorCx {
-    let c = opaque.downcast<EditorCx>(cx);
+    let c = opaque::downcast<EditorCx>(cx);
     if (c == nil) {
         panic("editor fixture: cx is not an EditorCx");
     }

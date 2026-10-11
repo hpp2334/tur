@@ -250,7 +250,7 @@ entry fn start() -> opaque {
 }
 
 entry fn probe_r(cx: opaque, b: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("radius fixture: cx is not an AppContext");
     }

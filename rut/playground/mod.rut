@@ -347,9 +347,9 @@ entry fn start() -> opaque {
 }
 
 // The probe seam's downcast (the context-crossing contract).
-// contract's `opaque.downcast<AppContext>`).
+// contract's `opaque::downcast<AppContext>`).
 fn probe_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("probe: the held context is not an AppContext");
     }
@@ -398,13 +398,13 @@ fn build_ui(cx: AppContext) {
     let sbar = status_bar(cx);
 
 
-    let shell = Column().cross_alignment(CrossAlign.Stretch)
+    let shell = Column().cross_alignment(CrossAlign::Stretch)
 
         .child(toolbar)
 
         .child(Expanded().flex(1.0)
 
-            .child(Row().cross_alignment(CrossAlign.Stretch)
+            .child(Row().cross_alignment(CrossAlign::Stretch)
 
                 .child(sidebar)
 
@@ -437,18 +437,18 @@ fn sidebar(cx: AppContext) -> View {
     // CASES header (the boa SidebarHeader — 10px tertiary label + the
     // registry count, space-between).
     let cases_header = Container().padding(14.0)
-        .child(Row().main_alignment(MainAlign.SpaceBetween)
+        .child(Row().main_alignment(MainAlign::SpaceBetween)
             .child(Text().text("CASES").font_size(10.0).color(TEXT_TERTIARY).build())
             .child(Text().text(f"{pg_case_count()}").font_size(10.0).color(TEXT_TERTIARY)
                 .query_key("cases-count").build())
             .build())
         .build();
     let sidebar = Container().width_bound(cx.sbw).color(BG_PANEL).query_key("sidebar")
-        .child(Column().cross_alignment(CrossAlign.Stretch)
+        .child(Column().cross_alignment(CrossAlign::Stretch)
             .child(cases_header)
             .child(Expanded().flex(1.0)
-                .child(ScrollView().axis(Axis.Vertical)
-                    .child(Column().cross_alignment(CrossAlign.Stretch)
+                .child(ScrollView().axis(Axis::Vertical)
+                    .child(Column().cross_alignment(CrossAlign::Stretch)
                         .child(Each(cx.names).item_builder(fn (i: u64, name: str) -> View { return side_item(cx, i, name); }).build()).build())
                     .build())
                 .build())
@@ -464,7 +464,7 @@ fn toolbar(cx: AppContext) -> View {
     // Reset, the auto-run toggle and the Split/Edit/View tabs (the boa
     // tab cluster sits on the toolbar's right side).
     let brand = Container().padding(12.0)
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             .child(Text().text("tur").font_size(14.0).color(ACCENT_SOLID).build())
             .child(SizedBox(4.0, 0.0).build())
             .child(Text().text("playground").font_size(11.0).color(TEXT_SECONDARY).build())
@@ -484,10 +484,10 @@ fn toolbar(cx: AppContext) -> View {
     let run = MouseRegion()
         .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<u64>(cx.run_h, BTN_PRIMARY_HOVER); }))
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.run_h, ACCENT_PRIMARY); }))
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { run_case(ctx, cx); })).query_key("run")
             .child(Container().padding(6.0).radius(6.0).color_bound(cx.run_h)
-                .child(Row().main_axis_size(MainAxisSize.Min)
+                .child(Row().main_axis_size(MainAxisSize::Min)
                     .child(Image(cx.run_icon).width(10.0).height(10.0).build())
                     .child(SizedBox(4.0, 0.0).build())
                     .child(Text().text("Run").color(TEXT_ON_ACCENT).font_size(12.0).build())
@@ -498,10 +498,10 @@ fn toolbar(cx: AppContext) -> View {
     let reset = MouseRegion()
         .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<u64>(cx.reset_h, BG_HOVER); }))
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.reset_h, BTN_GHOST); }))
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { reset_case(ctx, cx); })).query_key("reset")
             .child(Container().padding(6.0).radius(6.0).color_bound(cx.reset_h)
-                .child(Row().main_axis_size(MainAxisSize.Min)
+                .child(Row().main_axis_size(MainAxisSize::Min)
                     .child(Image(cx.reset_icon).width(12.0).height(12.0).build())
                     .child(SizedBox(4.0, 0.0).build())
                     .child(Text().text("Reset").color(TEXT_SECONDARY).font_size(12.0).build())
@@ -509,7 +509,7 @@ fn toolbar(cx: AppContext) -> View {
                 .build())
             .build())
         .build();
-    let actions = Row().main_axis_size(MainAxisSize.Min)
+    let actions = Row().main_axis_size(MainAxisSize::Min)
         .child(run)
         .child(SizedBox(6.0, 0.0).build())
         .child(reset)
@@ -520,7 +520,7 @@ fn toolbar(cx: AppContext) -> View {
         .child(SizedBox(12.0, 0.0).build())
         .build();
     let toolbar = Container().width_height(0.0, 48.0).color(BG_ELEVATED)
-        .border(BORDER_SUBTLE, 1.0, BorderPosition.Inside).query_key("toolbar")
+        .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("toolbar")
         .child(Row()
             .child(brand)
             .child(Expanded().flex(1.0).child(case_name).build())
@@ -553,8 +553,8 @@ fn editor_pane(cx: AppContext) -> View {
         .multiline(true).on_input(mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }))
         .query_key("editor").build();
     let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
-        .child(ScrollView().axis(Axis.Vertical).query_key("editor-scroll")
-            .child(Column().cross_alignment(CrossAlign.Stretch).child(editor).build())
+        .child(ScrollView().axis(Axis::Vertical).query_key("editor-scroll")
+            .child(Column().cross_alignment(CrossAlign::Stretch).child(editor).build())
             .build())
         .build();
     return editor_pane;
@@ -600,7 +600,7 @@ fn editor_slot(cx: AppContext, editor_pane: View) -> View {
     // zeros (the box_width / box_height rows — `width_height`'s 0 would
     // mean "unset").
     let slot = Switch().value(cx.layout)
-        .cases("view", Container().width(0.0).height(0.0).clip(Clip.HardEdge)
+        .cases("view", Container().width(0.0).height(0.0).clip(Clip::HardEdge)
             .child(editor_pane).build())
         .cases("split", Container().width_bound(cx.edw).child(editor_pane).build())
         .fallback(Expanded().flex(1.0).child(editor_pane).build())
@@ -611,7 +611,7 @@ fn editor_slot(cx: AppContext, editor_pane: View) -> View {
 
 fn viewer_slot(cx: AppContext, viewer_pane: View) -> View {
     let slot = Switch().value(cx.layout)
-        .cases("edit", Container().width(0.0).height(0.0).clip(Clip.HardEdge)
+        .cases("edit", Container().width(0.0).height(0.0).clip(Clip::HardEdge)
             .child(viewer_pane).build())
         .fallback(Expanded().flex(1.0).child(viewer_pane).build())
         .query_key("viewer-slot")
@@ -626,7 +626,7 @@ fn divider(cx: AppContext) -> View {
     // its bar across the whole grab strip) that turns the brand teal
     // while dragging. Drag intents resize the sidebar-width atom (clamped
     // 200–720 in `div_move` — the drag corpus's delta-tracking pattern).
-    let divider = MouseRegion().cursor(Cursor.ColResize)
+    let divider = MouseRegion().cursor(Cursor::ColResize)
         .child(PointerInteract()
             .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_down(ctx, cx, ev.global.x); }))
             .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_move(ctx, cx, ev.global.x); }))
@@ -647,7 +647,7 @@ fn edivider_slot(cx: AppContext) -> View {
     // `ediv_move` — the same delta-tracking drag rail as the sidebar
     // divider above). Outside split mode the pane Switch shells it into a
     // zero box (the boa Condition on `layoutMode === "split"`).
-    let edivider = MouseRegion().cursor(Cursor.ColResize)
+    let edivider = MouseRegion().cursor(Cursor::ColResize)
         .child(PointerInteract()
             .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_down(ctx, cx, ev.global.x); }))
             .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_move(ctx, cx, ev.global.x); }))
@@ -675,11 +675,11 @@ fn status_bar(cx: AppContext) -> View {
     // label renders "") — revisit on the next rut bump.
     // The derived atom rides the raw-atom Source spelling (the
     // upstream-workaround shape above).
-    let ago_d: Readable<str> = Source<str>.of(bridge(), rs_derive(fmt_ago, cx.ago.atom_id()), false, 1);
+    let ago_d: Readable<str> = Source<str>::of(bridge(), rs_derive(fmt_ago, cx.ago.atom_id()), false, 1);
     // The state label mirrors the dot's law: green while fine, the status
     // red for the failure states (the boa status bar colors both).
     let sbar_left = Container().padding(4.0)
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             .child(SizedBox(8.0, 0.0).build())
             .child(Container().width_height(6.0, 6.0).radius(999.0).color_bound(cx.dot)
                 .query_key("status-dot").build())
@@ -692,7 +692,7 @@ fn status_bar(cx: AppContext) -> View {
             .build())
         .build();
     let sbar_right = Container().padding(4.0)
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             .child(auto_state_text(cx))
             .child(SizedBox(12.0, 0.0).build())
             .child(Text().text("tur v0.1").font_size(11.0).color(TEXT_TERTIARY).build())
@@ -700,9 +700,9 @@ fn status_bar(cx: AppContext) -> View {
             .build())
         .build();
     let sbar = Container().width_height(0.0, 22.0).color(BG_ELEVATED)
-        .border(BORDER_SUBTLE, 1.0, BorderPosition.Inside).query_key("status-bar")
-        .alignment(Align.Center)
-        .child(Row().main_alignment(MainAlign.SpaceBetween)
+        .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("status-bar")
+        .alignment(Align::Center)
+        .child(Row().main_alignment(MainAlign::SpaceBetween)
             .child(sbar_left)
             .child(sbar_right)
             .build())
@@ -720,7 +720,7 @@ fn status_bar(cx: AppContext) -> View {
 fn ready_viewer(cx: AppContext) -> View {
     let host = VirtualApp().bind(cx.app_atom).query_key("viewer").build();
     let overlay = Condition(cx.hint_on)
-        .then(Container().color(CARD_BG).alignment(Align.Center)
+        .then(Container().color(CARD_BG).alignment(Align::Center)
             .child(Text().text_bound(cx.hint).font_size(13.0).color(TEXT_TERTIARY)
                 .query_key("viewer/hint").build())
             .build())
@@ -728,7 +728,7 @@ fn ready_viewer(cx: AppContext) -> View {
         .build();
     return Container().padding(12.0).color(BG_VIEWER)
         .child(Container().color(CARD_BG).query_key("viewer-card")
-            .child(Stack().fit(StackFit.Expand).child(host).child(overlay).build())
+            .child(Stack().fit(StackFit::Expand).child(host).child(overlay).build())
             .build())
         .build();
 }
@@ -737,10 +737,10 @@ fn ready_viewer(cx: AppContext) -> View {
 // panel, "!" badge, title + message (the message atom is shared: the
 // compile diags and the child's `va_error` land in the same rail).
 fn error_view(title_text: str, err: Readable<str>) -> View {
-    return Container().color(BG_DANGER).padding(24.0).alignment(Align.Center)
-        .child(Column().cross_alignment(CrossAlign.Center)
+    return Container().color(BG_DANGER).padding(24.0).alignment(Align::Center)
+        .child(Column().cross_alignment(CrossAlign::Center)
             .child(Container().width_height(32.0, 32.0).radius(16.0).color(STATUS_ERROR)
-                .alignment(Align.Center)
+                .alignment(Align::Center)
                 .child(Text().text("!").font_size(18.0).color(TEXT_INVERSE).build())
                 .build())
             .child(SizedBox(0.0, 16.0).build())
@@ -776,7 +776,7 @@ fn state_label(cx: AppContext) -> View {
 fn auto_toggle(cx: AppContext) -> View {
     let on = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
-            .child(Stack().fit(StackFit.Expand)
+            .child(Stack().fit(StackFit::Expand)
                 .child(Positioned().top(2.0).left(14.0)
                     .child(Container().width_height(12.0, 12.0).radius(999.0)
                         .color(TEXT_INVERSE).build())
@@ -786,7 +786,7 @@ fn auto_toggle(cx: AppContext) -> View {
         .build();
     let off = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
         .child(Container().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
-            .child(Stack().fit(StackFit.Expand)
+            .child(Stack().fit(StackFit::Expand)
                 .child(Positioned().top(2.0).left(2.0)
                     .child(Container().width_height(12.0, 12.0).radius(999.0)
                         .color(TEXT_INVERSE).build())
@@ -794,7 +794,7 @@ fn auto_toggle(cx: AppContext) -> View {
                 .build())
             .build())
         .build();
-    return Row().main_axis_size(MainAxisSize.Min)
+    return Row().main_axis_size(MainAxisSize::Min)
         .child(Text().text("auto").font_size(11.0).color(TEXT_SECONDARY)
             .query_key("auto-caption").build())
         .child(SizedBox(6.0, 0.0).build())
@@ -816,7 +816,7 @@ fn auto_state_text(cx: AppContext) -> View {
 // The edited pill — a coral dot + "edited", visible only while the editor
 // text differs from the last-compiled source.
 fn edited_pill(cx: AppContext) -> View {
-    let pill = Row().main_axis_size(MainAxisSize.Min)
+    let pill = Row().main_axis_size(MainAxisSize::Min)
         .child(SizedBox(12.0, 0.0).build())
         .child(Container().width_height(6.0, 6.0).radius(999.0).color(ACCENT_COMPLEMENT)
             .query_key("edited-pill").build())
@@ -834,7 +834,7 @@ fn tab_button(cx: AppContext, label: str, m: Mutation<nil>, key: str, brush: Rea
     return MouseRegion()
         .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { tab_enter(ctx, cx, idx); }))
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { tab_exit(ctx, cx, idx); }))
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(m).query_key(key)
             .child(Container().padding(6.0).radius(4.0).color_bound(brush)
                 .child(Text().text(label).font_size(11.0).color(TEXT_SECONDARY).build())
@@ -846,7 +846,7 @@ fn tab_button(cx: AppContext, label: str, m: Mutation<nil>, key: str, brush: Rea
 // The Split / Edit / View segmented control (the boa toolbar's right
 // cluster): a tray with the three tabs.
 fn layout_tabs(cx: AppContext) -> View {
-    let tray = Row().main_axis_size(MainAxisSize.Min)
+    let tray = Row().main_axis_size(MainAxisSize::Min)
         .child(tab_button(cx, "Split", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "split"); }), "tab-split", cx.tab_split, 0))
         .child(tab_button(cx, "Edit", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "edit"); }), "tab-edit", cx.tab_edit, 1))
         .child(tab_button(cx, "View", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "view"); }), "tab-view", cx.tab_view, 2))
@@ -888,7 +888,7 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
     });
     let row = Container().padding(8.0)
         .query_key(f"row/{name}")
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             // The reserved 3px bar (never clips — boa's trick): teal when
             // selected, transparent otherwise, so the label never shifts.
             .child(Container().width_height(3.0, 20.0).radius(2.0).color_bound(bar).build())
@@ -903,10 +903,10 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
     let item = MouseRegion()
         .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { row_enter(ctx, cx, i); }))
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { row_exit(ctx, cx, i); }))
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { case_tap(ctx, cx, i); })).child(row).build())
         .build();
-    return Column().cross_alignment(CrossAlign.Stretch)
+    return Column().cross_alignment(CrossAlign::Stretch)
         .child(SizedBox(0.0, 2.0).build())
         .child(item)
         .build();

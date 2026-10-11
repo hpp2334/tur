@@ -17,11 +17,11 @@ impl Input {
   [constructor] pub fn builder() -> Self {
     return Self { spec: input_new() };
   }
-  pub fn controller(mut self, c: handles.TextCtrl) -> Self {
+  pub fn controller(mut self, c: handles::TextCtrl) -> Self {
     input_controller(self.spec, c.raw());
     return self;
   }
-  pub fn undo(mut self, u: handles.UndoCtrl) -> Self {
+  pub fn undo(mut self, u: handles::UndoCtrl) -> Self {
     input_undo(self.spec, u.raw());
     return self;
   }
@@ -35,7 +35,7 @@ impl Input {
   }
   // The reactive reveal toggle: masking rides a live bool (the bound
   // props take the handle).
-  pub fn obscure_bound(mut self, r: reactive.Readable<bool>) -> Self {
+  pub fn obscure_bound(mut self, r: reactive::Readable<bool>) -> Self {
     input_obscure_bound(self.spec, r.atom_id());
     return self;
   }
@@ -48,7 +48,7 @@ impl Input {
     return self;
   }
   // The reactive placeholder: the hint rides a live str.
-  pub fn placeholder_bound(mut self, r: reactive.Readable<str>) -> Self {
+  pub fn placeholder_bound(mut self, r: reactive::Readable<str>) -> Self {
     input_placeholder_bound(self.spec, r.atom_id());
     return self;
   }
@@ -80,16 +80,16 @@ impl Input {
   // the typed `InputEvent` (the fresh value + the enter flag). Bind
   // `.controller(...)` first — the row installs through the builder's
   // shared controller.
-  pub fn on_input(mut self, m: reactive.Mutation<gesture.pointer.InputEvent>) -> Self {
-    input_on_input(self.spec, m.seal(reactive.SEAL_INPUT));
+  pub fn on_input(mut self, m: reactive::Mutation<gesture::pointer::InputEvent>) -> Self {
+    input_on_input(self.spec, m.seal(reactive::SEAL_INPUT));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     input_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(input_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(input_build(self.spec));
   }
 }
 

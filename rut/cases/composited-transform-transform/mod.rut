@@ -17,7 +17,7 @@ entry fn start() {
     let transformed = Transform(1.0, 0.0, 50.0, 10.0).child(target).build();
     stack.child(Positioned().left(20.0).top(20.0).child(transformed).build());
     let red = Container().width_height(20.0, 20.0).color(0xFF0000FFu64);
-    let follower = CompositedFollower().link(link).target_anchor(Align.TopLeft).follower_anchor(Align.TopLeft).child(red.build()).build();
+    let follower = CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(red.build()).build();
     stack.child(follower);
     mount(stack.build());
 }

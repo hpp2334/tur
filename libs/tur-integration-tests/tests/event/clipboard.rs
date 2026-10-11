@@ -191,7 +191,6 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
         get_text(&app, id),
         "heo",
         "Cmd+X should delete the selection from the buffer"
-use tur_kit::flags::{ Cursor };
     );
     assert_eq!(
         get_cursor(&app, id),

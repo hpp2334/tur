@@ -99,7 +99,7 @@ entry fn entry_start() -> opaque {
 // The shared downcast — one nil-guard, no per-entry duplication (a kind
 // mismatch is the loud channel; the guard is belt-and-braces).
 fn anim_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("animation fixture: cx is not an AppContext");
     }
@@ -517,7 +517,7 @@ entry fn entry_start() -> opaque {
 }
 
 fn anim_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("animation fixture: cx is not an AppContext");
     }
@@ -634,7 +634,7 @@ entry fn entry_start() -> opaque {
 }
 
 entry fn probe_s(cx: opaque, b: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("animation fixture: cx is not an AppContext");
     }
@@ -667,7 +667,7 @@ entry fn entry_start() -> opaque {
 // One entry drives both channels (ty reads 2× the arg, the test's b×2
 // expectation).
 entry fn probe_t(cx: opaque, b: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("animation fixture: cx is not an AppContext");
     }

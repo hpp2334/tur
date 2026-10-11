@@ -29,7 +29,7 @@ entry fn start() -> opaque {
 }
 
 fn switch_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("switch fixture: cx is not an AppContext");
     }
@@ -168,7 +168,7 @@ entry fn start() -> opaque {
 }
 
 entry fn set_key(cx: opaque) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("derived switch fixture: cx is not an AppContext");
     }

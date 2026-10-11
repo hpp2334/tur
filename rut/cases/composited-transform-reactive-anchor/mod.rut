@@ -21,7 +21,7 @@ entry fn start() -> u64 {
     let target = CompositedTarget().link(link).child(target_child).build();
     stack.child(Positioned().left(100.0).top(80.0).child(target).build());
     let red = Container().width_height(20.0, 20.0).color(0xFF0000FFu64);
-    let follower = CompositedFollower().link(link).target_anchor_bound(anchor).follower_anchor(Align.TopLeft).child(red.build()).build();
+    let follower = CompositedFollower().link(link).target_anchor_bound(anchor).follower_anchor(Align::TopLeft).child(red.build()).build();
     stack.child(follower);
 
     let btn = Container().width_height(60.0, 30.0).color(0x4F46E1FFu64);

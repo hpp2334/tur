@@ -149,7 +149,7 @@ entry fn start() -> opaque {
 }
 
 fn pos_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("positioned fixture: cx is not an AppContext");
     }

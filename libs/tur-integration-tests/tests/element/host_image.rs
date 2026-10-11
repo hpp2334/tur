@@ -105,7 +105,7 @@ entry fn start() {
 }
 
 entry fn mount_host(host_id: u64, _b: f64) {
-    let col = Column().child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+    let col = Column().child(Image(host_id).width(4.0).fit(BoxFit::Fill).build());
     mount(col.build());
 }
 "#,
@@ -154,8 +154,8 @@ entry fn start() {
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
-        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
-        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+        .child(Image(worker_id).width(1.0).fit(BoxFit::Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit::Fill).build());
     mount(col.build());
 }
 "#,
@@ -219,8 +219,8 @@ entry fn start() {
 entry fn mount_both(host_id: u64, _b: f64) {
     let worker_id = image_resource_solid(1, 1, 0xFF0000FFu64);
     let col = Column()
-        .child(Image(worker_id).width(1.0).fit(BoxFit.Fill).build())
-        .child(Image(host_id).width(4.0).fit(BoxFit.Fill).build());
+        .child(Image(worker_id).width(1.0).fit(BoxFit::Fill).build())
+        .child(Image(host_id).width(4.0).fit(BoxFit::Fill).build());
     mount(col.build());
 }
 "#,
@@ -318,7 +318,7 @@ entry fn start() {
 }
 
 entry fn mount_one(id: u64, _b: f64) {
-    mount(Image(id).width(4.0).fit(BoxFit.Fill).build());
+    mount(Image(id).width(4.0).fit(BoxFit::Fill).build());
 }
 "#,
     )
@@ -375,7 +375,7 @@ entry fn start() {
 
 entry fn mount_svg(_a: u64, _b: f64) {
     let id = image_resource_svg("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>");
-    mount(Column().child(Image(id).width(10.0).fit(BoxFit.Fill).build()).build());
+    mount(Column().child(Image(id).width(10.0).fit(BoxFit::Fill).build()).build());
 }
 "##,
     )

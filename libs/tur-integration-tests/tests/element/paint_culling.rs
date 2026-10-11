@@ -61,7 +61,7 @@ entry fn start() {
         col.child(item(i));
         i += 1;
     }
-    let mut scroller = ScrollView().axis(Axis.Vertical).child(col.build()).query_key("scroll").build();
+    let mut scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
     mount(scroller);
 }
 "#,

@@ -17,6 +17,6 @@ fn item(i: u64) -> View {
 
 entry fn start() {
     let count = source<f64>(50.0);
-    let list = LazyList().item_builder(item).count(count).axis(Axis.Horizontal).item_extent(80.0).query_key("lazy-list-row").build();
+    let list = LazyList().item_builder(item).count(count).axis(Axis::Horizontal).item_extent(80.0).query_key("lazy-list-row").build();
     mount(list);
 }

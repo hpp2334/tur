@@ -16,10 +16,7 @@ use rut_core::types::{
 };
 
 use super::{tur_decl_pkg, RutPkgCx, RutPkgExt};
-use rut_driver::PkgBody;
-
-/// A `host fn` row's surface shape — the decl pkg's tuple, named.
-pub type HostRow = (String, Vec<TypeId>, TypeId, bool);
+use rut_driver::{HostRow, PkgBody};
 
 /// The crossing-set type name for a decl signature (`decl.rs`'s table, in
 /// reverse: the engine rows only ever use these).
@@ -104,20 +101,24 @@ pub fn render_tur_host_decl(exts: &[RutPkgExt]) -> String {
          // Param names are positional (p1..pn) — the engine rows carry none; the\n\
          // crossing is positional too.\n\n",
     );
-    for (name, params, ret, is_async) in &funcs {
-        let params = params
+    for f in &funcs {
+        let params = f
+            .params
             .iter()
             .enumerate()
             .map(|(i, t)| format!("p{}: {}", i + 1, ty_name(*t)))
             .collect::<Vec<_>>()
             .join(", ");
-        let ret = if *ret == TY_NIL {
+        let ret = if f.ret == TY_NIL {
             String::new()
         } else {
-            format!(" -> {}", ty_name(*ret))
+            format!(" -> {}", ty_name(f.ret))
         };
-        let async_kw = if *is_async { "async " } else { "" };
-        out.push_str(&format!("pub host {async_kw}fn {name}({params}){ret};\n"));
+        let async_kw = if f.is_async { "async " } else { "" };
+        out.push_str(&format!(
+            "pub host {async_kw}fn {}({params}){ret};\n",
+            f.name
+        ));
     }
     // The surface grammar has no const spelling (the manifest's `consts`
     // table is their only form); the standard session carries none since

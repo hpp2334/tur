@@ -94,7 +94,7 @@ entry fn start() -> opaque {{
 }}
 
 entry fn set_value(cx: opaque) {{
-    let c = opaque.downcast<IdCx>(cx);
+    let c = opaque::downcast<IdCx>(cx);
     if (c == nil) {{
         panic("id fixture: cx is not an IdCx");
     }}
@@ -566,7 +566,7 @@ entry fn start() -> opaque {
 }
 
 entry fn flip(cx: opaque) {
-    let c = opaque.downcast<FlipCx>(cx);
+    let c = opaque::downcast<FlipCx>(cx);
     if (c == nil) {
         panic("flip fixture: cx is not a FlipCx");
     }

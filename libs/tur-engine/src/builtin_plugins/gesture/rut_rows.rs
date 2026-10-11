@@ -40,7 +40,7 @@ pub(crate) fn install_ext(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
 /// Declare the gesture rows + flag consts (the installer's decl half).
 pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        (n.to_string(), p, r, false)
+        rut_driver::HostRow::root(n, p, r, false)
     };
     cx.decl.extend(vec![
         // pointer interact

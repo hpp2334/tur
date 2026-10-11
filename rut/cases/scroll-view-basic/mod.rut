@@ -4,11 +4,11 @@ use tur_kit::flags::{ Axis, CrossAlign }; use tur_kit::handles::{ View, mount };
 
 entry fn start() {
     let content = Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(box_h(200.0))
         .child(box_h(200.0))
         .child(box_h(200.0));
-    let sv = ScrollView().axis(Axis.Vertical).child(content.build()).query_key("scroll-view").build();
+    let sv = ScrollView().axis(Axis::Vertical).child(content.build()).query_key("scroll-view").build();
     mount(sv);
 }
 

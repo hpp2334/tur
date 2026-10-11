@@ -8,7 +8,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(Container().color(0xFF0000FFu64).padding(20.0).query_key("container").child(Text().text("Empty State").build()).build());
     mount(col.build());
 }

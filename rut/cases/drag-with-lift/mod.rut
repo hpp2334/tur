@@ -44,6 +44,6 @@ entry fn start() -> u64 {
 // The `__resetDrag` seam (the lift keeps settling; only the transcript
 // clears). The atom id rides the entry arg.
 entry fn reset(atom: u64, _b: f64) {
-    let phase = Source<str>.of(bridge(), atom, false, 1);
-    MutationCtx.over(bridge()).set<str>(phase, "");
+    let phase = Source<str>::of(bridge(), atom, false, 1);
+    MutationCtx::over(bridge()).set<str>(phase, "");
 }

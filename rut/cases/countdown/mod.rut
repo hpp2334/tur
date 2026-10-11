@@ -172,8 +172,8 @@ entry fn start() -> u64 {
         .build();
 
     let pane = Column()
-        .main_axis_size(MainAxisSize.Min)
-        .cross_alignment(CrossAlign.Center)
+        .main_axis_size(MainAxisSize::Min)
+        .cross_alignment(CrossAlign::Center)
         .child(Text().text("COUNTDOWN").font_size(11.0).color(TEXT_FAINT).build())
         .child(SizedBox(0.0, 10.0).build())
         .child(display_view)
@@ -184,8 +184,8 @@ entry fn start() -> u64 {
         .child(SizedBox(0.0, 12.0).build())
         .child(
             Row()
-                .main_axis_size(MainAxisSize.Min)
-                .cross_alignment(CrossAlign.Center)
+                .main_axis_size(MainAxisSize::Min)
+                .cross_alignment(CrossAlign::Center)
                 .child(edit_button)
                 .child(SizedBox(10.0, 0.0).build())
                 .child(reset_button)
@@ -194,8 +194,8 @@ entry fn start() -> u64 {
         .build();
 
     // The pane centered in the viewer; the modal overlays it when open.
-    let page = Container().color(PAGE_BG).alignment(Align.Center).child(pane).build();
-    mount(Stack().fit(StackFit.Expand).child(page).child(modal).build());
+    let page = Container().color(PAGE_BG).alignment(Align::Center).child(pane).build();
+    mount(Stack().fit(StackFit::Expand).child(page).child(modal).build());
     return 0;
 }
 
@@ -208,7 +208,7 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
         .radius(12.0)
         .color(bg)
         .shadow(shade, 14.0, 0.0, 6.0)
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
@@ -225,7 +225,7 @@ fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
         .radius(12.0)
         .color(START)
         .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(Text().text_bound(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
@@ -240,12 +240,12 @@ fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
     let face = Container()
         .padding(10.0)
         .radius(10.0)
-        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .color(CARD_BG)
         .child(Text().text(label).font_size(13.0).color(TEXT_MUTED).build())
         .build();
     return MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(
             PointerInteract()
                 .on_click(cb)
@@ -263,12 +263,12 @@ fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
     return Container()
         .padding(6.0)
         .radius(999.0)
-        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .color(CARD_BG)
         .child(
             Row()
-                .main_axis_size(MainAxisSize.Min)
-                .cross_alignment(CrossAlign.Center)
+                .main_axis_size(MainAxisSize::Min)
+                .cross_alignment(CrossAlign::Center)
                 .child(Container().width_height(7.0, 7.0).radius(999.0).color_bound(dot).build())
                 .child(SizedBox(6.0, 0.0).build())
                 .child(Text().text_bound(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
@@ -301,11 +301,11 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
         .radius(14.0)
         .padding(22.0)
         .color(CARD_BG)
-        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
-                .main_axis_size(MainAxisSize.Min)
-                .cross_alignment(CrossAlign.Stretch)
+                .main_axis_size(MainAxisSize::Min)
+                .cross_alignment(CrossAlign::Stretch)
                 .child(Text().text("Set duration").font_size(18.0).color(TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
                 .child(Text().text("Enter a positive integer (seconds).").font_size(13.0).color(TEXT_MUTED).build())
@@ -314,20 +314,20 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
                     Container()
                         .padding(4.0)
                         .radius(8.0)
-                        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+                        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
                         .child(field)
                         .build(),
                 )
                 .child(SizedBox(0.0, 18.0).build())
                 .child(
                     Row()
-                        .main_alignment(MainAlign.End)
-                        .main_axis_size(MainAxisSize.Min)
+                        .main_alignment(MainAlign::End)
+                        .main_axis_size(MainAxisSize::Min)
                         .child(ghost_button("btn-cancel", "Cancel", b_cancel))
                         .child(SizedBox(8.0, 0.0).build())
                         .child(
                             MouseRegion()
-                                .cursor(Cursor.Pointer)
+                                .cursor(Cursor::Pointer)
                                 .child(
                                     PointerInteract()
                                         .on_click(b_confirm)
@@ -338,7 +338,7 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
                                                 .radius(12.0)
                                                 .color(START)
                                                 .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-                                                .alignment(Align.Center)
+                                                .alignment(Align::Center)
                                                 .child(Text().text("Save").font_size(15.0).color(BTN_FG).build())
                                                 .build(),
                                         )
@@ -353,17 +353,17 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
         .build();
 
     let inner = PointerInteract()
-        .behavior(HitTestBehavior.Opaque)
+        .behavior(HitTestBehavior::Opaque)
         .on_click(b_swallow)
         .child(card)
         .build();
     let scrim = Container()
         .color(BACKDROP)
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(inner)
         .build();
     return PointerInteract()
-        .behavior(HitTestBehavior.Opaque)
+        .behavior(HitTestBehavior::Opaque)
         .on_click(b_cancel)
         .query_key("edit-modal")
         .child(scrim)

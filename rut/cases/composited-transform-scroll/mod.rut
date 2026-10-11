@@ -22,11 +22,11 @@ entry fn start() {
     let target = CompositedTarget().link(link).child(target_child).build();
     content.child(target);
     content.child(SizedBox(200.0, 300.0).child(Container().build()).build());
-    let scroller = ScrollView().axis(Axis.Vertical).child(content.build()).build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(content.build()).build();
     stack.child(Positioned().width(200.0).height(200.0).child(scroller).build());
 
     let red = Container().width_height(20.0, 20.0).color(0xFF0000FFu64);
-    let follower = CompositedFollower().link(link).target_anchor(Align.TopLeft).follower_anchor(Align.TopLeft).child(red.build()).build();
+    let follower = CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(red.build()).build();
     stack.child(follower);
     mount(stack.build());
 }

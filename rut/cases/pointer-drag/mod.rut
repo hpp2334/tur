@@ -26,12 +26,12 @@ entry fn start() -> u64 {
         ctx.set<str>(phase, "up");
     });
 
-    let mut col = Column().cross_alignment(CrossAlign.Start);
+    let mut col = Column().cross_alignment(CrossAlign::Start);
 
     let b = Container()
         .width_height(100.0, 50.0)
         .color(0xCCCCCCFFu64)
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(Text().text_bound(phase).query_key("drag-phase").build());
 
     col.child(PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build());

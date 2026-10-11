@@ -138,7 +138,7 @@ entry fn start() -> u64 {
         .build();
     let page = Container().color(PAGE_BG).padding(22.0).child(body).build();
     let root = Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(Expanded().flex(1.0).child(page).build())
         .build();
     mount(root);
@@ -181,8 +181,8 @@ fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutati
                 b_sug2: Mutation<nil>) -> View {
     // The boa Field: the "Repository" caption over the bordered input.
     let field = Column()
-        .cross_alignment(CrossAlign.Stretch)
-        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign::Stretch)
+        .main_axis_size(MainAxisSize::Min)
         .child(Text().text("Repository").font_size(11.0).color(TEXT_SUBTLE).query_key("gh-field-label").build())
         .child(SizedBox(0.0, 6.0).build())
         .child(
@@ -190,7 +190,7 @@ fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutati
                 .radius(7.0)
                 .padding(9.0)
                 .color(INPUT_BG)
-                .border(INPUT_BORDER, 1.0, BorderPosition.Inside)
+                .border(INPUT_BORDER, 1.0, BorderPosition::Inside)
                 .child(
                     Input()
                         .controller(ctrl)
@@ -211,11 +211,11 @@ fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutati
         .padding(34.0)
         .radius(14.0)
         .color(PANEL)
-        .border(BORDER, 1.0, BorderPosition.Inside)
+        .border(BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
-                .cross_alignment(CrossAlign.Start)
-                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign::Start)
+                .main_axis_size(MainAxisSize::Min)
                 .child(brand_mark(gh))
                 .child(SizedBox(0.0, 18.0).build())
                 .child(Text().text("Browse a public repo").font_size(18.0).color(TEXT).build())
@@ -226,7 +226,7 @@ fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutati
                 .child(SizedBox(0.0, 8.0).build())
                 .child(error_banner(s))
                 .child(SizedBox(0.0, 8.0).build())
-                .child(Row().main_alignment(MainAlign.End).child(pill("gh-browse", "Browse", b_browse, ACCENT, ACCENT_FG)).build())
+                .child(Row().main_alignment(MainAlign::End).child(pill("gh-browse", "Browse", b_browse, ACCENT, ACCENT_FG)).build())
                 .child(SizedBox(0.0, 22.0).build())
                 .child(Text().text("Try one of these").font_size(11.0).color(TEXT_SUBTLE).build())
                 .child(SizedBox(0.0, 8.0).build())
@@ -234,7 +234,7 @@ fn landing_view(s: Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutati
                 .build(),
         )
         .build();
-    return Container().alignment(Align.Center).child(card).build();
+    return Container().alignment(Align::Center).child(card).build();
 }
 
 // The 40x40 rounded brand mark (the boa octocat badge, an inline SVG
@@ -244,7 +244,7 @@ fn brand_mark(gh: u64) -> View {
         .width_height(40.0, 40.0)
         .radius(10.0)
         .color(ACCENT_SOFT)
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(Image(gh).width(24.0).height(24.0).query_key("gh-mark").build())
         .build();
     return mark;
@@ -256,8 +256,8 @@ fn suggestion_row(b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
     // 360 card's content width in a row. The boa quick-pick set (all
     // under jsDelivr's 50 MB tree cap).
     return Column()
-        .cross_alignment(CrossAlign.Start)
-        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign::Start)
+        .main_axis_size(MainAxisSize::Min)
         .child(pill("gh-sug-0", "facebook/react", b_sug0, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
         .child(SizedBox(0.0, 6.0).build())
         .child(pill("gh-sug-1", "tailwindlabs/tailwindcss", b_sug1, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
@@ -305,11 +305,11 @@ fn explorer_view(s: Gh) -> View {
         launch_future(fetch_dir(ctx, s));
     });
     let list = ScrollView()
-        .axis(Axis.Vertical)
+        .axis(Axis::Vertical)
         .child(
             Column()
-                .cross_alignment(CrossAlign.Stretch)
-                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign::Stretch)
+                .main_axis_size(MainAxisSize::Min)
                 .child(Each(s.files).item_builder(fn (i: u64, f: str) -> View {
                     return item_file(i, f, s);
                 }).build())
@@ -317,16 +317,16 @@ fn explorer_view(s: Gh) -> View {
         )
         .build();
     let loading = Container()
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .child(Text().text("Loading…").font_size(13.0).color(TEXT_SUBTLE).query_key("gh-loading").build())
         .build();
     let empty = Container()
-        .alignment(Align.Center)
+        .alignment(Align::Center)
         .padding(40.0)
         .child(
             Column()
-                .cross_alignment(CrossAlign.Center)
-                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign::Center)
+                .main_axis_size(MainAxisSize::Min)
                 .child(Text().text("This folder is empty").font_size(14.0).color(TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
                 .child(Text().text("No files to show at this path.").font_size(12.0).color(TEXT_SUBTLE).build())
@@ -334,10 +334,10 @@ fn explorer_view(s: Gh) -> View {
         )
         .build();
     return Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(
             Row()
-                .cross_alignment(CrossAlign.Center)
+                .cross_alignment(CrossAlign::Center)
                 .child(
                     PointerInteract()
                         .on_click(b_back)
@@ -361,7 +361,7 @@ fn explorer_view(s: Gh) -> View {
                 // the label through it; taps still hit the pad beneath).
                 .child(
                     MouseRegion()
-                        .cursor(Cursor.Pointer)
+                        .cursor(Cursor::Pointer)
                         .child(
                             PointerInteract()
                                 .on_click(b_root)
@@ -385,7 +385,7 @@ fn explorer_view(s: Gh) -> View {
         .child(SizedBox(0.0, 8.0).build())
         .child(
             Row()
-                .cross_alignment(CrossAlign.Center)
+                .cross_alignment(CrossAlign::Center)
                 .child(pill("gh-refresh", "Refresh", b_refresh, SUBTLE_BUTTON, SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
                 .child(Text().text_bound(s.stats).font_size(12.0).color(TEXT_MUTED).query_key("gh-stats").build())
@@ -467,7 +467,7 @@ fn item_file(i: u64, s: str, g: Gh) -> View {
         ctx.set<str>(g.selected, f"{fname} — {size}");
     });
     let row = Row()
-        .cross_alignment(CrossAlign.Center)
+        .cross_alignment(CrossAlign::Center)
         .child(Container().width_height(14.0, 14.0).radius(3.0).color(icon).build())
         .child(SizedBox(10.0, 0.0).build())
         .child(Expanded().flex(1.0).child(Text().text(name).font_size(13.0).color(TEXT).build()).build())
@@ -478,7 +478,7 @@ fn item_file(i: u64, s: str, g: Gh) -> View {
         .padding(9.0)
         .radius(8.0)
         .color(PANEL)
-        .border(BORDER, 1.0, BorderPosition.Inside)
+        .border(BORDER, 1.0, BorderPosition::Inside)
         .child(row)
         .build();
     return PointerInteract()

@@ -26,7 +26,7 @@ entry fn start() {
     // Column): Stretch degrades to loose cross.
     let stretch_row = Row()
         .query_key("stretch-row")
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(SizedBox(50.0, 0.0).child(Container().build()).build());
     col.child(stretch_row.build());
 

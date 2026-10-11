@@ -864,7 +864,7 @@ entry fn start() {
     let undo = undo_ctrl();
     let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
     let col = Column().child(input).build();
-    let scroller = ScrollView().axis(Axis.Vertical).child(col).build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(col).build();
     mount(scroller);
 }
 "#;

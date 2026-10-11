@@ -14,7 +14,12 @@ use crate::{FilePicker, PickOptions};
 /// cosmetic — the spike's precedent.)
 #[allow(clippy::needless_question_mark)]
 pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
-    cx.decl.extend(vec![("pick_file".to_string(), vec![], TY_STR, true)]);
+    cx.decl.extend(vec![rut_driver::HostRow::root(
+        "pick_file",
+        vec![],
+        TY_STR,
+        true,
+    )]);
 
     let Some(handles) = cx.handles else {
         return;

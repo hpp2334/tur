@@ -58,7 +58,7 @@ entry fn entry_start() -> opaque {
 // The shared downcast (the nil-guard is belt-and-braces: a kind mismatch
 // is the loud channel — the downcast traps naming both sides).
 fn editor_cx(cx: opaque) -> EditorCx {
-    let c = opaque.downcast<EditorCx>(cx);
+    let c = opaque::downcast<EditorCx>(cx);
     if (c == nil) {
         panic("editor fixture: cx is not an EditorCx");
     }

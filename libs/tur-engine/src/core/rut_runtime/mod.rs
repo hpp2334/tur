@@ -203,8 +203,10 @@ pub fn default_limits() -> rut_vm::interp::Limits {
 /// involved. Plugin families extend it through their pushed
 /// [`RutPkgExt`]s (decl rows + consts).
 pub fn tur_decl_pkg() -> rut_driver::Pkg {
-    let row = |name: &str, params: Vec<TypeId>, ret: TypeId| (name.to_string(), params, ret, false);
-    let host_funcs: Vec<(String, Vec<TypeId>, TypeId, bool)> = vec![
+    let row = |name: &str, params: Vec<TypeId>, ret: TypeId| {
+        rut_driver::HostRow::root(name, params, ret, false)
+    };
+    let host_funcs: Vec<rut_driver::HostRow> = vec![
         // stash the root — the engine applies it after `start` returns
         row("mount", vec![TY_OPAQUE], TY_NIL),
         // The kit's twin spelling (see the mount bodies below): same
@@ -293,6 +295,7 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
             native_types: Vec::new(),
             native_fns: Vec::new(),
             native_impls: Vec::new(),
+            root_surface: None,
         },
         ..Default::default()
     }
@@ -1000,7 +1003,7 @@ impl RutRuntime {
         // the compile sees the full surface the boot will bind. Extensions
         // also contribute prelude modules (the kit — the authored builder
         // surface, owned by the standard bundle assembly, never by core).
-        let mut ext_decl: Vec<(String, Vec<TypeId>, TypeId, bool)> = Vec::new();
+        let mut ext_decl: Vec<rut_driver::HostRow> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
         let mut preludes: Vec<rut_driver::Pkg> = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur_host");
@@ -1028,8 +1031,12 @@ impl RutRuntime {
         // and the bodies install at boot (`rut_std::async_host::pkg()` —
         // pure VM-driving rows: launch / cancel / arm_timer).
         let async_decl_txt: &str = include_str!("async_host.d.rut");
-        let mut async_host = rut_driver::lower_decl_module(async_decl_txt, "async_host.d.rut")
-            .map_err(|e| format!("mount async_host decl: {e}"))?;
+        let mut async_host = rut_driver::lower_decl_module(
+            async_decl_txt,
+            &std::collections::BTreeMap::new(),
+            "async_host.d.rut",
+        )
+        .map_err(|e| format!("mount async_host decl: {e}"))?;
         async_host.spec = "async_host".to_string();
         // The typed launcher surface (`launch_future` / `sleep` / the
         // competition rows) — upstream's `futures` inline package, rut
@@ -1515,9 +1522,10 @@ pub struct RutRealmInputs {
 /// and the prelude modules (the kit et al.) registered before the app
 /// source compiles.
 pub struct RutPkgCx<'a> {
-    /// The decl rows `(name, params, ret, is_async)` appended before
-    /// compilation (async rows ride the driver's family expansion).
-    pub decl: &'a mut Vec<(String, Vec<TypeId>, TypeId, bool)>,
+    /// The decl rows appended before compilation (flat rows — `path = ""`,
+    /// the pkg root's own surface; async rows ride the driver's family
+    /// expansion).
+    pub decl: &'a mut Vec<rut_driver::HostRow>,
     /// The decl consts appended before compilation.
     pub consts: &'a mut Vec<(String, TypeId, u64)>,
     /// The body pkg the installer registers its rows into.

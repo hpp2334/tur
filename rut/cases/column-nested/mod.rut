@@ -1,6 +1,6 @@
 // column-nested: a Column inside a Column. Non-flex children receive
 // UNBOUNDED main-axis constraints, so the inner Column (default
-// MainAxisSize.max) must degenerate to content size (Flutter RenderFlex
+// MainAxisSize::max) must degenerate to content size (Flutter RenderFlex
 // parity).
 use tur_kit::flags::{ CrossAlign };
 use tur_kit::handles::{ View, mount };
@@ -14,9 +14,9 @@ fn box_h(h: f64) -> View {
 
 entry fn start() {
     let outer = Column()
-        .cross_alignment(CrossAlign.Start)
+        .cross_alignment(CrossAlign::Start)
         .child(box_h(50.0))
-        .child(Column().cross_alignment(CrossAlign.Start).child(box_h(30.0)).build())
+        .child(Column().cross_alignment(CrossAlign::Start).child(box_h(30.0)).build())
         .child(box_h(40.0));
     mount(outer.build());
 }

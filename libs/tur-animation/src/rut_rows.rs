@@ -36,7 +36,7 @@ pub fn install(
     manager: Rc<std::cell::RefCell<crate::manager::AnimationManager>>,
 ) {
     let row = |n: &str, p: Vec<rut_core::types::TypeId>, r: rut_core::types::TypeId| {
-        (n.to_string(), p, r, false)
+        rut_driver::HostRow::root(n, p, r, false)
     };
     cx.decl.extend(vec![
         row("el_opacity", vec![TY_F64, TY_OPAQUE], TY_OPAQUE),

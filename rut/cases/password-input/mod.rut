@@ -50,7 +50,7 @@ entry fn start() -> u64 {
         .build();
 
     let col = Column()
-        .cross_alignment(CrossAlign.Start)
+        .cross_alignment(CrossAlign::Start)
         .child(Text().text("Password Input").font_size(18.0).color(0x0F172AFFu64).query_key("password-title").build())
         .child(SizedBox(0.0, 12.0).build())
         .child(plain)

@@ -6,10 +6,10 @@ use tur_kit::flags::{ Axis, CrossAlign }; use tur_kit::handles::{ View, mount };
 
 entry fn start() {
     let content = Column()
-        .cross_alignment(CrossAlign.Start)
+        .cross_alignment(CrossAlign::Start)
         .child(sized(120.0, 40.0))
         .child(sized(60.0, 40.0));
-    let sv = ScrollView().axis(Axis.Vertical).child(content.build()).query_key("sv").build();
+    let sv = ScrollView().axis(Axis::Vertical).child(content.build()).query_key("sv").build();
     mount(sv);
 }
 

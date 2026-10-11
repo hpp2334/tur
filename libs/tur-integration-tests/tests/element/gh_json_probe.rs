@@ -48,7 +48,7 @@ struct AppContext {
 entry fn probe(cx: opaque) {
     let meta = "{\"id\":10270450,\"node_id\":\"MDEwOlJlcG9zaXRvcnkxMDI3MDQ1MA==\",\"name\":\"react\",\"full_name\":\"facebook/react\",\"private\":false,\"owner\":{\"login\":\"facebook\",\"id\":69631,\"node_id\":\"MDEyOk9yZ2FuaXphdGlvbjY5NjMx\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/69631?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/facebook\",\"html_url\":\"https://github.com/facebook\",\"followers_url\":\"https://api.github.com/users/facebook/followers\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/facebook/react\",\"description\":\"The library for web and native user interfaces.\",\"fork\":false,\"url\":\"https://api.github.com/repos/facebook/react\",\"stargazers_count\":237000,\"watchers_count\":237000,\"language\":\"JavaScript\",\"open_issues_count\":995,\"license\":{\"key\":\"mit\",\"name\":\"MIT License\",\"spdx_id\":\"MIT\"},\"forks\":48500,\"default_branch\":\"main\"}";
     // The context carries the pair (the probe answers into both).
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("ghj fixture: cx is not an AppContext");
     }

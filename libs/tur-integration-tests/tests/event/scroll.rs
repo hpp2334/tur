@@ -129,7 +129,7 @@ use tur_kit::text::core::{ Text };
 entry fn start() -> u64 {
     let header = Container().padding(14.0)
         .child(Text().text("CASES").font_size(10.0).build());
-    let rows = Column().cross_alignment(CrossAlign.Stretch);
+    let rows = Column().cross_alignment(CrossAlign::Stretch);
     // 19 fixed-height rows — the sidebar's overflow content (939px total
     // against a 754px scroll viewport in the 800-tall fixture window).
     let rows = rows.child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
@@ -152,10 +152,10 @@ entry fn start() -> u64 {
         .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
         .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build());
     let sidebar = Container().width(200.0)
-        .child(Column().cross_alignment(CrossAlign.Stretch)
+        .child(Column().cross_alignment(CrossAlign::Stretch)
             .child(header.build())
             .child(Expanded().flex(1.0)
-                .child(ScrollView().axis(Axis.Vertical)
+                .child(ScrollView().axis(Axis::Vertical)
                     .child(rows.build())
                     .query_key("sidebar-scroll")
                     .build())
@@ -240,14 +240,14 @@ entry fn start() -> opaque {
 
     let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
 
-    let mut scroller = ScrollView().axis(Axis.Vertical).child(b.build()).query_key("sv").build();
+    let mut scroller = ScrollView().axis(Axis::Vertical).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
     return opaque(AppContext { height: height });
 }
 
 entry fn shrink(cx: opaque) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("scroll fixture: cx is not an AppContext");
     }

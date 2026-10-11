@@ -320,7 +320,7 @@ entry fn start() -> opaque {
 }
 
 entry fn probe_obscure(cx: opaque, b: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("obscure fixture: cx is not an AppContext");
     }
@@ -394,7 +394,7 @@ entry fn start() -> opaque {
 }
 
 entry fn probe_hint(cx: opaque) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("placeholder fixture: cx is not an AppContext");
     }

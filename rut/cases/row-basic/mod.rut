@@ -10,6 +10,6 @@ fn box_w(w: f64) -> View {
 }
 
 entry fn start() {
-    let row = Row().cross_alignment(CrossAlign.Start).child(box_w(50.0)).child(box_w(30.0));
+    let row = Row().cross_alignment(CrossAlign::Start).child(box_w(50.0)).child(box_w(30.0));
     mount(row.build());
 }

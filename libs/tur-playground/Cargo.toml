@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 tur-engine = { workspace = true }
 rut-vm = { workspace = true }
+rut-driver = { workspace = true }
 rut-core = { workspace = true }
 rut-lexer = { workspace = true }
 rut-parser = { workspace = true }

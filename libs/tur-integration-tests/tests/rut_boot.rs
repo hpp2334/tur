@@ -102,7 +102,7 @@ entry fn entry_start() -> opaque {
 }
 
 entry fn on_event(cx: opaque, n: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("counter fixture: cx is not an AppContext");
     }
@@ -336,7 +336,7 @@ entry fn start() {
         col.child(Text().text(f"row {i}").font_size(16.0).color(0x222222FF).build());
         i += 1;
     }
-    let scroller = ScrollView().axis(Axis.Vertical).child(col.build()).build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(col.build()).build();
     let root = Column().child(Expanded().flex(1.0).child(scroller).build());
     mount(root.build());
 }
@@ -770,11 +770,11 @@ entry fn start() {
         .width_height(200.0, 120.0)
         .padding(8.0)
         .color(0x336699FF as u64)
-        .border(0xFFCC00FFu64, 3.0, BorderPosition.Center)
+        .border(0xFFCC00FFu64, 3.0, BorderPosition::Center)
         .radius(12.0)
         .shadow(0x00000066 as u64, 8.0, 2.0, 4.0)
-        .clip(Clip.AntiAlias)
-        .alignment(Align.BottomRight)
+        .clip(Clip::AntiAlias)
+        .alignment(Align::BottomRight)
         .child(Text().text("corner").build());
     let mut root = Column().child(styled.build());
 
@@ -867,7 +867,7 @@ entry fn start() -> u64 {
     });
     let menu = PointerInteract().on_context_menu(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         let mut b = "other";
-        if (ev.button == MouseButton.Right) {
+        if (ev.button == MouseButton::Right) {
             b = "right";
         }
         ctx.set<str>(label, f"{ctx.get<str>(label)}|menu-{b}");
@@ -900,10 +900,10 @@ entry fn start() -> u64 {
 
 // The button decode (the crossing's 0/1/2 — no enum cast in this build).
 fn button_code(b: MouseButton) -> str {
-    if (b == MouseButton.Middle) {
+    if (b == MouseButton::Middle) {
         return "1";
     }
-    if (b == MouseButton.Right) {
+    if (b == MouseButton::Right) {
         return "2";
     }
     return "0";
@@ -1250,7 +1250,7 @@ entry fn entry_start() -> opaque {
 }
 
 fn app_cx(cx: opaque) -> AppContext {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("vapp fixture: cx is not an AppContext");
     }

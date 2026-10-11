@@ -32,7 +32,7 @@ fn thumb(on: bool) -> View {
 
 fn thumb_align(on: bool) -> Align {
     if (on) {
-        return Align.CenterRight;
+        return Align::CenterRight;
     }
-    return Align.CenterLeft;
+    return Align::CenterLeft;
 }

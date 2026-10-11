@@ -31,7 +31,7 @@ entry fn start() {
     }
 
     let input = Input().controller(ctrl).width_height(100000.0, 4000.0).font_size(14.0).query_key("ed").build();
-    let scroller = ScrollView().axis(Axis.Vertical).child(input).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(input).query_key("scroll").build();
     mount(scroller);
 }
 "##;

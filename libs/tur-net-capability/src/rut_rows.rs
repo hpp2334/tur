@@ -80,7 +80,7 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             ("task_cancel", vec![TY_OPAQUE], TY_NIL, false),
         ]
         .into_iter()
-        .map(|(n, p, r, a)| (n.to_string(), p, r, a)),
+        .map(|(n, p, r, a)| rut_driver::HostRow::root(n, p, r, a)),
     );
 
     let Some(handles) = cx.handles else {

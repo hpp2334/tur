@@ -16,30 +16,30 @@ impl Stack {
   [constructor] pub fn builder() -> Self {
     return Self { spec: stack_new() };
   }
-  pub fn alignment(mut self, v: flags.Align) -> Self {
-    stack_align(self.spec, flags.align_code(v));
+  pub fn alignment(mut self, v: flags::Align) -> Self {
+    stack_align(self.spec, flags::align_code(v));
     return self;
   }
-  pub fn fit(mut self, v: flags.StackFit) -> Self {
-    stack_fit(self.spec, flags.stack_fit_code(v));
+  pub fn fit(mut self, v: flags::StackFit) -> Self {
+    stack_fit(self.spec, flags::stack_fit_code(v));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
     stack_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: handles.View) -> Self {
+  pub fn child(mut self, c: handles::View) -> Self {
     stack_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [handles.View]) -> Self {
+  pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
       stack_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(stack_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(stack_build(self.spec));
   }
 }
 
@@ -62,11 +62,11 @@ impl Positioned {
   // The reactive anchors (drag-to-move writes the live atom; a bound
   // anchor's 0 is a real coordinate, same as the static rows — anchors
   // are verbatim, absence is never calling the row).
-  pub fn left_bound(mut self, r: reactive.Readable<f64>) -> Self {
+  pub fn left_bound(mut self, r: reactive::Readable<f64>) -> Self {
     pos_left_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn top_bound(mut self, r: reactive.Readable<f64>) -> Self {
+  pub fn top_bound(mut self, r: reactive::Readable<f64>) -> Self {
     pos_top_bound(self.spec, r.atom_id());
     return self;
   }
@@ -86,12 +86,12 @@ impl Positioned {
     pos_height(self.spec, v);
     return self;
   }
-  pub fn child(mut self, c: handles.View) -> Self {
+  pub fn child(mut self, c: handles::View) -> Self {
     pos_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(pos_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(pos_build(self.spec));
   }
 }
 

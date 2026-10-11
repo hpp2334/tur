@@ -23,7 +23,7 @@ impl Text {
   // The ONE reactive text prop (a prop never has a twin): the handle's
   // kind selects the bind row — a source binds directly, a derived binds
   // through the derive rail.
-  pub fn text_bound(mut self, r: reactive.Readable<str>) -> Self {
+  pub fn text_bound(mut self, r: reactive::Readable<str>) -> Self {
     if (r.is_derived()) {
       text_bind_derived(self.spec, r.atom_id());
     } else {
@@ -71,8 +71,8 @@ impl Text {
     text_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(text_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(text_build(self.spec));
   }
 }
 
@@ -84,8 +84,8 @@ impl Spans {
   [constructor] pub fn builder() -> Self {
     return Self { spec: spans_new() };
   }
-  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, span_flags: flags.SpanFlags) -> Self {
-    span_add(self.spec, text, size, packed, weight, flags.span_flags_code(span_flags));
+  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, span_flags: flags::SpanFlags) -> Self {
+    span_add(self.spec, text, size, packed, weight, flags::span_flags_code(span_flags));
     return self;
   }
 }

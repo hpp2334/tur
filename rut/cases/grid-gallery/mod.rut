@@ -63,7 +63,7 @@ entry fn start() -> u64 {
         source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
         source<u64>(0), source<u64>(0),
     ];
-    let boot: MutationCtx = MutationCtx.over(bridge());
+    let boot: MutationCtx = MutationCtx::over(bridge());
     paint_chips(boot, a_chips, 0);
     paint_chips(boot, d_chips, 1);
     boot.set<u64>(rings[0], RING_ON);
@@ -133,18 +133,18 @@ entry fn start() -> u64 {
         .build();
 
     let col = Column()
-        .cross_alignment(CrossAlign.Start)
+        .cross_alignment(CrossAlign::Start)
         .child(Text().text("Grid Gallery").font_size(18.0).color(TITLE_FG).query_key("gallery/title").build())
         .child(SizedBox(0.0, 4.0).build())
         .child(subtitle(d_tile, d_aspect, d_extent))
         .child(SizedBox(0.0, 12.0).build())
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             .child(chip(a_chips[0], "gallery/a-1-1", "1:1", b_a0)).child(SizedBox(6.0, 0.0).build())
             .child(chip(a_chips[1], "gallery/a-16-9", "16:9", b_a1)).child(SizedBox(6.0, 0.0).build())
             .child(chip(a_chips[2], "gallery/a-9-16", "9:16", b_a2))
             .build())
         .child(SizedBox(0.0, 8.0).build())
-        .child(Row().main_axis_size(MainAxisSize.Min)
+        .child(Row().main_axis_size(MainAxisSize::Min)
             .child(chip(d_chips[0], "gallery/d-dense", "Dense", b_d0)).child(SizedBox(6.0, 0.0).build())
             .child(chip(d_chips[1], "gallery/d-normal", "Normal", b_d1)).child(SizedBox(6.0, 0.0).build())
             .child(chip(d_chips[2], "gallery/d-sparse", "Sparse", b_d2))
@@ -160,7 +160,7 @@ entry fn start() -> u64 {
 // "tile #0 · 1:1 · maxExtent 150" — three live fragments.
 fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> View {
     return Row()
-        .main_axis_size(MainAxisSize.Min)
+        .main_axis_size(MainAxisSize::Min)
         .child(Text().text_bound(d_tile).font_size(12.0).color(SUB_FG).query_key("gallery/subtitle").build())
         .child(Text().text(" · ").font_size(12.0).color(SUB_FG).build())
         .child(Text().text_bound(d_aspect).font_size(12.0).color(SUB_FG).query_key("gallery/aspect-label").build())
@@ -233,7 +233,7 @@ fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
         .child(face)
         .build();
     return MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(b_tap).child(framed).build())
         .build();
 }
@@ -247,7 +247,7 @@ fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
         .child(Text().text(label).font_size(12.0).color(CHIP_FG).build())
         .build();
     return MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(
             PointerInteract()
                 .on_click(m)

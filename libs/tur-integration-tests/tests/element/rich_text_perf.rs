@@ -47,13 +47,13 @@ entry fn start() -> opaque {
 
     let input = Input().controller(ctrl).width_height(0.0, 10000.0).font_size(14.0).query_key("ed").build();
     let wrap = Container().width_bound(width).child(input).build();
-    let scroller = ScrollView().axis(Axis.Vertical).child(wrap).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(wrap).query_key("scroll").build();
     mount(scroller);
     return opaque(AppContext { width: width });
 }
 
 entry fn set_width(cx: opaque, v: f64) {
-    let c = opaque.downcast<AppContext>(cx);
+    let c = opaque::downcast<AppContext>(cx);
     if (c == nil) {
         panic("perf fixture: cx is not an AppContext");
     }

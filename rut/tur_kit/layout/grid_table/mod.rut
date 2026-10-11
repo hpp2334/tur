@@ -36,18 +36,18 @@ impl Grid {
     grid_qkey(self.spec, k);
     return self;
   }
-  pub fn child(mut self, c: handles.View) -> Self {
+  pub fn child(mut self, c: handles::View) -> Self {
     grid_child(self.spec, c.inner);
     return self;
   }
-  pub fn children(mut self, cs: [handles.View]) -> Self {
+  pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
       grid_child(self.spec, c.inner);
     }
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(grid_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(grid_build(self.spec));
   }
 }
 
@@ -88,15 +88,15 @@ impl Table {
     table_columns(self.spec, cols.spec);
     return self;
   }
-  pub fn rows_atom(mut self, r: reactive.Readable<opaque>) -> Self {
+  pub fn rows_atom(mut self, r: reactive::Readable<opaque>) -> Self {
     table_rows_atom(self.spec, r.atom_id());
     return self;
   }
-  pub fn row_builder(mut self, cb: fn(u64, u64) -> handles.View) -> Self {
+  pub fn row_builder(mut self, cb: fn(u64, u64) -> handles::View) -> Self {
     table_row_builder(self.spec, opaque(cb));
     return self;
   }
-  pub fn header_builder(mut self, cb: fn(u64) -> handles.View) -> Self {
+  pub fn header_builder(mut self, cb: fn(u64) -> handles::View) -> Self {
     table_header_builder(self.spec, opaque(cb));
     return self;
   }
@@ -111,8 +111,8 @@ impl Table {
     table_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(table_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(table_build(self.spec));
   }
 }
 

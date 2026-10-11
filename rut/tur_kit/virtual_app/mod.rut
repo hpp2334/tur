@@ -17,7 +17,7 @@ impl VirtualApp {
   [constructor] pub fn builder() -> Self {
     return Self { spec: va_new() };
   }
-  pub fn controller(mut self, c: handles.VAppCtrl) -> Self {
+  pub fn controller(mut self, c: handles::VAppCtrl) -> Self {
     va_controller_set(self.spec, c.raw());
     return self;
   }
@@ -33,8 +33,8 @@ impl VirtualApp {
     va_qkey(self.spec, k);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(va_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(va_build(self.spec));
   }
 }
 
@@ -52,12 +52,12 @@ impl CompositedTarget {
     ct_target_link(self.spec, l.inner);
     return self;
   }
-  pub fn child(mut self, c: handles.View) -> Self {
+  pub fn child(mut self, c: handles::View) -> Self {
     ct_target_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(ct_target_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(ct_target_build(self.spec));
   }
 }
 
@@ -73,30 +73,30 @@ impl CompositedFollower {
     ct_follower_link(self.spec, l.inner);
     return self;
   }
-  pub fn target_anchor(mut self, v: flags.Align) -> Self {
-    ct_follower_target_anchor(self.spec, flags.align_code(v));
+  pub fn target_anchor(mut self, v: flags::Align) -> Self {
+    ct_follower_target_anchor(self.spec, flags::align_code(v));
     return self;
   }
   // The reactive anchor (the composited-transform corpus's reactive
   // anchor rail).
-  pub fn target_anchor_bound(mut self, r: reactive.Readable<f64>) -> Self {
+  pub fn target_anchor_bound(mut self, r: reactive::Readable<f64>) -> Self {
     ct_follower_target_anchor_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn follower_anchor(mut self, v: flags.Align) -> Self {
-    ct_follower_follower_anchor(self.spec, flags.align_code(v));
+  pub fn follower_anchor(mut self, v: flags::Align) -> Self {
+    ct_follower_follower_anchor(self.spec, flags::align_code(v));
     return self;
   }
   pub fn offset(mut self, x: f64, y: f64) -> Self {
     ct_follower_offset(self.spec, x, y);
     return self;
   }
-  pub fn child(mut self, c: handles.View) -> Self {
+  pub fn child(mut self, c: handles::View) -> Self {
     ct_follower_child(self.spec, c.inner);
     return self;
   }
-  pub fn build(self) -> handles.View {
-    return handles.View(ct_follower_build(self.spec));
+  pub fn build(self) -> handles::View {
+    return handles::View(ct_follower_build(self.spec));
   }
 }
 
@@ -113,15 +113,15 @@ pub fn layer_link() -> LinkCtrl {
 
 // Register a string-authored child module source with the virtual-app
 // subsystem — the `createModuleSource` twin.
-pub fn virtual_app_source(src: str) -> handles.VAppSource {
-  return handles.VAppSource(va_create_source(src));
+pub fn virtual_app_source(src: str) -> handles::VAppSource {
+  return handles::VAppSource(va_create_source(src));
 }
 
 // Lift a Rust-registered source id (e.g. the u64 the `pg_compile` row
 // answers) into the source handle — Rust-defined sources enter the realm
 // as plain u64s.
-pub fn virtual_app_source_handle(id: u64) -> handles.VAppSource {
-  return handles.VAppSource(va_source_handle(id));
+pub fn virtual_app_source_handle(id: u64) -> handles::VAppSource {
+  return handles::VAppSource(va_source_handle(id));
 }
 
 // Mint an EMPTY (Nil) controller-ref atom for the reactive `app$` binding
@@ -133,7 +133,7 @@ pub fn virtual_app_atom() -> u64 {
 
 // Swap the reactive `app$` binding to a controller (the mounted
 // VirtualAppView rebinds in the same flush).
-pub fn virtual_app_set(atom: u64, ctrl: handles.VAppCtrl) {
+pub fn virtual_app_set(atom: u64, ctrl: handles::VAppCtrl) {
   va_app_set(atom, ctrl.raw());
 }
 
@@ -144,6 +144,6 @@ pub fn virtual_app_clear(atom: u64) {
 
 // Mint a virtual-app controller from a registered source — the
 // `createVirtualAppController` twin.
-pub fn virtual_app_controller(src: handles.VAppSource) -> handles.VAppCtrl {
-  return handles.VAppCtrl(va_controller(src.inner));
+pub fn virtual_app_controller(src: handles::VAppSource) -> handles::VAppCtrl {
+  return handles::VAppCtrl(va_controller(src.inner));
 }

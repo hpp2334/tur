@@ -59,8 +59,8 @@ entry fn start() -> u64 {
     });
 
     let mut page = Column()
-        .cross_alignment(CrossAlign.Stretch)
-        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign::Stretch)
+        .main_axis_size(MainAxisSize::Min)
         .child(SizedBox(0.0, 16.0).build())
         .child(Text().text("Text").font_size(22.0).color(TEXT).build())
         .child(SizedBox(0.0, 4.0).build())
@@ -95,11 +95,11 @@ fn section(title: str, kids: [View]) -> View {
         .padding(14.0)
         .radius(10.0)
         .color(CARD_BG)
-        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
-                .cross_alignment(CrossAlign.Start)
-                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign::Start)
+                .main_axis_size(MainAxisSize::Min)
                 .child(Text().text(title).font_size(11.0).color(TEXT_MUTED).build())
                 .child(SizedBox(0.0, 10.0).build())
                 .children(kids)
@@ -112,8 +112,8 @@ fn section(title: str, kids: [View]) -> View {
 fn size_row() -> [View] {
     return [
         Row()
-            .cross_alignment(CrossAlign.End)
-            .main_axis_size(MainAxisSize.Min)
+            .cross_alignment(CrossAlign::End)
+            .main_axis_size(MainAxisSize::Min)
             .child(Text().text("Aa").font_size(10.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
             .child(Text().text("Aa").font_size(14.0).color(TEXT).build())
@@ -142,7 +142,7 @@ fn weight_col() -> [View] {
 fn color_row() -> [View] {
     return [
         Row()
-            .main_axis_size(MainAxisSize.Min)
+            .main_axis_size(MainAxisSize::Min)
             .child(Text().text("slate").font_size(14.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
             .child(Text().text("rose").font_size(14.0).color(ROSE).build())
@@ -158,14 +158,14 @@ fn color_row() -> [View] {
 // (0 = inherit, the span_add law).
 fn spans_line() -> View {
     let run = Spans()
-        .add("The ", 0.0, TEXT, 0.0, SpanFlags.None)
-        .add("quick ", 0.0, TEXT, 0.0, SpanFlags.Italic)
-        .add("brown ", 0.0, AMBER, 700.0, SpanFlags.None)
-        .add("fox ", 0.0, TEXT, 0.0, SpanFlags.Underline)
-        .add("jumps ", 18.0, TEXT, 0.0, SpanFlags.None)
-        .add("over the ", 0.0, TEXT_MUTED, 0.0, SpanFlags.None)
-        .add("lazy", 0.0, EMERALD, 700.0, SpanFlags.None)
-        .add(" dog.", 0.0, TEXT_MUTED, 0.0, SpanFlags.None);
+        .add("The ", 0.0, TEXT, 0.0, SpanFlags::None)
+        .add("quick ", 0.0, TEXT, 0.0, SpanFlags::Italic)
+        .add("brown ", 0.0, AMBER, 700.0, SpanFlags::None)
+        .add("fox ", 0.0, TEXT, 0.0, SpanFlags::Underline)
+        .add("jumps ", 18.0, TEXT, 0.0, SpanFlags::None)
+        .add("over the ", 0.0, TEXT_MUTED, 0.0, SpanFlags::None)
+        .add("lazy", 0.0, EMERALD, 700.0, SpanFlags::None)
+        .add(" dog.", 0.0, TEXT_MUTED, 0.0, SpanFlags::None);
     return Text().font_size(14.0).spans(run).build();
 }
 
@@ -177,11 +177,11 @@ fn overflow_card(kind: str, max_lines: u64) -> View {
         .padding(8.0)
         .radius(8.0)
         .color(CARD_BG)
-        .border(CARD_BORDER, 1.0, BorderPosition.Inside)
+        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
-                .cross_alignment(CrossAlign.Start)
-                .main_axis_size(MainAxisSize.Min)
+                .cross_alignment(CrossAlign::Start)
+                .main_axis_size(MainAxisSize::Min)
                 .child(Text().text(kind).font_size(11.0).color(TEXT_MUTED).build())
                 .child(SizedBox(0.0, 6.0).build())
                 .child(overflow_text(kind, max_lines))
@@ -217,8 +217,8 @@ fn overflow_cards(mode: Readable<str>) -> View {
 
 fn cards_row(max_lines: u64) -> View {
     return Row()
-        .cross_alignment(CrossAlign.Start)
-        .main_axis_size(MainAxisSize.Min)
+        .cross_alignment(CrossAlign::Start)
+        .main_axis_size(MainAxisSize::Min)
         .child(overflow_card("clip", max_lines))
         .child(SizedBox(8.0, 0.0).build())
         .child(overflow_card("ellipsis", max_lines))
@@ -236,13 +236,13 @@ fn cycle_button(b_cycle: Mutation<nil>, btn_label: Readable<str>) -> View {
         .color(ACCENT)
         .child(
             Row()
-                .main_axis_size(MainAxisSize.Min)
+                .main_axis_size(MainAxisSize::Min)
                 .child(Text().text_bound(btn_label).font_size(13.0).color(ACCENT_FG).build())
                 .build(),
         )
         .build();
     return MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(
             PointerInteract()
                 .on_click(b_cycle)

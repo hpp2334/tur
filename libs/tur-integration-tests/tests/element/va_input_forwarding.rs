@@ -45,7 +45,7 @@ entry fn entry_start() -> opaque {
 }
 
 fn child_cx(cx: opaque) -> ChildCx {
-    let c = opaque.downcast<ChildCx>(cx);
+    let c = opaque::downcast<ChildCx>(cx);
     if (c == nil) {
         panic("va child fixture: cx is not a ChildCx");
     }
@@ -309,7 +309,7 @@ entry fn start() -> u64 {
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r9").font_size(12.0).build()).build())
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r10").font_size(12.0).build()).build())
         .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r11").font_size(12.0).build()).build());
-    mount(ScrollView().axis(Axis.Vertical).child(rows.build()).query_key("child-scroll").build());
+    mount(ScrollView().axis(Axis::Vertical).child(rows.build()).query_key("child-scroll").build());
     return 0;
 }
 "#;

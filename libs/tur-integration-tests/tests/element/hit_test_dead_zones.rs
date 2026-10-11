@@ -102,7 +102,7 @@ entry fn start() -> u64 {
         ctx.set<f64>(taps, ctx.get<f64>(taps) + 1.0);
     });
     let btn = MouseRegion()
-        .cursor(Cursor.Pointer)
+        .cursor(Cursor::Pointer)
         .child(
             PointerInteract()
                 .on_click(b_tap)
@@ -112,7 +112,7 @@ entry fn start() -> u64 {
         )
         .build();
     let page = Column()
-        .cross_alignment(CrossAlign.Stretch)
+        .cross_alignment(CrossAlign::Stretch)
         .child(Text().text("top").build())
         .child(SizedBox(0.0, 900.0).build())
         .child(btn)
@@ -216,7 +216,7 @@ entry fn start() -> u64 {
         .child(b)
         .build();
     mount(Stack()
-        .alignment(Align.TopLeft)
+        .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .child(Positioned().left(10.0).top(10.0).child(pad).build())
         .build());
@@ -262,7 +262,7 @@ entry fn start() -> u64 {
         .child(b)
         .build();
     let mut stack = Stack()
-        .alignment(Align.TopLeft)
+        .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .build();
     stack.child(Positioned().left(10.0).top(10.0).child(pad).build());

@@ -22,7 +22,7 @@ entry fn start() {
     });
 
     let mut stack = Stack()
-        .alignment(Align.TopLeft)
+        .alignment(Align::TopLeft)
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
 
     let indigo = Container().width_height(40.0, 40.0).color(0x4F46E1FFu64);
