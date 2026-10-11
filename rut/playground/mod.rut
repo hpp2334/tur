@@ -110,7 +110,7 @@ use tur_kit::virtual_app::{
     VirtualApp, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
     virtual_app_source_handle,
 };
-use tur_host::{ mount_raw, pg_apply_highlight, pg_compile, pg_compile_diags, pg_highlight };
+use tur_host::{ mount_raw, pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
 
 // ---- design tokens ---------------------------------------------------------
 //
