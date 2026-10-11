@@ -2,10 +2,12 @@ pub mod test_scheduler;
 pub use test_scheduler::{TestHostLoop, TestSchedulerDriver, TestVsyncSource};
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -44,6 +46,7 @@ use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::Plugin;
 use tur_engine::core::render::Renderer;
+use tur_engine::core::rut_runtime::RutModuleFiles;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::error::TurError;
@@ -755,8 +758,11 @@ impl TurTestApp {
     }
 
     /// Load the **rut** case `name` from the shared case corpus
-    /// (`rut/cases/<name>/mod.rut`) through the
-    /// rut rail — the Phase-4 twin of [`Self::load_bundle`].
+    /// (`rut/cases/<name>/`) through the
+    /// rut rail — the Phase-4 twin of [`Self::load_bundle`]. The case's
+    /// whole declared file set rides along: [`read_case_files`] walks the
+    /// `mod` declarations (root-only everywhere until the corpus splits
+    /// land — byte-identical to the historical single-string load).
     ///
     /// The corpus's per-case contract (see the corpus README): the module
     /// declares `entry fn start()` that authors + mounts its tree, plus
@@ -769,12 +775,9 @@ impl TurTestApp {
             .parent()
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
-        let path = workspace_root
-            .join("rut/cases")
-            .join(name)
-            .join("mod.rut");
-        let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.load_rut_module(&source)?;
+        let files =
+            read_case_files(&workspace_root.join("rut/cases").join(name)).map_err(TurError::Io)?;
+        self.load_rut_module_files(files)?;
         // Same quiescence drive as `load_bundle`: settle the initial render
         // before the test starts interacting.
         self.wait_for_timeout(Duration::ZERO);
@@ -1527,6 +1530,74 @@ impl TurTestApp {
         self.with_tree(move |tree, _focus| tree.dev_tool_node(id))
             .flatten()
     }
+}
+
+/// Read a case directory into a [`RutModuleFiles`] — the declaration-
+/// following walker (the harness's Rust twin of the case generator's
+/// `walkModTree`): the root `mod.rut` plus every `mod NAME;` child it
+/// declares, recursively, nested names slash-joined (`"net/tls"`).
+///
+/// Mounting is DECLARED, not discovered: a stray undeclared directory
+/// stays invisible (the same law the loader applies), children are
+/// visited in sorted order for a deterministic walk, and a declared
+/// child with no `mod.rut` on disk is a loud IO error.
+pub fn read_case_files(dir: &Path) -> std::io::Result<RutModuleFiles> {
+    fn visit(
+        dir: &Path,
+        prefix: &str,
+        out: &mut BTreeMap<Arc<str>, Arc<str>>,
+    ) -> std::io::Result<()> {
+        let text = std::fs::read_to_string(dir.join("mod.rut"))?;
+        for name in declared_children(&text) {
+            let path = if prefix.is_empty() {
+                name.clone()
+            } else {
+                format!("{prefix}/{name}")
+            };
+            // Loud if missing — a declared mount with no file is a broken
+            // case, not a silent skip.
+            let child = std::fs::read_to_string(dir.join(&name).join("mod.rut"))?;
+            out.insert(Arc::from(path.as_str()), Arc::from(child.as_str()));
+            visit(&dir.join(&name), &path, out)?;
+        }
+        Ok(())
+    }
+    let mut mods = BTreeMap::new();
+    visit(dir, "", &mut mods)?;
+    let root = std::fs::read_to_string(dir.join("mod.rut"))?;
+    Ok(RutModuleFiles {
+        root: Arc::from(root.as_str()),
+        mods,
+    })
+}
+
+/// The declared mod edges of one module source — the line-scan for
+/// `mod NAME;` / `pub mod NAME;` (comment lines skipped), sorted +
+/// deduped so the walk order is deterministic. Deliberately shallow:
+/// `mod` blocks and nested paths are the compiler's business, not the
+/// harness walker's.
+fn declared_children(text: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with("//") {
+            continue;
+        }
+        let body = line.strip_prefix("pub ").unwrap_or(line);
+        let Some(rest) = body.strip_prefix("mod ") else {
+            continue;
+        };
+        let Some(name) = rest.strip_suffix(';') else {
+            continue;
+        };
+        let name = name.trim();
+        if !name.is_empty() {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// Single-frame pump shared by `TurTestApp::pump` and `RawAppLooper`:
