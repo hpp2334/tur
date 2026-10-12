@@ -12,6 +12,14 @@
 // `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
 // statement runs.
 //
+// Reactive law (the kit-wide one-name law, anim edition): the reactive
+// props are the PLAIN methods over `Readable<f64>` — `Opacity.value`,
+// `Transform.rotate` / `scale` / `translate` — each branching on the
+// handle's atom id: an `sv()` literal stores the static value (atom 0),
+// a live source rides the bound row at build (last bind wins; the
+// translate offsets are independently sv-able). The static constructors
+// (`Opacity(0.5)`, `Transform(s, r, tx, ty)`) stay the boot shape.
+//
 // Handler law (the mutation rail): the controller's tick / end are SEALED
 // MUTATIONS — `mutate<f64>(fn (ctx: MutationCtx, v: f64) { ... })` ticks
 // (boa wraps onTick in mutate), `mutate(fn (ctx: MutationCtx, _e: nil)

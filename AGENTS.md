@@ -364,15 +364,18 @@ Android build + device debugging live in the **`android-dev` skill** at
   the entry rail's ctx, `entry_ctx()`); `await sleep` rides the futures
   prelude. No `TaskCtx`/`spawn`/`Task`; the stash rails (`st_*` /
   `stf_*`) are DELETED (state crosses as `AppContext` fields — see the
-  fixture contract below). Reactive bindings are methods, not variants:
-  the literal keeps the base
-  prop (`Text().text("hi")`, `Container().color(0x…u64)`), the reactive
-  lane is the `*_bound` method over `Readable<T>` (`Text().text_bound(r)`,
-  `Container().color_bound(r)`, `Expanded().flex_bound(r)`). The
-  unified one-name-over-`Readable<T>` law (base prop takes the handle,
-  `sv`/sugar for literals, the `*_bound` twins gone) is blocked on
-  param-type overloads — rut at this pin rejects duplicate fn/method
-  names outright; it lands with the compiler feature. Flags are per-family
+  fixture contract below). Reactive bindings are the ONE-NAME law: every
+  reactive-capable prop is a single method over `Readable<T>` under the
+  plain prop name (`Text().text(r)`, `Container().color(r)`,
+  `Expanded().flex(r)`) — the handle's atom id is the lane discriminator:
+  derived → `*_bind_derived`, atom 0 → the static row via `r.get()`,
+  else `*_bind`. Statics spell `sv(v)` (`Text().text(sv("hi"))` — a
+  StaticValue, atom 0). Atom-only lanes (`shadow_color`/`shadow_blur`/
+  `shadow_dy`, `Table.rows`, the lazy counts, `Switch.value`) take no sv
+  lane — a static there trips the engine's loud atom-0 guard ("static
+  value on an atom-only lane — bind a source/derive, not sv()"). Two
+  enum-twin exceptions keep the `*_bound` suffix (`cursor_bound`,
+  `target_anchor_bound`) — the enum lane owns the plain name. Flags are per-family
   NAME-ONLY enums on the kit (`Align`, `MainAlign`, `CrossAlign`,
   `MainAxisSize`, `StackFit`, `Axis`, `BoxFit`, `BorderPosition`, `Clip`,
   `HitTestBehavior`, `SpanFlags`, `Cursor`): kit methods take the enum and

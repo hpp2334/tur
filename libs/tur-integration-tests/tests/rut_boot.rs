@@ -110,7 +110,7 @@ entry fn on_event(cx: opaque, n: f64) {
 }
 "#;
 
-fn rut_bound_text(app: &TurTestApp) -> String {
+fn rut_text_of(app: &TurTestApp) -> String {
     let id = app.query_element(&["rut", "text"]).expect("bound text not found");
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
@@ -129,14 +129,14 @@ fn rut_reactive_atom_rebinds_text() {
 
     let cx = app.call_rut_entry_opaque("entry_start").unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "Count: 0", "initial binding renders");
+    assert_eq!(rut_text_of(&app), "Count: 0", "initial binding renders");
 
     // The engine→rut rail mutates the held context's source; the reactive
     // flush re-renders.
     for n in [1u64, 2, 7] {
         app.call_rut_entry_cx_f64("on_event", cx, n as f64).unwrap();
         app.wait_for_timeout(Duration::ZERO);
-        assert_eq!(rut_bound_text(&app), format!("Count: {n}"), "atom write drove re-render");
+        assert_eq!(rut_text_of(&app), format!("Count: {n}"), "atom write drove re-render");
     }
 }
 
@@ -168,7 +168,7 @@ fn rut_button_click_mutates_bound_text() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(BUTTON_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "taps: 0");
+    assert_eq!(rut_text_of(&app), "taps: 0");
 
     // The button is the second child of the column — locate by tree walk,
     // then tap its center with real pointer events.
@@ -183,7 +183,7 @@ fn rut_button_click_mutates_bound_text() {
     for n in 1u64..=3 {
         app.click(cx, cy);
         app.wait_for_timeout(Duration::ZERO);
-        assert_eq!(rut_bound_text(&app), format!("taps: {n}"), "click {n} drove the rut callback");
+        assert_eq!(rut_text_of(&app), format!("taps: {n}"), "click {n} drove the rut callback");
     }
 }
 
@@ -224,7 +224,7 @@ fn rut_counter_app_full_journey() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(COUNTER_APP_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "Count: 0");
+    assert_eq!(rut_text_of(&app), "Count: 0");
 
     let root = app.dev_tool_element_tree().unwrap();
     let column = app.dev_tool_get_element(root.children[0]).unwrap();
@@ -239,11 +239,11 @@ fn rut_counter_app_full_journey() {
     app.wait_for_timeout(Duration::ZERO);
     app.click(inc_x, inc_y);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "Count: 2", "two +1 taps");
+    assert_eq!(rut_text_of(&app), "Count: 2", "two +1 taps");
 
     app.click(dec_x, dec_y);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "Count: 1", "one -1 tap");
+    assert_eq!(rut_text_of(&app), "Count: 1", "one -1 tap");
 }
 
 /// The Phase-3-breadth gate: painted box (color+padding), Expanded fill,
@@ -307,16 +307,16 @@ fn rut_layout_and_condition_breadth() {
         "positioned child anchored at +4,+4: dx={dy:+.1} dx={dx:+.1}");
 
     // The ON branch is the visible bound text.
-    assert_eq!(rut_bound_text(&app), "ON", "the truthy branch renders");
+    assert_eq!(rut_text_of(&app), "ON", "the truthy branch renders");
 
     // Toggle → the OFF branch swaps in (pure engine swap — no rut in flush).
     let (bx, by) = center_of(&app, column.children[4]);
     app.click(bx, by);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "OFF", "the branch swapped after the toggle tap");
+    assert_eq!(rut_text_of(&app), "OFF", "the branch swapped after the toggle tap");
     app.click(bx, by);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "ON", "and back");
+    assert_eq!(rut_text_of(&app), "ON", "and back");
 }
 
 fn center_of(app: &TurTestApp, id: tur_engine::core::element::NodeId) -> (f64, f64) {
@@ -450,7 +450,7 @@ fn rut_list_map_atoms_round_trip() {
     app.load_rut_module(LIST_MAP_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
-        rut_bound_text(&app),
+        rut_text_of(&app),
         "|alpha|beta (demo)",
         "list join + map get render through the native-KV atoms"
     );
@@ -464,7 +464,7 @@ fn rut_list_map_atoms_round_trip() {
     app.click(bx + bw / 2.0, by + bh / 2.0);
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
-        rut_bound_text(&app),
+        rut_text_of(&app),
         "|alpha|beta|gamma",
         "the push rebuilt the list value and the join re-rendered the bound text"
     );
@@ -557,7 +557,7 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 
     // The rows' programmatic journey rendered through the bound label:
     // seed "seed" → select 0..4 → paste "SEEDED" over it → "SEEDED".
-    assert_eq!(rut_bound_text(&app), "SEEDED", "tctrl rows round-tripped through the label");
+    assert_eq!(rut_text_of(&app), "SEEDED", "tctrl rows round-tripped through the label");
     assert_eq!(rut_editable_text(&app), "SEEDED", "the Input renders the controller's value");
 
     // Keyboard: click to focus, then type — the engine's KeyboardSubsystem
@@ -939,7 +939,7 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     app.pointer_up(px + 5.0, py + 3.0);
     app.wait_for_timeout(Duration::ZERO);
 
-    let transcript = rut_bound_text(&app);
+    let transcript = rut_text_of(&app);
     // Local coords are pad-relative; globals differ by the pad's origin
     // (the column centers it) — pin the locals, spot-check the global
     // offset consistency on the down intent.
@@ -967,9 +967,9 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     app.right_click(mx, my);
     app.wait_for_timeout(Duration::ZERO);
     assert!(
-        rut_bound_text(&app).contains("|menu-right"),
+        rut_text_of(&app).contains("|menu-right"),
         "the context-menu mutation fired: {}",
-        rut_bound_text(&app)
+        rut_text_of(&app)
     );
 
     // Programmatic focus (the entry rail drives `focus_request` with the
@@ -979,13 +979,13 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     app.call_rut_entry("do_focus", foc_node, 0.0).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert!(
-        rut_bound_text(&app).contains("|focused"),
+        rut_text_of(&app).contains("|focused"),
         "the focus intent fired: {}",
-        rut_bound_text(&app)
+        rut_text_of(&app)
     );
     app.send_key_with_modifiers("A", true, false);
     app.wait_for_timeout(Duration::ZERO);
-    let transcript = rut_bound_text(&app);
+    let transcript = rut_text_of(&app);
     assert!(
         transcript.contains("|key A/A m1 k0"),
         "the key payload crossed as a record: {transcript}"
@@ -1043,7 +1043,7 @@ fn rut_animation_controller_ticks_into_opacity() {
 
     // The helper rows answered at start: tween_lerp(100,200,.5)=150,
     // curve_eval("linear",.25)=0, color lerp mid = 0x808080FF.
-    assert_eq!(rut_bound_text(&app), "tw150 cv0 cl2155905279", "helper rows");
+    assert_eq!(rut_text_of(&app), "tw150 cv0 cl2155905279", "helper rows");
 
     // The opacity element exists and wraps its child.
     let op = app
@@ -1122,7 +1122,7 @@ fn rut_async_clipboard_and_net_request() {
     // clock — the virtual-clock window would close under load.
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let done = loop {
-        if rut_bound_text(&app).ends_with("|hello from net") {
+        if rut_text_of(&app).ends_with("|hello from net") {
             break true;
         }
         if std::time::Instant::now() > deadline {
@@ -1130,7 +1130,7 @@ fn rut_async_clipboard_and_net_request() {
         }
         app.wait_for_timeout(Duration::from_millis(25));
     };
-    assert!(done, "the awaits completed: {:?}", rut_bound_text(&app));
+    assert!(done, "the awaits completed: {:?}", rut_text_of(&app));
     assert_eq!(
         app.take_clipboard_write(),
         Some("from rut".to_string()),
@@ -1188,7 +1188,7 @@ fn rut_net_stream_chunks_cross_as_records() {
     // real clock (the virtual-clock window would close under load).
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let done = loop {
-        if rut_bound_text(&app).contains("|done") {
+        if rut_text_of(&app).contains("|done") {
             break true;
         }
         if std::time::Instant::now() > deadline {
@@ -1196,14 +1196,14 @@ fn rut_net_stream_chunks_cross_as_records() {
         }
         app.wait_for_timeout(Duration::from_millis(25));
     };
-    assert!(done, "the cancel journey ran: {:?}", rut_bound_text(&app));
+    assert!(done, "the cancel journey ran: {:?}", rut_text_of(&app));
 
     // The transcript pins all three crossings: the launched journey's
     // markers (run_ready phase) and both chunk records (intent-drain
     // phase, in stream order). (The two phases append in drain order —
     // intents drain after the flush — so the chunks may trail the done
     // marker; each pair's internal order is what matters.)
-    let transcript = rut_bound_text(&app);
+    let transcript = rut_text_of(&app);
     assert!(
         transcript.contains("|launched") && transcript.contains("|done"),
         "the launched cancel journey ran: {transcript}"
@@ -1301,7 +1301,7 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let running = loop {
         app.call_rut_entry_cx("poll", cx).unwrap();
-        let s = rut_bound_text(&app);
+        let s = rut_text_of(&app);
         if s == "running" || s == "error" {
             break true;
         }
@@ -1310,13 +1310,13 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
         }
         std::thread::sleep(Duration::from_millis(25));
     };
-    assert!(running, "the child reached running: {:?}", rut_bound_text(&app));
+    assert!(running, "the child reached running: {:?}", rut_text_of(&app));
     let _ = 0; // (error detail asserted below when non-running)
 
     // Destroy: the child tears down.
     app.call_rut_entry_cx("destroy", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
+    assert_eq!(rut_text_of(&app), "destroyed", "the child was destroyed");
 }
 
 /// The Edit→Split wasm trap (phase 6.5), pinned at its seam: a child
@@ -1345,7 +1345,7 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
         app.call_rut_entry_cx("poll", cx).unwrap();
-        let s = rut_bound_text(&app);
+        let s = rut_text_of(&app);
         if s == "running" || s == "error" {
             assert_eq!(s, "running", "the child settled");
             break;
@@ -1366,7 +1366,7 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
     // exits and drops the RPC inbox).
     app.call_rut_entry_cx("destroy", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "destroyed", "the child was destroyed");
+    assert_eq!(rut_text_of(&app), "destroyed", "the child was destroyed");
 
     // The stale facade's load reports `WorkerGone` ("worker gone" through
     // the facade's TurError wrap) — it must NOT panic.
@@ -1594,7 +1594,7 @@ fn rut_module_files_mount_a_tree() {
     app.wait_for_timeout(Duration::ZERO);
 
     // The child's fn crossed: the root authored its Text from it.
-    assert_eq!(rut_bound_text(&app), "hello from the tree");
+    assert_eq!(rut_text_of(&app), "hello from the tree");
     let root = app.dev_tool_element_tree().expect("root mounted by the multi-file module");
     assert_eq!(root.children.len(), 1, "one root child (the Column)");
 }

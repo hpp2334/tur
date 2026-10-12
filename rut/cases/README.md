@@ -160,10 +160,10 @@ the kit now — the boa cases lean on it heavily.
 ```rut
 use tur_kit::flags::{ Align, CrossAlign, MainAlign };
 use tur_kit::gesture::pointer::{ PointerInteract };
-use tur_kit::handles::{ mount };
+use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -179,12 +179,14 @@ entry fn start() -> u64 {
     });
 
     let col = Column()
-        .main_alignment(MainAlign.Center)
-        .cross_alignment(CrossAlign.Center)
+        .main_alignment(MainAlign::Center)
+        .cross_alignment(CrossAlign::Center)
         .query_key("col")
-        .child(Text().text_bound(label).query_key("count").font_size(36.0).build())
+        // ONE method per reactive prop: the handle rides the plain name
+        // (`text(label)`); statics wrap sv(...) (`text(sv("hi"))`).
+        .child(Text().text(label).query_key("count").font_size(36.0).build())
         .child(button(b_inc, "+1", "inc"));
-    mount(Container().alignment(Align.Center).child(col).build());
+    mount(Container().alignment(Align::Center).child(col).build());
     return count.atom_id();
 }
 
@@ -195,9 +197,9 @@ fn button(b: Mutation<nil>, text: str, key: str) -> View {
         .on_click(b)
         .child(
             Container()
-                .color(0x6366F1FFu64)
+                .color(sv(0x6366F1FFu64))
                 .query_key(key)
-                .child(Text().text(text).build())
+                .child(Text().text(sv(text)).build())
                 .build(),
         )
         .build();

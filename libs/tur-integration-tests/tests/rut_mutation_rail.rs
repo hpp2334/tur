@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use tur_integration_tests::TurTestApp;
 
-fn rut_bound_text(app: &TurTestApp) -> String {
+fn rut_text_of(app: &TurTestApp) -> String {
     let id = app
         .query_element(&["rut", "text"])
         .expect("bound text not found");
@@ -81,14 +81,14 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(COUNTER_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "0 clicks", "the derive rendered initially");
+    assert_eq!(rut_text_of(&app), "0 clicks", "the derive rendered initially");
 
     let (px, py) = element_center(&app, "pad");
     for n in 1..=3u64 {
         app.click(px, py);
         app.wait_for_timeout(Duration::ZERO);
         assert_eq!(
-            rut_bound_text(&app),
+            rut_text_of(&app),
             format!("{n} clicks"),
             "click {n} landed through ctx.set"
         );
@@ -155,14 +155,14 @@ fn b_mutations_drain_queued_in_order_and_the_watch_observes_the_write() {
     app.wait_for_timeout(Duration::ZERO);
     // The mint's seed write precedes the watcher activation — one boot
     // delivery may land; the batch assertions read the tail.
-    let boot = rut_bound_text(&app);
+    let boot = rut_text_of(&app);
 
     let (px, py) = element_center(&app, "pad");
     app.pointer_down(px, py);
     app.pointer_up(px, py);
     app.wait_for_timeout(Duration::ZERO);
 
-    let transcript = rut_bound_text(&app);
+    let transcript = rut_text_of(&app);
     let base = boot.len();
     let down = transcript[base..].find("|down").expect("down landed") + base;
     let up = transcript[base..].find("|up").expect("up landed") + base;
@@ -241,7 +241,7 @@ fn d_ctx_run_composes_and_return_values_flow() {
     // on the following mutation passes; poll until they settle.
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let settled = loop {
-        if rut_bound_text(&app) == "r=22" && rut_text_at(&app, "log") == "|marked" {
+        if rut_text_of(&app) == "r=22" && rut_text_at(&app, "log") == "|marked" {
             break true;
         }
         if std::time::Instant::now() > deadline {
@@ -249,8 +249,8 @@ fn d_ctx_run_composes_and_return_values_flow() {
         }
         app.wait_for_timeout(Duration::from_millis(25));
     };
-    assert!(settled, "the composition settled: out={:?} log={:?}", rut_bound_text(&app), rut_text_at(&app, "log"));
-    assert_eq!(rut_bound_text(&app), "r=22", "the arg crossed and the target's effect landed");
+    assert!(settled, "the composition settled: out={:?} log={:?}", rut_text_of(&app), rut_text_at(&app, "log"));
+    assert_eq!(rut_text_of(&app), "r=22", "the arg crossed and the target's effect landed");
     assert_eq!(rut_text_at(&app, "log"), "|marked", "the nil-arg composition ran");
 }
 
@@ -322,7 +322,7 @@ fn e_ctx_reads_reach_sources_and_derives() {
     let (px, py) = element_center(&app, "pad");
     app.click(px, py);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "expanded=false", "the negated read landed");
+    assert_eq!(rut_text_of(&app), "expanded=false", "the negated read landed");
 
     let (sx, sy) = element_center(&app, "snap");
     app.click(sx, sy);
@@ -404,7 +404,7 @@ fn f_drag_mutations_receive_typed_pointer_events() {
     app.pointer_up(dx + 5.0, dy + 3.0);
     app.wait_for_timeout(Duration::ZERO);
 
-    let transcript = rut_bound_text(&app);
+    let transcript = rut_text_of(&app);
     let (ix, iy) = (dx as u64, dy as u64);
     assert!(
         transcript.contains(&format!("|d{ix},{iy}")),
@@ -452,7 +452,7 @@ fn g_clicks_never_remount_the_tree() {
     }
     let after = snapshot(&app);
     assert_eq!(before, after, "the mutation passes repainted in place — no remounts");
-    assert_eq!(rut_bound_text(&app), "3 clicks", "the writes landed");
+    assert_eq!(rut_text_of(&app), "3 clicks", "the writes landed");
 }
 
 // ---------------------------------------------------------------------------
@@ -499,7 +499,7 @@ fn launched_task_reads_and_writes_through_its_ctx_across_awaits() {
     // resume on later pumps — poll on the real clock.
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let done = loop {
-        if rut_bound_text(&app) == "launched|seeded" {
+        if rut_text_of(&app) == "launched|seeded" {
             break true;
         }
         if std::time::Instant::now() > deadline {
@@ -510,7 +510,7 @@ fn launched_task_reads_and_writes_through_its_ctx_across_awaits() {
     assert!(
         done,
         "the task's ctx writes landed across the awaits: {:?}",
-        rut_bound_text(&app)
+        rut_text_of(&app)
     );
 }
 
@@ -551,13 +551,13 @@ fn h_generic_ctx_spelling_runs_the_triad() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(GENERIC_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_bound_text(&app), "0 clicks");
+    assert_eq!(rut_text_of(&app), "0 clicks");
 
     let (px, py) = element_center(&app, "pad");
     app.click(px, py);
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
-        rut_bound_text(&app),
+        rut_text_of(&app),
         "1 clicks",
         "ctx.set<f64> wrote through the generic method"
     );

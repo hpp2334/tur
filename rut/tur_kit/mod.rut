@@ -39,9 +39,13 @@
 // `width(r)`, `flex(r)`, `obscure(r)`, …). Static values wrap:
 // `text(sv("hi"))`, `color(sv(0xFF..u64))` — the literal lane lowers
 // through the existing static row via the handle's `get()`; reactive
-// lanes bind atoms exactly as the old twin methods did. A twin survives
-// ONLY where an enum lane owns the plain name (`cursor`, `target_anchor`)
-// — documented exceptions, not a regime. Sources /
+// lanes bind atoms exactly as the old twin methods did. ATOM-ONLY lanes
+// (`shadow_color`/`shadow_blur`/`shadow_dy`, `Table.rows`, the lazy
+// counts, `Switch.value`) take NO sv — a static there trips the engine's
+// loud atom-0 guard ("static value on an atom-only lane — bind a
+// source/derive, not sv()"). A twin survives ONLY where an enum lane
+// owns the plain name (`cursor`, `target_anchor`) — documented
+// exceptions, not a regime. Sources /
 // derives mint through
 // `source<T>(v)` / `derive<T>(fn (ctx: DeriveCtx) -> T)`; ALL reads and
 // writes flow through the ctxs (`DeriveCtx` get-only, `MutationCtx`
