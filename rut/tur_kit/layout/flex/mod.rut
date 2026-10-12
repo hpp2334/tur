@@ -102,12 +102,14 @@ impl Expanded {
   [constructor] pub fn builder() -> Self {
     return Self { spec: flexi_new() };
   }
-  pub fn flex(mut self, v: f64) -> Self {
-    flexi_flex(self.spec, v);
-    return self;
-  }
-  pub fn flex_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    flexi_flex_bound(self.spec, r.atom_id());
+  // The ONE reactive flex prop over `Readable<f64>`: a live source rides
+  // the bind row, an `sv()` literal lowers through the static row.
+  pub fn flex(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      flexi_flex(self.spec, r.get());
+    } else {
+      flexi_flex_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -133,12 +135,14 @@ impl Flexible {
     flexi_fit(s, 1); // FIT_LOOSE — the child shrink-wraps below its slot // the child shrink-wraps below its slot
     return Self { spec: s };
   }
-  pub fn flex(mut self, v: f64) -> Self {
-    flexi_flex(self.spec, v);
-    return self;
-  }
-  pub fn flex_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    flexi_flex_bound(self.spec, r.atom_id());
+  // The ONE reactive flex prop over `Readable<f64>` (same lanes as
+  // Expanded's).
+  pub fn flex(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      flexi_flex(self.spec, r.get());
+    } else {
+      flexi_flex_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

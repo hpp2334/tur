@@ -43,9 +43,9 @@ entry fn start() -> u64 {
     stack.child(Positioned().right(8.0).bottom(8.0).child(pill).build());
 
     // Counter readouts (the test parses these).
-    let downs_t = Text().text_bound(downs).query_key("beneath-downs");
+    let downs_t = Text().text(downs).query_key("beneath-downs");
     stack.child(downs_t.build());
-    let clicks_t = Text().text_bound(clicks).query_key("pill-clicks");
+    let clicks_t = Text().text(clicks).query_key("pill-clicks");
     stack.child(clicks_t.build());
 
     mount(stack.build());

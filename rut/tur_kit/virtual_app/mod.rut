@@ -81,7 +81,9 @@ impl CompositedFollower {
     return self;
   }
   // The reactive anchor (the composited-transform corpus's reactive
-  // anchor rail).
+  // anchor rail). The `_bound` spelling is a DOCUMENTED EXCEPTION — the
+  // enum lane owns the plain name (`target_anchor(flags::Align)`), so the
+  // type-mismatched `Readable<f64>` lane keeps its suffix.
   pub fn target_anchor_bound(mut self, r: reactive::Readable<f64>) -> Self {
     ct_follower_target_anchor_bound(self.spec, r.atom_id());
     return self;

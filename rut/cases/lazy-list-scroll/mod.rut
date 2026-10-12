@@ -2,15 +2,15 @@
 // outside the initial build set).
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyList };
 
 fn row(i: u64) -> View {
     let mut b = Container().width_height(400.0, 50.0);
     if (i % 2 == 0) {
-        b.color(0x303030FF);
+        b.color(sv(0x303030FFu64));
     } else {
-        b.color(0x1A1A1AFF);
+        b.color(sv(0x1A1A1AFFu64));
     }
     return b.build();
 }

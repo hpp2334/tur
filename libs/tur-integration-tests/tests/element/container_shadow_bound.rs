@@ -16,7 +16,7 @@ use tur_integration_tests::TurTestApp;
 const SHADOW_BOUND_RUT: &str = r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 
 struct AppContext {
     color: Source<u64>,
@@ -31,10 +31,10 @@ entry fn start() -> opaque {
     let dy: Source<f64> = source<f64>(4.0);
     let card = Container()
         .width_height(60.0, 40.0)
-        .color(0x222222FFu64)
-        .shadow_color_bound(color)
-        .shadow_blur_bound(blur)
-        .shadow_dy_bound(dy)
+        .color(sv(0x222222FFu64))
+        .shadow_color(color)
+        .shadow_blur(blur)
+        .shadow_dy(dy)
         .query_key("card")
         .build();
     mount(card);
@@ -63,15 +63,15 @@ entry fn resteepen(cx: opaque) {
 const STATIC_SHADOW_RUT: &str = r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source, sv };
 
 entry fn start() -> u64 {
     let dy: Readable<f64> = source<f64>(12.0);
     let card = Container()
         .width_height(60.0, 40.0)
-        .color(0x222222FFu64)
+        .color(sv(0x222222FFu64))
         .shadow(0xABCDEFFFu64, 24.0, 0.0, 4.0)
-        .shadow_dy_bound(dy)
+        .shadow_dy(dy)
         .query_key("card")
         .build();
     mount(card);

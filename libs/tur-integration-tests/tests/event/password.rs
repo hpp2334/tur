@@ -10,14 +10,14 @@ const PASSWORD_BUNDLE: &str = r#"
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
     // flags bit 0 = multiline, bit 1 = obscure.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(true).query_key("input").build();
+    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(sv(true)).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());
@@ -30,13 +30,13 @@ entry fn start() {
 const CUSTOM_CHAR_BUNDLE: &str = r#"
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).width_height(200.0, 30.0).obscure(true).obscure_char("*").query_key("input").build();
+    let input = Input().controller(ctrl).width_height(200.0, 30.0).obscure(sv(true)).obscure_char("*").query_key("input").build();
     mount(input);
 }
 "#;
@@ -292,7 +292,7 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 
 // ---------------------------------------------------------------------------
 // Reactive bindings: `input_obscure_bound` / `input_placeholder_bound`
-// (bindings are methods — `Input().obscure_bound(atom)`; the reveal toggle
+// (bindings are methods — `Input().obscure(atom)`; the reveal toggle
 // flips the live atom, not a rebuilt builder).
 // ---------------------------------------------------------------------------
 
@@ -313,7 +313,7 @@ entry fn start() -> opaque {
     let undo = undo_ctrl();
     let obscure: Source<bool> = source<bool>(true);
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
-        .obscure_bound(obscure)
+        .obscure(obscure)
         .query_key("input").build();
     mount(input);
     return opaque(AppContext { obscure: obscure });
@@ -367,7 +367,7 @@ fn obscure_bound_toggles_masking_reactively() {
     );
 }
 
-/// The bound-placeholder twin (`Input().placeholder_bound(atom)`): the
+/// The reactive placeholder (`Input().placeholder(atom)`): the
 /// placeholder string rides a str atom. The display path (a layout run,
 /// not a TextElement) has no public string probe, so this pins the
 /// reactive plumbing end to end — the atom swap re-resolves through the
@@ -387,7 +387,7 @@ entry fn start() -> opaque {
     let undo = undo_ctrl();
     let hint: Source<str> = source<str>("type here");
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0)
-        .placeholder_bound(hint)
+        .placeholder(hint)
         .query_key("input").build();
     mount(input);
     return opaque(AppContext { hint: hint });

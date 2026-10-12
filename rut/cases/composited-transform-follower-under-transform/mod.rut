@@ -5,6 +5,7 @@ use tur_kit::flags::{ Align };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ Readable, sv };
 use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 use tur_anim_kit::{ Transform };
 
@@ -14,8 +15,12 @@ entry fn start() {
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();
-    stack.child(Positioned().left(100.0).top(80.0).child(target).build());
-    let red = Container().width_height(20.0, 20.0).color(0xFF0000FFu64);
+    // The interface-annotated seed: the upstream duplicate-boot-scope
+    // interning bug (pin 3b4d2cc) mints sv<T> as an unresolved `#T`
+    // when a module also instantiates the anim-kit classes.
+    let at: Readable<f64> = sv(100.0f64);
+    stack.child(Positioned().left(at).top(sv(80.0f64)).child(target).build());
+    let red = Container().width_height(20.0, 20.0).color(sv(0xFF0000FFu64));
     let follower = CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(red.build()).build();
     let transformed = Transform(1.0, 0.0, 50.0, 30.0).child(follower).build();
     stack.child(transformed);

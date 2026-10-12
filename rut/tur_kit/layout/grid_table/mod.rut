@@ -89,7 +89,10 @@ impl Table {
     table_columns(self.spec, cols.spec);
     return self;
   }
-  pub fn rows_atom(mut self, r: reactive::Readable<opaque>) -> Self {
+  // The ONE reactive rows prop over `Readable<opaque>` — an atom-only
+  // lane (a static row list has no meaning here; sv() traps at the P1
+  // guard).
+  pub fn rows(mut self, r: reactive::Readable<opaque>) -> Self {
     table_rows_atom(self.spec, r.atom_id());
     return self;
   }

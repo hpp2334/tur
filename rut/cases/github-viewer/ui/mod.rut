@@ -6,7 +6,7 @@ use tur_kit::control_flow::control::{ Condition };
 use tur_kit::gesture::pointer::{ PointerInteract };
 use tur_kit::handles::{ View };
 use tur_kit::layout::box::{ Container, SizedBox };
-use tur_kit::reactive::{ Mutation };
+use tur_kit::reactive::{ Mutation, sv };
 use tur_kit::text::core::{ Text };
 
 // A compact pill button (the boa Button/IconButton composite); the
@@ -14,9 +14,9 @@ use tur_kit::text::core::{ Text };
 pub fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> View {
     let face = Container()
         .padding(9.0)
-        .radius(8.0)
-        .color(bg)
-        .child(Text().text(label).font_size(13.0).color(fg).build())
+        .radius(sv(8.0f64))
+        .color(sv(bg))
+        .child(Text().text(sv(label)).font_size(13.0).color(fg).build())
         .build();
     return PointerInteract()
         .on_click(m)
@@ -29,9 +29,9 @@ pub fn pill(key: str, label: str, m: Mutation<nil>, bg: u64, fg: u64) -> View {
 pub fn error_banner(s: state::Gh) -> View {
     let banner = Container()
         .padding(10.0)
-        .radius(8.0)
-        .color(theme::DANGER_SOFT)
-        .child(Text().text_bound(s.err).font_size(12.0).color(theme::DANGER).query_key("gh-err").build())
+        .radius(sv(8.0f64))
+        .color(sv(theme::DANGER_SOFT))
+        .child(Text().text(s.err).font_size(12.0).color(theme::DANGER).query_key("gh-err").build())
         .build();
     return Condition(s.err_has).then(banner).else_branch(SizedBox(0.0, 0.0).build()).build();
 }

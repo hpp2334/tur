@@ -122,39 +122,39 @@ use tur_kit::flags::{ Axis, CrossAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Expanded };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let header = Container().padding(14.0)
-        .child(Text().text("CASES").font_size(10.0).build());
+        .child(Text().text(sv("CASES")).font_size(10.0).build());
     let rows = Column().cross_alignment(CrossAlign::Stretch);
     // 19 fixed-height rows — the sidebar's overflow content (939px total
     // against a 754px scroll viewport in the 800-tall fixture window).
-    let rows = rows.child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build())
-        .child(Container().width_height(200.0, 47.0).color(0x0F172AFFu64).build());
-    let sidebar = Container().width(200.0)
+    let rows = rows.child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build())
+        .child(Container().width_height(200.0, 47.0).color(sv(0x0F172AFFu64)).build());
+    let sidebar = Container().width(sv(200.0f64))
         .child(Column().cross_alignment(CrossAlign::Stretch)
             .child(header.build())
-            .child(Expanded().flex(1.0)
+            .child(Expanded().flex(sv(1.0f64))
                 .child(ScrollView().axis(Axis::Vertical)
                     .child(rows.build())
                     .query_key("sidebar-scroll")
@@ -228,7 +228,7 @@ fn content_shrink_clamps_scroll_offset_to_new_max() {
 use tur_kit::flags::{ Axis, CrossAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::scroll::{ ScrollView };
 
 struct AppContext {
@@ -238,7 +238,7 @@ struct AppContext {
 entry fn start() -> opaque {
     let height: Source<f64> = source<f64>(900.0);
 
-    let b = Container().width_height(10.0, 10.0).color(0x204080FFu64).height_bound(height);
+    let b = Container().width_height(10.0, 10.0).color(sv(0x204080FFu64)).height(height);
 
     let mut scroller = ScrollView().axis(Axis::Vertical).child(b.build()).query_key("sv").build();
     let scroller = scroller;

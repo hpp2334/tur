@@ -12,11 +12,16 @@ const CTOR_FORM_RUT: &str = r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ Readable, sv };
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ Opacity };
 
 entry fn start() {
-    let col = Column().query_key("ctor-col").child(Row().query_key("ctor-row").child(Text().text("x").query_key("ctor-text").build()).build()).child(SizedBox(400.0, 200.0).query_key("ctor-sized").build()).child(Opacity(0.5).child(Text().text("faded").build()).build());
+    // The interface-annotated seed: the upstream duplicate-boot-scope
+    // interning bug (pin 3b4d2cc) misbinds sv<T>'s itable under the
+    // anim-kit import without a seeded table.
+    let faded: Readable<str> = sv("faded");
+    let col = Column().query_key("ctor-col").child(Row().query_key("ctor-row").child(Text().text(sv("x")).query_key("ctor-text").build()).build()).child(SizedBox(400.0, 200.0).query_key("ctor-sized").build()).child(Opacity(0.5).child(Text().text(faded).build()).build());
     mount(col.build());
 }
 "#;

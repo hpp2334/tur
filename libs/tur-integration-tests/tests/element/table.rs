@@ -34,10 +34,10 @@ use tur_kit::handles::{ ListHandle, list_new, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::layout::grid_table::{ Table, TableCols };
-use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source, sv };
 
 fn cell(key: str) -> View {
-    let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64).query_key(key);
+    let b = Container().width_height(10.0, 10.0).color(sv(0xC8C8C8FFu64)).query_key(key);
     return b.build();
 }
 
@@ -68,7 +68,7 @@ entry fn start() -> u64 {
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
-    let mut t = Table().columns(cols).rows_atom(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
+    let mut t = Table().columns(cols).rows(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
     mount(t);
     return rows.atom_id();
 }
@@ -164,7 +164,7 @@ entry fn start() {
     let cols = TableCols().extent(300.0);
     let t = Table()
         .columns(cols)
-        .rows_atom(rows)
+        .rows(rows)
         .row_builder(body_cell)
         .stripes(0xFF0000FFu64, 0x0000FFFFu64)
         .query_key("t")
@@ -232,7 +232,7 @@ entry fn start() {
     let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
     let t = Table()
         .columns(cols)
-        .rows_atom(rows_atom)
+        .rows(rows_atom)
         .row_builder(body_cell)
         .query_key("t")
         .build();

@@ -16,16 +16,15 @@ impl Text {
   [constructor] pub fn builder() -> Self {
     return Self { spec: text_new() };
   }
-  pub fn text(mut self, v: str) -> Self {
-    text_text(self.spec, v);
-    return self;
-  }
-  // The ONE reactive text prop (a prop never has a twin): the handle's
-  // kind selects the bind row — a source binds directly, a derived binds
-  // through the derive rail.
-  pub fn text_bound(mut self, r: reactive::Readable<str>) -> Self {
+  // The ONE reactive text prop over `Readable<str>` — the handle's kind
+  // selects the lane: a derived binds through the derive rail, an `sv()`
+  // literal lowers through the static row (pure read off the box), a
+  // source binds directly.
+  pub fn text(mut self, r: reactive::Readable<str>) -> Self {
     if (r.is_derived()) {
       text_bind_derived(self.spec, r.atom_id());
+    } else if (r.atom_id() == 0) {
+      text_text(self.spec, r.get());
     } else {
       text_bind(self.spec, r.atom_id());
     }

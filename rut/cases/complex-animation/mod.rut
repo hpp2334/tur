@@ -6,7 +6,7 @@
 // animated channels: card width (120 → 280), card radius (8 → 40, the
 // bound-radius row), card hue (indigo → coral via the color tween) and
 // the inner white square's ROTATION (the bound-angle row:
-// Transform().rotate_bound(progress) — the angle re-resolves through the
+// Transform().rotate(progress) — the angle re-resolves through the
 // live atom and the subtree NEVER re-mounts; no rebuild channel), the
 // orbiting dot (Positioned bounds over math_sin/math_cos riding boa's
 // 140/80 center) and the % readout (a derive over the progress source).
@@ -26,7 +26,7 @@ use tur_kit::handles::{ View, list_new, math_cos, math_sin, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl, color_tween_lerp, tween_lerp };
 
@@ -78,7 +78,7 @@ entry fn start() -> u64 {
     let loop_flag: Readable<bool> = source<bool>(false);
 
     // The tick: eased progress → the animated channels (the progress atom
-    // IS the bound angle's source — Transform().rotate_bound reads it
+    // IS the bound angle's source — Transform().rotate reads it
     // reactively; the tick just advances it; no list rewrite, no
     // re-mount).
     let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
@@ -183,10 +183,10 @@ entry fn start() -> u64 {
     let mut col = Column()
         .main_alignment(MainAlign::Center)
         .cross_alignment(CrossAlign::Center)
-        .child(Text().text("Animated Card Studio").font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
+        .child(Text().text(sv("Animated Card Studio")).font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
         .child(SizedBox(0.0, 4.0).build())
         .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(status_badge(status, badge)).child(gap(12.0)).child(
-            Text().text_bound(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
+            Text().text(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
         ).build())
         .child(SizedBox(0.0, 32.0).build())
         .child(stage(orbit_x, orbit_y, width, hue, radius, progress))
@@ -197,14 +197,14 @@ entry fn start() -> u64 {
             .child(pill("Reverse", 0x8B5CF6FFu64, b_reverse, "cas-reverse")).child(gap(6.0))
             .child(pill("Stop", 0xEF4444FFu64, b_stop, "cas-stop")).build())
         .child(SizedBox(0.0, 16.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text("Speed:").font_size(11.0).color(0x64748BFFu64).build())
+        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text(sv("Speed:")).font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
             .child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0))
             .child(chip(sp1, "1x", b_speed1, "cas-s1")).child(gap(4.0))
             .child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0))
             .child(chip(sp3, "4x", b_speed3, "cas-s3")).build())
         .child(SizedBox(0.0, 12.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text("Curve:").font_size(11.0).color(0x64748BFFu64).build())
+        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text(sv("Curve:")).font_size(11.0).color(0x64748BFFu64).build())
             .child(gap(8.0))
             .child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0))
             .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
@@ -212,10 +212,10 @@ entry fn start() -> u64 {
             .child(chip(cv3, "easeInOut", b_curve3, "cas-c3")).child(gap(12.0))
             .child(loop_chip(lp, loop_on, b_loop)).build())
         .child(SizedBox(0.0, 16.0).build())
-        .child(Text().text("Controls: pause mid-play, change speed/curve, resume").font_size(10.0).color(0x94A3B8FFu64).build());
+        .child(Text().text(sv("Controls: pause mid-play, change speed/curve, resume")).font_size(10.0).color(0x94A3B8FFu64).build());
     // The root Lifecycle fires the seed at mount (a transparent
     // pass-through around the unchanged page chain).
-    let page = Container().color(0xF8FAFCFFu64).alignment(Align::Center).child(col.build()).build();
+    let page = Container().color(sv(0xF8FAFCFFu64)).alignment(Align::Center).child(col.build()).build();
     mount(Lifecycle().on_mount(seed).child(page).build());
     return progress.atom_id();
 }
@@ -227,13 +227,13 @@ entry fn start() -> u64 {
 // cx + r·cos / cy + r·sin of the eased progress).
 fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> View {
     let dot = Positioned()
-        .left_bound(orbit_x)
-        .top_bound(orbit_y)
+        .left(orbit_x)
+        .top(orbit_y)
         .child(
             Container()
                 .width_height(20.0, 20.0)
-                .radius(999.0)
-                .color(GREEN)
+                .radius(sv(999.0f64))
+                .color(sv(GREEN))
                 .shadow(0x22C55E78u64, 16.0, 0.0, 0.0)
                 .query_key("cas-dot")
                 .build(),
@@ -241,20 +241,20 @@ fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, h
         .build();
     return Stack()
         .child(SizedBox(360.0, 200.0).build())
-        .child(Positioned().left(100.0).top(20.0).child(card(width, hue, radius, progress)).build())
+        .child(Positioned().left(sv(100.0f64)).top(sv(20.0f64)).child(card(width, hue, radius, progress)).build())
         .child(dot)
         .build();
 }
 
 // The card: width + hue + radius ride their atoms (the tick's write
 // targets); the inner white square SPINS through the bound row —
-// Transform().rotate_bound(progress) re-resolves the angle through the
+// Transform().rotate(progress) re-resolves the angle through the
 // live atom (the subscribe → relayout rail) and the subtree never
 // re-mounts. Boa's square is opaque — no opacity channel.
 fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> View {
-    let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).radius(12.0).build();
-    let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(progress).child(square).build();
-    return Container().width_bound(width).height(160.0).color_bound(hue).radius_bound(radius)
+    let square = Container().width_height(60.0, 60.0).color(sv(0xFFFFFFFFu64)).radius(sv(12.0f64)).build();
+    let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate(progress).child(square).build();
+    return Container().width(width).height(sv(160.0f64)).color(hue).radius(radius)
         .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
         .alignment(Align::Center)
         .query_key("cas-card")
@@ -267,10 +267,10 @@ fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progres
 // derive-driven label, case-side.
 fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) -> View {
     return PointerInteract().on_click(b_loop).child(
-        Container().padding(6.0).radius(6.0).color_bound(lp).query_key("cas-loop").child(
+        Container().padding(6.0).radius(sv(6.0f64)).color(lp).query_key("cas-loop").child(
             Condition(loop_on)
-                .then_build(fn () -> View { return Text().text("Loop ✓").font_size(10.0).color(0xFFFFFFFFu64).build(); })
-                .else_build(fn () -> View { return Text().text("Loop").font_size(10.0).color(0x475569FFu64).build(); })
+                .then_build(fn () -> View { return Text().text(sv("Loop ✓")).font_size(10.0).color(0xFFFFFFFFu64).build(); })
+                .else_build(fn () -> View { return Text().text(sv("Loop")).font_size(10.0).color(0x475569FFu64).build(); })
                 .build(),
         ).build(),
     ).build();
@@ -279,8 +279,8 @@ fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) 
 // The status badge: the label bound to the status atom, the fill bound to
 // the badge brush atom.
 fn status_badge(status: Readable<str>, badge: Readable<u64>) -> View {
-    return Container().padding(6.0).radius(999.0).color_bound(badge).child(
-        Text().text_bound(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
+    return Container().padding(6.0).radius(sv(999.0f64)).color(badge).child(
+        Text().text(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
     ).build();
 }
 
@@ -383,8 +383,8 @@ fn loop_color(on: bool) -> u64 {
 // label.
 fn pill(label: str, color: u64, cb: Mutation<nil>, key: str) -> View {
     return PointerInteract().on_click(cb).child(
-        Container().padding(8.0).radius(6.0).color(color).query_key(key).child(
-            Text().text(label).font_size(11.0).color(0xFFFFFFFFu64).build(),
+        Container().padding(8.0).radius(sv(6.0f64)).color(sv(color)).query_key(key).child(
+            Text().text(sv(label)).font_size(11.0).color(0xFFFFFFFFu64).build(),
         ).build(),
     ).build();
 }
@@ -392,8 +392,8 @@ fn pill(label: str, color: u64, cb: Mutation<nil>, key: str) -> View {
 // A selectable chip (speed / curve / loop): the fill rides its brush atom.
 fn chip(atom: Readable<u64>, label: str, cb: Mutation<nil>, key: str) -> View {
     return PointerInteract().on_click(cb).child(
-        Container().padding(6.0).radius(6.0).color_bound(atom).query_key(key).child(
-            Text().text(label).font_size(10.0).color(0x475569FFu64).build(),
+        Container().padding(6.0).radius(sv(6.0f64)).color(atom).query_key(key).child(
+            Text().text(sv(label)).font_size(10.0).color(0x475569FFu64).build(),
         ).build(),
     ).build();
 }

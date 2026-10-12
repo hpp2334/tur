@@ -109,8 +109,8 @@ use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
 use tur_kit::reactive::{
-    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate,
-    rs_derive, source, watch,
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate, sv,
+    rs_derive, source, sv, watch,
 };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
@@ -426,7 +426,7 @@ fn build_ui(cx: AppContext) {
 
         .child(toolbar)
 
-        .child(Expanded().flex(1.0)
+        .child(Expanded().flex(sv(1.0f64))
 
             .child(Row().cross_alignment(CrossAlign::Stretch)
 
@@ -462,15 +462,15 @@ fn sidebar(cx: AppContext) -> View {
     // registry count, space-between).
     let cases_header = Container().padding(14.0)
         .child(Row().main_alignment(MainAlign::SpaceBetween)
-            .child(Text().text("CASES").font_size(10.0).color(TEXT_TERTIARY).build())
-            .child(Text().text(f"{pg_case_count()}").font_size(10.0).color(TEXT_TERTIARY)
+            .child(Text().text(sv("CASES")).font_size(10.0).color(TEXT_TERTIARY).build())
+            .child(Text().text(sv(f"{pg_case_count()}")).font_size(10.0).color(TEXT_TERTIARY)
                 .query_key("cases-count").build())
             .build())
         .build();
-    let sidebar = Container().width_bound(cx.sbw).color(BG_PANEL).query_key("sidebar")
+    let sidebar = Container().width(cx.sbw).color(sv(BG_PANEL)).query_key("sidebar")
         .child(Column().cross_alignment(CrossAlign::Stretch)
             .child(cases_header)
-            .child(Expanded().flex(1.0)
+            .child(Expanded().flex(sv(1.0f64))
                 .child(ScrollView().axis(Axis::Vertical)
                     .child(Column().cross_alignment(CrossAlign::Stretch)
                         .child(Each(cx.names).item_builder(fn (i: u64, name: str) -> View { return side_item(cx, i, name); }).build()).build())
@@ -489,14 +489,14 @@ fn toolbar(cx: AppContext) -> View {
     // tab cluster sits on the toolbar's right side).
     let brand = Container().padding(12.0)
         .child(Row().main_axis_size(MainAxisSize::Min)
-            .child(Text().text("tur").font_size(14.0).color(ACCENT_SOLID).build())
+            .child(Text().text(sv("tur")).font_size(14.0).color(ACCENT_SOLID).build())
             .child(SizedBox(4.0, 0.0).build())
-            .child(Text().text("playground").font_size(11.0).color(TEXT_SECONDARY).build())
+            .child(Text().text(sv("playground")).font_size(11.0).color(TEXT_SECONDARY).build())
             .build())
         .build();
     let case_name = Container().padding(12.0)
-        .child(Expanded().flex(1.0)
-            .child(Text().text_bound(cx.selected).font_size(13.0).color(TEXT_BODY)
+        .child(Expanded().flex(sv(1.0f64))
+            .child(Text().text(cx.selected).font_size(13.0).color(TEXT_BODY)
                 .query_key("case-name").build())
             .build())
         .build();
@@ -510,11 +510,11 @@ fn toolbar(cx: AppContext) -> View {
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.run_h, ACCENT_PRIMARY); }))
         .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { run_case(ctx, cx); })).query_key("run")
-            .child(Container().padding(6.0).radius(6.0).color_bound(cx.run_h)
+            .child(Container().padding(6.0).radius(sv(6.0f64)).color(cx.run_h)
                 .child(Row().main_axis_size(MainAxisSize::Min)
                     .child(Image(cx.run_icon).width(10.0).height(10.0).build())
                     .child(SizedBox(4.0, 0.0).build())
-                    .child(Text().text("Run").color(TEXT_ON_ACCENT).font_size(12.0).build())
+                    .child(Text().text(sv("Run")).color(TEXT_ON_ACCENT).font_size(12.0).build())
                     .build())
                 .build())
             .build())
@@ -524,11 +524,11 @@ fn toolbar(cx: AppContext) -> View {
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.reset_h, BTN_GHOST); }))
         .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { reset_case(ctx, cx); })).query_key("reset")
-            .child(Container().padding(6.0).radius(6.0).color_bound(cx.reset_h)
+            .child(Container().padding(6.0).radius(sv(6.0f64)).color(cx.reset_h)
                 .child(Row().main_axis_size(MainAxisSize::Min)
                     .child(Image(cx.reset_icon).width(12.0).height(12.0).build())
                     .child(SizedBox(4.0, 0.0).build())
-                    .child(Text().text("Reset").color(TEXT_SECONDARY).font_size(12.0).build())
+                    .child(Text().text(sv("Reset")).color(TEXT_SECONDARY).font_size(12.0).build())
                     .build())
                 .build())
             .build())
@@ -543,11 +543,11 @@ fn toolbar(cx: AppContext) -> View {
         .child(layout_tabs(cx))
         .child(SizedBox(12.0, 0.0).build())
         .build();
-    let toolbar = Container().width_height(0.0, 48.0).color(BG_ELEVATED)
+    let toolbar = Container().width_height(0.0, 48.0).color(sv(BG_ELEVATED))
         .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("toolbar")
         .child(Row()
             .child(brand)
-            .child(Expanded().flex(1.0).child(case_name).build())
+            .child(Expanded().flex(sv(1.0f64)).child(case_name).build())
             .child(actions)
             .build())
         .build();
@@ -571,12 +571,12 @@ fn editor_pane(cx: AppContext) -> View {
     // lines never leave the pane), and the caret-follow rides
     // `ensure_caret_visible`'s ScrollView branch. The self-scroller
     // inside the editable stays at 0 the whole time.
-    let editor = Input().controller(cx.ctrl).undo(undo_ctrl()).placeholder("select a case…")
+    let editor = Input().controller(cx.ctrl).undo(undo_ctrl()).placeholder(sv("select a case…"))
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
         .multiline(true).on_input(mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }))
         .query_key("editor").build();
-    let editor_pane = Container().color(BG_CODE).padding(12.0).query_key("editor-pane")
+    let editor_pane = Container().color(sv(BG_CODE)).padding(12.0).query_key("editor-pane")
         .child(ScrollView().axis(Axis::Vertical).query_key("editor-scroll")
             .child(Column().cross_alignment(CrossAlign::Stretch).child(editor).build())
             .build())
@@ -597,7 +597,7 @@ fn viewer_pane(cx: AppContext) -> View {
     // The "(no case)" / "starting..." hint is the FallbackView shape — an
     // overlay the child's first frame paints over (the Condition drops it
     // once the child settles).
-    let viewer_pane = Container().color(BG_VIEWER).query_key("viewer-pane")
+    let viewer_pane = Container().color(sv(BG_VIEWER)).query_key("viewer-pane")
         .child(Switch().value(cx.state)
             .cases("error", error_view("Runtime error", cx.verr))
             .cases("compile-error", error_view("Compile error", cx.verr))
@@ -624,10 +624,10 @@ fn editor_slot(cx: AppContext, editor_pane: View) -> View {
     // zeros (the box_width / box_height rows — `width_height`'s 0 would
     // mean "unset").
     let slot = Switch().value(cx.layout)
-        .cases("view", Container().width(0.0).height(0.0).clip(Clip::HardEdge)
+        .cases("view", Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge)
             .child(editor_pane).build())
-        .cases("split", Container().width_bound(cx.edw).child(editor_pane).build())
-        .fallback(Expanded().flex(1.0).child(editor_pane).build())
+        .cases("split", Container().width(cx.edw).child(editor_pane).build())
+        .fallback(Expanded().flex(sv(1.0f64)).child(editor_pane).build())
         .query_key("editor-slot")
         .build();
     return slot;
@@ -635,9 +635,9 @@ fn editor_slot(cx: AppContext, editor_pane: View) -> View {
 
 fn viewer_slot(cx: AppContext, viewer_pane: View) -> View {
     let slot = Switch().value(cx.layout)
-        .cases("edit", Container().width(0.0).height(0.0).clip(Clip::HardEdge)
+        .cases("edit", Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge)
             .child(viewer_pane).build())
-        .fallback(Expanded().flex(1.0).child(viewer_pane).build())
+        .fallback(Expanded().flex(sv(1.0f64)).child(viewer_pane).build())
         .query_key("viewer-slot")
         .build();
     return slot;
@@ -655,7 +655,7 @@ fn divider(cx: AppContext) -> View {
             .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_down(ctx, cx, ev.global.x); }))
             .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_move(ctx, cx, ev.global.x); }))
             .on_pointer_up(mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { div_up(ctx, cx); })).query_key("divider")
-            .child(Container().width(8.0).color_bound(cx.div_bar).build())
+            .child(Container().width(sv(8.0f64)).color(cx.div_bar).build())
             .build())
         .build();
     return divider;
@@ -676,7 +676,7 @@ fn edivider_slot(cx: AppContext) -> View {
             .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_down(ctx, cx, ev.global.x); }))
             .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_move(ctx, cx, ev.global.x); }))
             .on_pointer_up(mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { ediv_up(ctx, cx); })).query_key("divider2")
-            .child(Container().width(8.0).color_bound(cx.ediv_bar).build())
+            .child(Container().width(sv(8.0f64)).color(cx.ediv_bar).build())
             .build())
         .build();
     let edivider_slot = Switch().value(cx.layout)
@@ -705,13 +705,13 @@ fn status_bar(cx: AppContext) -> View {
     let sbar_left = Container().padding(4.0)
         .child(Row().main_axis_size(MainAxisSize::Min)
             .child(SizedBox(8.0, 0.0).build())
-            .child(Container().width_height(6.0, 6.0).radius(999.0).color_bound(cx.dot)
+            .child(Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(cx.dot)
                 .query_key("status-dot").build())
             .child(SizedBox(6.0, 0.0).build())
             .child(state_label(cx))
             .child(edited_pill(cx))
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text_bound(ago_d).font_size(11.0).color(TEXT_TERTIARY)
+            .child(Text().text(ago_d).font_size(11.0).color(TEXT_TERTIARY)
                 .query_key("compiled-ago").build())
             .build())
         .build();
@@ -719,11 +719,11 @@ fn status_bar(cx: AppContext) -> View {
         .child(Row().main_axis_size(MainAxisSize::Min)
             .child(auto_state_text(cx))
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("tur v0.1").font_size(11.0).color(TEXT_TERTIARY).build())
+            .child(Text().text(sv("tur v0.1")).font_size(11.0).color(TEXT_TERTIARY).build())
             .child(SizedBox(8.0, 0.0).build())
             .build())
         .build();
-    let sbar = Container().width_height(0.0, 22.0).color(BG_ELEVATED)
+    let sbar = Container().width_height(0.0, 22.0).color(sv(BG_ELEVATED))
         .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("status-bar")
         .alignment(Align::Center)
         .child(Row().main_alignment(MainAlign::SpaceBetween)
@@ -744,14 +744,14 @@ fn status_bar(cx: AppContext) -> View {
 fn ready_viewer(cx: AppContext) -> View {
     let host = VirtualApp().bind(cx.app_atom).query_key("viewer").build();
     let overlay = Condition(cx.hint_on)
-        .then(Container().color(CARD_BG).alignment(Align::Center)
-            .child(Text().text_bound(cx.hint).font_size(13.0).color(TEXT_TERTIARY)
+        .then(Container().color(sv(CARD_BG)).alignment(Align::Center)
+            .child(Text().text(cx.hint).font_size(13.0).color(TEXT_TERTIARY)
                 .query_key("viewer/hint").build())
             .build())
         .else_branch(SizedBox(0.0, 0.0).build())
         .build();
-    return Container().padding(12.0).color(BG_VIEWER)
-        .child(Container().color(CARD_BG).query_key("viewer-card")
+    return Container().padding(12.0).color(sv(BG_VIEWER))
+        .child(Container().color(sv(CARD_BG)).query_key("viewer-card")
             .child(Stack().fit(StackFit::Expand).child(host).child(overlay).build())
             .build())
         .build();
@@ -761,16 +761,16 @@ fn ready_viewer(cx: AppContext) -> View {
 // panel, "!" badge, title + message (the message atom is shared: the
 // compile diags and the child's `va_error` land in the same rail).
 fn error_view(title_text: str, err: Readable<str>) -> View {
-    return Container().color(BG_DANGER).padding(24.0).alignment(Align::Center)
+    return Container().color(sv(BG_DANGER)).padding(24.0).alignment(Align::Center)
         .child(Column().cross_alignment(CrossAlign::Center)
-            .child(Container().width_height(32.0, 32.0).radius(16.0).color(STATUS_ERROR)
+            .child(Container().width_height(32.0, 32.0).radius(sv(16.0f64)).color(sv(STATUS_ERROR))
                 .alignment(Align::Center)
-                .child(Text().text("!").font_size(18.0).color(TEXT_INVERSE).build())
+                .child(Text().text(sv("!")).font_size(18.0).color(TEXT_INVERSE).build())
                 .build())
             .child(SizedBox(0.0, 16.0).build())
-            .child(Text().text(title_text).font_size(14.0).color(TEXT_ON_DANGER).build())
+            .child(Text().text(sv(title_text)).font_size(14.0).color(TEXT_ON_DANGER).build())
             .child(SizedBox(0.0, 8.0).build())
-            .child(Text().text_bound(err).font_size(12.0).color(TEXT_ON_DANGER).build())
+            .child(Text().text(err).font_size(12.0).color(TEXT_ON_DANGER).build())
             .build())
         .build();
 }
@@ -779,11 +779,11 @@ fn error_view(title_text: str, err: Readable<str>) -> View {
 // the failure states read in the status red, everything else in the
 // success green (the boa label coloring; the dot leads, text confirms).
 fn state_label(cx: AppContext) -> View {
-    let ok = Text().text_bound(cx.state).font_size(11.0).color(STATUS_SUCCESS)
+    let ok = Text().text(cx.state).font_size(11.0).color(STATUS_SUCCESS)
         .query_key("app-state").build();
-    let err_a = Text().text_bound(cx.state).font_size(11.0).color(STATUS_ERROR)
+    let err_a = Text().text(cx.state).font_size(11.0).color(STATUS_ERROR)
         .query_key("app-state").build();
-    let err_b = Text().text_bound(cx.state).font_size(11.0).color(STATUS_ERROR)
+    let err_b = Text().text(cx.state).font_size(11.0).color(STATUS_ERROR)
         .query_key("app-state").build();
     return Switch().value(cx.state)
         .cases("error", err_a)
@@ -799,27 +799,27 @@ fn state_label(cx: AppContext) -> View {
 // mounts).
 fn auto_toggle(cx: AppContext) -> View {
     let on = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
-        .child(Container().width_height(28.0, 16.0).radius(999.0).color(ACCENT_PRIMARY)
+        .child(Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(ACCENT_PRIMARY))
             .child(Stack().fit(StackFit::Expand)
-                .child(Positioned().top(2.0).left(14.0)
-                    .child(Container().width_height(12.0, 12.0).radius(999.0)
-                        .color(TEXT_INVERSE).build())
+                .child(Positioned().top(sv(2.0f64)).left(sv(14.0f64))
+                    .child(Container().width_height(12.0, 12.0).radius(sv(999.0f64))
+                        .color(sv(TEXT_INVERSE)).build())
                     .build())
                 .build())
             .build())
         .build();
     let off = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
-        .child(Container().width_height(28.0, 16.0).radius(999.0).color(BG_HOVER)
+        .child(Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(BG_HOVER))
             .child(Stack().fit(StackFit::Expand)
-                .child(Positioned().top(2.0).left(2.0)
-                    .child(Container().width_height(12.0, 12.0).radius(999.0)
-                        .color(TEXT_INVERSE).build())
+                .child(Positioned().top(sv(2.0f64)).left(sv(2.0f64))
+                    .child(Container().width_height(12.0, 12.0).radius(sv(999.0f64))
+                        .color(sv(TEXT_INVERSE)).build())
                     .build())
                 .build())
             .build())
         .build();
     return Row().main_axis_size(MainAxisSize::Min)
-        .child(Text().text("auto").font_size(11.0).color(TEXT_SECONDARY)
+        .child(Text().text(sv("auto")).font_size(11.0).color(TEXT_SECONDARY)
             .query_key("auto-caption").build())
         .child(SizedBox(6.0, 0.0).build())
         .child(Condition(cx.autorun).then(on).else_branch(off).build())
@@ -830,9 +830,9 @@ fn auto_toggle(cx: AppContext) -> View {
 // live, the "⌘S to run" keyboard hint otherwise — the boa status bar's
 // right cluster).
 fn auto_state_text(cx: AppContext) -> View {
-    let on = Text().text("auto-run on").font_size(11.0).color(TEXT_TERTIARY)
+    let on = Text().text(sv("auto-run on")).font_size(11.0).color(TEXT_TERTIARY)
         .query_key("auto-state").build();
-    let off = Text().text("\u{2318}S to run").font_size(11.0).color(TEXT_TERTIARY)
+    let off = Text().text(sv("\u{2318}S to run")).font_size(11.0).color(TEXT_TERTIARY)
         .query_key("auto-state").build();
     return Condition(cx.autorun).then(on).else_branch(off).build();
 }
@@ -842,10 +842,10 @@ fn auto_state_text(cx: AppContext) -> View {
 fn edited_pill(cx: AppContext) -> View {
     let pill = Row().main_axis_size(MainAxisSize::Min)
         .child(SizedBox(12.0, 0.0).build())
-        .child(Container().width_height(6.0, 6.0).radius(999.0).color(ACCENT_COMPLEMENT)
+        .child(Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(sv(ACCENT_COMPLEMENT))
             .query_key("edited-pill").build())
         .child(SizedBox(6.0, 0.0).build())
-        .child(Text().text("edited").font_size(11.0).color(TEXT_TERTIARY).build())
+        .child(Text().text(sv("edited")).font_size(11.0).color(TEXT_TERTIARY).build())
         .build();
     return Condition(cx.edited).then(pill).else_branch(SizedBox(0.0, 0.0).build()).build();
 }
@@ -860,8 +860,8 @@ fn tab_button(cx: AppContext, label: str, m: Mutation<nil>, key: str, brush: Rea
         .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { tab_exit(ctx, cx, idx); }))
         .cursor(Cursor::Pointer)
         .child(PointerInteract().on_click(m).query_key(key)
-            .child(Container().padding(6.0).radius(4.0).color_bound(brush)
-                .child(Text().text(label).font_size(11.0).color(TEXT_SECONDARY).build())
+            .child(Container().padding(6.0).radius(sv(4.0f64)).color(brush)
+                .child(Text().text(sv(label)).font_size(11.0).color(TEXT_SECONDARY).build())
                 .build())
             .build())
         .build();
@@ -875,7 +875,7 @@ fn layout_tabs(cx: AppContext) -> View {
         .child(tab_button(cx, "Edit", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "edit"); }), "tab-edit", cx.tab_edit, 1))
         .child(tab_button(cx, "View", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "view"); }), "tab-view", cx.tab_view, 2))
         .build();
-    return Container().radius(6.0).color(BG_HOVER).padding(2.0).child(tray).build();
+    return Container().radius(sv(6.0f64)).color(sv(BG_HOVER)).padding(2.0).child(tray).build();
 }
 
 // A sidebar entry — tapping loads + runs the case. The Each index IS
@@ -915,11 +915,11 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
         .child(Row().main_axis_size(MainAxisSize::Min)
             // The reserved 3px bar (never clips — boa's trick): teal when
             // selected, transparent otherwise, so the label never shifts.
-            .child(Container().width_height(3.0, 20.0).radius(2.0).color_bound(bar).build())
+            .child(Container().width_height(3.0, 20.0).radius(sv(2.0f64)).color(bar).build())
             .child(SizedBox(8.0, 0.0).build())
-            .child(Expanded().flex(1.0)
-                .child(Container().radius(5.0).padding(7.0).color_bound(bg)
-                    .child(Text().text(name).color(TEXT_BODY).font_size(13.0).build())
+            .child(Expanded().flex(sv(1.0f64))
+                .child(Container().radius(sv(5.0f64)).padding(7.0).color(bg)
+                    .child(Text().text(sv(name)).color(TEXT_BODY).font_size(13.0).build())
                     .build())
                 .build())
             .build())
@@ -989,11 +989,11 @@ fn side_file_item(cx: AppContext, fi: u64, path: str) -> View {
         .query_key(f"file/{label}")
         .child(Row().main_axis_size(MainAxisSize::Min)
             .child(SizedBox(23.0, 0.0).build())
-            .child(Container().width_height(4.0, 4.0).radius(2.0).color_bound(dot).build())
+            .child(Container().width_height(4.0, 4.0).radius(sv(2.0f64)).color(dot).build())
             .child(SizedBox(6.0, 0.0).build())
-            .child(Expanded().flex(1.0)
-                .child(Container().radius(4.0).padding(5.0).color_bound(bg)
-                    .child(Text().text(label).color(TEXT_SECONDARY).font_size(12.0).build())
+            .child(Expanded().flex(sv(1.0f64))
+                .child(Container().radius(sv(4.0f64)).padding(5.0).color(bg)
+                    .child(Text().text(sv(label)).color(TEXT_SECONDARY).font_size(12.0).build())
                     .build())
                 .build())
             .build())

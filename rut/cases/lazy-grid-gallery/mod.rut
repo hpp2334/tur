@@ -20,7 +20,7 @@
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur_kit::control_flow::control::{ Each }; use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize }; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, View, list_new, mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source }; use tur_kit::scroll::{ LazyGrid }; use tur_kit::text::core::{ Text };use tur_kit::layout::grid_table::{ Grid };
+use tur_kit::control_flow::control::{ Each }; use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize }; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, View, list_new, mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv }; use tur_kit::scroll::{ LazyGrid }; use tur_kit::text::core::{ Text };use tur_kit::layout::grid_table::{ Grid };
 
 
 // The boa palette (the deep-slate gallery chrome).
@@ -55,9 +55,9 @@ entry fn start() {
     let col = Column()
         .cross_alignment(CrossAlign::Start)
         .query_key("gallery/col")
-        .child(Text().text("Lazy Grid Gallery").font_size(18.0).color(TITLE_FG).query_key("gallery/header").build())
+        .child(Text().text(sv("Lazy Grid Gallery")).font_size(18.0).color(TITLE_FG).query_key("gallery/header").build())
         .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text("6,000 tiles · only the visible rows mount — scroll to explore").font_size(12.0).color(SUB_FG).build())
+        .child(Text().text(sv("6,000 tiles · only the visible rows mount — scroll to explore")).font_size(12.0).color(SUB_FG).build())
         .child(SizedBox(0.0, 12.0).build())
         .child(
             Row()
@@ -80,10 +80,10 @@ entry fn start() {
         )
         .child(SizedBox(0.0, 12.0).build())
         .child(
-            Expanded().flex(1.0).child(
+            Expanded().flex(sv(1.0f64)).child(
                 Container()
-                    .color(PANEL_BG)
-                    .radius(10.0)
+                    .color(sv(PANEL_BG))
+                    .radius(sv(10.0f64))
                     .child(Each(items).item_builder(fn (_i: u64, _s: str) -> View {
                         return grid_of(aspect, dense, count);
                     }).build())
@@ -92,7 +92,7 @@ entry fn start() {
         )
         .build();
 
-    mount(Container().color(PAGE_BG).padding(16.0).child(col).build());
+    mount(Container().color(sv(PAGE_BG)).padding(16.0).child(col).build());
 }
 
 // ---- the grid (the rebuild channel) --------------------------------------------
@@ -130,9 +130,9 @@ fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -
 // note).
 fn tile(i: u64) -> View {
     let face = Container()
-        .color(hsl_packed(((i * 37) % 360) as f64, 52.0, 48.0))
-        .radius(6.0)
-        .child(Text().text(f"{i}").font_size(10.0).color(CHIP_FG).build())
+        .color(sv(hsl_packed(((i * 37) % 360) as f64, 52.0, 48.0)))
+        .radius(sv(6.0f64))
+        .child(Text().text(sv(f"{i}")).font_size(10.0).color(CHIP_FG).build())
         .build();
     return Container().padding(2.0).child(face).build();
 }
@@ -143,9 +143,9 @@ fn tile(i: u64) -> View {
 fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
     let face = Container()
         .padding(7.0)
-        .radius(7.0)
-        .color_bound(r)
-        .child(Text().text(label).font_size(12.0).color(CHIP_FG).build())
+        .radius(sv(7.0f64))
+        .color(r)
+        .child(Text().text(sv(label)).font_size(12.0).color(CHIP_FG).build())
         .build();
     return MouseRegion()
         .cursor(Cursor::Pointer)

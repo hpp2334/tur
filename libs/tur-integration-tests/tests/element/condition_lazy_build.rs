@@ -21,7 +21,7 @@ const COND_RUT: &str = r#"
 use tur_kit::control_flow::control::{ Condition };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, entry_ctx, source, sv };
 use tur_kit::text::core::{ Text };
 
 struct AppContext {
@@ -42,10 +42,10 @@ entry fn start() -> opaque {
                 // its ctx is the entry rail's.
                 let write = entry_ctx();
                 write.set<f64>(runs, write.get<f64>(runs) + 1.0);
-                return Text().text(f"modal {write.get<f64>(seed) as u64}").query_key("cb/then").build();
+                return Text().text(sv(f"modal {write.get<f64>(seed) as u64}")).query_key("cb/then").build();
             })
             .else_build(fn () -> View {
-                return Text().text("closed").query_key("cb/else").build();
+                return Text().text(sv("closed")).query_key("cb/else").build();
             })
             .build(),
     ).build();
@@ -136,7 +136,7 @@ const SWITCH_RUT: &str = r#"
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source };
+use tur_kit::reactive::{ MutationCtx, Source, entry_ctx, source, sv };
 use tur_kit::text::core::{ Text };
 
 struct AppContext {
@@ -152,13 +152,13 @@ entry fn start() -> opaque {
             // rail's.
             let write = entry_ctx();
             write.set<str>(label, "built-a");
-            return Text().text("A").query_key("sw/a").build();
+            return Text().text(sv("A")).query_key("sw/a").build();
         })
-        .fallback(Text().text("fallback").query_key("sw/fb").build())
+        .fallback(Text().text(sv("fallback")).query_key("sw/fb").build())
         .build();
     let root = Column().query_key("sw/root")
         .child(v)
-        .child(Text().text_bound(label).query_key("sw/label").build())
+        .child(Text().text(label).query_key("sw/label").build())
         .build();
     mount(root);
     return opaque(AppContext { tab: tab });

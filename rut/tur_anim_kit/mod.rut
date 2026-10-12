@@ -143,9 +143,16 @@ impl Opacity {
   [constructor] pub fn builder(value: f64) -> Self {
     return Self { value: value, r: nil, kid: nil };
   }
-  // Bind the opacity to a live f64 (the onTick rail's consumer).
-  pub fn bound(mut self, r: Readable<f64>) -> Self {
-    self.r = r;
+  // The ONE reactive opacity prop over `Readable<f64>`: a live source
+  // rides the bound row at build, an `sv()` literal stores the static
+  // value (the ctor `Opacity(0.5)` stays valid — last bind wins).
+  pub fn value(mut self, r: Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      self.value = r.get();
+      self.r = nil;
+    } else {
+      self.r = r;
+    }
     return self;
   }
   pub fn child(mut self, c: View) -> Self {
@@ -179,31 +186,55 @@ impl Transform {
   [constructor] pub fn builder(scale: f64, rotate: f64, tx: f64, ty: f64) -> Self {
     return Self { scale: scale, rotate: rotate, tx: tx, ty: ty, scale_r: nil, rotate_r: nil, tx_r: nil, ty_r: nil, kid: nil };
   }
-  // Bind the rotation channel to a live f64 (radians — the onTick rail's
-  // consumer): the angle re-resolves through the subscribe → relayout
-  // rail and the subtree NEVER re-mounts (no rebuild channel). The rows
-  // are ONE bound channel per element — the last bind clears the others
-  // (never a silent combo).
-  pub fn rotate_bound(mut self, r: Readable<f64>) -> Self {
-    self.rotate_r = r;
-    self.scale_r = nil;
-    self.tx_r = nil;
-    self.ty_r = nil;
+  // The ONE reactive rotation channel over `Readable<f64>` (radians — the
+  // onTick rail's consumer): the atom lane binds (the rows are ONE bound
+  // channel per element — the last bind clears the others, never a silent
+  // combo), the `sv()` lane stores the static value. The angle
+  // re-resolves through the subscribe → relayout rail and the subtree
+  // NEVER re-mounts (no rebuild channel).
+  pub fn rotate(mut self, r: Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      self.rotate = r.get();
+      self.rotate_r = nil;
+    } else {
+      self.rotate_r = r;
+      self.scale_r = nil;
+      self.tx_r = nil;
+      self.ty_r = nil;
+    }
     return self;
   }
-  // The uniform scale rides a live f64 (last bind wins).
-  pub fn scale_bound(mut self, r: Readable<f64>) -> Self {
-    self.scale_r = r;
-    self.rotate_r = nil;
-    self.tx_r = nil;
-    self.ty_r = nil;
+  // The ONE reactive uniform scale over `Readable<f64>` (same lanes —
+  // last bind wins).
+  pub fn scale(mut self, r: Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      self.scale = r.get();
+      self.scale_r = nil;
+    } else {
+      self.scale_r = r;
+      self.rotate_r = nil;
+      self.tx_r = nil;
+      self.ty_r = nil;
+    }
     return self;
   }
-  // The translate twins: each offset rides its own live f64 (last bind
-  // wins — the translate row is the one multi-channel shape).
-  pub fn translate_bound(mut self, tx: Readable<f64>, ty: Readable<f64>) -> Self {
-    self.tx_r = tx;
-    self.ty_r = ty;
+  // The ONE reactive translate over `Readable<f64>` ×2 — each offset is
+  // independently sv-able or live (the translate row is the one
+  // multi-channel shape; the bind lanes clear the other channels — last
+  // bind wins).
+  pub fn translate(mut self, tx: Readable<f64>, ty: Readable<f64>) -> Self {
+    if (tx.atom_id() == 0) {
+      self.tx = tx.get();
+      self.tx_r = nil;
+    } else {
+      self.tx_r = tx;
+    }
+    if (ty.atom_id() == 0) {
+      self.ty = ty.get();
+      self.ty_r = nil;
+    } else {
+      self.ty_r = ty;
+    }
     self.scale_r = nil;
     self.rotate_r = nil;
     return self;

@@ -22,7 +22,7 @@ entry fn start() -> u64 {
     let mut col = Column();
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
     col.child(input);
-    let t = Text().text_bound(label).query_key("button");
+    let t = Text().text(label).query_key("button");
     col.child(PointerInteract().on_click(b_click).child(t.build()).build());
     mount(col.build());
     return clicks.atom_id();

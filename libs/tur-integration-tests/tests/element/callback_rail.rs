@@ -53,7 +53,7 @@ const RAIL_RUT: &str = r#"
 use tur_kit::gesture::pointer::{ PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -66,14 +66,14 @@ entry fn start() -> u64 {
         ctx.set<str>(label, f"named {ctx.get<f64>(count) as u64}");
     });
     let named = PointerInteract().on_click(b_named)
-        .child(Text().text("named").query_key("rail/named").build()).build();
+        .child(Text().text(sv("named")).query_key("rail/named").build()).build();
     // The anonymous mutation literal — the boa `mutate(() => ...)` twin.
     let literal = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<f64>(count, ctx.get<f64>(count) + 10.0);
         ctx.set<str>(label, "literal");
-    })).child(Text().text("literal").query_key("rail/literal").build()).build();
+    })).child(Text().text(sv("literal")).query_key("rail/literal").build()).build();
     mount(Column()
-        .child(Text().text_bound(label).query_key("rail/text").build())
+        .child(Text().text(label).query_key("rail/text").build())
         .child(named)
         .child(literal)
         .build());
@@ -105,7 +105,7 @@ const WRONG_ARITY_RUT: &str = r#"
 use tur_kit::gesture::pointer::{ PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
@@ -114,7 +114,7 @@ entry fn start() {
     let m = mutate(fn (ctx: MutationCtx, _e: nil) {
         let _ = ctx;
     });
-    mount(PointerInteract().on_pointer_down(m).child(Text().text("x").build()).build());
+    mount(PointerInteract().on_pointer_down(m).child(Text().text(sv("x")).build()).build());
 }
 "#;
 
@@ -135,7 +135,7 @@ const EACH_RAIL_RUT: &str = r#"
 use tur_kit::control_flow::control::{ Each };
 use tur_kit::handles::{ ListHandle, View, list_new, mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
@@ -145,7 +145,7 @@ entry fn start() {
     let items = source<opaque>(list.raw());
     mount(Column().query_key("rail/each").child(
         Each(items).item_builder(fn (i: u64, item: str) -> View {
-            return Text().text(f"{i}:{item}").query_key(f"rail/item-{i}").build();
+            return Text().text(sv(f"{i}:{item}")).query_key(f"rail/item-{i}").build();
         }).build(),
     ).build());
 }
@@ -181,7 +181,7 @@ const ANIM_RAIL_RUT: &str = r#"
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ anim_ctrl_tick };
 
@@ -196,7 +196,7 @@ entry fn start() {
     });
     let ctrl = anim_ctrl_tick(50.0, "linear", 0, a_tick);
     ctrl.forward();
-    mount(Column().query_key("rail/anim").child(Text().text("anim").build()).build());
+    mount(Column().query_key("rail/anim").child(Text().text(sv("anim")).build()).build());
 }
 "#;
 

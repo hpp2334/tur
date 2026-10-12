@@ -1070,7 +1070,7 @@ entry fn start() {
     });
     let input = Input().controller(ctrl).undo(undo_ctrl()).width_height(400.0, 200.0)
         .on_input(b_edit).query_key("input").build();
-    let col = Column().child(input).child(Text().text_bound(text).query_key("echo").build());
+    let col = Column().child(input).child(Text().text(text).query_key("echo").build());
     mount(col.build());
 }
 "#;

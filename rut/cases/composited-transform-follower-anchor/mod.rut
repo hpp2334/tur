@@ -5,6 +5,7 @@ use tur_kit::flags::{ Align };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ sv };
 use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 
 entry fn start() {
@@ -13,8 +14,8 @@ entry fn start() {
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();
-    stack.child(Positioned().left(100.0).top(80.0).child(target).build());
-    let red = Container().width_height(60.0, 40.0).color(0x2563EBFFu64).color(0xFF0000FFu64);
+    stack.child(Positioned().left(sv(100.0f64)).top(sv(80.0f64)).child(target).build());
+    let red = Container().width_height(60.0, 40.0).color(sv(0x2563EBFFu64)).color(sv(0xFF0000FFu64));
     let follower = CompositedFollower().link(link).target_anchor(Align::BottomRight).follower_anchor(Align::TopRight).child(red.build()).build();
     stack.child(follower);
     mount(stack.build());

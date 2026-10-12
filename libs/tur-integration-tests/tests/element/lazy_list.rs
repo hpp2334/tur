@@ -241,15 +241,15 @@ fn lazy_list_virtualizes_large_item_count() {
         r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
 fn row(i: u64) -> View {
     let b = Container()
         .width_height(50.0, 50.0)
-        .color(0xC8C8C8FFu64)
-        .child(Text().text(f"Item {i}").build());
+        .color(sv(0xC8C8C8FFu64))
+        .child(Text().text(sv(f"Item {i}")).build());
     return b.build();
 }
 
@@ -321,15 +321,15 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     app.load_rut_module(
         r#"use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
 fn row(i: u64) -> View {
     let b = Container()
         .width_height(56.0, 56.0)
-        .color(0xC8C8C8FFu64)
-        .child(Text().text(f"Item {i}").build());
+        .color(sv(0xC8C8C8FFu64))
+        .child(Text().text(sv(f"Item {i}")).build());
     return b.build();
 }
 
@@ -795,7 +795,7 @@ fn lazy_list_reactive_item_count_shrink_unmounts_tail() {
     app.load_rut_module(
         r#"use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
@@ -804,7 +804,7 @@ struct AppContext {
 }
 
 fn row(i: u64) -> View {
-    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(sv(f"Item {i}")).build());
     return b.build();
 }
 
@@ -851,7 +851,7 @@ fn lazy_list_reactive_item_count_grow_after_shrink_remounts_tail() {
     app.load_rut_module(
         r#"use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
@@ -860,7 +860,7 @@ struct AppContext {
 }
 
 fn row(i: u64) -> View {
-    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(sv(f"Item {i}")).build());
     return b.build();
 }
 
@@ -932,7 +932,7 @@ fn lazy_list_reactive_item_count_zero_then_grow_remounts() {
     app.load_rut_module(
         r#"use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
@@ -941,7 +941,7 @@ struct AppContext {
 }
 
 fn row(i: u64) -> View {
-    let b = Container().width_height(50.0, 50.0).child(Text().text(f"Item {i}").build());
+    let b = Container().width_height(50.0, 50.0).child(Text().text(sv(f"Item {i}")).build());
     return b.build();
 }
 

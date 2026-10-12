@@ -18,9 +18,10 @@ fn setup_grid(
 use tur_kit::handles::{{ mount }};
 use tur_kit::layout::box::{{ Container }};
 use tur_kit::layout::grid_table::{{ Grid }};
+use tur_kit::reactive::{{ sv }};
 
 fn tile() -> View {{
-    let b = Container().width_height(10.0, 10.0).color(0xC8C8C8FFu64);
+    let b = Container().width_height(10.0, 10.0).color(sv(0xC8C8C8FFu64));
     return b.build();
 }}
 

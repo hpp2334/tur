@@ -10,7 +10,7 @@ use tur_kit::flags::{ Align, CrossAlign, MainAlign, MainAxisSize };
 use tur_kit::handles::{ View, mount, str_parse_f64 };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
@@ -39,7 +39,7 @@ entry fn start() {
         .overscan(4)
         .query_key("lazy-list-virtualized")
         .build();
-    mount(Expanded().flex(1.0).child(Container().color(WHITE).child(list).build()).build());
+    mount(Expanded().flex(sv(1.0f64)).child(Container().color(sv(WHITE)).child(list).build()).build());
 }
 
 // The i'th '|'-separated slot of a data string.
@@ -117,29 +117,29 @@ fn row(i: u64) -> View {
     let sub = f"Item #{i + 1} of 10000";
     let avatar = Container()
         .width_height(36.0, 36.0)
-        .radius(999.0)
-        .color(avatar_bg)
+        .radius(sv(999.0f64))
+        .color(sv(avatar_bg))
         .alignment(Align::Center)
-        .child(Text().text(initials).font_size(13.0).color(WHITE).build())
+        .child(Text().text(sv(initials)).font_size(13.0).color(WHITE).build())
         .build();
     let lines = Column()
         .main_alignment(MainAlign::Center)
         .cross_alignment(CrossAlign::Start)
         .main_axis_size(MainAxisSize::Min)
-        .child(Text().text(name).font_size(13.0).color(TEXT).build())
+        .child(Text().text(sv(name)).font_size(13.0).color(TEXT).build())
         .child(SizedBox(0.0, 2.0).build())
-        .child(Text().text(sub).font_size(11.0).color(TEXT_MUTED).build())
+        .child(Text().text(sv(sub)).font_size(11.0).color(TEXT_MUTED).build())
         .build();
     let inner = Row()
         .cross_alignment(CrossAlign::Center)
         .child(avatar)
         .child(SizedBox(12.0, 0.0).build())
-        .child(Expanded().flex(1.0).child(lines).build())
+        .child(Expanded().flex(sv(1.0f64)).child(lines).build())
         .build();
     return Container()
-        .height(ITEM_HEIGHT)
+        .height(sv(ITEM_HEIGHT))
         .padding(12.0)
-        .color(zebra_fill(i))
+        .color(sv(zebra_fill(i)))
         .query_key("contact-row")
         .child(inner)
         .build();

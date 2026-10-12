@@ -23,7 +23,7 @@ entry fn start() {
     // is a construction-time value, not a state transition).
     let label: Source<str> = source<str>(f"{ascii}|{unicode}|{empty}|");
 
-    let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
+    let col = Column().child(Text().text(label).query_key("rut/text").build());
     mount(col.build());
 }
 "#;

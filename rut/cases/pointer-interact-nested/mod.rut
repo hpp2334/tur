@@ -54,9 +54,9 @@ entry fn start() -> u64 {
     outer_t_box.child(t_row.build());
     col.child(PointerInteract().on_click(b_outer_t).child(outer_t_box.build()).build());
 
-    let ro = Text().text_bound(d_o).query_key("result-opaque");
+    let ro = Text().text(d_o).query_key("result-opaque");
     col.child(ro.build());
-    let rt = Text().text_bound(d_t).query_key("result-translucent");
+    let rt = Text().text(d_t).query_key("result-translucent");
     col.child(rt.build());
 
     mount(col.build());

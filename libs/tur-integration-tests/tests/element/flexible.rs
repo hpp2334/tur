@@ -29,6 +29,7 @@ use tur_kit::flags::{{ MainAxisSize }};
 use tur_kit::handles::{{ mount }};
 use tur_kit::layout::box::{{ Container }};
 use tur_kit::layout::flex::{{ Expanded, Flexible, Row }};
+use tur_kit::reactive::{{ sv }};
 use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
@@ -36,8 +37,8 @@ entry fn start() {{
 
     let fixed = Container().width_height(100.0, 40.0);
 
-    let txt = Text().text({text}).font_size(14.0);
-{text_extra}    let slot = {item}().flex(1.0).child(txt.build()).build();
+    let txt = Text().text(sv({text})).font_size(14.0);
+{text_extra}    let slot = {item}().flex(sv(1.0f64)).child(txt.build()).build();
 
     row.child(fixed.build());
     row.child(slot);
@@ -188,6 +189,7 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Flexible, Row };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
@@ -196,14 +198,14 @@ entry fn start() {
         .main_axis_size(MainAxisSize::Min)
         .child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
-    let txt = Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis();
-    let mut label = Flexible().flex(1.0).child(txt.build()).query_key("label").build();
+    let txt = Text().text(sv("Last Week Todos")).font_size(14.0).max_lines(1).ellipsis();
+    let mut label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
     let label = label;
     pill.child(label);
 
     pill.child(SizedBox(8.0, 0.0).child(Container().build()).build());
 
-    let caret = Text().text("v").font_size(14.0).query_key("caret");
+    let caret = Text().text(sv("v")).font_size(14.0).query_key("caret");
     pill.child(caret.build());
 
     pill.child(SizedBox(14.0, 0.0).child(Container().build()).build());
@@ -292,6 +294,7 @@ fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Flexible, Row };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 use tur_kit::handles::{ mount };
@@ -301,7 +304,7 @@ use tur_kit::text::core::{ Text };
 
 fn long_label() -> View {
     let txt = Text()
-        .text("A very long label that must ellipsize inside its slot")
+        .text(sv("A very long label that must ellipsize inside its slot"))
         .font_size(14.0)
         .max_lines(1)
         .ellipsis();
@@ -313,14 +316,14 @@ entry fn start() {
         .query_key("long-row")
         .main_axis_size(MainAxisSize::Min)
         .child(Container().width_height(100.0, 40.0).build())
-        .child(Flexible().flex(1.0).child(long_label()).build())
+        .child(Flexible().flex(sv(1.0f64)).child(long_label()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
     let short_row = Row()
         .query_key("short-row")
         .main_axis_size(MainAxisSize::Min)
         .child(Container().width_height(100.0, 40.0).build())
-        .child(Flexible().flex(1.0).child(Text().text("Hi").build()).build())
+        .child(Flexible().flex(sv(1.0f64)).child(Text().text(sv("Hi")).build()).build())
         .child(SizedBox(20.0, 0.0).child(Container().build()).build());
 
     let col = Column().child(long_row.build()).child(short_row.build());
@@ -385,6 +388,7 @@ fn flexible_zero_remaining_slot_paints_within_budget() {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Flexible, Row };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 use tur_kit::handles::{ mount };
@@ -396,11 +400,11 @@ entry fn start() {
     let mut row = Row().child(Container().width_height(400.0, 40.0).build());
 
     let txt = Text()
-        .text("A very long label that must not paint naturally here")
+        .text(sv("A very long label that must not paint naturally here"))
         .font_size(14.0)
         .max_lines(1)
         .ellipsis();
-    let mut label = Flexible().flex(1.0).child(txt.build()).query_key("label").build();
+    let mut label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
     let label = label;
     row.child(label);
 

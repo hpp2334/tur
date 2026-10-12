@@ -58,7 +58,7 @@ fn element_center(app: &TurTestApp, key: &'static str) -> (f64, f64) {
 
 const COUNTER_RUT: &str = r#"
 
-use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let n: Readable<f64> = source<f64>(0.0);
@@ -69,8 +69,8 @@ entry fn start() -> u64 {
         ctx.set<f64>(n, ctx.get<f64>(n) + 1.0);
     });
     let col = Column()
-        .child(Text().text_bound(label).query_key("rut/text").build())
-        .child(PointerInteract().on_click(bump).query_key("rut/pad").child(Text().text("tap").build()).build());
+        .child(Text().text(label).query_key("rut/text").build())
+        .child(PointerInteract().on_click(bump).query_key("rut/pad").child(Text().text(sv("tap")).build()).build());
     mount(col.build());
     return n.atom_id();
 }
@@ -104,7 +104,7 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
 // ---------------------------------------------------------------------------
 
 const QUEUED_RUT: &str = r#"
-use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Watch, mutate, source, watch }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Watch, mutate, source, sv, watch }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let log: Source<str> = source<str>("");
@@ -141,9 +141,9 @@ entry fn start() -> u64 {
         .on_pointer_up(m_up)
         .on_click(m_click)
         .query_key("rut/pad")
-        .child(Text().text("pad").build())
+        .child(Text().text(sv("pad")).build())
         .build();
-    mount(Column().child(Text().text_bound(log).query_key("rut/text").build()).child(pad).build());
+    mount(Column().child(Text().text(log).query_key("rut/text").build()).child(pad).build());
     return log.atom_id();
 }
 "#;
@@ -182,7 +182,7 @@ fn b_mutations_drain_queued_in_order_and_the_watch_observes_the_write() {
 
 const RUN_RUT: &str = r#"
 
-use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let out: Readable<f64> = source<f64>(0.0);
@@ -216,12 +216,12 @@ entry fn start() -> u64 {
     let pad = PointerInteract()
         .on_click(compose)
         .query_key("rut/pad")
-        .child(Text().text("run").build())
+        .child(Text().text(sv("run")).build())
         .build();
     mount(
         Column()
-            .child(Text().text_bound(res).query_key("rut/text").build())
-            .child(Text().text_bound(log).query_key("rut/log").build())
+            .child(Text().text(res).query_key("rut/text").build())
+            .child(Text().text(log).query_key("rut/log").build())
             .child(pad)
             .build(),
     );
@@ -262,7 +262,7 @@ fn d_ctx_run_composes_and_return_values_flow() {
 
 const TOGGLE_RUT: &str = r#"
 
-use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let expanded: Readable<bool> = source<bool>(true);
@@ -292,19 +292,19 @@ entry fn start() -> u64 {
     let snap = PointerInteract()
         .on_click(snapshot)
         .query_key("rut/snap")
-        .child(Text().text("snap").build())
+        .child(Text().text(sv("snap")).build())
         .build();
 
     let pad = PointerInteract()
         .on_click(b_toggle)
         .query_key("rut/pad")
-        .child(Text().text("toggle").build())
+        .child(Text().text(sv("toggle")).build())
         .build();
     mount(
         Column()
-            .child(Text().text_bound(mirror).query_key("rut/text").build())
-            .child(Text().text_bound(badge).query_key("rut/badge").build())
-            .child(Text().text_bound(readback).query_key("rut/readback").build())
+            .child(Text().text(mirror).query_key("rut/text").build())
+            .child(Text().text(badge).query_key("rut/badge").build())
+            .child(Text().text(readback).query_key("rut/readback").build())
             .child(pad)
             .child(snap)
             .build(),
@@ -338,7 +338,7 @@ fn e_ctx_reads_reach_sources_and_derives() {
 
 const DRAG_RUT: &str = r#"
 
-use tur_kit::gesture::pointer::{ MouseButton, PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ MouseButton, PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let log: Readable<str> = source<str>("");
@@ -374,9 +374,9 @@ entry fn start() -> u64 {
         .on_pointer_move(m_move)
         .on_pointer_up(m_up)
         .query_key("rut/pad")
-        .child(Text().text("drag").build())
+        .child(Text().text(sv("drag")).build())
         .build();
-    mount(Column().child(Text().text_bound(log).query_key("rut/text").build()).child(pad).build());
+    mount(Column().child(Text().text(log).query_key("rut/text").build()).child(pad).build());
     return log.atom_id();
 }
 "#;
@@ -485,7 +485,7 @@ entry fn start() {
     let label: Source<str> = source<str>("launched");
     let busy: Source<bool> = source<bool>(false);
     launch_future(work(entry_ctx(), label, busy));
-    let col = Column().child(Text().text_bound(label).query_key("rut/text").build());
+    let col = Column().child(Text().text(label).query_key("rut/text").build());
     mount(col.build());
 }
 "#;
@@ -522,7 +522,7 @@ fn launched_task_reads_and_writes_through_its_ctx_across_awaits() {
 
 const GENERIC_RUT: &str = r#"
 
-use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source }; use tur_kit::text::core::{ Text };
+use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let n = source<f64>(0.0);
@@ -538,9 +538,9 @@ entry fn start() -> u64 {
         ctx.run<f64>(add_tag, 2.0);
     });
     let col = Column()
-        .child(Text().text_bound(label).query_key("rut/text").build())
-        .child(Text().text_bound(tag).query_key("rut/tag").build())
-        .child(PointerInteract().on_click(fire).query_key("rut/pad").child(Text().text("tap").build()).build());
+        .child(Text().text(label).query_key("rut/text").build())
+        .child(Text().text(tag).query_key("rut/tag").build())
+        .child(PointerInteract().on_click(fire).query_key("rut/pad").child(Text().text(sv("tap")).build()).build());
     mount(col.build());
     return n.atom_id();
 }

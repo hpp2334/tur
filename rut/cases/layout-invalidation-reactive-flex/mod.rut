@@ -6,23 +6,23 @@
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded, Row };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source, sv };
 
 entry fn start() -> u64 {
     let flex_a: Readable<f64> = source<f64>(1.0);
     let flex_b: Readable<f64> = source<f64>(1.0);
 
     let mut row = Row();
-    let a = Expanded().flex_bound(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
+    let a = Expanded().flex(flex_a).child(qkey_box("a", 0xEF4444FFu64)).build();
     row.child(a);
-    let b = Expanded().flex_bound(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
+    let b = Expanded().flex(flex_b).child(qkey_box("b", 0x3B82F6FFu64)).build();
     row.child(b);
     mount(row.build());
     return flex_a.atom_id();
 }
 
 fn qkey_box(key: str, color: u64) -> View {
-    let b = Container().width_height(0.0, 0.0).color(color).query_key(key);
+    let b = Container().width_height(0.0, 0.0).color(sv(color)).query_key(key);
     return b.build();
 }
 

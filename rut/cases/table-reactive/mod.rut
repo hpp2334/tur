@@ -24,7 +24,7 @@ use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded };
 use tur_kit::layout::grid_table::{ Table, TableCols };
 use tur_kit::reactive::{
-    DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, entry_ctx, mutate, source,
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, entry_ctx, mutate, source, sv,
 };
 use tur_kit::text::core::{ Text };
 
@@ -77,7 +77,7 @@ entry fn start() -> u64 {
     let cols = TableCols().flex(2.0, 0.0).flex(1.0, 0.0).flex(1.0, 0.0);
     let table = Table()
         .columns(cols)
-        .rows_atom(rows)
+        .rows(rows)
         .header_builder(fn (col: u64) -> View {
             return header_cell(col, fills, labels, taps);
         })
@@ -92,9 +92,9 @@ entry fn start() -> u64 {
         .cross_alignment(CrossAlign::Stretch)
         .child(table)
         .child(SizedBox(0.0, 12.0).build())
-        .child(Text().text_bound(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build())
+        .child(Text().text(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build())
         .build();
-    mount(Expanded().flex(1.0).child(Container().color(0x0B1220FFu64).child(page).build()).build());
+    mount(Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(page).build()).build());
     return rows.atom_id();
 }
 
@@ -115,10 +115,10 @@ fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
                 .child(
                     Container()
                         .padding(8.0)
-                        .color_bound(fills[i])
+                        .color(fills[i])
                         .child(
                             Text()
-                                .text_bound(labels[i])
+                                .text(labels[i])
                                 .font_size(12.0)
                                 .color(HEADER_FG)
                                 .build(),
@@ -282,7 +282,7 @@ fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
     return Container()
         .padding(8.0)
         .query_key(f"tr/row{row as u64}/c{col as u64}")
-        .child(Text().text(text).font_size(14.0).color(fg).build())
+        .child(Text().text(sv(text)).font_size(14.0).color(fg).build())
         .build();
 }
 

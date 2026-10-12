@@ -32,7 +32,7 @@ use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::reactive::{
-    DeriveCtx, MutationCtx, Readable, Source, bridge, derive, source,
+    DeriveCtx, MutationCtx, Readable, Source, bridge, derive, source, sv,
 };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
@@ -121,15 +121,15 @@ entry fn start() -> u64 {
         .cases("9:16/220", g_9_220)
         .build();
     let panel = Container()
-        .color(color::PANEL_BG)
-        .radius(10.0)
+        .color(sv(color::PANEL_BG))
+        .radius(sv(10.0f64))
         .padding(10.0)
         .child(ScrollView().child(grid_switch).build())
         .build();
 
     let col = Column()
         .cross_alignment(CrossAlign::Start)
-        .child(Text().text("Grid Gallery").font_size(18.0).color(color::TITLE_FG).query_key("gallery/title").build())
+        .child(Text().text(sv("Grid Gallery")).font_size(18.0).color(color::TITLE_FG).query_key("gallery/title").build())
         .child(SizedBox(0.0, 4.0).build())
         .child(subtitle(d_tile, d_aspect, d_extent))
         .child(SizedBox(0.0, 12.0).build())
@@ -145,10 +145,10 @@ entry fn start() -> u64 {
             .child(gallery::chip(d_chips[2], "gallery/d-sparse", "Sparse", b_d2))
             .build())
         .child(SizedBox(0.0, 12.0).build())
-        .child(Expanded().flex(1.0).child(panel).build())
+        .child(Expanded().flex(sv(1.0f64)).child(panel).build())
         .build();
 
-    mount(Container().color(color::PAGE_BG).padding(16.0).child(col).build());
+    mount(Container().color(sv(color::PAGE_BG)).padding(16.0).child(col).build());
     return sel.atom_id();
 }
 
@@ -156,10 +156,10 @@ entry fn start() -> u64 {
 fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> View {
     return Row()
         .main_axis_size(MainAxisSize::Min)
-        .child(Text().text_bound(d_tile).font_size(12.0).color(color::SUB_FG).query_key("gallery/subtitle").build())
-        .child(Text().text(" · ").font_size(12.0).color(color::SUB_FG).build())
-        .child(Text().text_bound(d_aspect).font_size(12.0).color(color::SUB_FG).query_key("gallery/aspect-label").build())
-        .child(Text().text(" · ").font_size(12.0).color(color::SUB_FG).build())
-        .child(Text().text_bound(d_extent).font_size(12.0).color(color::SUB_FG).query_key("gallery/extent").build())
+        .child(Text().text(d_tile).font_size(12.0).color(color::SUB_FG).query_key("gallery/subtitle").build())
+        .child(Text().text(sv(" · ")).font_size(12.0).color(color::SUB_FG).build())
+        .child(Text().text(d_aspect).font_size(12.0).color(color::SUB_FG).query_key("gallery/aspect-label").build())
+        .child(Text().text(sv(" · ")).font_size(12.0).color(color::SUB_FG).build())
+        .child(Text().text(d_extent).font_size(12.0).color(color::SUB_FG).query_key("gallery/extent").build())
         .build();
 }

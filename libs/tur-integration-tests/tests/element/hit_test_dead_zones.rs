@@ -79,7 +79,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
@@ -93,9 +93,9 @@ entry fn start() -> u64 {
     // viewport, inside a ScrollView.
     let pill = Container()
         .padding(10.0)
-        .radius(8.0)
-        .color(0x4F46E5FFu64)
-        .child(Text().text_bound(label).font_size(13.0).query_key("dz/scroll-label").build())
+        .radius(sv(8.0f64))
+        .color(sv(0x4F46E5FFu64))
+        .child(Text().text(label).font_size(13.0).query_key("dz/scroll-label").build())
         .build();
     let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         // The derive re-renders the label through fmt_taps.
@@ -113,7 +113,7 @@ entry fn start() -> u64 {
         .build();
     let page = Column()
         .cross_alignment(CrossAlign::Stretch)
-        .child(Text().text("top").build())
+        .child(Text().text(sv("top")).build())
         .child(SizedBox(0.0, 900.0).build())
         .child(btn)
         .child(SizedBox(0.0, 40.0).build())
@@ -188,16 +188,16 @@ use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::stack::{ Positioned, Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
     let b = Container()
         .width_height(80.0, 80.0)
-        .color(0x6366F1FFu64)
+        .color(sv(0x6366F1FFu64))
         .query_key("dz/piece")
-        .child(Text().text_bound(piece).query_key("dz/piece-label").build())
+        .child(Text().text(piece).query_key("dz/piece-label").build())
         .build();
     let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "down");
@@ -218,7 +218,7 @@ entry fn start() -> u64 {
     mount(Stack()
         .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
-        .child(Positioned().left(10.0).top(10.0).child(pad).build())
+        .child(Positioned().left(sv(10.0f64)).top(sv(10.0f64)).child(pad).build())
         .build());
     return piece.atom_id();
 }
@@ -234,16 +234,16 @@ use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::stack::{ Positioned, Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let piece: Readable<str> = source<str>("idle");
     let b = Container()
         .width_height(80.0, 80.0)
-        .color(0x6366F1FFu64)
+        .color(sv(0x6366F1FFu64))
         .query_key("dz/piece")
-        .child(Text().text_bound(piece).query_key("dz/piece-label").build())
+        .child(Text().text(piece).query_key("dz/piece-label").build())
         .build();
     let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
         ctx.set<str>(piece, "down");
@@ -265,7 +265,7 @@ entry fn start() -> u64 {
         .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .build();
-    stack.child(Positioned().left(10.0).top(10.0).child(pad).build());
+    stack.child(Positioned().left(sv(10.0f64)).top(sv(10.0f64)).child(pad).build());
     mount(stack.build());
     return piece.atom_id();
 }

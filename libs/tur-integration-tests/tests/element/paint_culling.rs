@@ -47,10 +47,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 fn item(i: u64) -> View {
-    let b = Container().width_height(10.0, 100.0).color(0xFF0000FFu64).query_key(f"item/{i}");
+    let b = Container().width_height(10.0, 100.0).color(sv(0xFF0000FFu64)).query_key(f"item/{i}");
     return b.build();
 }
 
@@ -191,9 +192,10 @@ fn no_clip_means_no_culling() {
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let b = Container().width_height(100.0, 100.0).color(0x0080FFFF).query_key("onscreen");
+    let b = Container().width_height(100.0, 100.0).color(sv(0x0080FFFFu64)).query_key("onscreen");
     mount(b.build());
 }
 "#,

@@ -205,7 +205,9 @@ impl MouseRegion {
     return self;
   }
   // The reactive cursor: the name rides a live str (the reactive-cursor
-  // corpus case).
+  // corpus case). The `_bound` spelling is a DOCUMENTED EXCEPTION — the
+  // enum lane owns the plain name (`cursor(flags::Cursor)`), so the
+  // type-mismatched `Readable<str>` lane keeps its suffix.
   pub fn cursor_bound(mut self, r: reactive::Readable<str>) -> Self {
     mr_cursor_bound(self.spec, r.atom_id());
     return self;

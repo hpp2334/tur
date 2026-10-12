@@ -7,14 +7,14 @@
 // case-side stand-in; the outer edges sit 2px in where boa's sit flush).
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 use tur_kit::text::core::{ Text };
 
 fn cell(i: u64) -> View {
     let tile = Container()
-        .color(hsl_packed(((i * 47) % 360) as f64, 55.0, 50.0))
-        .child(Text().text(f"{i}").font_size(11.0).color(0xFFFFFFFFu64).build())
+        .color(sv(hsl_packed(((i * 47) % 360) as f64, 55.0, 50.0)))
+        .child(Text().text(sv(f"{i}")).font_size(11.0).color(0xFFFFFFFFu64).build())
         .build();
     return Container().padding(2.0).child(tile).build();
 }

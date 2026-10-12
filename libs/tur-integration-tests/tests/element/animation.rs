@@ -72,7 +72,7 @@ fn start() -> AppContext {
     let label: Source<str> = source<str>("");
     let width: Readable<f64> = source<f64>(100.0);
 
-    let b = Container().width_height(10.0, 10.0).width_bound(width).query_key("box");
+    let b = Container().width_height(10.0, 10.0).width(width).query_key("box");
 
     // The tick mutation captures the width source (the eased 0..1 maps to
     // 100..200); the controller crosses entry boundaries as the context's
@@ -86,7 +86,7 @@ fn start() -> AppContext {
 
     let col = Column()
         .child(b.build())
-        .child(Text().text_bound(label).query_key("rut/text").build());
+        .child(Text().text(label).query_key("rut/text").build());
     mount(col.build());
     return AppContext { ctrl: ctrl, label: label };
 }
@@ -476,10 +476,10 @@ fn painted_rotate(app: &TurTestApp, id: ElementNodeId) -> f64 {
 }
 
 /// The bound-angle scaffold: a keyed square under
-/// `Transform(1, 0, 0, 0).rotate_bound(angle)`, the controller ticking
+/// `Transform(1, 0, 0, 0).rotate(angle)`, the controller ticking
 /// `TAU·v` into the atom across a 200ms linear run.
 const BOUND_ANGLE_RUT: &str = r#"
-use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source };use tur_kit::layout::flex::{ Column };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, entry_ctx, mutate, source, sv };use tur_kit::layout::flex::{ Column };
 use tur_kit::text::core::{ Text };
 
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl };
@@ -499,8 +499,8 @@ fn start() -> AppContext {
     let label: Readable<str> = source<str>("");
     let angle: Source<f64> = source<f64>(0.0);
     let _ = label;
-    let square = Container().width_height(60.0, 60.0).color(0xFFFFFFFFu64).query_key("bt/square").build();
-    let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate_bound(angle).child(square).build();
+    let square = Container().width_height(60.0, 60.0).color(sv(0xFFFFFFFFu64)).query_key("bt/square").build();
+    let xf = Transform(1.0, 0.0, 0.0, 0.0).rotate(angle).child(square).build();
     let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
         ctx.set<f64>(angle, TAU * v);
     });
@@ -581,11 +581,11 @@ fn bound_angle_animates_without_rebuild() {
 /// The static path — `el_transform` with all-static channels — unchanged.
 const STATIC_TRANSFORM_RUT: &str = r#"
 
-use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv };
 use tur_anim_kit::{ Transform };
 
 entry fn start() {
-    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
+    let square = Container().width_height(40.0, 40.0).color(sv(0xFFFFFFFFu64)).build();
     mount(Transform(1.0, 0.7, 12.0, 0.0).child(square).build());
 }
 "#;
@@ -614,7 +614,7 @@ fn static_transform_path_unchanged() {
 /// `rut/transform` matches the first transform). The writes ride the
 /// context-crossing lane (`entry_ctx` — the entry rail's ctx).
 const BOUND_SCALE_RUT: &str = r#"
-use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source, sv };
 use tur_anim_kit::{ Transform };
 
 struct AppContext {
@@ -623,8 +623,12 @@ struct AppContext {
 
 fn start() -> AppContext {
     let s = source<f64>(2.0);
-    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    mount(Transform(1.0, 0.0, 0.0, 0.0).scale_bound(s).child(square).build());
+    // The white fill rides a source (not sv): the upstream
+    // duplicate-boot-scope interning bug (pin 3b4d2cc) misbinds sv<T>'s
+    // itable in this module shape (the anim-kit import beside it).
+    let fill = source<u64>(0xFFFFFFFFu64);
+    let square = Container().width_height(40.0, 40.0).color(fill).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).scale(s).child(square).build());
     return AppContext { s: s };
 }
 
@@ -643,7 +647,7 @@ entry fn probe_s(cx: opaque, b: f64) {
 "#;
 
 const BOUND_TRANSLATE_RUT: &str = r#"
-use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::reactive::{ Mutation, MutationCtx, Source, entry_ctx, mutate, source, sv };
 use tur_anim_kit::{ Transform };
 
 struct AppContext {
@@ -654,8 +658,12 @@ struct AppContext {
 fn start() -> AppContext {
     let tx = source<f64>(10.0);
     let ty = source<f64>(20.0);
-    let square = Container().width_height(40.0, 40.0).color(0xFFFFFFFFu64).build();
-    mount(Transform(1.0, 0.0, 0.0, 0.0).translate_bound(tx, ty).child(square).build());
+    // The white fill rides a source (not sv): the upstream
+    // duplicate-boot-scope interning bug (pin 3b4d2cc) misbinds sv<T>'s
+    // itable in this module shape (the anim-kit import beside it).
+    let fill = source<u64>(0xFFFFFFFFu64);
+    let square = Container().width_height(40.0, 40.0).color(fill).build();
+    mount(Transform(1.0, 0.0, 0.0, 0.0).translate(tx, ty).child(square).build());
     return AppContext { tx: tx, ty: ty };
 }
 

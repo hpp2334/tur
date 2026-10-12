@@ -43,7 +43,7 @@ use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
 use tur_kit::image::{ image_resource_svg };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Expanded };
-use tur_kit::reactive::{ MutationCtx, mutate };
+use tur_kit::reactive::{ MutationCtx, mutate, sv };
 
 entry fn start() -> u64 {
     let s = state::seed();
@@ -69,10 +69,10 @@ entry fn start() -> u64 {
         .cases("landing", landing::landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2))
         .cases("explorer", explorer::explorer_view(s))
         .build();
-    let page = Container().color(theme::PAGE_BG).padding(22.0).child(body).build();
+    let page = Container().color(sv(theme::PAGE_BG)).padding(22.0).child(body).build();
     let root = Column()
         .cross_alignment(CrossAlign::Stretch)
-        .child(Expanded().flex(1.0).child(page).build())
+        .child(Expanded().flex(sv(1.0f64)).child(page).build())
         .build();
     mount(root);
     return s.mode.atom_id();

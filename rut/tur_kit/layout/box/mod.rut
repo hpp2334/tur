@@ -25,60 +25,68 @@ impl Container {
     box_padding(self.spec, v);
     return self;
   }
-  pub fn width(mut self, v: f64) -> Self {
-    box_width(self.spec, v);
+  // The ONE reactive width prop over `Readable<f64>`: a live source rides
+  // the bind row, an `sv()` literal lowers through the static row.
+  pub fn width(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      box_width(self.spec, r.get());
+    } else {
+      box_width_bound(self.spec, r.atom_id());
+    }
     return self;
   }
-  pub fn height(mut self, v: f64) -> Self {
-    box_height(self.spec, v);
+  // The ONE reactive height prop over `Readable<f64>` (same lanes).
+  pub fn height(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      box_height(self.spec, r.get());
+    } else {
+      box_height_bound(self.spec, r.atom_id());
+    }
     return self;
   }
-  pub fn color(mut self, packed: u64) -> Self {
-    box_color(self.spec, packed);
+  // The ONE reactive brush prop over `Readable<u64>` (same lanes).
+  pub fn color(mut self, r: reactive::Readable<u64>) -> Self {
+    if (r.atom_id() == 0) {
+      box_color(self.spec, r.get());
+    } else {
+      box_color_bound(self.spec, r.atom_id());
+    }
     return self;
   }
-  pub fn color_bound(mut self, r: reactive::Readable<u64>) -> Self {
-    box_color_bound(self.spec, r.atom_id());
-    return self;
-  }
-  pub fn width_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    box_width_bound(self.spec, r.atom_id());
-    return self;
-  }
-  pub fn height_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    box_height_bound(self.spec, r.atom_id());
-    return self;
-  }
-  // The reactive corner radius (animated radius rides a derive of the
-  // progress atom).
-  pub fn radius_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    box_radius_bound(self.spec, r.atom_id());
+  // The ONE reactive corner radius over `Readable<f64>` (animated radius
+  // rides a derive of the progress atom; an `sv()` literal lowers through
+  // the static row).
+  pub fn radius(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      box_radius(self.spec, r.get());
+    } else {
+      box_radius_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn border(mut self, packed: u64, width: f64, position: flags::BorderPosition) -> Self {
     box_border(self.spec, packed, width, flags::border_pos_code(position));
     return self;
   }
-  pub fn radius(mut self, r: f64) -> Self {
-    box_radius(self.spec, r);
-    return self;
-  }
+  // The 4-arg static shadow combo (all four channels at once).
   pub fn shadow(mut self, packed: u64, blur: f64, dx: f64, dy: f64) -> Self {
     box_shadow(self.spec, packed, blur, dx, dy);
     return self;
   }
-  // The reactive shadow channels — per-state piece glows (the jigsaw drag
-  // states) and eased blur (the implicit-animations shadow) ride atoms, not
-  // rebuilds. The bound dy wins over the static offset's y.
-  pub fn shadow_color_bound(mut self, r: reactive::Readable<u64>) -> Self {
+  // The reactive shadow channels over `Readable<T>` — ATOM-ONLY lanes (no
+  // sv lane: a static value here traps at the P1 guard; the static combo
+  // is the `shadow(...)` constructor). Per-state piece glows (the jigsaw
+  // drag states) and eased blur (the implicit-animations shadow) ride
+  // atoms, not rebuilds. The bound dy wins over the static offset's y.
+  pub fn shadow_color(mut self, r: reactive::Readable<u64>) -> Self {
     box_shadow_color_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn shadow_blur_bound(mut self, r: reactive::Readable<f64>) -> Self {
+  pub fn shadow_blur(mut self, r: reactive::Readable<f64>) -> Self {
     box_shadow_blur_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn shadow_dy_bound(mut self, r: reactive::Readable<f64>) -> Self {
+  pub fn shadow_dy(mut self, r: reactive::Readable<f64>) -> Self {
     box_shadow_dy_bound(self.spec, r.atom_id());
     return self;
   }

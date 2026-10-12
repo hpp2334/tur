@@ -26,7 +26,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ ListHandle, View, list_new, str_parse_f64 };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
-use tur_kit::reactive::{ MutationCtx, mutate };
+use tur_kit::reactive::{ MutationCtx, mutate, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
@@ -80,7 +80,7 @@ pub fn explorer_view(s: state::Gh) -> View {
         .build();
     let loading = Container()
         .alignment(Align::Center)
-        .child(Text().text("Loading…").font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-loading").build())
+        .child(Text().text(sv("Loading…")).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-loading").build())
         .build();
     let empty = Container()
         .alignment(Align::Center)
@@ -89,9 +89,9 @@ pub fn explorer_view(s: state::Gh) -> View {
             Column()
                 .cross_alignment(CrossAlign::Center)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text("This folder is empty").font_size(14.0).color(theme::TEXT).build())
+                .child(Text().text(sv("This folder is empty")).font_size(14.0).color(theme::TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
-                .child(Text().text("No files to show at this path.").font_size(12.0).color(theme::TEXT_SUBTLE).build())
+                .child(Text().text(sv("No files to show at this path.")).font_size(12.0).color(theme::TEXT_SUBTLE).build())
                 .build(),
         )
         .build();
@@ -107,9 +107,9 @@ pub fn explorer_view(s: state::Gh) -> View {
                         .child(
                             Container()
                                 .padding(9.0)
-                                .radius(8.0)
-                                .color(theme::SUBTLE_BUTTON)
-                                .child(Text().text("Back").font_size(13.0).color(theme::SUBTLE_BUTTON_FG).build())
+                                .radius(sv(8.0f64))
+                                .color(sv(theme::SUBTLE_BUTTON))
+                                .child(Text().text(sv("Back")).font_size(13.0).color(theme::SUBTLE_BUTTON_FG).build())
                                 .build(),
                         )
                         .build(),
@@ -129,7 +129,7 @@ pub fn explorer_view(s: state::Gh) -> View {
                                 .on_click(b_root)
                                 .child(
                                     Container().padding(4.0).child(
-                                        Text().text_bound(s.repo_full).font_size(13.0).color(theme::ACCENT).query_key("gh-crumb").build(),
+                                        Text().text(s.repo_full).font_size(13.0).color(theme::ACCENT).query_key("gh-crumb").build(),
                                     ).build(),
                                 )
                                 .build(),
@@ -137,11 +137,11 @@ pub fn explorer_view(s: state::Gh) -> View {
                         .build(),
                 )
                 .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text_bound(s.path).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-path").build())
+                .child(Text().text(s.path).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-path").build())
                 .build(),
         )
         .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text_bound(s.desc).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-desc").build())
+        .child(Text().text(s.desc).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-desc").build())
         .child(SizedBox(0.0, 8.0).build())
         .child(ui::error_banner(s))
         .child(SizedBox(0.0, 8.0).build())
@@ -150,13 +150,13 @@ pub fn explorer_view(s: state::Gh) -> View {
                 .cross_alignment(CrossAlign::Center)
                 .child(ui::pill("gh-refresh", "Refresh", b_refresh, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
-                .child(Text().text_bound(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build())
+                .child(Text().text(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build())
                 .build(),
         )
         .child(SizedBox(0.0, 8.0).build())
         .child(
             Expanded()
-                .flex(1.0)
+                .flex(sv(1.0f64))
                 // The file list (the boa fileListView): busy → "Loading…" in
                 // the list area; else empty → the empty state; else the list.
                 .child(
@@ -172,7 +172,7 @@ pub fn explorer_view(s: state::Gh) -> View {
         .child(
             Container()
                 .padding(6.0)
-                .child(Text().text_bound(s.selected).font_size(12.0).color(theme::TEXT_SUBTLE).query_key("gh-selected").build())
+                .child(Text().text(s.selected).font_size(12.0).color(theme::TEXT_SUBTLE).query_key("gh-selected").build())
                 .build(),
         )
         .build();
@@ -230,16 +230,16 @@ fn item_file(i: u64, s: str, g: state::Gh) -> View {
     });
     let row = Row()
         .cross_alignment(CrossAlign::Center)
-        .child(Container().width_height(14.0, 14.0).radius(3.0).color(icon).build())
+        .child(Container().width_height(14.0, 14.0).radius(sv(3.0f64)).color(sv(icon)).build())
         .child(SizedBox(10.0, 0.0).build())
-        .child(Expanded().flex(1.0).child(Text().text(name).font_size(13.0).color(theme::TEXT).build()).build())
+        .child(Expanded().flex(sv(1.0f64)).child(Text().text(sv(name)).font_size(13.0).color(theme::TEXT).build()).build())
         .child(SizedBox(10.0, 0.0).build())
-        .child(Text().text(size_txt).font_size(11.0).color(theme::TEXT_SUBTLE).build())
+        .child(Text().text(sv(size_txt)).font_size(11.0).color(theme::TEXT_SUBTLE).build())
         .build();
     let card = Container()
         .padding(9.0)
-        .radius(8.0)
-        .color(theme::PANEL)
+        .radius(sv(8.0f64))
+        .color(sv(theme::PANEL))
         .border(theme::BORDER, 1.0, BorderPosition::Inside)
         .child(row)
         .build();

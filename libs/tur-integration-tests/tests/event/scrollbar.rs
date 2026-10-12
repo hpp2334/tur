@@ -11,13 +11,14 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() -> u64 {
     let mut content = Column();
     let mut i = 0;
     while (i < 12) {
-        let b = Container().width_height(280.0, 50.0).color(0x4488CCFFu64);
+        let b = Container().width_height(280.0, 50.0).color(sv(0x4488CCFFu64));
         content.child(b.build());
         i += 1;
     }

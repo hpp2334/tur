@@ -88,7 +88,7 @@ struct IdCx {{
 
 entry fn start() -> opaque {{
     let atom: Source<str> = source<str>("{value}");
-    let mut txt = Text().text_bound(atom).query_key("id").build();
+    let mut txt = Text().text(atom).query_key("id").build();
     mount(txt);
     return opaque(IdCx {{ atom: atom }});
 }}
@@ -173,7 +173,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("only-in-A");
-    let mut txt = Text().text_bound(atom).query_key("a_only").build();
+    let mut txt = Text().text(atom).query_key("a_only").build();
     mount(txt);
 }
 "#,
@@ -218,7 +218,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
-    let mut txt = Text().text_bound(atom).query_key("val").build();
+    let mut txt = Text().text(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -256,7 +256,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("7");
-    let mut txt = Text().text_bound(atom).query_key("val").build();
+    let mut txt = Text().text(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -293,7 +293,7 @@ use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
     let atom: Readable<str> = source<str>("{i}");
-    let mut txt = Text().text_bound(atom).query_key("idx").build();
+    let mut txt = Text().text(atom).query_key("idx").build();
     mount(txt);
 }}
 "#
@@ -495,10 +495,10 @@ fn platform_events_route_to_the_correct_instance() {
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 
 entry fn start() {
-    let b = Container().width_height(10.0, 10.0).color(0x336699FFu64);
+    let b = Container().width_height(10.0, 10.0).color(sv(0x336699FFu64));
     mount(b.build());
 }
 "#;
@@ -560,7 +560,7 @@ struct FlipCx {
 
 entry fn start() -> opaque {
     let atom: Source<str> = source<str>("from-A");
-    let mut txt = Text().text_bound(atom).query_key("id").build();
+    let mut txt = Text().text(atom).query_key("id").build();
     mount(txt);
     return opaque(FlipCx { atom: atom });
 }

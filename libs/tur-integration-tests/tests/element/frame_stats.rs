@@ -71,12 +71,13 @@ fn mount(app: &TurTestApp) {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let col = Column()
         .child(Container().width_height(100.0, 50.0).build())
-        .child(Text().text("hello").build());
+        .child(Text().text(sv("hello")).build());
     mount(col.build());
 }
 "#,
@@ -141,9 +142,10 @@ use tur_kit::layout::box::{ Container };
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let b = Container().width_height(100.0, 10.0).color(0xFF0000FFu64);
+    let b = Container().width_height(100.0, 10.0).color(sv(0xFF0000FFu64));
     mount(b.build());
 }
 "#,

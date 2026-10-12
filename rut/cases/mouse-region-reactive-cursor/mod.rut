@@ -3,7 +3,7 @@
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the kit's bridge/over
 // probe rail (the sanctioned raw-atom hatch).
-use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ HitTestBehavior };
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ HitTestBehavior };
 
 
 entry fn start() -> u64 {
@@ -14,9 +14,9 @@ entry fn start() -> u64 {
     let b_exit = mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) {
     });
     let mut col = Column();
-    let b = Container().width_height(100.0, 50.0).child(Text().text_bound(state).build());
+    let b = Container().width_height(100.0, 50.0).child(Text().text(state).build());
     col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(HitTestBehavior::Opaque).child(b.build()).build());
-    let ct = Text().text_bound(cursor).query_key("cursor-atom");
+    let ct = Text().text(cursor).query_key("cursor-atom");
     col.child(ct.build());
     mount(col.build());
     return cursor.atom_id();
@@ -32,7 +32,7 @@ entry fn set_cursor(cursor: u64, code: f64) {
     MutationCtx::over(bridge()).set(rail, name);
 }
 
-// The standard CSS keyword for a cursor code (the el_mouse_region_bound
+// The standard CSS keyword for a cursor code (the mr_cursor_bound row
 // decode reads the same table).
 fn cursor_name(code: u64) -> str {
     if (code == 27) {

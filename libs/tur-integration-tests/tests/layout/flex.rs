@@ -18,6 +18,7 @@ use tur_kit::flags::{ CrossAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ sv };
 
 entry fn start() {
     let mut col = Column();
@@ -35,7 +36,7 @@ entry fn start() {
     // infinity.
     let mut flex_col = Column().query_key("flex-col");
     let sized = Container().width_height(10.0, 50.0);
-    flex_col.child(Expanded().flex(1.0).child(sized.build()).build());
+    flex_col.child(Expanded().flex(sv(1.0f64)).child(sized.build()).build());
     col.child(flex_col.build());
 
     mount(col.build());

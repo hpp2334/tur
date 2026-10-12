@@ -5,7 +5,7 @@
 use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -36,9 +36,9 @@ entry fn start() -> u64 {
 
     let b = Container()
         .width_height(200.0, 200.0)
-        .color(0x6366F1FF)
+        .color(sv(0x6366F1FFu64))
         .query_key("drag-target")
-        .child(Text().text_bound(info).query_key("drag-info").build());
+        .child(Text().text(info).query_key("drag-info").build());
 
     let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).query_key("rut/gesture").child(b.build()).build();
     mount(pad);

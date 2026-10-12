@@ -319,7 +319,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
-    let txt = Text().text_bound(atom).build();
+    let txt = Text().text(atom).build();
     mount(txt);
 }
 "#,

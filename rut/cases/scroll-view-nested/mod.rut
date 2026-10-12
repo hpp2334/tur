@@ -5,6 +5,7 @@ use tur_kit::flags::{ Axis, CrossAlign };
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
@@ -21,7 +22,7 @@ entry fn start() {
     outer_content.child(inner_wrapper.build());
     outer_content.child(box_h(400.0));
     let outer = ScrollView().axis(Axis::Vertical).child(outer_content.build()).query_key("outer-scroll").build();
-    row.child(Expanded().flex(1.0).child(outer).build());
+    row.child(Expanded().flex(sv(1.0f64)).child(outer).build());
     mount(row.build());
 }
 

@@ -15,7 +15,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Spans, Text };
 
@@ -62,9 +62,9 @@ entry fn start() -> u64 {
         .cross_alignment(CrossAlign::Stretch)
         .main_axis_size(MainAxisSize::Min)
         .child(SizedBox(0.0, 16.0).build())
-        .child(Text().text("Text").font_size(22.0).color(TEXT).build())
+        .child(Text().text(sv("Text")).font_size(22.0).color(TEXT).build())
         .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text("size · weight · color · spans · overflow").font_size(12.0).color(TEXT_MUTED).build())
+        .child(Text().text(sv("size · weight · color · spans · overflow")).font_size(12.0).color(TEXT_MUTED).build())
         .child(SizedBox(0.0, 16.0).build())
         .child(section("FONT SIZE", size_row()))
         .child(SizedBox(0.0, 12.0).build())
@@ -75,7 +75,7 @@ entry fn start() -> u64 {
         .child(section("RICH TEXT (SPANS)", [spans_line()]))
         .child(SizedBox(0.0, 12.0).build())
         .child(section("OVERFLOW", [
-            Text().text_bound(caption).font_size(11.0).color(TEXT_MUTED).query_key("overflow-caption").build(),
+            Text().text(caption).font_size(11.0).color(TEXT_MUTED).query_key("overflow-caption").build(),
             SizedBox(0.0, 8.0).build(),
             overflow_cards(mode),
             SizedBox(0.0, 10.0).build(),
@@ -84,7 +84,7 @@ entry fn start() -> u64 {
         .child(SizedBox(0.0, 16.0).build());
 
     let scroller = ScrollView().child(page.build()).build();
-    let root = Container().color(PAGE_BG).child(scroller).build();
+    let root = Container().color(sv(PAGE_BG)).child(scroller).build();
     mount(root);
     return maxlines.atom_id();
 }
@@ -93,14 +93,14 @@ entry fn start() -> u64 {
 fn section(title: str, kids: [View]) -> View {
     return Container()
         .padding(14.0)
-        .radius(10.0)
-        .color(CARD_BG)
+        .radius(sv(10.0f64))
+        .color(sv(CARD_BG))
         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
                 .cross_alignment(CrossAlign::Start)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text(title).font_size(11.0).color(TEXT_MUTED).build())
+                .child(Text().text(sv(title)).font_size(11.0).color(TEXT_MUTED).build())
                 .child(SizedBox(0.0, 10.0).build())
                 .children(kids)
                 .build(),
@@ -114,13 +114,13 @@ fn size_row() -> [View] {
         Row()
             .cross_alignment(CrossAlign::End)
             .main_axis_size(MainAxisSize::Min)
-            .child(Text().text("Aa").font_size(10.0).color(TEXT).build())
+            .child(Text().text(sv("Aa")).font_size(10.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("Aa").font_size(14.0).color(TEXT).build())
+            .child(Text().text(sv("Aa")).font_size(14.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("Aa").font_size(20.0).color(TEXT).build())
+            .child(Text().text(sv("Aa")).font_size(20.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("Aa").font_size(28.0).color(TEXT).build())
+            .child(Text().text(sv("Aa")).font_size(28.0).color(TEXT).build())
             .build(),
     ];
 }
@@ -128,13 +128,13 @@ fn size_row() -> [View] {
 // The weight ladder: the fox sentence at 300 / 400 / 700 / 900.
 fn weight_col() -> [View] {
     return [
-        Text().text(BROWN).font_size(14.0).font_weight(300.0).color(TEXT).build(),
+        Text().text(sv(BROWN)).font_size(14.0).font_weight(300.0).color(TEXT).build(),
         SizedBox(0.0, 4.0).build(),
-        Text().text(BROWN).font_size(14.0).font_weight(400.0).color(TEXT).build(),
+        Text().text(sv(BROWN)).font_size(14.0).font_weight(400.0).color(TEXT).build(),
         SizedBox(0.0, 4.0).build(),
-        Text().text(BROWN).font_size(14.0).font_weight(700.0).color(TEXT).build(),
+        Text().text(sv(BROWN)).font_size(14.0).font_weight(700.0).color(TEXT).build(),
         SizedBox(0.0, 4.0).build(),
-        Text().text(BROWN).font_size(14.0).font_weight(900.0).color(TEXT).build(),
+        Text().text(sv(BROWN)).font_size(14.0).font_weight(900.0).color(TEXT).build(),
     ];
 }
 
@@ -143,13 +143,13 @@ fn color_row() -> [View] {
     return [
         Row()
             .main_axis_size(MainAxisSize::Min)
-            .child(Text().text("slate").font_size(14.0).color(TEXT).build())
+            .child(Text().text(sv("slate")).font_size(14.0).color(TEXT).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("rose").font_size(14.0).color(ROSE).build())
+            .child(Text().text(sv("rose")).font_size(14.0).color(ROSE).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("emerald").font_size(14.0).color(EMERALD).build())
+            .child(Text().text(sv("emerald")).font_size(14.0).color(EMERALD).build())
             .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text("amber").font_size(14.0).color(AMBER).build())
+            .child(Text().text(sv("amber")).font_size(14.0).color(AMBER).build())
             .build(),
     ];
 }
@@ -173,16 +173,16 @@ fn spans_line() -> View {
 // 100px width under the given overflow mode.
 fn overflow_card(kind: str, max_lines: u64) -> View {
     return Container()
-        .width(100.0)
+        .width(sv(100.0f64))
         .padding(8.0)
-        .radius(8.0)
-        .color(CARD_BG)
+        .radius(sv(8.0f64))
+        .color(sv(CARD_BG))
         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
                 .cross_alignment(CrossAlign::Start)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text(kind).font_size(11.0).color(TEXT_MUTED).build())
+                .child(Text().text(sv(kind)).font_size(11.0).color(TEXT_MUTED).build())
                 .child(SizedBox(0.0, 6.0).build())
                 .child(overflow_text(kind, max_lines))
                 .build(),
@@ -194,12 +194,12 @@ fn overflow_card(kind: str, max_lines: u64) -> View {
 // no statement-mutated builders).
 fn overflow_text(kind: str, max_lines: u64) -> View {
     if (kind == "clip") {
-        return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).clip().build();
+        return Text().text(sv(BROWN)).font_size(12.0).color(TEXT).max_lines(max_lines).clip().build();
     }
     if (kind == "ellipsis") {
-        return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).ellipsis().build();
+        return Text().text(sv(BROWN)).font_size(12.0).color(TEXT).max_lines(max_lines).ellipsis().build();
     }
-    return Text().text(BROWN).font_size(12.0).color(TEXT).max_lines(max_lines).overflow_visible().build();
+    return Text().text(sv(BROWN)).font_size(12.0).color(TEXT).max_lines(max_lines).overflow_visible().build();
 }
 
 // The three truncation cards, keyed by the mirrored mode string — a
@@ -232,12 +232,12 @@ fn cards_row(max_lines: u64) -> View {
 fn cycle_button(b_cycle: Mutation<nil>, btn_label: Readable<str>) -> View {
     let pill = Container()
         .padding(10.0)
-        .radius(8.0)
-        .color(ACCENT)
+        .radius(sv(8.0f64))
+        .color(sv(ACCENT))
         .child(
             Row()
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text_bound(btn_label).font_size(13.0).color(ACCENT_FG).build())
+                .child(Text().text(btn_label).font_size(13.0).color(ACCENT_FG).build())
                 .build(),
         )
         .build();

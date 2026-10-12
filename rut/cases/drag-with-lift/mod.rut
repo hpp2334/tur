@@ -6,7 +6,7 @@ use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, anim_ctrl };
 
@@ -32,10 +32,10 @@ entry fn start() -> u64 {
     let b = Container()
         .width_height(80.0, 40.0)
         .query_key("lift-target")
-        .child(Text().text("piece").build());
+        .child(Text().text(sv("piece")).build());
     let pad = PointerInteract().on_pointer_down(b_down).on_pointer_move(b_move).on_pointer_up(b_up).query_key("rut/gesture").child(b.build()).build();
 
-    let phase_t = Text().text_bound(phase).query_key("last-event").build();
+    let phase_t = Text().text(phase).query_key("last-event").build();
     let root = Column().child(pad).child(phase_t);
     mount(root.build());
     return phase.atom_id();

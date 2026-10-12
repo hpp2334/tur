@@ -9,6 +9,7 @@ use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::layout::grid_table::{ Grid };
+use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
@@ -19,11 +20,11 @@ entry fn start() {
     let page = Column()
         .cross_alignment(CrossAlign::Start)
         .main_axis_size(MainAxisSize::Min)
-        .child(Text().text("aspect 2:1 (10 cells)").font_size(11.0).color(CAPTION_FG).build())
+        .child(Text().text(sv("aspect 2:1 (10 cells)")).font_size(11.0).color(CAPTION_FG).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(aspect_grid())
         .child(SizedBox(0.0, 16.0).build())
-        .child(Text().text("mainAxisExtent 40 (10 cells)").font_size(11.0).color(CAPTION_FG).build())
+        .child(Text().text(sv("mainAxisExtent 40 (10 cells)")).font_size(11.0).color(CAPTION_FG).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(extent_grid())
         .build();
@@ -36,8 +37,8 @@ fn aspect_grid() -> View {
     let mut i: u64 = 0;
     while (i < 10) {
         let cell = Container()
-            .color(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0))
-            .child(Text().text(f"#{i}").font_size(12.0).color(LABEL_FG).build());
+            .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
+            .child(Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build());
         grid.child(cell.build());
         i = i + 1;
     }
@@ -51,8 +52,8 @@ fn extent_grid() -> View {
     let mut i: u64 = 0;
     while (i < 10) {
         let cell = Container()
-            .color(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0))
-            .child(Text().text(f"#{i}").font_size(12.0).color(LABEL_FG).build());
+            .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
+            .child(Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build());
         grid.child(cell.build());
         i = i + 1;
     }

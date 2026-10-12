@@ -5,11 +5,11 @@
 // dark zebra is gone).
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    return Container().color(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0)).build();
+    return Container().color(sv(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0))).build();
 }
 
 entry fn start() {

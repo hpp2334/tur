@@ -30,7 +30,7 @@ use tur_kit::handles::{ TextCtrl, UndoCtrl, View, mount, str_parse_f64, text_ctr
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
 use tur_kit::layout::stack::{ Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 use tur_kit::text::input::{ Input };
 
@@ -174,7 +174,7 @@ entry fn start() -> u64 {
     let pane = Column()
         .main_axis_size(MainAxisSize::Min)
         .cross_alignment(CrossAlign::Center)
-        .child(Text().text("COUNTDOWN").font_size(11.0).color(TEXT_FAINT).build())
+        .child(Text().text(sv("COUNTDOWN")).font_size(11.0).color(TEXT_FAINT).build())
         .child(SizedBox(0.0, 10.0).build())
         .child(display_view)
         .child(SizedBox(0.0, 12.0).build())
@@ -194,7 +194,7 @@ entry fn start() -> u64 {
         .build();
 
     // The pane centered in the viewer; the modal overlays it when open.
-    let page = Container().color(PAGE_BG).alignment(Align::Center).child(pane).build();
+    let page = Container().color(sv(PAGE_BG)).alignment(Align::Center).child(pane).build();
     mount(Stack().fit(StackFit::Expand).child(page).child(modal).build());
     return 0;
 }
@@ -205,11 +205,11 @@ entry fn start() -> u64 {
 fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
     let face = Container()
         .width_height(220.0, 48.0)
-        .radius(12.0)
-        .color(bg)
+        .radius(sv(12.0f64))
+        .color(sv(bg))
         .shadow(shade, 14.0, 0.0, 6.0)
         .alignment(Align::Center)
-        .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
+        .child(Text().text(sv(label)).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
         .on_click(cb)
@@ -222,11 +222,11 @@ fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
 fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
     let face = Container()
         .width_height(220.0, 48.0)
-        .radius(12.0)
-        .color(START)
+        .radius(sv(12.0f64))
+        .color(sv(START))
         .shadow(START_SHADOW, 14.0, 0.0, 6.0)
         .alignment(Align::Center)
-        .child(Text().text_bound(label).font_size(15.0).color(BTN_FG).build())
+        .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
         .build();
     return PointerInteract()
         .on_click(cb)
@@ -239,10 +239,10 @@ fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
 fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
     let face = Container()
         .padding(10.0)
-        .radius(10.0)
+        .radius(sv(10.0f64))
         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-        .color(CARD_BG)
-        .child(Text().text(label).font_size(13.0).color(TEXT_MUTED).build())
+        .color(sv(CARD_BG))
+        .child(Text().text(sv(label)).font_size(13.0).color(TEXT_MUTED).build())
         .build();
     return MouseRegion()
         .cursor(Cursor::Pointer)
@@ -262,16 +262,16 @@ fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
 fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
     return Container()
         .padding(6.0)
-        .radius(999.0)
+        .radius(sv(999.0f64))
         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-        .color(CARD_BG)
+        .color(sv(CARD_BG))
         .child(
             Row()
                 .main_axis_size(MainAxisSize::Min)
                 .cross_alignment(CrossAlign::Center)
-                .child(Container().width_height(7.0, 7.0).radius(999.0).color_bound(dot).build())
+                .child(Container().width_height(7.0, 7.0).radius(sv(999.0f64)).color(dot).build())
                 .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text_bound(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
+                .child(Text().text(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
                 .build(),
         )
         .build();
@@ -280,7 +280,7 @@ fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
 // The 72px display twin (the tint is the Condition's branch — boa's
 // displayColor$ derive, spelled as two static tints over one bound text).
 fn display_text(color: u64, disp: Readable<str>) -> View {
-    return Text().text_bound(disp).font_size(72.0).color(color).query_key("display").build();
+    return Text().text(disp).font_size(72.0).color(color).query_key("display").build();
 }
 
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
@@ -290,30 +290,30 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
     let field = Input()
         .controller(ctrl)
         .undo(undo)
-        .placeholder("Positive integer")
+        .placeholder(sv("Positive integer"))
         .font_size(14.0)
         .width_height(332.0, 32.0)
         .query_key("edit-input")
         .build();
 
     let card = Container()
-        .width(380.0)
-        .radius(14.0)
+        .width(sv(380.0f64))
+        .radius(sv(14.0f64))
         .padding(22.0)
-        .color(CARD_BG)
+        .color(sv(CARD_BG))
         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
                 .main_axis_size(MainAxisSize::Min)
                 .cross_alignment(CrossAlign::Stretch)
-                .child(Text().text("Set duration").font_size(18.0).color(TEXT).build())
+                .child(Text().text(sv("Set duration")).font_size(18.0).color(TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
-                .child(Text().text("Enter a positive integer (seconds).").font_size(13.0).color(TEXT_MUTED).build())
+                .child(Text().text(sv("Enter a positive integer (seconds).")).font_size(13.0).color(TEXT_MUTED).build())
                 .child(SizedBox(0.0, 16.0).build())
                 .child(
                     Container()
                         .padding(4.0)
-                        .radius(8.0)
+                        .radius(sv(8.0f64))
                         .border(CARD_BORDER, 1.0, BorderPosition::Inside)
                         .child(field)
                         .build(),
@@ -335,11 +335,11 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
                                         .child(
                                             Container()
                                                 .width_height(220.0, 48.0)
-                                                .radius(12.0)
-                                                .color(START)
+                                                .radius(sv(12.0f64))
+                                                .color(sv(START))
                                                 .shadow(START_SHADOW, 14.0, 0.0, 6.0)
                                                 .alignment(Align::Center)
-                                                .child(Text().text("Save").font_size(15.0).color(BTN_FG).build())
+                                                .child(Text().text(sv("Save")).font_size(15.0).color(BTN_FG).build())
                                                 .build(),
                                         )
                                         .build(),
@@ -358,7 +358,7 @@ fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel
         .child(card)
         .build();
     let scrim = Container()
-        .color(BACKDROP)
+        .color(sv(BACKDROP))
         .alignment(Align::Center)
         .child(inner)
         .build();

@@ -14,7 +14,7 @@ use tur_kit::handles::{ View, list_new, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
 use tur_kit::layout::grid_table::{ Table, TableCols };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::text::core::{ Text };
 
 // The planet data (pipe-joined slots — the row builder indexes by row).
@@ -34,7 +34,7 @@ entry fn start() {
         rows.push(f"p{i}");
         i = i + 1;
     }
-    let rows_atom = source<opaque>(rows.raw());
+    let rows_src = source<opaque>(rows.raw());
 
     // Per-column geometry: extent 150 / flex 1 / flex 2 (min 120) — the
     // widths resolve against the table width once, and the header + every
@@ -43,14 +43,14 @@ entry fn start() {
 
     let table = Table()
         .columns(cols)
-        .rows_atom(rows_atom)
+        .rows(rows_src)
         .header_builder(header_cell)
         .row_builder(planet_cell)
         .stripes(0x00000000u64, STRIPE)
         .query_key("table-basic")
         .build();
 
-    mount(Expanded().flex(1.0).child(Container().color(0x0B1220FFu64).child(table).build()).build());
+    mount(Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(table).build()).build());
 }
 
 // The i'th '|'-separated slot of a data string.
@@ -82,7 +82,7 @@ fn header_cell(col: u64) -> View {
     }
     return Container()
         .padding(8.0)
-        .child(Text().text(label).font_size(12.0).color(HEADER_FG).build())
+        .child(Text().text(sv(label)).font_size(12.0).color(HEADER_FG).build())
         .build();
 }
 
@@ -97,5 +97,5 @@ fn planet_cell(row: u64, col: u64) -> View {
     } else {
         text = slot(P_DIST, row);
     }
-    return Container().padding(8.0).child(Text().text(text).font_size(14.0).color(CELL_FG).build()).build();
+    return Container().padding(8.0).child(Text().text(sv(text)).font_size(14.0).color(CELL_FG).build()).build();
 }

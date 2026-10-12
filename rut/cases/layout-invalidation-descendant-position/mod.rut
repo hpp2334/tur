@@ -7,15 +7,15 @@ use tur_kit::flags::{ MainAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Row };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, bridge, source, sv };
 
 entry fn start() -> u64 {
     let width: Readable<f64> = source<f64>(100.0);
 
-    let mut outer = Container().width_bound(width);
+    let mut outer = Container().width(width);
     let row = Row()
         .main_alignment(MainAlign::End)
-        .child(Container().width_height(20.0, 20.0).color(0x22C55EFFu64).query_key("tracker").build());
+        .child(Container().width_height(20.0, 20.0).color(sv(0x22C55EFFu64)).query_key("tracker").build());
     outer.child(row.build());
     mount(outer.build());
     return width.atom_id();

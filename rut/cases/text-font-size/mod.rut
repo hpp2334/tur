@@ -3,10 +3,11 @@
 
 use tur_kit::control_flow::control::{ Fragment };
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let small = Text().text("Hello").font_size(14.0);
-    let large = Text().text("Hello").font_size(28.0);
+    let small = Text().text(sv("Hello")).font_size(14.0);
+    let large = Text().text(sv("Hello")).font_size(28.0);
     mount(Fragment().children([small.build(), large.build()]).build());
 }

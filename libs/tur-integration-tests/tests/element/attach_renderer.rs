@@ -29,9 +29,10 @@ const SOURCE: &str = r##"
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let b = Container().width_height(40.0, 40.0).color(0x336699FFu64);
+    let b = Container().width_height(40.0, 40.0).color(sv(0x336699FFu64));
     mount(b.build());
 }
 "##;

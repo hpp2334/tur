@@ -99,7 +99,7 @@ use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Row };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
-use tur_kit::reactive::{ rs_derive };
+use tur_kit::reactive::{ rs_derive, sv };
 
 fn label(v: f64) -> str {
     return f"t={v as u64}";
@@ -114,7 +114,7 @@ entry fn start() -> u64 {
         let mut row = Row();
         let mut j = 0;
         while (j < 12) {
-            let b = Container().width_height(30.0, 30.0).color(0x208040FFu64);
+            let b = Container().width_height(30.0, 30.0).color(sv(0x208040FFu64));
             row.child(b.build());
             j += 1;
         }
@@ -149,18 +149,19 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
     let mut content = Column();
     let mut i = 0;
     while (i < 200) {
-        let b = Container().width_height(10.0, 40.0).color(0x204080FFu64);
+        let b = Container().width_height(10.0, 40.0).color(sv(0x204080FFu64));
         content.child(b.build());
         i += 1;
     }
     let scroller = ScrollView().axis(Axis::Vertical).initial_offset(0.0).child(content.build()).build();
-    let root = Column().child(Expanded().flex(1.0).child(scroller).build());
+    let root = Column().child(Expanded().flex(sv(1.0f64)).child(scroller).build());
     mount(root.build());
 }
 "##,
@@ -218,6 +219,7 @@ use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
 use tur_anim_kit::{ Opacity };
 use tur_anim_kit::{ anim_ctrl };
+use tur_kit::reactive::{ sv };
 
 entry fn start() -> u64 {
     let alpha = rs_source_f64();
@@ -225,7 +227,7 @@ entry fn start() -> u64 {
     let mut col = Column();
     let mut i = 0;
     while (i < 50) {
-        let b = Container().width_height(40.0, 40.0).color(0x3060C0FFu64);
+        let b = Container().width_height(40.0, 40.0).color(sv(0x3060C0FFu64));
         col.child(b.build());
         i += 1;
     }
@@ -234,7 +236,7 @@ entry fn start() -> u64 {
     // into the bound opacity atom — every frame differs.
     let ctrl = anim_ctrl(alpha, 1000.0, "linear", 18446744073709551615, a_tick, a_end);
     ctrl.forward();
-    mount(Opacity(0.0).bound(alpha).child(col.build()).build());
+    mount(Opacity(0.0).value(alpha).child(col.build()).build());
     return alpha;
 }
 

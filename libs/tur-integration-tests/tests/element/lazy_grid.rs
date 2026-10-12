@@ -12,11 +12,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
+    let b = Container().width_height(100.0, 100.0).color(sv(0xC8C8C8FFu64));
     return b.build();
 }
 
@@ -24,7 +24,7 @@ entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(10000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded().flex(1.0).child(lg).build();
+    let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
     return count.atom_id();
 }
@@ -154,11 +154,11 @@ fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    let b = Container().width_height(100.0, 100.0).color(0xC8C8C8FFu64);
+    let b = Container().width_height(100.0, 100.0).color(sv(0xC8C8C8FFu64));
     return b.build();
 }
 
@@ -166,7 +166,7 @@ entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(100.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded().flex(1.0).child(lg).build();
+    let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
     return opaque(AppContext { count: count });
 }
@@ -291,11 +291,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    return Container().color(0xC8C8C8FFu64).build();
+    return Container().color(sv(0xC8C8C8FFu64)).build();
 }
 
 entry fn start() -> u64 {
@@ -309,7 +309,7 @@ entry fn start() -> u64 {
         .overscan(2)
         .query_key("lg")
         .build();
-    mount(Expanded().flex(1.0).child(grid).build());
+    mount(Expanded().flex(sv(1.0f64)).child(grid).build());
     return count.atom_id();
 }
 "#,
@@ -374,11 +374,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    let b = Container().width_height(100.0, 100.0).color(0xB4B4DCFFu64);
+    let b = Container().width_height(100.0, 100.0).color(sv(0xB4B4DCFFu64));
     return b.build();
 }
 
@@ -386,7 +386,7 @@ entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(1000.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).axis(Axis::Horizontal).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded().flex(1.0).child(lg).build();
+    let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
     return count.atom_id();
 }
@@ -468,11 +468,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    let b = Container().width_height(145.0, 145.0).color(0xC8C8C8FFu64);
+    let b = Container().width_height(145.0, 145.0).color(sv(0xC8C8C8FFu64));
     return b.build();
 }
 
@@ -480,7 +480,7 @@ entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(12.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded().flex(1.0).child(lg).build();
+    let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
     return count.atom_id();
 }
@@ -524,11 +524,11 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
-use tur_kit::reactive::{ Source, source };
+use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    let b = Container().width_height(145.0, 145.0).color(0xB4B4DCFFu64);
+    let b = Container().width_height(145.0, 145.0).color(sv(0xB4B4DCFFu64));
     return b.build();
 }
 
@@ -536,7 +536,7 @@ entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(6.0);
     let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
-    let root = Expanded().flex(1.0).child(lg).build();
+    let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
     return opaque(AppContext { count: count });
 }

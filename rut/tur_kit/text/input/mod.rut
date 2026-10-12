@@ -29,27 +29,28 @@ impl Input {
     input_size(self.spec, w, h);
     return self;
   }
-  pub fn obscure(mut self, v: bool) -> Self {
-    input_obscure(self.spec, v);
-    return self;
-  }
-  // The reactive reveal toggle: masking rides a live bool (the bound
-  // props take the handle).
-  pub fn obscure_bound(mut self, r: reactive::Readable<bool>) -> Self {
-    input_obscure_bound(self.spec, r.atom_id());
+  // The ONE reactive reveal toggle over `Readable<bool>`: masking rides a
+  // live source, an `sv()` literal lowers through the static row.
+  pub fn obscure(mut self, r: reactive::Readable<bool>) -> Self {
+    if (r.atom_id() == 0) {
+      input_obscure(self.spec, r.get());
+    } else {
+      input_obscure_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn obscure_char(mut self, v: str) -> Self {
     input_obscure_char(self.spec, v);
     return self;
   }
-  pub fn placeholder(mut self, v: str) -> Self {
-    input_placeholder(self.spec, v);
-    return self;
-  }
-  // The reactive placeholder: the hint rides a live str.
-  pub fn placeholder_bound(mut self, r: reactive::Readable<str>) -> Self {
-    input_placeholder_bound(self.spec, r.atom_id());
+  // The ONE reactive placeholder over `Readable<str>`: the hint rides a
+  // live source, an `sv()` literal lowers through the static row.
+  pub fn placeholder(mut self, r: reactive::Readable<str>) -> Self {
+    if (r.atom_id() == 0) {
+      input_placeholder(self.spec, r.get());
+    } else {
+      input_placeholder_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn color(mut self, packed: u64) -> Self {

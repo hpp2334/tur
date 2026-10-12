@@ -47,6 +47,7 @@ use tur_kit::flags::{ CrossAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -54,9 +55,9 @@ entry fn start() -> u64 {
     // a 400×40 band above the rest of the column.
     let header = Container()
         .width_height(400.0, 40.0)
-        .color(0x0F172AFFu64)
+        .color(sv(0x0F172AFFu64))
         .query_key("fs/header")
-        .child(Text().text("Gallery").font_size(16.0).build())
+        .child(Text().text(sv("Gallery")).font_size(16.0).build())
         .build();
     let col = Column()
         .query_key("fs/col")
@@ -100,6 +101,7 @@ use tur_kit::flags::{ CrossAlign };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -107,15 +109,15 @@ entry fn start() -> u64 {
     // unset per the box_size idiom) above a padded 150-wide row container.
     let head = Container()
         .width_height(0.0, 32.0)
-        .color(0x1E293BFFu64)
+        .color(sv(0x1E293BFFu64))
         .query_key("fs/head")
-        .child(Text().text("PLANET").font_size(12.0).build())
+        .child(Text().text(sv("PLANET")).font_size(12.0).build())
         .build();
     let row = Container()
         .width_height(150.0, 0.0)
         .padding(8.0)
         .query_key("fs/row0")
-        .child(Text().text("Mercury").font_size(14.0).build())
+        .child(Text().text(sv("Mercury")).font_size(14.0).build())
         .build();
     let col = Column()
         .query_key("fs/col")

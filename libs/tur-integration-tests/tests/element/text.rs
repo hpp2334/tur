@@ -335,12 +335,13 @@ fn text_layout_is_dpr_invariant() {
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let b = Container()
         .width_height(164.0, 40.0)
-        .child(Text().text("Last Week Todos").font_size(14.0).max_lines(1).ellipsis().build());
+        .child(Text().text(sv("Last Week Todos")).font_size(14.0).max_lines(1).ellipsis().build());
     mount(b.build());
 }
 "#;

@@ -27,7 +27,7 @@ entry fn start() {
     let label: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
         return f"Count: {ctx.get<i64>(count)}";
     });
-    let col = Column().child(Text().text_bound(label).query_key("rut/i64").build());
+    let col = Column().child(Text().text(label).query_key("rut/i64").build());
     mount(col.build());
 }
 "#;

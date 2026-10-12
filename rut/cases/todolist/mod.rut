@@ -28,7 +28,7 @@ use tur_kit::image::{ image_resource_svg };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
-use tur_kit::reactive::{ DeriveCtx, MutationCtx, Source, bridge, derive, source };
+use tur_kit::reactive::{ DeriveCtx, MutationCtx, Source, bridge, derive, source, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
@@ -61,9 +61,9 @@ entry fn start() -> u64 {
             Column()
                 .cross_alignment(CrossAlign::Start)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text("Tasks").font_size(26.0).color(theme::TEXT).build())
+                .child(Text().text(sv("Tasks")).font_size(26.0).color(theme::TEXT).build())
                 .child(SizedBox(0.0, 4.0).build())
-                .child(Text().text_bound(count).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-count").build())
+                .child(Text().text(count).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-count").build())
                 .build(),
         )
         .child(task::add_button(add_open, ico))
@@ -82,14 +82,14 @@ entry fn start() -> u64 {
         .build();
 
     let page = Container()
-        .color(theme::PAGE_BG)
+        .color(sv(theme::PAGE_BG))
         .padding(22.0)
         .child(
             Column()
                 .cross_alignment(CrossAlign::Stretch)
                 .child(header)
                 .child(SizedBox(0.0, 18.0).build())
-                .child(Expanded().flex(1.0).child(scroller).build())
+                .child(Expanded().flex(sv(1.0f64)).child(scroller).build())
                 .build(),
         )
         .build();
@@ -102,13 +102,13 @@ entry fn start() -> u64 {
             .child(page)
             .child(
                 Condition(add_open)
-                    .then_build(fn () -> View { return Positioned().left(0.0).top(0.0).right(0.0).bottom(0.0).child(modals::add_modal(tasks, n, done, add_open, ico)).build(); })
+                    .then_build(fn () -> View { return Positioned().left(sv(0.0f64)).top(sv(0.0f64)).right(0.0).bottom(0.0).child(modals::add_modal(tasks, n, done, add_open, ico)).build(); })
                     .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
                     .build(),
             )
             .child(
                 Condition(rm_open)
-                    .then_build(fn () -> View { return Positioned().left(0.0).top(0.0).right(0.0).bottom(0.0).child(modals::remove_modal(tasks, n, done, rm_tgt, rm_open, ico)).build(); })
+                    .then_build(fn () -> View { return Positioned().left(sv(0.0f64)).top(sv(0.0f64)).right(0.0).bottom(0.0).child(modals::remove_modal(tasks, n, done, rm_tgt, rm_open, ico)).build(); })
                     .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
                     .build(),
             )

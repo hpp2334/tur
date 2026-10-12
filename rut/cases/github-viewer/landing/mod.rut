@@ -10,7 +10,7 @@ use tur_kit::handles::{ TextCtrl, UndoCtrl, View };
 use tur_kit::image::{ Image };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
-use tur_kit::reactive::{ Mutation, MutationCtx, mutate };
+use tur_kit::reactive::{ Mutation, MutationCtx, mutate, sv };
 use tur_kit::text::core::{ Text };
 use tur_kit::text::input::{ Input };
 
@@ -21,19 +21,19 @@ pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_bro
     let field = Column()
         .cross_alignment(CrossAlign::Stretch)
         .main_axis_size(MainAxisSize::Min)
-        .child(Text().text("Repository").font_size(11.0).color(theme::TEXT_SUBTLE).query_key("gh-field-label").build())
+        .child(Text().text(sv("Repository")).font_size(11.0).color(theme::TEXT_SUBTLE).query_key("gh-field-label").build())
         .child(SizedBox(0.0, 6.0).build())
         .child(
             Container()
-                .radius(7.0)
+                .radius(sv(7.0f64))
                 .padding(9.0)
-                .color(theme::INPUT_BG)
+                .color(sv(theme::INPUT_BG))
                 .border(theme::INPUT_BORDER, 1.0, BorderPosition::Inside)
                 .child(
                     Input()
                         .controller(ctrl)
                         .undo(undo)
-                        .placeholder("facebook/react")
+                        .placeholder(sv("facebook/react"))
                         .font_size(14.0)
                         .width_height(0.0, 22.0)
                         .query_key("gh-input")
@@ -45,10 +45,10 @@ pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_bro
     // Fixed 360 card (the boa card capped at `min(440, vw - 44)`; the
     // playground's viewer pane is ~390 of content — 440 overflows it).
     let card = Container()
-        .width(360.0)
+        .width(sv(360.0f64))
         .padding(34.0)
-        .radius(14.0)
-        .color(theme::PANEL)
+        .radius(sv(14.0f64))
+        .color(sv(theme::PANEL))
         .border(theme::BORDER, 1.0, BorderPosition::Inside)
         .child(
             Column()
@@ -56,9 +56,9 @@ pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_bro
                 .main_axis_size(MainAxisSize::Min)
                 .child(brand_mark(gh))
                 .child(SizedBox(0.0, 18.0).build())
-                .child(Text().text("Browse a public repo").font_size(18.0).color(theme::TEXT).build())
+                .child(Text().text(sv("Browse a public repo")).font_size(18.0).color(theme::TEXT).build())
                 .child(SizedBox(0.0, 6.0).build())
-                .child(Text().text("Enter a repo as \"owner/name\" to explore its files.").font_size(13.0).color(theme::TEXT_MUTED).build())
+                .child(Text().text(sv("Enter a repo as \"owner/name\" to explore its files.")).font_size(13.0).color(theme::TEXT_MUTED).build())
                 .child(SizedBox(0.0, 20.0).build())
                 .child(field)
                 .child(SizedBox(0.0, 8.0).build())
@@ -66,7 +66,7 @@ pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_bro
                 .child(SizedBox(0.0, 8.0).build())
                 .child(Row().main_alignment(MainAlign::End).child(ui::pill("gh-browse", "Browse", b_browse, theme::ACCENT, theme::ACCENT_FG)).build())
                 .child(SizedBox(0.0, 22.0).build())
-                .child(Text().text("Try one of these").font_size(11.0).color(theme::TEXT_SUBTLE).build())
+                .child(Text().text(sv("Try one of these")).font_size(11.0).color(theme::TEXT_SUBTLE).build())
                 .child(SizedBox(0.0, 8.0).build())
                 .child(suggestion_row(b_sug0, b_sug1, b_sug2))
                 .build(),
@@ -80,8 +80,8 @@ pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_bro
 fn brand_mark(gh: u64) -> View {
     let mark = Container()
         .width_height(40.0, 40.0)
-        .radius(10.0)
-        .color(theme::ACCENT_SOFT)
+        .radius(sv(10.0f64))
+        .color(sv(theme::ACCENT_SOFT))
         .alignment(Align::Center)
         .child(Image(gh).width(24.0).height(24.0).query_key("gh-mark").build())
         .build();

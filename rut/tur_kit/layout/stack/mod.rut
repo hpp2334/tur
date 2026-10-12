@@ -53,23 +53,25 @@ impl Positioned {
   [constructor] pub fn builder() -> Self {
     return Self { spec: pos_new() };
   }
-  pub fn left(mut self, v: f64) -> Self {
-    pos_left(self.spec, v);
+  // The ONE reactive anchors over `Readable<f64>` (drag-to-move writes
+  // the live atom; a bound anchor's 0 is a real coordinate, same as the
+  // static rows — anchors are verbatim, absence is never calling the
+  // row): a live source rides the bind row, an `sv()` literal lowers
+  // through the static row.
+  pub fn left(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      pos_left(self.spec, r.get());
+    } else {
+      pos_left_bound(self.spec, r.atom_id());
+    }
     return self;
   }
-  pub fn top(mut self, v: f64) -> Self {
-    pos_top(self.spec, v);
-    return self;
-  }
-  // The reactive anchors (drag-to-move writes the live atom; a bound
-  // anchor's 0 is a real coordinate, same as the static rows — anchors
-  // are verbatim, absence is never calling the row).
-  pub fn left_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    pos_left_bound(self.spec, r.atom_id());
-    return self;
-  }
-  pub fn top_bound(mut self, r: reactive::Readable<f64>) -> Self {
-    pos_top_bound(self.spec, r.atom_id());
+  pub fn top(mut self, r: reactive::Readable<f64>) -> Self {
+    if (r.atom_id() == 0) {
+      pos_top(self.spec, r.get());
+    } else {
+      pos_top_bound(self.spec, r.atom_id());
+    }
     return self;
   }
   pub fn right(mut self, v: f64) -> Self {

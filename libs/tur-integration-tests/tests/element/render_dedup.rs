@@ -44,10 +44,10 @@ fn identical_frames_render_once() {
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 
 entry fn start() {
-    let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
+    let b = Container().width_height(100.0, 50.0).color(sv(0xFF0000FFu64));
     mount(b.build());
 }
 "#,
@@ -99,7 +99,7 @@ entry fn start() -> opaque {
     // The boot brush seeds at the mint.
     let color: Source<u64> = source<u64>(0xFF0000FFu64);
 
-    let b = Container().width_height(100.0, 50.0).color_bound(color);
+    let b = Container().width_height(100.0, 50.0).color(color);
     mount(b.build());
     return opaque(AppContext { color: color });
 }
@@ -163,13 +163,13 @@ fn attach_resets_dedup() {
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
 
 entry fn start() {
-    let b = Container().width_height(100.0, 50.0).color(0xFF0000FFu64);
+    let b = Container().width_height(100.0, 50.0).color(sv(0xFF0000FFu64));
     mount(b.build());
 }
 "#,

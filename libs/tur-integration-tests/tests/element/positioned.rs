@@ -140,7 +140,7 @@ entry fn start() -> opaque {
     let x: Source<f64> = source<f64>(30.0);
     let y: Source<f64> = source<f64>(40.0);
     let stack = Stack().query_key("pos/board").child(
-        Positioned().left_bound(x).top_bound(y)
+        Positioned().left(x).top(y)
             .child(Container().width_height(50.0, 50.0).query_key("pos/pill").build())
             .build(),
     ).build();

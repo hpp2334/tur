@@ -14,10 +14,11 @@ const TREE_RUT: &str = r#"
 
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let col = Column().child(Text().text("host-drain rpc").query_key("probe").build());
+    let col = Column().child(Text().text(sv("host-drain rpc")).query_key("probe").build());
     mount(col.build());
 }
 "#;

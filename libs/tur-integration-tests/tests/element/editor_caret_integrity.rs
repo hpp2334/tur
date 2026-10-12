@@ -32,7 +32,7 @@ use tur_kit::control_flow::control::{ Switch };
 use tur_kit::flags::{ Clip };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::text::input::{ Input };
 
 struct EditorCx {
@@ -69,9 +69,9 @@ fn start() -> EditorCx {
         .build();
     let pane = Container().child(editor).build();
     let slot = Switch().value(mode)
-        .cases("view", Container().width(0.0).height(0.0).clip(Clip::HardEdge).child(pane).build())
-        .cases("split", Container().width(200.0).child(pane).build())
-        .fallback(Container().width(400.0).child(pane).build())
+        .cases("view", Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge).child(pane).build())
+        .cases("split", Container().width(sv(200.0f64)).child(pane).build())
+        .fallback(Container().width(sv(400.0f64)).child(pane).build())
         .query_key("slot")
         .build();
     mount(slot);

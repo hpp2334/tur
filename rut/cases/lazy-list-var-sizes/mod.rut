@@ -16,7 +16,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ ListHandle, View, list_new, math_sin, mount, str_parse_f64 };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv };
 use tur_kit::scroll::{ LazyList };
 use tur_kit::text::core::{ Text };
 
@@ -48,12 +48,12 @@ entry fn start() {
                 .child(
                     Container()
                         .padding(10.0)
-                        .radius(8.0)
-                        .color(0x4F46E5FFu64)
+                        .radius(sv(8.0f64))
+                        .color(sv(0x4F46E5FFu64))
                         .child(
                             Condition(axis)
-                                .then_build(fn () -> View { return Text().text("Axis: Vertical  (click to flip)").font_size(13.0).color(0xFFFFFFFFu64).build(); })
-                                .else_build(fn () -> View { return Text().text("Axis: Horizontal  (click to flip)").font_size(13.0).color(0xFFFFFFFFu64).build(); })
+                                .then_build(fn () -> View { return Text().text(sv("Axis: Vertical  (click to flip)")).font_size(13.0).color(0xFFFFFFFFu64).build(); })
+                                .else_build(fn () -> View { return Text().text(sv("Axis: Horizontal  (click to flip)")).font_size(13.0).color(0xFFFFFFFFu64).build(); })
                                 .build(),
                         )
                         .build(),
@@ -63,8 +63,8 @@ entry fn start() {
         .build();
 
     let list_host = Container()
-        .radius(8.0)
-        .color(0x0B1220FFu64)
+        .radius(sv(8.0f64))
+        .color(sv(0x0B1220FFu64))
         .child(Each(items).item_builder(fn (_i: u64, _s: str) -> View {
             return list_of(axis, count);
         }).build())
@@ -74,10 +74,10 @@ entry fn start() {
         .cross_alignment(CrossAlign::Start)
         .child(toggle)
         .child(SizedBox(0.0, 12.0).build())
-        .child(Expanded().flex(1.0).child(list_host).build())
+        .child(Expanded().flex(sv(1.0f64)).child(list_host).build())
         .build();
 
-    mount(Container().color(0x020617FFu64).padding(16.0).child(col).build());
+    mount(Container().color(sv(0x020617FFu64)).padding(16.0).child(col).build());
 }
 
 // A fresh one-item list — rewriting it re-invokes the Each builder (the
@@ -205,17 +205,17 @@ fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> V
         bar_h = 26.0;
     }
     let label = f"#{i}  h={main as u64}  bar={cross as u64}";
-    let bar = Container().width_height(cross, bar_h).radius(4.0).color(bar_color).build();
+    let bar = Container().width_height(cross, bar_h).radius(sv(4.0f64)).color(sv(bar_color)).build();
     let line = Row()
         .main_axis_size(MainAxisSize::Min)
         .cross_alignment(CrossAlign::Center)
         .child(bar)
         .child(SizedBox(10.0, 0.0).build())
-        .child(Text().text(label).font_size(11.0).color(LABEL).build())
+        .child(Text().text(sv(label)).font_size(11.0).color(LABEL).build())
         .build();
     return Container()
-        .height(main)
-        .color(zebra)
+        .height(sv(main))
+        .color(sv(zebra))
         .padding(8.0)
         .alignment(Align::CenterLeft)
         .query_key("var-sizes-item")
@@ -232,18 +232,18 @@ fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) ->
     }
     let count_label = f"#{i}";
     let width_label = f"w={main as u64}";
-    let bar = Container().width_height(bar_w, cross).radius(4.0).color(bar_color).build();
+    let bar = Container().width_height(bar_w, cross).radius(sv(4.0f64)).color(sv(bar_color)).build();
     let line = Column()
         .main_axis_size(MainAxisSize::Min)
         .cross_alignment(CrossAlign::Center)
         .child(bar)
         .child(SizedBox(0.0, 8.0).build())
-        .child(Text().text(count_label).font_size(11.0).color(LABEL).build())
-        .child(Text().text(width_label).font_size(10.0).color(LABEL_FAINT).build())
+        .child(Text().text(sv(count_label)).font_size(11.0).color(LABEL).build())
+        .child(Text().text(sv(width_label)).font_size(10.0).color(LABEL_FAINT).build())
         .build();
     return Container()
-        .width(main)
-        .color(zebra)
+        .width(sv(main))
+        .color(sv(zebra))
         .padding(8.0)
         .alignment(Align::TopCenter)
         .child(line)

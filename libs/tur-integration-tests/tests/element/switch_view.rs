@@ -10,7 +10,7 @@ use tur_integration_tests::TurTestApp;
 const RUNTIME: &str = r#"
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::handles::{ mount };
-use tur_kit::reactive::{ Source, entry_ctx, source };
+use tur_kit::reactive::{ Source, entry_ctx, source, sv };
 use tur_kit::text::core::{ Text };
 
 struct AppContext {
@@ -21,9 +21,9 @@ entry fn start() -> opaque {
     let key: Source<str> = source<str>("a");
 
     let mut sw = Switch().value(key);
-    sw.cases("a", Text().text("AAA").query_key("case_a").build());
-    sw.cases("b", Text().text("BBB").query_key("case_b").build());
-    sw.fallback(Text().text("FALL").query_key("case_fallback").build());
+    sw.cases("a", Text().text(sv("AAA")).query_key("case_a").build());
+    sw.cases("b", Text().text(sv("BBB")).query_key("case_b").build());
+    sw.fallback(Text().text(sv("FALL")).query_key("case_fallback").build());
     mount(sw.build());
     return opaque(AppContext { key: key });
 }
@@ -132,7 +132,7 @@ const DERIVED_RUNTIME: &str = r#"
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::handles::{ mount };
 use tur_kit::reactive::{
-    DeriveCtx, MutationCtx, Readable, Source, derive, entry_ctx, mutate, source,
+    DeriveCtx, MutationCtx, Readable, Source, derive, entry_ctx, mutate, source, sv,
 };
 use tur_kit::text::core::{ Text };
 
@@ -160,9 +160,9 @@ entry fn start() -> opaque {
     // The unified value prop over the derived handle (the kind rides the
     // handle: a derived binds through the derive rail).
     let mut sw = Switch().value(derived);
-    sw.cases("a", Text().text("AAA").query_key("d_case_a").build());
-    sw.cases("b", Text().text("BBB").query_key("d_case_b").build());
-    sw.fallback(Text().text("FALL").query_key("d_case_fallback").build());
+    sw.cases("a", Text().text(sv("AAA")).query_key("d_case_a").build());
+    sw.cases("b", Text().text(sv("BBB")).query_key("d_case_b").build());
+    sw.fallback(Text().text(sv("FALL")).query_key("d_case_fallback").build());
     mount(sw.build());
     return opaque(AppContext { key: key });
 }

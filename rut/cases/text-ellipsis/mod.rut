@@ -1,11 +1,12 @@
 // text-ellipsis: the long line ellipsized at two lines.
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let t = Text()
-        .text("Hello World this is a long text that should wrap")
+        .text(sv("Hello World this is a long text that should wrap"))
         .font_size(14.0)
         .max_lines(2)
         .ellipsis();

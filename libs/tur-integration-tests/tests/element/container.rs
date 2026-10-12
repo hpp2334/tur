@@ -244,7 +244,7 @@ struct AppContext {
 
 entry fn start() -> opaque {
     let r: Source<f64> = source<f64>(8.0);
-    let card = Container().width_height(100.0, 100.0).radius_bound(r).query_key("rb/box").build();
+    let card = Container().width_height(100.0, 100.0).radius(r).query_key("rb/box").build();
     mount(card);
     return opaque(AppContext { r: r });
 }

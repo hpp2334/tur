@@ -7,7 +7,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ View };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::grid_table::{ Grid };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, sv };
 use tur_kit::text::core::{ Text };
 
 // The 27-tile gallery grid under one (aspect, max_cross) mode. The tile
@@ -63,13 +63,13 @@ fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
         ctx.set<u64>(rings[ii[0] as i32], color::RING_ON);
     });
     let face = Container()
-        .color(color::hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0))
-        .radius(5.0)
-        .child(Text().text(f"{i}").font_size(13.0).color(color::LABEL_FG).build())
+        .color(sv(color::hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0)))
+        .radius(sv(5.0f64))
+        .child(Text().text(sv(f"{i}")).font_size(13.0).color(color::LABEL_FG).build())
         .build();
     let framed = Container()
-        .color_bound(rings[i as i32])
-        .radius(8.0)
+        .color(rings[i as i32])
+        .radius(sv(8.0f64))
         .padding(3.0)
         .child(face)
         .build();
@@ -83,9 +83,9 @@ fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
 pub fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
     let face = Container()
         .padding(7.0)
-        .radius(7.0)
-        .color_bound(r)
-        .child(Text().text(label).font_size(12.0).color(color::CHIP_FG).build())
+        .radius(sv(7.0f64))
+        .color(r)
+        .child(Text().text(sv(label)).font_size(12.0).color(color::CHIP_FG).build())
         .build();
     return MouseRegion()
         .cursor(Cursor::Pointer)

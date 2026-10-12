@@ -34,13 +34,15 @@
 // THIS boundary, at compile time. Nothing callable crosses the boundary
 // as a string. `View` is the user-facing view newtype.
 //
-// Reactive law: ONE prop per reactive-capable name over `Readable<T>`
-// (`text(r)`, `color(r)`, `width(r)`, `flex(r)`, `obscure(r)`, …) with a
-// param-type sugar overload for the literal (`text("hi")`,
-// `color(0xFF'u64)`); the `*_bound` twins are the phase-5 migrants (the
-// test snippets still spell them — thin delegates over the unified
-// props). The literal lane is `StaticValue<T>` (`sv(v)`) for the props
-// without a sugar overload. Sources / derives mint through
+// Reactive law: every reactive-capable prop is ONE method over
+// `Readable<T>` under the plain prop name (`text(r)`, `color(r)`,
+// `width(r)`, `flex(r)`, `obscure(r)`, …). Static values wrap:
+// `text(sv("hi"))`, `color(sv(0xFF..u64))` — the literal lane lowers
+// through the existing static row via the handle's `get()`; reactive
+// lanes bind atoms exactly as the old twin methods did. A twin survives
+// ONLY where an enum lane owns the plain name (`cursor`, `target_anchor`)
+// — documented exceptions, not a regime. Sources /
+// derives mint through
 // `source<T>(v)` / `derive<T>(fn (ctx: DeriveCtx) -> T)`; ALL reads and
 // writes flow through the ctxs (`DeriveCtx` get-only, `MutationCtx`
 // get + set + run) — the handles carry NO public getter (there is no
@@ -57,7 +59,7 @@
 // test migration; the raw-const method overloads below are the same
 // story.
 //
-// Color law: every `packed: u64` color prop (`color` / `color_bound` /
+// Color law: every `packed: u64` color prop (`color` /
 // `placeholder_color` / `cursor_color` / `border` / `shadow` / `span_add`)
 // packs **`0xRRGGBBAA`** — R in bits 31..24, A in bits 7..0. An OPAQUE
 // color is `0xRRGGBBFF`; passing a bare `0xRRGGBB` shifts the channels

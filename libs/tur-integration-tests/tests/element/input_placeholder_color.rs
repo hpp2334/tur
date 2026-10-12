@@ -61,10 +61,11 @@ fn placeholder_default_is_default_text_color_mixed_50pct_alpha() {
         r#"
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
-    let input = Input().placeholder("hint").font_size(20.0).width_height(300.0, 40.0);
+    let input = Input().placeholder(sv("hint")).font_size(20.0).width_height(300.0, 40.0);
     mount(input.build());
 }
 "#,
@@ -95,11 +96,12 @@ fn placeholder_default_follows_explicit_text_color() {
         r#"
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let input = Input()
-        .placeholder("hint")
+        .placeholder(sv("hint"))
         .color(0x143CDCFFu64)
         .font_size(20.0)
         .width_height(300.0, 40.0);
@@ -133,11 +135,12 @@ fn placeholder_default_multiplies_existing_alpha() {
         r#"
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let input = Input()
-        .placeholder("hint")
+        .placeholder(sv("hint"))
         .color(0x000000C8u64)
         .font_size(20.0)
         .width_height(300.0, 40.0);
@@ -170,11 +173,12 @@ fn explicit_placeholder_color_wins() {
         r#"
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let input = Input()
-        .placeholder("hint")
+        .placeholder(sv("hint"))
         .color(0x143CDCFFu64)
         .placeholder_color(0x008000FFu64)
         .font_size(20.0)

@@ -161,10 +161,11 @@ fn blocking_work_does_not_stall_lane_cotenants() {
                 r#"
 
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    mount(Text().text("b").build());
+    mount(Text().text(sv("b")).build());
 }
 
 entry fn ping(_a: u64, _b: f64) {

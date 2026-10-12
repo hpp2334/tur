@@ -10,10 +10,11 @@ const RESIZE_BUNDLE: &str = r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let fill_builder = Container().color(0x404040FFu64);
-    let mut fill = Expanded().flex(1.0).child(fill_builder.build()).query_key("fill").build();
+    let fill_builder = Container().color(sv(0x404040FFu64));
+    let mut fill = Expanded().flex(sv(1.0f64)).child(fill_builder.build()).query_key("fill").build();
     let fill = fill;
     let col = Column().child(fill);
     mount(col.build());

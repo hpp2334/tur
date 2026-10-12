@@ -12,12 +12,13 @@ use tur_integration_tests::TurTestApp;
 const MATH_RUT: &str = r#"
 use tur_kit::handles::{ math_cos, math_sin };
 use tur_kit::handles::{ mount };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let sin_mils = (math_sin(0.5) * 1000.0 + 0.5) as u64;
     let cos_mils = (math_cos(0.5) * 1000.0 + 0.5) as u64;
-    mount(Text().text("math").query_key("math/root").build());
+    mount(Text().text(sv("math")).query_key("math/root").build());
     return sin_mils * 10000 + cos_mils;
 }
 "#;

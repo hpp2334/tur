@@ -9,7 +9,7 @@ use tur_kit::handles::{ View };
 use tur_kit::image::{ Image };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, mutate };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, mutate, sv };
 use tur_kit::text::core::{ Text };
 
 // The indigo New Task pill (plus glyph + label); its mutation opens the
@@ -20,8 +20,8 @@ pub fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
     });
     let face = Container()
         .padding(10.0)
-        .radius(8.0)
-        .color(theme::ACCENT)
+        .radius(sv(8.0f64))
+        .color(sv(theme::ACCENT))
         .shadow(0x4F46E550u64, 10.0, 0.0, 4.0)
         .child(
             Row()
@@ -29,7 +29,7 @@ pub fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
                 .cross_alignment(CrossAlign::Center)
                 .child(icon(ico[2], 13.0))
                 .child(SizedBox(7.0, 0.0).build())
-                .child(Text().text("New Task").font_size(13.0).color(theme::ACCENT_FG).build())
+                .child(Text().text(sv("New Task")).font_size(13.0).color(theme::ACCENT_FG).build())
                 .build(),
         )
         .build();
@@ -62,9 +62,9 @@ pub fn task_row(i: u64, s: str, tasks: Source<opaque>, n: Source<f64>, done: Sou
     let desc = data::item_desc(s);
     let is_done = data::item_done(s);
     let card = Container()
-        .radius(10.0)
+        .radius(sv(10.0f64))
         .padding(14.0)
-        .color(theme::CARD_BG)
+        .color(sv(theme::CARD_BG))
         .border(theme::CARD_BORDER, 1.0, BorderPosition::Inside)
         .shadow(0x0F172A14u64, 6.0, 0.0, 1.0)
         .child(
@@ -72,7 +72,7 @@ pub fn task_row(i: u64, s: str, tasks: Source<opaque>, n: Source<f64>, done: Sou
                 .cross_alignment(CrossAlign::Start)
                 .child(checkbox(i, is_done, tasks, n, done, ico))
                 .child(SizedBox(12.0, 0.0).build())
-                .child(Expanded().flex(1.0).child(title_block(title, desc, is_done)).build())
+                .child(Expanded().flex(sv(1.0f64)).child(title_block(title, desc, is_done)).build())
                 .child(SizedBox(8.0, 0.0).build())
                 .child(delete_button(i, rm_tgt, rm_open, ico))
                 .build(),
@@ -118,16 +118,16 @@ fn checkbox_face(done: bool, ico: [u64]) -> View {
     if (done) {
         return Container()
             .width_height(20.0, 20.0)
-            .radius(6.0)
-            .color(theme::SUCCESS)
+            .radius(sv(6.0f64))
+            .color(sv(theme::SUCCESS))
             .alignment(Align::Center)
             .child(icon(ico[0], 13.0))
             .build();
     }
     return Container()
         .width_height(20.0, 20.0)
-        .radius(6.0)
-        .color(theme::CARD_BG)
+        .radius(sv(6.0f64))
+        .color(sv(theme::CARD_BG))
         .border(theme::INPUT_BORDER, 1.5, BorderPosition::Inside)
         .build();
 }
@@ -138,7 +138,7 @@ fn title_block(title: str, desc: str, done: bool) -> View {
     if (done) {
         fg = theme::TEXT_STRIKE;
     }
-    let t = Text().text(title).font_size(14.0).color(fg).build();
+    let t = Text().text(sv(title)).font_size(14.0).color(fg).build();
     if (desc == "") {
         return Column()
             .cross_alignment(CrossAlign::Start)
@@ -151,7 +151,7 @@ fn title_block(title: str, desc: str, done: bool) -> View {
         .main_axis_size(MainAxisSize::Min)
         .child(t)
         .child(SizedBox(0.0, 3.0).build())
-        .child(Text().text(desc).font_size(12.0).color(theme::TEXT_MUTED).build())
+        .child(Text().text(sv(desc)).font_size(12.0).color(theme::TEXT_MUTED).build())
         .build();
 }
 
@@ -164,8 +164,8 @@ fn delete_button(i: u64, rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u
     });
     let face = Container()
         .width_height(26.0, 26.0)
-        .radius(6.0)
-        .color(theme::SUBTLE)
+        .radius(sv(6.0f64))
+        .color(sv(theme::SUBTLE))
         .alignment(Align::Center)
         .child(icon(ico[1], 13.0))
         .build();

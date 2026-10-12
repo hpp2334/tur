@@ -9,7 +9,7 @@ use tur_kit::gesture::pointer::{ PointerInteract };
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
@@ -34,7 +34,7 @@ entry fn start() -> u64 {
     let col = Column()
         .main_alignment(MainAlign::Center)
         .cross_alignment(CrossAlign::Center)
-        .child(Text().text_bound(label).query_key("count").font_size(36.0).color(0x1E293BFFu64).build())
+        .child(Text().text(label).query_key("count").font_size(36.0).color(0x1E293BFFu64).build())
         .child(
             Row()
                 .main_alignment(MainAlign::Center)
@@ -46,7 +46,7 @@ entry fn start() -> u64 {
         .build();
 
     // The boa page: the slate fill centers the column in the pane.
-    mount(Container().color(0xF8FAFCFFu64).alignment(Align::Center).child(col).build());
+    mount(Container().color(sv(0xF8FAFCFFu64)).alignment(Align::Center).child(col).build());
     return count.atom_id();
 }
 
@@ -54,10 +54,10 @@ entry fn start() -> u64 {
 fn button(b: Mutation<nil>, text: str, key: str) -> View {
     let face = Container()
         .width_height(100.0, 44.0)
-        .radius(8.0)
-        .color(0x6366F1FFu64)
+        .radius(sv(8.0f64))
+        .color(sv(0x6366F1FFu64))
         .alignment(Align::Center)
         .query_key(key)
-        .child(Text().text(text).font_size(18.0).color(0xFFFFFFFFu64).build());
+        .child(Text().text(sv(text)).font_size(18.0).color(0xFFFFFFFFu64).build());
     return PointerInteract().on_click(b).child(face.build()).build();
 }

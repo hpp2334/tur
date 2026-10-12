@@ -4,6 +4,7 @@
 use tur_kit::handles::{ View, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
@@ -15,8 +16,8 @@ entry fn start() {
 fn qkey_button(key: str, label: str) -> View {
     let b = Container()
         .width_height(100.0, 44.0)
-        .color(0x6366F1FFu64)
+        .color(sv(0x6366F1FFu64))
         .query_key(key)
-        .child(Text().text(label).font_size(14.0).build());
+        .child(Text().text(sv(label)).font_size(14.0).build());
     return b.build();
 }

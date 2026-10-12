@@ -24,6 +24,7 @@ use tur_integration_tests::TurTestApp;
 const CHILD_SRC: &str = r#"
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl };
 use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
 use tur_kit::text::input::{ Input };
 
 struct ChildCx {
@@ -34,7 +35,7 @@ struct ChildCx {
 fn start() -> ChildCx {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).undo(undo).placeholder("type here").width_height(200.0, 32.0).query_key("child-input").build();
+    let input = Input().controller(ctrl).undo(undo).placeholder(sv("type here")).width_height(200.0, 32.0).query_key("child-input").build();
     mount(Column().child(input).build());
     return ChildCx { ctrl: ctrl, undo: undo };
 }
@@ -291,24 +292,24 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
+use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let rows = Column();
-    let rows = rows.child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r0").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r1").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r2").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r3").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r4").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r5").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r6").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r7").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r8").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r9").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r10").font_size(12.0).build()).build())
-        .child(Container().width_height(400.0, 100.0).color(0x0F172AFFu64).child(Text().text("r11").font_size(12.0).build()).build());
+    let rows = rows.child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r0")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r1")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r2")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r3")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r4")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r5")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r6")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r7")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r8")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r9")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r10")).font_size(12.0).build()).build())
+        .child(Container().width_height(400.0, 100.0).color(sv(0x0F172AFFu64)).child(Text().text(sv("r11")).font_size(12.0).build()).build());
     mount(ScrollView().axis(Axis::Vertical).child(rows.build()).query_key("child-scroll").build());
     return 0;
 }

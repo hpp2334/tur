@@ -31,8 +31,8 @@ entry fn start() -> opaque {
     let full: Source<str> = source<str>("");
     let desc: Source<str> = source<str>("");
     let col = Column()
-        .child(Text().text_bound(full).query_key("ghj-full").build())
-        .child(Text().text_bound(desc).query_key("ghj-desc").build())
+        .child(Text().text(full).query_key("ghj-full").build())
+        .child(Text().text(desc).query_key("ghj-desc").build())
         .build();
     mount(col);
     return opaque(AppContext { full: full, desc: desc });

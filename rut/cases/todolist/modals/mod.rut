@@ -8,7 +8,7 @@ use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, View, list_new, text_ctrl, undo_ctrl, value_item, value_len };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
-use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, sv };
 use tur_kit::text::core::{ Text };
 use tur_kit::text::input::{ Input };
 
@@ -20,7 +20,7 @@ fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: View) -> 
         .on_click(swallow)
         .child(card)
         .build();
-    let scrim = Container().color(theme::BACKDROP).alignment(Align::Center).child(inner).build();
+    let scrim = Container().color(sv(theme::BACKDROP)).alignment(Align::Center).child(inner).build();
     return PointerInteract()
         .behavior(HitTestBehavior::Opaque)
         .on_click(scrim_tap)
@@ -32,9 +32,9 @@ fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: View) -> 
 fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> View {
     let face = Container()
         .padding(9.0)
-        .radius(7.0)
-        .color(bg)
-        .child(Text().text(label).font_size(13.0).color(fg).build())
+        .radius(sv(7.0f64))
+        .color(sv(bg))
+        .child(Text().text(sv(label)).font_size(13.0).color(fg).build())
         .build();
     return MouseRegion()
         .cursor(Cursor::Pointer)
@@ -53,19 +53,19 @@ fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: st
     return Column()
         .cross_alignment(CrossAlign::Stretch)
         .main_axis_size(MainAxisSize::Min)
-        .child(Text().text(caption).font_size(11.0).color(theme::TEXT_MUTED).build())
+        .child(Text().text(sv(caption)).font_size(11.0).color(theme::TEXT_MUTED).build())
         .child(SizedBox(0.0, 6.0).build())
         .child(
             Container()
-                .radius(7.0)
+                .radius(sv(7.0f64))
                 .padding(9.0)
-                .color(theme::INPUT_BG)
+                .color(sv(theme::INPUT_BG))
                 .border(theme::INPUT_BORDER, 1.0, BorderPosition::Inside)
                 .child(
                     Input()
                         .controller(ctrl)
                         .undo(undo)
-                        .placeholder(placeholder)
+                        .placeholder(sv(placeholder))
                         .font_size(14.0)
                         .color(theme::TEXT)
                         .placeholder_color(theme::TEXT_MUTED)
@@ -108,16 +108,16 @@ pub fn add_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
     });
 
     let card = Container()
-        .width(380.0)
-        .radius(14.0)
+        .width(sv(380.0f64))
+        .radius(sv(14.0f64))
         .padding(22.0)
-        .color(theme::CARD_BG)
+        .color(sv(theme::CARD_BG))
         .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
         .child(
             Column()
                 .cross_alignment(CrossAlign::Stretch)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text("New Task").font_size(17.0).color(theme::TEXT).build())
+                .child(Text().text(sv("New Task")).font_size(17.0).color(theme::TEXT).build())
                 .child(SizedBox(0.0, 16.0).build())
                 .child(field("Title", "What needs doing?", ctrl, undo, "todo-add-title"))
                 .child(SizedBox(0.0, 14.0).build())
@@ -173,18 +173,18 @@ pub fn remove_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
     });
 
     let card = Container()
-        .width(340.0)
-        .radius(14.0)
+        .width(sv(340.0f64))
+        .radius(sv(14.0f64))
         .padding(22.0)
-        .color(theme::CARD_BG)
+        .color(sv(theme::CARD_BG))
         .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
         .child(
             Column()
                 .cross_alignment(CrossAlign::Stretch)
                 .main_axis_size(MainAxisSize::Min)
-                .child(Text().text("Remove task?").font_size(16.0).color(theme::TEXT).build())
+                .child(Text().text(sv("Remove task?")).font_size(16.0).color(theme::TEXT).build())
                 .child(SizedBox(0.0, 8.0).build())
-                .child(Text().text(said).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-rm-msg").build())
+                .child(Text().text(sv(said)).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-rm-msg").build())
                 .child(SizedBox(0.0, 18.0).build())
                 .child(
                     Row()
