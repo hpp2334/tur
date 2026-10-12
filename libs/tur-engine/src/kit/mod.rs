@@ -102,6 +102,7 @@ pub fn tur_kit_pkg() -> Pkg {
     Pkg {
         spec: "tur_kit".to_string(),
         namespace: Some("tur_kit".to_string()),
+        manifest: rut_driver::Manifest::lib("tur_kit", &["tur_host"]),
         body: PkgBody::Source {
             text: TUR_KIT_ROOT.to_string(),
             is_decl: false,

@@ -1130,7 +1130,8 @@ impl RutRuntime {
         // The typed launcher surface (`launch_future` / `sleep` / the
         // competition rows) — upstream's `futures` inline package, rut
         // source over the `__*` engine rows (vendored alongside).
-        let futures = rut_driver::Pkg::source("futures", include_str!("futures.rut"));
+        let futures = rut_driver::Pkg::source("futures", include_str!("futures.rut"))
+            .manifest(rut_driver::Manifest::lib("futures", &["async_host"]));
         // The app pkg: the file tree mounted (the root the body, the mods
         // the declared children — an empty `files.mods` is the historical
         // single-string shape, byte-identical).
@@ -1141,8 +1142,15 @@ impl RutRuntime {
             .collect();
         let mods = rut_driver::mods::mount_rows(&files.root, &rows, rut_driver::Mode::Impl, "mod.rut")
             .map_err(|e| format!("mount module tree: {e}"))?;
+        let mut offered = vec![tur_pkg.clone(), async_host.clone()];
+        offered.extend(preludes.iter().cloned());
+        // D5: the program's declaration defaults host-side to the offered lib
+        // names (upstream's wasm-playground law) — ambient nameability kept.
+        let mut app_heads: Vec<&str> = offered.iter().map(|p| p.spec.as_str()).collect();
+        app_heads.push("futures");
         let app = rut_driver::Pkg {
             spec: "app".to_string(),
+            manifest: rut_driver::Manifest::lib("app", &app_heads),
             body: PkgBody::Source {
                 text: files.root.to_string(),
                 is_decl: false,
@@ -1155,8 +1163,6 @@ impl RutRuntime {
         // snapshot for the boot-side installs comes from the same offer set
         // (core carries no host rows, so the snapshot matches the old
         // session's `host_pkg_context`).
-        let mut offered = vec![tur_pkg.clone(), async_host.clone()];
-        offered.extend(preludes.iter().cloned());
         let mut run = rut_driver::RutRun::new()
             .pkg(tur_pkg)
             .pkg(async_host)

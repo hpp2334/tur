@@ -11,6 +11,7 @@ pub fn net_kit_pkg() -> rut_driver::Pkg {
     rut_driver::Pkg {
         spec: "tur_net_kit".to_string(),
         namespace: Some("tur_net_kit".to_string()),
+        manifest: rut_driver::Manifest::lib("tur_net_kit", &["tur_host", "tur_kit"]),
         body: rut_driver::PkgBody::Source {
             text: NET_KIT_RUT.to_string(),
             is_decl: false,
