@@ -315,10 +315,10 @@ Android build + device debugging live in the **`android-dev` skill** at
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
   `cases_gen.rut`, github-viewer's DIR-SCOPED exception over
-  `rut/cases/github-viewer/` — the raw `tur_host::net` row stays because
-  the net-kit migration is blocked by the upstream cross-package
-  async-fn resolution gap, detail at the case's import sites — and the
-  corpora's named
+  `rut/cases/github-viewer/` — the raw row is gone (explorer rides
+  `tur_net_kit` since the 29bd115 bump); the exception covers the root's
+  load-bearing anchor line, the interning family, detail at the case's
+  import sites — and the corpora's named
   raw-row probes); `rs_derive|rs_derive2|rs_watch` have no call sites
   outside the kit's wrappers (the authored spelling is
   `derive<T>`/`watch<T>`); and the deleted stash rows

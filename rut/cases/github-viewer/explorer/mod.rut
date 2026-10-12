@@ -2,14 +2,14 @@
 // with per-row taps, a selection footer), the net journeys (the repo
 // meta fetch + the directory listing), and the parse/format helpers.
 //
-// Host surface: `net_request` rides RAW (`tur_host::net`) — the net kit's
-// wrapper stays out of reach at this pin: awaiting a cross-package async
-// fn fails to resolve (`tur_net_kit::net_request` mints "unknown
-// function" even in a minimal root-only module — a different upstream gap
-// from the interning family, unmoved by import position / wrapper /
-// qualification accommodations). The raw row here makes this case the
-// corpus's one tur_host importer (the dir-scoped layering exception).
-// Migrate to `tur_net_kit::net_request` at the next rut bump.
+// Host surface: `net_request` rides the net kit's wrapper
+// (`tur_net_kit::net_request` — the cross-package async-fn gap closed at
+// the 29bd115 rut bump). The ROOT still carries a load-bearing
+// `use tur_host::net::{ net_request }` anchor line: without it this
+// module's kit import dies at the call site ("unknown function
+// net_request") — the duplicate-boot-scope interning family, detail in
+// the root's comment. The anchor is the case's dir-scoped layering
+// exception.
 //
 // The journeys take their handles as PARAMETERS (the `Gh` bundle of
 // sources) and the launching mutation's ctx rides along as a plain
@@ -19,7 +19,6 @@
 // limit) surfaces the API's own message (the scanner lives in json/).
 
 use futures::launch_future;
-use tur_host::net::{ net_request };
 use tur_kit::control_flow::control::{ Condition, Each };
 use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
@@ -29,6 +28,7 @@ use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::reactive::{ MutationCtx, mutate, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
+use tur_net_kit::{ net_request };
 
 pub fn explorer_view(s: state::Gh) -> View {
     // Back: up one directory, or back to the landing when at the root.

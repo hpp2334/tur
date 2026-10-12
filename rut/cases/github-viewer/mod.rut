@@ -22,13 +22,12 @@
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
 //
-// (The `tur_host` use line below is LOAD-BEARING at this rut pin — the
-// duplicate-boot-scope type-interning bug: with a child module carrying
-// a `tur_host` use line (explorer's raw net row) and the root carrying
-// none, the root's kit-fn resolution collapses ("argument 1 is `View`,
-// `opaque` expected" at `mount`). The anchoring line pins the boot
-// scope — the same documented family as the playground's second use
-// line. Revisit both at the next rut bump.)
+// (The `tur_host` use line below is LOAD-BEARING at the 29bd115 pin —
+// the duplicate-boot-scope type-interning family: WITHOUT the anchor,
+// explorer's `tur_net_kit` import dies at the call site ("unknown
+// function net_request" in explorer/mod.rut). The anchoring line pins
+// the boot scope for the child's KIT import — the same documented
+// family as the playground's second use line (that one stays too).)
 mod state;
 mod theme;
 mod ui;

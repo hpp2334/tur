@@ -88,18 +88,16 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
         "rut/playground/cases_gen.rut",
         "generated case registry — embeds case sources verbatim",
     ),
-    // The one corpus case that imports tur_host: the net row stays RAW in
-    // explorer/ (the net kit's async wrapper cannot be awaited from an
-    // app module at this pin — a cross-package async resolution gap, see
-    // the explorer header), and the root carries the load-bearing anchor
-    // line that keeps the split tree's kit resolution up (the interning
-    // family — see the root header). Both carriers live in this one case
-    // dir; migrate at the next rut bump.
+    // The one corpus case that still carries a `use tur_host` line: the
+    // root's LOAD-BEARING anchor (the interning family — without it the
+    // child's tur_net_kit import dies at the call site). explorer itself
+    // rides `tur_net_kit` since the 29bd115 bump; see the case's import
+    // notes.
     (
         "rut/cases/github-viewer/",
-        "github-viewer: the raw net row (explorer/) + the root's \
-         load-bearing anchor line — the net-kit async gap + the interning \
-         family (see the case's import notes)",
+        "github-viewer: the root's load-bearing anchor line — the \
+         interning-family accommodation (explorer rides tur_net_kit; see \
+         the case's import notes)",
     ),
     // ---- the test corpora's deliberate raw-row probes ----
     // (the thin-faithful-delegate law: a fixture keeps probing the rail
