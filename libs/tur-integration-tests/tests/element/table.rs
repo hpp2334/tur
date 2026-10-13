@@ -72,10 +72,6 @@ entry fn start() -> u64 {
     mount(t);
     return rows.atom_id();
 }
-
-fn set_rows(atom: u64, n: f64) {
-    entry_ctx().set<opaque>(atom, rows_of(n as u64).raw());
-}
 "#
         .replace("{ROWS_PLACEHOLDER}", &rows.to_string())
 }

@@ -437,7 +437,8 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (pin 3b4d2cc, the duplicate-boot-scope
+- Known upstream rut bug (observed from pin 3b4d2cc through 8ebe2729,
+  still unfixed — the duplicate-boot-scope
   type-interning family): some module-shape edits trip it — kit fn/row
   resolution collapses ("argument N is X, Y expected" far from the edit)
   or an interface-typed capture misbinds at runtime ("no impl for
@@ -453,6 +454,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   playground's status label spells its derive through `rs_derive` (the
   plain-fn rail) for the same reason.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
+- The rut compile laws (pin 8ebe2729): record literals must cover every
+  field — spelled in the literal or covered by the field's declared
+  initializer (the silent zero-fill is gone; duplicate spellings are an
+  error); a use line naming what the target doesn't export is rejected
+  AT THE USE LINE (`` `X` has no `Y` — unknown import `` — a flat
+  spelling of a mod row dies there too, not at the call site); a `->`
+  fn must return on every path; and DEAD PRIVATE CODE is type-checked
+  like live code (a private fn nothing calls still compiles — keep
+  fixtures and cases law-clean; the bump caught table.rs's dead
+  raw-atom `set_rows` write).
 - Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
   workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;
