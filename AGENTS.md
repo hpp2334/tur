@@ -437,7 +437,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (observed from pin 3b4d2cc through 8ebe2729,
+- Known upstream rut bug (observed from pin 3b4d2cc through bbb5df61,
   still unfixed — the duplicate-boot-scope
   type-interning family): some module-shape edits trip it — kit fn/row
   resolution collapses ("argument N is X, Y expected" far from the edit)
@@ -454,16 +454,23 @@ Android build + device debugging live in the **`android-dev` skill** at
   playground's status label spells its derive through `rs_derive` (the
   plain-fn rail) for the same reason.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
-- The rut compile laws (pin 8ebe2729): record literals must cover every
+- The rut compile laws (pin bbb5df61): record literals must cover every
   field — spelled in the literal or covered by the field's declared
   initializer (the silent zero-fill is gone; duplicate spellings are an
-  error); a use line naming what the target doesn't export is rejected
-  AT THE USE LINE (`` `X` has no `Y` — unknown import `` — a flat
-  spelling of a mod row dies there too, not at the call site); a `->`
-  fn must return on every path; and DEAD PRIVATE CODE is type-checked
-  like live code (a private fn nothing calls still compiles — keep
-  fixtures and cases law-clean; the bump caught table.rs's dead
-  raw-atom `set_rows` write).
+  error; `Point { x, y }` field-init shorthand rides too); a use line
+  naming what the target doesn't export is rejected AT THE USE LINE
+  (`` `X` has no `Y` — unknown import `` — a flat spelling of a mod row
+  dies there too, not at the call site); a `->` fn must return on every
+  path; DEAD PRIVATE CODE is type-checked like live code (a private fn
+  nothing calls still compiles — keep fixtures and cases law-clean; the
+  bumps caught table.rs's dead raw-atom `set_rows` write and rut_boot's
+  un-mut'd for-c induction); and the MUT-BINDING LAW rides loop
+  headers — the header's `mut` is the ONLY write license for the loop
+  variable (`for (let mut i = …)`: an un-mut'd binding is immutable —
+  reads fine, `i += 1` a compile error). Block tails are values (an
+  expression before `}` with no `;` is the block's tail; a fn/lambda
+  body tail is an implicit return) and `if`/`when` arms compose as
+  values.
 - Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
   workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;

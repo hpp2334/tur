@@ -394,7 +394,7 @@ fn join_into(items: u64, label: u64) {
     let v = rs_get_value(items);
     let n = rs_value_len(v);
     let mut joined = "";
-    for (let i = 0; i < n as i32; i += 1) {
+    for (let mut i = 0; i < n as i32; i += 1) {
         joined = f"{joined}|{rs_value_item(v, i as u64)}";
     }
     rs_set_str(label, joined);
@@ -426,7 +426,7 @@ entry fn start() -> u64 {
         let v = rs_get_value(items);
         let n = rs_value_len(v);
         let fresh = rs_list_new();
-        for (let i = 0; i < n as i32; i += 1) {
+        for (let mut i = 0; i < n as i32; i += 1) {
             rs_list_push(fresh, rs_value_item(v, i as u64));
         }
         rs_list_push(fresh, "gamma");
