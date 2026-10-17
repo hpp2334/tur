@@ -238,8 +238,12 @@ cargo clippy --workspace -- -D warnings
 cargo clippy --target wasm32-unknown-unknown -p tur-wasm -p tur-website -- -D warnings
 ```
 
-Tests run under cargo-nextest (`.config/nextest.toml`; CI uses `--profile ci`
-with retries = 2). The rut case corpus needs no build step — cases are plain
+Tests run through `cargo nextest run` (cargo-nextest is installed), not
+`cargo test` — keep this for every test invocation. The single exception
+is the doctest lane above (`cargo test --workspace --doc --locked` —
+nextest does not run doctests). Tests run under cargo-nextest
+(`.config/nextest.toml`; CI uses `--profile ci` with retries = 2). The
+rut case corpus needs no build step — cases are plain
 `.rut` sources read from disk as DECLARED module trees (the
 `read_case_files` / `walkModTree` declaration-following walkers; the website
 embeds them at compile time).
