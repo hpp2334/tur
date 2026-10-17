@@ -4,12 +4,10 @@
 //
 // Host surface: `net_request` rides the net kit's wrapper
 // (`tur_net_kit::net_request` — the cross-package async-fn gap closed at
-// the 29bd115 rut bump). The ROOT still carries a load-bearing
-// `use tur_host::net::{ net_request }` anchor line: without it this
-// module's kit import dies at the call site ("unknown function
-// net_request") — the duplicate-boot-scope interning family, detail in
-// the root's comment. The anchor is the case's dir-scoped layering
-// exception.
+// the 29bd115 rut bump). At the 0eea7e95 pin the per-file binding law is
+// the rule: THIS file's own `use tur_net_kit::{ net_request }` is what
+// binds the name — no root anchor needed (the old `use
+// tur_host::net::{ net_request }` anchor is gone).
 //
 // The journeys take their handles as PARAMETERS (the `Gh` bundle of
 // sources) and the launching mutation's ctx rides along as a plain

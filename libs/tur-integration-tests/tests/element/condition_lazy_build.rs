@@ -18,6 +18,7 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 const COND_RUT: &str = r#"
+use tur_kit::handles::{ View };
 use tur_kit::control_flow::control::{ Condition };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
@@ -133,6 +134,7 @@ fn reactivation_reinvokes_the_builder_with_live_state() {
 // ---------------------------------------------------------------------------
 
 const SWITCH_RUT: &str = r#"
+use tur_kit::handles::{ View };
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };

@@ -164,9 +164,6 @@ fn attach_resets_dedup() {
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };
-use tur_kit::handles::{ mount };
-use tur_kit::layout::box::{ Container };
-use tur_kit::reactive::{ MutationCtx, Readable, Source, source };
 
 entry fn start() {
     let b = Container().width_height(100.0, 50.0).color(sv(0xFF0000FFu64));

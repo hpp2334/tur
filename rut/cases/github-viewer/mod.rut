@@ -22,12 +22,10 @@
 // rows), and f-string braces take no nested string literals (bind a
 // local first).
 //
-// (The `tur_host` use line below is LOAD-BEARING at the 29bd115 pin —
-// the duplicate-boot-scope type-interning family: WITHOUT the anchor,
-// explorer's `tur_net_kit` import dies at the call site ("unknown
-// function net_request" in explorer/mod.rut). The anchoring line pins
-// the boot scope for the child's KIT import — the same documented
-// family as the playground's second use line (that one stays too).)
+// (No root `tur_host` anchor is needed at the 0eea7e95 pin: the per-file
+// binding law is now the rule — explorer's own `use tur_net_kit::{ net_request }`
+// binds it in explorer/mod.rut, and the root's use never fed a child's
+// file. The old `use tur_host::net::{ net_request }` anchor is gone.)
 mod state;
 mod theme;
 mod ui;
@@ -35,7 +33,6 @@ mod landing;
 mod explorer;
 mod json;
 
-use tur_host::net::{ net_request };
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::flags::{ CrossAlign };
 use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };

@@ -8,6 +8,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
@@ -150,7 +151,8 @@ fn lazy_grid_scroll_shifts_visible_window() {
 fn lazy_grid_reactive_item_count_grow_after_shrink_remounts_tail() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
-        r#"use tur_kit::flags::{ Axis };
+        r#"use tur_kit::handles::{ View };
+use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Expanded };
@@ -287,6 +289,7 @@ fn lazy_grid_item_extent_and_spacing_shape_the_pitch() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
@@ -370,6 +373,7 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
@@ -464,6 +468,7 @@ fn lazy_grid_column_count_ceils_max_extent_division() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
@@ -520,6 +525,8 @@ fn lazy_grid_exact_multiple_stays_at_exact_count() {
     let mut app = TurTestApp::new(435.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
+use tur_kit::reactive::{ entry_ctx };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };

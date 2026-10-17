@@ -139,9 +139,6 @@ fn host_frame_timing_is_opt_in() {
         r#"
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
-
-use tur_kit::handles::{ mount };
-use tur_kit::layout::box::{ Container };
 use tur_kit::reactive::{ sv };
 
 entry fn start() {

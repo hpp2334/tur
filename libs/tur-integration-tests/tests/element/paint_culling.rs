@@ -42,6 +42,7 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ mount };

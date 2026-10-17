@@ -186,6 +186,7 @@ fn flexible_min_size_row_under_unbounded_main_shrink_wraps() {
     app.load_rut_module(
         r#"
 
+use tur_kit::flags::{ MainAxisSize };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Flexible, Row };
@@ -291,15 +292,12 @@ fn min_size_row_flexible_uses_remaining_budget_and_shrink_wraps() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::flags::{ MainAxisSize };
+use tur_kit::handles::{ View };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Flexible, Row };
 use tur_kit::reactive::{ sv };
-use tur_kit::text::core::{ Text };
-
-use tur_kit::handles::{ mount };
-use tur_kit::layout::box::{ Container, SizedBox };
-use tur_kit::layout::flex::{ Column, Flexible, Row };
 use tur_kit::text::core::{ Text };
 
 fn long_label() -> View {
@@ -389,11 +387,6 @@ use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Flexible, Row };
 use tur_kit::reactive::{ sv };
-use tur_kit::text::core::{ Text };
-
-use tur_kit::handles::{ mount };
-use tur_kit::layout::box::{ Container };
-use tur_kit::layout::flex::{ Flexible, Row };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {

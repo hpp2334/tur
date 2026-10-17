@@ -90,11 +90,10 @@
 // (`launch_future` / `sleep`) installs on BOTH targets — the vendored
 // decl lowers from the `.d.rut` (wasm has no filesystem) and the bodies
 // are pure VM-driving rows.
-// (A second `tur_host` use statement is LOAD-BEARING at this rut pin: the
-// duplicate-boot-scope type-interning bug collapses kit-fn/row resolution
-// in this module when it has fewer than two `tur_host` use lines — the
-// documented upstream family. Revisit at the next rut bump.)
-use tur_host::mount_raw;
+// (No second `tur_host` use statement is needed at the 0eea7e95 pin: the
+// per-file binding law retired the old duplicate-boot-scope anchor — this
+// module's kit resolution holds with a single `tur_host` (the pg_*) use
+// line. The runtime-interning `rs_derive` workaround below still stands.)
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
 use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{
@@ -103,13 +102,13 @@ use tur_kit::flags::{
 use tur_kit::gesture::pointer::{
     EnterEvent, ExitEvent, InputEvent, MouseRegion, PointerEvent, PointerInteract,
 };
-use tur_kit::handles::{ MapHandle, TextCtrl, UndoCtrl, VAppCtrl, list_new, map_new, mount, text_ctrl, undo_ctrl };
+use tur_kit::handles::{ MapHandle, TextCtrl, UndoCtrl, VAppCtrl, View, list_new, map_new, mount, text_ctrl, undo_ctrl };
 use tur_kit::image::{ Image, image_resource_svg };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
 use tur_kit::reactive::{
-    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate, sv,
+    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate,
     rs_derive, source, sv, watch,
 };
 use tur_kit::scroll::{ ScrollView };
@@ -119,7 +118,7 @@ use tur_kit::virtual_app::{
     VirtualApp, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
     virtual_app_source_handle,
 };
-use tur_host::{ mount_raw, pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
+use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
 
 // ---- design tokens ---------------------------------------------------------
 //
@@ -694,9 +693,11 @@ fn status_bar(cx: AppContext) -> View {
     // ---- status bar -------------------------------------------------------
     // The str-format derive rail (rs_derive over the ago atom — the
     // top-level fmt fn + the raw dep). The lambda-capturing
-    // `derive(fn ...)` spelling trips an upstream duplicate-type-interning
-    // bug at this module's size (the derived materialization traps; the
-    // label renders "") — revisit on the next rut bump.
+    // `derive(fn ...)` spelling still trips the upstream duplicate-type-
+    // interning bug at this module's size at the 0eea7e95 pin (the
+    // derived materialization traps and the playground's auto-run
+    // respawn test goes red) — the per-file-binding bump retired the
+    // NAME-side anchors, not this runtime-interning shape.
     // The derived atom rides the raw-atom Source spelling (the
     // upstream-workaround shape above).
     let ago_d: Readable<str> = Source<str>::of(bridge(), rs_derive(fmt_ago, cx.ago.atom_id()), false, 1);

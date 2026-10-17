@@ -3,6 +3,7 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };

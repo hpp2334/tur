@@ -330,12 +330,10 @@ Android build + device debugging live in the **`android-dev` skill** at
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
-  `cases_gen.rut`, github-viewer's DIR-SCOPED exception over
-  `rut/cases/github-viewer/` — the raw row is gone (explorer rides
-  `tur_net_kit` since the 29bd115 bump); the exception covers the root's
-  load-bearing anchor line, the interning family, detail at the case's
-  import sites — and the corpora's named
-  raw-row probes); `rs_derive|rs_derive2|rs_watch` have no call sites
+  `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
+  no longer needs an exception (the 0eea7e95 per-file binding law retired
+  its root anchor — explorer's own `use tur_net_kit::{ net_request }`
+  binds it); `rs_derive|rs_derive2|rs_watch` have no call sites
   outside the kit's wrappers (the authored spelling is
   `derive<T>`/`watch<T>`); and the deleted stash rows
   (`st_put|st_take|stf_put|stf_take`) have zero spellings anywhere.
@@ -453,24 +451,41 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (observed from pin 3b4d2cc through 565b7156,
-  still unfixed — the duplicate-boot-scope
-  type-interning family): some module-shape edits trip it — kit fn/row
-  resolution collapses ("argument N is X, Y expected" far from the edit)
-  or an interface-typed capture misbinds at runtime ("no impl for
-  interface slot N"). Accommodations that hold: keep captured sources
-  CONCRETE-annotated (`Source<T>`, not `Readable<T>`) when they cross
-  ctx calls, struct fields, or write-path chains (the `Writable`
-  origin-loss shape); make import-list deltas single-name; an
-  interface-annotated `let` before the first `mutate` seeds the table;
-  the playground keeps a second `use tur_host` line (load-bearing); a
-  split tree whose CHILD carries a `tur_host` use while the root
-  carries none needs a root anchor `use tur_host` line (github-viewer's).
-  The
-  playground's status label spells its derive through `rs_derive` (the
-  plain-fn rail) for the same reason.
+- Known upstream rut bug (observed from pin 3b4d2cc through 565b7156 —
+  the duplicate-boot-scope type-interning family): some module-shape
+  edits trip it — kit fn/row resolution collapses ("argument N is X, Y
+  expected" far from the edit) or an interface-typed capture misbinds at
+  runtime ("no impl for interface slot N"). The 0eea7e95 per-file
+  binding law RETIRED the two structural anchors (the playground's
+  second `use tur_host` line and github-viewer's root anchor — both
+  deleted, suites green), but the RUNTIME-interning shapes survive:
+  keep captured sources CONCRETE-annotated (`Source<T>`, not
+  `Readable<T>`) when they cross ctx calls, struct fields, or write-path
+  chains (the `Writable` origin-loss shape); make import-list deltas
+  single-name; an interface-annotated `let` before the first `mutate`
+  seeds the table; and the playground's status label spells its derive
+  through `rs_derive` (the plain-fn rail + a hand-built Source — the
+  lambda-capturing `derive(fn …)` spelling traps the derived
+  materialization at this module's size and the auto-run respawn test
+  goes red).
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
-- The rut compile laws (pin 565b7156): record literals must cover every
+- The rut compile laws (pin 0eea7e95): **every leaf must bind, in the FILE
+  that spelled it** — a `use` binds its OWN file (the root's `use` never
+  feeds a child module's file, nor a sibling's), and the engine's builtin
+  names are the only ambient tier, so every file writes every import it
+  calls (`` `fetch` is bound by a `use` in the root module — write the
+  `use` in this file ``, `` `dup` is not bound — no `use` statement names
+  it ``); the check is total and lands AT THE USE LINE (an unreachable
+  private row names the fix — `` `helper` is not exported by `pkga` — mark
+  it `pub` there ``; a packed surface with no source says `` … is not part
+  of `pkga`'s exported surface — nothing binds in this file ``); **one name
+  = one leaf per file** — a name spelled by two use leaves, whatever the
+  heads (including twice within one list), errors at the second spelling
+  (`` duplicate name `x` — `use pkga::{ x }` … already binds it in this
+  file ``), while `use pkga::{ x }; use pkga::{ y };` is fine (the name is
+  the rule, never the package); `pub async fn` crosses package surfaces
+  (the consumer's call answers the closed `Future<answer>`; the generic
+  async shape refuses at the use line); record literals must cover every
   field — spelled in the literal or covered by the field's declared
   initializer (the silent zero-fill is gone; duplicate spellings are an
   error; `Point { x, y }` field-init shorthand rides too); a use line

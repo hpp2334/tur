@@ -30,6 +30,7 @@ fn q(app: &TurTestApp, key: &str) -> ElementNodeId {
 /// header. Cells carry per-column query keys so tests can address them.
 fn table_source(rows: usize, _table_opts: &str) -> String {
     r#"
+use tur_kit::handles::{ View };
 use tur_kit::handles::{ ListHandle, list_new, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column };
@@ -136,6 +137,7 @@ fn fills_for(
 /// declarative stripes — even rows red, odd rows blue (the cells paint
 /// nothing, so the table's own fills are exactly the stripes).
 const STRIPE_TABLE_RUT: &str = r#"
+use tur_kit::handles::{ View };
 use tur_kit::handles::{ ListHandle, list_new, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::grid_table::{ Table, TableCols };
@@ -212,6 +214,7 @@ fn column_extent_honored_in_layout() {
     // (min 120) — the leftover 250 splits 1:2.
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::handles::{ ListHandle, list_new, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::grid_table::{ Table, TableCols };

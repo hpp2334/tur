@@ -239,6 +239,7 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(
         r#"
+use tur_kit::handles::{ View };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, source, sv };

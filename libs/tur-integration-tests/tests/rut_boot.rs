@@ -504,6 +504,7 @@ fn rut_reload_runs_stop_and_replaces_root() {
 /// undo rows. The interactive half (keyboard / IME into the focused
 /// editable) is driven by the test via the engine's own subsystems.
 const INPUT_RUT: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 use tur_host::text::input::{ tctrl_paste, tctrl_select, tctrl_text };
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source, sv }; use tur_kit::text::core::{ Text }; use tur_kit::text::input::{ Input };
 
@@ -763,6 +764,7 @@ fn rut_lazy_list_virtualizes_rows_through_the_entry_face() {
 /// the exported flag consts. The align/size assertions read back through
 /// the tree geometry; a second box (SizedBox) pins the exact size.
 const CONTAINER_FULL_RUT: &str = r#"
+use tur_kit::flags::{ Align, BorderPosition, Clip };
 
 use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::core::{ Text };
 use tur_kit::reactive::{ sv };
@@ -1232,7 +1234,7 @@ struct AppContext {
 
 fn start() -> AppContext {
     let label: Source<str> = source<str>("");
-    let src = virtual_app_source("\nuse tur_kit::handles::{ mount }; use tur_kit::text::core::{ Text };\nentry fn start() {\nmount(Text().text(sv(\"child here\")).build());\n}");
+    let src = virtual_app_source("\nuse tur_kit::handles::{ mount }; use tur_kit::reactive::{ sv }; use tur_kit::text::core::{ Text };\nentry fn start() {\nmount(Text().text(sv(\"child here\")).build());\n}");
     let ctrl: VAppCtrl = virtual_app_controller(src);
 
     // The lifecycle surfaces: on_mount is a mutation over the typed
@@ -1391,7 +1393,7 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 const DERIVED_RUT: &str = r#"
 use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture::pointer::{ PointerInteract }; use tur_kit::handles::{ TextCtrl, UndoCtrl, mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{
     DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, derive, entry_ctx, mutate, source, sv,
-    sv, watch,
+    watch,
 }; use tur_kit::text::core::{ Text };
 
 entry fn start() {
@@ -1568,6 +1570,7 @@ fn read_rut_f64(app: &TurTestApp) -> f64 {
 /// A two-file module: the root declares `mod landing;` and calls into it
 /// (same-pkg module-path qualification); the child provides the string.
 const MULTI_ROOT: &str = r#"
+use tur_kit::reactive::{ sv };
 use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::core::{ Text };
 
 mod landing;

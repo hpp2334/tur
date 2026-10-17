@@ -7,6 +7,7 @@ use tur_integration_tests::TurTestApp;
 /// (`el_input_opts` flags bit 1). The `queryKey` lands on Input's Container
 /// wrapper; the editable text is that container's first child.
 const PASSWORD_BUNDLE: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };
@@ -28,6 +29,7 @@ entry fn start() {
 /// `input_obscure` + `input_obscure_char` (the JS `obscureText: true` +
 /// `obscuringCharacter: '*'` twins).
 const CUSTOM_CHAR_BUNDLE: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::reactive::{ MutationCtx, Readable, Source, source, sv };

@@ -104,6 +104,7 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
 // ---------------------------------------------------------------------------
 
 const QUEUED_RUT: &str = r#"
+use tur_kit::reactive::{ Source };
 use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract }; use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Watch, mutate, source, sv, watch }; use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {

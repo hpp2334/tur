@@ -46,6 +46,7 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single Input at the top-left of the canvas,
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };
@@ -65,6 +66,7 @@ entry fn start() {
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"
+use tur_kit::handles::{ text_ctrl, undo_ctrl };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::text::input::{ Input };

@@ -310,10 +310,6 @@ use tur_kit::flags::{ BoxFit };
 use tur_kit::handles::{ mount };
 use tur_kit::image::{ Image };
 
-use tur_kit::flags::{ BoxFit };
-use tur_kit::handles::{ mount };
-use tur_kit::image::{ Image };
-
 entry fn start() {
 }
 

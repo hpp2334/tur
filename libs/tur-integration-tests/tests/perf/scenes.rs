@@ -97,8 +97,6 @@ use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::layout::box::{ Container };
 use tur_kit::layout::flex::{ Column, Row };
-use tur_kit::flags::{ Axis };
-use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
 use tur_kit::reactive::{ rs_derive, sv };
 
 fn label(v: f64) -> str {
@@ -288,6 +286,7 @@ pub fn long_editor(frames: usize) {
     let app = TurTestApp::new(400.0, 600.0).expect("app");
     app.load_rut_module(
         r##"
+use tur_kit::handles::{ text_ctrl };
 use tur_host::text::input::{ tctrl_push_span };
 use tur_kit::flags::{ Axis };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount };
