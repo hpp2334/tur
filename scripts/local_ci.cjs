@@ -40,7 +40,28 @@ const logStream = fs.createWriteStream(logPath, { flags: 'w' });
 
 const child = spawn(
   'flock',
-  ['/tmp/tur-ci.lock', 'act', 'workflow_dispatch', '-W', '.github/workflows/local-ci.yml', '--json', '--env', `BRANCH_NAME=${currentBranch}`],
+  [
+    '/tmp/tur-ci.lock',
+    'act',
+    'workflow_dispatch',
+    '-W',
+    '.github/workflows/local-ci.yml',
+    '--json',
+    '--env',
+    `BRANCH_NAME=${currentBranch}`,
+    // Linux: the ~/.ssh bind-mount lands at /root/.ssh still owned by the
+    // host uid, so ssh rejects the routed config ("Bad owner or permissions").
+    // Bypass the config with an explicit direct-connection command (github
+    // :22 is reachable directly here; the image's keyscan proves it). On
+    // macOS Docker Desktop presents the mount as root-owned, so the config
+    // is usable as-is.
+    ...(os === 'darwin'
+      ? []
+      : [
+          '--env',
+          'GIT_SSH_COMMAND=ssh -F /dev/null -o IdentityFile=/root/.ssh/id_ed25519 -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes',
+        ]),
+  ],
   {
     cwd: rootDir,
     env: { ...process.env, PATH: `/usr/local/opt/util-linux/bin:${process.env.PATH}` },
