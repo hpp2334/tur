@@ -46,14 +46,11 @@ impl ElementRender for ContainerElement {
             && sb > 0.0
         {
             let radius = border_radius.unwrap_or(0.0);
-            canvas.draw_shadow(
-                Offset::ZERO,
-                layout.size,
-                sc,
-                radius,
-                sb,
-                self.view.shadow_offset.unwrap_or((0.0, 0.0)),
-            );
+            // The bound dy wins over the static tuple's y (the reactive
+            // channel; x stays factory-static).
+            let (dx, dy) = self.view.shadow_offset.unwrap_or((0.0, 0.0));
+            let dy = self.painting.shadow_dy.unwrap_or(dy);
+            canvas.draw_shadow(Offset::ZERO, layout.size, sc, radius, sb, (dx, dy));
         }
 
         if let Some(brush) = color {

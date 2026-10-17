@@ -1,0 +1,14 @@
+# Playground dev tunnel (`pnpm dev:tunnel`): serves the local dev server at
+# https://local-tur.hpp2334.com through the named `tur-local` tunnel.
+#
+# Nothing machine-specific lives here — cloudflared resolves the tunnel name
+# against the credentials in ~/.cloudflared (default location). One-time
+# setup:
+#   cloudflared tunnel login
+#   cloudflared tunnel create tur-local
+#   cloudflared tunnel route dns tur-local local-tur.hpp2334.com
+tunnel: tur-local
+ingress:
+  - hostname: local-tur.hpp2334.com
+    service: http://localhost:8080
+  - service: http_status:404

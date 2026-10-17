@@ -40,7 +40,7 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     drive_to_quiescence(&mut app);
     assert_eq!(
-        app.eval_js("globalThis.__getHover()"),
+        app.query_text(&["hover"]).unwrap_or_default(),
         "A",
         "after entering A, hover should be 'A'"
     );
@@ -52,7 +52,7 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     drive_to_quiescence(&mut app);
     assert_eq!(
-        app.eval_js("globalThis.__getHover()"),
+        app.query_text(&["hover"]).unwrap_or_default(),
         "B",
         "after moving A->B, hover should be 'B' (not cleared by A's exit)"
     );

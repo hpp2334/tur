@@ -32,6 +32,7 @@ impl ElementLayout for ContainerElement {
                 .unwrap_or_default(),
             shadow_color: cx.read_val_opt(self.view.shadow_color.as_ref()),
             shadow_blur: cx.read_val_opt(self.view.shadow_blur.as_ref()),
+            shadow_dy: cx.read_val_opt(self.view.shadow_dy.as_ref()),
         };
 
         let sized_constraints = Constraints {

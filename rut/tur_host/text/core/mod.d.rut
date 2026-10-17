@@ -1,0 +1,19 @@
+// tur_host/text/core — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn text_new() -> opaque;
+pub host fn text_text(p1: opaque, p2: str);
+pub host fn text_bind(p1: opaque, p2: u64);
+pub host fn text_bind_derived(p1: opaque, p2: u64);
+pub host fn text_size(p1: opaque, p2: f64);
+pub host fn text_weight(p1: opaque, p2: f64);
+pub host fn text_color(p1: opaque, p2: u64);
+pub host fn text_max_lines(p1: opaque, p2: u64);
+pub host fn text_clip(p1: opaque);
+pub host fn text_ellipsis(p1: opaque);
+pub host fn text_overflow_visible(p1: opaque);
+pub host fn text_selectable(p1: opaque, p2: bool);
+pub host fn text_qkey(p1: opaque, p2: str);
+pub host fn text_build(p1: opaque) -> opaque;
+pub host fn spans_new() -> opaque;
+pub host fn span_add(p1: opaque, p2: str, p3: f64, p4: u64, p5: f64, p6: u64);
+pub host fn text_spans(p1: opaque, p2: opaque);

@@ -19,19 +19,19 @@
 //!   in `tur-filepicker-native`, `RecordingFilePicker` in
 //!   `tur-integration-tests`) implement [`FilePickerBackend`] and are
 //!   registered via `.capability(FilePicker::new(backend))`.
-//! - The bridge (in [`bridge`]) parses JS opts into [`PickOptions`] /
-//!   [`SaveOptions`], spawns the future via the engine's `AsyncExecutor`, and
-//!   settles the `JsPromise` via a completion closure on the next `flush`.
-//! - File picking is **opt-in**: unlike `tur:net` (an optional capability that
+//! - The `tur_host` pkg rows (in [`rut_rows`], via the pkg-extension seam)
+//!   parse [`PickOptions`] and drive the backend on the rut async weave.
+//! - File picking is **opt-in**: unlike net (an optional capability that
 //!   silently skips when absent), [`TurFilePickerPlugin`] declares
-//!   `requires(FilePicker)` and fails fast — hosts that want `tur:filepicker`
+//!   `requires(FilePicker)` and fails fast — hosts that want the pick rows
 //!   must register a real backend. There is intentionally no no-op default:
-//!   code that imports `tur:filepicker` without the plugin installed crashes
+//!   a rut module calling the rows without the plugin installed traps
 //!   loudly rather than silently doing nothing.
 
-pub mod bridge;
+pub mod rut_rows;
 
 use std::future::Future;
+use std::rc::Rc;
 use std::pin::Pin;
 
 use tur_engine::core::capability::CapabilityDecls;
@@ -123,17 +123,12 @@ impl tur_engine::core::capability::Capability for FilePicker {}
 // Plugin
 // ---------------------------------------------------------------------------
 
-/// tur-filepicker plugin: registers `tur:filepicker`, exporting a single
-/// `filePicker` object with `pick(opts?)` / `saveFile(name, bytes, opts?)`
-/// methods (each returning a `Task` — `{ promise, cancel() }`).
+/// tur-filepicker plugin: pushes the `tur_host` pkg's pick rows (see
+/// [`rut_rows`]).
 ///
 /// The plugin declares a hard dependency on the [`FilePicker`] capability via
 /// `requires`; the engine builder fails fast at `build()` if the embedder
 /// forgot to register a backend via `.capability(FilePicker::new(...))`.
-///
-/// The bridge fns are ctx-bound `Ptr`s that read their `FilePicker` +
-/// `AsyncExecutor` from `TurInstanceContext`'s capability registry at call time — no
-/// `unsafe NativeFunction::from_closure` (see [`bridge`]).
 pub struct TurFilePickerPlugin;
 
 impl Default for TurFilePickerPlugin {
@@ -147,12 +142,8 @@ impl Plugin for TurFilePickerPlugin {
         decls.need::<FilePicker>();
     }
 
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
-        let ctx_value = ctx.js_ctx_value.clone();
-        let filepicker_obj = bridge::build_filepicker_object(ctx.boa_mut(), ctx_value);
-        let consts: Vec<tur_engine::core::js_runtime::helpers::ConstEntry> =
-            vec![("filePicker", filepicker_obj)];
-        ctx.register_module("tur:filepicker", bridge::fns(), consts);
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
+        ctx.push_rut_ext(Rc::new(crate::rut_rows::install));
         Ok(())
     }
 }

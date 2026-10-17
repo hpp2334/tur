@@ -3,9 +3,11 @@
 //! `tur-wasm` is a reusable embedder lib (it owns all the DOM wiring + engine
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
-//! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and adds the
-//! playground-only [`tur_playground_plugin::TurPlaygroundPlugin`] (swc TS
-//! compiler). JS imports `TurWebsiteApp` from the generated `tur_website.js`.
+//! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and wires the
+//! playground's rut compile service ([`tur_playground::TurRutPlaygroundPlugin`],
+//! the retired swc plugin's replacement). JS imports `TurWebsiteApp` from the
+//! generated `tur_website.js` and boots the playground via
+//! `loadAndRunRutModule(playgroundSource())`.
 //!
 //! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
 //! (the app's own cdylib that adds the demo plugin set).
@@ -17,6 +19,14 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+use tur_playground::TurRutPlaygroundPlugin;
+
+#[cfg(target_arch = "wasm32")]
+pub const PLAYGROUND_RUT: &str = include_str!("../../../../rut/playground/mod.rut");
+#[cfg(target_arch = "wasm32")]
+pub const CASES_GEN_RUT: &str = include_str!("../../../../rut/playground/cases_gen.rut");
+
 /// One-time wasm init (panic hook + tracing). Called automatically on module
 /// instantiation via the `#[wasm_bindgen(start)]` attribute.
 #[cfg(target_arch = "wasm32")]
@@ -27,8 +37,8 @@ pub fn wasm_entry() {
 
 /// A running tur website app. Construct via [`TurWebsiteApp::create`] (full
 /// viewport) or [`TurWebsiteApp::create_in`] (embedded in a container element).
-/// Load a view bundle (e.g. the playground-view `impl.js`) via
-/// `loadAndRunModule`.
+/// Load a rut module (e.g. the playground, `rut/playground`) via
+/// `loadAndRunRutModule`.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurWebsiteApp {
@@ -80,9 +90,11 @@ impl TurWebsiteApp {
                 }
                 None => None,
             };
-            // Build the shared runtime once with the demo plugin.
+            // Build the shared runtime once with the playground's rut
+            // compile-service extension (the swc plugin is retired — the
+            // editor compiles rut via `pg_compile`).
             let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
-                configure: Box::new(|b| b.plugin(tur_playground_plugin::TurPlaygroundPlugin)),
+                configure: Box::new(|b| b.plugin(TurRutPlaygroundPlugin)),
                 worker_pools: Vec::new(),
             })?;
             // Spawn an isolated DOM-wired instance from it.
@@ -102,20 +114,25 @@ impl TurWebsiteApp {
         })
     }
 
-    /// Evaluate `js_source` as an ES module (supports real
-    /// `import { ... } from "tur:..."`, resolved by the engine's module
-    /// loader), then render. Used to load the playground-view bundle.
-    ///
-    /// Async: returns a Promise that resolves once the module finishes
-    /// loading + evaluating.
-    #[wasm_bindgen(js_name = loadAndRunModule)]
-    pub fn load_and_run_module(&self, js_source: &str) -> js_sys::Promise {
+    /// Compile + boot `source` as a **rut** module and render. The zero-JS
+    /// load path (the engine's `load_rut_module` RPC) — the module exports
+    /// `entry fn start()`.
+    #[wasm_bindgen(js_name = loadAndRunRutModule)]
+    pub fn load_and_run_rut_module(&self, source: &str) -> js_sys::Promise {
         let app = self.app.clone();
-        let js_source = js_source.to_string();
+        let source = source.to_string();
         wasm_bindgen_futures::future_to_promise(async move {
-            app.load_and_run_module(&js_source).await?;
+            app.load_and_run_rut_module(&source).await?;
             Ok(JsValue::undefined())
         })
+    }
+
+    /// The playground's rut source (the handwritten module + the generated
+    /// case registry), concatenated into one loadable module. The site
+    /// shell feeds this to `loadAndRunRutModule`.
+    #[wasm_bindgen(js_name = playgroundSource)]
+    pub fn playground_source(&self) -> String {
+        format!("{PLAYGROUND_RUT}\n{CASES_GEN_RUT}")
     }
 
     /// Return a host-side dev-tool handle. Methods eval the in-engine
@@ -128,10 +145,10 @@ impl TurWebsiteApp {
 }
 
 /// Host-side dev-tool handle, exposed via `TurWebsiteApp.dev_tool()`. Methods
-/// return Promises that resolve to JSON strings (the data originates inside
-/// the boa engine — a separate JS realm — and the underlying RPCs are now
-/// `async`, so JSON is the simplest cross-realm transport and the JS host
-/// `await`s each call).
+/// return Promises that resolve to JSON strings (the snapshots serialize the
+/// engine's Rust state on the worker — see `tur_engine::core::dev`; the
+/// underlying RPCs are `async`, so JSON is the simplest transport and the JS
+/// host `await`s each call).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurDevTool {
@@ -163,8 +180,7 @@ impl TurDevTool {
     /// populated only while frame timing is enabled.
     #[wasm_bindgen(js_name = frameStats)]
     pub fn frame_stats(&self) -> js_sys::Promise {
-        self.app
-            .eval_js_promise("JSON.stringify(turDevTool.frameStats())".to_string())
+        self.app.frame_stats()
     }
 
     /// Toggle host-side render-commit timing collection. While on, every
@@ -172,7 +188,8 @@ impl TurDevTool {
     /// `frameStats().lastHost`. Off by default (zero per-frame overhead).
     #[wasm_bindgen(js_name = setHostFrameTiming)]
     pub fn set_host_frame_timing(&self, enabled: bool) -> js_sys::Promise {
-        self.app
-            .eval_js_promise(format!("turDevTool.setHostFrameTiming({enabled})"))
+        self.app.set_host_frame_timing(enabled)
     }
 }
+
+// (the playground compile service lives in the `tur-playground` crate)

@@ -1,0 +1,15 @@
+// vello-column-basic: a colored container with two text rows — the vello
+// render smoke fixture.
+
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ sv };
+use tur_kit::text::core::{ Text };
+
+entry fn start() {
+    let col = Column()
+        .child(Text().text(sv("hello vello")).build())
+        .child(Text().text(sv("second line")).build());
+    mount(Container().color(sv(0xF0F4F8FFu64)).padding(12.0).child(col.build()).build());
+}

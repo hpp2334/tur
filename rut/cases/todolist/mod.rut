@@ -1,0 +1,118 @@
+// todolist: the boa "Tasks" board — a 26px header with the derived
+// "N items · M done" counter, an indigo New Task pill, and task cards
+// (colored checkbox + title/subtitle + X button) in a scrollable list.
+// Tapping a card's checkbox toggles its done state; the X opens the
+// remove-confirm modal (a then_build branch that reads the targeted task
+// at open time); New Task opens the add modal (fresh, blank controllers
+// minted at activation — the modal's buttons capture them).
+//
+// Tasks ride one list source, each item encoded "title|desc|done"; the
+// per-row taps capture the row index (no id rails). Both modals overlay
+// via Condition branches in the root Stack — and unlike the boa
+// reference, NEITHER boots open (the boot-modal bug is not ported).
+//
+// Multi-file layout: the root keeps the boot + the composition (header,
+// scroller, the modal overlay branches); theme/ carries the palette +
+// the inline SVG icons; data/ carries the seed list + the item encoding
+// + the list-write journeys; task/ carries the task-card pieces;
+// modals/ carries the two overlay modals + their chrome.
+mod data;
+mod modals;
+mod task;
+mod theme;
+
+use tur_kit::control_flow::control::{ Condition, Each };
+use tur_kit::flags::{ Axis, CrossAlign, MainAlign, MainAxisSize, StackFit };
+use tur_kit::handles::{ View, mount };
+use tur_kit::image::{ image_resource_svg };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ DeriveCtx, MutationCtx, Source, bridge, derive, source, sv };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    // The board state (all rides by capture — no stash). The lets carry
+    // CONCRETE `Source<T>` annotations — the documented interning
+    // accommodation (they cross ctx calls through the data/ + task/ +
+    // modals/ journeys).
+    let tasks: Source<opaque> = source<opaque>(data::seed_tasks().raw());
+    let n: Source<f64> = source<f64>(0.0);
+    let done: Source<f64> = source<f64>(0.0);
+    let add_open: Source<bool> = source<bool>(false);
+    let rm_open: Source<bool> = source<bool>(false);
+    let rm_tgt: Source<f64> = source<f64>(0.0);
+
+    // The icon resources (inline SVG through the image rail; plain u64
+    // resource ids — the builders take them as params).
+    let ico: [u64] = [image_resource_svg(theme::SVG_CHECK), image_resource_svg(theme::SVG_CLOSE), image_resource_svg(theme::SVG_PLUS)];
+
+    // Seed the counters, then hand the header derive its deps.
+    data::recount(MutationCtx::over(bridge()), tasks, n, done);
+    let count = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"{ctx.get<f64>(n) as u64} items · {ctx.get<f64>(done) as u64} done";
+    });
+
+    let header = Row()
+        .main_alignment(MainAlign::SpaceBetween)
+        .cross_alignment(CrossAlign::Center)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Start)
+                .main_axis_size(MainAxisSize::Min)
+                .child(Text().text(sv("Tasks")).font_size(26.0).color(theme::TEXT).build())
+                .child(SizedBox(0.0, 4.0).build())
+                .child(Text().text(count).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-count").build())
+                .build(),
+        )
+        .child(task::add_button(add_open, ico))
+        .build();
+
+    let scroller = ScrollView()
+        .axis(Axis::Vertical)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Stretch)
+                .child(Each(tasks).item_builder(fn (i: u64, s: str) -> View {
+                    return task::task_row(i, s, tasks, n, done, rm_tgt, rm_open, ico);
+                }).build())
+                .build(),
+        )
+        .build();
+
+    let page = Container()
+        .color(sv(theme::PAGE_BG))
+        .padding(22.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Stretch)
+                .child(header)
+                .child(SizedBox(0.0, 18.0).build())
+                .child(Expanded().flex(sv(1.0f64)).child(scroller).build())
+                .build(),
+        )
+        .build();
+
+    // The modals overlay the page; neither boots open (the closed branch
+    // is a zero box — cond_build requires both branches).
+    mount(
+        Stack()
+            .fit(StackFit::Expand)
+            .child(page)
+            .child(
+                Condition(add_open)
+                    .then_build(fn () -> View { return Positioned().left(sv(0.0f64)).top(sv(0.0f64)).right(0.0).bottom(0.0).child(modals::add_modal(tasks, n, done, add_open, ico)).build(); })
+                    .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
+                    .build(),
+            )
+            .child(
+                Condition(rm_open)
+                    .then_build(fn () -> View { return Positioned().left(sv(0.0f64)).top(sv(0.0f64)).right(0.0).bottom(0.0).child(modals::remove_modal(tasks, n, done, rm_tgt, rm_open, ico)).build(); })
+                    .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
+                    .build(),
+            )
+            .build(),
+    );
+    return tasks.atom_id();
+}

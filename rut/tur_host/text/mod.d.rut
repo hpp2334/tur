@@ -1,0 +1,4 @@
+// tur_host/text — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub mod core;
+pub mod input;

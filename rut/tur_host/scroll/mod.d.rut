@@ -1,0 +1,27 @@
+// tur_host/scroll — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn lazy_list_new() -> opaque;
+pub host fn lazy_builder(p1: opaque, p2: opaque);
+pub host fn lazy_count(p1: opaque, p2: u64);
+pub host fn lazy_axis(p1: opaque, p2: u64);
+pub host fn lazy_overscan(p1: opaque, p2: u64);
+pub host fn lazy_item_extent(p1: opaque, p2: f64);
+pub host fn lazy_qkey(p1: opaque, p2: str);
+pub host fn lazy_build(p1: opaque) -> opaque;
+pub host fn lazy_grid_new() -> opaque;
+pub host fn lazy_grid_builder(p1: opaque, p2: opaque);
+pub host fn lazy_grid_count(p1: opaque, p2: u64);
+pub host fn lazy_grid_axis(p1: opaque, p2: u64);
+pub host fn lazy_grid_overscan(p1: opaque, p2: u64);
+pub host fn lazy_grid_max_cross(p1: opaque, p2: f64);
+pub host fn lazy_grid_aspect(p1: opaque, p2: f64);
+pub host fn lazy_grid_item_extent(p1: opaque, p2: f64);
+pub host fn lazy_grid_spacing(p1: opaque, p2: f64, p3: f64);
+pub host fn lazy_grid_qkey(p1: opaque, p2: str);
+pub host fn lazy_grid_build(p1: opaque) -> opaque;
+pub host fn scroll_new() -> opaque;
+pub host fn scroll_axis(p1: opaque, p2: u64);
+pub host fn scroll_offset(p1: opaque, p2: f64);
+pub host fn scroll_child(p1: opaque, p2: opaque);
+pub host fn scroll_qkey(p1: opaque, p2: str);
+pub host fn scroll_build(p1: opaque) -> opaque;

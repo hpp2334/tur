@@ -7,27 +7,19 @@ pub use span_data::SpanData;
 pub use undo_controller::{TextEditingValue, UndoController};
 
 // ---------------------------------------------------------------------------
-// TextEditingController (inlined from controller.rs to avoid module_inception).
+// TextEditingController — a plain Rust type shared as
+// `Rc<RefCell<TextEditingController>>` between the element and whoever
+// authors it (the rut rows in `core::rut_runtime`).
 // ---------------------------------------------------------------------------
 
-use boa_engine::class::{Class, ClassBuilder};
-use boa_engine::js_string;
-use boa_engine::native_function::NativeFunction;
-use boa_engine::object::JsObject;
-use boa_engine::property::Attribute;
-use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
-use boa_gc::{Finalize, Trace};
 use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::core::edgy::mutation::{MutationHandle, extract_mutation_from_opts};
+use crate::core::edgy::mutation::MutationHandle;
+use crate::core::element::NodeId;
 use crate::core::focus::{BlurEvent, FocusEvent};
-use crate::core::js_runtime::BoaOpaque;
-use crate::core::js_runtime::TurInstanceContext;
-use crate::core::js_runtime::TurNodeHandle;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 
-#[derive(Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
 pub struct TextEditingController {
     spans: Vec<SpanData>,
     cursor_position: usize,
@@ -35,30 +27,37 @@ pub struct TextEditingController {
     selection_end: usize,
     composing_text: Option<String>,
     composing_start: usize,
-    handle: Option<JsObject>,
     /// Content revision — bumped by every mutation that changes the *rendered
     /// text or span styles* (insert / delete / setSpans / clear / composition
     /// transitions). Pure caret/selection moves do NOT bump it, so the
     /// `EditableTextElement` layout memo (keyed on the revision) can skip
     /// re-shaping the whole document on cursor-only changes.
     revision: u64,
+    /// Replacement epoch — bumped by the programmatic full-replacement rail
+    /// (`set_spans`, i.e. the `tctrl_set_text` row) ONLY. Typing, undo, and
+    /// highlight span writes ride the other mutators and never touch it.
+    /// The multiline scroll reset keys off THIS, not the revision: a scrolled
+    /// editor must keep its scroll while the user types or undo runs, and
+    /// reopen at the top only when a new document is loaded into it.
+    replace_epoch: u64,
     /// Memoized join of `spans`, keyed by `revision`. `text()` is called
     /// several times per keystroke and once per painted frame; the join is
     /// O(document) so it is derived once per content change instead.
     cached_text: RefCell<Option<(u64, String)>>,
     /// Back-reference to the `UndoController` attached via `Input`'s
-    /// `undoController` prop. When `Some`, every text-mutating method pushes
-    /// a snapshot of the *current* state to the recorder BEFORE mutating —
-    /// mirroring Flutter's `UndoHistory` listener model where recording is a
-    /// side effect of the controller's value setter, not a per-call-site
-    /// concern. Note: a controller shared across multiple `Input`
-    /// elements will have its recorder overwritten by whichever element
-    /// attaches last (the demo uses a single editor, so this is fine).
-    undo_recorder: Option<JsObject>,
+    /// `undoController` prop (bound at view-build time). When `Some`, every
+    /// text-mutating method pushes a snapshot of the *current* state to the
+    /// recorder BEFORE mutating — mirroring Flutter's `UndoHistory` listener
+    /// model where recording is a side effect of the controller's value
+    /// setter, not a per-call-site concern. Note: a controller shared across
+    /// multiple `Input` elements will have its recorder overwritten by
+    /// whichever element attaches last (the demo uses a single editor, so
+    /// this is fine).
+    undo_recorder: Option<Rc<RefCell<UndoController>>>,
     /// Transient flag set by the undo/redo keystroke arms while they apply a
     /// restored value via `set_spans_preserve_cursor`. Prevents the
     /// restoration from pushing the current state and clearing the redo
-    /// stack. Single-threaded (boa), no re-entrancy across the JS boundary.
+    /// stack. Single-threaded, no re-entrancy across the mutation boundary.
     suppress_undo: bool,
     on_input: Option<MutationHandle<InputEvent>>,
     on_cursor_change: Option<MutationHandle<CursorChangeEvent>>,
@@ -70,6 +69,14 @@ pub struct TextEditingController {
     on_composition_start: Option<MutationHandle<CompositionStartEvent>>,
     on_composition_update: Option<MutationHandle<CompositionUpdateEvent>>,
     on_composition_end: Option<MutationHandle<CompositionEndEvent>>,
+    /// The editable node currently mounted with this controller — attached
+    /// at view build (same moment as the undo recorder). The host-pkg
+    /// mutating rows (`tctrl_set_text` & co) read it to mark the mounted
+    /// node dirty: the controller is an opaque `Rc` binding invisible to
+    /// the reactive build dedup, so without the mark a programmatic write
+    /// never revisits the element and the pixels stay frozen at the old
+    /// shape.
+    mounted: Option<NodeId>,
 }
 
 impl TextEditingController {
@@ -81,8 +88,8 @@ impl TextEditingController {
             selection_end: 0,
             composing_text: None,
             composing_start: 0,
-            handle: None,
             revision: 0,
+            replace_epoch: 0,
             cached_text: RefCell::new(None),
             undo_recorder: None,
             suppress_undo: false,
@@ -96,7 +103,21 @@ impl TextEditingController {
             on_composition_start: None,
             on_composition_update: None,
             on_composition_end: None,
+            mounted: None,
         }
+    }
+
+    /// Attach the editable node mounted with this controller. Called by
+    /// `EditableTextView::build` — the same moment the undo recorder
+    /// attaches. A controller shared across inputs keeps the LAST mount
+    /// (matching the undo-recorder law documented on the field).
+    pub fn attach_view(&mut self, id: NodeId) {
+        self.mounted = Some(id);
+    }
+
+    /// The editable node mounted with this controller, if any.
+    pub fn mounted_view(&self) -> Option<NodeId> {
+        self.mounted
     }
 
     /// Current content revision. Consumers pair this with the rendered
@@ -106,6 +127,14 @@ impl TextEditingController {
         self.revision
     }
 
+    /// Current replacement epoch (see the field doc). The multiline scroll
+    /// reset compares against the epoch it last saw: a mismatch means a
+    /// programmatic document replacement happened and the view reopens at
+    /// the top.
+    pub fn replace_epoch(&self) -> u64 {
+        self.replace_epoch
+    }
+
     /// Bump the content revision (rendered text / span styles changed).
     /// Invalidates the memoized text join.
     fn invalidate(&mut self) {
@@ -113,12 +142,12 @@ impl TextEditingController {
         *self.cached_text.borrow_mut() = None;
     }
 
-    /// Attach an `UndoController` recorder. Called by `Input`'s element
-    /// builder when the `undoController` prop is present, so the controller's
+    /// Attach an `UndoController` recorder. Called by `EditableTextView`'s
+    /// build when an undo controller is present, so the controller's
     /// text-mutating methods can snapshot to the history stack uniformly —
     /// regardless of whether the mutation originated from a keystroke, IME,
-    /// JS bridge, or programmatic `setSpans`.
-    pub fn set_undo_recorder(&mut self, recorder: Option<JsObject>) {
+    /// paste, or a programmatic `set_spans`.
+    pub fn set_undo_recorder(&mut self, recorder: Option<Rc<RefCell<UndoController>>>) {
         self.undo_recorder = recorder;
     }
 
@@ -148,11 +177,7 @@ impl TextEditingController {
             selection_anchor: self.selection_anchor,
             selection_end: self.selection_end,
         };
-        if let Some(mut undo) =
-            recorder.downcast_mut::<crate::builtin_plugins::text::controller::UndoController>()
-        {
-            undo.push(snapshot);
-        }
+        recorder.borrow_mut().push(snapshot);
     }
 
     /// The full text (all spans joined). Memoized on the content revision —
@@ -181,6 +206,11 @@ impl TextEditingController {
         if new_text != self.text() {
             self.maybe_push_undo();
         }
+        // The replacement rail ALWAYS advances the epoch — even when the
+        // content is unchanged (re-selecting the same case / Reset). This is
+        // the multiline scroll reset's only trigger: a programmatic document
+        // replacement reopens the view at the top.
+        self.replace_epoch = self.replace_epoch.wrapping_add(1);
         // Bump the revision only when the *rendered content* differs: a
         // no-op re-highlight (identical spans) stays free — the element's
         // layout memo keeps its hit and the document is not re-shaped.
@@ -340,6 +370,12 @@ impl TextEditingController {
         self.on_input
     }
 
+    /// Attach the input-intent mutation (the rut `input_on_input` row's
+    /// crossing). `None` detaches.
+    pub fn set_on_input(&mut self, m: Option<MutationHandle<InputEvent>>) {
+        self.on_input = m;
+    }
+
     pub fn on_cursor_change(&self) -> Option<MutationHandle<CursorChangeEvent>> {
         self.on_cursor_change
     }
@@ -475,314 +511,5 @@ impl TextEditingController {
 impl Default for TextEditingController {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-macro_rules! controller_getter {
-    ($class:expr, $name:expr, $body:expr) => {
-        let getter = NativeFunction::from_fn_ptr($body).to_js_function($class.context().realm());
-        $class.accessor(js_string!($name), Some(getter), None, Attribute::default());
-    };
-}
-
-impl Class for TextEditingController {
-    const NAME: &'static str = "TextEditingController";
-    const LENGTH: usize = 1;
-
-    fn data_constructor(
-        _new_target: &JsValue,
-        args: &[JsValue],
-        ctx: &mut Context,
-    ) -> JsResult<Self> {
-        let mut ctrl = Self::new();
-        if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_input = extract_mutation_from_opts(&opts, "onInput", ctx);
-            ctrl.on_cursor_change = extract_mutation_from_opts(&opts, "onCursorChange", ctx);
-            ctrl.on_selection_change = extract_mutation_from_opts(&opts, "onSelectionChange", ctx);
-            ctrl.on_key_down = extract_mutation_from_opts(&opts, "onKeyDown", ctx);
-            ctrl.on_key_up = extract_mutation_from_opts(&opts, "onKeyUp", ctx);
-            ctrl.on_focus = extract_mutation_from_opts(&opts, "onFocus", ctx);
-            ctrl.on_blur = extract_mutation_from_opts(&opts, "onBlur", ctx);
-            ctrl.on_composition_start =
-                extract_mutation_from_opts(&opts, "onCompositionStart", ctx);
-            ctrl.on_composition_update =
-                extract_mutation_from_opts(&opts, "onCompositionUpdate", ctx);
-            ctrl.on_composition_end = extract_mutation_from_opts(&opts, "onCompositionEnd", ctx);
-
-            // Optional initial text — pre-fills the controller so an input
-            // that mounts it shows a value other than empty without needing
-            // a separate `setSpans` call after mount.
-            if let Some(initial) = opts
-                .get(js_string!("initialText"), ctx)
-                .ok()
-                .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
-                && !initial.is_empty()
-            {
-                ctrl.set_spans(vec![
-                    crate::builtin_plugins::text::controller::span_data::SpanData {
-                        text: initial,
-                        weight: None,
-                        italic: false,
-                        underline: false,
-                        font_size: None,
-                        color: None,
-                    },
-                ]);
-            }
-        }
-        Ok(ctrl)
-    }
-
-    fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
-        controller_getter!(class, "text", |this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<TextEditingController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(js_string!(ctrl.text())))
-        });
-
-        controller_getter!(class, "cursorPosition", |this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<TextEditingController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(ctrl.cursor_position as f64))
-        });
-
-        controller_getter!(class, "selectionAnchor", |this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<TextEditingController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(ctrl.selection_anchor as f64))
-        });
-
-        controller_getter!(class, "selectionEnd", |this, _, _| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<TextEditingController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            Ok(JsValue::from(ctrl.selection_end as f64))
-        });
-
-        controller_getter!(class, "selectedText", |this, _, _ctx| {
-            let obj = this
-                .as_object()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            let ctrl = obj
-                .downcast_ref::<TextEditingController>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-            if !ctrl.has_selection() {
-                return Ok(JsValue::from(js_string!("")));
-            }
-            let full = ctrl.text();
-            let (start, end) = ctrl.selection_range();
-            let slice = &full[start..end];
-            Ok(JsValue::from(js_string!(slice)))
-        });
-
-        class.method(
-            js_string!("setSpans"),
-            1,
-            NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let spans =
-                    crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
-                        args.get_or_undefined(0),
-                        ctx,
-                    );
-                ctrl.set_spans(spans);
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("setSpansPreserveCursor"),
-            1,
-            NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let spans =
-                    crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
-                        args.get_or_undefined(0),
-                        ctx,
-                    );
-                ctrl.set_spans_preserve_cursor(spans);
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("clear"),
-            0,
-            NativeFunction::from_fn_ptr(|this, _, _| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                ctrl.clear();
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("setSelection"),
-            2,
-            NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let anchor = args.get_or_undefined(0).to_number(ctx)? as usize;
-                let end = args.get_or_undefined(1).to_number(ctx)? as usize;
-                ctrl.set_selection(anchor, end);
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("insertText"),
-            1,
-            NativeFunction::from_fn_ptr(|this, args, _ctx| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let text = args
-                    .get_or_undefined(0)
-                    .as_string()
-                    .map(|s| s.to_std_string_escaped())
-                    .unwrap_or_default();
-                // Replace any existing selection, otherwise insert at the cursor.
-                if ctrl.has_selection() {
-                    let (start, _end) = ctrl.selection_range();
-                    ctrl.delete_selection();
-                    ctrl.insert_str_at(start, &text);
-                    let new_cursor = start + text.len();
-                    ctrl.set_cursor_position(new_cursor);
-                    ctrl.set_selection(new_cursor, new_cursor);
-                } else {
-                    let pos = ctrl.cursor_position();
-                    ctrl.insert_str_at(pos, &text);
-                    let new_cursor = pos + text.len();
-                    ctrl.set_cursor_position(new_cursor);
-                    ctrl.set_selection(new_cursor, new_cursor);
-                }
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("deleteSelection"),
-            0,
-            NativeFunction::from_fn_ptr(|this, _args, _ctx| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                ctrl.delete_selection();
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("_attach"),
-            1,
-            NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let mut ctrl = obj
-                    .downcast_mut::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                if let Some(handle_obj) = args.get_or_undefined(0).as_object()
-                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some()
-                {
-                    ctrl.handle = Some(handle_obj.clone());
-                }
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        // Explicit JS-side recorder attachment. `Input` attaches
-        // automatically from the `undoController` prop, so this is only needed
-        // when a controller is mutated outside an Input binding.
-        class.method(
-            js_string!("setUndoController"),
-            1,
-            NativeFunction::from_fn_ptr(|this, args, _ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let recorder = match args.get_or_undefined(0).as_object() {
-                    Some(o) if o.downcast_ref::<crate::builtin_plugins::text::controller::UndoController>().is_some() => {
-                        Some(o.clone())
-                    }
-                    _ => None,
-                };
-                ctrl.set_undo_recorder(recorder);
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        class.method(
-            js_string!("requestFocus"),
-            0,
-            NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let ctrl = obj
-                    .downcast_ref::<TextEditingController>()
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
-                let Some(ref handle_obj) = ctrl.handle else {
-                    return Ok(JsValue::undefined());
-                };
-                let handle_ref = BoaOpaque::<TurNodeHandle>::wrap(handle_obj)
-                    .ok_or_else(|| JsNativeError::typ().with_message("invalid handle"))?;
-                let node_id = handle_ref.id;
-
-                let js_ctx_obj = args
-                    .get_or_undefined(0)
-                    .as_object()
-                    .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
-                let js_ctx = BoaOpaque::<TurInstanceContext>::wrap(&js_ctx_obj)
-                    .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
-                let mut focus = js_ctx.focus_manager.borrow_mut();
-                focus.set_focus(node_id);
-                Ok(JsValue::undefined())
-            }),
-        );
-
-        Ok(())
     }
 }

@@ -628,18 +628,16 @@ pub mod ops {
         })
     }
 
-    /// Evaluate the registered module source `source_handle` as an ES module
-    /// (resolved by the engine's `TurModuleLoader` — `tur:std`,
-    /// `tur:animation`, etc. must already be registered, which instance
-    /// creation does), then request a paint so the bundle renders on the
-    /// next frame.
+    /// Compile + boot the registered module source `source_handle` as a
+    /// **rut** module (`entry fn start()` — the module lifecycle contract),
+    /// then request a paint so the module's tree renders on the next frame.
     ///
     /// Posted to the tur-host thread (FIFO behind the instance build), so
     /// the calling thread returns immediately; a failed load logs to logcat
     /// instead of throwing. The registry's `Arc<str>` flows to the worker
     /// by refcount — no copy, no JNI string traffic. A source produced on
     /// the Rust side (e.g. an APK asset read via `AAssetManager`)
-    /// therefore reaches the JS realm without ever being serialized across
+    /// therefore reaches the rut VM without ever being serialized across
     /// the JNI boundary.
     pub fn load_module(env: &mut JNIEnv, handle: jlong, source_handle: jlong) {
         catch_void(env, "loadModule", |_env| {
@@ -663,13 +661,44 @@ pub mod ops {
                 match futures::executor::block_on(
                     instance
                         .app
-                        .load_module_source(&instance.module_sources, source_handle as u64),
+                        .load_rut_module_source(&instance.module_sources, source_handle as u64),
                 ) {
                     Ok(()) => {
-                        log::info!("loadModule: module evaluated OK");
+                        log::info!("loadModule: rut module booted OK");
                         log::info!("loadModule: paint requested");
                     }
-                    Err(e) => log::error!("loadModule: module load failed: {e}"),
+                    Err(e) => log::error!("loadModule: rut module load failed: {e}"),
+                }
+            });
+            if !posted {
+                return Err("tur-host thread has shut down".into());
+            }
+            Ok(())
+        });
+    }
+
+    /// Compile + boot `source` as a **rut** module (the zero-JS scripting
+    /// rail — `core::rut_runtime`) on the given instance, then request a
+    /// paint. The module must export `entry fn start()`.
+    ///
+    /// Posted to the tur-host thread (FIFO behind the instance build); a
+    /// failed load logs to logcat instead of throwing. Rut sources are
+    /// small, so the string crosses JNI directly (no registry hop).
+    pub fn load_rut_module(env: &mut JNIEnv, handle: jlong, source: JString) {
+        catch_void(env, "loadRutModule", move |env| {
+            let source: String = env.get_string(&source)?.into();
+            let route = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let id = route.id;
+            let posted = route.host.post(move |state| {
+                let Some(instance) = state.instance(id) else {
+                    log::warn!(
+                        "loadRutModule: instance {id} not present (build failed or destroyed) — load skipped"
+                    );
+                    return;
+                };
+                match futures::executor::block_on(instance.app.load_rut_module(source)) {
+                    Ok(()) => log::info!("loadRutModule: module booted OK"),
+                    Err(e) => log::error!("loadRutModule: module load failed: {e}"),
                 }
             });
             if !posted {
@@ -1212,6 +1241,16 @@ macro_rules! standard_jni_exports {
             source_handle: $crate::jlong,
         ) {
             $crate::ops::load_module(&mut env, handle, source_handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_loadRutModule(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            source: $crate::JString,
+        ) {
+            $crate::ops::load_rut_module(&mut env, handle, source)
         }
 
         #[unsafe(no_mangle)]

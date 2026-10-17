@@ -25,11 +25,9 @@ jobs:
 
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
-        working-directory: ./js
 
       - name: Build JS
         run: pnpm build
-        working-directory: ./js
 
       - name: Install cargo-nextest
         run: |
@@ -55,11 +53,9 @@ jobs:
 
       - name: Typecheck JS
         run: pnpm typecheck
-        working-directory: ./js
 
       - name: Check JS
         run: pnpm check
-        working-directory: ./js
 
       - name: wasm-pack build
         run: wasm-pack build --target web --no-opt -- --locked

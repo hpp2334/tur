@@ -17,7 +17,7 @@ mod imp {
     use std::pin::Pin;
     use std::rc::Rc;
 
-    use boa_engine::context::time::StdClock;
+    use tur_engine::core::clock::StdClock;
     use jni::objects::{GlobalRef, JObject, JValue};
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};

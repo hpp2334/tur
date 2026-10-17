@@ -1,18 +1,13 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsValue};
-
-use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::Axis;
-use crate::core::view::{Val, View, ViewCx, extract_view, read_val};
+use crate::core::view::{Val, View, ViewCx, read_val};
 
+use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
 use crate::builtin_plugins::scroll::ScrollPosition;
 
 /// The default number of items built up-front when no viewport information is
@@ -26,7 +21,8 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 //
 // `axis`, `itemCount`, `overscan`, `maxCrossAxisExtent`, `childAspectRatio`,
 // `mainAxisExtent`, and the spacing props are reactive (`Val<T>`). `builder`
-// is a JS function `(index) => Element`.
+// is a rut entry-builder `(index) -> opaque` resolved through the guarded VM
+// face.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -39,39 +35,42 @@ pub struct LazyGridView {
     pub(crate) main_axis_extent: Option<Val<f64>>,
     pub(crate) cross_axis_spacing: Option<Val<f64>>,
     pub(crate) main_axis_spacing: Option<Val<f64>>,
-    pub(crate) builder: JsFunction,
+    pub(crate) builder: RutEntryBuilder,
     pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for LazyGridView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(Axis::Vertical);
-        let item_count = read_val(cx, &self.item_count, boa).unwrap_or(0);
+        let item_count = read_val(cx, &self.item_count).unwrap_or(0);
         let overscan = self
             .overscan
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(3);
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
-        // adjusts the mounted set to match the actual viewport.
+        // adjusts the mounted set to match the actual viewport. The item
+        // builder resolves specs first (the guarded VM face), then the
+        // build phase runs realm-free.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut visible: Vec<(u64, NodeId)> = Vec::new();
-        let mut warned_builder_error = false;
+        let mut resolved: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in 0..initial_count {
-            let Some(spec) = build_item_spec(&builder, index, &mut warned_builder_error, boa)
-            else {
-                continue;
-            };
-            let item_id = spec.build(cx, boa, id.into());
+            if let Some(spec) = builder.build(index) {
+                resolved.push((index, spec));
+            }
+        }
+        let mut visible: Vec<(u64, NodeId)> = Vec::new();
+        for (index, spec) in resolved {
+            let item_id = spec.build(cx, id.into());
             visible.push((index, item_id));
         }
         let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
@@ -95,10 +94,8 @@ impl View for LazyGridView {
                 reported_start: 0,
                 reported_end: 0,
                 warned_unbounded: false,
-                warned_builder_error,
             })
             .with_callbacks(),
-            boa,
         );
 
         for item_id in item_ids {
@@ -109,33 +106,6 @@ impl View for LazyGridView {
         }
         cx.link_child(parent, id.into());
         id.into()
-    }
-}
-
-/// Invoke the JS builder closure for `index`, returning the produced spec.
-/// A throwing builder is swallowed by `call` → `None`, which would render a
-/// silently EMPTY grid — so the first failure is logged (one error per
-/// element, matching the `warned_unbounded` convention) before returning.
-fn build_item_spec(
-    builder: &JsFunction,
-    index: u64,
-    warned_builder_error: &mut bool,
-    boa: &mut Context,
-) -> Option<Rc<dyn View>> {
-    let result = builder.call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa);
-    match result {
-        Ok(result) => extract_view(&result),
-        Err(err) => {
-            if !*warned_builder_error {
-                *warned_builder_error = true;
-                let message = err.to_string();
-                tracing::error!(
-                    "LazyGrid item builder threw for index {index} — item not \
-                     built (further failures silenced): {message}"
-                );
-            }
-            None
-        }
     }
 }
 
@@ -179,9 +149,6 @@ pub struct LazyGridElement {
     /// One-shot layout diagnostic: viewport collapsed under unbounded
     /// constraints.
     pub(crate) warned_unbounded: bool,
-    /// Set after the first item-builder exception is logged — a throwing
-    /// builder fires once per element, not per item per frame.
-    pub(crate) warned_builder_error: bool,
 }
 
 impl LazyGridElement {
@@ -271,13 +238,13 @@ impl LazyGridElement {
     /// Detect prop changes (axis + all sizing props + itemCount) by diffing
     /// freshly-read reactive values against cached ones, tearing down /
     /// resetting state as needed. Called at the top of `perform_layout`.
-    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx, boa: &mut Context) {
+    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx) {
         // Axis change: cached geometry is axis-specific, so reset.
         let new_axis = self
             .view
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(self.axis);
         if new_axis != self.axis {
             self.axis = new_axis;
@@ -290,7 +257,7 @@ impl LazyGridElement {
         // itemCount: always refresh the declared count (the authoritative
         // value for window math). A read failure keeps the previous declared
         // value rather than collapsing it to 0.
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        let new_count = read_val(cx, &self.view.item_count).unwrap_or(self.declared_count);
         self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
@@ -311,7 +278,7 @@ impl LazyGridElement {
     /// Mount cells in the visible range that aren't currently built, and
     /// unmount any built cells outside it. Mutates the tree via `cx`. Sorted
     /// `visible` is preserved.
-    pub fn remount(&mut self, cx: &mut dyn ViewCx, boa: &mut Context, viewport_main: f64) {
+    pub fn remount(&mut self, cx: &mut dyn ViewCx, viewport_main: f64) {
         if viewport_main <= 0.0 {
             return;
         }
@@ -351,25 +318,27 @@ impl LazyGridElement {
             self.visible.iter().map(|(i, _)| *i).collect();
         let builder = self.view.builder.clone();
         let node_id = self.node_id;
-        let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
+        let mut built: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in new_start..=new_end {
             if existing.contains(&index) {
                 continue;
             }
-            if let Some(spec) =
-                build_item_spec(&builder, index, &mut self.warned_builder_error, boa)
-            {
-                let item_id = spec.build(cx, boa, node_id.into());
-                let next_higher = self
-                    .visible
-                    .iter()
-                    .find(|(i, _)| *i > index)
-                    .map(|(_, id)| *id);
-                if let Some(ref_id) = next_higher {
-                    cx.move_child_before(node_id, item_id, ref_id);
-                }
-                newly_mounted.push((index, item_id));
+            if let Some(spec) = builder.build(index) {
+                built.push((index, spec));
             }
+        }
+        let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
+        for (index, spec) in built {
+            let item_id = spec.build(cx, node_id.into());
+            let next_higher = self
+                .visible
+                .iter()
+                .find(|(i, _)| *i > index)
+                .map(|(_, id)| *id);
+            if let Some(ref_id) = next_higher {
+                cx.move_child_before(node_id, item_id, ref_id);
+            }
+            newly_mounted.push((index, item_id));
         }
         if !newly_mounted.is_empty() {
             self.visible.extend(newly_mounted);
@@ -481,30 +450,41 @@ impl ElementOnWheel for LazyGridElement {
 // ---------------------------------------------------------------------------
 
 impl LazyGridView {
-    /// Build a `LazyGridView` from a JS props object. Returns `None` when a
-    /// required prop (`itemCount`, `maxCrossAxisExtent`, `builder`) is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let item_count = p.val::<u64>("itemCount")?;
-        let max_cross_axis_extent = p.val::<f64>("maxCrossAxisExtent")?;
-        let builder = p.function("builder")?;
-        Some(LazyGridView {
-            axis: p.val::<Axis>("axis"),
+    /// Rut-rail constructor (the `lazy_*` rows): an entry-builder item
+    /// face (the guarded flush-time VM call) + static config + the query
+    /// key (the rows' `lazy_qkey` crossing). The extent/spacing props are
+    /// the fixed-row + gap knobs (`lazy_grid_item_extent` /
+    /// `lazy_grid_spacing`); absent → the aspect math / zero gaps.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_rut(
+        entry: RutEntryBuilder,
+        item_count: Val<u64>,
+        axis: Option<Axis>,
+        overscan: Option<u64>,
+        max_cross_axis_extent: f64,
+        child_aspect_ratio: Option<f64>,
+        main_axis_extent: Option<f64>,
+        cross_axis_spacing: Option<f64>,
+        main_axis_spacing: Option<f64>,
+        query_key: Option<Vec<String>>,
+    ) -> Self {
+        LazyGridView {
+            axis: axis.map(Val::Static),
             item_count,
-            overscan: p.val::<u64>("overscan"),
-            max_cross_axis_extent,
-            child_aspect_ratio: p.val::<f64>("childAspectRatio"),
-            main_axis_extent: p.val::<f64>("mainAxisExtent"),
-            cross_axis_spacing: p.val::<f64>("crossAxisSpacing"),
-            main_axis_spacing: p.val::<f64>("mainAxisSpacing"),
-            builder,
-            query_key: p.query_key("queryKey"),
-        })
+            overscan: overscan.map(Val::Static),
+            max_cross_axis_extent: Val::Static(max_cross_axis_extent),
+            child_aspect_ratio: child_aspect_ratio.map(Val::Static),
+            main_axis_extent: main_axis_extent.map(Val::Static),
+            cross_axis_spacing: cross_axis_spacing.map(Val::Static),
+            main_axis_spacing: main_axis_spacing.map(Val::Static),
+            builder: entry,
+            query_key,
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Visible-range event payload — JS callback arguments for
+// Visible-range event payload — callback arguments for
 // onVisibleRangeChange (LazyGridController only).
 // ---------------------------------------------------------------------------
 
@@ -514,11 +494,12 @@ pub struct VisibleRangeChangeEvent {
     pub(crate) end_index: u64,
 }
 
-impl IntoJsArgs for VisibleRangeChangeEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
+impl crate::core::edgy::mutation::MutationPayload for VisibleRangeChangeEvent {
+    /// The visible window — `[startIndex, endIndex]` (inclusive).
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
         vec![
-            JsValue::from(self.start_index as f64),
-            JsValue::from(self.end_index as f64),
+            crate::core::edgy::Value::Num(self.start_index as f64),
+            crate::core::edgy::Value::Num(self.end_index as f64),
         ]
     }
 }

@@ -9,10 +9,10 @@ const path = require('path');
 const fs = require('fs');
 
 const rootDir = path.join(__dirname, '..');
-const biomeBin = path.join('js', 'node_modules', '.bin', 'biome');
+const biomeBin = path.join('node_modules', '.bin', 'biome');
 
-// Biome scope, matching the `pnpm format`/`pnpm lint` scripts in js/package.json.
-const biomeScopes = ['js/', 'demo/website/', 'demo/playground-view/'];
+// Biome scope, matching the `pnpm format`/`pnpm lint` scripts in package.json.
+const biomeScopes = ['demo/website/', 'package.json', 'tsconfig.base.json', 'biome.json'];
 const biomeExts = new Set([
   '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
   '.json', '.jsonc', '.css',

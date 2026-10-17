@@ -71,7 +71,7 @@ node ./scripts/format-staged.cjs
 git commit -m "<type>: <description>"
 ```
 
-`format-staged.cjs` runs `rustfmt` on staged `.rs` files and `biome check --write` on staged JS/TS files (within `js/`, `demo/website`, `demo/playground-view`), then re-stages anything it reformatted. It is non-fatal — it never blocks a commit; lint/clippy are still enforced by CI in Step 5.
+`format-staged.cjs` runs `rustfmt` on staged `.rs` files and `biome check --write` on staged JS/TS files (within `demo/website` plus the root `package.json`/`tsconfig.base.json`/`biome.json`), then re-stages anything it reformatted. It is non-fatal — it never blocks a commit; lint/clippy are still enforced by CI in Step 5.
 
 Then push to remote:
 ```bash

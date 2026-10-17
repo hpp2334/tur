@@ -1,5 +1,5 @@
 //! Clipboard plugin — backend trait + capability newtype + event payloads +
-//! `tur:clipboard` JS bridge + engine-internal subsystems.
+//! engine-internal subsystems.
 //!
 //! Inlined from the former `tur-clipboard-capability` crate. Exposes a
 //! minimal public API surface; the rest is internal to `builtin_plugins`.
@@ -21,14 +21,10 @@
 //!   plugin and by `builtin_plugins/text`).
 //! - [`ClipboardPlatformSubsystem`] / [`ClipboardWriteSubsystem`] engine
 //!   event-bus handlers.
-//! - The JS bridge fns (ctx-bound `Ptr`s) — registered as the
-//!   `clipboard.readText` / `clipboard.writeText` consts of
-//!   `tur:clipboard`.
 //!
 //! [`ClipboardPlatformSubsystem`]: handlers::ClipboardPlatformSubsystem
 //! [`ClipboardWriteSubsystem`]: handlers::ClipboardWriteSubsystem
 
-pub(in crate::builtin_plugins) mod bridge;
 pub mod capability;
 pub(in crate::builtin_plugins) mod event;
 pub(in crate::builtin_plugins) mod handlers;
@@ -38,13 +34,11 @@ pub use event::platform_paste;
 pub(in crate::builtin_plugins) use event::{ClipboardPasteEvent, push_write};
 
 use crate::core::capability::CapabilityDecls;
-use crate::core::js_runtime::helpers::ConstEntry;
 use crate::core::plugin::{Plugin, PluginRegisterContext};
 use crate::error::TurError;
 
-/// tur-clipboard plugin: registers `tur:clipboard` (exporting a
-/// `clipboard` object with `readText` / `writeText` methods) plus the
-/// engine-internal [`ClipboardPlatformSubsystem`](handlers::ClipboardPlatformSubsystem)
+/// tur-clipboard plugin: registers the engine-internal
+/// [`ClipboardPlatformSubsystem`](handlers::ClipboardPlatformSubsystem)
 /// (forwards embedder paste into the engine-internal event bus) and
 /// [`ClipboardWriteSubsystem`](handlers::ClipboardWriteSubsystem) (the
 /// Cmd+C/Cmd+X event path).
@@ -74,7 +68,7 @@ impl Plugin for TurClipboardPlugin {
         decls.need::<Clipboard>();
     }
 
-    fn register(&self, ctx: &mut PluginRegisterContext<'_>) -> Result<(), TurError> {
+    fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
         // Engine-internal subsystems.
         //
         // `ClipboardPlatformSubsystem` must run BEFORE tur-text's
@@ -92,14 +86,6 @@ impl Plugin for TurClipboardPlugin {
         // have caught at build()), writes silently drop with a warning.
         ctx.register_subsystem(Box::new(handlers::ClipboardPlatformSubsystem));
         ctx.register_subsystem(Box::new(handlers::ClipboardWriteSubsystem));
-
-        // Build the `clipboard` object (with `readText`/`writeText` methods)
-        // and register it as the module's only export.
-        let ctx_value = ctx.js_ctx_value.clone();
-        let clipboard_obj = bridge::build_clipboard_object(ctx.boa_mut(), ctx_value);
-        let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
-
-        ctx.register_module("tur:clipboard", bridge::fns(), consts);
 
         Ok(())
     }

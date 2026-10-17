@@ -1,24 +1,23 @@
 //! Builtin plugins — feature bundles bundled with the engine itself.
 //!
 //! Each plugin sub-folder exports a single `pub fn install_<name>(ctx:
-//! &mut PluginRegisterContext) -> Result<Vec<FnEntry>, TurError>` that registers
-//! its elements + bridge fns + subsystems + classes. Sub-modules are
-//! `pub(in crate::builtin_plugins)` so sibling plugins can share internals
-//! (e.g. text uses scroll's `dispatch_wheel`), but `core/` and external
-//! crates cannot reach past `install_xxx`.
+//! &mut PluginRegisterContext) -> Result<(), TurError>` that registers its
+//! subsystems + plugin state + rut-ext pushes. Elements materialize
+//! pure-Rust views (authored through the rut rows in `core::rut_runtime`);
+//! there is no JS bridge rail. Sub-modules are `pub(in
+//! crate::builtin_plugins)` so sibling plugins can share internals (e.g.
+//! text uses scroll's `dispatch_wheel`), but `core/` and external crates
+//! cannot reach past `install_xxx`.
 //!
 //! `core/` keeps only pure infrastructure (trait defs, app loop, event
 //! queues, render/layout/view primitives, contract types).
 //!
 //! [`TurStdPlugin`] in `std.rs` is the orchestrator that calls every
-//! plugin's `install_xxx` and merges their `FnEntry`s into the single
-//! `tur:std` JS module.
+//! plugin's `install_xxx`.
 
 pub mod clipboard;
-pub mod console;
 pub mod control_flow;
 pub mod effects;
-pub mod encode;
 pub mod focus;
 pub mod gesture;
 pub mod image;

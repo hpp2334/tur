@@ -3,22 +3,9 @@
 //! effects, not animation; the animation machinery (`AnimationController`,
 //! `Tween`, implicit-animation widgets) lives in the separate `tur-animation`
 //! crate.
-//!
-//! Installed into `tur:std` by [`install_effects`].
 
-pub mod bridge;
 mod element;
 mod layout;
 mod render;
 
 pub use element::{OpacityElement, OpacityView, TransformElement, TransformView};
-
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::plugin::PluginRegisterContext;
-use crate::error::TurError;
-
-/// Install the visual-effect elements (`Opacity`, `Transform`) and return
-/// their JS factory fns to be merged into `tur:std` by the orchestrator.
-pub fn install_effects(_ctx: &mut PluginRegisterContext<'_>) -> Result<Vec<FnEntry>, TurError> {
-    Ok(bridge::fns())
-}

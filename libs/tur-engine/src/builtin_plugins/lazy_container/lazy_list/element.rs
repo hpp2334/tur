@@ -1,18 +1,14 @@
 use std::rc::Rc;
 
 use crate::core::layout::Axis;
-use boa_engine::object::JsObject;
-use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsValue};
 
-use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::js_runtime::JsProps;
-use crate::core::view::{Val, View, ViewCx, extract_view, read_val};
+use crate::core::view::{Val, View, ViewCx, read_val};
 
+use crate::builtin_plugins::lazy_container::item_builder::RutEntryBuilder;
 use crate::builtin_plugins::lazy_container::lazy_list::controller::LazyListController;
 use crate::builtin_plugins::scroll::ScrollPosition;
 
@@ -27,8 +23,8 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 // LazyListView — the user's declaration.
 //
 // `axis`, `itemCount`, `overscan`, and `itemExtent` are reactive (`Val<T>`).
-// `builder` is a JS function `(index) => Element` captured at factory
-// time and stored as a `JsFunction`.
+// `builder` is a rut entry-builder `(index) -> opaque` resolved through the
+// guarded VM face.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -41,41 +37,44 @@ pub struct LazyListView {
     /// measure items off-screen to know the total content length. When
     /// absent, the average of measured children is used as a fallback.
     pub(crate) item_extent: Option<Val<f64>>,
-    pub(crate) builder: JsFunction,
+    pub(crate) builder: RutEntryBuilder,
     pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for LazyListView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         // Resolve the eager props needed by the element up-front.
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(Axis::Vertical);
-        let item_count = read_val(cx, &self.item_count, boa).unwrap_or(0);
+        let item_count = read_val(cx, &self.item_count).unwrap_or(0);
         let overscan = self
             .overscan
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(3);
-        let item_extent = self.item_extent.as_ref().and_then(|v| read_val(cx, v, boa));
+        let item_extent = self.item_extent.as_ref().and_then(|v| read_val(cx, v));
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
-        // will adjust the mounted set to match the actual viewport.
+        // will adjust the mounted set to match the actual viewport. The
+        // item builder resolves specs first (the guarded VM face), then the
+        // build phase runs realm-free.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut visible: Vec<(u64, NodeId)> = Vec::new();
-        let mut warned_builder_error = false;
+        let mut resolved: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in 0..initial_count {
-            let Some(spec) = build_item_spec(&builder, index, &mut warned_builder_error, boa)
-            else {
-                continue;
-            };
-            let item_id = spec.build(cx, boa, id.into());
+            if let Some(spec) = builder.build(index) {
+                resolved.push((index, spec));
+            }
+        }
+        let mut visible: Vec<(u64, NodeId)> = Vec::new();
+        for (index, spec) in resolved {
+            let item_id = spec.build(cx, id.into());
             visible.push((index, item_id));
         }
         let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
@@ -98,10 +97,8 @@ impl View for LazyListView {
                 reported_start: 0,
                 reported_end: 0,
                 warned_unbounded: false,
-                warned_builder_error,
             })
             .with_callbacks(),
-            boa,
         );
 
         for item_id in item_ids {
@@ -112,33 +109,6 @@ impl View for LazyListView {
         }
         cx.link_child(parent, id.into());
         id.into()
-    }
-}
-
-/// Invoke the JS builder closure for `index`, returning the produced spec.
-/// A throwing builder is swallowed by `call` → `None`, which would render a
-/// silently EMPTY list — so the first failure is logged (one error per
-/// element, matching the `warned_unbounded` convention) before returning.
-fn build_item_spec(
-    builder: &JsFunction,
-    index: u64,
-    warned_builder_error: &mut bool,
-    boa: &mut Context,
-) -> Option<Rc<dyn View>> {
-    let result = builder.call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa);
-    match result {
-        Ok(result) => extract_view(&result),
-        Err(err) => {
-            if !*warned_builder_error {
-                *warned_builder_error = true;
-                let message = err.to_string();
-                tracing::error!(
-                    "LazyList item builder threw for index {index} — item not \
-                     built (further failures silenced): {message}"
-                );
-            }
-            None
-        }
     }
 }
 
@@ -200,9 +170,6 @@ pub struct LazyListElement {
     /// One-shot layout diagnostic: viewport collapsed under unbounded
     /// constraints.
     pub(crate) warned_unbounded: bool,
-    /// Set after the first item-builder exception is logged — a throwing
-    /// builder fires once per element, not per item per frame.
-    pub(crate) warned_builder_error: bool,
 }
 
 impl LazyListElement {
@@ -342,14 +309,14 @@ impl LazyListElement {
     /// read value, subsequent passes are no-ops. Called at the top of
     /// `perform_layout` (with a `LayoutViewCx` so tree mutations work);
     /// replaces the former pre-layout `Effect` handler.
-    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx, boa: &mut Context) {
+    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx) {
         // Axis change: cached extents are axis-specific, so invalidate them
         // and reset the positioning anchor.
         let new_axis = self
             .view
             .axis
             .as_ref()
-            .and_then(|v| read_val(cx, v, boa))
+            .and_then(|v| read_val(cx, v))
             .unwrap_or(self.axis);
         if new_axis != self.axis {
             self.axis = new_axis;
@@ -359,11 +326,7 @@ impl LazyListElement {
         }
 
         // itemExtent change: invalidate cached measurements and the anchor.
-        let new_extent = self
-            .view
-            .item_extent
-            .as_ref()
-            .and_then(|v| read_val(cx, v, boa));
+        let new_extent = self.view.item_extent.as_ref().and_then(|v| read_val(cx, v));
         if new_extent != self.item_extent {
             self.item_extent = new_extent;
             self.extent_cache.clear();
@@ -375,7 +338,7 @@ impl LazyListElement {
         // value for all window math below — remount, extents, scrollbar). A
         // read failure keeps the previous declared value rather than
         // collapsing it to 0 (which would tear the list down spuriously).
-        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(self.declared_count);
+        let new_count = read_val(cx, &self.view.item_count).unwrap_or(self.declared_count);
         self.declared_count = new_count;
         // itemCount shrink: destroy items at or beyond the new count.
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
@@ -409,7 +372,7 @@ impl LazyListElement {
     /// Called from `perform_layout` with the **real** viewport (from
     /// constraints) via a `LayoutViewCx` — so remount runs during layout,
     /// not as a separate pre-layout pass.
-    pub fn remount(&mut self, cx: &mut dyn ViewCx, boa: &mut Context, viewport_main: f64) {
+    pub fn remount(&mut self, cx: &mut dyn ViewCx, viewport_main: f64) {
         // Defer remount until we have a real viewport size. Until then keep
         // the initial set mounted so the first paint isn't blank.
         if viewport_main <= 0.0 {
@@ -448,14 +411,17 @@ impl LazyListElement {
         let builder = self.view.builder.clone();
         let node_id = self.node_id;
         let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
+        let mut built: Vec<(u64, Rc<dyn View>)> = Vec::new();
         for index in new_start..=new_end {
             if existing.contains(&index) {
                 continue;
             }
-            if let Some(spec) =
-                build_item_spec(&builder, index, &mut self.warned_builder_error, boa)
+            if let Some(spec) = builder.build(index) {
+                built.push((index, spec));
+            }
+        }
+        for (index, spec) in built {
             {
-                let item_id = spec.build(cx, boa, node_id.into());
                 // Ensure the tree children vector stays ordered by logical
                 // index. `spec.build` already appended the new child to the
                 // end of `node.children`; if there's an existing mounted
@@ -466,6 +432,7 @@ impl LazyListElement {
                 // Using `link_child_before` here would double-add the id
                 // and crash layout; `move_child_before` removes the
                 // existing slot first, then re-inserts.
+                let item_id = spec.build(cx, node_id.into());
                 let next_higher = self
                     .visible
                     .iter()
@@ -587,8 +554,8 @@ impl ElementTrace for LazyListElement {
 
 // ---------------------------------------------------------------------------
 // Wheel handling — scroll the viewport along the main axis and flag a
-// remount. The actual mount/unmount happens in the next flush pass (which
-// has Context access to call the JS builder).
+// remount. The actual mount/unmount happens in the next flush pass (whose
+// layout step calls the item builder through the guarded VM face).
 // ---------------------------------------------------------------------------
 
 impl ElementOnWheel for LazyListElement {
@@ -619,25 +586,31 @@ impl ElementOnWheel for LazyListElement {
 // ---------------------------------------------------------------------------
 
 impl LazyListView {
-    /// Build a `LazyListView` from a JS props object. Returns `None` when a
-    /// required prop (`itemCount`, `builder`) is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let item_count = p.val::<u64>("itemCount")?;
-        let builder = p.function("builder")?;
-        Some(LazyListView {
-            axis: p.val::<Axis>("axis"),
+    /// Rut-rail constructor (the `lazy_*` rows): an entry-builder item
+    /// face (the guarded flush-time VM call) + static config + the query
+    /// key (the rows' `lazy_qkey` crossing).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_rut(
+        entry: RutEntryBuilder,
+        item_count: Val<u64>,
+        axis: Option<Axis>,
+        overscan: Option<u64>,
+        item_extent: Option<f64>,
+        query_key: Option<Vec<String>>,
+    ) -> Self {
+        LazyListView {
+            axis: axis.map(Val::Static),
             item_count,
-            overscan: p.val::<u64>("overscan"),
-            item_extent: p.val::<f64>("itemExtent"),
-            builder,
-            query_key: p.query_key("queryKey"),
-        })
+            overscan: overscan.map(Val::Static),
+            item_extent: item_extent.map(Val::Static),
+            builder: entry,
+            query_key,
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Visible-range event payload — JS callback arguments for
+// Visible-range event payload — callback arguments for
 // onVisibleRangeChange (LazyListController only).
 // ---------------------------------------------------------------------------
 
@@ -647,11 +620,12 @@ pub struct VisibleRangeChangeEvent {
     pub(crate) end_index: u64,
 }
 
-impl IntoJsArgs for VisibleRangeChangeEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
+impl crate::core::edgy::mutation::MutationPayload for VisibleRangeChangeEvent {
+    /// The visible window — `[startIndex, endIndex]` (inclusive).
+    fn to_value_args(&self) -> Vec<crate::core::edgy::Value> {
         vec![
-            JsValue::from(self.start_index as f64),
-            JsValue::from(self.end_index as f64),
+            crate::core::edgy::Value::Num(self.start_index as f64),
+            crate::core::edgy::Value::Num(self.end_index as f64),
         ]
     }
 }

@@ -1,0 +1,136 @@
+// data — the seed list, the "title|desc|done" item encoding, and the
+// list-write journeys (toggle / append / recount) the taps + modals
+// compose. The palette + icons live in theme/.
+
+use tur_kit::handles::{ ListHandle, list_new, value_item, value_len };
+use tur_kit::reactive::{ MutationCtx, Source };
+
+// ---- the seed data -------------------------------------------------------------
+
+// The boa state.ts seed list.
+pub fn seed_tasks() -> ListHandle {
+    let items = list_new();
+    items.push("Buy groceries|Milk, eggs, sourdough, coffee beans|0");
+    items.push("Walk the dog|30 minutes around the park|1");
+    items.push("Finish quarterly report|Q2 numbers + projection slides for Monday's review|0");
+    items.push("Call mom|Birthday planning for Saturday|0");
+    items.push("Read chapter 4|Designing Data-Intensive Applications|0");
+    return items;
+}
+
+// ---- the item parsing (the "title|desc|done" encoding) --------------------------
+
+fn idx_of(s: str, from: i32, c: u32) -> i32 {
+    let n = s.len();
+    let mut k = from;
+    while (k < n) {
+        if (s.code_at(k) == c) {
+            return k;
+        }
+        k = k + 1;
+    }
+    return -1;
+}
+
+pub fn item_title(s: str) -> str {
+    let p = idx_of(s, 0, 124);
+    if (p < 0) {
+        return s;
+    }
+    return s.slice(0, p);
+}
+
+pub fn item_desc(s: str) -> str {
+    let a = idx_of(s, 0, 124);
+    if (a < 0) {
+        return "";
+    }
+    let b = idx_of(s, a + 1, 124);
+    if (b < 0) {
+        return "";
+    }
+    return s.slice(a + 1, b);
+}
+
+pub fn item_done(s: str) -> bool {
+    let n = s.len();
+    if (n == 0) {
+        return false;
+    }
+    return s.code_at(n - 1) == 49;
+}
+
+// ---- the list writes -------------------------------------------------------------
+
+// Checkbox tap helper: flip the row's done flag (rewrite the list source —
+// the Each rebuilds; the derive recount follows). The handles stay
+// CONCRETE-annotated (`Source<T>`) — they cross ctx calls, and a plain
+// cross-module param loses the write origin (`Readable<T>` does not
+// satisfy `Writable` — the documented interning/origin accommodation).
+pub fn toggle_task(ctx: MutationCtx, tasks: Source<opaque>, idx: u64) {
+    let old = ctx.get<opaque>(tasks);
+    let count = value_len(old);
+    let fresh = list_new();
+    let mut k: u64 = 0;
+    while (k < count) {
+        let item = value_item(old, k);
+        if (k == idx) {
+            let body = item.slice(0, item.len() - 1);
+            if (item_done(item)) {
+                fresh.push(f"{body}0");
+            } else {
+                fresh.push(f"{body}1");
+            }
+        } else {
+            fresh.push(item);
+        }
+        k = k + 1;
+    }
+    ctx.set<opaque>(tasks, fresh.raw());
+}
+
+// The add-modal append (the encoded row arrives prebuilt).
+pub fn append_task(ctx: MutationCtx, tasks: Source<opaque>, row: str) {
+    let old = ctx.get<opaque>(tasks);
+    let fresh = list_new();
+    let count = value_len(old);
+    let mut k: u64 = 0;
+    while (k < count) {
+        fresh.push(value_item(old, k));
+        k = k + 1;
+    }
+    fresh.push(row);
+    ctx.set<opaque>(tasks, fresh.raw());
+}
+
+// ---- the counters -------------------------------------------------------------------
+
+// Recount items + dones off the live list (the header derive's deps).
+pub fn recount(ctx: MutationCtx, tasks: Source<opaque>, n: Source<f64>, done: Source<f64>) {
+    let old = ctx.get<opaque>(tasks);
+    let count = value_len(old);
+    let mut dones: u64 = 0;
+    let mut k: u64 = 0;
+    while (k < count) {
+        if (item_done(value_item(old, k))) {
+            dones = dones + 1;
+        }
+        k = k + 1;
+    }
+    ctx.set<f64>(n, count as f64);
+    ctx.set<f64>(done, dones as f64);
+}
+
+// ASCII trim (the spaces around a draft).
+pub fn trim(s: str) -> str {
+    let n = s.len();
+    let mut a = 0;
+    while (a < n && s.code_at(a) == 32) {
+        a = a + 1;
+    }
+    let mut b = n;
+    while (b > a && s.code_at(b - 1) == 32) {
+        b = b - 1;
+    }
+    return s.slice(a, b);
+}

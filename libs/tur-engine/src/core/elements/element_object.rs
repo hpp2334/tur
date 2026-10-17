@@ -1,11 +1,9 @@
 use std::fmt;
 
 use crate::core::layout::{ComputedLayout, Constraints};
-use boa_engine::Context;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::AnyElement;
-use crate::core::js_runtime::{BoaOpaque, TurNodeHandle};
 
 pub struct ElementObject {
     pub id: ElementNodeId,
@@ -14,8 +12,6 @@ pub struct ElementObject {
     pub parent: Option<NodeId>,
     pub computed_layout: ComputedLayout,
     pub(crate) query_key: Option<Vec<String>>,
-    #[allow(dead_code)]
-    handle: BoaOpaque<TurNodeHandle>,
     pub(crate) dirty_layout: bool,
     pub(crate) last_constraints: Option<Constraints>,
 }
@@ -32,9 +28,8 @@ impl fmt::Debug for ElementObject {
 }
 
 impl ElementObject {
-    pub fn new(id: ElementNodeId, element: AnyElement, context: &mut Context) -> Self {
+    pub fn new(id: ElementNodeId, element: AnyElement) -> Self {
         ElementObject {
-            handle: BoaOpaque::new(TurNodeHandle { id }, context),
             id,
             element: Some(element),
             children: Vec::new(),

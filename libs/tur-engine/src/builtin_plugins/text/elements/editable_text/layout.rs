@@ -72,6 +72,21 @@ impl ElementLayout for EditableTextElement {
 
         let display_text = self.composition_display_text();
 
+        // ── Replacement-epoch scroll reset ─────────────────────────────────
+        // A programmatic text replacement (the replacement epoch advanced —
+        // `tctrl_set_text`, the playground's case switch) resets the scroll
+        // to the top. This runs BEFORE the layout memo: a same-content
+        // replacement (re-selecting the current case) leaves the revision —
+        // and therefore the memo key — untouched, but the view must still
+        // reopen at the top. Typing, undo, and highlight span writes never
+        // touch the epoch, so a scrolled editor stays put while the user
+        // edits.
+        let replace_epoch = self.controller().replace_epoch();
+        if self.seen_replace_epoch.get() != replace_epoch {
+            self.seen_replace_epoch.set(replace_epoch);
+            self.scroll_y.set(0.0);
+        }
+
         let text_color = if display_text.is_empty() {
             // Default placeholder: the text color (explicit `color`, else the
             // default text color) mixed with 50% alpha — currentColor
@@ -235,7 +250,24 @@ impl ElementLayout for EditableTextElement {
 
         self.cached_layout = Some(Arc::new(layout_data));
 
-        constraints.constrain(Size::new(width as f64, height as f64))
+        let constrained = constraints.constrain(Size::new(width as f64, height as f64));
+
+        // ── Multiline scroll state ─────────────────────────────────────────
+        // The full (unclamped) layout height is the content; the constrained
+        // height is the viewport. Their difference is the scrollable excess.
+        // (The replacement-epoch reset ran above the memo; this refreshes
+        // the clamp ceiling from the fresh layout and clamps to it.)
+        let max_scroll = if self.resolved_multiline {
+            (height as f64 - constrained.height).max(0.0)
+        } else {
+            0.0
+        };
+        self.max_scroll_y.set(max_scroll);
+        if self.scroll_y.get() > max_scroll {
+            self.scroll_y.set(max_scroll);
+        }
+
+        constrained
     }
 }
 

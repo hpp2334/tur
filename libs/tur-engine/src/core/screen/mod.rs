@@ -18,8 +18,6 @@ pub mod resize;
 
 pub use resize::ResizeSubsystem;
 
-pub(crate) use resize::viewport_size_value;
-
 /// The viewport a frame was laid out for — the worker-owned half of the
 /// render commit.
 ///

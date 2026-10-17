@@ -89,7 +89,6 @@ impl ElementLayout for LazyListElement {
         // borrow, so no competing Rc<RefCell> borrow. Dropped before measure
         // so `cx.layout_child` can reborrow the tree. ---
         if viewport_main > 0.0 {
-            let boa = cx.js.boa_mut();
             let mut vcx = LayoutViewCx::new(
                 cx.tree,
                 cx.node_tree.clone(),
@@ -98,8 +97,8 @@ impl ElementLayout for LazyListElement {
             );
             // React to axis/itemExtent/itemCount changes first (replaces the
             // former pre-layout Effect handler).
-            self.react_to_prop_changes(&mut vcx, boa);
-            self.remount(&mut vcx, boa, viewport_main);
+            self.react_to_prop_changes(&mut vcx);
+            self.remount(&mut vcx, viewport_main);
         }
 
         // --- measure phase: lay out every currently-mounted item. We

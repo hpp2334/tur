@@ -1,0 +1,8 @@
+// tur_host/net — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host async fn net_request(p1: str, p2: str) -> bytes;
+pub host async fn net_request_raw(p1: str, p2: str) -> bytes;
+pub host fn net_status(p1: opaque) -> u64;
+pub host fn net_error(p1: opaque) -> str;
+pub host fn net_stream_mut(p1: str, p2: str, p3: u64) -> opaque;
+pub host fn task_cancel(p1: opaque);

@@ -1,0 +1,165 @@
+// grid-gallery: "Grid Gallery" — the interactive tile gallery (the full
+// boa port). The header (title + a live subtitle "tile #i · 1:1 ·
+// maxExtent 150") sits above aspect chips (1:1 / 16:9 / 9:16), density
+// chips (Dense / Normal / Sparse), and a styled scrollable tile grid with
+// top-left labels (boa's alignment-less Container child); tapping a tile
+// paints its white selection ring and re-derives the subtitle.
+//
+// Reactivity: the Grid's max_cross / aspect rows are static per build, so
+// the chips re-key ONE Switch over the COMBINED mode string
+// ("1:1/150" …) whose nine lazy cases rebuild the grid fresh per mode
+// (each activation reads live state). The case grid stays FLAT — a switch
+// branch that mounts ANOTHER switch mid-flush would defer that inner
+// switch's initial case activation (a known mounting-order gap), so the
+// aspect × density matrix is spelled out instead of nested. Tile rings
+// ride per-tile brush sources (an array of handles the taps index); the
+// subtitle's three fragments are derives over the aspect / density /
+// selection sources.
+//
+// The child loop feeding `.child()` runs BEFORE the single `.build()`
+// (build-then-mutate stays out; repetition is just the loop).
+//
+// Multi-file layout: the root keeps the boot + the nine EAGER grids +
+// the flat Switch + the panel (the documented hazards above stay
+// untouched here); gallery/ carries the grid + the tiles + the chips +
+// their mutations; color/ carries the palette + the tile ramp.
+mod color;
+mod gallery;
+
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::flags::{ CrossAlign, MainAxisSize };
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{
+    DeriveCtx, MutationCtx, Readable, Source, bridge, derive, source, sv,
+};
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+
+entry fn start() -> u64 {
+    let aspect: Readable<f64> = source<f64>(1.0);
+    let maxext: Readable<f64> = source<f64>(150.0);
+    let sel: Readable<f64> = source<f64>(0.0);
+    let akey: Readable<str> = source<str>("1:1");
+    let dkey: Readable<str> = source<str>("150");
+    let mode: Readable<str> = source<str>("1:1/150");
+
+    // The six chip brushes (the chip fills ride them).
+    let a_chips: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
+    let d_chips: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
+    // The 27 tile selection rings (per-tile brush sources — the taps
+    // index the array; the grid rebuilds re-bind the same handles).
+    let rings: [Source<u64>] = [
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0),
+    ];
+    let boot: MutationCtx = MutationCtx::over(bridge());
+    gallery::paint_chips(boot, a_chips, 0);
+    gallery::paint_chips(boot, d_chips, 1);
+    boot.set<u64>(rings[0], color::RING_ON);
+
+    // The chip taps (each captures its handles + its literal knob).
+    let b_a0 = gallery::set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "1:1", 1.0, 0);
+    let b_a1 = gallery::set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "16:9", 16.0 / 9.0, 1);
+    let b_a2 = gallery::set_aspect_mutation(aspect, akey, dkey, mode, a_chips, "9:16", 0.5625, 2);
+    let b_d0 = gallery::set_density_mutation(maxext, akey, dkey, mode, d_chips, "95", 95.0, 0);
+    let b_d1 = gallery::set_density_mutation(maxext, akey, dkey, mode, d_chips, "150", 150.0, 1);
+    let b_d2 = gallery::set_density_mutation(maxext, akey, dkey, mode, d_chips, "220", 220.0, 2);
+
+    // The subtitle fragments (three derives over the state sources).
+    let d_tile: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"tile #{ctx.get<f64>(sel) as u64}";
+    });
+    let d_aspect: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
+        let v = ctx.get<f64>(aspect);
+        if (v > 1.01) {
+            return "16:9";
+        }
+        if (v < 0.99) {
+            return "9:16";
+        }
+        return "1:1";
+    });
+    let d_extent: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
+        return f"maxExtent {ctx.get<f64>(maxext) as u64}";
+    });
+
+    // The reactive grid: one Switch over the combined mode string — the
+    // aspect × density matrix, kept FLAT (see the header note). The nine
+    // grids build EAGERLY here (direct calls from start()'s body) and the
+    // Switch re-keys over the pre-built views: a mutation box's capture
+    // cell binds per CALL SITE, so the per-tile tap closures only get
+    // their own index when the tile calls are unrolled literals in a
+    // direct body — the lazy case_build indirection shared one cell (and
+    // a loop shares it across every pad: each tap answering with the last
+    // index). The ring/selection state rides the shared sources, so a
+    // re-key re-mounts the pre-built grid with the live handles.
+    let g_1_95 = gallery::gallery_grid(1.0, 95.0, rings, sel);
+    let g_1_150 = gallery::gallery_grid(1.0, 150.0, rings, sel);
+    let g_1_220 = gallery::gallery_grid(1.0, 220.0, rings, sel);
+    let g_16_95 = gallery::gallery_grid(1.7777778, 95.0, rings, sel);
+    let g_16_150 = gallery::gallery_grid(1.7777778, 150.0, rings, sel);
+    let g_16_220 = gallery::gallery_grid(1.7777778, 220.0, rings, sel);
+    let g_9_95 = gallery::gallery_grid(0.5625, 95.0, rings, sel);
+    let g_9_150 = gallery::gallery_grid(0.5625, 150.0, rings, sel);
+    let g_9_220 = gallery::gallery_grid(0.5625, 220.0, rings, sel);
+    let grid_switch = Switch()
+        .value(mode)
+        .cases("1:1/95", g_1_95)
+        .cases("1:1/150", g_1_150)
+        .cases("1:1/220", g_1_220)
+        .cases("16:9/95", g_16_95)
+        .cases("16:9/150", g_16_150)
+        .cases("16:9/220", g_16_220)
+        .cases("9:16/95", g_9_95)
+        .cases("9:16/150", g_9_150)
+        .cases("9:16/220", g_9_220)
+        .build();
+    let panel = Container()
+        .color(sv(color::PANEL_BG))
+        .radius(sv(10.0f64))
+        .padding(10.0)
+        .child(ScrollView().child(grid_switch).build())
+        .build();
+
+    let col = Column()
+        .cross_alignment(CrossAlign::Start)
+        .child(Text().text(sv("Grid Gallery")).font_size(18.0).color(color::TITLE_FG).query_key("gallery/title").build())
+        .child(SizedBox(0.0, 4.0).build())
+        .child(subtitle(d_tile, d_aspect, d_extent))
+        .child(SizedBox(0.0, 12.0).build())
+        .child(Row().main_axis_size(MainAxisSize::Min)
+            .child(gallery::chip(a_chips[0], "gallery/a-1-1", "1:1", b_a0)).child(SizedBox(6.0, 0.0).build())
+            .child(gallery::chip(a_chips[1], "gallery/a-16-9", "16:9", b_a1)).child(SizedBox(6.0, 0.0).build())
+            .child(gallery::chip(a_chips[2], "gallery/a-9-16", "9:16", b_a2))
+            .build())
+        .child(SizedBox(0.0, 8.0).build())
+        .child(Row().main_axis_size(MainAxisSize::Min)
+            .child(gallery::chip(d_chips[0], "gallery/d-dense", "Dense", b_d0)).child(SizedBox(6.0, 0.0).build())
+            .child(gallery::chip(d_chips[1], "gallery/d-normal", "Normal", b_d1)).child(SizedBox(6.0, 0.0).build())
+            .child(gallery::chip(d_chips[2], "gallery/d-sparse", "Sparse", b_d2))
+            .build())
+        .child(SizedBox(0.0, 12.0).build())
+        .child(Expanded().flex(sv(1.0f64)).child(panel).build())
+        .build();
+
+    mount(Container().color(sv(color::PAGE_BG)).padding(16.0).child(col).build());
+    return sel.atom_id();
+}
+
+// "tile #0 · 1:1 · maxExtent 150" — three live fragments.
+fn subtitle(d_tile: Readable<str>, d_aspect: Readable<str>, d_extent: Readable<str>) -> View {
+    return Row()
+        .main_axis_size(MainAxisSize::Min)
+        .child(Text().text(d_tile).font_size(12.0).color(color::SUB_FG).query_key("gallery/subtitle").build())
+        .child(Text().text(sv(" · ")).font_size(12.0).color(color::SUB_FG).build())
+        .child(Text().text(d_aspect).font_size(12.0).color(color::SUB_FG).query_key("gallery/aspect-label").build())
+        .child(Text().text(sv(" · ")).font_size(12.0).color(color::SUB_FG).build())
+        .child(Text().text(d_extent).font_size(12.0).color(color::SUB_FG).query_key("gallery/extent").build())
+        .build();
+}

@@ -19,11 +19,11 @@ RUST_MIN_STACK = "8388608"
 # `wasm-pack build --target web --profile wasm-dev` to enable.
 #
 # Status: under this codegen the engine previously trapped with
-# "memory access out of bounds" during JS module evaluation
-# (`loadAndRunModule`) when using wasm-bindgen-rayon. The trap
-# appeared to be a boa_engine / engine-level incompatibility with
-# atomics-enabled LLVM codegen, NOT a configuration issue — the
-# configuration below matches the upstream README exactly. Default
+# "memory access out of bounds" during module evaluation when using
+# wasm-bindgen-rayon (observed with the retired JS scripting rail; the
+# atomics-enabled LLVM codegen combination was the trigger, not a
+# configuration issue — the configuration below matches the upstream
+# README exactly). Default
 # `wasm-pack build --target web --no-opt` produces a working
 # single-threaded wasm; threaded mode is opt-in via `--profile wasm-dev`.
 rustflags = [
@@ -53,6 +53,18 @@ rustflags = [
     "-C",
     "link-arg=--export=__heap_base",
 ]
+
+[target.x86_64-apple-darwin]
+# Ad-hoc sign every binary linked for Intel macOS. Unsigned Mach-O execs
+# consult taskgated, which can wedge under concurrent unsigned exec load
+# (parallel builds), stalling every subsequent exec by ~26-35s each.
+# Apple Silicon links already ad-hoc-sign by default; Intel does not.
+#
+# The new Apple linker (1221.4+) dropped `-Wl,-adhoc_sign`, so signing
+# rides the `codesign-cc.sh` wrapper: link exactly as rustc asked, then
+# `codesign -f -s -` the `-o` output. Scoped to this target only —
+# other targets are unaffected. (Same mechanism as the rut repo.)
+linker = "scripts/codesign-cc.sh"
 
 [unstable]
 build-std = ["panic_abort", "std"]

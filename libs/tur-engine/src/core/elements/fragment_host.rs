@@ -1,5 +1,3 @@
-use boa_engine::Context;
-
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::TraceValue;
 use crate::core::layout::SubscribeCx;
@@ -84,13 +82,14 @@ pub trait FragmentKind: 'static {
     /// (built under `fragment_id`). Return `None` if no structural change is
     /// needed (e.g. same branch resolved).
     ///
-    /// The returned children are built via `View::build(cx, boa,
-    /// fragment_id)` — each child auto-links itself to the fragment (pushing
-    /// to `fragments[fragment_id].children`).
+    /// The returned children are built via `View::build(cx, fragment_id)` —
+    /// each child auto-links itself to the fragment (pushing to
+    /// `fragments[fragment_id].children`). The realm rides the context
+    /// (`None` on realm-free instances — Rust factories ignore it; JS thunks
+    /// cannot exist there).
     fn perform_update(
         &mut self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>>;
 }

@@ -1,0 +1,204 @@
+// modals — the two overlay modals (add + remove-confirm), built at
+// ACTIVATION over the Condition branches the root Stack mounts, plus the
+// shared shell / button / field chrome. The palette lives in theme/, the
+// list writes in data/.
+
+use tur_kit::flags::{ Align, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, View, list_new, text_ctrl, undo_ctrl, value_item, value_len };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, sv };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
+
+// The modal shell: a scrim (tap = dismiss) around a card that swallows
+// its own taps (both handlers ride by parameter).
+fn modal_shell(scrim_tap: Mutation<nil>, swallow: Mutation<nil>, card: View) -> View {
+    let inner = PointerInteract()
+        .behavior(HitTestBehavior::Opaque)
+        .on_click(swallow)
+        .child(card)
+        .build();
+    let scrim = Container().color(sv(theme::BACKDROP)).alignment(Align::Center).child(inner).build();
+    return PointerInteract()
+        .behavior(HitTestBehavior::Opaque)
+        .on_click(scrim_tap)
+        .child(scrim)
+        .build();
+}
+
+// A standard modal button (the boa Button).
+fn modal_button(key: str, label: str, bg: u64, fg: u64, m: Mutation<nil>) -> View {
+    let face = Container()
+        .padding(9.0)
+        .radius(sv(7.0f64))
+        .color(sv(bg))
+        .child(Text().text(sv(label)).font_size(13.0).color(fg).build())
+        .build();
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(m)
+                .query_key(key)
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// A labelled field (the boa Field): the caption over the bordered input.
+fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: str) -> View {
+    return Column()
+        .cross_alignment(CrossAlign::Stretch)
+        .main_axis_size(MainAxisSize::Min)
+        .child(Text().text(sv(caption)).font_size(11.0).color(theme::TEXT_MUTED).build())
+        .child(SizedBox(0.0, 6.0).build())
+        .child(
+            Container()
+                .radius(sv(7.0f64))
+                .padding(9.0)
+                .color(sv(theme::INPUT_BG))
+                .border(theme::INPUT_BORDER, 1.0, BorderPosition::Inside)
+                .child(
+                    Input()
+                        .controller(ctrl)
+                        .undo(undo)
+                        .placeholder(sv(placeholder))
+                        .font_size(14.0)
+                        .color(theme::TEXT)
+                        .placeholder_color(theme::TEXT_MUTED)
+                        .cursor_color(theme::ACCENT)
+                        .query_key(key)
+                        .width_height(0.0, 22.0)
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+}
+
+// The add modal — built at ACTIVATION, so its controllers mint fresh and
+// blank every open; the buttons CAPTURE them (no stash round-trip).
+// tasks/n/done stay CONCRETE-annotated (`Source<T>`) — they flow into the
+// data/ journeys as plain cross-module params (the write-origin law);
+// add_open only crosses as a closure capture.
+pub fn add_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
+             add_open: Readable<bool>, ico: [u64]) -> View {
+    let ctrl = text_ctrl();
+    let undo = undo_ctrl();
+    let dctrl = text_ctrl();
+    let undo2 = undo_ctrl();
+
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(add_open, false);
+    });
+    // Add Task: the non-empty title appends a fresh open task, then the
+    // modal closes (the composed close is an inline write).
+    let b_submit = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let title = data::trim(ctrl.text());
+        if (title == "") {
+            return;
+        }
+        let desc = data::trim(dctrl.text());
+        data::append_task(ctx, tasks, f"{title}|{desc}|0");
+        data::recount(ctx, tasks, n, done);
+        ctx.set<bool>(add_open, false);
+    });
+
+    let card = Container()
+        .width(sv(380.0f64))
+        .radius(sv(14.0f64))
+        .padding(22.0)
+        .color(sv(theme::CARD_BG))
+        .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Stretch)
+                .main_axis_size(MainAxisSize::Min)
+                .child(Text().text(sv("New Task")).font_size(17.0).color(theme::TEXT).build())
+                .child(SizedBox(0.0, 16.0).build())
+                .child(field("Title", "What needs doing?", ctrl, undo, "todo-add-title"))
+                .child(SizedBox(0.0, 14.0).build())
+                .child(field("Description", "Optional details", dctrl, undo2, "todo-add-desc"))
+                .child(SizedBox(0.0, 20.0).build())
+                .child(
+                    Row()
+                        .main_alignment(MainAlign::End)
+                        .main_axis_size(MainAxisSize::Min)
+                        .child(modal_button("todo-add-cancel", "Cancel", theme::SUBTLE, theme::SUBTLE_FG, b_cancel))
+                        .child(SizedBox(8.0, 0.0).build())
+                        .child(modal_button("todo-add-submit", "Add Task", theme::ACCENT, theme::ACCENT_FG, b_submit))
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    return modal_shell(b_cancel, swallow, card);
+}
+
+// The remove-confirm modal — built at ACTIVATION for the targeted task
+// (the branch reads the live target off the source).
+pub fn remove_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
+                rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
+    let read = MutationCtx::over(bridge());
+    let target = read.get<f64>(rm_tgt) as u64;
+    let item = value_item(read.get<opaque>(tasks), target);
+    let title = data::item_title(item);
+    // Bound-quote locals: f-string braces take no escape sequences.
+    let q: str = "\"";
+    let said = f"{q}{title}{q} will be permanently removed.";
+
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<bool>(rm_open, false);
+    });
+    // Remove for real: rebuild the list without the target, recount, close.
+    let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let old = ctx.get<opaque>(tasks);
+        let fresh = list_new();
+        let count = value_len(old);
+        let mut k: u64 = 0;
+        while (k < count) {
+            if (k != target) {
+                fresh.push(value_item(old, k));
+            }
+            k = k + 1;
+        }
+        ctx.set<opaque>(tasks, fresh.raw());
+        data::recount(ctx, tasks, n, done);
+        ctx.set<bool>(rm_open, false);
+    });
+
+    let card = Container()
+        .width(sv(340.0f64))
+        .radius(sv(14.0f64))
+        .padding(22.0)
+        .color(sv(theme::CARD_BG))
+        .shadow(0x0F172A1Eu64, 30.0, 0.0, 12.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Stretch)
+                .main_axis_size(MainAxisSize::Min)
+                .child(Text().text(sv("Remove task?")).font_size(16.0).color(theme::TEXT).build())
+                .child(SizedBox(0.0, 8.0).build())
+                .child(Text().text(sv(said)).font_size(13.0).color(theme::TEXT_MUTED).query_key("todo-rm-msg").build())
+                .child(SizedBox(0.0, 18.0).build())
+                .child(
+                    Row()
+                        .main_alignment(MainAlign::End)
+                        .main_axis_size(MainAxisSize::Min)
+                        .child(modal_button("todo-rm-cancel", "Cancel", theme::SUBTLE, theme::SUBTLE_FG, b_cancel))
+                        .child(SizedBox(8.0, 0.0).build())
+                        .child(modal_button("todo-rm-confirm", "Remove", theme::DANGER, theme::ACCENT_FG, b_confirm))
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    let swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
+    });
+    return modal_shell(b_cancel, swallow, card);
+}
