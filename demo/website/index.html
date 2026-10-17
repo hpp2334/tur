@@ -129,6 +129,11 @@
     </style>
 </head>
 <body>
+    <!-- No bundler: the bootstrap is a plain ES module and the wasm glue
+         (tur_website.js + tur_website_bg.wasm) sits beside it at the site
+         root, staged by scripts/build.mjs (served in dev by
+         scripts/dev.mjs from native/pkg). -->
+    <script type="module" src="./src/index.js"></script>
     <div id="overlay">
         <div class="card">
             <div class="spinner" aria-hidden="true"></div>

@@ -4,7 +4,7 @@
 # Cargo.lock is committed for reproducible CI
 *.rs.bk
 
-# wasm-pack (website wasm cdylib — built by the dev server's WasmBuildPlugin)
+# wasm-pack (website wasm cdylib — built by demo/website/scripts/{build,dev}.mjs)
 demo/website/native/pkg/
 demo/website/native/target/
 

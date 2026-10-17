@@ -51,9 +51,6 @@ jobs:
       - name: Cargo clippy
         run: cargo clippy --workspace --locked -- -D warnings
 
-      - name: Typecheck JS
-        run: pnpm typecheck
-
       - name: Check JS
         run: pnpm check
 

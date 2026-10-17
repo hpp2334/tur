@@ -254,23 +254,35 @@ README for the fixture conventions), confirm red, then make it green.
 
 ### tur-website (wasm)
 
+The website shell is a **plain ES module with no bundler** (rspack is gone):
+`index.html` loads `src/index.js` directly, and two zero-dependency node
+scripts replace the old rspack build + dev server.
+
 ```sh
-cd demo/website/native && wasm-pack build --target web
-cd demo/website && pnpm build      # bundles + copies the wasm
-cd demo/website && pnpm dev        # → http://localhost:8080/
+cd demo/website && pnpm build      # wasm-pack + stage dist/ (scripts/build.mjs)
+cd demo/website && pnpm build --skip-wasm  # restage dist/ from an existing pkg
+cd demo/website && pnpm dev        # → http://localhost:8080/ (scripts/dev.mjs)
 cd demo/website && pnpm dev:tunnel # → https://local-tur.hpp2334.com (cloudflared `tur-local`)
 ```
 
-The dev server sets COOP/COEP headers (required by the multithreaded wasm
-backend — `SharedArrayBuffer` + workers; COEP must be `require-corp`).
-`dev:tunnel` serves the playground over a public custom domain via the
-`cloudflared.yml` next to the config (one-time `cloudflared tunnel login` /
-`create` / `route dns` setup — see that file's header).
+`pnpm build` runs `wasm-pack build --target web --no-opt` in `native/`, then
+stages `index.html` + `src/index.js` + `public/_headers` + the glue
+(`tur_website.js`, `tur_website_bg.wasm`, `snippets/**`) into `dist/`.
+`pnpm dev` serves a virtual root (website dir + `native/pkg` — no staging),
+always sends COOP/COEP/CORP headers (required by the multithreaded wasm
+backend — `SharedArrayBuffer` + workers; COEP must be `require-corp`), and
+re-runs wasm-pack (debounced) when `libs/` / `rut/` / `native/src` change —
+JS/HTML edits need no build, just refresh. `dev:tunnel` additionally spawns
+cloudflared (`--tunnel`) to serve the playground over a public custom domain
+(one-time `cloudflared tunnel login` / `create` / `route dns` setup — see
+`cloudflared.yml`'s header).
 
 ### JS tooling (repo root)
 
 The pnpm workspace + lint tooling live at the repo root (`demo/website` is
 the only workspace package; biome lint + the website build run from root).
+There is no TypeScript and no `typecheck` lane anymore — the website bootstrap
+is plain JavaScript (checked by biome).
 
 ```sh
 pnpm install

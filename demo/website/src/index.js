@@ -3,17 +3,21 @@
 // demo-helper plugin), then loads the playground rut module
 // (`rut/playground`, embedded in the cdylib) via `loadAndRunRutModule`. The
 // entire playground UI (sidebar / editor / viewer) is rendered by tur itself.
+//
+// Plain ES module — no build step. `index.html` loads this file directly and
+// the wasm glue (`tur_website.js`, staged by scripts/build.mjs) is imported
+// natively at runtime.
 
-let wasmReady: Promise<Record<string, unknown>> | null = null;
+let wasmReady = null;
 
-function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
+function fetchArrayBuffer(url) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
         xhr.responseType = "arraybuffer";
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-                resolve(xhr.response as ArrayBuffer);
+                resolve(xhr.response);
             } else {
                 reject(new Error(`XHR ${xhr.status}: ${xhr.statusText}`));
             }
@@ -29,7 +33,7 @@ function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
 // COOP=`same-origin` + COEP=`require-corp` from the server). Any
 // failure surfaces as a friendly red banner with diagnostics instead
 // of an opaque wasm trap.
-function browserDiagnostics(): string {
+function browserDiagnostics() {
     const sabSupported = typeof SharedArrayBuffer !== "undefined";
     // COOP/COEP aren't directly observable from JS; the only signal
     // exposed is `self.crossOriginIsolated`, which becomes true only
@@ -44,10 +48,7 @@ function browserDiagnostics(): string {
     );
 }
 
-function probeBrowserSupport(): {
-    ok: boolean;
-    reason?: string;
-} {
+function probeBrowserSupport() {
     const sabSupported = typeof SharedArrayBuffer !== "undefined";
     if (!sabSupported) {
         return {
@@ -64,30 +65,27 @@ function probeBrowserSupport(): {
     return { ok: true };
 }
 
-async function loadWasm(): Promise<Record<string, unknown>> {
+async function loadWasm() {
     if (wasmReady) return wasmReady;
     wasmReady = (async () => {
-        // The wasm glue (`tur_website.js`) is copied verbatim into dist by the
-        // WasmBuildPlugin; load it as a plain runtime asset, not a bundled
-        // module.
-        const mod = (await import(
-            /* webpackIgnore: true */ "./tur_website.js"
-        )) as Record<string, unknown>;
-        const buffer = await fetchArrayBuffer("./tur_website_bg.wasm");
+        // The wasm glue (`tur_website.js`) is served from the site root (dev:
+        // the pkg dir mounted by scripts/dev.mjs; prod: staged by
+        // scripts/build.mjs). Imported natively — no bundler involved. The
+        // specifiers are ABSOLUTE: this module lives at /src/, and a relative
+        // `./` would resolve against /src/ (the old rspack bundle sat at the
+        // site root, which is the resolution these paths preserve).
+        const mod = await import("/tur_website.js");
+        const buffer = await fetchArrayBuffer("/tur_website_bg.wasm");
         const compiled = await WebAssembly.compile(buffer);
-        await (mod.default as (b: WebAssembly.Module) => Promise<unknown>)(
-            compiled,
-        );
+        await mod.default(compiled);
         // No JS-side thread-pool init needed: the engine's in-tree
-        // `worker_spawn` boots Web Workers on demand from Rust. Compare to
-        // the previous wasm-bindgen-rayon setup which required
-        // `await initThreadPool(n)` here.
+        // `worker_spawn` boots Web Workers on demand from Rust.
         return mod;
     })();
     return wasmReady;
 }
 
-function showFatalError(message: string, diag: string): void {
+function showFatalError(message, diag) {
     const overlay = document.getElementById("overlay");
     const status = document.getElementById("status");
     const msgEl = document.getElementById("error-message");
@@ -98,7 +96,7 @@ function showFatalError(message: string, diag: string): void {
     if (diagEl) diagEl.textContent = diag;
 }
 
-async function main(): Promise<void> {
+async function main() {
     const status = document.getElementById("status");
     try {
         if (status) status.textContent = "checking browser support…";
@@ -113,28 +111,20 @@ async function main(): Promise<void> {
 
         if (status) status.textContent = "loading wasm…";
         const mod = await loadWasm();
-        const { TurWebsiteApp } = mod as {
-            TurWebsiteApp: { create: () => Promise<Record<string, unknown>> };
-        };
+        const { TurWebsiteApp } = mod;
 
         if (status) status.textContent = "booting tur…";
         const app = await TurWebsiteApp.create();
-        (globalThis as Record<string, unknown>).turApp = app;
-        (globalThis as Record<string, unknown>).turDevTool = (
-            app as { dev_tool: () => unknown }
-        ).dev_tool();
+        globalThis.turApp = app;
+        globalThis.turDevTool = app.dev_tool();
 
         if (status) status.textContent = "loading playground…";
         // The playground is a rut module embedded in the wasm host (the
         // Phase-4 rewrite): the site shell only feeds it to the engine's
         // zero-JS load path.
-        const source = (
-            app as { playgroundSource: () => string }
-        ).playgroundSource();
+        const source = app.playgroundSource();
 
-        (
-            app as { loadAndRunRutModule: (s: string) => void }
-        ).loadAndRunRutModule(source);
+        app.loadAndRunRutModule(source);
         // Fade the overlay out, then drop it so the canvas owns the
         // viewport. The paint is gone before tur's first frame lands.
         const overlay = document.getElementById("overlay");
