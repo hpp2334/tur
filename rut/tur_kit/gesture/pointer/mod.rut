@@ -176,7 +176,7 @@ impl PointerInteract {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    pi_child(self.spec, c.inner);
+    pi_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {
@@ -217,7 +217,7 @@ impl MouseRegion {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    mr_child(self.spec, c.inner);
+    mr_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

@@ -32,7 +32,7 @@ impl ScrollView {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    scroll_child(self.spec, c.inner);
+    scroll_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

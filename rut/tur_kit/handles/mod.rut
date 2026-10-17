@@ -99,6 +99,13 @@ impl MapHandle {
 // `virtual_app_controller`).
 pub class VAppSource(opaque);
 
+impl VAppSource {
+  // The row-probe erase (the virtual_app rows take the raw opaque).
+  pub(pkg) fn raw(self) -> opaque {
+    return self.inner;
+  }
+}
+
 // The text-input controller (`tctrl_new` / `tctrl_set_text` /
 // `tctrl_text`; `Input.controller`). Mint with `text_ctrl()`.
 pub class TextCtrl(opaque);

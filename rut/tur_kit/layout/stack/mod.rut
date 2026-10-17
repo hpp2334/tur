@@ -31,12 +31,12 @@ impl Stack {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    stack_child(self.spec, c.inner);
+    stack_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      stack_child(self.spec, c.inner);
+      stack_child(self.spec, c.raw());
     }
     return self;
   }
@@ -91,7 +91,7 @@ impl Positioned {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    pos_child(self.spec, c.inner);
+    pos_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

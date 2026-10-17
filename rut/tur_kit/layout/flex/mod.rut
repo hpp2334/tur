@@ -39,12 +39,12 @@ impl Column {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    flex_child(self.spec, c.inner);
+    flex_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      flex_child(self.spec, c.inner);
+      flex_child(self.spec, c.raw());
     }
     return self;
   }
@@ -78,12 +78,12 @@ impl Row {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    flex_child(self.spec, c.inner);
+    flex_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      flex_child(self.spec, c.inner);
+      flex_child(self.spec, c.raw());
     }
     return self;
   }
@@ -117,7 +117,7 @@ impl Expanded {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    flexi_child(self.spec, c.inner);
+    flexi_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {
@@ -150,7 +150,7 @@ impl Flexible {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    flexi_child(self.spec, c.inner);
+    flexi_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

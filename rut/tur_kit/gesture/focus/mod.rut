@@ -25,7 +25,7 @@ impl Focusable {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    focus_child(self.spec, c.inner);
+    focus_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

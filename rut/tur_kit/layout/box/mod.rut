@@ -103,12 +103,12 @@ impl Container {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    box_child(self.spec, c.inner);
+    box_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      box_child(self.spec, c.inner);
+      box_child(self.spec, c.raw());
     }
     return self;
   }
@@ -126,7 +126,7 @@ impl SizedBox {
     return Self { spec: sizedbox_new(w, h) };
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    sizedbox_child(self.spec, c.inner);
+    sizedbox_child(self.spec, c.raw());
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

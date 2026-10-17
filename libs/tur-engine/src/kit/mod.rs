@@ -96,6 +96,8 @@ pub fn tur_kit_pkg() -> Pkg {
                 path: path.to_string(),
                 vis,
                 text: text.to_string(),
+                // directory-form children: `NAME/mod.rut` beside the root
+                file: "mod.rut".to_string(),
             },
         );
     }

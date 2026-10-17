@@ -31,7 +31,7 @@ impl Switch {
   // Appends one case — the historical `cases` prop's crossing (`case` is
   // a reserved word in rut).
   pub fn cases(mut self, key: str, branch: handles::View) -> Self {
-    switch_case(self.spec, key, branch.inner);
+    switch_case(self.spec, key, branch.raw());
     return self;
   }
   // The lazy case twin: the branch is a FN VALUE, invoked when the key
@@ -41,7 +41,7 @@ impl Switch {
     return self;
   }
   pub fn fallback(mut self, branch: handles::View) -> Self {
-    switch_fallback(self.spec, branch.inner);
+    switch_fallback(self.spec, branch.raw());
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {
@@ -62,11 +62,11 @@ impl Condition {
     return Self { spec: cond_new(r.atom_id()) };
   }
   pub fn then(mut self, branch: handles::View) -> Self {
-    cond_then(self.spec, branch.inner);
+    cond_then(self.spec, branch.raw());
     return self;
   }
   pub fn else_branch(mut self, branch: handles::View) -> Self {
-    cond_else(self.spec, branch.inner);
+    cond_else(self.spec, branch.raw());
     return self;
   }
   // The lazy twins: the branch is a FN VALUE (`fn() -> View`), invoked
@@ -116,12 +116,12 @@ impl Fragment {
     return Self { spec: frag_new() };
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    frag_child(self.spec, c.inner);
+    frag_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      frag_child(self.spec, c.inner);
+      frag_child(self.spec, c.raw());
     }
     return self;
   }

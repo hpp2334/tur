@@ -56,7 +56,7 @@ impl CompositedTarget {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    ct_target_child(self.spec, c.inner);
+    ct_target_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {
@@ -97,7 +97,7 @@ impl CompositedFollower {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    ct_follower_child(self.spec, c.inner);
+    ct_follower_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {
@@ -150,5 +150,5 @@ pub fn virtual_app_clear(atom: u64) {
 // Mint a virtual-app controller from a registered source — the
 // `createVirtualAppController` twin.
 pub fn virtual_app_controller(src: handles::VAppSource) -> handles::VAppCtrl {
-  return handles::VAppCtrl(va_controller(src.inner));
+  return handles::VAppCtrl(va_controller(src.raw()));
 }

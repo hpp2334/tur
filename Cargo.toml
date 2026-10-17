@@ -47,33 +47,34 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# master (bbb5df61) on 2026-10-14 — the mut-law batch: the mut-binding law
-# for loop variables (the header's `mut` is the write license), block tail
-# + if expressions, struct-literal field-init shorthand, std v10
-# (pouch/json re-bundled post-law), the IDE-diagnostics batch. Same
-# nightly pin as this workspace (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c", default-features = false }
+# master (565b7156) on 2026-10-17 — the strict-manifest batch: peer-deps
+# DELETED (strict manifest keys), deps/ wire v11 + content identity, std
+# v11 (json/flow fold their deps in), the cross-module member-visibility
+# law, own-package use + NAME.rut file modules, generic bodies ride the
+# binary (templates v22). Same nightly pin as this workspace
+# (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
-rut-ast = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c" }
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323" }
 # The native pkg-dir walker/loader (`load_path_session` — the REAL
 # discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
-rut-native = { git = "https://github.com/hpp2334/rut", rev = "bbb5df619410dc8b7b648b8b766a969183f3376c", default-features = false }
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "565b71562c7268f8e6d430910f2a98c998782323", default-features = false }
 
 
 num-derive = "0.4"

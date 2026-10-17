@@ -38,12 +38,12 @@ impl Grid {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    grid_child(self.spec, c.inner);
+    grid_child(self.spec, c.raw());
     return self;
   }
   pub fn children(mut self, cs: [handles::View]) -> Self {
     for (let c of cs) {
-      grid_child(self.spec, c.inner);
+      grid_child(self.spec, c.raw());
     }
     return self;
   }

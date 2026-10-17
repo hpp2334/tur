@@ -219,7 +219,7 @@ pub fn mount_host_tree(pkg: &mut rut_driver::Pkg) {
         } else {
             mods.insert(
                 path.clone(),
-                ModSource { path: path.clone(), vis: Vis::Pub, text },
+                ModSource { path: path.clone(), vis: Vis::Pub, text, file: "mod.d.rut".to_string() },
             );
         }
     }

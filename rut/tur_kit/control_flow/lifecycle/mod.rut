@@ -21,7 +21,7 @@ impl Lifecycle {
     return self;
   }
   pub fn child(mut self, c: handles::View) -> Self {
-    lc_child(self.spec, c.inner);
+    lc_child(self.spec, c.raw());
     return self;
   }
   pub fn build(self) -> handles::View {

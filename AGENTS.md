@@ -437,7 +437,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (observed from pin 3b4d2cc through bbb5df61,
+- Known upstream rut bug (observed from pin 3b4d2cc through 565b7156,
   still unfixed — the duplicate-boot-scope
   type-interning family): some module-shape edits trip it — kit fn/row
   resolution collapses ("argument N is X, Y expected" far from the edit)
@@ -454,7 +454,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   playground's status label spells its derive through `rs_derive` (the
   plain-fn rail) for the same reason.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
-- The rut compile laws (pin bbb5df61): record literals must cover every
+- The rut compile laws (pin 565b7156): record literals must cover every
   field — spelled in the literal or covered by the field's declared
   initializer (the silent zero-fill is gone; duplicate spellings are an
   error; `Point { x, y }` field-init shorthand rides too); a use line
@@ -464,13 +464,19 @@ Android build + device debugging live in the **`android-dev` skill** at
   path; DEAD PRIVATE CODE is type-checked like live code (a private fn
   nothing calls still compiles — keep fixtures and cases law-clean; the
   bumps caught table.rs's dead raw-atom `set_rows` write and rut_boot's
-  un-mut'd for-c induction); and the MUT-BINDING LAW rides loop
-  headers — the header's `mut` is the ONLY write license for the loop
-  variable (`for (let mut i = …)`: an un-mut'd binding is immutable —
-  reads fine, `i += 1` a compile error). Block tails are values (an
-  expression before `}` with no `;` is the block's tail; a fn/lambda
-  body tail is an implicit return) and `if`/`when` arms compose as
-  values.
+  un-mut'd for-c induction); the MUT-BINDING LAW rides loop headers —
+  the header's `mut` is the ONLY write license for the loop variable
+  (`for (let mut i = …)`: an un-mut'd binding is immutable — reads
+  fine, `i += 1` a compile error); and the MEMBER-VISIBILITY LAW makes
+  class fields and impl methods module-private by default (structs are
+  exempt — their fields stay always-public): cross-module reads/writes
+  need the `pub` dial, `pub(pkg)` widens within the pkg — the kit's
+  tuple handle classes (`View`, `VAppSource`, …) expose their raw
+  opaque through `pub(pkg) fn raw()` erases and cross-file leaves spell
+  `.raw()`, never `.inner` (the bump swept all 26 child-insert sites).
+  Block tails are values (an expression before `}` with no `;` is the
+  block's tail; a fn/lambda body tail is an implicit return) and
+  `if`/`when` arms compose as values.
 - Publishable npm packages: none — the `@tur-ng/*` packages and the `js/`
   workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;
