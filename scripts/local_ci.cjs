@@ -14,6 +14,17 @@ const sshPath = platform === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
 // eat memory while it lives.
 const cacheRoot = path.join(os.homedir(), '.tur-build-cache');
 
+// Share the host's wasm-pack cache (the wasm-bindgen CLI downloads).
+// Without it the container re-downloads the CLI from GitHub releases per
+// run — and on a slow-network evening that download WEDGES the Build JS
+// step silently (wasm-pack has no output timeout). Only mounted when the
+// host dir exists (docker would create it root-owned and break the
+// host-side user).
+const wasmPackCache = path.join(os.homedir(), '.cache', '.wasm-pack');
+const wasmPackMount = fs.existsSync(wasmPackCache)
+  ? ` -v ${wasmPackCache}:/root/.cache/.wasm-pack`
+  : '';
+
 // ── Docker access ─────────────────────────────────────────────────────────
 // act drives the Docker daemon, and the socket is root:docker 0660 — so the
 // invoking shell needs the `docker` group. A shell started before the user
@@ -63,7 +74,7 @@ if (!dockerReachable()) {
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
---container-options --network=host -v ${cacheRoot}/cargo/registry:/root/.cargo/registry -v ${cacheRoot}/cargo/git:/root/.cargo/git -v ${cacheRoot}/sccache:/root/.cache/sccache -v ${cacheRoot}/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
+--container-options --network=host -v ${cacheRoot}/cargo/registry:/root/.cargo/registry -v ${cacheRoot}/cargo/git:/root/.cargo/git -v ${cacheRoot}/sccache:/root/.cache/sccache -v ${cacheRoot}/pnpm/store:/root/.local/share/pnpm/store${wasmPackMount} -v ${sshPath}:/root/.ssh:ro`;
 
 fs.writeFileSync(actrcPath, actrcContent, 'utf8');
 
