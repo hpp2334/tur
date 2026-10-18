@@ -949,9 +949,14 @@ fn rut_gesture_focus_key_payloads_realm_free() {
     assert!(
         transcript.contains("|down 10,6 g")
             && transcript.contains(&format!(
-                "|down 10,6 g{:.0},{:.0} b0",
-                pad_origin.0 + 10.0,
-                pad_origin.1 + 6.0
+                // TRUNCATE like the module (`ev.global.x as u64` drops
+                // the fraction); `{:.0}` would ROUND, and the two sides
+                // disagree whenever the pad's absolute x is fractional
+                // ≥ .5 — which the container's font metrics produce
+                // (subpixel text widths shift the column's centering).
+                "|down 10,6 g{},{} b0",
+                (pad_origin.0 + 10.0) as u64,
+                (pad_origin.1 + 6.0) as u64,
             ))
             && transcript.contains("|move 15,9 g")
             && transcript.contains("|up 15,9 g")
