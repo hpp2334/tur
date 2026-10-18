@@ -9,6 +9,11 @@ const platform = os.platform();
 
 const sshPath = platform === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
 
+// Persistent CI caches live under the user's home — NOT /tmp, which is
+// tmpfs here (RAM-backed, wiped on reboot): a warm cache would vanish and
+// eat memory while it lives.
+const cacheRoot = path.join(os.homedir(), '.tur-build-cache');
+
 // ── Docker access ─────────────────────────────────────────────────────────
 // act drives the Docker daemon, and the socket is root:docker 0660 — so the
 // invoking shell needs the `docker` group. A shell started before the user
@@ -58,7 +63,7 @@ if (!dockerReachable()) {
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
---container-options --network=host -v /tmp/tur-ci-cache/cargo/registry:/root/.cargo/registry -v /tmp/tur-ci-cache/cargo/git:/root/.cargo/git -v /tmp/tur-ci-cache/sccache:/root/.cache/sccache -v /tmp/tur-ci-cache/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
+--container-options --network=host -v ${cacheRoot}/cargo/registry:/root/.cargo/registry -v ${cacheRoot}/cargo/git:/root/.cargo/git -v ${cacheRoot}/sccache:/root/.cache/sccache -v ${cacheRoot}/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
 
 fs.writeFileSync(actrcPath, actrcContent, 'utf8');
 
@@ -99,6 +104,16 @@ try {
 
 const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
 
+// Isolate this run's sccache daemon on its own port. The container shares
+// the host netns (--network=host), so with the default port a run would
+// either collide with or silently ADOPT a leaked daemon from an earlier
+// killed run — whose cache dir is gone, silently defeating the persistent
+// sccache mount (observed: a 0-byte cache across runs, every run compiling
+// cold). A per-run port guarantees a fresh daemon owning the mounted cache;
+// it dies with the container, and any future leak is inert.
+const sccachePort = 20000 + Math.floor(Math.random() * 12000);
+console.log(`sccache daemon port: ${sccachePort}`);
+
 const logDir = path.join(rootDir, 'logs');
 fs.mkdirSync(logDir, { recursive: true });
 const logPath = path.join(logDir, 'workflow.log');
@@ -123,6 +138,8 @@ const child = spawn(
     '--json',
     '--env',
     `BRANCH_NAME=${currentBranch}`,
+    '--env',
+    `SCCACHE_SERVER_PORT=${sccachePort}`,
     // Linux: the ~/.ssh bind-mount lands at /root/.ssh still owned by the
     // host uid, so ssh rejects the routed config ("Bad owner or permissions").
     // Bypass the config with an explicit direct-connection command (github
