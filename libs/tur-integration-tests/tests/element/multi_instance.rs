@@ -288,11 +288,15 @@ fn many_instances_share_one_runtime() {
             r#"
 
 use tur_kit::handles::{{ mount }};
-use tur_kit::reactive::{{ Readable, source }};
+use tur_kit::reactive::{{ Source, source }};
 use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
-    let atom: Readable<str> = source<str>("{i}");
+    // Concrete-annotated (Source<str>, not Readable<str>): the
+    // interface-annotated let is the known rut interning-family trip
+    // (a late interface dispatch on Source<str> misbinds once several
+    // modules boot on one runtime).
+    let atom: Source<str> = source<str>("{i}");
     let mut txt = Text().text(atom).query_key("idx").build();
     mount(txt);
 }}
