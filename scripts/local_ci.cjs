@@ -1,12 +1,60 @@
-const { execSync, spawn } = require('child_process');
+const { execSync, spawnSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const rootDir = path.join(__dirname, '..');
 const actrcPath = path.join(rootDir, '.actrc');
-const os = require('os').platform();
+const platform = os.platform();
 
-const sshPath = os === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
+const sshPath = platform === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
+
+// ── Docker access ─────────────────────────────────────────────────────────
+// act drives the Docker daemon, and the socket is root:docker 0660 — so the
+// invoking shell needs the `docker` group. A shell started before the user
+// was added to it (or any non-login shell, e.g. the agent harness) carries a
+// stale group set and gets "permission denied" from the API, which act
+// surfaces as an immediate, confusing failure. Rather than demanding a
+// re-login, re-exec this script with the group applied through sudo
+// (`sudo -u <user> -g docker`) — that keeps the run's own artifacts (logs/,
+// .actrc) owned by the invoking user instead of root.
+function dockerReachable() {
+  try {
+    execSync('docker info', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (!dockerReachable()) {
+  if (process.env.TUR_CI_REEXEC === '1') {
+    console.error(
+      'docker is still unreachable with the `docker` group applied — is the daemon running?',
+    );
+    process.exit(1);
+  }
+  const reexec = spawnSync(
+    'sudo',
+    [
+      '-n',
+      '-u',
+      os.userInfo().username,
+      '-g',
+      'docker',
+      'env',
+      `PATH=${process.env.PATH}`,
+      `HOME=${process.env.HOME}`,
+      'TUR_CI_REEXEC=1',
+      process.execPath,
+      __filename,
+      ...process.argv.slice(2),
+    ],
+    { cwd: rootDir, stdio: 'inherit' },
+  );
+  if (reexec.error) throw reexec.error;
+  process.exit(reexec.status ?? 1);
+}
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
@@ -31,11 +79,36 @@ function waitForDocker(maxRetries = 30) {
 waitForDocker();
 console.log(' Docker ready.');
 
+// ── Stale act containers ──────────────────────────────────────────────────
+// act names its job container deterministically (act-<workflow>-<job>-<hash>).
+// A container left behind by an aborted or killed run collides with the next
+// run's creation, so reap it up front; `--rm` below keeps successful runs from
+// leaving one behind in the first place.
+try {
+  const stale = execSync("docker ps -aq --filter 'name=act-Local-CI-'", { encoding: 'utf8' })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (stale.length > 0) {
+    console.log(`Reaping ${stale.length} stale act container(s)...`);
+    execSync(`docker rm -f ${stale.join(' ')}`, { stdio: 'ignore' });
+  }
+} catch {
+  // Listing is best-effort: never let cleanup block the run.
+}
+
 const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
 
 const logDir = path.join(rootDir, 'logs');
 fs.mkdirSync(logDir, { recursive: true });
 const logPath = path.join(logDir, 'workflow.log');
+try {
+  fs.rmSync(logPath, { force: true });
+} catch {
+  // A previous run driven as another user (e.g. root) left logs/ unwritable.
+  execSync(`sudo -n chown -R ${process.getuid()}:${process.getgid()} ${logDir}`);
+  fs.rmSync(logPath, { force: true });
+}
 const logStream = fs.createWriteStream(logPath, { flags: 'w' });
 
 const child = spawn(
@@ -44,6 +117,7 @@ const child = spawn(
     '/tmp/tur-ci.lock',
     'act',
     'workflow_dispatch',
+    '--rm',
     '-W',
     '.github/workflows/local-ci.yml',
     '--json',
@@ -55,7 +129,7 @@ const child = spawn(
     // :22 is reachable directly here; the image's keyscan proves it). On
     // macOS Docker Desktop presents the mount as root-owned, so the config
     // is usable as-is.
-    ...(os === 'darwin'
+    ...(platform === 'darwin'
       ? []
       : [
           '--env',
@@ -104,5 +178,5 @@ child.on('close', (code) => {
   } else {
     console.log(`\nCI FAILED (exit ${code}). See logs/workflow.log for details.`);
   }
-  process.exit(code || 0);
+  process.exit(code ?? 1);
 });
