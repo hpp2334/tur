@@ -134,7 +134,14 @@ impl WorkerBackend {
     /// rut-built tree is pure Rust `Rc<dyn View>`) — is script-runtime-free.
     fn load_rut_module_inner(&self, files: &RutModuleFiles) -> Result<(), ModuleError> {
         let exts = self.internal.instance.rut_pkg_exts.borrow().clone();
-        crate::core::rut_runtime::RutRuntime::parse_check_files(files, &exts)?;
+        // Parse-first contract, paid ONCE: compile before any teardown runs
+        // (a broken module never destroys the running tree) and KEEP the
+        // program for the boot — the old pre-flight (`parse_check_files`)
+        // compiled the whole session a second time in `boot_files` just to
+        // throw the first result away.
+        let (prog, host_ctx) =
+            crate::core::rut_runtime::RutRuntime::compile_files(files, &exts)
+                .map_err(ModuleError::Parse)?;
 
         // Module lifecycle contract: run the previous module's cleanup +
         // clear its leftover root tree before the new module runs.
@@ -144,8 +151,13 @@ impl WorkerBackend {
         let inputs = crate::core::rut_runtime::RutRealmInputs {
             clock: self.internal.app_context.borrow().frame_env.clock(),
         };
-        let mut rut =
-            crate::core::rut_runtime::RutRuntime::boot_files(files, js.clone(), inputs, exts)?;
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot_compiled(
+            prog,
+            host_ctx,
+            js.clone(),
+            inputs,
+            &exts,
+        )?;
 
         // Apply the root the module's `start` stashed via `tur_host::mount` —
         // outside the VM, realm-free (the rut-built tree is pure Rust).

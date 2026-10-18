@@ -1073,7 +1073,7 @@ impl RutRuntime {
     ///
     /// Exposed for the embedder-side parse rails ([`Self::parse_check_files`],
     /// the playground's `pg_compile`): the compile half of the load contract.
-    fn compile_files(
+    pub(crate) fn compile_files(
         files: &RutModuleFiles,
         exts: &[RutPkgExt],
     ) -> Result<
@@ -1223,6 +1223,21 @@ impl RutRuntime {
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) =
             Self::compile_files(files, &exts).map_err(crate::core::app::ModuleError::Parse)?;
+        Self::boot_compiled(prog, ctx, js_ctx, inputs, &exts)
+    }
+
+    /// The boot half over a PRE-COMPILED program ([`Self::compile_files`]'s
+    /// result): bind bodies, verify the join, boot the VM, and invoke
+    /// `start`. The load rail compiles once and hands the result through —
+    /// the parse-first contract holds (the compile ran before any
+    /// teardown) and the session is never paid for twice.
+    pub fn boot_compiled(
+        prog: Rc<rut_core::binary::Program>,
+        ctx: rut_vm::interp::HostPkgContext,
+        js_ctx: InstanceContext,
+        inputs: RutRealmInputs,
+        exts: &[RutPkgExt],
+    ) -> Result<Self, crate::core::app::ModuleError> {
 
         let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
@@ -1253,7 +1268,7 @@ impl RutRuntime {
         // targets: the rows are pure VM-driving — launch / cancel /
         // arm_timer — and the decl lowers from the vendored `.d.rut`).
         hosts.install_host_pkg(&ctx, rut_std::async_host::pkg());
-        install_tur_pkg(&mut hosts, &ctx, &handles, &exts);
+        install_tur_pkg(&mut hosts, &ctx, &handles, exts);
         hosts.verify_against(&ctx.flatten());
 
         let export_of = |name: &str| {

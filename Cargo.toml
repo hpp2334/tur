@@ -47,35 +47,33 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# master (e55ce0ec) on 2026-10-18 — one fix past the plan10 leaf-binding
-# batch (0eea7e95, see git log for its laws): fix(vm) "array literals own
-# their ref elements" — the use-after-free behind the jigsaw capture
-# misbinds (an array literal of ref cells did not retain its elements, so
-# a closure capturing an array-element load could observe freed cells once
-# the creating frame exited). Same nightly pin as this workspace
-# (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c", default-features = false }
+# master (65a19be7) on 2026-10-18 — the perf pass past the array-literal
+# ref-ownership fix (e55ce0ec, see git log): the graph compile lane stops
+# rendering CLI-only AST/IR dumps and re-parsing sources per module
+# (~45% of tur's per-load debug compile was that waste). Same nightly pin
+# as this workspace (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
-rut-ast = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c" }
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120" }
 # The native pkg-dir walker/loader (`load_path_session` — the REAL
 # discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
-rut-native = { git = "https://github.com/hpp2334/rut", rev = "e55ce0ecff82d248ceba3d6b2a259cf5ba4da85c", default-features = false }
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "65a19be7c0502e6b0e31b90d0c4af094dcf6d120", default-features = false }
 
 
 num-derive = "0.4"
