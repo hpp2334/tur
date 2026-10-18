@@ -248,9 +248,21 @@ rut case corpus needs no build step — cases are plain
 `read_case_files` / `walkModTree` declaration-following walkers; the website
 embeds them at compile time).
 
+The vello tests (`libs/tur-integration-tests/tests/vello/`) need an X
+display — run them under `xvfb-run -a` (`xvfb-run -a cargo nextest run -p
+tur-integration-tests --test vello`); the CI container does this, and xvfb
+is installed on this host, so the full suite runs locally.
+
 **Workflow (TDD):** for engine bug fixes, write a failing test under
 `libs/tur-integration-tests/tests/` first (rut fixtures — see the corpus
 README for the fixture conventions), confirm red, then make it green.
+
+**Local CI** (`node ./scripts/local_ci.cjs`) mirrors `.github/workflows/
+local-ci.yml` in an act container over `tur-ci:latest`: it clones from
+origin (commit + push first), keeps persistent caches under
+`~/.tur-build-cache` (cargo registry/git, sccache, pnpm store, the host's
+wasm-pack CLI cache), and enforces the workflow's timeouts — the Cargo
+test budget is 5 minutes; fix slowness, never stretch the budget.
 
 ### tur-website (wasm)
 
@@ -451,23 +463,20 @@ Android build + device debugging live in the **`android-dev` skill** at
   gesture tests. The corpus CASES keep `entry fn start() -> u64` +
   atom-arg probe entries (the playground embeds them; their boot must be
   eager) — their ctx hatch is the kit's `bridge()`/`over` probe rail.
-- Known upstream rut bug (observed from pin 3b4d2cc through 565b7156 —
-  the duplicate-boot-scope type-interning family): some module-shape
-  edits trip it — kit fn/row resolution collapses ("argument N is X, Y
-  expected" far from the edit) or an interface-typed capture misbinds at
-  runtime ("no impl for interface slot N"). The 0eea7e95 per-file
-  binding law RETIRED the two structural anchors (the playground's
-  second `use tur_host` line and github-viewer's root anchor — both
-  deleted, suites green), but the RUNTIME-interning shapes survive:
-  keep captured sources CONCRETE-annotated (`Source<T>`, not
-  `Readable<T>`) when they cross ctx calls, struct fields, or write-path
-  chains (the `Writable` origin-loss shape); make import-list deltas
-  single-name; an interface-annotated `let` before the first `mutate`
-  seeds the table; and the playground's status label spells its derive
-  through `rs_derive` (the plain-fn rail + a hand-built Source — the
-  lambda-capturing `derive(fn …)` spelling traps the derived
-  materialization at this module's size and the auto-run respawn test
-  goes red).
+- The duplicate-boot-scope type-interning family is FIXED upstream (rut
+  2cf9c3bf, 2026-10-19): re-shipped surface rows keep their iface ids
+  decodable in the consumer's private numbering, and closure
+  monomorphizations key per instantiation (never by AST node alone).
+  Historically (3b4d2cc through 65a19be7) module-shape edits tripped it —
+  kit fn/row resolution collapsed ("argument N is X, Y expected" far from
+  the edit), an interface-typed capture misbound at runtime ("no impl for
+  interface slot N"), or a generic instantiation mistyped outright
+  (`mutate<bytes>` typed as `Readable<#T>`). Workaround shapes from that
+  era still sit in the tree as-authored (concrete `Source<T>` annotations
+  on captures crossing ctx calls, the playground's `rs_derive`
+  status-label spelling) — historical, not law; new code needs none of
+  them. If those symptoms reappear, suspect a rut regression and check
+  the pin first.
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
 - The rut compile laws (pin 0eea7e95): **every leaf must bind, in the FILE
   that spelled it** — a `use` binds its OWN file (the root's `use` never
