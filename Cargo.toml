@@ -47,35 +47,36 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# master (2cf9c3bf) on 2026-10-18 — the cross-scope identity fix past the
-# graph-lane perf pass (65a19be7, see git log): re-shipped surface rows keep
-# their iface ids decodable in the consumer's numbering, and closure
-# monomorphizations key per instantiation instead of by AST node — the
-# duplicate-boot-scope interning family that mistyped `mutate<bytes>` as
-# `Readable<#T>` and silently dropped nil-arg composed mutations. Same
-# nightly pin as this workspace (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82", default-features = false }
+# master (61f145eb) on 2026-10-19 — the pack-lane modernization past the
+# cross-scope identity fix (2cf9c3bf, see git log): link's smart part split
+# out (byte-identical templates), the intent-level Bundle API
+# (Bundle::parse / pack_inline_pkg / Offer::{Lib,Host} — old names
+# deprecated-not-broken), and the by-value T-substitution repair
+# (materialization recomputes repr-keyed opcodes: a prim-typed T at a
+# by-value move no longer keeps `movref` and aborts Heap::retain).
+# Same nightly pin as this workspace (nightly-2026-07-15).
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
-rut-ast = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82" }
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e" }
 # The native pkg-dir walker/loader (`load_path_session` — the REAL
 # discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
-rut-native = { git = "https://github.com/hpp2334/rut", rev = "3f0291afebda99a8f9bf7fd80ad9e390e692ec82", default-features = false }
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "61f145eb671dc51f3059315c19d5cdf0cffb184e", default-features = false }
 
 
 num-derive = "0.4"
