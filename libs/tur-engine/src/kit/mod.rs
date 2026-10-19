@@ -5,7 +5,7 @@
 //! class family per leaf — one method per prop, `.child` / `.children`
 //! appending, `.build()` the only terminal, over each family's
 //! `tur_host` pkg rows). The embed here hands the tree to the compiler
-//! through [`rut_driver::Pkg::mods`] — the root as the pkg body, every
+//! through [`rut_driver::Mounted::mods`] — the root as the pkg body, every
 //! intermediate + leaf module as a [`rut_driver::ModSource`] row keyed
 //! by mod path — and the `tur_host_decl` pin test diffs the embedded
 //! set against the disk tree. The kit lives OUTSIDE `core/` (the
@@ -16,7 +16,7 @@
 //! tur_kit::layout::flex::{ Column }` resolves in every module the
 //! standard plugin set compiles. Core never names it.
 
-use rut_driver::{ModSource, Pkg, PkgBody};
+use rut_driver::{ModSource, Mounted, MountedBody};
 
 /// The kit tree's root module — `rut/tur_kit/mod.rut` (decls only: the
 /// `pub mod` edges).
@@ -83,8 +83,8 @@ pub fn tur_kit_mods() -> Vec<(&'static str, rut_ast::ast::Vis, &'static str)> {
 
 /// The kit as a compile pkg (spec `tur_kit`) — what the standard bundle
 /// assembly pushes into [`crate::core::rut_runtime::RutPkgCx::preludes`].
-/// The body is the root module; [`Pkg::mods`] carries the declared tree.
-pub fn tur_kit_pkg() -> Pkg {
+/// The body is the root module; [`Mounted::mods`] carries the declared tree.
+pub fn tur_kit_pkg() -> Mounted {
     let mut mods = std::collections::BTreeMap::new();
     for (path, vis, text) in tur_kit_mods() {
         if path.is_empty() {
@@ -101,11 +101,11 @@ pub fn tur_kit_pkg() -> Pkg {
             },
         );
     }
-    Pkg {
+    Mounted {
         spec: "tur_kit".to_string(),
         namespace: Some("tur_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_kit", &["tur_host"]),
-        body: PkgBody::Source {
+        body: MountedBody::Source {
             text: TUR_KIT_ROOT.to_string(),
             is_decl: false,
         },

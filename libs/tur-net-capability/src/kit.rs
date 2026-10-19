@@ -7,12 +7,12 @@
 pub const NET_KIT_RUT: &str = include_str!("../../../rut/tur_net_kit/mod.rut");
 
 /// The kit as a compile pkg (spec `tur_net_kit`).
-pub fn net_kit_pkg() -> rut_driver::Pkg {
-    rut_driver::Pkg {
+pub fn net_kit_pkg() -> rut_driver::Mounted {
+    rut_driver::Mounted {
         spec: "tur_net_kit".to_string(),
         namespace: Some("tur_net_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_net_kit", &["tur_host", "tur_kit"]),
-        body: rut_driver::PkgBody::Source {
+        body: rut_driver::MountedBody::Source {
             text: NET_KIT_RUT.to_string(),
             is_decl: false,
         },

@@ -636,6 +636,37 @@ impl TurTestApp {
             } else {
                 driver.worker_spawner()
             };
+        // The precompiled standard kit — THIS harness's standard shape
+        // (std + animation + clipboard, the no-http `TurTestApp::new`
+        // configuration the bulk of the corpus runs under). Every load
+        // whose offered set matches serves the compiled pkgs and
+        // compiles only the app module; anything else (http /
+        // filepicker / extra plugins) falls back to the source lane.
+        // The pair is pinned by the `kit_bundle` test (bless:
+        // TUR_BLESS_KIT_BUNDLE=1).
+        // The precompiled standard kit — THIS harness's standard shape
+        // (std + animation + clipboard, the no-http `TurTestApp::new`
+        // configuration the bulk of the corpus runs under). Every load
+        // whose offered set matches serves the compiled pkgs and
+        // compiles only the app module; anything else (http /
+        // filepicker / extra plugins) falls back to the source lane.
+        // The pair is pinned by the `kit_bundle` test (bless:
+        // TUR_BLESS_KIT_BUNDLE=1).
+        //
+        // OPT-IN until upstream lands the template fix: a compiled
+        // group's consumer-side template materialization misbinds
+        // interface slots at eval (`sv<T>` & friends — "no impl for
+        // interface slot N on StaticValue<u64>"), so the default lane
+        // stays source and the corpus runs green. Set TUR_KIT_BUNDLE=1
+        // to exercise the fast lane (the load bench does).
+        if std::env::var("TUR_KIT_BUNDLE").ok().as_deref() == Some("1") {
+            let fp = u64::from_str_radix(include_str!("../assets/std_kit.fingerprint").trim(), 16)
+                .expect("the std kit fingerprint hex");
+            let _ = tur_engine::core::rut_runtime::set_precompiled_std(
+                include_bytes!("../assets/std_kit.rutbundle"),
+                fp,
+            );
+        }
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())

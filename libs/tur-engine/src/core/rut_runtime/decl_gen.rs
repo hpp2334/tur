@@ -21,7 +21,7 @@ use rut_core::types::{
 };
 
 use super::{tur_decl_pkg, RutPkgCx, RutPkgExt};
-use rut_driver::{HostRow, ModSource, PkgBody};
+use rut_driver::{HostRow, ModSource, MountedBody};
 
 /// The crossing-set type name for a decl signature (`decl.rs`'s table, in
 /// reverse: the engine rows only ever use these).
@@ -59,7 +59,7 @@ pub fn tur_host_surface(exts: &[RutPkgExt]) -> (Vec<HostRow>, Vec<(String, TypeI
     let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
     let mut consts_out: Vec<(String, TypeId, u64)> = Vec::new();
     let mut pkg = rut_vm::interp::HostPkg::new("tur_host");
-    let mut preludes: Vec<rut_driver::Pkg> = Vec::new();
+    let mut preludes: Vec<rut_driver::Mounted> = Vec::new();
     for ext in exts {
         ext(&mut RutPkgCx {
             decl: &mut ext_decl,
@@ -69,7 +69,7 @@ pub fn tur_host_surface(exts: &[RutPkgExt]) -> (Vec<HostRow>, Vec<(String, TypeI
             preludes: &mut preludes,
         });
     }
-    if let PkgBody::Host {
+    if let MountedBody::Host {
         host_funcs, consts, ..
     } = &mut tur_pkg.body
     {
@@ -79,7 +79,7 @@ pub fn tur_host_surface(exts: &[RutPkgExt]) -> (Vec<HostRow>, Vec<(String, TypeI
     }
     // The host fns out of the assembled pkg (the exts' rows appended).
     let funcs = match &tur_pkg.body {
-        PkgBody::Host { host_funcs, .. } => host_funcs.clone(),
+        MountedBody::Host { host_funcs, .. } => host_funcs.clone(),
         _ => Vec::new(),
     };
     (funcs, consts_out)
@@ -204,9 +204,9 @@ fn module_text(
 /// (`use tur_host::store::{ rs_source_str };`) reads THIS tree — a
 /// hand-built pkg without it is flat by the compiler's law. Idempotent:
 /// re-run after extending the row set (the exts' families).
-pub fn mount_host_tree(pkg: &mut rut_driver::Pkg) {
+pub fn mount_host_tree(pkg: &mut rut_driver::Mounted) {
     let rows = match &pkg.body {
-        PkgBody::Host { host_funcs, .. } => host_funcs.clone(),
+        MountedBody::Host { host_funcs, .. } => host_funcs.clone(),
         _ => return,
     };
     let groups = module_groups(&rows);
@@ -224,7 +224,7 @@ pub fn mount_host_tree(pkg: &mut rut_driver::Pkg) {
         }
     }
     pkg.mods = mods;
-    if let PkgBody::Host { root_surface, .. } = &mut pkg.body {
+    if let MountedBody::Host { root_surface, .. } = &mut pkg.body {
         *root_surface = Some(root_text);
     }
 }

@@ -8,12 +8,12 @@
 pub const TUR_ANIM_KIT_RUT: &str = include_str!("../../../rut/tur_anim_kit/mod.rut");
 
 /// The kit as a compile pkg (spec `tur_anim_kit`).
-pub fn tur_anim_kit_pkg() -> rut_driver::Pkg {
-    rut_driver::Pkg {
+pub fn tur_anim_kit_pkg() -> rut_driver::Mounted {
+    rut_driver::Mounted {
         spec: "tur_anim_kit".to_string(),
         namespace: Some("tur_anim_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_anim_kit", &["tur_host", "tur_kit"]),
-        body: rut_driver::PkgBody::Source {
+        body: rut_driver::MountedBody::Source {
             text: TUR_ANIM_KIT_RUT.to_string(),
             is_decl: false,
         },

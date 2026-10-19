@@ -34,7 +34,7 @@ use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
 use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64, TypeId};
-use rut_driver::PkgBody;
+use rut_driver::MountedBody;
 use rut_vm::Opaque;
 use rut_vm::OpaqueRef;
 use rut_vm::interp::{CallArgs, Ret, Vm};
@@ -245,7 +245,7 @@ pub fn host_row_at(
 /// rut code compiles against. Offered to the run chain — no filesystem
 /// involved. Plugin families extend it through their pushed
 /// [`RutPkgExt`]s (decl rows + consts).
-pub fn tur_decl_pkg() -> rut_driver::Pkg {
+pub fn tur_decl_pkg() -> rut_driver::Mounted {
     // `path` first: every row spells its module in the tree (`""` = the
     // root surface — mount only).
     let row = |path: &str, name: &str, params: Vec<TypeId>, ret: TypeId| {
@@ -272,7 +272,12 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("store", "rs_list_new", vec![], TY_OPAQUE),
         row("store", "rs_list_push", vec![TY_OPAQUE, TY_STR], TY_NIL),
         row("store", "rs_map_new", vec![], TY_OPAQUE),
-        row("store", "rs_map_set", vec![TY_OPAQUE, TY_STR, TY_STR], TY_NIL),
+        row(
+            "store",
+            "rs_map_set",
+            vec![TY_OPAQUE, TY_STR, TY_STR],
+            TY_NIL,
+        ),
         row("store", "rs_source_value", vec![TY_OPAQUE], TY_U64),
         row("store", "rs_set_value", vec![TY_U64, TY_OPAQUE], TY_NIL),
         row("store", "rs_get_value", vec![TY_U64], TY_OPAQUE),
@@ -297,22 +302,67 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
         row("store", "rs_box_stamp", vec![TY_OPAQUE], TY_U64),
         // M1 — the mutation rail: the ctx read/write/compose rows + the
         // mutation/derive sealers (the write-side twin of the C8 face).
-        row("ctx", "ctx_get_box", vec![TY_OPAQUE, TY_U64, TY_U64], TY_OPAQUE),
-        row("ctx", "ctx_set_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx", "ctx_run_box", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row(
+            "ctx",
+            "ctx_get_box",
+            vec![TY_OPAQUE, TY_U64, TY_U64],
+            TY_OPAQUE,
+        ),
+        row(
+            "ctx",
+            "ctx_set_box",
+            vec![TY_OPAQUE, TY_U64, TY_OPAQUE],
+            TY_NIL,
+        ),
+        row(
+            "ctx",
+            "ctx_run_box",
+            vec![TY_OPAQUE, TY_U64, TY_OPAQUE],
+            TY_NIL,
+        ),
         row("ctx", "ctx_bridge", vec![], TY_OPAQUE),
         row("ctx", "ctx_get_f64", vec![TY_OPAQUE, TY_U64], TY_F64),
         row("ctx", "ctx_get_str", vec![TY_OPAQUE, TY_U64], TY_STR),
         row("ctx", "ctx_get_bool", vec![TY_OPAQUE, TY_U64], TY_BOOL),
         row("ctx", "ctx_get_value", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
         row("ctx", "ctx_get_opaque", vec![TY_OPAQUE, TY_U64], TY_OPAQUE),
-        row("ctx", "ctx_set_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
-        row("ctx", "ctx_set_str", vec![TY_OPAQUE, TY_U64, TY_STR], TY_NIL),
-        row("ctx", "ctx_set_bool", vec![TY_OPAQUE, TY_U64, TY_BOOL], TY_NIL),
-        row("ctx", "ctx_set_value", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
-        row("ctx", "ctx_set_opaque", vec![TY_OPAQUE, TY_U64, TY_OPAQUE], TY_NIL),
+        row(
+            "ctx",
+            "ctx_set_f64",
+            vec![TY_OPAQUE, TY_U64, TY_F64],
+            TY_NIL,
+        ),
+        row(
+            "ctx",
+            "ctx_set_str",
+            vec![TY_OPAQUE, TY_U64, TY_STR],
+            TY_NIL,
+        ),
+        row(
+            "ctx",
+            "ctx_set_bool",
+            vec![TY_OPAQUE, TY_U64, TY_BOOL],
+            TY_NIL,
+        ),
+        row(
+            "ctx",
+            "ctx_set_value",
+            vec![TY_OPAQUE, TY_U64, TY_OPAQUE],
+            TY_NIL,
+        ),
+        row(
+            "ctx",
+            "ctx_set_opaque",
+            vec![TY_OPAQUE, TY_U64, TY_OPAQUE],
+            TY_NIL,
+        ),
         row("ctx", "ctx_run_nil", vec![TY_OPAQUE, TY_U64], TY_NIL),
-        row("ctx", "ctx_run_f64", vec![TY_OPAQUE, TY_U64, TY_F64], TY_NIL),
+        row(
+            "ctx",
+            "ctx_run_f64",
+            vec![TY_OPAQUE, TY_U64, TY_F64],
+            TY_NIL,
+        ),
         row("ctx", "mutate_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
         row("ctx", "derive_seal", vec![TY_OPAQUE, TY_U64], TY_U64),
         // pure math (f64 radians in/out) — the orbit / wave case shapes
@@ -331,10 +381,10 @@ pub fn tur_decl_pkg() -> rut_driver::Pkg {
     // ride the driver's five-row family expansion).
     let mut funcs = host_funcs;
     funcs.extend(async_caps::decl_rows());
-    let mut pkg = rut_driver::Pkg {
+    let mut pkg = rut_driver::Mounted {
         spec: "tur_host".to_string(),
         namespace: Some("tur_host".to_string()),
-        body: PkgBody::Host {
+        body: MountedBody::Host {
             host_funcs: funcs,
             consts: Vec::new(),
             native_types: Vec::new(),
@@ -1057,6 +1107,97 @@ fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> Stri
         .join("; ")
 }
 
+// ── The precompiled standard kit ──────────────────────────────────────────
+//
+// A build-time-packed copy of the standard offered set (see
+// [`RutRuntime::offered_pkgs`]): the embedder hands the checked-in
+// `.rutbundle` bytes + the fingerprint of the pkg set they were
+// generated from; a load whose offered-set fingerprint MATCHES serves
+// the compiled pkgs and compiles only the app module. Any other
+// configuration (different rows, preludes, or vendored texts) falls
+// back to the source lane — the bundle never serves a set it was not
+// generated for.
+//
+// UPSTREAM NOTE (why the harness installs this opt-in only): a
+// compiled group's consumer-side template materialization misbinds
+// interface slots at eval (`sv<T>` & friends — "no impl for interface
+// slot N on `StaticValue<u64>`"); the source lane at the same pin is
+// clean. Flip the harness's `TUR_KIT_BUNDLE` gate once the rut fix
+// lands — the bench (`module_load_bench`) already asserts the lane.
+
+static PRECOMPILED_STD: std::sync::OnceLock<(&'static [u8], u64)> = std::sync::OnceLock::new();
+
+/// Lane telemetry — `(loads served from the precompiled kit, loads that
+/// fell back to the source lane)`. The bench gate reads it: a load that
+/// silently lost the fast path is a test failure, not a slow machine.
+static PRECOMPILED_STATS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SOURCE_FALLBACKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// `(precompiled-lane loads, source-lane fallbacks)` since process start.
+pub fn precompiled_std_stats() -> (u64, u64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        PRECOMPILED_STATS.load(Relaxed),
+        SOURCE_FALLBACKS.load(Relaxed),
+    )
+}
+
+thread_local! {
+    /// The bundle's WALKED yield for the CURRENT thread (the worker lane
+    /// the compiles run on) — every group the walk yielded (see
+    /// [`precompiled_std_matching`] for what rides and why). One
+    /// `Bundle::parse` at install, one `bundle.walk()` per thread, then
+    /// cheap `Mounted` clones per load: a fresh walk per load
+    /// re-relocates every group (measured: ~3/4 of the whole lane's
+    /// cost); the clone+offer is an order of magnitude cheaper.
+    static PRECOMPILED_WALK: std::cell::RefCell<Option<(*const u8, Vec<rut_driver::Mounted>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Install the precompiled standard kit. Validates the bundle by
+/// decoding it once (loud, at install — a corrupt bundle refuses here,
+/// never at load); first install wins (a process serves one standard
+/// shape).
+pub fn set_precompiled_std(bytes: &'static [u8], fingerprint: u64) -> Result<(), String> {
+    if PRECOMPILED_STD.get().is_some() {
+        return Ok(());
+    }
+    rut_driver::Bundle::parse(bytes).map_err(|e| format!("precompiled std kit: {}", e.msg))?;
+    let _ = PRECOMPILED_STD.set((bytes, fingerprint));
+    Ok(())
+}
+
+/// The walked standard-kit yield when its fingerprint matches — the
+/// bundle's groups exactly as the walk yielded them (the compiled kit
+/// preludes + async weave, the bundle's host-surface groups, and the
+/// `tur_std` staging root — its mount carries the archive's scope
+/// ledger, which the kit's packed scope references resolve through),
+/// ready to offer one pkg at a time. `None` otherwise (not installed,
+/// or a different configuration → the source lane). The bundle's host
+/// groups mount identity-keyed and never shadow the engine-live bare
+/// `tur_host`/`async_host` the compile lane offers FIRST: the app's
+/// surface checks resolve bare (exact), the kit's packed scope
+/// references resolve identity (exact), and runtime row calls bind by
+/// name against the boot registry. The fingerprint gates the one
+/// assumption in that three-way split: the bundled surfaces and the
+/// running engine's rows are the same generation.
+fn precompiled_std_matching(fp: u64) -> Option<Vec<rut_driver::Mounted>> {
+    let (bytes, want) = PRECOMPILED_STD.get()?;
+    if *want != fp {
+        return None;
+    }
+    PRECOMPILED_WALK.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let fresh = !slot.as_ref().is_some_and(|(ptr, _)| *ptr == bytes.as_ptr());
+        if fresh {
+            let bundle = rut_driver::Bundle::parse(bytes).ok()?;
+            let walked = bundle.walk().ok()?;
+            *slot = Some((bytes.as_ptr(), walked.pkgs));
+        }
+        slot.as_ref().map(|(_, pkgs)| pkgs.clone())
+    })
+}
+
 impl RutRuntime {
     /// Convert an opaque handle minted by a rut row (`RutView`) back into
     /// the materialized view — the item-builder face's crossing back from
@@ -1065,24 +1206,14 @@ impl RutRuntime {
         let v = Opaque::<RutView>::from_handle(handle).ok()?;
         v.with(|v| Some(v.0.clone())).ok()?
     }
-    /// Assemble a fresh session (core + the in-memory `tur_host` decl pkg +
-    /// every extension's prelude modules) and compile a module file tree
-    /// against it. Split from [`Self::boot_files`] so a syntactically-broken
-    /// module fails BEFORE any teardown runs (the parse-first contract).
-    /// A root-only [`RutModuleFiles`] is the historical single-string shape.
-    ///
-    /// Exposed for the embedder-side parse rails ([`Self::parse_check_files`],
-    /// the playground's `pg_compile`): the compile half of the load contract.
-    pub(crate) fn compile_files(
-        files: &RutModuleFiles,
-        exts: &[RutPkgExt],
-    ) -> Result<
-        (
-            Rc<rut_core::binary::Program>,
-            rut_vm::interp::HostPkgContext,
-        ),
-        String,
-    > {
+    /// The standard offered set — everything but the app pkg: the
+    /// `tur_host` decl pkg (the engine rows + every extension's rows,
+    /// tree-mounted), the async weave (`async_host` + `futures`), and
+    /// the extensions' prelude modules (the kit et al.).
+    /// [`Self::compile_files`] roots the app at exactly this set, and
+    /// the precompiled-kit lane matches a build-time-packed copy of it
+    /// by [`Self::offered_fingerprint`].
+    pub fn offered_pkgs(exts: &[RutPkgExt]) -> Vec<rut_driver::Mounted> {
         // The decl surface: the engine rows plus every extension's rows
         // (plugin-owned — the element families + capability crates), so
         // the compile sees the full surface the boot will bind. Extensions
@@ -1090,7 +1221,7 @@ impl RutRuntime {
         // surface, owned by the standard bundle assembly, never by core).
         let mut ext_decl: Vec<rut_driver::HostRow> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
-        let mut preludes: Vec<rut_driver::Pkg> = Vec::new();
+        let mut preludes: Vec<rut_driver::Mounted> = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur_host");
         for ext in exts {
             ext(&mut RutPkgCx {
@@ -1102,7 +1233,7 @@ impl RutRuntime {
             });
         }
         let mut tur_pkg = tur_decl_pkg();
-        if let PkgBody::Host {
+        if let MountedBody::Host {
             host_funcs, consts, ..
         } = &mut tur_pkg.body
         {
@@ -1125,13 +1256,58 @@ impl RutRuntime {
             &std::collections::BTreeMap::new(),
             "async_host.d.rut",
         )
-        .map_err(|e| format!("mount async_host decl: {e}"))?;
+        .map_err(|e| format!("mount async_host decl: {e}"))
+        .expect("the vendored async_host decl always lowers");
         async_host.spec = "async_host".to_string();
         // The typed launcher surface (`launch_future` / `sleep` / the
         // competition rows) — upstream's `futures` inline package, rut
         // source over the `__*` engine rows (vendored alongside).
-        let futures = rut_driver::Pkg::source("futures", include_str!("futures.rut"))
+        let futures = rut_driver::Mounted::source("futures", include_str!("futures.rut"))
             .manifest(rut_driver::Manifest::lib("futures", &["async_host"]));
+        vec![tur_pkg, async_host]
+            .into_iter()
+            .chain(preludes)
+            .chain(std::iter::once(futures))
+            .collect()
+    }
+
+    /// A content fingerprint over the offered set — the precompiled
+    /// lane's match key. The packed bundle records the fingerprint of
+    /// the set it was generated from; a configuration offering anything
+    /// else (different rows, preludes, or vendored texts) falls back to
+    /// the source lane. Stable within a build (Debug render + SipHash
+    /// over fixed keys); cross-build drift only ever means fallback —
+    /// the checked-in bundle's own staleness is pinned by the generator
+    /// test, which re-packs and byte-compares.
+    pub fn offered_fingerprint(pkgs: &[rut_driver::Mounted]) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for pkg in pkgs {
+            format!("{:?}", pkg).hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// Assemble a fresh session (core + the in-memory `tur_host` decl pkg +
+    /// every extension's prelude modules) and compile a module file tree
+    /// against it. Split from [`Self::boot_files`] so a syntactically-broken
+    /// module fails BEFORE any teardown runs (the parse-first contract).
+    /// A root-only [`RutModuleFiles`] is the historical single-string shape.
+    ///
+    /// Exposed for the embedder-side parse rails ([`Self::parse_check_files`],
+    /// the playground's `pg_compile`): the compile half of the load contract.
+    pub(crate) fn compile_files(
+        files: &RutModuleFiles,
+        exts: &[RutPkgExt],
+    ) -> Result<
+        (
+            Rc<rut_core::binary::Program>,
+            rut_vm::interp::HostPkgContext,
+        ),
+        String,
+    > {
+        let offered_all = Self::offered_pkgs(exts);
+
         // The app pkg: the file tree mounted (the root the body, the mods
         // the declared children — an empty `files.mods` is the historical
         // single-string shape, byte-identical).
@@ -1140,36 +1316,76 @@ impl RutRuntime {
             .iter()
             .map(|(p, t)| (p.to_string(), t.to_string()))
             .collect();
-        let mods = rut_driver::mods::mount_rows(&files.root, &rows, rut_driver::Mode::Impl, "mod.rut")
-            .map_err(|e| format!("mount module tree: {e}"))?;
-        let mut offered = vec![tur_pkg.clone(), async_host.clone()];
-        offered.extend(preludes.iter().cloned());
+        let mods =
+            rut_driver::mods::mount_rows(&files.root, &rows, rut_driver::Mode::Impl, "mod.rut")
+                .map_err(|e| format!("mount module tree: {e}"))?;
         // D5: the program's declaration defaults host-side to the offered lib
         // names (upstream's wasm-playground law) — ambient nameability kept.
-        let mut app_heads: Vec<&str> = offered.iter().map(|p| p.spec.as_str()).collect();
-        app_heads.push("futures");
-        let app = rut_driver::Pkg {
+        let app_heads: Vec<&str> = offered_all.iter().map(|p| p.spec.as_str()).collect();
+        let app = rut_driver::Mounted {
             spec: "app".to_string(),
             manifest: rut_driver::Manifest::lib("app", &app_heads),
-            body: PkgBody::Source {
+            body: MountedBody::Source {
                 text: files.root.to_string(),
                 is_decl: false,
             },
             mods,
             ..Default::default()
         };
-        // The run chain: offer the pkgs (first-offer-wins), root at the app
-        // source. `core` is auto-offered by `.compile()`; the host-row
-        // snapshot for the boot-side installs comes from the same offer set
-        // (core carries no host rows, so the snapshot matches the old
-        // session's `host_pkg_context`).
-        let mut run = rut_driver::RutRun::new()
-            .pkg(tur_pkg)
-            .pkg(async_host)
-            .pkg(futures)
-            .pkg(app)
-            .entrypoint("app");
-        for pkg in preludes {
+
+        // The host-row snapshot for the boot-side installs comes from the
+        // offer set (core carries no host rows, so the snapshot matches
+        // the old session's `host_pkg_context`) — the same snapshot both
+        // lanes install against (the host pkgs + preludes; `futures`
+        // contributes no rows).
+        let host_view: Vec<rut_driver::Mounted> = offered_all
+            .iter()
+            .filter(|p| p.spec != "futures")
+            .cloned()
+            .collect();
+
+        // The precompiled lane: a build-time-packed copy of EXACTLY this
+        // offered set (fingerprint-matched) serves its groups — the kit
+        // preludes + async weave ride COMPILED, and only the app
+        // compiles from source. The host-row surfaces (`tur_host`,
+        // `async_host`) are offered FIRST, from the live engine's row
+        // registry: their mod trees are engine-mounted, and the surface
+        // the app type-checks against must mirror the running engine
+        // exactly (a stale bundled surface could bind rows the running
+        // engine no longer has). The bundle's own host groups also
+        // mount — identity-keyed, the kit's packed scope references
+        // need them — and never shadow the bare engine-live ones (see
+        // [`precompiled_std_matching`]). A configuration the bundle was
+        // not generated for falls through to the source lane below.
+        if let Some(pkgs) = precompiled_std_matching(Self::offered_fingerprint(&offered_all)) {
+            let mut run = rut_driver::RutRun::new().entrypoint("app");
+            for pkg in offered_all
+                .iter()
+                .filter(|p| p.spec == "tur_host" || p.spec == "async_host")
+            {
+                run = run.pkg(pkg.clone());
+            }
+            for pkg in pkgs {
+                run = run.pkg(pkg);
+            }
+            let compiled = run.pkg(app).compile().map_err(|e| e.msg)?;
+            PRECOMPILED_STATS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if !compiled.graph.diags.is_empty() {
+                return Err(render_diags(&compiled.graph.diags, files));
+            }
+            let prog = compiled
+                .graph
+                .program
+                .ok_or("rut compile emitted no binary")?;
+            rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
+            return Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)));
+        }
+
+        // The source lane: offer the pkgs (first-offer-wins), root at the
+        // app source. `core` is auto-offered by `.compile()`.
+        SOURCE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut run = rut_driver::RutRun::new().pkg(app).entrypoint("app");
+        for pkg in offered_all {
             run = run.pkg(pkg);
         }
         let compiled = run.compile().map_err(|e| e.msg)?;
@@ -1181,7 +1397,7 @@ impl RutRuntime {
             .program
             .ok_or("rut compile emitted no binary")?;
         rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
-        Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&offered)))
+        Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)))
     }
 
     /// Parse + compile only (the parse-first half of the load contract) —
@@ -1238,7 +1454,6 @@ impl RutRuntime {
         inputs: RutRealmInputs,
         exts: &[RutPkgExt],
     ) -> Result<Self, crate::core::app::ModuleError> {
-
         let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
             store: js_ctx.store.clone(),
@@ -1325,11 +1540,7 @@ impl RutRuntime {
         match start_ret {
             Some(TY_U64) => {
                 let answer = vm.call::<_, u64>("start", ()).map_err(|t| {
-                    crate::core::app::ModuleError::Eval(format!(
-                        "start: {} — {}",
-                        t.name(),
-                        t.msg
-                    ))
+                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
                 self.start_answer = answer;
             }
@@ -1339,21 +1550,13 @@ impl RutRuntime {
             // back through the cx entry lanes).
             Some(TY_OPAQUE) => {
                 let cx = vm.call::<_, OpaqueRef>("start", ()).map_err(|t| {
-                    crate::core::app::ModuleError::Eval(format!(
-                        "start: {} — {}",
-                        t.name(),
-                        t.msg
-                    ))
+                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
                 self.start_answer = self.entry_slot_mint(cx);
             }
             Some(TY_NIL) => {
                 vm.call::<_, ()>("start", ()).map_err(|t| {
-                    crate::core::app::ModuleError::Eval(format!(
-                        "start: {} — {}",
-                        t.name(),
-                        t.msg
-                    ))
+                    crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
             }
             Some(other) => {
@@ -1427,7 +1630,10 @@ impl RutRuntime {
 
     /// Clone a held slot's handle — the cx crossing back INTO the VM (the
     /// slot STAYS: one context re-crosses on every control call).
-    pub fn entry_slot_handle(&self, token: u64) -> Result<OpaqueRef, crate::core::app::ModuleError> {
+    pub fn entry_slot_handle(
+        &self,
+        token: u64,
+    ) -> Result<OpaqueRef, crate::core::app::ModuleError> {
         self.entry_slots
             .borrow()
             .get(&token)
@@ -1451,11 +1657,7 @@ impl RutRuntime {
             .borrow_mut()
             .call::<_, OpaqueRef>(name, ())
             .map_err(|t| {
-                crate::core::app::ModuleError::Eval(format!(
-                    "{name}: {} — {}",
-                    t.name(),
-                    t.msg
-                ))
+                crate::core::app::ModuleError::Eval(format!("{name}: {} — {}", t.name(), t.msg))
             })?;
         Ok(crate::core::app::RutEntryAnswer::Opaque(
             self.entry_slot_mint(o),
@@ -1683,7 +1885,7 @@ pub struct RutPkgCx<'a> {
     /// Prelude rut pkgs registered into the compile run before the app
     /// source compiles (the kit — the authored builder surface). Core
     /// never fills this; the standard bundle assembly does.
-    pub preludes: &'a mut Vec<rut_driver::Pkg>,
+    pub preludes: &'a mut Vec<rut_driver::Mounted>,
 }
 
 /// A rut pkg extension: plugin-owned rows for the `tur_host` pkg (e.g.
@@ -1716,7 +1918,10 @@ mod tests {
             Diag::new(Span::new(40, 44), "child-side problem"),
         ];
         let rendered = render_diags(&diags, &files);
-        assert_eq!(rendered, "mod.rut: root-side problem; landing/mod.rut: child-side problem");
+        assert_eq!(
+            rendered,
+            "mod.rut: root-side problem; landing/mod.rut: child-side problem"
+        );
     }
 
     /// Two children: the SECOND file's range must win over the first's
@@ -1733,7 +1938,10 @@ mod tests {
 
         // concat layout: root [0..14), seam 14, a [15..49), seam 49,
         // b [50..82). A diag at 60 lives in b.
-        let diags = vec![Diag::new(Span::new(20, 22), "in a"), Diag::new(Span::new(60, 62), "in b")];
+        let diags = vec![
+            Diag::new(Span::new(20, 22), "in a"),
+            Diag::new(Span::new(60, 62), "in b"),
+        ];
         let rendered = render_diags(&diags, &files);
         assert_eq!(rendered, "a/mod.rut: in a; b/mod.rut: in b");
     }
@@ -1752,8 +1960,13 @@ mod tests {
     #[test]
     fn zero_span_attributes_to_the_root() {
         let mut files = RutModuleFiles::from("mod a;\n");
-        files.mods.insert(Arc::from("a"), Arc::from("pub fn x() {}\n"));
+        files
+            .mods
+            .insert(Arc::from("a"), Arc::from("pub fn x() {}\n"));
         let diags = vec![Diag::new(Span::new(0, 0), "`mod a;` mounted at root")];
-        assert_eq!(render_diags(&diags, &files), "mod.rut: `mod a;` mounted at root");
+        assert_eq!(
+            render_diags(&diags, &files),
+            "mod.rut: `mod a;` mounted at root"
+        );
     }
 }

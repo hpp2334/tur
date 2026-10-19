@@ -16,20 +16,20 @@
 //! 2. `rut/tur_kit/rut.jsonc` — the kit manifest parses with NO repealed
 //!    entry keys (the root module is the walk's `mod.rut`), and the
 //!    kit's FILE-MODULE TREE on disk (every directory's `mod.rut`) is
-//!    byte-identical to the engine's embedded `Pkg.mods` tree.
+//!    byte-identical to the engine's embedded `Mounted.mods` tree.
 //! 3. `rut/tur_host/rut.jsonc` — the host pkg's manifest must declare
 //!    `type = "host"` and NO `entry` (the `mod.d.rut` root is the
 //!    default).
 
 use std::path::{Path, PathBuf};
 
+use rut_driver::MountedBody;
 use rut_driver::bundle::{PkgType, parse_manifest};
-use rut_driver::PkgBody;
 use tur_animation::TurAnimationPlugin;
 use tur_engine::core::capability::Capabilities;
 use tur_engine::core::plugin::Plugin;
-use tur_engine::core::rut_runtime::{render_tur_host_decl_tree, tur_host_surface};
 use tur_engine::core::runtime::probe_register_rut_pkg_exts;
+use tur_engine::core::rut_runtime::{render_tur_host_decl_tree, tur_host_surface};
 use tur_engine::{TurClipboardPlugin, TurStdPlugin};
 use tur_integration_tests::{RecordingClipboard, RecordingHttp};
 use tur_net_capability::TurNetPlugin;
@@ -66,12 +66,8 @@ fn standard_capabilities() -> Capabilities {
 }
 
 fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {
-    probe_register_rut_pkg_exts(
-        &standard_plugins(),
-        standard_capabilities(),
-        (400.0, 600.0),
-    )
-    .expect("the standard session's register probe")
+    probe_register_rut_pkg_exts(&standard_plugins(), standard_capabilities(), (400.0, 600.0))
+        .expect("the standard session's register probe")
 }
 
 #[test]
@@ -142,7 +138,10 @@ fn tur_host_decl_tree_matches_the_standard_session() {
         } else {
             format!("{rel}/mod.d.rut")
         };
-        disk.insert(key, std::fs::read_to_string(&mod_d).expect("read mod.d.rut"));
+        disk.insert(
+            key,
+            std::fs::read_to_string(&mod_d).expect("read mod.d.rut"),
+        );
         for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             if entry.path().is_dir() {
@@ -193,7 +192,7 @@ fn tur_host_decl_tree_matches_the_standard_session() {
     let session = rut_native::load_path_session(&pkg_dir)
         .expect("the committed tur_host tree loads through the real walk");
     let mounted = session.pkg("tur_host").expect("the tur_host pkg mounts");
-    let PkgBody::Host { host_funcs, .. } = &mounted.body else {
+    let MountedBody::Host { host_funcs, .. } = &mounted.body else {
         panic!("the loaded tur_host pkg answered a non-host body");
     };
     let (live_rows, live_consts) = tur_host_surface(&probe_exts());
@@ -220,7 +219,11 @@ fn tur_host_decl_tree_matches_the_standard_session() {
         assert_eq!(row.path, lrow.path, "module-path drift on `{}`", lrow.name);
         assert_eq!(row.params, lrow.params, "param drift on `{}`", lrow.name);
         assert_eq!(row.ret, lrow.ret, "return drift on `{}`", lrow.name);
-        assert_eq!(row.is_async, lrow.is_async, "async drift on `{}`", lrow.name);
+        assert_eq!(
+            row.is_async, lrow.is_async,
+            "async drift on `{}`",
+            lrow.name
+        );
     }
 }
 
