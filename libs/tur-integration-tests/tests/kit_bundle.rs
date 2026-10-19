@@ -59,6 +59,24 @@ fn standard_capabilities() -> Capabilities {
     caps
 }
 
+/// The harness's http plugin shape — the configuration
+/// `TurTestApp::new_with_http` builds (std + animation + clipboard +
+/// the net rows over the Http capability). The corpus sweep and the net
+/// tests run under it.
+fn http_plugins() -> Vec<Box<dyn Plugin>> {
+    let mut plugins = standard_plugins();
+    plugins.push(Box::new(tur_net_capability::TurNetPlugin));
+    plugins
+}
+
+fn http_capabilities() -> Capabilities {
+    let caps = standard_capabilities();
+    caps.insert(tur_net_capability::Http::new(
+        tur_integration_tests::RecordingHttp::new(),
+    ));
+    caps
+}
+
 /// Stage one offered pkg to a sibling directory (relative `../name` dep
 /// paths keep resolving). Manifests derive from the pkg's own manifest
 /// (name, kind, deps); the flat host pkg (async_host — root surface
@@ -120,11 +138,13 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
 }
 
 /// Stage the whole offered set + the synthetic pack root, pack it, and
-/// answer (bundle bytes, offered-set fingerprint).
-fn generate() -> (Vec<u8>, u64) {
+/// answer (bundle bytes, offered-set fingerprint). `root_uses` spells
+/// the synthetic root's `use` lines — one REAL binding per offered
+/// lib pkg so the pack's compile closure LINKS every group (see below).
+fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) -> (Vec<u8>, u64) {
     let exts =
-        probe_register_rut_pkg_exts(&standard_plugins(), standard_capabilities(), (400.0, 600.0))
-            .expect("the standard session's register probe");
+        probe_register_rut_pkg_exts(plugins, caps, (400.0, 600.0))
+            .expect("the session's register probe");
     let offered = RutRuntime::offered_pkgs(&exts);
     let fp = RutRuntime::offered_fingerprint(&offered);
 
@@ -154,10 +174,9 @@ fn generate() -> (Vec<u8>, u64) {
     fs::create_dir_all(&root).expect("root dir");
     fs::write(
         root.join("mod.rut"),
-        "// staged root — the offered set's pack root\n\
-         use tur_kit::handles::{ mount };\n\
-         use tur_anim_kit::{ anim_ctrl };\n\
-         use futures::{ sleep };\n",
+        format!(
+            "// staged root — the offered set's pack root\n{root_uses}"
+        ),
     )
     .expect("root module");
     let mut deps = String::new();
@@ -188,11 +207,12 @@ fn generate() -> (Vec<u8>, u64) {
     (bytes, fp)
 }
 
-#[test]
-fn std_kit_bundle_is_pinned() {
-    let (bytes, fp) = generate();
-    let bundle_path = assets_dir().join("std_kit.rutbundle");
-    let fp_path = assets_dir().join("std_kit.fingerprint");
+/// One (config → artifact pair) lane: generate, bless-or-compare, and
+/// round-trip the pinned bytes.
+fn pin_one(label: &str, plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) {
+    let (bytes, fp) = generate(plugins, caps, root_uses);
+    let bundle_path = assets_dir().join(format!("{label}.rutbundle"));
+    let fp_path = assets_dir().join(format!("{label}.fingerprint"));
     let fp_hex = format!("{fp:016x}");
 
     if std::env::var("TUR_BLESS_KIT_BUNDLE").ok().as_deref() == Some("1") {
@@ -200,7 +220,7 @@ fn std_kit_bundle_is_pinned() {
         fs::write(&bundle_path, &bytes).expect("bless bundle");
         fs::write(&fp_path, &fp_hex).expect("bless fingerprint");
         eprintln!(
-            "blessed std_kit.rutbundle ({} bytes, fp {fp_hex})",
+            "blessed {label}.rutbundle ({} bytes, fp {fp_hex})",
             bytes.len()
         );
         return;
@@ -214,7 +234,7 @@ fn std_kit_bundle_is_pinned() {
     });
     assert_eq!(
         bytes, pinned,
-        "the packed std kit drifted from assets/std_kit.rutbundle — \
+        "the packed {label} kit drifted from assets/{label}.rutbundle — \
          bless with TUR_BLESS_KIT_BUNDLE=1 (the rut pin bump drill)"
     );
     let pinned_fp = fs::read_to_string(&fp_path)
@@ -225,9 +245,33 @@ fn std_kit_bundle_is_pinned() {
         "the offered-set fingerprint drifted"
     );
 
-    // And the pair round-trips: the pinned bytes decode + the engine's
-    // matcher accepts them for exactly this fingerprint.
+    // And the pair round-trips: the pinned bytes decode + walk.
     let bundle = rut_driver::Bundle::parse(&pinned).expect("decode the pinned bundle");
     let loaded = bundle.walk().expect("walk the pinned bundle");
     assert!(loaded.pkgs.iter().any(|p| p.spec.starts_with("tur_kit")));
+}
+
+#[test]
+fn kit_bundles_are_pinned() {
+    // The std shape — `TurTestApp::new`.
+    pin_one(
+        "std_kit",
+        &standard_plugins(),
+        standard_capabilities(),
+        "use tur_kit::handles::{ mount };\n\
+         use tur_anim_kit::{ anim_ctrl };\n\
+         use futures::{ sleep };\n",
+    );
+    // The http shape — `TurTestApp::new_with_http` (the corpus sweep
+    // + the net tests). tur_net_kit's real binding pulls the net rows'
+    // group into the pack's compile closure.
+    pin_one(
+        "http_kit",
+        &http_plugins(),
+        http_capabilities(),
+        "use tur_kit::handles::{ mount };\n\
+         use tur_anim_kit::{ anim_ctrl };\n\
+         use futures::{ sleep };\n\
+         use tur_net_kit::{ net_request };\n",
+    );
 }

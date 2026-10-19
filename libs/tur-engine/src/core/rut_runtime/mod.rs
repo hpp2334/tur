@@ -1125,7 +1125,7 @@ fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> Stri
 // fill pass). The harness installs the lane unconditionally now; the
 // bench (`module_load_bench`) asserts it.
 
-static PRECOMPILED_STD: std::sync::OnceLock<(&'static [u8], u64)> = std::sync::OnceLock::new();
+static PRECOMPILED_KITS: std::sync::Mutex<Vec<(&'static [u8], u64)>> = std::sync::Mutex::new(Vec::new());
 
 /// Lane telemetry — `(loads served from the precompiled kit, loads that
 /// fell back to the source lane)`. The bench gate reads it: a load that
@@ -1143,59 +1143,74 @@ pub fn precompiled_std_stats() -> (u64, u64) {
 }
 
 thread_local! {
-    /// The bundle's WALKED yield for the CURRENT thread (the worker lane
-    /// the compiles run on) — every group the walk yielded (see
-    /// [`precompiled_std_matching`] for what rides and why). One
-    /// `Bundle::parse` at install, one `bundle.walk()` per thread, then
-    /// cheap `Mounted` clones per load: a fresh walk per load
-    /// re-relocates every group (measured: ~3/4 of the whole lane's
-    /// cost); the clone+offer is an order of magnitude cheaper.
-    static PRECOMPILED_WALK: std::cell::RefCell<Option<(*const u8, Vec<rut_driver::Mounted>)>> =
-        const { std::cell::RefCell::new(None) };
+    /// Each installed bundle's WALKED yield for the CURRENT thread (the
+    /// worker lane the compiles run on) — every group the walk yielded
+    /// (see [`precompiled_kit_matching`] for what rides and why). One
+    /// `Bundle::parse` at install, one `bundle.walk()` per bundle per
+    /// thread, then cheap `Mounted` clones per load: a fresh walk per
+    /// load re-relocates every group (measured: ~3/4 of the whole
+    /// lane's cost); the clone+offer is an order of magnitude cheaper.
+    static PRECOMPILED_WALKS: std::cell::RefCell<Vec<(*const u8, Vec<rut_driver::Mounted>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Install the precompiled standard kit. Validates the bundle by
-/// decoding it once (loud, at install — a corrupt bundle refuses here,
-/// never at load); first install wins (a process serves one standard
-/// shape).
-pub fn set_precompiled_std(bytes: &'static [u8], fingerprint: u64) -> Result<(), String> {
-    if PRECOMPILED_STD.get().is_some() {
+/// The walked kit yield for the FIRST installed bundle whose
+/// fingerprint matches — the bundle's groups exactly as the walk
+/// yielded them (the compiled kit preludes + async weave, the bundle's
+/// host-surface groups, and the `tur_std` staging root — its mount
+/// carries the archive's scope ledger, which the kit's packed scope
+/// references resolve through), ready to offer one pkg at a time.
+/// `None` otherwise (not installed, or a different configuration → the
+/// source lane). The bundle's host groups mount identity-keyed and
+/// never shadow the engine-live bare `tur_host`/`async_host` the
+/// compile lane offers FIRST: the app's surface checks resolve bare
+/// (exact), the kit's packed scope references resolve identity (exact),
+/// and runtime row calls bind by name against the boot registry. The
+/// fingerprint gates the one assumption in that three-way split: the
+/// bundled surfaces and the running engine's rows are the same
+/// generation.
+fn precompiled_kit_matching(fp: u64) -> Option<Vec<rut_driver::Mounted>> {
+    let bytes = {
+        let kits = PRECOMPILED_KITS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut found = None;
+        for &(bytes, want) in kits.iter() {
+            if want == fp {
+                found = Some(bytes);
+                break;
+            }
+        }
+        found?
+    };
+    PRECOMPILED_WALKS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if let Some(idx) = slot.iter().position(|(ptr, _)| *ptr == bytes.as_ptr()) {
+            return Some(slot[idx].1.clone());
+        }
+        let bundle = rut_driver::Bundle::parse(bytes).ok()?;
+        let walked = bundle.walk().ok()?;
+        slot.push((bytes.as_ptr(), walked.pkgs));
+        slot.last().map(|(_, pkgs)| pkgs.clone())
+    })
+}
+
+/// Install one precompiled kit (a packed bundle + the offered-set
+/// fingerprint it was generated from). Validates the bundle by decoding
+/// it once (loud, at install — a corrupt bundle refuses here, never at
+/// load); re-installing a fingerprint already registered is a no-op, so
+/// a harness can install its whole config family unconditionally (the
+/// std shape, the http shape, …) and each load picks its match.
+pub fn set_precompiled_kit(bytes: &'static [u8], fingerprint: u64) -> Result<(), String> {
+    let mut kits = PRECOMPILED_KITS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if kits.iter().any(|&(_, want)| want == fingerprint) {
         return Ok(());
     }
-    rut_driver::Bundle::parse(bytes).map_err(|e| format!("precompiled std kit: {}", e.msg))?;
-    let _ = PRECOMPILED_STD.set((bytes, fingerprint));
+    rut_driver::Bundle::parse(bytes).map_err(|e| format!("precompiled kit: {}", e.msg))?;
+    kits.push((bytes, fingerprint));
     Ok(())
-}
-
-/// The walked standard-kit yield when its fingerprint matches — the
-/// bundle's groups exactly as the walk yielded them (the compiled kit
-/// preludes + async weave, the bundle's host-surface groups, and the
-/// `tur_std` staging root — its mount carries the archive's scope
-/// ledger, which the kit's packed scope references resolve through),
-/// ready to offer one pkg at a time. `None` otherwise (not installed,
-/// or a different configuration → the source lane). The bundle's host
-/// groups mount identity-keyed and never shadow the engine-live bare
-/// `tur_host`/`async_host` the compile lane offers FIRST: the app's
-/// surface checks resolve bare (exact), the kit's packed scope
-/// references resolve identity (exact), and runtime row calls bind by
-/// name against the boot registry. The fingerprint gates the one
-/// assumption in that three-way split: the bundled surfaces and the
-/// running engine's rows are the same generation.
-fn precompiled_std_matching(fp: u64) -> Option<Vec<rut_driver::Mounted>> {
-    let (bytes, want) = PRECOMPILED_STD.get()?;
-    if *want != fp {
-        return None;
-    }
-    PRECOMPILED_WALK.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        let fresh = !slot.as_ref().is_some_and(|(ptr, _)| *ptr == bytes.as_ptr());
-        if fresh {
-            let bundle = rut_driver::Bundle::parse(bytes).ok()?;
-            let walked = bundle.walk().ok()?;
-            *slot = Some((bytes.as_ptr(), walked.pkgs));
-        }
-        slot.as_ref().map(|(_, pkgs)| pkgs.clone())
-    })
 }
 
 impl RutRuntime {
@@ -1355,9 +1370,9 @@ impl RutRuntime {
         // engine no longer has). The bundle's own host groups also
         // mount — identity-keyed, the kit's packed scope references
         // need them — and never shadow the bare engine-live ones (see
-        // [`precompiled_std_matching`]). A configuration the bundle was
+        // [`precompiled_kit_matching`]). A configuration the bundle was
         // not generated for falls through to the source lane below.
-        if let Some(pkgs) = precompiled_std_matching(Self::offered_fingerprint(&offered_all)) {
+        if let Some(pkgs) = precompiled_kit_matching(Self::offered_fingerprint(&offered_all)) {
             let mut run = rut_driver::RutRun::new().entrypoint("app");
             for pkg in offered_all
                 .iter()
