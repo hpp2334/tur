@@ -131,16 +131,48 @@ fn every_corpus_case_has_a_manifest_and_compiles_against_the_standard_kit() {
     // byte-identical to the single-string shape) and the load compiles +
     // boots it through `load_rut_module_files` — the sweep is
     // multi-file-ready before any case splits.
+    //
+    // Cases are independent (a fresh instance each), and this test is the
+    // suite's long tail — it typically finishes alone on one core long
+    // after the sibling tests drained — so the sweep rides a scoped
+    // thread team: the sorted case set chunks across the available
+    // cores, each chunk compiles sequentially, and failures collect by
+    // name (sorted back to deterministic order at the assert). The
+    // with-http config fails the std bundle's fingerprint, so every
+    // case rides the source lane here — the per-case cost the thread
+    // team is amortizing until an http-shaped bundle exists.
     let mut failures = Vec::new();
-    for name in &names {
-        let files = read_case_files(&cases_dir.join(name)).unwrap();
-        let app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
-        if let Err(e) = app.load_rut_module_files(files) {
-            failures.push(format!("{name}: {e}"));
-        } else {
-            app.wait_for_timeout(Duration::ZERO);
+    let n_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(1, names.len());
+    let chunk = names.len().div_ceil(n_threads);
+    std::thread::scope(|s| {
+        let handles: Vec<_> = names
+            .chunks(chunk)
+            .map(|chunk_names| {
+                let chunk: &[String] = chunk_names;
+                let cases_dir: &std::path::PathBuf = &cases_dir;
+                s.spawn(move || {
+                    let mut failures = Vec::new();
+                    for name in chunk_names {
+                        let files = read_case_files(&cases_dir.join(name)).unwrap();
+                        let app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
+                        if let Err(e) = app.load_rut_module_files(files) {
+                            failures.push(format!("{name}: {e}"));
+                        } else {
+                            app.wait_for_timeout(Duration::ZERO);
+                        }
+                    }
+                    failures
+                })
+            })
+            .collect();
+        for h in handles {
+            failures.extend(h.join().expect("corpus sweep thread"));
         }
-    }
+    });
+    failures.sort();
     assert!(
         failures.is_empty(),
         "{} corpus case(s) failed to compile:\n{}",
