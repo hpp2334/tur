@@ -1118,12 +1118,12 @@ fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> Stri
 // back to the source lane — the bundle never serves a set it was not
 // generated for.
 //
-// UPSTREAM NOTE (why the harness installs this opt-in only): a
-// compiled group's consumer-side template materialization misbinds
-// interface slots at eval (`sv<T>` & friends — "no impl for interface
-// slot N on `StaticValue<u64>`"); the source lane at the same pin is
-// clean. Flip the harness's `TUR_KIT_BUNDLE` gate once the rut fix
-// lands — the bench (`module_load_bench`) already asserts the lane.
+// UPSTREAM NOTE (resolved): consumer-side template materialization
+// misbound interface slots at eval (`sv<T>` & friends — "no impl for
+// interface slot N on `StaticValue<u64>`") until rut ca5e523c landed
+// the interface-row substitution (IfaceRemaps + the post-materialize
+// fill pass). The harness installs the lane unconditionally now; the
+// bench (`module_load_bench`) asserts it.
 
 static PRECOMPILED_STD: std::sync::OnceLock<(&'static [u8], u64)> = std::sync::OnceLock::new();
 

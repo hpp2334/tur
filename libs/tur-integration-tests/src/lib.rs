@@ -653,13 +653,13 @@ impl TurTestApp {
         // The pair is pinned by the `kit_bundle` test (bless:
         // TUR_BLESS_KIT_BUNDLE=1).
         //
-        // OPT-IN until upstream lands the template fix: a compiled
-        // group's consumer-side template materialization misbinds
-        // interface slots at eval (`sv<T>` & friends — "no impl for
-        // interface slot N on StaticValue<u64>"), so the default lane
-        // stays source and the corpus runs green. Set TUR_KIT_BUNDLE=1
-        // to exercise the fast lane (the load bench does).
-        if std::env::var("TUR_KIT_BUNDLE").ok().as_deref() == Some("1") {
+        // The pre-compiled kit lane is ALWAYS installed (rut ca5e523c
+        // fixed the consumer-side interface-row substitution that
+        // misbound iface slots at eval; the byte-pinned bundle halves
+        // every module load — 455ms -> 209ms debug). Loads whose
+        // offered set doesn't match the fingerprint fall back to the
+        // source lane per-load anyway.
+        {
             let fp = u64::from_str_radix(include_str!("../assets/std_kit.fingerprint").trim(), 16)
                 .expect("the std kit fingerprint hex");
             let _ = tur_engine::core::rut_runtime::set_precompiled_std(

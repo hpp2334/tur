@@ -2,12 +2,11 @@
 //!
 //! Loads a trivial kit-using module (the standard shape) and reports
 //! per-load wall time. The ASSERTION pins the lane structure, never
-//! machine speed: with `TUR_KIT_BUNDLE=1` every standard-shape load
-//! must ride the precompiled kit (`precompiled_std_stats`), without it
-//! the source lane must serve. The timing ceilings are set far enough
-//! above the honest numbers that only a STRUCTURAL regression (the
-//! double-compile shape this lane replaces, ~2x these figures) trips
-//! them.
+//! machine speed: the harness always installs the precompiled kit, so
+//! every standard-shape load must ride it (`precompiled_std_stats`).
+//! The timing ceilings are set far enough above the honest numbers
+//! that only a STRUCTURAL regression (the double-compile shape this
+//! lane replaces, ~2x these figures) trips them.
 
 use std::time::Instant;
 
@@ -42,19 +41,11 @@ fn trivial_module_load_bench() {
 
     let (served, fallbacks) = tur_engine::core::rut_runtime::precompiled_std_stats();
     println!("[load-bench] lane stats: served={served} source_fallbacks={fallbacks}");
-    if std::env::var("TUR_KIT_BUNDLE").ok().as_deref() == Some("1") {
-        assert!(
-            served > 0,
-            "TUR_KIT_BUNDLE=1 but no load rode the precompiled kit — the fast lane lost its \
-             fingerprint or was never installed"
-        );
-    } else {
-        assert!(
-            fallbacks > 0,
-            "no load took the source lane — the precompiled kit must not serve unless \
-             TUR_KIT_BUNDLE=1"
-        );
-    }
+    assert!(
+        served > 0,
+        "no load rode the precompiled kit — the fast lane lost its fingerprint or was \
+         never installed"
+    );
 
     // The structural ceiling: set far above even loaded-suite timings
     // (nextest runs this binary alongside dozens of others) — only a
