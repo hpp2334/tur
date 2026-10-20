@@ -20,6 +20,7 @@ use std::rc::Rc;
 use crate::builtin_plugins::text::controller::{
     InputEvent, SpanData, TextEditingController, UndoController,
 };
+use crate::builtin_plugins::text::elements::editable_text::ContextMenuEvent;
 use crate::builtin_plugins::text::elements::paragraph::TextOverflow;
 use crate::builtin_plugins::text::{InputView, TextView};
 use crate::core::edgy::mutation::MutationHandle;
@@ -205,6 +206,15 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
             TY_NIL,
             false,
         ),
+        // the context-menu rail (the mutation law): `input_on_context_menu(
+        // builder, atom)` installs the sealed mutation; the engine's
+        // right-button gesture fires it with the typed `ContextMenuEvent`
+        // (local + global points) — the playground menu's open trigger.
+        trow("text/input", "input_on_context_menu",
+            vec![TY_OPAQUE, TY_U64],
+            TY_NIL,
+            false,
+        ),
         trow("text/input", "input_qkey",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
@@ -215,6 +225,9 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
         trow("text/input", "tctrl_new", vec![], TY_OPAQUE, false),
         trow("text/input", "undo_new", vec![], TY_OPAQUE, false),
         trow("text/input", "tctrl_text", vec![TY_OPAQUE], TY_STR, false),
+        // the selected slice (the context-menu Cut/Copy rail's read — the
+        // keyboard Copy arm's twin; empty when nothing is selected).
+        trow("text/input", "tctrl_selected_text", vec![TY_OPAQUE], TY_STR, false),
         trow("text/input", "tctrl_set_text",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
@@ -469,6 +482,15 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             }
         })
     });
+    // input_on_context_menu(builder, atom) — install the sealed
+    // context-menu mutation (the element enqueues its invocation on the
+    // engine's right-button gesture: the typed `ContextMenuEvent` with
+    // local + global points). Unlike the on-input rail this lives on the
+    // SPEC (not the shared controller) — a per-element trigger.
+    rut_vm::pkg_fn!(pkg, "text::input::input_on_context_menu", (Opaque<InputView>, u64) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, atom: u64| {
+        let m = Some(MutationHandle::<ContextMenuEvent>::new(crate::core::rut_runtime::mutation_of(atom)));
+        b.with_mut(vm, |_vm, s| s.on_context_menu = m)
+    });
     // input_multiline(builder, on) — the JS `multiline: true` twin.
     rut_vm::pkg_fn!(pkg, "text::input::input_multiline", (Opaque<InputView>, bool) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, on: bool| {
         b.with_mut(vm, |_vm, s| s.set_multiline(on))
@@ -495,6 +517,11 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
 
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_text", (Opaque<RutTextCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
         c.with(|c| Ok(c.0.borrow().text()))?
+    });
+    // tctrl_selected_text(ctrl) -> str — the selected slice (the
+    // context-menu Cut/Copy rail's read; empty when nothing is selected).
+    rut_vm::pkg_fn!(pkg, "text::input::tctrl_selected_text", (Opaque<RutTextCtrl>,) -> String, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
+        c.with(|c| Ok(c.0.borrow().selected_text()))?
     });
     let set_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_set_text", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
@@ -561,10 +588,16 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_cursor", (Opaque<RutTextCtrl>,) -> u64, move |_vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
         c.with(|c| Ok(c.0.borrow().cursor_position() as u64))?
     });
+    let sel_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_select", (Opaque<RutTextCtrl>, u64, u64) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, anchor: u64, end: u64| {
+        let handles = sel_handles.clone();
         c.with_mut(vm, |_vm, c| {
             c.0.borrow_mut().set_selection(anchor as usize, end as usize);
         })?;
+        // A post-mount select (the menu's Select All) must repaint the
+        // highlight — request the frame (paint-level; no rebuild mark —
+        // selection moves never bump the revision).
+        (handles.request_frame)();
         Ok(())
     });
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_clear", (Opaque<RutTextCtrl>,) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>| {
@@ -575,14 +608,23 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     // The paste-equivalent: insert at the caret, replacing any selection —
     // the same state change the engine's ClipboardPasteSubsystem applies.
+    // (The mounted-editable refresh rides the sibling rows' law: the
+    // controller is invisible to the reactive dedup, so a post-mount paste
+    // must mark the node dirty + request the frame itself.)
+    let paste_handles = handles.clone();
     rut_vm::pkg_fn!(pkg, "text::input::tctrl_paste", (Opaque<RutTextCtrl>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, c: Opaque<RutTextCtrl>, text: &str| {
+        let handles = paste_handles.clone();
         c.with_mut(vm, |_vm, c| {
             let mut t = c.0.borrow_mut();
             t.delete_selection();
             let pos = t.cursor_position();
             t.insert_str_at(pos, text);
             t.set_cursor_position(pos + text.len());
+            if let Some(id) = t.mounted_view() {
+                handles.element_tree.mark_dirty(id);
+            }
         })?;
+        (handles.request_frame)();
         Ok(())
     });
 

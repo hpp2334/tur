@@ -22,15 +22,55 @@ use super::RutHandles;
 pub fn decl_rows() -> Vec<rut_driver::HostRow> {
     vec![
         ("clipboard_read", vec![], TY_STR, true),
+        // The clipboard kit's twin spelling (the `net_request_raw` pattern —
+        // the kit's own `clipboard_read` wrapper shadows the row name, so
+        // its body reaches the row through the `_raw` alias).
+        ("clipboard_read_raw", vec![], TY_STR, true),
         ("clipboard_write", vec![TY_STR], TY_NIL, true),
+        ("clipboard_write_raw", vec![TY_STR], TY_NIL, true),
         ("decode_utf8", vec![TY_BYTES], TY_STR, false),
         ("encode_utf8", vec![TY_STR], TY_BYTES, false),
     ]
     .into_iter()
-    .map(|(n, p, r, a)| {
-        crate::core::rut_runtime::host_row_at("clipboard", n, p, r, a)
-    })
+    .map(|(n, p, r, a)| crate::core::rut_runtime::host_row_at("clipboard", n, p, r, a))
     .collect()
+}
+
+/// The `clipboard_read` / `clipboard_read_raw` bodies — one law, two
+/// spellings (the kit's authored `clipboard_read` wrapper shadows the row
+/// name, so it reaches the row through the `_raw` alias).
+fn clipboard_read_body(h: Rc<RutHandles>) -> rut_vm::Completer<String> {
+    use crate::Clipboard;
+    let done = rut_vm::Completer::new();
+    let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
+        done.complete(String::new());
+        return done;
+    };
+    let clipboard = clipboard.backend().clone();
+    let w = done.clone();
+    h.inst.spawn_local(move |_aw| async move {
+        w.complete(clipboard.read_text().await);
+    });
+    done
+}
+
+/// The `clipboard_write` / `clipboard_write_raw` bodies (a missing
+/// capability completes immediately — the no-op degradation).
+fn clipboard_write_body(h: Rc<RutHandles>, text: &str) -> rut_vm::Completer<()> {
+    use crate::Clipboard;
+    let done = rut_vm::Completer::<()>::new();
+    let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
+        done.complete(());
+        return done;
+    };
+    let clipboard = clipboard.backend().clone();
+    let text = text.to_string();
+    let w = done.clone();
+    h.inst.spawn_local(move |_aw| async move {
+        clipboard.write_text(text).await;
+        w.complete(());
+    });
+    done
 }
 
 /// Install the C6 bodies. (The needless_question_mark allow covers the
@@ -38,42 +78,29 @@ pub fn decl_rows() -> Vec<rut_driver::HostRow> {
 /// precedent.)
 #[allow(clippy::needless_question_mark)]
 pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
-    use crate::Clipboard;
-
     // clipboard_read() -> str — resolves with the platform text (empty when
     // denied/unavailable — the same degradation the JS bridge documents).
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read", () -> String, move || {
-        let done = rut_vm::Completer::new();
-        let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
-            done.complete(String::new());
-            return done;
-        };
-        let clipboard = clipboard.backend().clone();
-        let w = done.clone();
-        h.inst.spawn_local(move |_aw| async move {
-            w.complete(clipboard.read_text().await);
-        });
-        done
+        clipboard_read_body(h.clone())
     });
 
-    // clipboard_write(s: str) -> () — resolves when the write lands (a
-    // missing capability completes immediately — the no-op degradation).
+    // The clipboard kit's twin spelling (the `net_request_raw` pattern).
+    let h = handles.clone();
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read_raw", () -> String, move || {
+        clipboard_read_body(h.clone())
+    });
+
+    // clipboard_write(s: str) -> () — resolves when the write lands.
     let h = handles.clone();
     rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write", (&str,) -> (), move |text: &str| {
-        let done = rut_vm::Completer::<()>::new();
-        let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
-            done.complete(());
-            return done;
-        };
-        let clipboard = clipboard.backend().clone();
-        let text = text.to_string();
-        let w = done.clone();
-        h.inst.spawn_local(move |_aw| async move {
-            clipboard.write_text(text).await;
-            w.complete(());
-        });
-        done
+        clipboard_write_body(h.clone(), text)
+    });
+
+    // The clipboard kit's twin spelling (the `net_request_raw` pattern).
+    let h = handles.clone();
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write_raw", (&str,) -> (), move |text: &str| {
+        clipboard_write_body(h.clone(), text)
     });
 
     // ---- bytes helpers (the response-body decode path) ------------------

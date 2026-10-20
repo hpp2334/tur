@@ -3,8 +3,8 @@
 use tur_host::text::input::{
   input_build, input_color, input_controller, input_cursor_color, input_font_family,
   input_font_size, input_multiline, input_new, input_obscure, input_obscure_bound,
-  input_obscure_char, input_on_input, input_placeholder, input_placeholder_bound,
-  input_placeholder_color, input_qkey, input_size, input_undo,
+  input_obscure_char, input_on_context_menu, input_on_input, input_placeholder,
+  input_placeholder_bound, input_placeholder_color, input_qkey, input_size, input_undo,
 };
 
 // ---- input -----------------------------------------------------------------
@@ -83,6 +83,15 @@ impl Input {
   // shared controller.
   pub fn on_input(mut self, m: reactive::Mutation<gesture::pointer::InputEvent>) -> Self {
     input_on_input(self.spec, m.seal(reactive::SEAL_INPUT));
+    return self;
+  }
+  // The context-menu rail: the engine's right-button gesture (right-click,
+  // or Ctrl+click on macOS) enqueues the sealed mutation with the typed
+  // `ContextMenuEvent` — the menu overlay's open trigger. Right-clicking
+  // INSIDE an active selection preserves it, so the menu's Cut/Copy operate
+  // on what the user right-clicked.
+  pub fn on_context_menu(mut self, m: reactive::Mutation<gesture::pointer::ContextMenuEvent>) -> Self {
+    input_on_context_menu(self.spec, m.seal(reactive::SEAL_CTM));
     return self;
   }
   pub fn query_key(mut self, k: str) -> Self {

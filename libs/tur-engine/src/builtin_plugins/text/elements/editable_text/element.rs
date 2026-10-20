@@ -921,14 +921,26 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
 // Carries both local (element-relative) and global (canvas-relative) coords.
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct ContextMenuEvent {
     local: crate::core::layout::Offset,
     global: crate::core::layout::Offset,
 }
 
-impl crate::core::edgy::mutation::MutationPayload for ContextMenuEvent {}
+impl crate::core::edgy::mutation::MutationPayload for ContextMenuEvent {
+    /// Native crossing (the rut rail): `[local.x, local.y, global.x,
+    /// global.y]` — the same four-number shape the pointer events cross
+    /// in (the kit's `ContextMenuEvent` event value decodes both points).
+    fn to_value_args(&self) -> Vec<crate::core::edgy::value::Value> {
+        use crate::core::edgy::value::Value;
+        vec![
+            Value::Num(self.local.x),
+            Value::Num(self.local.y),
+            Value::Num(self.global.x),
+            Value::Num(self.global.y),
+        ]
+    }
+}
 
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx) {

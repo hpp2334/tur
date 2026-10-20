@@ -291,6 +291,20 @@ impl TextEditingController {
         if a <= b { (a, b) } else { (b, a) }
     }
 
+    /// The selected slice of the joined text — the context-menu Cut/Copy
+    /// rail's read (mirrors the keyboard Copy arm: sorted, clamped byte
+    /// range over `text()`). Empty when nothing is selected.
+    pub fn selected_text(&self) -> String {
+        let full = self.text();
+        let (a, b) = self.selection_range();
+        let s = a.min(full.len());
+        let e = b.min(full.len());
+        if s >= e {
+            return String::new();
+        }
+        full[s..e].to_string()
+    }
+
     pub fn clear_selection(&mut self) {
         self.selection_anchor = self.cursor_position;
         self.selection_end = self.cursor_position;

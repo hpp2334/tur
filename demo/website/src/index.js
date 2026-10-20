@@ -121,10 +121,13 @@ async function main() {
         if (status) status.textContent = "loading playground…";
         // The playground is a rut module embedded in the wasm host (the
         // Phase-4 rewrite): the site shell only feeds it to the engine's
-        // zero-JS load path.
+        // zero-JS load path. The declared `menu` child (the editor's
+        // context menu) rides the multi-file twin — its own scope carries
+        // the menu's async surfaces.
         const source = app.playgroundSource();
+        const menuSource = app.playgroundMenuSource();
 
-        app.loadAndRunRutModule(source);
+        app.loadAndRunRutModuleFiles(source, { menu: menuSource });
         // Fade the overlay out, then drop it so the canvas owns the
         // viewport. The paint is gone before tur's first frame lands.
         const overlay = document.getElementById("overlay");

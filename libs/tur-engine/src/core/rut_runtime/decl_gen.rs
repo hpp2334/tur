@@ -16,11 +16,11 @@ use std::collections::BTreeMap;
 
 use rut_ast::ast::Vis;
 use rut_core::types::{
-    TypeId, TY_BOOL, TY_BYTES, TY_F32, TY_F64, TY_I16, TY_I32, TY_I64, TY_I8, TY_NIL, TY_OPAQUE,
-    TY_OPT_BYTES, TY_OPT_OPAQUE, TY_OPT_STR, TY_STR, TY_U16, TY_U32, TY_U64, TY_U8,
+    TY_BOOL, TY_BYTES, TY_F32, TY_F64, TY_I8, TY_I16, TY_I32, TY_I64, TY_NIL, TY_OPAQUE,
+    TY_OPT_BYTES, TY_OPT_OPAQUE, TY_OPT_STR, TY_STR, TY_U8, TY_U16, TY_U32, TY_U64, TypeId,
 };
 
-use super::{tur_decl_pkg, RutPkgCx, RutPkgExt};
+use super::{RutPkgCx, RutPkgExt, tur_decl_pkg};
 use rut_driver::{HostRow, ModSource, MountedBody};
 
 /// The crossing-set type name for a decl signature (`decl.rs`'s table, in
@@ -177,11 +177,7 @@ fn child_mods(modules: &BTreeMap<String, Vec<&HostRow>>, path: &str) -> Vec<Stri
 /// The decl text for one module file: the `pub mod` edges then the
 /// rows (the exact shape the generated `.d.rut` files carry, minus
 /// the prose headers).
-fn module_text(
-    modules: &BTreeMap<String, Vec<&HostRow>>,
-    path: &str,
-    rows: &[&HostRow],
-) -> String {
+fn module_text(modules: &BTreeMap<String, Vec<&HostRow>>, path: &str, rows: &[&HostRow]) -> String {
     let mut text = String::new();
     let kids = child_mods(modules, path);
     for kid in &kids {
@@ -219,7 +215,12 @@ pub fn mount_host_tree(pkg: &mut rut_driver::Mounted) {
         } else {
             mods.insert(
                 path.clone(),
-                ModSource { path: path.clone(), vis: Vis::Pub, text, file: "mod.d.rut".to_string() },
+                ModSource {
+                    path: path.clone(),
+                    vis: Vis::Pub,
+                    text,
+                    file: "mod.d.rut".to_string(),
+                },
             );
         }
     }

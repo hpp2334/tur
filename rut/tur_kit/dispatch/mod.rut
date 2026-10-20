@@ -125,6 +125,13 @@ entry fn __tur_cb_minput(cb: opaque, h: opaque, value: str, enter: bool) {
   f(reactive::MutationCtx::over(h), gesture::pointer::InputEvent::of(value, enter));
 }
 
+// The editable's context-menu crossing: the four numbers construct the
+// typed event (local + global points).
+entry fn __tur_cb_mctm(cb: opaque, h: opaque, lx: f64, ly: f64, gx: f64, gy: f64) {
+  let f = opaque::downcast<fn(reactive::MutationCtx, gesture::pointer::ContextMenuEvent)>(cb);
+  f(reactive::MutationCtx::over(h), gesture::pointer::ContextMenuEvent::of(gesture::pointer::Point::at(lx, ly), gesture::pointer::Point::at(gx, gy)));
+}
+
 entry fn __tur_cb_mfocus(cb: opaque, h: opaque) {
   let f = opaque::downcast<fn(reactive::MutationCtx, gesture::pointer::FocusEvent)>(cb);
   f(reactive::MutationCtx::over(h), gesture::pointer::FocusEvent::of());

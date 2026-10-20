@@ -3,5 +3,5 @@ mod input;
 mod layout;
 mod render;
 
-pub use element::{EditableTextElement, EditableTextView};
+pub use element::{ContextMenuEvent, EditableTextElement, EditableTextView};
 pub use input::InputView;

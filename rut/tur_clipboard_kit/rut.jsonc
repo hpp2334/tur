@@ -1,0 +1,12 @@
+// tur_clipboard_kit — the clipboard capability's kit prelude (the authored face
+// over the clipboard rows). Owned by the plugin that owns the rows (the
+// layering law applied to the kit); embedded by
+// tur-engine/src/builtin_plugins/clipboard/kit.rs and registered as a
+// compile-session prelude only when the Clipboard capability is present
+// (TurClipboardPlugin declares it as a hard dep).
+{
+  "name": "tur_clipboard_kit",
+  "deps": {
+    "tur_host": { "path": "../tur_host" }
+  }
+}

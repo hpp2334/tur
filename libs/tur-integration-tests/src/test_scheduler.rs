@@ -288,7 +288,9 @@ impl TestSchedulerDriver {
     /// flips to host-drain (the wasm browser path), letting tests pin
     /// that path natively. See
     /// [`WorkerExecutor::wakes_host_tasks_cross_thread`](tur_engine::core::scheduler::WorkerExecutor::wakes_host_tasks_cross_thread).
-    pub fn worker_spawner_via_host_drain(&self) -> Rc<dyn tur_engine::core::scheduler::WorkerSpawner> {
+    pub fn worker_spawner_via_host_drain(
+        &self,
+    ) -> Rc<dyn tur_engine::core::scheduler::WorkerSpawner> {
         ViaHostDrainSpawner::new(self.pools.clone())
     }
 
@@ -345,9 +347,7 @@ pub struct ViaHostDrainSpawner {
 }
 
 impl ViaHostDrainSpawner {
-    pub fn new(
-        inner: Rc<dyn tur_engine::core::scheduler::WorkerSpawner>,
-    ) -> Rc<Self> {
+    pub fn new(inner: Rc<dyn tur_engine::core::scheduler::WorkerSpawner>) -> Rc<Self> {
         Rc::new(Self { inner })
     }
 }
@@ -358,13 +358,12 @@ impl tur_engine::core::scheduler::WorkerSpawner for ViaHostDrainSpawner {
         pool: &tur_engine::core::scheduler::WorkerPoolHandle,
         entry: tur_engine::core::scheduler::WorkerEntry,
     ) -> tur_engine::core::scheduler::WorkerTicket {
-        let wrapped: tur_engine::core::scheduler::WorkerEntry =
-            Box::new(move |ctx| {
-                let exec = Rc::new(ViaHostDrainExecutor {
-                    inner: ctx.executor().clone(),
-                });
-                entry(tur_engine::core::scheduler::WorkerContext::new(exec))
+        let wrapped: tur_engine::core::scheduler::WorkerEntry = Box::new(move |ctx| {
+            let exec = Rc::new(ViaHostDrainExecutor {
+                inner: ctx.executor().clone(),
             });
+            entry(tur_engine::core::scheduler::WorkerContext::new(exec))
+        });
         self.inner.spawn_worker(pool, wrapped)
     }
 }

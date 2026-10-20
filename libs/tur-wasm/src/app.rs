@@ -1171,6 +1171,50 @@ impl WasmApp {
         Ok(())
     }
 
+    /// The multi-file twin: compile + boot the mounted module (root +
+    /// `mod` children) and start the frame loop. `mods` is a plain JS
+    /// object mapping each declared child's mod path to its source
+    /// (`{ menu: "…" }` for `mod menu;` in the root). Mirrors the engine's
+    /// `load_rut_module_files`.
+    pub async fn load_and_run_rut_module_files(
+        &self,
+        root: &str,
+        mods: js_sys::Object,
+    ) -> Result<(), JsValue> {
+        let app = {
+            let guard = self.state.borrow();
+            let Some(s) = guard.as_ref() else {
+                return Err(JsValue::from_str("app not initialized"));
+            };
+            s.app.clone()
+        };
+        let entries = js_sys::Object::entries(&mods);
+        let mut map = std::collections::BTreeMap::new();
+        for pair in entries.iter() {
+            let arr = js_sys::Array::from(&pair);
+            let key = arr
+                .get(0)
+                .as_string()
+                .ok_or_else(|| JsValue::from_str("mod map keys must be strings"))?;
+            let val = arr
+                .get(1)
+                .as_string()
+                .ok_or_else(|| JsValue::from_str("mod map values must be strings"))?;
+            map.insert(
+                std::sync::Arc::from(key.as_str()),
+                std::sync::Arc::from(val.as_str()),
+            );
+        }
+        let files = tur_engine::core::rut_runtime::RutModuleFiles {
+            root: root.into(),
+            mods: map,
+        };
+        app.load_rut_module_files(files)
+            .await
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
     /// JSON snapshot of the root node, or `""` if no tree is mounted.
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
     ///

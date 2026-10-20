@@ -841,6 +841,10 @@ pub mod mutation_entries {
     /// The boxed composition mutation: `(cb, h, box)` — the generic
     /// lane; the entry hands the box to the kit's fixed-type wrapper.
     pub const MBOX: &str = "__tur_cb_mbox";
+    /// The context-menu mutation: `(cb, h, lx, ly, gx, gy)` — the entry
+    /// constructs the typed `ContextMenuEvent` (the editable's
+    /// right-click rail).
+    pub const MCTM: &str = "__tur_cb_mctm";
     /// The derive format fns: `(cb, h) -> T` — the entry constructs the
     /// read-only `DeriveCtx`.
     pub const DERIVE_F64: &str = "__tur_cb_derive_f64";
@@ -890,6 +894,9 @@ pub mod seal_tags {
     /// `mutate_seal`: the boxed composition mutation — the GENERIC lane
     /// (`ctx.run<A>`'s crossing; the kit's fixed-type wrapper recovers A).
     pub const MUT_BOX: u64 = 11;
+    /// `mutate_seal`: the context-menu mutation (the editable's
+    /// right-click rail — the playground menu's open trigger).
+    pub const MUT_CTM: u64 = 12;
     /// `derive_seal` tags: the value kind (the entry's return type).
     pub const DRV_F64: u64 = 0;
     pub const DRV_STR: u64 = 1;

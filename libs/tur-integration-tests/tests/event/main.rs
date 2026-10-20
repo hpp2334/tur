@@ -2,6 +2,7 @@ mod caret_into_view;
 mod click;
 mod click_propagation;
 mod clipboard;
+mod context_menu_rail;
 mod countdown;
 mod counter;
 mod drag_delta;

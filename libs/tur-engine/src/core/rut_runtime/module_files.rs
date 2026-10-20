@@ -76,7 +76,11 @@ mod tests {
             Arc::from("pub fn one() -> i32 { return 1; }"),
         );
         let paths: Vec<&str> = f.mods.keys().map(|p| p.as_ref()).collect();
-        assert_eq!(paths, vec!["a", "b"], "BTreeMap = path order (the concat law)");
+        assert_eq!(
+            paths,
+            vec!["a", "b"],
+            "BTreeMap = path order (the concat law)"
+        );
     }
 
     #[test]
@@ -85,6 +89,9 @@ mod tests {
         f.mods.insert(Arc::from("a"), Arc::from("pub fn x() {}"));
         let g = f.clone();
         assert!(Arc::ptr_eq(&f.root, &g.root));
-        assert!(Arc::ptr_eq(f.mods.get("a").unwrap(), g.mods.get("a").unwrap()));
+        assert!(Arc::ptr_eq(
+            f.mods.get("a").unwrap(),
+            g.mods.get("a").unwrap()
+        ));
     }
 }

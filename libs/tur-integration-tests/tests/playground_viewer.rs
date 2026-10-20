@@ -22,10 +22,23 @@ use tur_playground::TurRutPlaygroundPlugin;
 
 const PLAYGROUND_RUT: &str = include_str!("../../../rut/playground/mod.rut");
 const CASES_GEN_RUT: &str = include_str!("../../../rut/playground/cases_gen.rut");
+const MENU_RUT: &str = include_str!("../../../rut/playground/menu.rut");
 
 /// The website's concatenation (`playgroundSource()`): one loadable module.
 fn playground_source() -> String {
     format!("{PLAYGROUND_RUT}\n{CASES_GEN_RUT}")
+}
+
+/// The playground's file tree (`loadAndRunRutModuleFiles`): the spliced
+/// root + the declared `menu` child (its own scope carries the menu's
+/// async surfaces — see menu.rut's header).
+fn playground_files() -> tur_engine::core::rut_runtime::RutModuleFiles {
+    let mut mods = std::collections::BTreeMap::new();
+    mods.insert(std::sync::Arc::from("menu"), std::sync::Arc::from(MENU_RUT));
+    tur_engine::core::rut_runtime::RutModuleFiles {
+        root: playground_source().into(),
+        mods,
+    }
 }
 
 /// The workspace root (the tests' fixtures live outside the crate).
@@ -112,7 +125,7 @@ fn playground_app_sized(width: f64, height: f64) -> TurTestApp {
         vec![Box::new(TurRutPlaygroundPlugin)],
     )
     .unwrap();
-    app.load_rut_module(&playground_source()).unwrap();
+    app.load_rut_module_files(playground_files()).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     app
 }
@@ -1599,5 +1612,196 @@ fn editor_scrolls_through_the_scrollview_never_itself() {
     assert!(
         offset > 50.0,
         "the wheel must scroll the ScrollView, got offset {offset}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The editor's context menu (the boa-era right-click menu, re-landed): the
+// editable's on_context_menu opens the overlay anchored at the click, the
+// Cut / Copy / Paste / Select-All items drive the controller + the
+// clipboard kit's async journeys, and the scrim closes on click-outside.
+// ---------------------------------------------------------------------------
+
+fn menu_visible(app: &TurTestApp) -> bool {
+    app.query_element(&["context-menu"]).is_some()
+}
+
+/// Type `text` into the focused editor, REPLACING the document (the boot
+/// auto-selects the counter case, so the editor starts with its source —
+/// a Cmd+A first pins a known document).
+fn type_into_editor(app: &mut TurTestApp, text: &str) {
+    app.send_key_with_modifiers_full("a", false, false, true);
+    app.wait_for_timeout(Duration::ZERO);
+    for ch in text.chars() {
+        app.send_key(&ch.to_string());
+        app.wait_for_timeout(Duration::ZERO);
+    }
+    app.wait_for_timeout(Duration::ZERO);
+}
+
+/// Right-click inside the visible editor region (the pane-clamped point
+/// `focus_editor` uses — the editable hugs its content, so a raw center
+/// can lie below the window).
+fn right_click_editor(app: &mut TurTestApp) {
+    let id = editor_editable(app);
+    let b = app.get_element_absolute_bounds(id).unwrap();
+    let pane = app
+        .get_element_absolute_bounds(ElementNodeId::new(
+            app.query_element(&["editor-pane"]).unwrap().as_u64(),
+        ))
+        .unwrap();
+    let cy = ((b.top + b.bottom) / 2.0).clamp(pane.top + 20.0, pane.bottom - 20.0);
+    app.right_click(b.left + 60.0, cy);
+    app.wait_for_timeout(Duration::ZERO);
+}
+
+#[test]
+fn playground_right_click_opens_the_context_menu_and_the_scrim_closes_it() {
+    let mut app = playground_app();
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "hello world");
+    assert!(!menu_visible(&app), "the menu starts closed");
+
+    right_click_editor(&mut app);
+    assert!(menu_visible(&app), "right-click opens the menu");
+
+    // Click-outside (the scrim covers the whole canvas): the menu closes.
+    let (sx, sy) = qk_center(&app, &["menu-scrim"]);
+    let _ = (sx, sy);
+    app.click(20.0, 300.0);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(!menu_visible(&app), "a click on the scrim closes the menu");
+}
+
+#[test]
+fn playground_context_menu_select_all_selects_the_document() {
+    let mut app = playground_app();
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "hello world");
+
+    right_click_editor(&mut app);
+    assert!(menu_visible(&app), "right-click opens the menu");
+    click_qk(&mut app, &["menu-select-all"]);
+    assert!(!menu_visible(&app), "the action closes the menu");
+
+    let id = editor_editable(&app);
+    let sel = app
+        .with_element(id, |e| {
+            e.cast::<EditableTextElement>()
+                .map(|el| el.selection())
+                .unwrap_or((0, 0))
+        })
+        .unwrap_or((0, 0));
+    assert_eq!(
+        sel,
+        (0, "hello world".len()),
+        "Select All selects the whole document"
+    );
+}
+
+#[test]
+fn playground_context_menu_cut_writes_the_clipboard_and_deletes() {
+    let mut app = playground_app();
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "hello world");
+
+    right_click_editor(&mut app);
+    click_qk(&mut app, &["menu-select-all"]);
+    assert!(!menu_visible(&app));
+    assert_eq!(editor_text(&app), "hello world");
+
+    // Cut via the menu: the buffer empties and the selection crosses to
+    // the clipboard (the kit journey's write lands on the recording
+    // backend).
+    right_click_editor(&mut app);
+    click_qk(&mut app, &["menu-cut"]);
+    assert!(!menu_visible(&app));
+    assert_eq!(editor_text(&app), "", "the cut clears the buffer");
+
+    // The write journey completes on the worker's lane — poll for the
+    // settle (take consumes; assert on the polled value).
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let wrote = loop {
+        match app.take_clipboard_write() {
+            Some(w) => break w,
+            None => {}
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("the menu cut never wrote the clipboard");
+        }
+        app.wait_for_timeout(Duration::from_millis(25));
+    };
+    assert_eq!(
+        wrote, "hello world",
+        "the cut wrote the selection to the clipboard"
+    );
+
+    // Undo restores (the menu Cut rides the controller's recorder — the
+    // same law the keyboard Cmd+X path pins).
+    app.send_key_with_modifiers_full("z", false, false, true);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        editor_text(&app),
+        "hello world",
+        "Cmd+Z after a menu Cut restores the text"
+    );
+}
+
+#[test]
+fn playground_context_menu_paste_inserts_the_platform_text() {
+    let mut app = playground_app();
+    app.set_clipboard_read("XYZ");
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "ab");
+
+    right_click_editor(&mut app);
+    click_qk(&mut app, &["menu-paste"]);
+    assert!(!menu_visible(&app));
+
+    // The paste journey awaits the clipboard read (the async capability
+    // completes on the worker's lane) — poll for the settle.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if editor_text(&app) == "abXYZ" {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("the menu paste never landed: {:?}", editor_text(&app));
+        }
+        app.wait_for_timeout(Duration::from_millis(25));
+    }
+}
+
+#[test]
+fn playground_context_menu_copy_writes_the_clipboard_without_deleting() {
+    let mut app = playground_app();
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "keep me");
+
+    right_click_editor(&mut app);
+    click_qk(&mut app, &["menu-select-all"]);
+    right_click_editor(&mut app);
+    click_qk(&mut app, &["menu-copy"]);
+    assert_eq!(
+        editor_text(&app),
+        "keep me",
+        "the copy leaves the buffer unchanged"
+    );
+
+    // The write journey completes on the worker's lane — poll for it.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let wrote = loop {
+        match app.take_clipboard_write() {
+            Some(w) => break w,
+            None => {}
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("the menu copy never wrote the clipboard");
+        }
+        app.wait_for_timeout(Duration::from_millis(25));
+    };
+    assert_eq!(
+        wrote, "keep me",
+        "the copy wrote the selection to the clipboard"
     );
 }

@@ -7,7 +7,10 @@ use tur_host::scalars::{ math_cos_raw, math_sin_raw, str_parse_f64_raw };
 use tur_host::store::{
   rs_list_new, rs_list_push, rs_map_new, rs_map_set, rs_value_get, rs_value_item, rs_value_len,
 };
-use tur_host::text::input::{ tctrl_new, tctrl_set_text, tctrl_text, undo_new };
+use tur_host::text::input::{
+  tctrl_delete_selection, tctrl_new, tctrl_paste, tctrl_select, tctrl_selected_text, tctrl_set_text,
+  tctrl_text, undo_new,
+};
 use tur_host::virtual_app::{ va_destroy, va_error, va_status, va_status_atom };
 
 // The async launch rail's typed surface (the `futures` package rides the
@@ -121,6 +124,25 @@ impl TextCtrl {
   }
   pub fn text(self) -> str {
     return tctrl_text(self.inner);
+  }
+  // The selected slice (the context-menu Cut/Copy's read; empty when
+  // nothing is selected).
+  pub fn selected_text(self) -> str {
+    return tctrl_selected_text(self.inner);
+  }
+  // Select a byte range (the menu's Select All: `select(0, text().len())`).
+  pub fn select(self, anchor: u64, end: u64) {
+    tctrl_select(self.inner, anchor, end);
+  }
+  // Delete the selection (the menu's Cut's buffer half — the clipboard
+  // write crosses separately).
+  pub fn delete_selection(self) {
+    tctrl_delete_selection(self.inner);
+  }
+  // Paste: replace any selection with the text, insert at the caret
+  // otherwise (the menu's Paste action).
+  pub fn paste(self, text: str) {
+    tctrl_paste(self.inner, text);
   }
 }
 

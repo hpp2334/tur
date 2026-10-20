@@ -32,7 +32,7 @@ pub struct InputView {
     multiline: Option<Val<bool>>,
     obscure_text: Option<Val<bool>>,
     obscuring_character: Option<Val<String>>,
-    on_context_menu: Option<crate::core::edgy::mutation::MutationHandle<ContextMenuEvent>>,
+    pub(crate) on_context_menu: Option<crate::core::edgy::mutation::MutationHandle<ContextMenuEvent>>,
     query_key: Option<Vec<String>>,
 }
 

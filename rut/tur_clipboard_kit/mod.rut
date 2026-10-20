@@ -1,0 +1,23 @@
+// tur_clipboard_kit (mod.rut) — the clipboard capability's kit prelude (the
+// authored face over the clipboard rows). Owned by the plugin that owns the
+// rows (the layering law applied to the kit): `TurClipboardPlugin` registers
+// it as a compile-session prelude next to the rows, so plugin sets without
+// the Clipboard capability never see (or compile) this module.
+//
+// Both journeys are PLAIN RUT async — `await clipboard_read()` /
+// `await clipboard_write(..)` ride the futures prelude; the bodies call the
+// `_raw` row twins because these fns' own names shadow the rows'.
+
+use tur_host::clipboard::{ clipboard_read_raw, clipboard_write_raw };
+
+// Read the platform clipboard text (empty when denied/unavailable — the
+// same degradation the JS bridge documents). Async: `await clipboard_read()`.
+pub async fn clipboard_read() -> str {
+  return await clipboard_read_raw();
+}
+
+// Write text to the platform clipboard (resolves when the write lands; a
+// missing capability degrades to a no-op). Async: `await clipboard_write(..)`.
+pub async fn clipboard_write(text: str) {
+  await clipboard_write_raw(text);
+}

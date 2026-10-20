@@ -1,0 +1,231 @@
+// menu — the editor's context menu (the boa-era right-click menu,
+// re-landed on the rut rails): the overlay (a full-viewport transparent
+// scrim over the anchored panel), the Cut / Copy / Paste / Select All
+// items, and the clipboard journeys (the clipboard kit's async face —
+// plain rut async over ordinary params; the launches ride
+// `launch_future`).
+//
+// A CHILD MODULE of the playground root (the showcase split's single-file
+// spelling): the module-parse collapse trips when the futures/clipboard
+// async surfaces join the ROOT scope's table at this module's size (the
+// rs_derive materialization misbinds — the same duplicate-boot-scope
+// family the docs pin), and the root-launched clipboard tasks stall at
+// this size too. The menu's own small scope carries them instead. The
+// journeys take their handles as PARAMETERS (the `MenuCx` bundle of
+// sources + the controller) and the launching mutation's ctx rides along
+// as a plain value.
+//
+// Undo rides the controller's recorder (the delete_selection / paste
+// rails push the snapshots, so a Cmd+Z restores a menu Cut just like
+// Cmd+X).
+
+use futures::{ launch_future };
+use tur_clipboard_kit::{ clipboard_read, clipboard_write };
+use tur_kit::control_flow::control::{ Condition };
+use tur_kit::flags::{ BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAxisSize, StackFit };
+use tur_kit::gesture::pointer::{
+    ContextMenuEvent, EnterEvent, ExitEvent, MouseRegion, PointerInteract,
+};
+use tur_kit::handles::{ TextCtrl, View };
+use tur_kit::image::{ Image, image_resource_svg };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Source, derive, mutate, source, sv };
+use tur_kit::text::core::{ Text };
+
+// ---- design tokens ---------------------------------------------------------
+// The root's semantic layer, restated under menu-scoped names (module
+// `let` initializers must be literals in this build, and the combined
+// unit's one-name law forbids redeclaring the root's token names; origins
+// in the root's token table).
+let BG_ELEVATED_M: u64 = 0xECEFF4FFu64; // ink.150
+let BG_HOVER_M: u64 = 0xE1E5ECFFu64; // ink.200 (bg.hover)
+let TEXT_BODY_M: u64 = 0x3A4250FFu64; // ink.700
+let TEXT_TERTIARY_M: u64 = 0x8A94A3FFu64; // ink.500
+let BORDER_SUBTLE_M: u64 = 0xD4D9E0FFu64; // ink.300 (border.subtle)
+
+// The context menu's icon trio (the boa menu's Cut / Copy / Paste — the
+// feather glyph shapes, the toolbar's stroke style).
+let CUT_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"6\" cy=\"6\" r=\"3\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><line x1=\"20\" y1=\"4\" x2=\"8.12\" y2=\"15.88\"/><line x1=\"14.47\" y1=\"14.48\" x2=\"20\" y2=\"20\"/><line x1=\"8.12\" y1=\"8.12\" x2=\"12\" y2=\"12\"/></svg>";
+let COPY_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\" ry=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg>";
+let PASTE_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/><rect x=\"8\" y=\"2\" width=\"8\" height=\"4\" rx=\"1\" ry=\"1\"/></svg>";
+
+// ---- the bundle -------------------------------------------------------------
+// The menu's state: the open flag + the canvas anchor, the shared
+// item-hover index (-1 = none), the editor controller (the actions read
+// the selection and drive it), and the icons' resource ids (minted once
+// at boot). The fields stay CONCRETE-annotated (`Source<T>`) — they cross
+// ctx calls (the documented accommodation shape).
+pub struct MenuCx {
+    open: Source<bool>;
+    x: Source<f64>;
+    y: Source<f64>;
+    hover: Source<f64>;
+    ctrl: TextCtrl;
+    cut_icon: u64;
+    copy_icon: u64;
+    paste_icon: u64;
+}
+
+// Boot: mint the sources + rasterise the icons (the root's start calls
+// this once; the record threads through every intent fn below).
+pub fn boot(ctrl: TextCtrl) -> MenuCx {
+    return MenuCx {
+        open: source<bool>(false),
+        x: source<f64>(0.0),
+        y: source<f64>(0.0),
+        hover: source<f64>(-1.0),
+        ctrl: ctrl,
+        cut_icon: image_resource_svg(CUT_ICON_SVG),
+        copy_icon: image_resource_svg(COPY_ICON_SVG),
+        paste_icon: image_resource_svg(PASTE_ICON_SVG),
+    };
+}
+
+// ---- the intents ------------------------------------------------------------
+
+// Open: anchor at the click's canvas point (the editable's
+// on_context_menu crossing). Right-clicking INSIDE an active selection
+// preserves it (the engine's native-OS semantics), so the menu's Cut/Copy
+// operate on what the user right-clicked.
+pub fn open(ctx: MutationCtx, cx: MenuCx, ev: ContextMenuEvent) {
+    ctx.set<f64>(cx.x, ev.global.x);
+    ctx.set<f64>(cx.y, ev.global.y);
+    ctx.set<bool>(cx.open, true);
+}
+
+fn close(ctx: MutationCtx, cx: MenuCx) {
+    ctx.set<bool>(cx.open, false);
+}
+
+// Cut: the selection crosses to the clipboard (its own journey — the
+// mutation stays sync), then the buffer deletes it.
+fn cut(ctx: MutationCtx, cx: MenuCx) {
+    let text = cx.ctrl.selected_text();
+    if (text.len() > 0) {
+        cx.ctrl.delete_selection();
+        launch_future(clip_write(text));
+    }
+    close(ctx, cx);
+}
+
+// Copy: the selection crosses to the clipboard; the buffer is unchanged.
+fn copy_sel(ctx: MutationCtx, cx: MenuCx) {
+    let text = cx.ctrl.selected_text();
+    if (text.len() > 0) {
+        launch_future(clip_write(text));
+    }
+    close(ctx, cx);
+}
+
+// Paste: the platform text crosses back through the read journey, then
+// the controller pastes it (replace the selection / insert at the caret).
+fn paste(ctx: MutationCtx, cx: MenuCx) {
+    launch_future(clip_paste(cx.ctrl));
+    close(ctx, cx);
+}
+
+// Select All: the full document range.
+fn select_all(ctx: MutationCtx, cx: MenuCx) {
+    cx.ctrl.select(0, cx.ctrl.text().len() as u64);
+    close(ctx, cx);
+}
+
+// The clipboard write journey (the kit's async face — resolves when the
+// write lands; a missing capability degrades to a no-op).
+async fn clip_write(text: str) {
+    await clipboard_write(text);
+}
+
+// The clipboard read + paste journey: empty text (denied / unavailable)
+// pastes nothing.
+async fn clip_paste(ctrl: TextCtrl) {
+    let text = await clipboard_read();
+    if (text.len() > 0) {
+        ctrl.paste(text);
+    }
+}
+
+// ---- the overlay ------------------------------------------------------------
+
+// The overlay root — the LAST child of the root Stack so it paints on
+// top. Renders nothing while the menu is closed.
+pub fn overlay(cx: MenuCx) -> View {
+    return Condition(cx.open).then(menu_stack(cx)).else_branch(SizedBox(0.0, 0.0).build()).build();
+}
+
+fn menu_stack(cx: MenuCx) -> View {
+    // The click-outside scrim: the full-viewport transparent layer (the
+    // countdown modal's Opaque-behavior pattern — the fit-Expand stack
+    // gives the layer the whole canvas) — every click closes the menu.
+    let scrim = PointerInteract().behavior(HitTestBehavior::Opaque)
+        .on_click(mutate(fn (ctx: MutationCtx, _e: nil) { close(ctx, cx); }))
+        .query_key("menu-scrim")
+        .child(Container().width_height(1.0, 1.0).build())
+        .build();
+    let menu = Positioned().left(cx.x).top(cx.y)
+        .child(menu_panel(cx))
+        .build();
+    return Stack().fit(StackFit::Expand).child(scrim).child(menu).build();
+}
+
+// The menu panel — the boa reference metrics: 200 wide, padding 4, radius
+// 8, the elevated surface over a subtle border and a soft ink.900 drop
+// shadow (blur 12, offset (0, 4)).
+fn menu_panel(cx: MenuCx) -> View {
+    let items = Column().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Stretch)
+        .child(item(cx, 0.0, cx.cut_icon, "Cut", "⌘X", "menu-cut",
+            mutate(fn (ctx: MutationCtx, _e: nil) { cut(ctx, cx); })))
+        .child(item(cx, 1.0, cx.copy_icon, "Copy", "⌘C", "menu-copy",
+            mutate(fn (ctx: MutationCtx, _e: nil) { copy_sel(ctx, cx); })))
+        .child(item(cx, 2.0, cx.paste_icon, "Paste", "⌘V", "menu-paste",
+            mutate(fn (ctx: MutationCtx, _e: nil) { paste(ctx, cx); })))
+        .child(Container().width(sv(0.0f64)).height(sv(1.0f64)).color(sv(BORDER_SUBTLE_M)).build())
+        .child(item(cx, 3.0, 0, "Select All", "⌘A", "menu-select-all",
+            mutate(fn (ctx: MutationCtx, _e: nil) { select_all(ctx, cx); })))
+        .build();
+    let panel = Container().width(sv(200.0f64)).padding(4.0).radius(sv(8.0f64))
+        .color(sv(BG_ELEVATED_M))
+        .border(BORDER_SUBTLE_M, 1.0, BorderPosition::Inside)
+        .shadow(0x0A0E145Eu64, 12.0, 0.0, 4.0)
+        .query_key("context-menu")
+        .child(items)
+        .build();
+    return panel;
+}
+
+// One menu row: the icon (12px; Select All carries none — a 12px spacer
+// keeps the labels aligned) + the label + the shortcut hint, the hover
+// pill deriving over the shared hover index (the side_item rail).
+fn item(cx: MenuCx, i: f64, icon: u64, label: str, shortcut: str, qkey: str, action: Mutation<nil>) -> View {
+    let hover = cx.hover;
+    let bg = derive(fn (ctx: DeriveCtx) -> u64 {
+        if (ctx.get<f64>(hover) == i) {
+            return BG_HOVER_M;
+        }
+        return 0;
+    });
+    let icon_view: View = if (icon != 0) {
+        Image(icon).width(12.0).height(12.0).build()
+    } else {
+        SizedBox(12.0, 12.0).build()
+    };
+    let row = Container().radius(sv(5.0f64)).padding(6.0).color(bg)
+        .child(Row().main_axis_size(MainAxisSize::Min)
+            .child(icon_view)
+            .child(SizedBox(8.0, 0.0).build())
+            .child(Expanded().flex(sv(1.0f64))
+                .child(Text().text(sv(label)).color(TEXT_BODY_M).font_size(13.0).build())
+                .build())
+            .child(Text().text(sv(shortcut)).color(TEXT_TERTIARY_M).font_size(11.0).build())
+            .build())
+        .build();
+    let entry = MouseRegion()
+        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<f64>(cx.hover, i); }))
+        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<f64>(cx.hover, -1.0); }))
+        .cursor(Cursor::Pointer)
+        .child(PointerInteract().on_click(action).query_key(qkey).child(row).build())
+        .build();
+    return entry;
+}

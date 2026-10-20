@@ -17,8 +17,8 @@ use std::rc::Rc;
 
 use crate::core::edgy::mutation::MutationHandle;
 pub use crate::core::edgy::mutation::ValueArgs;
-use crate::core::edgy::reactive::Mutation;
 use crate::core::edgy::reactive::AtomId;
+use crate::core::edgy::reactive::Mutation;
 use crate::core::edgy::value::Value;
 use rut_vm::{Opaque, OpaqueRef};
 
@@ -337,6 +337,16 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
                         &h2,
                         mutation_entries::MBOX,
                         (cb.clone(), marker.clone(), b),
+                    );
+                }
+                seal_tags::MUT_CTM => {
+                    // [local.x, local.y, global.x, global.y] — the
+                    // editable's context-menu crossing (the entry
+                    // constructs the typed `ContextMenuEvent`).
+                    let _ = h2.face.call::<_, ()>(
+                        &h2,
+                        mutation_entries::MCTM,
+                        (cb.clone(), marker.clone(), num(0), num(1), num(2), num(3)),
                     );
                 }
                 seal_tags::MUT_FOCUS | seal_tags::MUT_BLUR | seal_tags::MUT_MOUNT => {

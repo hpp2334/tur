@@ -568,3 +568,93 @@ fn h_generic_ctx_spelling_runs_the_triad() {
         "ctx.run<f64> composed a typed-arg mutation"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The clipboard kit + a mutation-site launch (the menu journeys' exact
+// shape at minimal module size): the kit's async fns cross the pkg
+// surface and the write lands through the mutation-launched task.
+// ---------------------------------------------------------------------------
+
+const LAUNCH_CLIP_RUT: &str = r#"
+use futures::{ launch_future };
+use tur_clipboard_kit::{ clipboard_read, clipboard_write };
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ MutationCtx, Source, mutate, source, sv }; use tur_kit::text::core::{ Text };
+
+async fn clip_write(text: str) {
+    await clipboard_write(text);
+}
+
+async fn clip_read_write() {
+    let t = await clipboard_read();
+    await clipboard_write(t);
+}
+
+entry fn start() {
+    let label: Source<str> = source<str>("idle");
+    let b_write = mutate(fn (ctx: MutationCtx, _e: nil) {
+        launch_future(clip_write("from mutation"));
+        ctx.set<str>(label, "launched-write");
+    });
+    let b_roundtrip = mutate(fn (ctx: MutationCtx, _e: nil) {
+        launch_future(clip_read_write());
+        ctx.set<str>(label, "launched-roundtrip");
+    });
+    let col = Column()
+        .child(PointerInteract().on_click(b_write).query_key("fire-write")
+            .child(Container().width_height(40.0, 20.0).child(Text().text(sv("w")).build()).build()).build())
+        .child(PointerInteract().on_click(b_roundtrip).query_key("fire-roundtrip")
+            .child(Container().width_height(40.0, 20.0).child(Text().text(sv("r")).build()).build()).build())
+        .child(Text().text(label).query_key("rut/text").build());
+    mount(col.build());
+}
+"#;
+
+fn label_of(app: &TurTestApp) -> String {
+    let id = app
+        .query_element(&["rut", "text"])
+        .expect("bound text not found");
+    let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
+    app.with_element(id, |e| {
+        e.cast::<tur_engine::builtin_plugins::text::TextElement>()
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
+#[test]
+fn mutation_site_clipboard_launch_round_trips() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.set_clipboard_read("seeded");
+    app.load_rut_module(LAUNCH_CLIP_RUT).unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+
+    let (cx, cy) = {
+        let id = app.query_element(&["fire-write"]).unwrap();
+        let b = app
+            .get_element_absolute_bounds(tur_engine::core::element::ElementNodeId::new(id.as_u64()))
+            .unwrap();
+        b.center()
+    };
+    app.click(cx, cy);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let wrote = loop {
+        match app.take_clipboard_write() {
+            Some(w) => break w,
+            None => {}
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("the mutation-site clipboard write never landed: {:?}", label_of(&app));
+        }
+        app.wait_for_timeout(std::time::Duration::from_millis(25));
+    };
+    assert_eq!(wrote, "from mutation");
+    assert_eq!(label_of(&app), "launched-write");
+}

@@ -223,8 +223,13 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   tur-animation/src/kit.rs)
   tur_net_kit/         # the net kit (kit.rut; embedded by
                        #   tur-net-capability/src/kit.rs)
-  playground/          # mod.rut + cases_gen.rut + showcase.json +
-                       #   scripts/gen-cases.cjs
+  tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
+                       #   tur-engine builtin_plugins/clipboard/kit.rs —
+                       #   pushed as a prelude by TurClipboardPlugin)
+  playground/          # mod.rut + menu.rut (the editor's context menu —
+                       #   the declared child; the site feeds both through
+                       #   loadAndRunRutModuleFiles) + cases_gen.rut +
+                       #   showcase.json + scripts/gen-cases.cjs
 ```
 
 ## Commands

@@ -1232,6 +1232,61 @@ fn rut_async_clipboard_and_net_request() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The context-menu rail's selected-text probe: `tctrl_selected_text` answers
+// the selected slice (the playground menu's Cut/Copy read it). The row is the
+// compile truth — probed raw.
+// ---------------------------------------------------------------------------
+
+/// Mint a controller, seed text, select a range, read the slice back.
+const SEL_TEXT_RUT: &str = r#"
+use tur_host::text::input::{ tctrl_new, tctrl_select, tctrl_selected_text, tctrl_set_text };
+use tur_kit::handles::{ mount }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Source, entry_ctx, source }; use tur_kit::text::core::{ Text };
+
+struct AppContext {
+    label: Source<str>,
+}
+
+fn start() -> AppContext {
+    let label = source<str>("");
+    let col = Column().child(Text().text(label).query_key("rut/text").build());
+    mount(col.build());
+    return AppContext { label: label };
+}
+
+entry fn entry_start() -> opaque {
+    return opaque(start());
+}
+
+// The probe: set + select + read (the raw row rail, one entry).
+entry fn probe_set_sel_read(cx: opaque) {
+    let c = opaque::downcast<AppContext>(cx);
+    if (c == nil) {
+        panic("sel-text fixture: cx is not an AppContext");
+    }
+    let ctrl = tctrl_new();
+    tctrl_set_text(ctrl, "hello world");
+    tctrl_select(ctrl, 6, 11);
+    entry_ctx().set<str>(c.label, tctrl_selected_text(ctrl));
+}
+"#;
+
+#[test]
+fn rut_tctrl_selected_text_answers_the_slice() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module(SEL_TEXT_RUT).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    let cx = app.call_rut_entry_opaque("entry_start").unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    app.call_rut_entry_cx("probe_set_sel_read", cx).unwrap();
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        rut_text_of(&app),
+        "world",
+        "tctrl_selected_text answers the selected slice"
+    );
+}
+
 /// A streaming download into rut: each chunk crosses as an intent record
 /// into `on_chunk` (the chunk lengths append to the label); the task
 /// opaque's cancel row runs (idempotent after completion).

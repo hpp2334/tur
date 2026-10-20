@@ -93,14 +93,16 @@
 // (No second `tur_host` use statement is needed at the 0eea7e95 pin: the
 // per-file binding law retired the old duplicate-boot-scope anchor — this
 // module's kit resolution holds with a single `tur_host` (the pg_*) use
-// line. The runtime-interning `rs_derive` workaround below still stands.)
+// line. The old `rs_derive` status-label workaround is retired too: the
+// interning family is fixed upstream and the kit's lambda derive holds
+// even with the menu's async surfaces in the root scope.)
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
 use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{
     Align, Axis, BorderPosition, Clip, CrossAlign, Cursor, MainAlign, MainAxisSize, StackFit,
 };
 use tur_kit::gesture::pointer::{
-    EnterEvent, ExitEvent, InputEvent, MouseRegion, PointerEvent, PointerInteract,
+    ContextMenuEvent, EnterEvent, ExitEvent, InputEvent, MouseRegion, PointerEvent, PointerInteract,
 };
 use tur_kit::handles::{ MapHandle, TextCtrl, UndoCtrl, VAppCtrl, View, list_new, map_new, mount, text_ctrl, undo_ctrl };
 use tur_kit::image::{ Image, image_resource_svg };
@@ -109,7 +111,7 @@ use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
 use tur_kit::reactive::{
     DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate,
-    rs_derive, source, sv, watch,
+    source, sv, watch,
 };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
@@ -119,6 +121,11 @@ use tur_kit::virtual_app::{
     virtual_app_source_handle,
 };
 use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
+
+// The editor's context menu (the child module — its own scope carries the
+// async surfaces; see menu.rut's header).
+mod menu;
+
 
 // ---- design tokens ---------------------------------------------------------
 //
@@ -205,6 +212,8 @@ let CARD_BG: u64 = 0xF8FAFCFFu64; // #f8fafc
 // 10 / 12 px like the reference buttons.
 let RUN_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>";
 let RESET_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 2.13-9.36L1 10\"/></svg>";
+// feather glyph shapes, the toolbar's stroke style).
+// feather glyph shapes, the reset icon's stroke style).
 
 // The module's state: one record, built once in `start`, threaded as
 // `cx` through every builder and intent fn. Reactive rails are typed
@@ -270,6 +279,11 @@ struct AppContext {
     // the toolbar icons' resource ids (minted once at boot)
     run_icon: u64,
     reset_icon: u64,
+    // the editor's context menu (the right-click rail) — the child
+    // module's bundle (the overlay + the Cut/Copy/Paste/Select-All
+    // intents + the clipboard journeys live in `menu.rut`; its own scope
+    // carries the async surfaces — see menu.rut's header)
+    menu: menu::MenuCx,
     // the shared-cell scratch (the tab hover index, the two dividers'
     // drag-start x — non-reactive, written through `mut cx`)
     tab_h: f64,
@@ -333,6 +347,7 @@ entry fn start() -> opaque {
         vctrl: seed_controller(),
         run_icon: image_resource_svg(RUN_ICON_SVG),
         reset_icon: image_resource_svg(RESET_ICON_SVG),
+        menu: menu::boot(ctrl),
         tab_h: -1.0,
         dragx: 0.0,
         edragx: 0.0,
@@ -447,7 +462,14 @@ fn build_ui(cx: AppContext) {
 
         .build();
 
-    mount(shell);
+    // The overlay rides a root Stack (the countdown modal's pattern): the
+    // shell fills, the context menu paints on top when open.
+    let root = Stack().fit(StackFit::Expand)
+        .child(shell)
+        .child(menu::overlay(cx.menu))
+        .build();
+
+    mount(root);
 }
 
     // ---- sidebar ------------------------------------------------------
@@ -574,6 +596,11 @@ fn editor_pane(cx: AppContext) -> View {
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
         .font_family("monospace").font_size(13.0)
         .multiline(true).on_input(mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }))
+        // The right-click rail: the engine's context-menu gesture opens the
+        // menu anchored at the click's canvas point (right-clicking INSIDE
+        // an active selection preserves it, so the menu's Cut/Copy operate
+        // on what the user right-clicked).
+        .on_context_menu(mutate<ContextMenuEvent>(fn (ctx: MutationCtx, ev: ContextMenuEvent) { menu::open(ctx, cx.menu, ev); }))
         .query_key("editor").build();
     let editor_pane = Container().color(sv(BG_CODE)).padding(12.0).query_key("editor-pane")
         .child(ScrollView().axis(Axis::Vertical).query_key("editor-scroll")
@@ -690,17 +717,13 @@ fn edivider_slot(cx: AppContext) -> View {
     // The state dot + label, the edited pill, the ago clock, the
     // auto-run state and the version.
 fn status_bar(cx: AppContext) -> View {
-    // ---- status bar -------------------------------------------------------
-    // The str-format derive rail (rs_derive over the ago atom — the
-    // top-level fmt fn + the raw dep). The lambda-capturing
-    // `derive(fn ...)` spelling still trips the upstream duplicate-type-
-    // interning bug at this module's size at the 0eea7e95 pin (the
-    // derived materialization traps and the playground's auto-run
-    // respawn test goes red) — the per-file-binding bump retired the
-    // NAME-side anchors, not this runtime-interning shape.
-    // The derived atom rides the raw-atom Source spelling (the
-    // upstream-workaround shape above).
-    let ago_d: Readable<str> = Source<str>::of(bridge(), rs_derive(fmt_ago, cx.ago.atom_id()), false, 1);
+    // The str-format derive (the kit's lambda rail — the old rs_derive
+    // workaround retired: the interning family is fixed upstream and the
+    // lambda spelling holds at this pin even with the menu's async
+    // surfaces in the root scope).
+    let ago_d: Readable<str> = derive(fn (ctx: DeriveCtx) -> str {
+        return fmt_ago(ctx.get<f64>(cx.ago));
+    });
     // The state label mirrors the dot's law: green while fine, the status
     // red for the failure states (the boa status bar colors both).
     let sbar_left = Container().padding(4.0)

@@ -28,6 +28,7 @@
 pub mod capability;
 pub(in crate::builtin_plugins) mod event;
 pub(in crate::builtin_plugins) mod handlers;
+pub mod kit;
 
 pub use capability::{Clipboard, ClipboardBackend};
 pub use event::platform_paste;
@@ -86,6 +87,15 @@ impl Plugin for TurClipboardPlugin {
         // have caught at build()), writes silently drop with a warning.
         ctx.register_subsystem(Box::new(handlers::ClipboardPlatformSubsystem));
         ctx.register_subsystem(Box::new(handlers::ClipboardWriteSubsystem));
+
+        // The kit — the authored face over the clipboard rows (a rut source
+        // module, the tur_net_kit pattern). Lives beside the plugin (the
+        // layering law: core never knows it); registered as a compile-session
+        // prelude so `use tur_clipboard_kit::{…}` resolves wherever this
+        // plugin compiles modules.
+        ctx.push_rut_ext(std::rc::Rc::new(|cx: &mut crate::core::rut_runtime::RutPkgCx<'_>| {
+            cx.preludes.push(crate::builtin_plugins::clipboard::kit::clipboard_kit_pkg());
+        }));
 
         Ok(())
     }

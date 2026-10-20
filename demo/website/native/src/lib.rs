@@ -27,6 +27,9 @@ pub const PLAYGROUND_RUT: &str = include_str!("../../../../rut/playground/mod.ru
 #[cfg(target_arch = "wasm32")]
 pub const CASES_GEN_RUT: &str = include_str!("../../../../rut/playground/cases_gen.rut");
 
+/// The playground's declared `menu` child (the editor's context menu).
+pub const PLAYGROUND_MENU_RUT: &str = include_str!("../../../../rut/playground/menu.rut");
+
 /// One-time wasm init (panic hook + tracing). Called automatically on module
 /// instantiation via the `#[wasm_bindgen(start)]` attribute.
 #[cfg(target_arch = "wasm32")]
@@ -127,12 +130,33 @@ impl TurWebsiteApp {
         })
     }
 
+    /// The multi-file twin (`loadAndRunRutModuleFiles(root, mods)`): the
+    /// root source + a plain JS object of declared child modules. The
+    /// playground's `menu` child rides this.
+    #[wasm_bindgen(js_name = loadAndRunRutModuleFiles)]
+    pub fn load_and_run_rut_module_files(&self, root: &str, mods: js_sys::Object) -> js_sys::Promise {
+        let app = self.app.clone();
+        let root = root.to_string();
+        wasm_bindgen_futures::future_to_promise(async move {
+            app.load_and_run_rut_module_files(&root, mods).await?;
+            Ok(JsValue::undefined())
+        })
+    }
+
     /// The playground's rut source (the handwritten module + the generated
     /// case registry), concatenated into one loadable module. The site
     /// shell feeds this to `loadAndRunRutModule`.
     #[wasm_bindgen(js_name = playgroundSource)]
     pub fn playground_source(&self) -> String {
         format!("{PLAYGROUND_RUT}\n{CASES_GEN_RUT}")
+    }
+
+    /// The playground's declared `menu` child (the editor's context menu —
+    /// its own scope carries the async surfaces). The site shell feeds the
+    /// pair to `loadAndRunRutModuleFiles`.
+    #[wasm_bindgen(js_name = playgroundMenuSource)]
+    pub fn playground_menu_source(&self) -> String {
+        PLAYGROUND_MENU_RUT.to_string()
     }
 
     /// Return a host-side dev-tool handle. Methods eval the in-engine

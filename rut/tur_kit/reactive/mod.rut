@@ -96,6 +96,8 @@ pub(pkg) let SEAL_BLUR: u64 = 8;
 pub(pkg) let SEAL_MOUNT: u64 = 9;
 let SEAL_BYTES: u64 = 10;
 let SEAL_BOX: u64 = 11;
+// The editable's context-menu rail (the Input.on_context_menu sealing).
+pub(pkg) let SEAL_CTM: u64 = 12;
 
 // The boxed rail's number stamps (the engine's `rs_box_stamp` answers —
 // the KV holds ONE number variant, so the mint reports the width and the

@@ -73,6 +73,10 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
         "the animation kit — plugin-owned prelude",
     ),
     ("rut/tur_net_kit/", "the net kit — plugin-owned prelude"),
+    (
+        "rut/tur_clipboard_kit/",
+        "the clipboard kit — plugin-owned prelude",
+    ),
     // The playground's documented upstream-workaround lines: the pg_* rows
     // (no kit — a 7th prelude pkg trips the layering law) and the status
     // label's raw `rs_derive` (the runtime-interning workaround).
@@ -93,7 +97,8 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
     (
         "tests/rut_boot.rs",
         "raw-row probes: the rs_* structured-value rail, tctrl_paste/select/\
-         text, focus_request, task_cancel, decode_utf8, clipboard rows",
+         selected_text/text, focus_request, task_cancel, decode_utf8, \
+         clipboard rows",
     ),
     (
         "tests/rut_mutation_rail.rs",
