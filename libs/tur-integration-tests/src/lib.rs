@@ -1564,34 +1564,83 @@ impl TurTestApp {
 /// `walkModTree`): the root `mod.rut` plus every `mod NAME;` child it
 /// declares, recursively, nested names slash-joined (`"net/tls"`).
 ///
+/// Each child resolves under the loader's TWO spellings: the directory
+/// form `NAME/mod.rut` first, else the single-file `NAME.rut` beside the
+/// declaring file (the corpus's showcase splits ride the single-file
+/// form). Both spellings on disk is the loader's loud ambiguity; neither
+/// — or a `NAME/` directory without its module file — is a loud miss.
+/// A file-form child's own children probe beside it, never under a dir
+/// named after the mod path (rut-native's `dir_child_lookup` law).
+///
 /// Mounting is DECLARED, not discovered: a stray undeclared directory
-/// stays invisible (the same law the loader applies), children are
-/// visited in sorted order for a deterministic walk, and a declared
-/// child with no `mod.rut` on disk is a loud IO error.
+/// stays invisible (the same law the loader applies) and children are
+/// visited in sorted order for a deterministic walk.
 pub fn read_case_files(dir: &Path) -> std::io::Result<RutModuleFiles> {
     fn visit(
         dir: &Path,
+        file: &Path,
         prefix: &str,
         out: &mut BTreeMap<Arc<str>, Arc<str>>,
     ) -> std::io::Result<()> {
-        let text = std::fs::read_to_string(dir.join("mod.rut"))?;
+        let text = std::fs::read_to_string(file)?;
         for name in declared_children(&text) {
             let path = if prefix.is_empty() {
                 name.clone()
             } else {
                 format!("{prefix}/{name}")
             };
+            let dir_form = dir.join(&name).join("mod.rut");
+            let file_form = dir.join(format!("{name}.rut"));
+            let has_dir = dir_form.is_file();
+            let has_file = file_form.is_file();
+            if has_dir && has_file {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!(
+                        "`{path}` mounts twice — {} and {} both exist (the \
+                         loader's loud ambiguity)",
+                        dir_form.display(),
+                        file_form.display(),
+                    ),
+                ));
+            }
             // Loud if missing — a declared mount with no file is a broken
             // case, not a silent skip.
-            let child = std::fs::read_to_string(dir.join(&name).join("mod.rut"))?;
+            let (child_file, child_dir) = if has_dir {
+                (dir_form.clone(), dir.join(&name))
+            } else if has_file {
+                // A single-file child: its own children probe beside it.
+                (file_form.clone(), dir.to_path_buf())
+            } else if dir.join(&name).is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "declared `{path}` has no module file — {} carries \
+                         no `mod.rut` (and no `{name}.rut` beside it)",
+                        dir.join(&name).display(),
+                    ),
+                ));
+            } else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "declared `{path}` has no module file — neither {} \
+                         nor {} exists",
+                        dir_form.display(),
+                        file_form.display(),
+                    ),
+                ));
+            };
+            let child = std::fs::read_to_string(&child_file)?;
             out.insert(Arc::from(path.as_str()), Arc::from(child.as_str()));
-            visit(&dir.join(&name), &path, out)?;
+            visit(&child_dir, &child_file, &path, out)?;
         }
         Ok(())
     }
     let mut mods = BTreeMap::new();
-    visit(dir, "", &mut mods)?;
-    let root = std::fs::read_to_string(dir.join("mod.rut"))?;
+    let root_file = dir.join("mod.rut");
+    visit(dir, &root_file, "", &mut mods)?;
+    let root = std::fs::read_to_string(&root_file)?;
     Ok(RutModuleFiles {
         root: Arc::from(root.as_str()),
         mods,

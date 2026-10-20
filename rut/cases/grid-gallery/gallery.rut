@@ -1,6 +1,6 @@
 // gallery — the tile gallery: the 27-tile grid under one (aspect,
 // max_cross) mode, the tile + chip faces, and the chip-tap mutations
-// (the palette lives in color/).
+// (the palette lives in color.rut).
 
 use tur_kit::flags::{ Cursor };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };

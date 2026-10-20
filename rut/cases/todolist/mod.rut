@@ -12,10 +12,10 @@
 // reference, NEITHER boots open (the boot-modal bug is not ported).
 //
 // Multi-file layout: the root keeps the boot + the composition (header,
-// scroller, the modal overlay branches); theme/ carries the palette +
-// the inline SVG icons; data/ carries the seed list + the item encoding
-// + the list-write journeys; task/ carries the task-card pieces;
-// modals/ carries the two overlay modals + their chrome.
+// scroller, the modal overlay branches); theme.rut carries the palette +
+// the inline SVG icons; data.rut carries the seed list + the item encoding
+// + the list-write journeys; task.rut carries the task-card pieces;
+// modals.rut carries the two overlay modals + their chrome.
 mod data;
 mod modals;
 mod task;
@@ -35,8 +35,8 @@ use tur_kit::text::core::{ Text };
 entry fn start() -> u64 {
     // The board state (all rides by capture — no stash). The lets carry
     // CONCRETE `Source<T>` annotations — the documented interning
-    // accommodation (they cross ctx calls through the data/ + task/ +
-    // modals/ journeys).
+    // accommodation (they cross ctx calls through the data.rut + task.rut +
+    // modals.rut journeys).
     let tasks: Source<opaque> = source<opaque>(data::seed_tasks().raw());
     let n: Source<f64> = source<f64>(0.0);
     let done: Source<f64> = source<f64>(0.0);

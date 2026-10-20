@@ -3,7 +3,7 @@
 // `json_get_str` (one object's scalar field) and `json_contents` (an
 // array walk into a display list). The engine ships no parse row, so
 // this scanner is the whole story. Escapes decode the common pairs;
-// `\uXXXX` mints U+FFFD. The compared codepoints live in theme/.
+// `\uXXXX` mints U+FFFD. The compared codepoints live in theme.rut.
 
 use tur_kit::handles::{ ListHandle };
 

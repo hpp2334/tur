@@ -47,12 +47,23 @@ fn rut_module_mounts_a_tree() {
     app.load_rut_module(HELLO_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
 
-    let root = app.dev_tool_element_tree().expect("root mounted by the rut module");
+    let root = app
+        .dev_tool_element_tree()
+        .expect("root mounted by the rut module");
     // RootView wrapper -> the rut-built Column -> two Text children.
     assert_eq!(root.children.len(), 1, "one root child (the Column)");
-    let column = app.dev_tool_get_element(root.children[0]).expect("column node");
-    assert_eq!(column.name, "tur_flex", "the rut builder materialized a flex view");
-    assert_eq!(column.children.len(), 2, "both rut-authored children attached");
+    let column = app
+        .dev_tool_get_element(root.children[0])
+        .expect("column node");
+    assert_eq!(
+        column.name, "tur_flex",
+        "the rut builder materialized a flex view"
+    );
+    assert_eq!(
+        column.children.len(),
+        2,
+        "both rut-authored children attached"
+    );
 
     let texts: Vec<&'static str> = column
         .children
@@ -63,7 +74,11 @@ fn rut_module_mounts_a_tree() {
     assert_eq!(texts.len(), 2, "two Text nodes authored from rut");
 
     // Layout ran: every rut-authored node painted non-zero.
-    assert!(column.size.0 > 0.0 && column.size.1 > 0.0, "column laid out: {:?}", column.size);
+    assert!(
+        column.size.0 > 0.0 && column.size.1 > 0.0,
+        "column laid out: {:?}",
+        column.size
+    );
     for id in &column.children {
         let t = app.dev_tool_get_element(*id).unwrap();
         assert!(t.size.1 > 0.0, "text node laid out: {:?}", t.size);
@@ -111,11 +126,18 @@ entry fn on_event(cx: opaque, n: f64) {
 "#;
 
 fn rut_text_of(app: &TurTestApp) -> String {
-    let id = app.query_element(&["rut", "text"]).expect("bound text not found");
+    let id = app
+        .query_element(&["rut", "text"])
+        .expect("bound text not found");
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -136,7 +158,11 @@ fn rut_reactive_atom_rebinds_text() {
     for n in [1u64, 2, 7] {
         app.call_rut_entry_cx_f64("on_event", cx, n as f64).unwrap();
         app.wait_for_timeout(Duration::ZERO);
-        assert_eq!(rut_text_of(&app), format!("Count: {n}"), "atom write drove re-render");
+        assert_eq!(
+            rut_text_of(&app),
+            format!("Count: {n}"),
+            "atom write drove re-render"
+        );
     }
 }
 
@@ -183,7 +209,11 @@ fn rut_button_click_mutates_bound_text() {
     for n in 1u64..=3 {
         app.click(cx, cy);
         app.wait_for_timeout(Duration::ZERO);
-        assert_eq!(rut_text_of(&app), format!("taps: {n}"), "click {n} drove the rut callback");
+        assert_eq!(
+            rut_text_of(&app),
+            format!("taps: {n}"),
+            "click {n} drove the rut callback"
+        );
     }
 }
 
@@ -294,7 +324,11 @@ fn rut_layout_and_condition_breadth() {
 
     // Expanded fills the column's remaining main axis (tall).
     let expanded = app.dev_tool_get_element(column.children[1]).unwrap();
-    assert!(expanded.size.1 > 100.0, "expanded child fills: {:?}", expanded.size);
+    assert!(
+        expanded.size.1 > 100.0,
+        "expanded child fills: {:?}",
+        expanded.size
+    );
 
     // Stack + positioned overlay: both children present, the positioned
     // one offset by (4, 4) from the stack origin.
@@ -303,8 +337,10 @@ fn rut_layout_and_condition_breadth() {
     let floating = app.dev_tool_get_element(overlay.children[1]).unwrap();
     let dx = floating.absolute.0 - overlay.absolute.0;
     let dy = floating.absolute.1 - overlay.absolute.1;
-    assert!((dx - 4.0).abs() < 0.5 && (dy - 4.0).abs() < 0.5,
-        "positioned child anchored at +4,+4: dx={dy:+.1} dx={dx:+.1}");
+    assert!(
+        (dx - 4.0).abs() < 0.5 && (dy - 4.0).abs() < 0.5,
+        "positioned child anchored at +4,+4: dx={dy:+.1} dx={dx:+.1}"
+    );
 
     // The ON branch is the visible bound text.
     assert_eq!(rut_text_of(&app), "ON", "the truthy branch renders");
@@ -313,7 +349,11 @@ fn rut_layout_and_condition_breadth() {
     let (bx, by) = center_of(&app, column.children[4]);
     app.click(bx, by);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_text_of(&app), "OFF", "the branch swapped after the toggle tap");
+    assert_eq!(
+        rut_text_of(&app),
+        "OFF",
+        "the branch swapped after the toggle tap"
+    );
     app.click(bx, by);
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(rut_text_of(&app), "ON", "and back");
@@ -352,14 +392,31 @@ fn rut_scroll_view_with_styled_rows() {
     // Root column -> scroll view -> content column -> 20 styled rows.
     let root = app.dev_tool_element_tree().unwrap();
     let root_col = app.dev_tool_get_element(root.children[0]).unwrap();
-    assert_eq!(root_col.children.len(), 1, "the expanded scroller is the only child");
+    assert_eq!(
+        root_col.children.len(),
+        1,
+        "the expanded scroller is the only child"
+    );
     let flexible = app.dev_tool_get_element(root_col.children[0]).unwrap();
     let scroller = app.dev_tool_get_element(flexible.children[0]).unwrap();
-    assert!(scroller.size.1 > 0.0 && scroller.size.1 <= 600.0, "scroll viewport bounded: {:?}", scroller.size);
+    assert!(
+        scroller.size.1 > 0.0 && scroller.size.1 <= 600.0,
+        "scroll viewport bounded: {:?}",
+        scroller.size
+    );
     let content = app.dev_tool_get_element(scroller.children[0]).unwrap();
-    assert_eq!(content.children.len(), 60, "all 60 rut-authored rows mounted");
+    assert_eq!(
+        content.children.len(),
+        60,
+        "all 60 rut-authored rows mounted"
+    );
     // The content is taller than the viewport (that's why it scrolls).
-    assert!(content.size.1 > scroller.size.1, "content overflows: content {:?} viewport {:?}", content.size, scroller.size);
+    assert!(
+        content.size.1 > scroller.size.1,
+        "content overflows: content {:?} viewport {:?}",
+        content.size,
+        scroller.size
+    );
 
     // A wheel event over the viewport scrolls the content.
     let cx = scroller.absolute.0 + scroller.size.0 / 2.0;
@@ -481,7 +538,9 @@ fn rut_reload_runs_stop_and_replaces_root() {
     let err = app.load_rut_module(BROKEN_RUT).unwrap_err();
     assert!(!err.to_string().is_empty(), "broken module fails loudly");
     app.wait_for_timeout(Duration::ZERO);
-    let root = app.dev_tool_element_tree().expect("tree survives a broken reload");
+    let root = app
+        .dev_tool_element_tree()
+        .expect("tree survives a broken reload");
     assert_eq!(root.children.len(), 1, "the previous tree is still mounted");
 
     // A good reload replaces the root and runs the old module's `stop`.
@@ -490,7 +549,10 @@ fn rut_reload_runs_stop_and_replaces_root() {
     let root = app.dev_tool_element_tree().expect("v2 root mounted");
     assert_eq!(root.children.len(), 1);
     let only = app.dev_tool_get_element(root.children[0]).unwrap();
-    assert_eq!(only.name, "tur_paragraph", "the v2 module's single Text is the new root child");
+    assert_eq!(
+        only.name, "tur_paragraph",
+        "the v2 module's single Text is the new root child"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -558,8 +620,16 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
 
     // The rows' programmatic journey rendered through the bound label:
     // seed "seed" → select 0..4 → paste "SEEDED" over it → "SEEDED".
-    assert_eq!(rut_text_of(&app), "SEEDED", "tctrl rows round-tripped through the label");
-    assert_eq!(rut_editable_text(&app), "SEEDED", "the Input renders the controller's value");
+    assert_eq!(
+        rut_text_of(&app),
+        "SEEDED",
+        "tctrl rows round-tripped through the label"
+    );
+    assert_eq!(
+        rut_editable_text(&app),
+        "SEEDED",
+        "the Input renders the controller's value"
+    );
 
     // Keyboard: click to focus, then type — the engine's KeyboardSubsystem
     // mutates the SAME controller the rows minted.
@@ -571,7 +641,11 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
         app.send_key(ch);
         app.wait_for_timeout(Duration::ZERO);
     }
-    assert_eq!(rut_editable_text(&app), "SEEDEDab!", "keystrokes landed in the rut-minted controller");
+    assert_eq!(
+        rut_editable_text(&app),
+        "SEEDEDab!",
+        "keystrokes landed in the rut-minted controller"
+    );
 
     // IME: a full composition lifecycle — start, update, commit appends
     // through the same element.
@@ -586,7 +660,11 @@ fn rut_input_realm_controllers_keyboard_and_ime() {
         text: "ok".to_string(),
     });
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_editable_text(&app), "SEEDEDab!ok", "the IME commit landed");
+    assert_eq!(
+        rut_editable_text(&app),
+        "SEEDEDab!ok",
+        "the IME commit landed"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -648,7 +726,12 @@ fn all_texts(app: &TurTestApp) -> Vec<String> {
             let text = app
                 .with_element(eid, |e| {
                     e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-                        .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+                        .map(|c| {
+                            c.spans()
+                                .iter()
+                                .map(|s| s.text.as_str())
+                                .collect::<String>()
+                        })
                         .unwrap_or_default()
                 })
                 .unwrap_or_default();
@@ -798,7 +881,11 @@ fn rut_container_full_surface_and_sizedbox() {
 
     let root = app.dev_tool_element_tree().unwrap();
     let column = app.dev_tool_get_element(root.children[0]).unwrap();
-    assert_eq!(column.children.len(), 3, "styled box + sized box + legacy box");
+    assert_eq!(
+        column.children.len(),
+        3,
+        "styled box + sized box + legacy box"
+    );
 
     // The styled box honored its explicit 200 x 120 size.
     let styled = app.dev_tool_get_element(column.children[0]).unwrap();
@@ -1317,7 +1404,11 @@ fn rut_virtual_app_hosts_a_child_and_lifecycle_intents_fire() {
         }
         std::thread::sleep(Duration::from_millis(25));
     };
-    assert!(running, "the child reached running: {:?}", rut_text_of(&app));
+    assert!(
+        running,
+        "the child reached running: {:?}",
+        rut_text_of(&app)
+    );
     let _ = 0; // (error detail asserted below when non-running)
 
     // Destroy: the child tears down.
@@ -1377,9 +1468,8 @@ fn rut_child_load_against_a_destroyed_child_reports_worker_gone() {
 
     // The stale facade's load reports `WorkerGone` ("worker gone" through
     // the facade's TurError wrap) — it must NOT panic.
-    let outcome = futures::executor::block_on(children[0].load_rut_module(
-        "\nentry fn start() {}\n",
-    ));
+    let outcome =
+        futures::executor::block_on(children[0].load_rut_module("\nentry fn start() {}\n"));
     let err = outcome.expect_err("a load against a destroyed child must err, not panic");
     assert!(
         err.to_string().contains("worker gone"),
@@ -1593,9 +1683,10 @@ pub fn banner() -> str { return "hello from the tree"; }
 #[test]
 fn rut_module_files_mount_a_tree() {
     let mut files = tur_engine::core::rut_runtime::RutModuleFiles::from(MULTI_ROOT);
-    files
-        .mods
-        .insert(std::sync::Arc::from("landing"), std::sync::Arc::from(MULTI_LANDING));
+    files.mods.insert(
+        std::sync::Arc::from("landing"),
+        std::sync::Arc::from(MULTI_LANDING),
+    );
 
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module_files(files).unwrap();
@@ -1603,13 +1694,16 @@ fn rut_module_files_mount_a_tree() {
 
     // The child's fn crossed: the root authored its Text from it.
     assert_eq!(rut_text_of(&app), "hello from the tree");
-    let root = app.dev_tool_element_tree().expect("root mounted by the multi-file module");
+    let root = app
+        .dev_tool_element_tree()
+        .expect("root mounted by the multi-file module");
     assert_eq!(root.children.len(), 1, "one root child (the Column)");
 }
 
 /// A child file with a syntax error: the parse-first contract fails the
 /// load BEFORE teardown, and the diag names the file it lives in
-/// (`broken/mod.rut:` — the concat-order attribution).
+/// (`broken.rut:` — the concat-order attribution, the single-file
+/// spelling).
 const ATTRIB_ROOT: &str = r#"
 mod broken;
 
@@ -1621,9 +1715,10 @@ const ATTRIB_BROKEN: &str = "pub fn oops() -> i32 { let x: i32 = ; }";
 #[test]
 fn rut_module_files_broken_child_names_the_file() {
     let mut files = tur_engine::core::rut_runtime::RutModuleFiles::from(ATTRIB_ROOT);
-    files
-        .mods
-        .insert(std::sync::Arc::from("broken"), std::sync::Arc::from(ATTRIB_BROKEN));
+    files.mods.insert(
+        std::sync::Arc::from("broken"),
+        std::sync::Arc::from(ATTRIB_BROKEN),
+    );
 
     let app = TurTestApp::new(400.0, 600.0).unwrap();
     // The module mounts nothing (it never boots) — the point is the error.
@@ -1633,10 +1728,12 @@ fn rut_module_files_broken_child_names_the_file() {
     let err = app.load_rut_module_files(files).unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("broken/mod.rut:"),
+        msg.contains("broken.rut:"),
         "the diag names the broken child file: {msg}"
     );
     // Parse-first: the running tree survives the failed multi-file load.
-    let root = app.dev_tool_element_tree().expect("tree survives the broken reload");
+    let root = app
+        .dev_tool_element_tree()
+        .expect("tree survives the broken reload");
     assert_eq!(root.children.len(), 1, "the previous tree is still mounted");
 }

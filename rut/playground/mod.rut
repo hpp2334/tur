@@ -960,7 +960,7 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
 // a MouseRegion delivers the hover intents + the pointer cursor, and the
 // tap swaps the edited file (no auto-run — the boa file switch only
 // moves the editor). The key rides the DISPLAY label (`file/mod.rut`,
-// `file/explorer/mod.rut`); the row carries the sublist's 27px indent
+// `file/explorer.rut`); the row carries the sublist's 27px indent
 // (19px past the accent bar) itself, so an empty list mounts nothing.
 fn side_file_item(cx: AppContext, fi: u64, path: str) -> View {
     let sel = cx.fsel;
@@ -1072,14 +1072,14 @@ fn load_file(cx: AppContext, name: str, path: str) {
     load_editor(cx, file_text(cx, name, path));
 }
 
-// A file row's label: the root renders "mod.rut", a child its mod path +
-// "/mod.rut" ("landing" → "landing/mod.rut" — the diag attribution
-// spelling).
+// A file row's label: the root renders "mod.rut", a child its mod path
+// + ".rut" ("landing" → "landing.rut" — the single-file spelling the
+// splits ride on disk).
 fn file_label(path: str) -> str {
     if (path == "") {
         return "mod.rut";
     }
-    return f"{path}/mod.rut";
+    return f"{path}.rut";
 }
 
 // The file tap: save the outgoing file's edit, load the tapped file

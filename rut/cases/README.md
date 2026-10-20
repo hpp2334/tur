@@ -20,9 +20,10 @@ The case corpus drives three consumers:
 
 A case is a **declared module tree** rooted at its `mod.rut`. Most
 cases are the degenerate one-file tree — exactly as before; the three
-showcase splits are full trees: `github-viewer` (7 files:
-state/theme/ui/landing/explorer/json), `todolist` (5:
-theme/data/task/modals), `grid-gallery` (3: gallery/color). The corpus
+showcase splits are full trees whose CHILDREN ride the loader's
+single-file spelling: `github-viewer` (7 files:
+explorer/json/landing/state/theme/ui), `todolist` (5:
+data/modals/task/theme), `grid-gallery` (3: color/gallery). The corpus
 walkers (`read_case_files` in the harness, `walkModTree` in the case
 generator) follow `mod` EDGES only — single-file cases remain exactly
 as before, and a stray undeclared directory on disk is invisible (the
@@ -40,9 +41,14 @@ Every case carries:
   missing or drifted manifest.
 
 - **declared mounting** — children mount through `mod NAME;` /
-  `pub mod NAME;` edges and live at `<NAME>/mod.rut` beside the
-  declaring file (nested children nest the same way). A declared mount
-  with no `<NAME>/mod.rut` on disk is a loud error, not a silent skip.
+  `pub mod NAME;` edges and live beside the declaring file under the
+  loader's two spellings: the directory form `<NAME>/mod.rut` or the
+  single-file `<NAME>.rut` (the splits ride the single-file form; a
+  file-form child's own children probe beside it, never under a dir
+  named after the mod path). BOTH spellings on disk is the loader's
+  loud ambiguity; a declared mount with neither — or a `<NAME>/`
+  directory without its module file — is a loud error, not a silent
+  skip.
 
 - **per-file use lines** — uses bind per file: the root and every
   child carry their own `use tur_kit::…` lines, trimmed to the names

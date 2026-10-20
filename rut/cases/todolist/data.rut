@@ -1,6 +1,6 @@
 // data — the seed list, the "title|desc|done" item encoding, and the
 // list-write journeys (toggle / append / recount) the taps + modals
-// compose. The palette + icons live in theme/.
+// compose. The palette + icons live in theme.rut.
 
 use tur_kit::handles::{ ListHandle, list_new, value_item, value_len };
 use tur_kit::reactive::{ MutationCtx, Source };

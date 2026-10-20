@@ -46,12 +46,14 @@ if (new Set(manifest).size !== manifest.length) {
 // `pub mod NAME;` edges (the same law rut_driver::mods::mount_rows
 // enforces, mirrored by the harness's `read_case_files`). Children are
 // visited in sorted order, a stray undeclared directory stays invisible,
-// and a declared child with no `mod.rut` on disk throws (a loud
-// broken-case error, not a silent skip).
+// and a declared child resolves under the loader's two spellings — the
+// directory form `NAME/mod.rut` first, else the single-file `NAME.rut`
+// beside the declaring file; BOTH present throws (the loud ambiguity)
+// and NEITHER throws (a loud broken-case error, not a silent skip).
 function walkModTree(caseDir) {
     const files = [];
-    (function visit(dir, modPath) {
-        const text = fs.readFileSync(path.join(dir, "mod.rut"), "utf8");
+    (function visit(dir, file, modPath) {
+        const text = fs.readFileSync(file, "utf8");
         files.push({ modPath, text });
         const names = [
             ...text.matchAll(
@@ -61,9 +63,28 @@ function walkModTree(caseDir) {
             .map((m) => m[1])
             .sort();
         for (const name of names) {
-            visit(path.join(dir, name), modPath ? `${modPath}/${name}` : name);
+            const childPath = modPath ? `${modPath}/${name}` : name;
+            const dirForm = path.join(dir, name, "mod.rut");
+            const fileForm = path.join(dir, `${name}.rut`);
+            const hasDir = fs.existsSync(dirForm);
+            const hasFile = fs.existsSync(fileForm);
+            if (hasDir && hasFile) {
+                throw new Error(
+                    `\`${childPath}\` mounts twice — ${dirForm} and ${fileForm} both exist (the loader's loud ambiguity)`,
+                );
+            }
+            if (hasDir) {
+                visit(path.join(dir, name), dirForm, childPath);
+            } else if (hasFile) {
+                // A single-file child: its own children probe beside it.
+                visit(dir, fileForm, childPath);
+            } else {
+                throw new Error(
+                    `declared \`${childPath}\` has no module file — neither ${dirForm} nor ${fileForm} exists`,
+                );
+            }
         }
-    })(caseDir, "");
+    })(caseDir, path.join(caseDir, "mod.rut"), "");
     return files; // [{ modPath: "" | "explorer" | …, text }]
 }
 

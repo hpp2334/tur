@@ -74,14 +74,21 @@ fn case_source(name: &str) -> String {
 }
 
 /// A showcase case FILE's original source: `path` is the registry's mod
-/// path ("" = the root `mod.rut`, i.e. `case_source`). Mirrors
-/// `pg_case_file_source`'s disk read.
+/// path ("" = the root `mod.rut`, i.e. `case_source`). Children resolve
+/// under the walker's two spellings — `<path>/mod.rut` first, else the
+/// single-file `<path>.rut`. Mirrors `pg_case_file_source`'s disk read.
 fn case_file_source(name: &str, path: &str) -> String {
     if path.is_empty() {
         return case_source(name);
     }
-    std::fs::read_to_string(cases_dir().join(name).join(path).join("mod.rut"))
-        .unwrap_or_else(|e| panic!("case `{name}`/{path} source: {e}"))
+    let dir_form = cases_dir().join(name).join(path).join("mod.rut");
+    let file_form = cases_dir().join(name).join(format!("{path}.rut"));
+    std::fs::read_to_string(if dir_form.is_file() {
+        dir_form
+    } else {
+        file_form
+    })
+    .unwrap_or_else(|e| panic!("case `{name}`/{path} source: {e}"))
 }
 
 fn cases_dir() -> std::path::PathBuf {
@@ -441,7 +448,7 @@ fn playground_multi_file_case_opens_its_file_list() {
 
     // github-viewer (7 declared files) opens the indented list: the root
     // row plus every declared child, addressed by the display label
-    // (file/<mod path>/mod.rut).
+    // (file/<mod path>.rut — the single-file spelling).
     app.call_rut_entry_cx_u64("select", cx, case_index("github-viewer"))
         .unwrap();
     assert!(wait_for_state(&app, "ready"));
@@ -450,9 +457,10 @@ fn playground_multi_file_case_opens_its_file_list() {
         "the root file row"
     );
     for child in ["explorer", "json", "landing", "state", "theme", "ui"] {
+        let label = format!("{child}.rut");
         assert!(
-            app.query_element(&["file", child, "mod.rut"]).is_some(),
-            "the {child}/mod.rut file row"
+            app.query_element(&["file", label.as_str()]).is_some(),
+            "the {label} file row"
         );
     }
 }
@@ -471,7 +479,7 @@ fn playground_file_tap_swaps_the_editor_text() {
     );
 
     // The declared order is the registry's sorted mod paths: "" then
-    // explorer..ui — index 1 is explorer/mod.rut.
+    // explorer..ui — index 1 is explorer.rut.
     app.call_rut_entry_cx_u64("select_file", cx, 1).unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
@@ -528,11 +536,7 @@ fn playground_file_edit_cache_survives_switches_and_reset_restores() {
     app.send_key("x");
     app.wait_for_timeout(Duration::ZERO);
     let edited = editor_text(&app);
-    assert_ne!(
-        edited,
-        case_source("github-viewer"),
-        "the keystroke landed"
-    );
+    assert_ne!(edited, case_source("github-viewer"), "the keystroke landed");
 
     // Switch away: the untouched child shows its registry text.
     app.call_rut_entry_cx_u64("select_file", cx, 1).unwrap();
@@ -958,7 +962,10 @@ fn pg_highlight_rows_color_the_controller_spans() {
     // the call callee color as functions, the method-call name joins them
     // (the same code.function ink), the primitive type name reads as a
     // type, and the param stays plain.
-    assert!(has("helper", CODE_FUNCTION), "the fn decl + call callee: {spans:?}");
+    assert!(
+        has("helper", CODE_FUNCTION),
+        "the fn decl + call callee: {spans:?}"
+    );
     assert!(has("draw", CODE_FUNCTION), "the method-call name");
     assert!(has("u64", CODE_TYPE), "the primitive type name");
     assert!(has("n", CODE_FG_PLAIN), "the param stays plain");
@@ -1543,9 +1550,7 @@ fn editor_scrolls_through_the_scrollview_never_itself() {
     );
 
     // Boa viewport parity: the ScrollView fills the pane's inner extent.
-    let sv = ElementNodeId::new(
-        app.query_element(&["editor-scroll"]).unwrap().as_u64(),
-    );
+    let sv = ElementNodeId::new(app.query_element(&["editor-scroll"]).unwrap().as_u64());
     let sv_h = {
         let b = app.get_element_absolute_bounds(sv).unwrap();
         b.bottom - b.top

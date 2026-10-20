@@ -3,10 +3,10 @@
 // stats, the directory listing with per-row taps, a selection footer).
 // Multi-file port of the boa TSX original (a 6-file case: index/landing/
 // explorer/state/theme/ui): the root keeps the boot + the mode Switch;
-// the subtrees carry the state bundle (state/), the palette + the
-// codepoints (theme/), the shared chrome (ui/), the landing (landing/),
-// the explorer + the net journeys (explorer/), and the JSON scanner
-// (json/).
+// the subtrees carry the state bundle (state.rut), the palette + the
+// codepoints (theme.rut), the shared chrome (ui.rut), the landing
+// (landing.rut), the explorer + the net journeys (explorer.rut), and
+// the JSON scanner (json.rut).
 //
 // Host surface: the async journeys ride rut's own async — they take
 // their handles as PARAMETERS (the `Gh` bundle of sources) and the
@@ -15,7 +15,7 @@
 // the wasm build fetches it directly. Degradation: an empty response
 // body (the net row completes empty on transport failure) becomes a
 // visible error banner; a JSON error payload (404 / rate limit) surfaces
-// the API's own message (see explorer/ + json/).
+// the API's own message (see explorer.rut + json.rut).
 //
 // Rust-boundary notes for future editors: unannotated float locals are
 // `f32` by the default-width rule (annotate `: f64` when handing them to
@@ -24,7 +24,7 @@
 //
 // (No root `tur_host` anchor is needed at the 0eea7e95 pin: the per-file
 // binding law is now the rule — explorer's own `use tur_net_kit::{ net_request }`
-// binds it in explorer/mod.rut, and the root's use never fed a child's
+// binds it in explorer.rut, and the root's use never fed a child's
 // file. The old `use tur_host::net::{ net_request }` anchor is gone.)
 mod state;
 mod theme;

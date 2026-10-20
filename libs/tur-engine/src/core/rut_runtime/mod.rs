@@ -1088,8 +1088,10 @@ fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> Stri
     let mut table: Vec<(usize, String)> = vec![(0, "mod.rut".to_string())];
     let mut off = files.root.len();
     for (path, text) in &files.mods {
-        // BTreeMap = path order — the concat order's other half
-        table.push((off + 1, format!("{path}/mod.rut")));
+        // BTreeMap = path order — the concat order's other half. The
+        // single-file spelling (`landing.rut`), the shape the corpus's
+        // splits ride on disk.
+        table.push((off + 1, format!("{path}.rut")));
         off += 1 + text.len();
     }
     diags
@@ -1125,7 +1127,8 @@ fn render_diags(diags: &[rut_lexer::diag::Diag], files: &RutModuleFiles) -> Stri
 // fill pass). The harness installs the lane unconditionally now; the
 // bench (`module_load_bench`) asserts it.
 
-static PRECOMPILED_KITS: std::sync::Mutex<Vec<(&'static [u8], u64)>> = std::sync::Mutex::new(Vec::new());
+static PRECOMPILED_KITS: std::sync::Mutex<Vec<(&'static [u8], u64)>> =
+    std::sync::Mutex::new(Vec::new());
 
 /// Lane telemetry — `(loads served from the precompiled kit, loads that
 /// fell back to the source lane)`. The bench gate reads it: a load that
@@ -1171,9 +1174,7 @@ thread_local! {
 /// generation.
 fn precompiled_kit_matching(fp: u64) -> Option<Vec<rut_driver::Mounted>> {
     let bytes = {
-        let kits = PRECOMPILED_KITS
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let kits = PRECOMPILED_KITS.lock().unwrap_or_else(|e| e.into_inner());
         let mut found = None;
         for &(bytes, want) in kits.iter() {
             if want == fp {
@@ -1202,9 +1203,7 @@ fn precompiled_kit_matching(fp: u64) -> Option<Vec<rut_driver::Mounted>> {
 /// a harness can install its whole config family unconditionally (the
 /// std shape, the http shape, …) and each load picks its match.
 pub fn set_precompiled_kit(bytes: &'static [u8], fingerprint: u64) -> Result<(), String> {
-    let mut kits = PRECOMPILED_KITS
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut kits = PRECOMPILED_KITS.lock().unwrap_or_else(|e| e.into_inner());
     if kits.iter().any(|&(_, want)| want == fingerprint) {
         return Ok(());
     }
@@ -1935,7 +1934,7 @@ mod tests {
         let rendered = render_diags(&diags, &files);
         assert_eq!(
             rendered,
-            "mod.rut: root-side problem; landing/mod.rut: child-side problem"
+            "mod.rut: root-side problem; landing.rut: child-side problem"
         );
     }
 
@@ -1958,7 +1957,7 @@ mod tests {
             Diag::new(Span::new(60, 62), "in b"),
         ];
         let rendered = render_diags(&diags, &files);
-        assert_eq!(rendered, "a/mod.rut: in a; b/mod.rut: in b");
+        assert_eq!(rendered, "a.rut: in a; b.rut: in b");
     }
 
     /// A root-only files (the single-string shape): everything attributes

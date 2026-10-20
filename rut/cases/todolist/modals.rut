@@ -1,7 +1,7 @@
 // modals — the two overlay modals (add + remove-confirm), built at
 // ACTIVATION over the Condition branches the root Stack mounts, plus the
-// shared shell / button / field chrome. The palette lives in theme/, the
-// list writes in data/.
+// shared shell / button / field chrome. The palette lives in theme.rut, the
+// list writes in data.rut.
 
 use tur_kit::flags::{ Align, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
@@ -82,7 +82,7 @@ fn field(caption: str, placeholder: str, ctrl: TextCtrl, undo: UndoCtrl, key: st
 // The add modal — built at ACTIVATION, so its controllers mint fresh and
 // blank every open; the buttons CAPTURE them (no stash round-trip).
 // tasks/n/done stay CONCRETE-annotated (`Source<T>`) — they flow into the
-// data/ journeys as plain cross-module params (the write-origin law);
+// data.rut journeys as plain cross-module params (the write-origin law);
 // add_open only crosses as a closure capture.
 pub fn add_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
              add_open: Readable<bool>, ico: [u64]) -> View {

@@ -14,7 +14,7 @@
 // value; the tap mutations capture the bundle. Degradation: an empty
 // response body (the net row completes empty on transport failure)
 // becomes a visible error banner; a JSON error payload (404 / rate
-// limit) surfaces the API's own message (the scanner lives in json/).
+// limit) surfaces the API's own message (the scanner lives in json.rut).
 
 use futures::launch_future;
 use tur_kit::control_flow::control::{ Condition, Each };

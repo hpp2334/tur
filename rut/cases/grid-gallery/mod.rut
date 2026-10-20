@@ -21,8 +21,8 @@
 //
 // Multi-file layout: the root keeps the boot + the nine EAGER grids +
 // the flat Switch + the panel (the documented hazards above stay
-// untouched here); gallery/ carries the grid + the tiles + the chips +
-// their mutations; color/ carries the palette + the tile ramp.
+// untouched here); gallery.rut carries the grid + the tiles + the chips +
+// their mutations; color.rut carries the palette + the tile ramp.
 mod color;
 mod gallery;
 

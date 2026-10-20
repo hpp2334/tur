@@ -196,9 +196,10 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   every pkg dir carries its rut.jsonc manifest)
   cases/               # the shared case corpus (declared <name>/mod.rut
                        #   trees — single-file cases + the three showcase
-                       #   splits: github-viewer 7 files, todolist 5,
-                       #   grid-gallery 3 — + the generated <name>/rut.jsonc
-                       #   + README)
+                       #   splits (github-viewer 7 files, todolist 5,
+                       #   grid-gallery 3 — their CHILDREN ride the
+                       #   single-file NAME.rut spelling) + the generated
+                       #   <name>/rut.jsonc + README)
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
                        #   test-pinned decl MODULE TREE (mod.d.rut root +
                        #   NAME/mod.d.rut per module — store/, ctx/,
@@ -319,6 +320,9 @@ Android build + device debugging live in the **`android-dev` skill** at
   (bare `[a-zA-Z0-9_]+` — kebab dir names sanitize to underscores for the
   per-case manifests); the body is the FILE-MODULE TREE — the root module
   is `mod.rut` beside the manifest and `mod NAME;` mounts `NAME/mod.rut`
+  or the single-file `NAME.rut` beside the declaring file (dir form
+  first; both present is the loader's loud ambiguity — the corpus's
+  showcase splits ride the single-file form)
   (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly).
   A `type: "host"` pkg organizes its surface as a DECL MODULE TREE the
   same way: `mod.d.rut` beside the manifest is the auto-discovered root

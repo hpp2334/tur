@@ -1,7 +1,7 @@
 // task — the task-card pieces: the row (card + gutter), the done
 // checkbox, the title/subtitle block, the X delete button, and the
-// header's New Task pill. The palette + icons live in theme/, the list
-// writes in data/.
+// header's New Task pill. The palette + icons live in theme.rut, the list
+// writes in data.rut.
 
 use tur_kit::flags::{ Align, BorderPosition, CrossAlign, Cursor, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
@@ -54,7 +54,7 @@ fn icon(res: u64, size: f64) -> View {
 
 // The row-card entry (root-composed per Each item). The tasks/n/done
 // handles stay CONCRETE-annotated (`Source<T>`) — they flow into the
-// data/ journeys as plain cross-module params (the write-origin law);
+// data.rut journeys as plain cross-module params (the write-origin law);
 // rm_tgt/rm_open only cross as closure captures (Readable carries them).
 pub fn task_row(i: u64, s: str, tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
             rm_tgt: Readable<f64>, rm_open: Readable<bool>, ico: [u64]) -> View {
