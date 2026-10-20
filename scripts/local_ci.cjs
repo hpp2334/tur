@@ -163,6 +163,15 @@ const child = spawn(
           '--env',
           'GIT_SSH_COMMAND=ssh -F /dev/null -o IdentityFile=/root/.ssh/id_ed25519 -o UserKnownHostsFile=/root/.ssh/known_hosts -o StrictHostKeyChecking=yes',
         ]),
+    // Forward the host's proxy configuration into the container (the
+    // container shares the host network, so a localhost proxy is
+    // reachable — it just needs the env). git-HTTPS (the repo mirror
+    // fetch), cargo, and pnpm all honor these via libcurl/node; SSH
+    // never did, which is one reason the checkout moved to HTTPS.
+    ...['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+        'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY']
+      .filter((k) => process.env[k])
+      .flatMap((k) => ['--env', `${k}=${process.env[k]}`]),
   ],
   {
     cwd: rootDir,
