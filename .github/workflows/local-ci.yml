@@ -14,8 +14,18 @@ jobs:
     steps:
       - name: Checkout
         run: |
-          git clone git@github.com:hpp2334/tur.git .
-          git checkout ${{ env.BRANCH_NAME }}
+          # The repo mirror lives in the persistent cache volume: the
+          # network side is one INCREMENTAL fetch per run (KBs when
+          # nothing changed) instead of a cold full clone — the evening
+          # SSH crawl to github made that 4-11 minutes for a 10MB pack.
+          # HTTPS needs no auth (public repo); the clone itself is local.
+          MIRROR=/ci/repo-mirror/tur.git
+          mkdir -p /ci/repo-mirror
+          if [ ! -d "$MIRROR" ]; then
+            git clone --mirror https://github.com/hpp2334/tur.git "$MIRROR"
+          fi
+          git -C "$MIRROR" fetch origin --prune '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+          git clone --branch "$BRANCH_NAME" "$MIRROR" .
 
       - name: Check merge conflict
         run: |

@@ -260,9 +260,10 @@ README for the fixture conventions), confirm red, then make it green.
 **Local CI** (`node ./scripts/local_ci.cjs`) mirrors `.github/workflows/
 local-ci.yml` in an act container over `tur-ci:latest`: it clones from
 origin (commit + push first), keeps persistent caches under
-`~/.tur-build-cache` (cargo registry/git, sccache, pnpm store, the host's
-wasm-pack CLI cache), and enforces the workflow's timeouts — the Cargo
-test budget is 5 minutes; fix slowness, never stretch the budget.
+`~/.tur-build-cache` (cargo registry/git, sccache, pnpm store, the
+tur repo mirror, the host's wasm-pack CLI cache), and enforces the
+workflow's timeouts — the Cargo test budget is 5 minutes; fix slowness,
+never stretch the budget.
 
 ### tur-website (wasm)
 

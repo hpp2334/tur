@@ -74,7 +74,7 @@ if (!dockerReachable()) {
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
---container-options --network=host -v ${cacheRoot}/cargo/registry:/root/.cargo/registry -v ${cacheRoot}/cargo/git:/root/.cargo/git -v ${cacheRoot}/sccache:/root/.cache/sccache -v ${cacheRoot}/pnpm/store:/root/.local/share/pnpm/store${wasmPackMount} -v ${sshPath}:/root/.ssh:ro`;
+--container-options --network=host -v ${cacheRoot}/cargo/registry:/root/.cargo/registry -v ${cacheRoot}/cargo/git:/root/.cargo/git -v ${cacheRoot}/sccache:/root/.cache/sccache -v ${cacheRoot}/pnpm/store:/root/.local/share/pnpm/store -v ${cacheRoot}/tur-repo-mirror:/ci/repo-mirror${wasmPackMount} -v ${sshPath}:/root/.ssh:ro`;
 
 fs.writeFileSync(actrcPath, actrcContent, 'utf8');
 
