@@ -6,6 +6,7 @@
   "name": "github_viewer",
   "deps": {
     "tur_kit": { "path": "../../tur_kit" },
-    "tur_net_kit": { "path": "../../tur_net_kit" }
+    "tur_net_kit": { "path": "../../tur_net_kit" },
+    "tur_file_kit": { "path": "../../tur_file_kit" }
   }
 }

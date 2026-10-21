@@ -1,5 +1,6 @@
 mod caret_into_view;
 mod click;
+mod click_integrity;
 mod click_propagation;
 mod clipboard;
 mod context_menu_rail;

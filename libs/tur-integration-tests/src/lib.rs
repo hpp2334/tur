@@ -491,7 +491,7 @@ impl TurTestApp {
             width,
             height,
             Some(RecordingHttp::new()),
-            None,
+            Some(RecordingFilePicker::new()),
             Vec::new(),
             None,
             None,
@@ -526,10 +526,12 @@ impl TurTestApp {
         Self::build(width, height, None, None, extra_plugins, None, None)
     }
 
-    /// [`Self::new_with_extra_plugins`] plus the `Http` capability
-    /// (a fresh [`RecordingHttp`]; `TurNetPlugin` pushes the net rows) —
-    /// the browser-shaped capability set, for playground instances that
-    /// compile net-riding corpus cases (github-viewer).
+    /// [`Self::new_with_extra_plugins`] plus the `Http` + `FilePicker`
+    /// capabilities (fresh [`RecordingHttp`] / [`RecordingFilePicker`];
+    /// `TurNetPlugin` pushes the net rows, `TurFilePickerPlugin` the
+    /// filepicker rows) — the browser-shaped capability set, for
+    /// playground instances that compile net-riding corpus cases
+    /// (github-viewer's download included).
     pub fn new_with_http_and_plugins(
         width: f64,
         height: f64,
@@ -539,7 +541,7 @@ impl TurTestApp {
             width,
             height,
             Some(RecordingHttp::new()),
-            None,
+            Some(RecordingFilePicker::new()),
             extra_plugins,
             None,
             None,
@@ -641,12 +643,14 @@ impl TurTestApp {
         // misbound iface slots at eval; the byte-pinned bundles halve
         // every module load — 455ms -> 209ms debug). Two shapes cover
         // the harness's configurations: the std shape
-        // (TurTestApp::new: std + animation + clipboard) and the http
-        // shape (TurTestApp::new_with_http: + net rows — the corpus
-        // sweep and the net tests). Loads whose offered set matches
-        // neither fingerprint (filepicker / extra plugins) fall back
-        // to the source lane per-load. Both pairs are pinned by the
-        // `kit_bundle` test (bless: TUR_BLESS_KIT_BUNDLE=1).
+        // (TurTestApp::new: std + animation + clipboard) and the
+        // browser shape (`TurTestApp::new_with_http` /
+        // `new_with_http_and_plugins`: + net + filepicker rows — the
+        // corpus sweep, the net tests, and the playground instances).
+        // Loads whose offered set matches neither fingerprint
+        // (filepicker-only / extra plugins) fall back to the source
+        // lane per-load. Both pairs are pinned by the `kit_bundle`
+        // test (bless: TUR_BLESS_KIT_BUNDLE=1).
         {
             let std_fp =
                 u64::from_str_radix(include_str!("../assets/std_kit.fingerprint").trim(), 16)
@@ -655,12 +659,14 @@ impl TurTestApp {
                 include_bytes!("../assets/std_kit.rutbundle"),
                 std_fp,
             );
-            let http_fp =
-                u64::from_str_radix(include_str!("../assets/http_kit.fingerprint").trim(), 16)
-                    .expect("the http kit fingerprint hex");
+            let browser_fp = u64::from_str_radix(
+                include_str!("../assets/browser_kit.fingerprint").trim(),
+                16,
+            )
+            .expect("the browser kit fingerprint hex");
             let _ = tur_engine::core::rut_runtime::set_precompiled_kit(
-                include_bytes!("../assets/http_kit.rutbundle"),
-                http_fp,
+                include_bytes!("../assets/browser_kit.rutbundle"),
+                browser_fp,
             );
         }
         let mut builder = TurRuntime::builder()
@@ -959,6 +965,34 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
+        self.inner
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Mouse,
+            }));
+    }
+
+    /// Fire-and-forget: push a pointer-DOWN only — the split half of
+    /// [`Self::click`]. Pair with [`Self::mouse_up`] to interleave reactive
+    /// writes between the press and the release (the shape a real browser
+    /// produces: separate DOM events, separate worker pumps — the press's
+    /// subtree may rebuild before the release arrives).
+    pub fn mouse_down(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
+        self.inner
+            .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Mouse,
+            }));
+    }
+
+    /// Fire-and-forget: push a pointer-UP only (see [`Self::mouse_down`]).
+    pub fn mouse_up(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
         self.inner
             .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),

@@ -48,6 +48,9 @@ entry fn start() -> u64 {
     ctrl.set_text("facebook/react");
     let undo = undo_ctrl();
     let gh = image_resource_svg(theme::SVG_GITHUB);
+    // The listing row icons (minted once; the rows render them at 17×17).
+    let ico_folder = image_resource_svg(theme::SVG_FOLDER);
+    let ico_file = image_resource_svg(theme::SVG_FILE);
 
     // The quick-pick chips: pre-fill the field and open directly (each
     // captures its literal name — no id rails).
@@ -63,7 +66,7 @@ entry fn start() -> u64 {
         .value(s.mode)
         .query_key("gh-body")
         .cases("landing", landing::landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2))
-        .cases("explorer", explorer::explorer_view(s))
+        .cases("explorer", explorer::explorer_view(s, ico_folder, ico_file))
         .build();
     let page = Container().color(sv(theme::PAGE_BG)).padding(22.0).child(body).build();
     let root = Column()

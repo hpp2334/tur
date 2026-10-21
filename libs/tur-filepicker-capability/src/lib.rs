@@ -28,6 +28,7 @@
 //!   a rut module calling the rows without the plugin installed traps
 //!   loudly rather than silently doing nothing.
 
+pub mod kit;
 pub mod rut_rows;
 
 use std::future::Future;

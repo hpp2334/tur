@@ -22,8 +22,11 @@ pub let SUBTLE_BUTTON: u64 = 0xF1F5F9FFu64;
 pub let SUBTLE_BUTTON_FG: u64 = 0x334155FFu64;
 pub let INPUT_BG: u64 = 0xF8FAFCFFu64;
 pub let INPUT_BORDER: u64 = 0xCBD5E1FFu64;
-pub let DIR_ICON: u64 = 0x6366F1FFu64;
-pub let FILE_ICON: u64 = 0x94A3B8FFu64;
+
+// The listing row icons (the boa feather glyphs — a filled indigo folder,
+// an outlined slate document), rendered through the image rail at 17×17.
+pub let SVG_FOLDER: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='#6366f1'><path d='M3 7a2 2 0 0 1 2-2h3.5a2 2 0 0 1 1.5.7l1 1.3H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>";
+pub let SVG_FILE: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#64748b' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'><path d='M14 3v5h5'/><path d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/></svg>";
 
 // ASCII codepoints the scanner compares against (typed so the literals
 // land on `u32`).

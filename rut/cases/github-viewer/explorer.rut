@@ -17,18 +17,20 @@
 // limit) surfaces the API's own message (the scanner lives in json.rut).
 
 use futures::launch_future;
+use tur_file_kit::{ save_file };
 use tur_kit::control_flow::control::{ Condition, Each };
 use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ ListHandle, View, list_new, str_parse_f64 };
+use tur_kit::image::{ Image };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
-use tur_kit::reactive::{ MutationCtx, mutate, sv };
+use tur_kit::reactive::{ DeriveCtx, MutationCtx, Readable, derive, mutate, sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 use tur_net_kit::{ net_request };
 
-pub fn explorer_view(s: state::Gh) -> View {
+pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
     // Back: up one directory, or back to the landing when at the root.
     let b_back = mutate(fn (ctx: MutationCtx, _e: nil) {
         let cur = ctx.get<str>(s.path);
@@ -51,6 +53,7 @@ pub fn explorer_view(s: state::Gh) -> View {
             ctx.set<str>(s.path, cur.slice(0, sep));
         }
         ctx.set<str>(s.selected, "");
+        ctx.set<str>(s.sel_file, "");
         launch_future(fetch_dir(ctx, s));
     });
     // The crumb tap: back to the repo ROOT listing (the boa
@@ -58,12 +61,32 @@ pub fn explorer_view(s: state::Gh) -> View {
     let b_root = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<str>(s.path, "");
         ctx.set<str>(s.selected, "");
+        ctx.set<str>(s.sel_file, "");
         launch_future(fetch_dir(ctx, s));
     });
     // Re-fetch the current directory.
     let b_refresh = mutate(fn (ctx: MutationCtx, _e: nil) {
         launch_future(fetch_dir(ctx, s));
     });
+    // Download the selected file: fetch its raw bytes and hand them to the
+    // platform save lane. No-op when nothing is selected (the subtle pill
+    // state); a missing host capability surfaces through the error banner.
+    let b_download = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let fname = ctx.get<str>(s.sel_file);
+        if (fname == "") {
+            return;
+        }
+        launch_future(download_file(ctx, s, fname));
+    });
+    // The download pill's accent state (boa parity: accent + white label
+    // when a FILE is selected, subtle otherwise — two static pills over a
+    // Condition; the label color lane is static-only).
+    let has_sel: Readable<bool> = derive<bool>(fn (ctx: DeriveCtx) -> bool {
+        return ctx.get<str>(s.sel_file) != "";
+    });
+    let dl_accent = ui::pill("gh-download", "Download", b_download, theme::ACCENT, theme::ACCENT_FG);
+    let dl_subtle = ui::pill("gh-download", "Download", b_download, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG);
+    let download = Condition(has_sel).then(dl_accent).else_branch(dl_subtle).build();
     let list = ScrollView()
         .axis(Axis::Vertical)
         .child(
@@ -71,7 +94,7 @@ pub fn explorer_view(s: state::Gh) -> View {
                 .cross_alignment(CrossAlign::Stretch)
                 .main_axis_size(MainAxisSize::Min)
                 .child(Each(s.files).item_builder(fn (i: u64, f: str) -> View {
-                    return item_file(i, f, s);
+                    return item_file(i, f, s, ico_folder, ico_file);
                 }).build())
                 .build(),
         )
@@ -148,6 +171,8 @@ pub fn explorer_view(s: state::Gh) -> View {
                 .cross_alignment(CrossAlign::Center)
                 .child(ui::pill("gh-refresh", "Refresh", b_refresh, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
                 .child(SizedBox(10.0, 0.0).build())
+                .child(download)
+                .child(SizedBox(10.0, 0.0).build())
                 .child(Text().text(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build())
                 .build(),
         )
@@ -176,10 +201,10 @@ pub fn explorer_view(s: state::Gh) -> View {
         .build();
 }
 
-// One listing row: icon square + name + size. The row tap captures the
-// row string + the bundle (a directory descends — a fresh contents fetch;
-// a file fills the selection footer).
-fn item_file(i: u64, s: str, g: state::Gh) -> View {
+// One listing row: folder/file icon + name + size. The row tap captures
+// the row string + the bundle (a directory descends — a fresh contents fetch;
+// a file fills the selection footer + the download rail's raw name).
+fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> View {
     let is_dir = s.starts_with(0, "d|");
     let n = s.len();
     let mut name = "";
@@ -197,9 +222,9 @@ fn item_file(i: u64, s: str, g: state::Gh) -> View {
         name = s.slice(2, k);
         size_txt = explorer::fmt_size(s.slice(k + 1, n));
     }
-    let mut icon = theme::DIR_ICON;
+    let mut icon = ico_folder;
     if (!is_dir) {
-        icon = theme::FILE_ICON;
+        icon = ico_file;
     }
     let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
         if (s.starts_with(0, "d|")) {
@@ -211,6 +236,7 @@ fn item_file(i: u64, s: str, g: state::Gh) -> View {
             }
             ctx.set<str>(g.path, next);
             ctx.set<str>(g.selected, "");
+            ctx.set<str>(g.sel_file, "");
             launch_future(fetch_dir(ctx, g));
             return;
         }
@@ -225,10 +251,11 @@ fn item_file(i: u64, s: str, g: state::Gh) -> View {
         let fname = s.slice(2, k);
         let size = explorer::fmt_size(s.slice(k + 1, rn));
         ctx.set<str>(g.selected, f"{fname} — {size}");
+        ctx.set<str>(g.sel_file, fname);
     });
     let row = Row()
         .cross_alignment(CrossAlign::Center)
-        .child(Container().width_height(14.0, 14.0).radius(sv(3.0f64)).color(sv(icon)).build())
+        .child(Image(icon).width(17.0).height(17.0).query_key("gh-row-icon").build())
         .child(SizedBox(10.0, 0.0).build())
         .child(Expanded().flex(sv(1.0f64)).child(Text().text(sv(name)).font_size(13.0).color(theme::TEXT).build()).build())
         .child(SizedBox(10.0, 0.0).build())
@@ -258,6 +285,7 @@ pub fn go_landing(ctx: MutationCtx, s: state::Gh) {
     ctx.set<str>(s.stats, "");
     ctx.set<str>(s.path, "");
     ctx.set<str>(s.selected, "");
+    ctx.set<str>(s.sel_file, "");
     ctx.set<bool>(s.is_empty, false);
     ctx.set<bool>(s.busy, false);
 }
@@ -293,6 +321,7 @@ pub async fn open_repo(ctx: MutationCtx, s: state::Gh) -> str {
     ctx.set<str>(s.stats, fmt_stats(meta));
     ctx.set<str>(s.path, "");
     ctx.set<str>(s.selected, "");
+    ctx.set<str>(s.sel_file, "");
     await fetch_dir(ctx, s);
     return "";
 }
@@ -341,6 +370,32 @@ fn fail(ctx: MutationCtx, s: state::Gh, msg: str, stay: bool) {
     } else {
         ctx.set<str>(s.mode, "landing");
     }
+}
+
+// The download journey (the boa doDownload twin): fetch the selected
+// file's raw bytes (`HEAD` resolves the default branch — no version
+// tracking needed; raw.githubusercontent.com is CORS-open) and hand them
+// to the platform save lane. An empty body is the transport failure
+// banner; `save_file` answering false means the host carries no save
+// capability (the headless/test degradation).
+async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
+    let full = ctx.get<str>(s.repo_full);
+    let dir = ctx.get<str>(s.path);
+    let mut url = f"https://raw.githubusercontent.com/{full}/HEAD/{fname}";
+    if (dir != "") {
+        url = f"https://raw.githubusercontent.com/{full}/HEAD/{dir}/{fname}";
+    }
+    let body = await net_request(url, "GET");
+    if (body.len() == 0) {
+        fail(ctx, s, "Download failed — the raw host may be offline.", true);
+        return "";
+    }
+    let ok = await save_file(fname, body);
+    if (!ok) {
+        fail(ctx, s, "Save not available in this host.", true);
+        return "";
+    }
+    return "";
 }
 
 // ---- helpers ---------------------------------------------------------------

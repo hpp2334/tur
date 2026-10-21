@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use tur_integration_tests::{TurTestApp, text_response};
+use tur_integration_tests::{TurTestApp, bytes_response, text_response};
 
 const META: &str = "{\"full_name\":\"facebook/react\",\"description\":\"The library for web and native user interfaces.\",\"stargazers_count\":234000,\"forks_count\":48000,\"open_issues_count\":1000,\"language\":\"TypeScript\"}";
 
@@ -190,6 +190,103 @@ fn github_viewer_selects_a_file() {
     assert_eq!(
         app.query_text(&["gh-selected"]).as_deref(),
         Some("README.md — 2.6 KB"),
+    );
+}
+
+#[test]
+fn github_viewer_rows_render_folder_and_file_icons() {
+    // The boa parity re-land: every listing row carries a folder/file SVG
+    // icon (the 14×14 color swatch era is gone).
+    let mut app = build();
+    app.set_http_responses(vec![
+        text_response(200, META),
+        text_response(200, ROOT_CONTENTS),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    let ok = wait_explorer(&app, "facebook/react");
+    assert!(ok, "the explorer should open");
+    assert!(
+        app.query_element(&["gh-row-icon"]).is_some(),
+        "the listing rows carry the icon image"
+    );
+}
+
+#[test]
+fn github_viewer_downloads_the_selected_file() {
+    // The boa doDownload twin: select a file, tap Download, and the raw
+    // bytes land on the platform save lane under the file's name (the
+    // raw.githubusercontent.com fetch → save_file through the file kit).
+    let mut app = build();
+    let files_only =
+        "[{\"name\":\"README.md\",\"path\":\"README.md\",\"size\":2739,\"type\":\"file\"}]";
+    let payload = b"# hello from raw\n".to_vec();
+    let expected = payload.clone();
+    app.set_http_responses(vec![
+        text_response(200, META),
+        text_response(200, files_only),
+        bytes_response(200, payload),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    wait_explorer(&app, "facebook/react");
+    click_qk(&mut app, &["gh-row"]);
+    let selected = wait_for(&app, || {
+        app.query_text(&["gh-selected"])
+            .is_some_and(|t| t.contains("README.md"))
+    });
+    assert!(selected, "the file is selected before the download");
+    click_qk(&mut app, &["gh-download"]);
+    // Poll on the raw fetch (last_save DRAINS the capture log — read it
+    // exactly once, after the journey settles).
+    let fetched = wait_for(&app, || {
+        app.last_http_request()
+            .is_some_and(|r| r.url.contains("raw.githubusercontent.com"))
+    });
+    assert!(fetched, "the raw-host fetch should fire");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let save = loop {
+        // The save lands after the fetch resolves — one drain attempt per
+        // poll until the capture appears.
+        if let Some(save) = app.last_save() {
+            break save;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the save lane never received the download"
+        );
+        app.wait_for_timeout(Duration::from_millis(32));
+    };
+    assert_eq!(save.name, "README.md");
+    assert_eq!(save.bytes, expected);
+    // The journey leaves no error banner behind.
+    assert!(
+        app.query_element(&["gh-err"]).is_none(),
+        "a successful download raises no banner: {:?}",
+        app.query_text(&["gh-err"])
+    );
+}
+
+#[test]
+fn github_viewer_download_without_a_selection_is_a_no_op() {
+    // Nothing selected → the Download tap must not fire any journey (no
+    // third canned response exists; a fetch would fail the script order
+    // and surface the transport banner).
+    let mut app = build();
+    app.set_http_responses(vec![
+        text_response(200, META),
+        text_response(200, ROOT_CONTENTS),
+    ]);
+    click_qk(&mut app, &["gh-sug-0"]);
+    wait_explorer(&app, "facebook/react");
+    click_qk(&mut app, &["gh-download"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert!(
+        app.last_save().is_none(),
+        "the download must no-op with nothing selected"
+    );
+    assert!(
+        app.query_element(&["gh-err"]).is_none(),
+        "no banner from a no-op download: {:?}",
+        app.query_text(&["gh-err"])
     );
 }
 

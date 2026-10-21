@@ -59,20 +59,26 @@ fn standard_capabilities() -> Capabilities {
     caps
 }
 
-/// The harness's http plugin shape — the configuration
-/// `TurTestApp::new_with_http` builds (std + animation + clipboard +
-/// the net rows over the Http capability). The corpus sweep and the net
-/// tests run under it.
-fn http_plugins() -> Vec<Box<dyn Plugin>> {
+/// The harness's browser plugin shape — the configuration
+/// `TurTestApp::new_with_http` / `new_with_http_and_plugins` builds
+/// (std + animation + clipboard + the net rows over the `Http`
+/// capability + the filepicker rows over the `FilePicker` capability —
+/// the capability set the website runtime registers). The corpus sweep,
+/// the net tests, and the playground instances run under it.
+fn browser_plugins() -> Vec<Box<dyn Plugin>> {
     let mut plugins = standard_plugins();
     plugins.push(Box::new(tur_net_capability::TurNetPlugin));
+    plugins.push(Box::new(tur_filepicker_capability::TurFilePickerPlugin));
     plugins
 }
 
-fn http_capabilities() -> Capabilities {
+fn browser_capabilities() -> Capabilities {
     let caps = standard_capabilities();
     caps.insert(tur_net_capability::Http::new(
         tur_integration_tests::RecordingHttp::new(),
+    ));
+    caps.insert(tur_filepicker_capability::FilePicker::new(
+        tur_integration_tests::RecordingFilePicker::new(),
     ));
     caps
 }
@@ -262,13 +268,17 @@ fn kit_bundles_are_pinned() {
          use tur_anim_kit::{ anim_ctrl };\n\
          use futures::{ sleep };\n",
     );
-    // The http shape — `TurTestApp::new_with_http` (the corpus sweep
-    // + the net tests). tur_net_kit's real binding pulls the net rows'
-    // group into the pack's compile closure.
+    // The browser shape — `TurTestApp::new_with_http` /
+    // `new_with_http_and_plugins` (the corpus sweep, the net tests, the
+    // playground instances). tur_net_kit's real binding pulls the net
+    // rows' group into the pack's compile closure; the filepicker rows
+    // ride tur_host's own group (its decl surface carries them — the
+    // kit/futures pull tur_host transitively, no direct row binding
+    // needed here).
     pin_one(
-        "http_kit",
-        &http_plugins(),
-        http_capabilities(),
+        "browser_kit",
+        &browser_plugins(),
+        browser_capabilities(),
         "use tur_kit::handles::{ mount };\n\
          use tur_anim_kit::{ anim_ctrl };\n\
          use futures::{ sleep };\n\

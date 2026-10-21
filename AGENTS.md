@@ -226,6 +226,10 @@ rut/                   # all rut package sources (pure rut — no build step;
   tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
                        #   tur-engine builtin_plugins/clipboard/kit.rs —
                        #   pushed as a prelude by TurClipboardPlugin)
+  tur_file_kit/        # the filepicker kit (mod.rut; embedded by
+                       #   tur-filepicker-capability/src/kit.rs — pushed
+                       #   as a prelude by TurFilePickerPlugin; the rows
+                       #   spell *_raw twins, the kit owns the names)
   playground/          # mod.rut + menu.rut (the editor's context menu —
                        #   the declared child; the site feeds both through
                        #   loadAndRunRutModuleFiles) + cases_gen.rut +
@@ -349,13 +353,14 @@ Android build + device debugging live in the **`android-dev` skill** at
   The per-case manifests are generated the same way
   (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
-  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit` — the documented
+  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_clipboard_kit|
+  tur_file_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
   `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
   no longer needs an exception (the 0eea7e95 per-file binding law retired
-  its root anchor — explorer's own `use tur_net_kit::{ net_request }`
-  binds it); `rs_derive|rs_derive2|rs_watch` have no call sites
+  its root anchor — explorer's own `use tur_net_kit::{ net_request }` +
+  `use tur_file_kit::{ save_file }` bind it); `rs_derive|rs_derive2|rs_watch` have no call sites
   outside the kit's wrappers (the authored spelling is
   `derive<T>`/`watch<T>`); and the deleted stash rows
   (`st_put|st_take|stf_put|stf_take`) have zero spellings anywhere.

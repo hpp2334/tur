@@ -35,14 +35,15 @@ fn workspace_root() -> std::path::PathBuf {
 /// a leaf case; nothing imports it).
 fn case_manifest_text(dir_name: &str) -> String {
     let name = dir_name.replace('-', "_");
-    // The one per-case dep: github-viewer's fetches are authored against
-    // the net kit, so its manifest declares tur_net_kit beside tur_kit —
-    // honest for the editor's dep-walk (nominal for the harness compile:
-    // the preludes are ambient). Every other case is kit-only.
+    // The per-case deps: github-viewer's fetches ride the net kit and its
+    // download rides the file kit, so its manifest declares both beside
+    // tur_kit — honest for the editor's dep-walk (nominal for the harness
+    // compile: the preludes are ambient). Every other case is kit-only.
     let deps = if dir_name == "github-viewer" {
         concat!(
             "{\n    \"tur_kit\": { \"path\": \"../../tur_kit\" },\n    ",
-            "\"tur_net_kit\": { \"path\": \"../../tur_net_kit\" }\n  }"
+            "\"tur_net_kit\": { \"path\": \"../../tur_net_kit\" },\n    ",
+            "\"tur_file_kit\": { \"path\": \"../../tur_file_kit\" }\n  }"
         )
     } else {
         "{ \"tur_kit\": { \"path\": \"../../tur_kit\" } }"
