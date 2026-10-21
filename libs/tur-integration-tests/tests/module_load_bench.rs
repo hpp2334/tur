@@ -67,3 +67,23 @@ fn trivial_module_load_bench() {
         );
     }
 }
+
+/// The browser-shape twin: every `new_with_http` load must ride the
+/// `browser_kit` bundle. The fingerprint covers the offered set (rows +
+/// preludes), so any plugin-shape drift (a new kit, a renamed row)
+/// silently drops the whole corpus sweep + playground family onto the
+/// source lane — a ~2x per-load cost this gate makes loud instead.
+#[test]
+fn browser_shape_module_load_bench() {
+    let mut app = TurTestApp::new_with_http(400.0, 600.0).unwrap();
+    app.load_rut_module(TRIVIAL).unwrap();
+    let (served, fallbacks) = tur_engine::core::rut_runtime::precompiled_std_stats();
+    println!("[load-bench/browser] lane stats: served={served} source_fallbacks={fallbacks}");
+    assert!(
+        served > 0 && fallbacks == 0,
+        "the browser shape fell off the precompiled lane (served={served}, \
+         fallbacks={fallbacks}) — the browser_kit bundle's fingerprint no \
+         longer matches TurTestApp::new_with_http's offered set; re-bless \
+         with TUR_BLESS_KIT_BUNDLE=1"
+    );
+}
