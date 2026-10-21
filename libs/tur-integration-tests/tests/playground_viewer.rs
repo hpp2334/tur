@@ -1722,9 +1722,13 @@ fn playground_context_menu_cut_writes_the_clipboard_and_deletes() {
     // settle (take consumes; assert on the polled value).
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let wrote = loop {
-        match app.take_clipboard_write() {
-            Some(w) => break w,
-            None => {}
+        let writes = app.take_clipboard_writes();
+        if !writes.is_empty() {
+            // Exactly ONE write per menu action (a double-fire would mean
+            // the click intent dispatched twice — the browser spy saw a
+            // duplicate once).
+            assert_eq!(writes.len(), 1, "one Copy/Cut click = one clipboard write");
+            break writes.into_iter().next().unwrap();
         }
         if std::time::Instant::now() > deadline {
             panic!("the menu cut never wrote the clipboard");

@@ -196,6 +196,21 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
         .expect("tur worker: failed to add panic relay listener");
     onmsg_closure.forget();
 
+    // Clipboard bridge (the serving side): the engine's pump runs on THIS
+    // worker — `navigator.clipboard` is Window-only — so clipboard ops ride
+    // the tagged-message channel here and execute on the main thread (the
+    // boa era's host-bridge / frame-loop drain, adapted). Additive `message`
+    // listener — coexists with the wake protocol riding `onmessage`.
+    let clip_worker = worker.clone();
+    let clip_closure =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |ev: web_sys::MessageEvent| {
+            tur_clipboard_wasm::serve_host_message(&ev, &clip_worker);
+        });
+    worker
+        .add_event_listener_with_callback("message", clip_closure.as_ref().unchecked_ref())
+        .expect("tur worker: failed to add clipboard bridge listener");
+    clip_closure.forget();
+
     // Box the factory + post `[module, memory, ptr]`. The pointer is valid
     // across threads (shared linear memory); the worker reconstitutes it.
     let entry = Box::new(FactoryPayload(factory));
@@ -319,7 +334,15 @@ pub(super) fn install_executor(loop_fut: Pin<Box<dyn Future<Output = ()> + 'stat
     // - `0` (number) — cross-thread wake (from `WorkerTicket::wake`).
     // - `{ t: "tur-factory", ptr }` (object) — an additional app factory
     //   to host on this worker (from the pool registry).
+    // - `{ t: "tur-clip-read-result", rid, text }` — the clipboard bridge's
+    //   read reply (routed into the pending-read slab in
+    //   `tur_clipboard_wasm`).
     let onmsg_closure = Closure::<dyn FnMut(MessageEvent)>::new(|ev: MessageEvent| {
+        // Clipboard read replies first — they wake their awaiting future
+        // (the wake itself re-arms the repoll).
+        if tur_clipboard_wasm::route_worker_message(&ev.data()) {
+            return;
+        }
         if let Some(obj) = ev.data().dyn_ref::<Object>()
             && Reflect::get(obj, &JsValue::from_str("t"))
                 .map(|t| t == JsValue::from_str("tur-factory"))

@@ -1331,6 +1331,13 @@ impl TurTestApp {
         self.clipboard.last_write()
     }
 
+    /// Drain ALL clipboard writes logged since the last call, in insertion
+    /// order (the `RecordingClipboard` records every write — use this when
+    /// the COUNT matters, e.g. asserting one write per menu action).
+    pub fn take_clipboard_writes(&self) -> Vec<String> {
+        self.clipboard.take_writes()
+    }
+
     /// Condition-wait variant of [`Self::take_clipboard_write`]: drive
     /// frames until a clipboard write lands, returning the latest one.
     ///
