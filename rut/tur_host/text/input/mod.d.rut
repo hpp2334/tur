@@ -1,0 +1,36 @@
+// tur_host/text/input — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn input_new() -> opaque;
+pub host fn input_controller(p1: opaque, p2: opaque);
+pub host fn input_undo(p1: opaque, p2: opaque);
+pub host fn input_size(p1: opaque, p2: f64, p3: f64);
+pub host fn input_placeholder(p1: opaque, p2: str);
+pub host fn input_color(p1: opaque, p2: u64);
+pub host fn input_placeholder_color(p1: opaque, p2: u64);
+pub host fn input_cursor_color(p1: opaque, p2: u64);
+pub host fn input_font_size(p1: opaque, p2: f64);
+pub host fn input_obscure(p1: opaque, p2: bool);
+pub host fn input_obscure_bound(p1: opaque, p2: u64);
+pub host fn input_obscure_char(p1: opaque, p2: str);
+pub host fn input_placeholder_bound(p1: opaque, p2: u64);
+pub host fn input_multiline(p1: opaque, p2: bool);
+pub host fn input_font_family(p1: opaque, p2: str);
+pub host fn input_on_input(p1: opaque, p2: u64);
+pub host fn input_on_context_menu(p1: opaque, p2: u64);
+pub host fn input_qkey(p1: opaque, p2: str);
+pub host fn input_build(p1: opaque) -> opaque;
+pub host fn tctrl_new() -> opaque;
+pub host fn undo_new() -> opaque;
+pub host fn tctrl_text(p1: opaque) -> str;
+pub host fn tctrl_selected_text(p1: opaque) -> str;
+pub host fn tctrl_set_text(p1: opaque, p2: str);
+pub host fn tctrl_push_span(p1: opaque, p2: str);
+pub host fn tctrl_delete_selection(p1: opaque);
+pub host fn tctrl_insert_text(p1: opaque, p2: str);
+pub host fn tctrl_cursor(p1: opaque) -> u64;
+pub host fn tctrl_select(p1: opaque, p2: u64, p3: u64);
+pub host fn tctrl_clear(p1: opaque);
+pub host fn tctrl_paste(p1: opaque, p2: str);
+pub host fn undo_can_undo(p1: opaque) -> bool;
+pub host fn undo_can_redo(p1: opaque) -> bool;
+pub host fn undo_clear(p1: opaque);

@@ -3,9 +3,6 @@ pub mod helper;
 
 pub use focusable::Focusable;
 
-use boa_engine::{Context, JsValue};
-
-use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::ElementNodeId;
 
 // ---------------------------------------------------------------------------
@@ -18,17 +15,8 @@ pub struct FocusEvent;
 #[derive(Clone)]
 pub struct BlurEvent;
 
-impl IntoJsArgs for FocusEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        Vec::new()
-    }
-}
-
-impl IntoJsArgs for BlurEvent {
-    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
-        Vec::new()
-    }
-}
+impl crate::core::edgy::mutation::MutationPayload for FocusEvent {}
+impl crate::core::edgy::mutation::MutationPayload for BlurEvent {}
 
 // ---------------------------------------------------------------------------
 // FocusChange — a deferred focus/blur notification. `set_focus` / `clear_focus`

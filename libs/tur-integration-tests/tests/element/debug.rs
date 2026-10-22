@@ -43,17 +43,10 @@ fn debug_solidjs_column_basic() {
 
 #[test]
 fn debug_react_minimal() {
-    let app = TurTestApp::new(400.0, 600.0).unwrap();
-    let source = std::fs::read_to_string(
-        std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("js/packages/tur-test-cases/dist/column-basic.js"),
-    )
-    .unwrap();
-    let _ = app.eval_module_source(&source);
+    // The corpus is rut now — the same tree-shape assertion runs against the
+    // rut port (the legacy dist/ JS bundle is gone with the JS toolchain).
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_bundle("column-basic").unwrap();
     let tree = app.element_tree();
     let root_id = tree.root_element_id();
     let child_count = tree.raw_children_of_element(root_id.unwrap()).len();

@@ -53,6 +53,18 @@ impl Color {
     /// Opaque white — the renderers' default base (background) color.
     pub const WHITE: Color = Color::RGB(RGB::new(255, 255, 255));
 
+    /// `0xRRGGBBAA` packed color → engine `Color` (the packed-color
+    /// crossing every styled row family shares, and the reactive brush
+    /// decode: brush atoms hold the packed u64 plainly).
+    pub const fn from_packed(packed: u64) -> Self {
+        Color::rgba(
+            ((packed >> 24) & 0xFF) as u8,
+            ((packed >> 16) & 0xFF) as u8,
+            ((packed >> 8) & 0xFF) as u8,
+            (packed & 0xFF) as u8,
+        )
+    }
+
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Color::RGB(RGB::new(r, g, b))
     }

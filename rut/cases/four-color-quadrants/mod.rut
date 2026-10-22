@@ -1,0 +1,21 @@
+// four-color-quadrants: a 2x2 grid of 100x100 colored quadrants (Stack +
+// positioned fills) — the vello render fixtures sample exact pixels.
+
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned, Stack };
+use tur_kit::reactive::{ sv };
+
+fn quad(color: u64) -> View {
+    let b = Container().width_height(100.0, 100.0).color(sv(color));
+    return b.build();
+}
+
+entry fn start() {
+    let stack = Stack()
+        .child(Positioned().left(sv(0.0f64)).top(sv(0.0f64)).child(quad(0xFF0000FFu64)).build())
+        .child(Positioned().left(sv(100.0f64)).top(sv(0.0f64)).child(quad(0x00FF00FFu64)).build())
+        .child(Positioned().left(sv(0.0f64)).top(sv(100.0f64)).child(quad(0x0000FFFFu64)).build())
+        .child(Positioned().left(sv(100.0f64)).top(sv(100.0f64)).child(quad(0xFFFF00FFu64)).build());
+    mount(stack.build());
+}

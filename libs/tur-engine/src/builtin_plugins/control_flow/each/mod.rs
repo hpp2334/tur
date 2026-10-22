@@ -1,4 +1,3 @@
-pub mod bridge;
 mod element;
 
-pub use element::EachView;
+pub use element::{EachBuilder, EachView};

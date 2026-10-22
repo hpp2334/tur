@@ -8,6 +8,15 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true, default-features = false }
+js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["Window", "Navigator", "Clipboard"] }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Navigator",
+    "Clipboard",
+    "console",
+    "MessageEvent",
+    "Worker",
+    "DedicatedWorkerGlobalScope",
+] }

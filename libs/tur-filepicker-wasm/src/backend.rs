@@ -24,6 +24,8 @@ use wasm_bindgen_futures::JsFuture;
 
 use tur_filepicker_capability::{FilePickerBackend, PickedFile};
 
+use crate::bridge;
+
 /// The `change` handler closure type used by the hidden file-picker `<input>`.
 type PickHandler = Closure<dyn FnMut(web_sys::Event)>;
 
@@ -46,6 +48,12 @@ impl FilePickerBackend for WasmFilePicker {
         opts: tur_filepicker_capability::PickOptions,
     ) -> Pin<Box<dyn Future<Output = Vec<PickedFile>>>> {
         Box::pin(async move {
+            // Worker (production): round-trip to the main thread — the
+            // hidden `<input>` is DOM, unreachable from the pump's realm.
+            if let Some(pending) = bridge::worker_begin_pick(opts.multiple, &opts.accept) {
+                return pending.await;
+            }
+            // Main-thread embedding: direct call.
             let Some(window) = web_sys::window() else {
                 return Vec::new();
             };
@@ -125,6 +133,14 @@ impl FilePickerBackend for WasmFilePicker {
         _opts: tur_filepicker_capability::SaveOptions,
     ) -> Pin<Box<dyn Future<Output = ()>>> {
         Box::pin(async move {
+            // Worker (production): hop to the main thread — fire-and-forget
+            // (the clipboard bridge's semantics): the Blob + `<a download>`
+            // dance is DOM and unreachable from the pump's realm. The hop
+            // used to be missing, so saves silently no-op'd on the worker.
+            if bridge::worker_post_save(&name, &bytes) {
+                return;
+            }
+            // Main-thread embedding: direct call.
             let Some(window) = web_sys::window() else {
                 return;
             };

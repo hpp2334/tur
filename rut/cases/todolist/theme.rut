@@ -1,0 +1,24 @@
+// theme — the boa light palette (Notion / Linear-style) + the inline
+// icon SVGs (single-quoted attrs, rasterised through the image rail).
+
+// The boa light palette (Notion / Linear-style).
+pub let CARD_BG: u64 = 0xFFFFFFFFu64;
+pub let CARD_BORDER: u64 = 0xE2E8F0FFu64;
+pub let PAGE_BG: u64 = 0xF8FAFCFFu64;
+pub let TEXT: u64 = 0x0F172AFFu64;
+pub let TEXT_MUTED: u64 = 0x64748BFFu64;
+pub let TEXT_STRIKE: u64 = 0x94A3B8FFu64;
+pub let ACCENT: u64 = 0x4F46E5FFu64;
+pub let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+pub let SUCCESS: u64 = 0x22C55EFFu64;
+pub let INPUT_BG: u64 = 0xF8FAFCFFu64;
+pub let INPUT_BORDER: u64 = 0xCBD5E1FFu64;
+pub let BACKDROP: u64 = 0x0F172A6Eu64;
+pub let SUBTLE: u64 = 0xF1F5F9FFu64;
+pub let SUBTLE_FG: u64 = 0x334155FFu64;
+pub let DANGER: u64 = 0xEF4444FFu64;
+
+// The inline icon SVGs (the boa state.ts icons, single-quoted attrs).
+pub let SVG_CHECK: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
+pub let SVG_CLOSE: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#64748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>";
+pub let SVG_PLUS: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>";

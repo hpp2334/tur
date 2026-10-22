@@ -1,7 +1,5 @@
 use crate::core::render::brush::Color;
 
-use crate::core::js_runtime::js_value::FromJs;
-
 /// One styled run of the controller's span tree.
 ///
 /// `PartialEq` compares **rendered content** (text + every style field) so
@@ -21,71 +19,24 @@ pub struct SpanData {
     pub(crate) color: Option<Color>,
 }
 
-pub fn extract_spans_from_js(
-    value: &boa_engine::JsValue,
-    context: &mut boa_engine::Context,
-) -> Vec<SpanData> {
-    let Some(obj) = value.as_object() else {
-        return Vec::new();
-    };
-    let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(obj.clone()) else {
-        return Vec::new();
-    };
-    let len = match arr.length(context) {
-        Ok(l) => l as usize,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut spans = Vec::with_capacity(len);
-    for i in 0..len {
-        let Ok(span_val) = arr.at(i as i64, context) else {
-            continue;
-        };
-        let Some(span_obj) = span_val.as_object() else {
-            continue;
-        };
-
-        let content = span_obj
-            .get(boa_engine::js_string!("content"), context)
-            .ok()
-            .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
-            .unwrap_or_default();
-
-        let weight = span_obj
-            .get(boa_engine::js_string!("weight"), context)
-            .ok()
-            .and_then(|v| v.as_number());
-
-        let italic = span_obj
-            .get(boa_engine::js_string!("italic"), context)
-            .ok()
-            .and_then(|v| v.as_boolean())
-            .unwrap_or(false);
-
-        let underline = span_obj
-            .get(boa_engine::js_string!("underline"), context)
-            .ok()
-            .and_then(|v| v.as_boolean())
-            .unwrap_or(false);
-
-        let font_size = span_obj
-            .get(boa_engine::js_string!("fontSize"), context)
-            .ok()
-            .and_then(|v| v.as_number());
-
-        let color = span_obj
-            .get(boa_engine::js_string!("color"), context)
-            .ok()
-            .and_then(|v| Color::from_js(&v).ok());
-
-        spans.push(SpanData {
-            text: content,
-            weight,
-            italic,
-            underline,
-            font_size,
-            color,
-        });
+impl SpanData {
+    /// The span's pinned color, if any (the highlighting merge probe —
+    /// adjacent same-colored runs coalesce into one).
+    pub fn color(&self) -> Option<Color> {
+        self.color
     }
-    spans
+
+    /// A single-color text run — the syntax-highlighting payload shape.
+    /// Every style field except the color inherits the element's defaults
+    /// (the fields stay crate-private; styled runs are minted engine-side).
+    pub fn colored(text: impl Into<String>, color: Color) -> Self {
+        Self {
+            text: text.into(),
+            weight: None,
+            italic: false,
+            underline: false,
+            font_size: None,
+            color: Some(color),
+        }
+    }
 }

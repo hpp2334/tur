@@ -1,21 +1,20 @@
-//! The shared `LayerLink` handle + the `createLayerLink` factory.
+//! The shared `LayerLink` handle.
+//!
+//! Links are minted by the rut rows (`core::rut_runtime::composited`'s
+//! `ct_link_new`) and registered into the [`LayerLinkRegistry`](super::LayerLinkRegistry)
+//! plugin state — the same registry the tracking subsystem recomputes from.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsResult, JsValue};
-use boa_gc::{Finalize, Trace};
 use vello_common::kurbo::Affine;
 
 use crate::core::element::ElementNodeId;
-use crate::core::js_runtime::{BoaOpaque, JsProps};
 use crate::core::layout::Size;
 
-/// Shared, GC-pinned state backing a `LayerLink`. One per
-/// `createLayerLink()` call; held by the target element, the follower
-/// element, and the [`super::subsystem::CompositedTransformSubsystem`]
-/// registry.
+/// Shared state backing a `LayerLink`. One per minted link; held by the
+/// target element, the follower element, and the
+/// [`super::subsystem::CompositedTransformSubsystem`] registry.
 ///
 /// All fields are `Cell`/interior-mutable because the same `Rc` is shared
 /// across the build phase (target/follower set their node ids), the subsystem
@@ -61,55 +60,13 @@ impl Default for CompositedLinkState {
     }
 }
 
-/// JS-opaque handle wrapping the shared state. Constructed only via
-/// `createLayerLink()` (the closure), so the factory can register the state
-/// into the subsystem's registry before handing it to JS.
-#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
+/// A plain handle wrapping the shared state (no script-realm plumbing —
+/// the rut rail's `RutLayerLink` opaque carries the same `Rc`).
+#[derive(Debug, Clone)]
 pub struct LayerLink(pub Rc<CompositedLinkState>);
 
 impl LayerLink {
     pub fn new(state: Rc<CompositedLinkState>) -> Self {
         Self(state)
     }
-}
-
-/// Build the `createLayerLink` bridge fn — a plain ctx-bound fn pointer
-/// (user args at index 1). Reads the shared link registry (the same `Rc`
-/// held by the subsystem) off the instance ctx's plugin-state channel, so
-/// each newly-created link is tracked for the per-flush recompute.
-pub fn tur_create_layer_link(
-    _this: &JsValue,
-    args: &[JsValue],
-    ctx: &mut Context,
-) -> JsResult<JsValue> {
-    let js_ctx = crate::core::js_runtime::helpers::extract_js_ctx(args)?;
-    let registry = js_ctx
-        .plugin_state::<super::LayerLinkRegistry>()
-        .ok_or_else(|| {
-            boa_engine::JsNativeError::typ()
-                .with_message("composited-transform not registered on this instance")
-        })?;
-    create_layer_link(&registry.0.clone(), ctx)
-}
-
-fn create_layer_link(
-    registry: &Rc<RefCell<Vec<Rc<CompositedLinkState>>>>,
-    ctx: &mut Context,
-) -> JsResult<JsValue> {
-    let state = Rc::new(CompositedLinkState::default());
-    registry.borrow_mut().push(state.clone());
-    let opaque = BoaOpaque::new(LayerLink::new(state), ctx);
-    Ok(opaque.object().clone().into())
-}
-
-/// Read a `LayerLink`'s shared state off the `link` field of a props object.
-/// Returns `None` if absent or not a `LayerLink`.
-pub(crate) fn extract_link_state(
-    props: &JsObject,
-    ctx: &mut Context,
-) -> Option<Rc<CompositedLinkState>> {
-    let mut p = JsProps::new(props, ctx);
-    p.opaque::<LayerLink>("link")
-        .and_then(|obj| obj.downcast_ref::<LayerLink>().map(|l| l.0.clone()))
 }

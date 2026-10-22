@@ -1,0 +1,8 @@
+// pointer-interact-empty: a bare PointerInteract with no child — the
+// invisible hit-target widget (zero-sized, still absorbs at its point).
+use tur_kit::gesture::pointer::{ PointerInteract };
+use tur_kit::handles::{ mount };
+
+entry fn start() {
+    mount(PointerInteract().build());
+}

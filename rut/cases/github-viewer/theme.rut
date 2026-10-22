@@ -1,0 +1,44 @@
+// theme — the octocat brand mark, the boa palette (Notion / Linear-style
+// light), and the ASCII codepoints the explorer's path scans + the JSON
+// scanner compare against (typed so the literals land on `u32`).
+
+// The octocat brand mark (the boa state.ts GitHub glyph, rasterised
+// through the image rail).
+pub let SVG_GITHUB: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='#4f46e5'><path d='M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z'/></svg>";
+
+// The boa theme (Notion / Linear-style light palette).
+pub let PAGE_BG: u64 = 0xF8FAFCFFu64;
+pub let PANEL: u64 = 0xFFFFFFFFu64;
+pub let BORDER: u64 = 0xE2E8F0FFu64;
+pub let TEXT: u64 = 0x0F172AFFu64;
+pub let TEXT_MUTED: u64 = 0x64748BFFu64;
+pub let TEXT_SUBTLE: u64 = 0x94A3B8FFu64;
+pub let ACCENT: u64 = 0x4F46E5FFu64;
+pub let ACCENT_SOFT: u64 = 0xEEF2FFFFu64;
+pub let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+pub let DANGER: u64 = 0xEF4444FFu64;
+pub let DANGER_SOFT: u64 = 0xFEF2F2FFu64;
+pub let SUCCESS: u64 = 0x16A34AFFu64;
+pub let SUBTLE_BUTTON: u64 = 0xF1F5F9FFu64;
+pub let SUBTLE_BUTTON_FG: u64 = 0x334155FFu64;
+pub let INPUT_BG: u64 = 0xF8FAFCFFu64;
+pub let INPUT_BORDER: u64 = 0xCBD5E1FFu64;
+
+// The listing row icons (the boa feather glyphs — a filled indigo folder,
+// an outlined slate document), rendered through the image rail at 17×17.
+pub let SVG_FOLDER: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='#6366f1'><path d='M3 7a2 2 0 0 1 2-2h3.5a2 2 0 0 1 1.5.7l1 1.3H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>";
+pub let SVG_FILE: str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#64748b' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'><path d='M14 3v5h5'/><path d='M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/></svg>";
+
+// ASCII codepoints the scanner compares against (typed so the literals
+// land on `u32`).
+pub let C_QUOTE: u32 = 34;
+pub let C_COMMA: u32 = 44;
+pub let C_COLON: u32 = 58;
+pub let C_PIPE: u32 = 124;
+pub let C_SPACE: u32 = 32;
+pub let C_SLASH: u32 = 47;
+pub let C_BACKSLASH: u32 = 92;
+pub let C_LBRACE: u32 = 123;
+pub let C_RBRACE: u32 = 125;
+pub let C_LBRACKET: u32 = 91;
+pub let C_RBRACKET: u32 = 93;

@@ -17,8 +17,6 @@
 //! No flex-item (`Expanded`) handling: root children are never flex items.
 //! No `main_axis_size::Min` mode: root always fills the viewport.
 
-use boa_engine::Context;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::layout::ComputedLayout;
@@ -36,10 +34,10 @@ pub struct RootView {
 }
 
 impl View for RootView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(RootElement), boa);
-        let _child_id = self.child.build(cx, boa, id.into());
+        cx.insert_node(id, AnyElement::new(RootElement));
+        let _child_id = self.child.build(cx, id.into());
         cx.link_child(parent, id.into());
         id.into()
     }

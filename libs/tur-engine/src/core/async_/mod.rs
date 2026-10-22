@@ -1,43 +1,13 @@
-//! Engine-side completion queue + boa job executor.
+//! Engine-side async plumbing.
 //!
-//! The old `AsyncExecutor` (a future poller + completion queue combined)
-//! has been replaced by two focused types:
-//! - [`CompletionQueue`] / [`CompletionHandle`] — closures pushed by spawned
-//!   futures (which now run on a [`WorkerContext`]) to settle JsPromises
-//!   under `&mut Context` on the next flush.
-//! - [`TurJobExecutor`] — boa's `JobExecutor` impl that drains PromiseJobs /
-//!   GenericJobs / AsyncJobs.
+//! The script rail (rut) drives its own async weave: capability rows spawn
+//! worker futures via [`InstanceContext::spawn_local`] and settle
+//! [`rut_vm::Completer`]s; the pump's `run_ready` drives the awaiting tasks.
 //!
-//! ## Flush loop
-//!
-//! ```text
-//! loop {
-//!     completion_queue.drain(boa);                        // settle promises
-//!     jobs_run = executor.drain(boa);                     // run PromiseJobs
-//!     // …events, reactive, layout, mutations…
-//!     if all quiet { break; }
-//! }
-//! ```
-//!
-//! See [`crate::core::app::TurAppInternal::flush`] for the full sequence.
-
-use boa_engine::Context;
-use boa_engine::JsResult;
+//! The engine contributes the worker-side task context:
+//! [`AsyncWorkerContext`] — timers / nested spawns / blocking work / the
+//! self-waking paint signal (e.g. the caret-blink loop).
 
 pub mod async_worker_context;
-pub mod completion;
-pub mod executor;
-pub mod flush_tasks;
-pub mod task;
 
 pub use async_worker_context::AsyncWorkerContext;
-pub use completion::{CompletionHandle, CompletionQueue};
-pub use executor::TurJobExecutor;
-pub use flush_tasks::{FlushTaskHandle, FlushTaskQueue};
-pub use task::{CANCEL_ERROR_NAME, cancel_error, make_task};
-
-/// A closure that runs under `&mut Context` to settle a JsPromise (or any
-/// other synchronous side-effect that needs Context access). Produced by a
-/// spawned future's completion and drained by [`CompletionQueue::drain`]
-/// inside `flush`.
-pub type Completion = Box<dyn FnOnce(&mut Context) -> JsResult<()>>;

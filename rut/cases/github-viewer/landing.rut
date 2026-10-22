@@ -1,0 +1,129 @@
+// landing — the boa landing: the Field (the "Repository" caption over
+// the bordered input), the fixed 360 card over the brand mark, the
+// quick-pick chips, and the draft rail shared by Browse + the chips
+// (validate the owner/name shape, then launch the repo journey — the
+// handles bind at the launch site).
+
+use futures::launch_future;
+use tur_kit::flags::{ Align, BorderPosition, CrossAlign, MainAlign, MainAxisSize };
+use tur_kit::handles::{ TextCtrl, UndoCtrl, View };
+use tur_kit::image::{ Image };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Row };
+use tur_kit::reactive::{ Mutation, MutationCtx, mutate, sv };
+use tur_kit::text::core::{ Text };
+use tur_kit::text::input::{ Input };
+
+pub fn landing_view(s: state::Gh, ctrl: TextCtrl, undo: UndoCtrl, gh: u64, b_browse: Mutation<nil>,
+                b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
+                b_sug2: Mutation<nil>) -> View {
+    // The boa Field: the "Repository" caption over the bordered input.
+    let field = Column()
+        .cross_alignment(CrossAlign::Stretch)
+        .main_axis_size(MainAxisSize::Min)
+        .child(Text().text(sv("Repository")).font_size(11.0).color(theme::TEXT_SUBTLE).query_key("gh-field-label").build())
+        .child(SizedBox(0.0, 6.0).build())
+        .child(
+            Container()
+                .radius(sv(7.0f64))
+                .padding(9.0)
+                .color(sv(theme::INPUT_BG))
+                .border(theme::INPUT_BORDER, 1.0, BorderPosition::Inside)
+                .child(
+                    Input()
+                        .controller(ctrl)
+                        .undo(undo)
+                        .placeholder(sv("facebook/react"))
+                        .font_size(14.0)
+                        .width_height(0.0, 22.0)
+                        .query_key("gh-input")
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    // Fixed 360 card (the boa card capped at `min(440, vw - 44)`; the
+    // playground's viewer pane is ~390 of content — 440 overflows it).
+    let card = Container()
+        .width(sv(360.0f64))
+        .padding(34.0)
+        .radius(sv(14.0f64))
+        .color(sv(theme::PANEL))
+        .border(theme::BORDER, 1.0, BorderPosition::Inside)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Start)
+                .main_axis_size(MainAxisSize::Min)
+                .child(brand_mark(gh))
+                .child(SizedBox(0.0, 18.0).build())
+                .child(Text().text(sv("Browse a public repo")).font_size(18.0).color(theme::TEXT).build())
+                .child(SizedBox(0.0, 6.0).build())
+                .child(Text().text(sv("Enter a repo as \"owner/name\" to explore its files.")).font_size(13.0).color(theme::TEXT_MUTED).build())
+                .child(SizedBox(0.0, 20.0).build())
+                .child(field)
+                .child(SizedBox(0.0, 8.0).build())
+                .child(ui::error_banner(s))
+                .child(SizedBox(0.0, 8.0).build())
+                .child(Row().main_alignment(MainAlign::End).child(ui::pill("gh-browse", "Browse", b_browse, theme::ACCENT, theme::ACCENT_FG)).build())
+                .child(SizedBox(0.0, 22.0).build())
+                .child(Text().text(sv("Try one of these")).font_size(11.0).color(theme::TEXT_SUBTLE).build())
+                .child(SizedBox(0.0, 8.0).build())
+                .child(suggestion_row(b_sug0, b_sug1, b_sug2))
+                .build(),
+        )
+        .build();
+    return Container().alignment(Align::Center).child(card).build();
+}
+
+// The 40x40 rounded brand mark (the boa octocat badge, an inline SVG
+// through the image rail).
+fn brand_mark(gh: u64) -> View {
+    let mark = Container()
+        .width_height(40.0, 40.0)
+        .radius(sv(10.0f64))
+        .color(sv(theme::ACCENT_SOFT))
+        .alignment(Align::Center)
+        .child(Image(gh).width(24.0).height(24.0).query_key("gh-mark").build())
+        .build();
+    return mark;
+}
+
+fn suggestion_row(b_sug0: Mutation<nil>, b_sug1: Mutation<nil>,
+                  b_sug2: Mutation<nil>) -> View {
+    // Stacked (the boa mobile variant) — the three chips overflow the
+    // 360 card's content width in a row. The boa quick-pick set (all
+    // under jsDelivr's 50 MB tree cap).
+    return Column()
+        .cross_alignment(CrossAlign::Start)
+        .main_axis_size(MainAxisSize::Min)
+        .child(ui::pill("gh-sug-0", "facebook/react", b_sug0, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+        .child(SizedBox(0.0, 6.0).build())
+        .child(ui::pill("gh-sug-1", "tailwindlabs/tailwindcss", b_sug1, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+        .child(SizedBox(0.0, 6.0).build())
+        .child(ui::pill("gh-sug-2", "vuejs/core", b_sug2, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+        .build();
+}
+
+// A quick-pick chip's mutation: pre-fill the field and open directly.
+pub fn sug_mutation(ctrl: TextCtrl, s: state::Gh, name: str) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctrl.set_text(name);
+        open_draft(ctx, s, name);
+    });
+}
+
+// The draft rail shared by Browse + the chips: validate the owner/name
+// shape, then launch the repo journey (the handles bind at the launch
+// site).
+pub fn open_draft(ctx: MutationCtx, s: state::Gh, draft: str) {
+    let full = explorer::parse_repo(draft);
+    if (full == "") {
+        ctx.set<str>(s.err, "Enter a repo as \"owner/name\" — e.g. facebook/react");
+        ctx.set<bool>(s.err_has, true);
+        return;
+    }
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.repo_full, full);
+    launch_future(explorer::open_repo(ctx, s));
+}

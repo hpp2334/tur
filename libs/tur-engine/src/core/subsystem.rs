@@ -55,8 +55,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::Context;
-
 use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
@@ -163,10 +161,8 @@ pub struct FlushSignals<'a> {
 /// `onTick` mutations directly) don't panic on a double-borrow. Subsystems
 /// borrow on demand via `cx.element_tree.borrow_mut()` etc.
 ///
-/// Subsystems that just override [`Subsystem::flush_pre_layout`] (e.g.
-/// animation) only need [`Self::boa`]; subsystems that handle events use the
-/// element tree / focus manager / mutation queue / event queues /
-/// `screen` / async executor / capability fields.
+/// Subsystems that handle events use the element tree / focus manager /
+/// mutation queue / event queues / `screen` / capability fields.
 ///
 /// ## Signalling the engine
 ///
@@ -184,10 +180,6 @@ pub struct FlushSignals<'a> {
 /// sampling): it is stable across the fixed-point iterations of one
 /// `TurAppInternal::flush` call and differs across `flush` calls.
 pub struct SubsystemFlushContext<'a> {
-    /// The engine's boa `Context`. Borrowed for the duration of one subsystem
-    /// tick or event dispatch; the borrow is released before the next
-    /// subsystem (or the rest of the flush loop) runs.
-    pub boa: &'a mut Context,
     /// Element tree (shared handle). Borrow on demand via `.borrow()` /
     /// `.borrow_mut()`. The tree is instance-owned — rootless before the
     /// first `mount` (empty layout/paint), root cleared at module teardown.
@@ -205,16 +197,8 @@ pub struct SubsystemFlushContext<'a> {
     pub need_paint: &'a Cell<bool>,
     /// Worker-thread scheduler. Subsystems call
     /// [`WorkerContext::spawn_local`] to drive Rust futures (e.g.
-    /// `clipboard.write_text`). The future's completion pushes a closure
-    /// via [`Self::completion_handle`]; the engine drains it on the next
-    /// flush iteration.
+    /// `clipboard.write_text`).
     pub worker_ctx: &'a crate::core::scheduler::WorkerContext,
-    /// Completion handle for spawned futures. A spawned future calls
-    /// `completion_handle.push(closure)` from inside its body to settle a
-    /// `JsPromise` (or similar) under `&mut Context` on the next flush.
-    /// Pushing fires `on_push`, which self-sends `WorkerMsg::Wake` so the
-    /// worker flushes promptly.
-    pub completion_handle: &'a crate::core::async_::CompletionHandle,
     /// Capability registry view. Subsystems look up plugin-injected backends
     /// (e.g. `Clipboard`, `Http`) at dispatch time via
     /// `cx.capabilities.of::<C>()`. Missing capabilities return `None` —

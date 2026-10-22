@@ -3,23 +3,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use boa_engine::Context;
-use boa_engine::context::time::Clock;
-use boa_engine::js_string;
-use boa_engine::object::JsObject;
-use boa_engine::property::Attribute;
+use crate::core::clock::Clock;
 
 use crate::core::app::TurAppInternal;
-use crate::core::app::mount;
-use crate::core::async_::TurJobExecutor;
 use crate::core::capability::{Capabilities, CapabilityDecls};
-use crate::core::dev::dev_tool;
-use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
-use crate::core::js_runtime::helpers::FnEntry;
-use crate::core::js_runtime::instance_context::InstanceDataCx;
-use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
-use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
+use crate::core::instance::InstanceDataCx;
 use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginRegisterContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::error::TurError;
@@ -38,21 +27,14 @@ pub(crate) use backend::WorkerBackend;
 // (which lives in `lib.rs`).
 pub(crate) use backend::MsgOutcome;
 
-/// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
-/// concrete (`Sized`) `C`, so it won't accept an already-erased
-/// `Arc<dyn Clock + Send + Sync>`. `ClockProxy` is a Sized adapter that
-/// delegates to the shared `Arc<dyn Clock + Send + Sync>` — giving every
-/// instance's boa `Context` and the runtime `FrameEnv` one shared time
-/// source. `Send + Sync` so the runtime can be shared across worker
-/// threads (Phase 8 threaded mode).
+/// Adapter from the shared `Arc<dyn Clock>` to the `Rc<dyn Clock>` the
+/// worker-side `FrameEnv` expects — giving the frame environment one shared
+/// time source with the host backend.
 #[derive(Clone)]
 pub(crate) struct ClockProxy(pub(crate) Arc<dyn Clock + Send + Sync>);
 impl Clock for ClockProxy {
-    fn now(&self) -> boa_engine::context::time::JsInstant {
-        self.0.now()
-    }
-    fn system_time_millis(&self) -> i64 {
-        self.0.system_time_millis()
+    fn now_millis(&self) -> f64 {
+        self.0.now_millis()
     }
 }
 
@@ -103,7 +85,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// - the capability registry (shared Clipboard/Http/FilePicker/Cursor
 ///   backends),
 /// - the registered plugins (their `register` takes `&self`, so the same
-///   plugin objects register into every instance's fresh boa `Context`).
+///   plugin objects register into every instance's fresh context).
 ///
 /// Spawn instances via [`TurRuntime::app_builder`] (rendering or headless).
 ///
@@ -117,7 +99,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// let ui = WorkerPoolHandle::new("ui", 4);
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
-///     .clock(std::sync::Arc::new(boa_engine::context::time::StdClock::new()))
+///     .clock(std::sync::Arc::new(tur_engine::core::clock::StdClock))
 ///     .worker_pool(ui.clone())
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
@@ -142,7 +124,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// # }
 /// ```
 pub struct TurRuntime {
-    clock: Arc<dyn Clock + Send + Sync>,
+    clock: Arc<dyn Clock>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
@@ -210,7 +192,7 @@ impl TurRuntime {
     /// incrementally, and calls `renderer.resize(...)` on viewport-change
     /// events only.
     ///
-    /// The instance gets its own boa `Context` (JS realm), element tree,
+    /// The instance gets its own script realm, element tree,
     /// reactive store, focus manager, event queues, subsystems, screen and
     /// shell — fully isolated from every other instance. Fonts, clock, and
     /// capability backends are shared from this runtime. Plugins are
@@ -664,9 +646,16 @@ impl<'rt> TurAppBuilder<'rt> {
 /// responsible for ensuring `clock`, `font_loader`, etc. are constructed
 /// on the right thread (e.g. the threaded factory constructs them inside
 /// the closure so the `!Send` `Rc`s never cross threads).
+///
+/// **Realm-free build**: no script realm exists. Plugins
+/// register their realm-free halves (subsystems, plugin state, atoms);
+/// realm-bound registrations (JS modules, classes, globals, consts) are
+/// recorded as deferred thunks and replayed by
+/// `WorkerBackend::ensure_realm` when a JS module/script actually loads.
+/// A rut-only instance never allocates a realm.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_worker_backend(
-    clock: Arc<dyn Clock + Send + Sync>,
+    clock: Arc<dyn Clock>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: crate::core::capability::Capabilities,
@@ -679,189 +668,142 @@ pub(crate) fn build_worker_backend(
     instance_data_definer: Option<InstanceDataDefiner>,
     worker_pools: std::sync::Arc<[WorkerPoolHandle]>,
 ) -> Result<WorkerBackend, TurError> {
-    let executor = Rc::new(TurJobExecutor::new());
-    let module_loader = TurModuleLoader::new();
-    // Runtime-error reporter: reaches the boa Context two ways — as
-    // host-defined data (capture sites read it via
-    // `runtime_error::report(ctx, err)`) and via the promise-rejection
-    // host hook. One identity per instance, built from the shared
-    // worker→host sender.
-    let reporter = crate::core::app::runtime_error::RuntimeErrorReporter::new(host_tx.clone());
-    let mut boa_context = Context::builder()
-        .clock(Rc::new(ClockProxy(clock.clone())))
-        .job_executor(executor.clone())
-        .module_loader(module_loader.clone())
-        .host_hooks(Rc::new(
-            crate::core::app::runtime_error::PromiseRejectionHandler::new(reporter.clone()),
-        ))
-        .build()
-        .expect("failed to build boa context");
-    boa_context.insert_data(reporter);
-
+    // Resolve the RPC reply transport once, from the executor seam (see
+    // `WorkerExecutor::wakes_host_tasks_cross_thread`): executors that
+    // can't re-poll host tasks from a worker-side waker (wasm) get
+    // replies routed through the drained host channel.
+    let rpc_via_host_drain = !worker_ctx.wakes_host_tasks_cross_thread();
     let mut internal = TurAppInternal::new(
         font_context,
         font_loader,
-        executor.clone(),
-        clock,
+        clock.clone(),
         capabilities,
         worker_ctx,
         wake_worker,
-        host_tx,
+        host_tx.clone(),
         worker_pools,
     );
-
-    let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
-    let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
-
-    // The instance store as a JS `{get, set}` object — the `store` handed to
-    // every module's `start({ store })`. The instance-owned tree is
-    // born-bound to this store at build, so a module that mounts
-    // `mount(view)` (no explicit store) builds against exactly the store it
-    // was handed; `mount(store, view)` swaps the binding (legacy shape).
-    let start_arg = {
-        let store_obj =
-            reactive::make_store_js_object(&mut boa_context, internal.js_context.store.clone());
-        let obj = JsObject::with_object_proto(boa_context.intrinsics());
-        let _ = obj.create_data_property(
-            js_string!("store"),
-            boa_engine::JsValue::from(store_obj),
-            &mut boa_context,
-        );
-        obj
-    };
 
     // Seed the worker-side screen state with the build-time viewport. The
     // `viewportSize$` engine atom — backing source, public derive handle,
     // and the `ResizeSubsystem` that publishes it — is minted and owned by
-    // `TurStdPlugin` (the canonical plugin-facing engine-atom recipe, see
-    // `builtin_plugins/std.rs`), seeded via `PluginRegisterContext::viewport()`.
+    // the standard plugin (the canonical plugin-facing engine-atom recipe,
+    // see the std plugin), seeded via `PluginRegisterContext::viewport()`.
     internal.app_context.borrow_mut().screen.logical_size = viewport;
-
-    let mut core_fns: Vec<FnEntry> = Vec::new();
-    core_fns.extend(crate::core::edgy::bridge::fns());
-    core_fns.extend(mount::fns());
-    let core_module = build_native_module(
-        &mut boa_context,
-        opaque.object().clone().into(),
-        &core_fns,
-        &[],
-    );
-    module_loader.register("tur:core", core_module);
-
-    let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
-    let et_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_element_tree,
-        0,
-        "elementTree",
-    );
-    let ge_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_get_element,
-        1,
-        "getElement",
-    );
-    let rs_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_reactive_stats,
-        0,
-        "reactiveStats",
-    );
-    let fs_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_frame_stats,
-        0,
-        "frameStats",
-    );
-    let hft_fn = bound_native(
-        &mut boa_context,
-        ctx_val.clone(),
-        dev_tool::tur_dev_tool_set_host_frame_timing,
-        1,
-        "setHostFrameTiming",
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("elementTree"),
-        boa_engine::JsValue::from(et_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("getElement"),
-        boa_engine::JsValue::from(ge_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("reactiveStats"),
-        boa_engine::JsValue::from(rs_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("frameStats"),
-        boa_engine::JsValue::from(fs_fn),
-        &mut boa_context,
-    );
-    let _ = dt_obj.create_data_property(
-        js_string!("setHostFrameTiming"),
-        boa_engine::JsValue::from(hft_fn),
-        &mut boa_context,
-    );
-    let _ =
-        boa_context.register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
 
     // Replay the build-time `instance_data` definer (from
     // `TurAppBuilder::instance_data`) — runs on the worker, before any
     // plugin `register`, so plugins see all defined slots as already
     // present (they can `update` / `data` / `with_data` but not define).
     if let Some(definer) = instance_data_definer {
-        let mut data_cx = InstanceDataCx::from_map(internal.js_context.instance_data.clone());
+        let mut data_cx = InstanceDataCx::from_map(internal.instance.instance_data.clone());
         definer(&mut data_cx);
     }
 
-    // One register-phase context for the whole plugin loop (today's
-    // per-plugin contexts were clones of the same handles; the only mutable
-    // state is the collectors, which must accumulate across plugins so
-    // registration order = plugin order is preserved verbatim).
-    // The context is consumed after the loop and its collected state
-    // becomes the instance's registries — the natural freeze: no handle
-    // into either survives the builder, so registration after build is
-    // structurally impossible.
+    // One register-phase context for the whole plugin loop (the only
+    // mutable state is the collectors, which must accumulate across plugins
+    // so registration order = plugin order is preserved verbatim). The
+    // context is consumed after the loop and its collected state becomes
+    // the instance's registries — the natural freeze: no handle into either
+    // survives the builder, so registration after build is structurally
+    // impossible.
     let mut register_cx = PluginRegisterContext {
-        boa: &mut boa_context,
-        loader: module_loader.clone(),
-        js_ctx_value: ctx_val.clone(),
-        js_ctx: internal.js_context.clone(),
+        js_ctx: internal.instance.clone(),
         app: internal.app_context.clone(),
         subsystems: Vec::new(),
         plugin_state: HashMap::new(),
-        event_bus: internal.event_bus.clone(),
         host_exec: host_exec.clone(),
     };
     for plugin in plugins {
         plugin.register(&mut register_cx)?;
     }
     // Consume the register-phase collectors (subsystems + plugin state) —
-    // both installed once; runtime code can read both but there is no
-    // write path left in existence.
+    // both installed once; runtime code can read them but there is no write
+    // path left in existence.
     let parts = register_cx.into_parts();
-    internal.js_context.install_plugin_state(parts.plugin_state);
+    internal.instance.install_plugin_state(parts.plugin_state);
     internal.subsystems = RefCell::new(parts.subsystems);
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
     Ok(WorkerBackend::new(
-        boa_context,
         internal,
-        executor,
-        start_arg,
+        clock,
+        host_tx,
+        host_exec,
+        rpc_via_host_drain,
     ))
+}
+
+/// A never-driven `WorkerExecutor` + `FontLoader` for the register probe
+/// below: the probe registers plugins only — no task outlives the probe
+/// (spawned futures drop unpolled; sleeps pend forever), and no fonts load.
+struct ProbeExecutor;
+
+impl crate::core::scheduler::WorkerExecutor for ProbeExecutor {
+    fn spawn_local(
+        &self,
+        _fut: crate::core::scheduler::LocalFut,
+    ) -> crate::core::scheduler::TaskHandle {
+        // Drop the future unpolled — track_spawn's Dropped path.
+        crate::core::scheduler::track_spawn(Box::pin(async {}), |_f| { /* never driven */ })
+    }
+    fn sleep(&self, _d: std::time::Duration) -> crate::core::scheduler::Sleep {
+        crate::core::scheduler::Sleep(Box::pin(std::future::pending::<()>()))
+    }
+}
+
+/// The probe's font loader: registers nothing (the register phase never
+/// loads fonts — the runtime build owns that).
+struct ProbeFontLoader;
+
+impl crate::core::fonts::FontLoader for ProbeFontLoader {
+    fn load_preset_fonts(&self, _fcx: &mut crate::core::fonts::FontContext) {}
+}
+
+/// Run `plugins`' register phase against a SCRATCH instance context and
+/// answer the rut pkg extensions they pushed — no worker, no realm, no
+/// renderer (subsystems are constructed into the discarded collector and
+/// dropped; nothing is ever driven). The decl-surface generator's plugin
+/// seam: the caller supplies the plugin set (the engine cannot name the
+/// out-of-crate plugins — animation, net, filepicker are separate crates),
+/// the probe supplies the register-phase machinery that is otherwise
+/// buried inside [`build_worker_backend`].
+pub fn probe_register_rut_pkg_exts(
+    plugins: &[Box<dyn Plugin>],
+    capabilities: Capabilities,
+    viewport: (f64, f64),
+) -> Result<Vec<crate::core::rut_runtime::RutPkgExt>, TurError> {
+    let clock: Arc<dyn Clock> = Arc::new(crate::core::clock::StdClock);
+    let (host_tx, _host_rx) = futures::channel::mpsc::unbounded::<crate::core::app::HostMsg>();
+    let (task_tx, _task_rx) =
+        futures::channel::mpsc::unbounded::<crate::core::scheduler::HostTask>();
+    let internal = TurAppInternal::new(
+        FontContext::new(),
+        Arc::new(ProbeFontLoader),
+        clock,
+        capabilities,
+        crate::core::scheduler::WorkerContext::new(Rc::new(ProbeExecutor)),
+        Arc::new(|| {}),
+        host_tx,
+        Arc::from(Vec::<WorkerPoolHandle>::new()),
+    );
+    internal.app_context.borrow_mut().screen.logical_size = viewport;
+    let mut register_cx = PluginRegisterContext {
+        js_ctx: internal.instance.clone(),
+        app: internal.app_context.clone(),
+        subsystems: Vec::new(),
+        plugin_state: HashMap::new(),
+        host_exec: HostExecutor::from_sender(task_tx),
+    };
+    for plugin in plugins {
+        plugin.register(&mut register_cx)?;
+    }
+    Ok(internal.instance.rut_pkg_exts.borrow().clone())
 }
 
 pub struct TurRuntimeBuilder {
     font_loader: Option<Arc<dyn FontLoader>>,
-    clock: Option<Arc<dyn Clock + Send + Sync>>,
+    clock: Option<Arc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
     worker_spawner: Option<Rc<dyn crate::core::scheduler::WorkerSpawner>>,
@@ -904,8 +846,8 @@ impl TurRuntimeBuilder {
     /// Production passes a [`StdClock`] (real wall clock); tests pass a
     /// [`FixedClock`] they advance themselves frame-by-frame.
     ///
-    /// [`StdClock`]: boa_engine::context::time::StdClock
-    /// [`FixedClock`]: boa_engine::context::time::FixedClock
+    /// [`StdClock`]: crate::core::clock::StdClock
+    /// [`FixedClock`]: crate::core::clock::FixedClock
     pub fn clock(mut self, clock: Arc<dyn Clock + Send + Sync>) -> Self {
         self.clock = Some(clock);
         self
@@ -1075,8 +1017,10 @@ impl TurRuntimeBuilder {
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
+        // `load_font_stack` = loader presets + the last-resort platform-
+        // symbol face (⌘ & friends) — see `core::fonts`.
         let mut font_context = FontContext::new();
-        font_loader.load_preset_fonts(&mut font_context);
+        crate::core::fonts::load_font_stack(&mut font_context, font_loader.as_ref());
 
         // Create the engine-internal main-thread channel + root the drain
         // on the main loop. `build()` runs on the main thread, so

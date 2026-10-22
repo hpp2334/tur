@@ -4,14 +4,8 @@
     "type": "module",
     "private": true,
     "scripts": {
-        "build": "rspack build",
-        "dev": "rspack serve",
-        "dev:tunnel": "TUR_TUNNEL=1 concurrently \"rspack serve\" \"cloudflared tunnel run tur-local\"",
-        "typecheck": "tsc --noEmit"
-    },
-    "devDependencies": {
-        "@rspack/cli": "^1.2.0",
-        "@rspack/core": "^1.2.0",
-        "concurrently": "^10.0.3"
+        "build": "node scripts/build.mjs",
+        "dev": "node scripts/dev.mjs",
+        "dev:tunnel": "node scripts/dev.mjs --tunnel"
     }
 }

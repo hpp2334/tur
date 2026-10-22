@@ -1,0 +1,534 @@
+// explorer — the explorer view (breadcrumb, stats, the directory listing
+// with per-row taps, a selection footer), the net journeys (the repo
+// meta fetch + the directory listing), and the parse/format helpers.
+//
+// Host surface: `net_request` rides the net kit's wrapper
+// (`tur_net_kit::net_request` — the cross-package async-fn gap closed at
+// the 29bd115 rut bump). At the 0eea7e95 pin the per-file binding law is
+// the rule: THIS file's own `use tur_net_kit::{ net_request }` is what
+// binds the name — no root anchor needed (the old `use
+// tur_host::net::{ net_request }` anchor is gone).
+//
+// The journeys take their handles as PARAMETERS (the `Gh` bundle of
+// sources) and the launching mutation's ctx rides along as a plain
+// value; the tap mutations capture the bundle. Degradation: an empty
+// response body (the net row completes empty on transport failure)
+// becomes a visible error banner; a JSON error payload (404 / rate
+// limit) surfaces the API's own message (the scanner lives in json.rut).
+
+use futures::{ launch_future, sleep };
+use tur_file_kit::{ save_file };
+use tur_kit::control_flow::control::{ Condition, Each, Switch };
+use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ ListHandle, View, list_new, str_parse_f64 };
+use tur_kit::image::{ Image };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ DeriveCtx, MutationCtx, Readable, derive, mutate, sv };
+use tur_kit::scroll::{ ScrollView };
+use tur_kit::text::core::{ Text };
+use tur_net_kit::{ net_request };
+
+pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
+    // Back: up one directory, or back to the landing when at the root.
+    let b_back = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let cur = ctx.get<str>(s.path);
+        if (cur == "") {
+            go_landing(ctx, s);
+            return;
+        }
+        let n = cur.len();
+        let mut sep: i32 = -1;
+        let mut k = 0;
+        while (k < n) {
+            if (cur.code_at(k) == theme::C_SLASH) {
+                sep = k;
+            }
+            k = k + 1;
+        }
+        if (sep < 0) {
+            ctx.set<str>(s.path, "");
+        } else {
+            ctx.set<str>(s.path, cur.slice(0, sep));
+        }
+        ctx.set<str>(s.selected, "");
+        ctx.set<str>(s.sel_file, "");
+        launch_future(fetch_dir(ctx, s));
+    });
+    // The crumb tap: back to the repo ROOT listing (the boa
+    // navigateToRoot); the handles bind at the launch site.
+    let b_root = mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<str>(s.path, "");
+        ctx.set<str>(s.selected, "");
+        ctx.set<str>(s.sel_file, "");
+        launch_future(fetch_dir(ctx, s));
+    });
+    // Re-fetch the current directory.
+    let b_refresh = mutate(fn (ctx: MutationCtx, _e: nil) {
+        launch_future(fetch_dir(ctx, s));
+    });
+    // Download the selected file: fetch its raw bytes and hand them to the
+    // platform save lane. No-op when nothing is selected (the subtle pill
+    // state); a missing host capability surfaces through the error banner.
+    // The boa re-entry guard: clicks while a journey (or its flash) is
+    // active are ignored.
+    let b_download = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let fname = ctx.get<str>(s.sel_file);
+        if (fname == "") {
+            return;
+        }
+        if (ctx.get<str>(s.dl) != "idle") {
+            return;
+        }
+        launch_future(download_file(ctx, s, fname));
+    });
+    // The download pill's status machine (the boa DownloadButton): the
+    // pill's FACE swaps on the dl source — "Downloading…" while the
+    // journey rides, "Saved" / "Failed" flashes, the idle pair (accent
+    // when a FILE is selected, subtle otherwise). One pad, four faces;
+    // the key rides each face's TEXT (tests read the label through it,
+    // taps still hit the pad beneath).
+    let has_sel: Readable<bool> = derive<bool>(fn (ctx: DeriveCtx) -> bool {
+        return ctx.get<str>(s.sel_file) != "";
+    });
+    let dl_idle = Condition(has_sel)
+        .then(dl_face("Download", theme::ACCENT, theme::ACCENT_FG))
+        .else_branch(dl_face("Download", theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+        .build();
+    let download = MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_download)
+                .child(
+                    Switch()
+                        .value(s.dl)
+                        .cases("loading", dl_face("Downloading…", theme::ACCENT_SOFT, theme::ACCENT))
+                        .cases("done", dl_face("Saved", theme::SUCCESS, theme::ACCENT_FG))
+                        .cases("error", dl_face("Failed", theme::DANGER_SOFT, theme::DANGER))
+                        .fallback(dl_idle)
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+    let list = ScrollView()
+        .axis(Axis::Vertical)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Stretch)
+                .main_axis_size(MainAxisSize::Min)
+                .child(Each(s.files).item_builder(fn (i: u64, f: str) -> View {
+                    return item_file(i, f, s, ico_folder, ico_file);
+                }).build())
+                .build(),
+        )
+        .build();
+    let loading = Container()
+        .alignment(Align::Center)
+        .child(Text().text(sv("Loading…")).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-loading").build())
+        .build();
+    let empty = Container()
+        .alignment(Align::Center)
+        .padding(40.0)
+        .child(
+            Column()
+                .cross_alignment(CrossAlign::Center)
+                .main_axis_size(MainAxisSize::Min)
+                .child(Text().text(sv("This folder is empty")).font_size(14.0).color(theme::TEXT).build())
+                .child(SizedBox(0.0, 6.0).build())
+                .child(Text().text(sv("No files to show at this path.")).font_size(12.0).color(theme::TEXT_SUBTLE).build())
+                .build(),
+        )
+        .build();
+    return Column()
+        .cross_alignment(CrossAlign::Stretch)
+        .child(
+            Row()
+                .cross_alignment(CrossAlign::Center)
+                .child(
+                    PointerInteract()
+                        .on_click(b_back)
+                        .query_key("gh-back")
+                        .child(
+                            Container()
+                                .padding(9.0)
+                                .radius(sv(8.0f64))
+                                .color(sv(theme::SUBTLE_BUTTON))
+                                .child(Text().text(sv("Back")).font_size(13.0).color(theme::SUBTLE_BUTTON_FG).build())
+                                .build(),
+                        )
+                        .build(),
+                )
+                .child(SizedBox(10.0, 0.0).build())
+                // The repo crumb (the boa RepoCrumb): a clickable chip that
+                // navigates back to the repo root. 13px accent, padding 4 —
+                // no invented weight. The crumb keeps the PARSED draft
+                // identity (the crumb source is never overwritten by the
+                // API's full_name). The key rides the TEXT (the tests read
+                // the label through it; taps still hit the pad beneath).
+                .child(
+                    MouseRegion()
+                        .cursor(Cursor::Pointer)
+                        .child(
+                            PointerInteract()
+                                .on_click(b_root)
+                                .child(
+                                    Container().padding(4.0).child(
+                                        Text().text(s.repo_full).font_size(13.0).color(theme::ACCENT).query_key("gh-crumb").build(),
+                                    ).build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                )
+                .child(SizedBox(6.0, 0.0).build())
+                .child(Text().text(s.path).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-path").build())
+                .build(),
+        )
+        .child(SizedBox(0.0, 4.0).build())
+        .child(Text().text(s.desc).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-desc").build())
+        .child(SizedBox(0.0, 8.0).build())
+        .child(ui::error_banner(s))
+        .child(SizedBox(0.0, 8.0).build())
+        .child(
+            Row()
+                .cross_alignment(CrossAlign::Center)
+                .child(ui::pill("gh-refresh", "Refresh", b_refresh, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+                .child(SizedBox(10.0, 0.0).build())
+                .child(download)
+                .child(SizedBox(10.0, 0.0).build())
+                .child(Text().text(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build())
+                .build(),
+        )
+        .child(SizedBox(0.0, 8.0).build())
+        .child(
+            Expanded()
+                .flex(sv(1.0f64))
+                // The file list (the boa fileListView): busy → "Loading…" in
+                // the list area; else empty → the empty state; else the list.
+                .child(
+                    Condition(s.busy)
+                        .then(loading)
+                        .else_branch(
+                            Condition(s.is_empty).then(empty).else_branch(list).build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .child(
+            Container()
+                .padding(6.0)
+                .child(Text().text(s.selected).font_size(12.0).color(theme::TEXT_SUBTLE).query_key("gh-selected").build())
+                .build(),
+        )
+        .build();
+}
+
+// One listing row: folder/file icon + name + size. The row tap captures
+// the row string + the bundle (a directory descends — a fresh contents fetch;
+// a file fills the selection footer + the download rail's raw name).
+fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> View {
+    let is_dir = s.starts_with(0, "d|");
+    let n = s.len();
+    let mut name = "";
+    let mut size_txt = "";
+    if (is_dir) {
+        name = s.slice(2, n);
+    } else {
+        let mut k = 2;
+        while (k < n) {
+            if (s.code_at(k) == theme::C_PIPE) {
+                break;
+            }
+            k = k + 1;
+        }
+        name = s.slice(2, k);
+        size_txt = explorer::fmt_size(s.slice(k + 1, n));
+    }
+    let mut icon = ico_folder;
+    if (!is_dir) {
+        icon = ico_file;
+    }
+    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
+        if (s.starts_with(0, "d|")) {
+            let dname = s.slice(2, s.len());
+            let cur = ctx.get<str>(g.path);
+            let mut next = dname;
+            if (cur != "") {
+                next = f"{cur}/{dname}";
+            }
+            ctx.set<str>(g.path, next);
+            ctx.set<str>(g.selected, "");
+            ctx.set<str>(g.sel_file, "");
+            launch_future(fetch_dir(ctx, g));
+            return;
+        }
+        let rn = s.len();
+        let mut k = 2;
+        while (k < rn) {
+            if (s.code_at(k) == theme::C_PIPE) {
+                break;
+            }
+            k = k + 1;
+        }
+        let fname = s.slice(2, k);
+        let size = explorer::fmt_size(s.slice(k + 1, rn));
+        ctx.set<str>(g.selected, f"{fname} — {size}");
+        ctx.set<str>(g.sel_file, fname);
+    });
+    let row = Row()
+        .cross_alignment(CrossAlign::Center)
+        .child(Image(icon).width(17.0).height(17.0).query_key("gh-row-icon").build())
+        .child(SizedBox(10.0, 0.0).build())
+        .child(Expanded().flex(sv(1.0f64)).child(Text().text(sv(name)).font_size(13.0).color(theme::TEXT).build()).build())
+        .child(SizedBox(10.0, 0.0).build())
+        .child(Text().text(sv(size_txt)).font_size(11.0).color(theme::TEXT_SUBTLE).build())
+        .build();
+    let card = Container()
+        .padding(9.0)
+        .radius(sv(8.0f64))
+        .color(sv(theme::PANEL))
+        .border(theme::BORDER, 1.0, BorderPosition::Inside)
+        .child(row)
+        .build();
+    return PointerInteract()
+        .on_click(b_tap)
+        .query_key("gh-row")
+        .child(card)
+        .build();
+}
+
+// ---- actions ---------------------------------------------------------------
+
+pub fn go_landing(ctx: MutationCtx, s: state::Gh) {
+    ctx.set<str>(s.mode, "landing");
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.desc, "");
+    ctx.set<str>(s.stats, "");
+    ctx.set<str>(s.path, "");
+    ctx.set<str>(s.selected, "");
+    ctx.set<str>(s.sel_file, "");
+    ctx.set<bool>(s.is_empty, false);
+    ctx.set<bool>(s.busy, false);
+}
+
+// The repo-meta journey: land straight on the explorer chrome with the
+// list area showing "Loading…" (boa's shape — no full-pane loading), GET
+// the repo, surface its error payload or seed the explorer and fetch the
+// root listing. The crumb keeps the PARSED draft identity (boa's repo$) —
+// the API's full_name never overwrites it.
+pub async fn open_repo(ctx: MutationCtx, s: state::Gh) -> str {
+    ctx.set<bool>(s.busy, true);
+    let full = ctx.get<str>(s.repo_full);
+    let url = f"https://api.github.com/repos/{full}";
+    let body = await net_request(url, "GET");
+    if (body.len() == 0) {
+        ctx.set<bool>(s.busy, false);
+        fail(ctx, s, "Network request failed — the browser may be offline.", false);
+        return "";
+    }
+    let meta = body.decode();
+    let name = json::json_get_str(meta, "full_name");
+    if (name == "") {
+        ctx.set<bool>(s.busy, false);
+        let msg = json::json_get_str(meta, "message");
+        if (msg == "") {
+            fail(ctx, s, "Unexpected response from the GitHub API.", false);
+        } else {
+            fail(ctx, s, f"{msg} — check the name (owner/repo).", false);
+        }
+        return "";
+    }
+    ctx.set<str>(s.desc, json::json_get_str(meta, "description"));
+    ctx.set<str>(s.stats, fmt_stats(meta));
+    ctx.set<str>(s.path, "");
+    ctx.set<str>(s.selected, "");
+    ctx.set<str>(s.sel_file, "");
+    await fetch_dir(ctx, s);
+    return "";
+}
+
+// The directory journey: GET .../contents[/path], fill the display list
+// (dirs first), flip the empty flag, settle on the explorer. The list
+// area shows "Loading…" while the fetch rides (the busy source).
+async fn fetch_dir(ctx: MutationCtx, s: state::Gh) -> str {
+    ctx.set<str>(s.mode, "explorer");
+    ctx.set<bool>(s.busy, true);
+    let full = ctx.get<str>(s.repo_full);
+    let dir = ctx.get<str>(s.path);
+    let mut url = f"https://api.github.com/repos/{full}/contents";
+    if (dir != "") {
+        url = f"https://api.github.com/repos/{full}/contents/{dir}";
+    }
+    let body = await net_request(url, "GET");
+    if (body.len() == 0) {
+        ctx.set<bool>(s.busy, false);
+        fail(ctx, s, "Network request failed — the browser may be offline.", true);
+        return "";
+    }
+    let text = body.decode();
+    let fresh = list_new();
+    let ndirs = json::json_contents(text, fresh, true);
+    let nfiles = json::json_contents(text, fresh, false);
+    if (ndirs < 0 || nfiles < 0) {
+        ctx.set<bool>(s.busy, false);
+        fail(ctx, s, "Unexpected file-list response from the GitHub API.", true);
+        return "";
+    }
+    ctx.set<opaque>(s.files, fresh.raw());
+    ctx.set<bool>(s.is_empty, ndirs + nfiles == 0);
+    ctx.set<bool>(s.busy, false);
+    ctx.set<str>(s.mode, "explorer");
+    return "";
+}
+
+// The failure rail: the message lands on the banner; `explorer` keeps the
+// listing visible under it, anything else falls back to the landing.
+fn fail(ctx: MutationCtx, s: state::Gh, msg: str, stay: bool) {
+    ctx.set<str>(s.err, msg);
+    ctx.set<bool>(s.err_has, true);
+    if (stay) {
+        ctx.set<str>(s.mode, "explorer");
+    } else {
+        ctx.set<str>(s.mode, "landing");
+    }
+}
+
+// The download journey (the boa doDownload twin): fetch the selected
+// file's raw bytes (`HEAD` resolves the default branch — no version
+// tracking needed; raw.githubusercontent.com is CORS-open) and hand them
+// to the platform save lane. The dl source drives the pill's status
+// machine: "loading" while the fetch rides, "done" once the bytes land
+// (the "Saved" flash renders BEFORE the host download's `<a>.click()`
+// stalls the frame loop — the boa 500ms defer), "error" on failure, and
+// the idle reset after the boa STATUS_FLASH_MS confirmation window. An
+// empty body is the transport failure banner; `save_file` answering false
+// means the host carries no save capability (the headless/test
+// degradation).
+async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.dl, "loading");
+    let full = ctx.get<str>(s.repo_full);
+    let dir = ctx.get<str>(s.path);
+    let mut url = f"https://raw.githubusercontent.com/{full}/HEAD/{fname}";
+    if (dir != "") {
+        url = f"https://raw.githubusercontent.com/{full}/HEAD/{dir}/{fname}";
+    }
+    let body = await net_request(url, "GET");
+    if (body.len() == 0) {
+        fail(ctx, s, "Download failed — the raw host may be offline.", true);
+        ctx.set<str>(s.dl, "error");
+        await sleep(1800);
+        ctx.set<str>(s.dl, "idle");
+        return "";
+    }
+    ctx.set<str>(s.dl, "done");
+    await sleep(500);
+    let ok = await save_file(fname, body);
+    if (!ok) {
+        fail(ctx, s, "Save not available in this host.", true);
+        ctx.set<str>(s.dl, "error");
+    }
+    await sleep(1800);
+    ctx.set<str>(s.dl, "idle");
+    return "";
+}
+
+// One download-pill face (the boa dlShell minus the leading icon — a
+// coloured pill with a label). The query key rides the TEXT so the tests
+// read the live label.
+fn dl_face(label: str, bg: u64, fg: u64) -> View {
+    return Container()
+        .padding(9.0)
+        .radius(sv(8.0f64))
+        .color(sv(bg))
+        .child(Text().text(sv(label)).font_size(13.0).color(fg).query_key("gh-download").build())
+        .build();
+}
+
+// ---- helpers ---------------------------------------------------------------
+
+// "owner/repo" out of a draft; "" when the shape is wrong (a `.git`
+// suffix is stripped).
+pub fn parse_repo(draft: str) -> str {
+    let n = draft.len();
+    let mut a = 0;
+    while (a < n && draft.code_at(a) == theme::C_SPACE) {
+        a = a + 1;
+    }
+    let mut b = n;
+    while (b > a && draft.code_at(b - 1) == theme::C_SPACE) {
+        b = b - 1;
+    }
+    let t = draft.slice(a, b);
+    let m = t.len();
+    let mut sep: i32 = -1;
+    let mut k = 0;
+    while (k < m) {
+        if (t.code_at(k) == theme::C_SLASH) {
+            sep = k;
+            break;
+        }
+        k = k + 1;
+    }
+    if (sep <= 0 || sep >= m - 1) {
+        return "";
+    }
+    let owner = t.slice(0, sep);
+    let mut repo = t.slice(sep + 1, m);
+    let rl = repo.len();
+    if (rl > 4 && repo.starts_with(rl - 4, ".git")) {
+        repo = repo.slice(0, rl - 4);
+    }
+    return f"{owner}/{repo}";
+}
+
+// "rust · stars 12.3k · forks 4.5k · issues 123" — the language folded in
+// when present.
+fn fmt_stats(meta: str) -> str {
+    let lang = json::json_get_str(meta, "language");
+    let stars = json::json_get_str(meta, "stargazers_count");
+    let forks = json::json_get_str(meta, "forks_count");
+    let issues = json::json_get_str(meta, "open_issues_count");
+    let mut out = "";
+    if (lang != "") {
+        out = f"{out}{lang} · ";
+    }
+    return f"{out}stars {fmt_count(stars)} · forks {fmt_count(forks)} · issues {fmt_count(issues)}";
+}
+
+// 12345 → "12.3k"; 123 → "123".
+fn fmt_count(s: str) -> str {
+    let v: f64 = str_parse_f64(s);
+    if (v >= 1000.0) {
+        let d = ((v / 1000.0) * 10.0) as u64;
+        return f"{d / 10}.{d % 10}k";
+    }
+    return f"{v as u64}";
+}
+
+// 2739 → "2.7 KB"; 12 → "12 B". (pub + qualified call sites: the bare
+// spelling mis-resolves in this module — the interning family; the
+// checker's own hint spells `explorer::fmt_size`.)
+pub fn fmt_size(s: str) -> str {
+    if (s == "") {
+        return "—";
+    }
+    let v: f64 = str_parse_f64(s);
+    if (v < 1024.0) {
+        return f"{v as u64} B";
+    }
+    let mut x: f64 = v / 1024.0;
+    let mut unit = "KB";
+    if (v >= 1048576.0) {
+        x = v / 1048576.0;
+        unit = "MB";
+    }
+    let d = (x * 10.0) as u64;
+    return f"{d / 10}.{d % 10} {unit}";
+}

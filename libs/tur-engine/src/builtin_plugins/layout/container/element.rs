@@ -2,12 +2,9 @@ use std::rc::Rc;
 
 use crate::core::layout::{Alignment, BorderPosition, ClipBehavior};
 use crate::core::render::brush::{Brush, Color};
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -31,12 +28,16 @@ pub struct ContainerView {
     pub alignment: Option<Val<Alignment>>,
     /// shadowOffset is `[x, y]` — parsed at factory time (not reactive).
     pub shadow_offset: Option<(f64, f64)>,
+    /// Reactive shadow offset-y (the jigsaw drag states animate `[0,4] →
+    /// [0,12]`); when bound it wins over the static tuple's y. The x stays
+    /// factory-static (no consumer animates it).
+    pub shadow_dy: Option<Val<f64>>,
     pub query_key: Option<Vec<String>>,
     pub children: Vec<Rc<dyn View>>,
 }
 
 impl View for ContainerView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -44,13 +45,12 @@ impl View for ContainerView {
                 view: self.clone(),
                 painting: ContainerPainting::default(),
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -68,6 +68,7 @@ impl View for ContainerView {
 pub struct ContainerPainting {
     pub(crate) shadow_blur: Option<f64>,
     pub(crate) shadow_color: Option<Color>,
+    pub(crate) shadow_dy: Option<f64>,
     pub(crate) color: Option<Brush>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: Option<f64>,
@@ -102,7 +103,9 @@ impl ContainerElement {
         static_f64(&self.view.border_width)
     }
     pub fn border_radius(&self) -> Option<f64> {
-        static_f64(&self.view.border_radius)
+        // The reactive twin (`box_radius_bound`) resolves through layout —
+        // painting carries the live value (the `color()` pattern).
+        static_f64(&self.view.border_radius).or(self.painting.border_radius)
     }
     pub fn shadow_blur(&self) -> Option<f64> {
         static_f64(&self.view.shadow_blur)
@@ -127,6 +130,17 @@ impl ContainerElement {
     }
     pub fn shadow_offset(&self) -> Option<(f64, f64)> {
         self.view.shadow_offset
+    }
+    /// Paint accessors (the `OpacityElement::painted_value` pattern) — the
+    /// reactive shadow channels as last resolved by layout.
+    pub fn painted_shadow_color(&self) -> Option<Color> {
+        self.painting.shadow_color
+    }
+    pub fn painted_shadow_blur(&self) -> Option<f64> {
+        self.painting.shadow_blur
+    }
+    pub fn painted_shadow_dy(&self) -> Option<f64> {
+        self.painting.shadow_dy
     }
     pub fn border_position(&self) -> BorderPosition {
         match &self.view.border_position {
@@ -175,6 +189,9 @@ impl ElementSubscribe for ContainerElement {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.shadow_blur.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.shadow_dy.as_ref() {
             cx.subscribe_val(v);
         }
     }
@@ -226,33 +243,5 @@ impl ElementTrace for ContainerElement {
             p.push(("borderPosition", TraceValue::Str(format!("{v:?}"))));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl ContainerView {
-    /// Build a `ContainerView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        ContainerView {
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            padding: p.val::<f64>("padding"),
-            color: p.val::<Brush>("color"),
-            border_color: p.val::<Color>("borderColor"),
-            border_width: p.val::<f64>("borderWidth"),
-            border_radius: p.val::<f64>("borderRadius"),
-            border_position: p.val::<BorderPosition>("borderPosition"),
-            clip_behavior: p.val::<ClipBehavior>("clipBehavior"),
-            shadow_color: p.val::<Color>("shadowColor"),
-            shadow_blur: p.val::<f64>("shadowBlur"),
-            alignment: p.val::<Alignment>("alignment"),
-            shadow_offset: p.offset("shadowOffset"),
-            query_key: p.query_key("queryKey"),
-            children: p.children("children"),
-        }
     }
 }

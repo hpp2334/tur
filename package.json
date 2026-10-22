@@ -1,0 +1,13 @@
+{
+    "name": "tur",
+    "private": true,
+    "scripts": {
+        "build": "pnpm -r --sort run build",
+        "lint": "biome lint demo/website package.json biome.json",
+        "format": "biome format --write demo/website package.json biome.json",
+        "check": "biome check demo/website package.json biome.json"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.4.15"
+    }
+}

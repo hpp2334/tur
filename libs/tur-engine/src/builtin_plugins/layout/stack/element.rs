@@ -1,12 +1,9 @@
 use std::rc::Rc;
 
 use crate::core::layout::{Alignment, Size, StackFit};
-use boa_engine::Context;
-use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -23,7 +20,7 @@ pub struct StackView {
 }
 
 impl View for StackView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -32,13 +29,12 @@ impl View for StackView {
                 computed_size: None,
                 warned_expand_unbounded: false,
             }),
-            boa,
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id.into());
+            let _child_id = child_spec.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -95,22 +91,5 @@ impl ElementTrace for StackElement {
             p.push(("alignment", TraceValue::Str(format!("{v:?}"))));
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl StackView {
-    /// Build a `StackView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        StackView {
-            fit: p.val::<StackFit>("fit"),
-            alignment: p.val::<Alignment>("alignment"),
-            children: p.children("children"),
-            query_key: p.query_key("queryKey"),
-        }
     }
 }

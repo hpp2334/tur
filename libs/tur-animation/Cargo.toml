@@ -1,6 +1,6 @@
 [package]
 name = "tur-animation"
-description = "Animation subsystem for tur (AnimationController + Opacity/Transform elements + AnimatedContainer/Opacity/Positioned widgets via tur:animation)"
+description = "Animation subsystem for tur (AnimationController + Opacity/Transform effects + tween/curve helpers on the tur host pkg)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,8 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true }
-boa_engine = { workspace = true }
-boa_gc = { workspace = true }
+rut-core = { workspace = true }
+rut-driver = { workspace = true }
+rut-vm = { workspace = true }
 tracing = { workspace = true }
 vello_common = { workspace = true }

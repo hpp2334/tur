@@ -1,0 +1,4 @@
+// gesture — the gesture families' namespace (decls only).
+
+pub mod pointer;
+pub mod focus;

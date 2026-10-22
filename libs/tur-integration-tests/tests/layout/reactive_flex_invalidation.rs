@@ -37,9 +37,12 @@ fn reactive_flex_change_relays_out_children() {
         );
     }
 
-    // Flip the flex to 3:1 via a reactive source set — no gesture, so no
-    // `mark_dirty` is called on any descendant. Only the Row is dirtied.
-    app.eval_js("globalThis.__setFlex(3, 1)");
+    // Flip the flex to 3:1 via reactive source sets — no gesture, so no
+    // `mark_dirty` is called on any descendant. The pair mints in order
+    // (a then b); the probes address them by the start answer + offset.
+    let flex_a = app.rut_start_answer();
+    app.call_rut_entry("set_flex_a", flex_a, 3.0).unwrap();
+    app.call_rut_entry("set_flex_b", flex_a + 1, 1.0).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     {

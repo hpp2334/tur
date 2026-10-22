@@ -216,8 +216,18 @@ impl GestureSubsystem {
             cx.focus_manager.borrow_mut().clear_focus();
         }
 
+        // Click eligibility: the release position must still hit some
+        // element of the DOWN path. The press-and-release PAIR is the
+        // click's subject — keying on the down's deepest leaf identity
+        // would swallow the click whenever the pressed subtree rebuilt
+        // between down and up (a hover swap, async content, an overlay)
+        // and destroy the leaf; any surviving common element (the
+        // `PointerInteract` wrapper, an ancestor) keeps the click alive.
         let click_eligible = match down_target {
-            Some(id) => HitTest::new(&cx.element_tree.borrow()).contains(position, id),
+            Some(_) => {
+                let up_path = HitTest::new(&cx.element_tree.borrow()).path(position);
+                down_path.iter().any(|id| up_path.contains(id))
+            }
             None => false,
         };
 
@@ -229,8 +239,8 @@ impl GestureSubsystem {
             // platform event, so it is produced here rather than carried in
             // from the embedder.
             match button {
-                MouseButton::Left => dispatch_click(cx, position, device),
-                MouseButton::Right => dispatch_context_menu(cx, position, device),
+                MouseButton::Left => dispatch_click(cx, position, device, &down_path),
+                MouseButton::Right => dispatch_context_menu(cx, position, device, &down_path),
                 _ => {}
             }
         }
@@ -477,13 +487,25 @@ impl GestureSubsystem {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /// Dispatch `ComposedGestureEvent::Click` to every `PointerInteractElement`
-/// in the hit-path, stopping at the first click-opaque element.
-fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: PointerDeviceKind) {
+/// in the hit-path that ALSO sat under the pointer-down (the
+/// press-and-release pair), stopping at the first click-opaque element.
+/// The down-path intersection is the click's subject law: a subtree that
+/// appeared after the press (a scrim, an overlay) is not part of the
+/// click even when the release lands on it — it was never pressed.
+fn dispatch_click(
+    cx: &mut SubsystemFlushContext<'_>,
+    position: Offset,
+    device: PointerDeviceKind,
+    down_path: &[ElementNodeId],
+) {
     // Clone the handle out (cheap Rc bump) so the tree reference doesn't
     // borrow `cx` across the `&mut cx` dispatch calls below.
     let tree = cx.element_tree.clone();
     let hit_path = HitTest::new(&tree.borrow()).path(position);
     for node_id in &hit_path {
+        if !down_path.contains(node_id) {
+            continue;
+        }
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(
             cx,
@@ -505,17 +527,22 @@ fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: 
 }
 
 /// Dispatch `ComposedGestureEvent::ContextMenu` to every element in the
-/// hit-path (mirrors how the web `contextmenu` event bubbles).
+/// hit-path that also sat under the pointer-down (mirrors how the web
+/// `contextmenu` event bubbles — but only over the press site's chain).
 fn dispatch_context_menu(
     cx: &mut SubsystemFlushContext<'_>,
     position: Offset,
     device: PointerDeviceKind,
+    down_path: &[ElementNodeId],
 ) {
     // Clone the handle out (cheap Rc bump) — same borrow discipline as
     // `dispatch_click`.
     let tree = cx.element_tree.clone();
     let hit_path = HitTest::new(&tree.borrow()).path(position);
     for node_id in &hit_path {
+        if !down_path.contains(node_id) {
+            continue;
+        }
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(
             cx,

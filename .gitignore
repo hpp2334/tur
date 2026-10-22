@@ -4,7 +4,7 @@
 # Cargo.lock is committed for reproducible CI
 *.rs.bk
 
-# wasm-pack (website wasm cdylib — built by the dev server's WasmBuildPlugin)
+# wasm-pack (website wasm cdylib — built by demo/website/scripts/{build,dev}.mjs)
 demo/website/native/pkg/
 demo/website/native/target/
 
@@ -12,12 +12,6 @@ demo/website/native/target/
 node_modules/
 dist/
 *.tsbuildinfo
-
-# Generated TypeScript
-demo/playground-view/src/cases/generated.ts
-
-# Build output
-js/packages/tur-rspack-plugin/dist/
 
 # Test fixtures
 scripts/tests/fixtures/

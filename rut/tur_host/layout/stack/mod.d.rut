@@ -1,0 +1,8 @@
+// tur_host/layout/stack — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn stack_new() -> opaque;
+pub host fn stack_align(p1: opaque, p2: u64);
+pub host fn stack_fit(p1: opaque, p2: u64);
+pub host fn stack_child(p1: opaque, p2: opaque);
+pub host fn stack_qkey(p1: opaque, p2: str);
+pub host fn stack_build(p1: opaque) -> opaque;

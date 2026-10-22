@@ -1,0 +1,78 @@
+// github-viewer: browse a public GitHub repo — landing form ("owner/repo"
+// + quick-pick chips), a loading state, and an explorer (breadcrumb,
+// stats, the directory listing with per-row taps, a selection footer).
+// Multi-file port of the boa TSX original (a 6-file case: index/landing/
+// explorer/state/theme/ui): the root keeps the boot + the mode Switch;
+// the subtrees carry the state bundle (state.rut), the palette + the
+// codepoints (theme.rut), the shared chrome (ui.rut), the landing
+// (landing.rut), the explorer + the net journeys (explorer.rut), and
+// the JSON scanner (json.rut).
+//
+// Host surface: the async journeys ride rut's own async — they take
+// their handles as PARAMETERS (the `Gh` bundle of sources) and the
+// launching mutation's ctx rides along as a plain value; the tap
+// mutations capture the bundle. GitHub's REST API is CORS-friendly, so
+// the wasm build fetches it directly. Degradation: an empty response
+// body (the net row completes empty on transport failure) becomes a
+// visible error banner; a JSON error payload (404 / rate limit) surfaces
+// the API's own message (see explorer.rut + json.rut).
+//
+// Rust-boundary notes for future editors: unannotated float locals are
+// `f32` by the default-width rule (annotate `: f64` when handing them to
+// rows), and f-string braces take no nested string literals (bind a
+// local first).
+//
+// (No root `tur_host` anchor is needed at the 0eea7e95 pin: the per-file
+// binding law is now the rule — explorer's own `use tur_net_kit::{ net_request }`
+// binds it in explorer.rut, and the root's use never fed a child's
+// file. The old `use tur_host::net::{ net_request }` anchor is gone.)
+mod state;
+mod theme;
+mod ui;
+mod landing;
+mod explorer;
+mod json;
+
+use tur_kit::control_flow::control::{ Switch };
+use tur_kit::flags::{ CrossAlign };
+use tur_kit::handles::{ mount, text_ctrl, undo_ctrl };
+use tur_kit::image::{ image_resource_svg };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column, Expanded };
+use tur_kit::reactive::{ MutationCtx, mutate, sv };
+
+entry fn start() -> u64 {
+    let s = state::seed();
+    let ctrl = text_ctrl();
+    // The boa landing boots with the draft pre-filled.
+    ctrl.set_text("facebook/react");
+    let undo = undo_ctrl();
+    let gh = image_resource_svg(theme::SVG_GITHUB);
+    // The listing row icons (minted once; the rows render them at 17×17).
+    let ico_folder = image_resource_svg(theme::SVG_FOLDER);
+    let ico_file = image_resource_svg(theme::SVG_FILE);
+
+    // The quick-pick chips: pre-fill the field and open directly (each
+    // captures its literal name — no id rails).
+    let b_sug0 = landing::sug_mutation(ctrl, s, "facebook/react");
+    let b_sug1 = landing::sug_mutation(ctrl, s, "tailwindlabs/tailwindcss");
+    let b_sug2 = landing::sug_mutation(ctrl, s, "vuejs/core");
+    // The Browse tap: read the draft, validate the owner/name shape, launch.
+    let b_browse = mutate(fn (ctx: MutationCtx, _e: nil) {
+        landing::open_draft(ctx, s, ctrl.text());
+    });
+
+    let body = Switch()
+        .value(s.mode)
+        .query_key("gh-body")
+        .cases("landing", landing::landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2))
+        .cases("explorer", explorer::explorer_view(s, ico_folder, ico_file))
+        .build();
+    let page = Container().color(sv(theme::PAGE_BG)).padding(22.0).child(body).build();
+    let root = Column()
+        .cross_alignment(CrossAlign::Stretch)
+        .child(Expanded().flex(sv(1.0f64)).child(page).build())
+        .build();
+    mount(root);
+    return s.mode.atom_id();
+}

@@ -1,0 +1,140 @@
+// gallery — the tile gallery: the 27-tile grid under one (aspect,
+// max_cross) mode, the tile + chip faces, and the chip-tap mutations
+// (the palette lives in color.rut).
+
+use tur_kit::flags::{ Cursor };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ View };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::grid_table::{ Grid };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, sv };
+use tur_kit::text::core::{ Text };
+
+// The 27-tile gallery grid under one (aspect, max_cross) mode. The tile
+// calls are UNROLLED literals (jigsaw's piece() law): the VM binds a
+// closure's capture cell per CALL SITE, so a single call inside the loop
+// would share one cell across every pad (each tap answering with the
+// last index) — a literal per tile gives each pad its own index.
+pub fn gallery_grid(aspect: f64, max_cross: f64, rings: [Source<u64>], sel: Readable<f64>) -> View {
+    let mut grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
+    grid.child(tile([0.0], rings, sel));
+    grid.child(tile([1.0], rings, sel));
+    grid.child(tile([2.0], rings, sel));
+    grid.child(tile([3.0], rings, sel));
+    grid.child(tile([4.0], rings, sel));
+    grid.child(tile([5.0], rings, sel));
+    grid.child(tile([6.0], rings, sel));
+    grid.child(tile([7.0], rings, sel));
+    grid.child(tile([8.0], rings, sel));
+    grid.child(tile([9.0], rings, sel));
+    grid.child(tile([10.0], rings, sel));
+    grid.child(tile([11.0], rings, sel));
+    grid.child(tile([12.0], rings, sel));
+    grid.child(tile([13.0], rings, sel));
+    grid.child(tile([14.0], rings, sel));
+    grid.child(tile([15.0], rings, sel));
+    grid.child(tile([16.0], rings, sel));
+    grid.child(tile([17.0], rings, sel));
+    grid.child(tile([18.0], rings, sel));
+    grid.child(tile([19.0], rings, sel));
+    grid.child(tile([20.0], rings, sel));
+    grid.child(tile([21.0], rings, sel));
+    grid.child(tile([22.0], rings, sel));
+    grid.child(tile([23.0], rings, sel));
+    grid.child(tile([24.0], rings, sel));
+    grid.child(tile([25.0], rings, sel));
+    grid.child(tile([26.0], rings, sel));
+    return grid.build();
+}
+
+// One tile: the hue face with a top-left label (boa's tile — the Text is
+// an alignment-less Container child), wrapped in the selection ring (the
+// tile's own brush source — white when selected, cleared otherwise). The
+// tap captures the ring array + the selection source. The index rides the
+// one-slot array param — each call site passes a DISTINCT literal (the
+// capture law: the VM binds a closure's cell per call site, so a loop
+// would point every pad at the last iteration's cell).
+fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
+    let i: u64 = ii[0] as u64;
+    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
+        let prev = ctx.get<f64>(sel) as i32;
+        ctx.set<u64>(rings[prev], 0x00000000u64);
+        ctx.set<f64>(sel, ii[0]);
+        ctx.set<u64>(rings[ii[0] as i32], color::RING_ON);
+    });
+    let face = Container()
+        .color(sv(color::hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0)))
+        .radius(sv(5.0f64))
+        .child(Text().text(sv(f"{i}")).font_size(13.0).color(color::LABEL_FG).build())
+        .build();
+    let framed = Container()
+        .color(rings[i as i32])
+        .radius(sv(8.0f64))
+        .padding(3.0)
+        .child(face)
+        .build();
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(PointerInteract().on_click(b_tap).child(framed).build())
+        .build();
+}
+
+// A pill chip: the fill rides its brush source (indigo when active).
+pub fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
+    let face = Container()
+        .padding(7.0)
+        .radius(sv(7.0f64))
+        .color(r)
+        .child(Text().text(sv(label)).font_size(12.0).color(color::CHIP_FG).build())
+        .build();
+    return MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(m)
+                .query_key(key)
+                .child(face)
+                .build(),
+        )
+        .build();
+}
+
+// ---- the chip taps -------------------------------------------------------------
+
+// One aspect chip's mutation: write the key + the recomposed mode string +
+// the aspect value, then repaint the trio.
+pub fn set_aspect_mutation(aspect: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
+                       mode: Readable<str>, chips: [Source<u64>], key: str, v: f64,
+                       on_idx: u64) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<str>(akey, key);
+        ctx.set<str>(mode, f"{key}/{ctx.get<str>(dkey)}");
+        ctx.set<f64>(aspect, v);
+        paint_chips(ctx, chips, on_idx);
+    });
+}
+
+// One density chip's mutation (the mirror twin).
+pub fn set_density_mutation(maxext: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
+                        mode: Readable<str>, chips: [Source<u64>], key: str, v: f64,
+                        on_idx: u64) -> Mutation<nil> {
+    return mutate(fn (ctx: MutationCtx, _e: nil) {
+        ctx.set<str>(dkey, key);
+        ctx.set<str>(mode, f"{ctx.get<str>(akey)}/{key}");
+        ctx.set<f64>(maxext, v);
+        paint_chips(ctx, chips, on_idx);
+    });
+}
+
+// Paint a chip trio: the active index indigo, the others slate.
+pub fn paint_chips(ctx: MutationCtx, chips: [Source<u64>], on_idx: u64) {
+    let mut i: i32 = 0;
+    while (i < 3) {
+        let mut c: u64 = color::CHIP_OFF;
+        if (i as u64 == on_idx) {
+            c = color::CHIP_ON;
+        }
+        ctx.set<u64>(chips[i], c);
+        i = i + 1;
+    }
+}

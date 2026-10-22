@@ -1,0 +1,47 @@
+// state — the state bundle (the sources every journey reads and writes —
+// handles bind at the launch site, captures stay rut-side). The fields
+// stay CONCRETE-annotated (`Source<T>`, not `Readable<T>`) — the
+// documented interning accommodation (they cross ctx calls).
+
+use tur_kit::handles::{ list_new };
+use tur_kit::reactive::{ Source, source };
+
+pub struct Gh {
+    mode: Source<str>;
+    err: Source<str>;
+    err_has: Source<bool>;
+    repo_full: Source<str>;
+    desc: Source<str>;
+    stats: Source<str>;
+    path: Source<str>;
+    selected: Source<str>;
+    files: Source<opaque>;
+    is_empty: Source<bool>;
+    busy: Source<bool>;
+    // The raw selected FILE name ("" when none — dirs deselect). The
+    // download journey reads it; the footer's formatted `selected` stays
+    // presentation-only.
+    sel_file: Source<str>;
+    // The download button's status machine ("idle" / "loading" / "done" /
+    // "error" — the boa downloadStatus$): the pill's face swaps on it.
+    dl: Source<str>;
+}
+
+// The boot seed — the boa landing opens on the empty landing form.
+pub fn seed() -> Gh {
+    return Gh {
+        mode: source<str>("landing"),
+        err: source<str>(""),
+        err_has: source<bool>(false),
+        repo_full: source<str>(""),
+        desc: source<str>(""),
+        stats: source<str>(""),
+        path: source<str>(""),
+        selected: source<str>(""),
+        files: source<opaque>(list_new().raw()),
+        is_empty: source<bool>(false),
+        busy: source<bool>(false),
+        sel_file: source<str>(""),
+        dl: source<str>("idle"),
+    };
+}

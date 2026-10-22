@@ -26,7 +26,7 @@ tur_android::standard_jni_exports!();
 /// `DemoNative.createRuntime(env, context): long`
 ///
 /// Builds the shared runtime with the **demo's** plugins (Std + Animation +
-/// Clipboard + Net + DemoHelper). Returns an opaque runtime handle Kotlin
+/// Clipboard + Net). Returns an opaque runtime handle Kotlin
 /// holds as a `long` and passes to `TurNative.createInstance`. No surface —
 /// instances are attached separately via `TurNative.attachInstance`.
 #[cfg(target_os = "android")]
@@ -39,7 +39,6 @@ pub extern "system" fn Java_org_tur_demo_DemoNative_createRuntime(
     use tur_animation::TurAnimationPlugin;
     use tur_engine::{TurClipboardPlugin, TurStdPlugin};
     use tur_net_native::TurNetPlugin;
-    use tur_playground_plugin::TurPlaygroundPlugin;
 
     tur_android::ops::create_runtime(&mut env, context, |builder| {
         builder
@@ -47,7 +46,6 @@ pub extern "system" fn Java_org_tur_demo_DemoNative_createRuntime(
             .plugin(TurAnimationPlugin)
             .plugin(TurClipboardPlugin)
             .plugin(TurNetPlugin)
-            .plugin(TurPlaygroundPlugin)
     })
 }
 

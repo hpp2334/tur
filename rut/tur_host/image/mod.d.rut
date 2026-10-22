@@ -1,0 +1,11 @@
+// tur_host/image — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn img_res_bytes(p1: bytes) -> u64;
+pub host fn img_res_solid(p1: u64, p2: u64, p3: u64) -> u64;
+pub host fn img_res_svg(p1: str) -> u64;
+pub host fn img_new(p1: u64) -> opaque;
+pub host fn img_width(p1: opaque, p2: f64);
+pub host fn img_height(p1: opaque, p2: f64);
+pub host fn img_fit(p1: opaque, p2: u64);
+pub host fn img_qkey(p1: opaque, p2: str);
+pub host fn img_build(p1: opaque) -> opaque;

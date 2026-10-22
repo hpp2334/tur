@@ -1,13 +1,9 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
-use crate::core::js_runtime::JsProps;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 use crate::core::view::{Lifecycle, View, ViewCx};
 
@@ -26,17 +22,16 @@ pub struct FocusableView {
 }
 
 impl View for FocusableView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(FocusableElement { view: self.clone() })
                 .with_focusable::<FocusableElement>()
                 .with_callbacks(),
-            boa,
         );
         if let Some(child) = &self.child {
-            child.build(cx, boa, id.into());
+            child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
@@ -69,20 +64,3 @@ impl Lifecycle for FocusableElement {}
 impl ElementTrace for FocusableElement {}
 
 impl ElementOnFocus for FocusableElement {}
-
-// ---------------------------------------------------------------------------
-// Factory helpers
-// ---------------------------------------------------------------------------
-
-impl FocusableView {
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        FocusableView {
-            on_key_down: p.mutation::<KeydownEvent>("onKeyDown"),
-            on_key_up: p.mutation::<KeyupEvent>("onKeyUp"),
-            on_focus: p.mutation::<FocusEvent>("onFocus"),
-            on_blur: p.mutation::<BlurEvent>("onBlur"),
-            child: p.child("child"),
-        }
-    }
-}

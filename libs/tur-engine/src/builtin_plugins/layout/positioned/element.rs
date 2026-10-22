@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
@@ -30,7 +26,7 @@ pub struct PositionedView {
 }
 
 impl View for PositionedView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -39,9 +35,8 @@ impl View for PositionedView {
                 warned_edges_unbounded: false,
                 warned_anchor_unbounded: false,
             }),
-            boa,
         );
-        let _child_id = self.child.build(cx, boa, id.into());
+        let _child_id = self.child.build(cx, id.into());
         cx.link_child(parent, id.into());
         id.into()
     }
@@ -122,27 +117,5 @@ impl ElementTrace for PositionedElement {
             }
         }
         p
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
-// ---------------------------------------------------------------------------
-
-impl PositionedView {
-    /// Build a `PositionedView` from a JS props object. Returns `None` when
-    /// the required `child` prop is missing.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let mut p = JsProps::new(props, ctx);
-        let child = p.child("child")?;
-        Some(PositionedView {
-            left: p.val::<f64>("left"),
-            top: p.val::<f64>("top"),
-            right: p.val::<f64>("right"),
-            bottom: p.val::<f64>("bottom"),
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            child,
-        })
     }
 }

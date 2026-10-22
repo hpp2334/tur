@@ -90,8 +90,9 @@ pub fn vello_dpr_3_renders_colors() {
 }
 
 /// Verify that an `Image` element renders its uploaded pixels (the
-/// `image-basic` case is a semi-transparent yellow 1x1 PNG stretched over the
-/// canvas, which blends to pale yellow on the white background).
+/// `image-basic` case is a synthetic semi-transparent yellow 1x1 solid
+/// (RRGGBBAA 0xFFFF00C8) stretched over the canvas, which blends to pale
+/// yellow on the white background).
 pub fn vello_image_renders() {
     let app = TurVelloApp::new(200.0, 100.0, 1.0).unwrap();
     app.load_bundle("image-basic").unwrap();

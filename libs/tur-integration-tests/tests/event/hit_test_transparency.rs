@@ -15,6 +15,14 @@ use tur_engine::builtin_plugins::scroll::ScrollViewElement;
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
+/// Parse a counter Text (the rut corpus renders its counters into bound
+/// readout atoms — the `__getBeneathDowns` seam's twin).
+fn counter_text(app: &TurTestApp, key: &[&str]) -> u32 {
+    app.query_text(key)
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
 fn setup(name: &str) -> TurTestApp {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle(name).unwrap();
@@ -59,10 +67,7 @@ fn pointer_down_beneath_invisible_overlay_fires() {
     app.pointer_down(200.0, 150.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let downs: u32 = app
-        .eval_js("globalThis.__getBeneathDowns()")
-        .parse()
-        .unwrap();
+    let downs = counter_text(&app, &["beneath-downs"]);
     assert_eq!(downs, 1, "pointer down must pass through the overlay");
 }
 
@@ -97,16 +102,14 @@ fn pill_clicks_over_overlay_still_fire() {
     app.click(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let clicks: u32 = app.eval_js("globalThis.__getPillClicks()").parse().unwrap();
+    let clicks = counter_text(&app, &["pill-clicks"]);
     assert_eq!(clicks, 1, "the opaque pill must still receive clicks");
 }
 
 // ── hit-test-opaqueness ─────────────────────────────────────────────────
 
 fn beneath_downs(app: &TurTestApp) -> u32 {
-    app.eval_js("globalThis.__getBeneathDowns()")
-        .parse()
-        .unwrap()
+    counter_text(app, &["beneath-downs"])
 }
 
 /// A painted surface (Container with color) absorbs hits — DecoratedBox /

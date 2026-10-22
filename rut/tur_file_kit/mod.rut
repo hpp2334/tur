@@ -1,0 +1,28 @@
+// tur_file_kit (mod.rut) — the filepicker capability's kit prelude (the
+// authored face over the filepicker rows). Owned by the plugin that owns
+// the rows (the layering law applied to the kit): `TurFilePickerPlugin`
+// registers it as a compile-session prelude next to the rows, so plugin
+// sets without the FilePicker capability never see (or compile) this
+// module.
+//
+// Both journeys are PLAIN RUT async — `await pick_file()` /
+// `await save_file(..)` ride the futures prelude; the bodies call the
+// `_raw` row twins because these fns' own names shadow the rows'.
+
+use tur_host::filepicker::{ pick_file_raw, save_file_raw };
+
+// Open the platform file picker. Resolves the first picked file's name
+// ("" when cancelled/denied — the same degradation the row documents).
+// Async: `await pick_file()`.
+pub async fn pick_file() -> str {
+  return await pick_file_raw();
+}
+
+// Persist `bytes` under file name `name` through the platform save lane
+// (the browser's download dialog on wasm, the rfd save dialog on native).
+// Resolves false when the capability is absent ("Save not available in
+// this host" — the caller's degradation signal). Async:
+// `await save_file(..)`.
+pub async fn save_file(name: str, bytes: bytes) -> bool {
+  return await save_file_raw(name, bytes);
+}

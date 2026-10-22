@@ -32,7 +32,8 @@ use super::follower::FollowerElement;
 use super::link::CompositedLinkState;
 
 pub struct CompositedTransformSubsystem {
-    /// Shared with the `createLayerLink` closure. O(active links) per flush.
+    /// Shared with the link registry (the plugin state the rut rows'
+    /// `ct_link_new` mints into). O(active links) per flush.
     pub(super) links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>>,
 }
 

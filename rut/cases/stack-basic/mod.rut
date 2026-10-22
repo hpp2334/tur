@@ -1,0 +1,16 @@
+// stack-basic: two non-positioned children — the Stack sizes to the
+// largest one and paints them overlaid.
+
+use tur_kit::handles::{ View, mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Stack };
+
+fn box_wh(w: f64, h: f64) -> View {
+    let b = Container().width_height(w, h);
+    return b.build();
+}
+
+entry fn start() {
+    let stack = Stack().child(box_wh(100.0, 100.0)).child(box_wh(200.0, 200.0));
+    mount(stack.build());
+}

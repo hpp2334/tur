@@ -1,8 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_engine::Context;
-
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::{ReactiveReadStore, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
@@ -31,7 +29,6 @@ pub struct LayoutViewCx<'a> {
 }
 
 impl<'a> LayoutViewCx<'a> {
-    #[allow(clippy::too_many_arguments, dead_code)]
     pub fn new(
         tree: &'a mut NodeTreeData,
         node_tree: NodeTree,
@@ -47,13 +44,13 @@ impl<'a> LayoutViewCx<'a> {
     }
 }
 
-impl<'a> ViewCx for LayoutViewCx<'a> {
+impl ViewCx for LayoutViewCx<'_> {
     fn alloc_node(&mut self) -> NodeId {
         self.tree.alloc_id()
     }
 
-    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
-        let node = ElementObject::new(id, element, boa);
+    fn insert_node(&mut self, id: ElementNodeId, element: AnyElement) {
+        let node = ElementObject::new(id, element);
         self.tree.insert_element(node);
     }
 

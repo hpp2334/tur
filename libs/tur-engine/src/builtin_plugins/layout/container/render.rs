@@ -46,14 +46,11 @@ impl ElementRender for ContainerElement {
             && sb > 0.0
         {
             let radius = border_radius.unwrap_or(0.0);
-            canvas.draw_shadow(
-                Offset::ZERO,
-                layout.size,
-                sc,
-                radius,
-                sb,
-                self.view.shadow_offset.unwrap_or((0.0, 0.0)),
-            );
+            // The bound dy wins over the static tuple's y (the reactive
+            // channel; x stays factory-static).
+            let (dx, dy) = self.view.shadow_offset.unwrap_or((0.0, 0.0));
+            let dy = self.painting.shadow_dy.unwrap_or(dy);
+            canvas.draw_shadow(Offset::ZERO, layout.size, sc, radius, sb, (dx, dy));
         }
 
         if let Some(brush) = color {
@@ -72,20 +69,36 @@ impl ElementRender for ContainerElement {
         {
             let half = bw / 2.0;
             let s = layout.size;
-            let (ox, oy, size) = match border_position {
+            // `rad_adj` shifts the stroke path's corner radius so the arc
+            // keeps the fill arc's center: Inside deflates by half the
+            // width (the stroke's outer edge lands exactly on the fill's
+            // rounded boundary), Outside inflates symmetrically, Center
+            // straddles as-is. Keeping the fill's radius would mis-center
+            // the arcs and poke the border's outer edge outside the fill's
+            // corner.
+            let (ox, oy, size, rad_adj): (f64, f64, Size, f64) = match border_position {
                 BorderPosition::Inside => (
                     half,
                     half,
                     Size::new((s.width - bw).max(0.0), (s.height - bw).max(0.0)),
+                    -half,
                 ),
-                BorderPosition::Outside => (-half, -half, Size::new(s.width + bw, s.height + bw)),
-                BorderPosition::Center => (0.0, 0.0, s),
+                BorderPosition::Outside => (
+                    -half,
+                    -half,
+                    Size::new(s.width + bw, s.height + bw),
+                    half,
+                ),
+                BorderPosition::Center => (0.0, 0.0, s, 0.0),
             };
             // Local inset/outset — the canvas transform already positions
             // the box at its absolute origin.
             let border_offset = Offset::new(ox, oy);
             let geometry = match border_radius {
-                Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
+                Some(r) if r > 0.0 => Geometry::RoundedRect {
+                    size,
+                    radius: (r + rad_adj).max(0.0),
+                },
                 _ => Geometry::Rect(size),
             };
             canvas.stroke_geometry(border_offset, &geometry, bc, bw);

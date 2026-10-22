@@ -7,82 +7,71 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::js_runtime::JsProps;
+use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::layout::{Constraints, Geometry, Offset, Size};
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::brush::{Brush, Color};
 use crate::core::render::{Canvas, CanvasOp, ElementRender, PaintContext, RenderCommand};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
+use crate::core::virtual_app::VirtualControl;
 
 use super::state::{VirtualControllerRef, VirtualState};
 
 // ---------------------------------------------------------------------------
-// VirtualAppView — the user's declaration. Pure Rust, no JsValues.
+// VirtualAppView — the user's declaration. Pure Rust.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct VirtualAppView {
     pub(crate) state: Rc<VirtualState>,
-    /// Reactive controller binding (`Readable<VirtualAppController | null>`
-    /// on the JS side) — resolved untracked during layout like every other
-    /// `Val<T>` prop. Binding materializes the controller's child (lazy
-    /// declaration); unbinding (null / swap) destroys it unless `keepAlive`.
+    /// Reactive controller binding (`Readable<controller | null>` authored
+    /// through the reactive rail, or a static ref) — resolved untracked
+    /// during layout like every other `Val<T>` prop. Binding materializes
+    /// the controller's child (lazy declaration); unbinding (null / swap)
+    /// destroys it unless `keepAlive`.
     pub(crate) app: Option<Val<VirtualControllerRef>>,
     pub(crate) background: Option<Val<Color>>,
     pub(crate) width: Option<Val<f64>>,
     pub(crate) height: Option<Val<f64>>,
     pub(crate) query_key: Option<Vec<String>>,
-    /// Painted while the child isn't live (JS-side `fallback` view).
+    /// Painted while the child isn't live (the `fallback` view).
     pub(crate) fallback: Option<Rc<dyn View>>,
-    /// Painted on error (JS-side `errorView`).
+    /// Painted on error (the `errorView` view).
     pub(crate) error_view: Option<Rc<dyn View>>,
 }
 
 impl View for VirtualAppView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
+            // The host participates in the focus sweep: `with_callbacks`
+            // makes `has_focus()` true (a click INTO the child must not
+            // blur the parent's held host focus) and `with_focusable`
+            // resolves the host's focus/blur notifications so
+            // `on_focus_changed` can forward focus-out into the child.
             AnyElement::new(VirtualAppElement {
                 view: self.clone(),
                 painting: VirtualPainting::default(),
                 bound_base: Cell::new(None),
-            }),
-            boa,
+                binder: u64::from(id),
+            })
+            .with_callbacks()
+            .with_focusable::<VirtualAppElement>(),
         );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child) = &self.fallback {
-            let _ = child.build(cx, boa, id.into());
+            let _ = child.build(cx, id.into());
         }
         if let Some(child) = &self.error_view {
-            let _ = child.build(cx, boa, id.into());
+            let _ = child.build(cx, id.into());
         }
         cx.link_child(parent, id.into());
         id.into()
-    }
-}
-
-impl VirtualAppView {
-    /// Build a `VirtualAppView` from a JS props object.
-    pub fn from_js(props: &JsObject, ctx: &mut Context, state: Rc<VirtualState>) -> Self {
-        let mut p = JsProps::new(props, ctx);
-        VirtualAppView {
-            state,
-            app: p.val::<VirtualControllerRef>("app$"),
-            background: p.val::<Color>("background"),
-            width: p.val::<f64>("width"),
-            height: p.val::<f64>("height"),
-            query_key: p.query_key("queryKey"),
-            fallback: p.child("fallback"),
-            error_view: p.child("errorView"),
-        }
     }
 }
 
@@ -102,13 +91,51 @@ pub struct VirtualAppElement {
     /// The controller base this element currently binds (layout-time
     /// bind/unbind diff — see `perform_layout`).
     pub(crate) bound_base: Cell<Option<u64>>,
+    /// This element instance's binder identity (its node id — unique per
+    /// built instance). The controller record's live incarnation is owned
+    /// by the binder that spawned it; a different instance binding the same
+    /// controller is a takeover, and this instance's unbind after a takeover
+    /// is a stale no-op (see `VirtualState::bind`).
+    pub(crate) binder: u64,
 }
 
 impl Lifecycle for VirtualAppElement {
-    fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx, _boa: &mut Context) {
-        if let Some(base) = self.bound_base.take() {
-            self.view.state.unbind(base);
+    fn on_focus_changed(&mut self, focused: bool, _cx: &mut crate::core::view::SharedViewCx) {
+        // Focus-out forwarding: when the parent's focus manager drops this
+        // host (a pointer click elsewhere took focus, or another host /
+        // parent element gained it), the child must release its own
+        // focused element — keys are focus-routed, so a still-focused
+        // child would keep consuming keystrokes invisibly. The `ClearFocus`
+        // control is a no-op when the child already released focus (the
+        // child's own blur reported first).
+        if focused {
+            return;
         }
+        if let Some(base) = self.bound_base.get()
+            && let Some(record) = self.view.state.record(base)
+            && let Some(token) = record.current.get()
+        {
+            self.view.state.send_control(VirtualControl::ClearFocus { token });
+        }
+    }
+
+    fn before_destroy(&mut self, _cx: &mut crate::core::view::SharedViewCx) {
+        if let Some(base) = self.bound_base.take() {
+            self.view.state.unbind(base, self.binder);
+        }
+    }
+}
+
+impl Focusable for VirtualAppElement {
+    // No script-facing focus callbacks — the host registers as focusable
+    // purely to participate in the focus sweep + notification flush (its
+    // `on_focus_changed` above is the Rust-level focus-out rail).
+    fn on_focus_mutation(&self) -> Option<crate::core::edgy::mutation::MutationHandle<FocusEvent>> {
+        None
+    }
+
+    fn on_blur_mutation(&self) -> Option<crate::core::edgy::mutation::MutationHandle<BlurEvent>> {
+        None
     }
 }
 
@@ -135,13 +162,17 @@ impl ElementLayout for VirtualAppElement {
         // materialized by binding (same "pure declaration, materialize on
         // demand" shape as `source`/`derive`/`mutate`). Runs in layout so a
         // resolution change can never skip it: `app$` is subscribed below.
+        // The bind/unbind carry this element's binder identity — a same-base
+        // bind from a DIFFERENT instance is a takeover, not a rebind (the
+        // Switch's mount-new-before-destroy-old order makes the new branch's
+        // bind race the old branch's unbind; see `VirtualState::bind`).
         let new_base = app.as_ref().map(|r| r.0);
         if new_base != self.bound_base.get() {
             if let Some(old) = self.bound_base.take() {
-                self.view.state.unbind(old);
+                self.view.state.unbind(old, self.binder);
             }
             if let Some(base) = new_base {
-                self.view.state.bind(base);
+                self.view.state.bind(base, self.binder);
             }
             self.bound_base.set(new_base);
         }

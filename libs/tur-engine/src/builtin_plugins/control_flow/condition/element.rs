@@ -1,11 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
-use boa_engine::object::JsObject;
-
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::{Val, View, ViewCx, ViewFactory, read_val};
 
@@ -29,12 +25,12 @@ pub struct ConditionView {
 }
 
 impl View for ConditionView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
         // Resolve the initial condition value and pick the branch.
-        let value = read_val(cx, &self.condition, boa).unwrap_or(false);
+        let value = read_val(cx, &self.condition).unwrap_or(false);
         let mounted = if value {
             MountedBranch::Then
         } else {
@@ -67,7 +63,7 @@ impl View for ConditionView {
             view: self.clone(),
             mounted,
         };
-        kind.build_branch(cx, boa, frag_id);
+        kind.build_branch(cx, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -106,16 +102,9 @@ impl ConditionFragment {
     }
 
     /// Build the currently-mounted branch under `fragment_id`.
-    fn build_branch(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        fragment_id: FragmentNodeId,
-    ) -> Vec<NodeId> {
-        if let Some(factory) = self.current_factory()
-            && let Some(view) = factory.create(boa)
-        {
-            return vec![view.build(cx, boa, NodeId::from(fragment_id))];
+    fn build_branch(&self, cx: &mut dyn ViewCx, fragment_id: FragmentNodeId) -> Vec<NodeId> {
+        if let Some(view) = self.current_factory().and_then(|f| f.create()) {
+            return vec![view.build(cx, NodeId::from(fragment_id))];
         }
         Vec::new()
     }
@@ -151,10 +140,9 @@ impl FragmentKind for ConditionFragment {
     fn perform_update(
         &mut self,
         cx: &mut dyn ViewCx,
-        boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        let new_value = read_val(cx, &self.view.condition, boa).unwrap_or(false);
+        let new_value = read_val(cx, &self.view.condition).unwrap_or(false);
         let new_branch = if new_value {
             MountedBranch::Then
         } else {
@@ -164,26 +152,33 @@ impl FragmentKind for ConditionFragment {
             return None;
         }
         self.mounted = new_branch;
-        Some(self.build_branch(cx, boa, fragment_id))
+        Some(self.build_branch(cx, fragment_id))
     }
 }
 
 // ---------------------------------------------------------------------------
-// Factory — called from the JS bridge to parse props into a spec.
+// Rut-rail constructor (`core::rut_runtime`).
 // ---------------------------------------------------------------------------
 
 impl ConditionView {
-    /// Build a `ConditionView` from a JS props object.
-    ///
-    /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
-    /// the JS `ConditionProps` interface). Both are thunks `() => Element`.
-    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        let mut p = JsProps::new(props, ctx);
+    /// Re-key the condition fragment (the `cond_qkey` row).
+    pub(crate) fn set_query_key(&mut self, key: Option<Vec<String>>) {
+        self.query_key = key;
+    }
+
+    /// Rut-rail constructor: a bool-atom condition with both branches
+    /// pre-built (the factory clones them — no scripting invocation during
+    /// flush).
+    pub(crate) fn new_rut(
+        condition: Val<bool>,
+        then_child: Rc<dyn ViewFactory>,
+        else_child: Rc<dyn ViewFactory>,
+    ) -> Self {
         ConditionView {
-            condition: p.val::<bool>("condition").unwrap_or(Val::Static(false)),
-            then_child: p.factory("child"),
-            else_child: p.factory("elseChild"),
-            query_key: p.query_key("queryKey"),
+            condition,
+            then_child: Some(then_child),
+            else_child: Some(else_child),
+            query_key: None,
         }
     }
 }
