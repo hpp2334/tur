@@ -196,3 +196,80 @@ fn renderer_slot_attach_detach_cycle() {
     app.detach_renderer();
     app.destroy();
 }
+
+/// A dpr-only change — same logical size, different `devicePixelRatio`
+/// (browser zoom on a fixed-size window, a monitor move, an OS
+/// display-scale change) — must re-sync the host renderer. The engine
+/// path: `ResizeSubsystem` updates `Screen.dpr` even when the logical
+/// size (and thus `viewportSize$`) is unchanged, the flush still paints
+/// (`mark_root_dirty` + `request_paint`), and the render commit point's
+/// `sync_viewport` dedups on the full viewport triple (dpr included) so
+/// the new geometry applies with the next shipped batch.
+///
+/// Pins the engine half of the wasm dpr bug: the browser embedder's
+/// `ResizeObserver` alone never sees dpr-only changes (no CSS-box
+/// change), which used to leave the canvas backing store at the stale
+/// pixel ratio — the whole frame rendered at the old scale and the
+/// compositor stretched it (blurry text at dpr 1.25). The embedder now
+/// watches dpr directly (a `matchMedia` re-arm in `tur-wasm`); this test
+/// guarantees the rail it feeds actually re-syncs.
+#[test]
+fn dpr_only_resize_resyncs_renderer() {
+    let driver = TestSchedulerDriver::new();
+    let pool = WorkerPoolHandle::new("dpr-only-resize", usize::MAX);
+    let runtime = TurRuntime::builder()
+        .worker_spawner(driver.worker_spawner())
+        .host_loop(driver.host_loop())
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
+        .plugin(TurStdPlugin)
+        .build()
+        .expect("runtime build");
+
+    let (app, mut looper) = runtime
+        .app_builder()
+        .worker_pool(pool)
+        .shell(TestShell::new(driver.vsync_source()))
+        .build_headless((64.0, 64.0))
+        .expect("headless build");
+    let app = Rc::new(app);
+    let (frame_tx, frame_rx) = mpsc::unbounded::<FrameOutcome>();
+    looper.set_after_frame_hook(Some(Rc::new(move |o| {
+        let _ = frame_tx.unbounded_send(o);
+    })));
+    driver.spawn_local(Box::pin(looper.run()));
+    let frame_rx = RefCell::new(frame_rx);
+
+    // Content that paints (an empty batch ships nothing — see
+    // `deferred_resize` for the empty-paint caveat).
+    block_on(app.load_rut_module(SOURCE)).expect("module load");
+    pump_quiet(&driver, &frame_rx);
+
+    // Attach AT the bootstrap size so the only later geometry change is
+    // the dpr itself. Note the attach itself records no `resize`: the
+    // builder seeded `last_viewport` with the build triple, so the
+    // commit-point sync correctly dedups (in a real embedder the renderer
+    // arrives already sized — it was CONSTRUCTED for that viewport).
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    app.attach_renderer(
+        Box::new(RecordingRenderer {
+            calls: calls.clone(),
+        }),
+        64,
+        64,
+        1.0,
+    );
+    pump_quiet(&driver, &frame_rx);
+
+    // dpr-only change: same logical size, doubled dpr.
+    app.resize(64, 64, 2.0);
+    pump_quiet(&driver, &frame_rx);
+    assert!(
+        calls.borrow().iter().any(|c| c == "resize:64x64@2"),
+        "a dpr-only resize must re-sync the renderer (got {:?})",
+        calls.borrow()
+    );
+
+    app.destroy();
+}

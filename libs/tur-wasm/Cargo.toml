@@ -46,6 +46,7 @@ web-sys = { workspace = true, features = [
     "ClipboardEvent",
     "DataTransfer",
     "ResizeObserver",
+    "MediaQueryList",
     # Worker spawn (replaces wasm_thread):
     "Blob",
     "Url",

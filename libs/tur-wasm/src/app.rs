@@ -57,6 +57,18 @@ struct WasmState {
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
+    /// The last viewport triple forwarded to the engine — dedups resize
+    /// events across the canvas `ResizeObserver` and the dpr-change
+    /// watcher (both can deliver for one zoom change, and the RO always
+    /// fires once at observe time).
+    last_resize: Cell<(u32, u32, f64)>,
+    /// The armed `MediaQueryList` for the current `devicePixelRatio` (see
+    /// [`arm_dpr_watcher`]). Retained so its `onchange` stays live;
+    /// replaced on each re-arm.
+    _dpr_mql: RefCell<Option<web_sys::MediaQueryList>>,
+    /// The `onchange` handler registered on `_dpr_mql` — retained for the
+    /// state's lifetime so re-arming can re-register the same closure.
+    _dpr_closure: Rc<Closure<dyn Fn(web_sys::Event)>>,
     _resize_closure: Closure<dyn Fn()>,
     _resize_observer: web_sys::ResizeObserver,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
@@ -131,6 +143,99 @@ impl tur_engine::Shell for WasmShell {
         self.vsync
             .take()
             .map(|v| v as Rc<dyn tur_engine::core::scheduler::VsyncSource>)
+    }
+}
+
+/// Measure the canvas (full-viewport mode) or its container, read the live
+/// `devicePixelRatio`, and forward a resize to the engine when the viewport
+/// triple actually changed. Shared by the canvas `ResizeObserver` (CSS-box
+/// changes) and the dpr-change watcher ([`arm_dpr_watcher`] — pixel-ratio
+/// changes the RO cannot see); the dedup absorbs their overlap (the RO's
+/// initial observation, and zoom changes that fire both).
+///
+/// The canvas's BACKING STORE must NOT be resized here: setting the
+/// `width`/`height` attributes resets the bitmap to transparent
+/// synchronously, which composites as a white flash until the frame laid
+/// out for the new size arrives (a worker round-trip + vsync later). The
+/// engine stamps the new viewport onto that frame's render batch, and the
+/// host swaps the backing store at the render commit point — the same
+/// task as the repaint — so the old frame stays visible (CSS-stretched)
+/// meanwhile.
+fn sync_viewport_to_dom(
+    window: &web_sys::Window,
+    state: &Rc<RefCell<Option<WasmState>>>,
+    container_id: &Option<String>,
+) {
+    let guard = state.borrow();
+    let Some(s) = guard.as_ref() else {
+        return;
+    };
+    let dpr = window.device_pixel_ratio();
+    // Full-viewport mode measures the canvas (== wrapper content box =
+    // safe area), not `window.innerHeight`; container mode measures the
+    // container's box. Either way the canvas — not `window.innerWidth` —
+    // is the authoritative viewport.
+    let (logical_width, logical_height) = if let Some(id) = container_id {
+        let Some(document) = window.document() else {
+            return;
+        };
+        let Some(el) = document.get_element_by_id(id) else {
+            return;
+        };
+        let rect = el.get_bounding_client_rect();
+        (rect.width() as u32, rect.height() as u32)
+    } else {
+        let rect = s._canvas.get_bounding_client_rect();
+        (rect.width() as u32, rect.height() as u32)
+    };
+    let next = (logical_width, logical_height, dpr);
+    if s.last_resize.replace(next) == next {
+        return;
+    }
+    s.app.resize(logical_width, logical_height, dpr);
+}
+
+/// (Re-)arm the dpr-change watcher: a `matchMedia` query for the CURRENT
+/// `devicePixelRatio` whose `change` event fires the moment the ratio
+/// leaves that value (browser zoom, moving the window between monitors,
+/// OS display-scale changes).
+///
+/// This is the only reliable signal for pixel-ratio changes: a canvas
+/// `ResizeObserver` fires on CSS-box changes only — a dpr change with an
+/// unchanged box (monitor move, OS scale change) fires nothing — and
+/// Chrome RO callbacks during zoom can read a STALE `devicePixelRatio`
+/// (reflow + RO delivery happen before the ratio updates; the MQL
+/// `change` fires only after the flip, so the watcher's late re-measure
+/// corrects an early stale RO read). Without it the canvas backing store
+/// keeps the stale ratio and the compositor stretches the whole frame —
+/// the "blurry text at dpr 1.25" bug.
+fn arm_dpr_watcher(window: &web_sys::Window, state: &Rc<RefCell<Option<WasmState>>>) {
+    let dpr = window.device_pixel_ratio();
+    let query = format!("(resolution: {dpr}dppx)");
+    let mql = match window.match_media(&query) {
+        Ok(Some(mql)) => mql,
+        _ => {
+            // No MQL support — the RO still covers size-changing zooms;
+            // log so the gap stays visible.
+            tracing::warn!("tur: match_media({query}) unavailable — dpr changes without a CSS-box change will be missed");
+            return;
+        }
+    };
+    let closure = {
+        let guard = state.borrow();
+        let Some(s) = guard.as_ref() else {
+            return;
+        };
+        s._dpr_closure.clone()
+    };
+    mql.set_onchange(Some(
+        closure.as_ref().as_ref().unchecked_ref::<js_sys::Function>(),
+    ));
+    let guard = state.borrow();
+    if let Some(s) = guard.as_ref() {
+        // Replacing the old MQL drops its listener binding; the closure
+        // itself stays retained by `WasmState` across the swap.
+        *s._dpr_mql.borrow_mut() = Some(mql);
     }
 }
 
@@ -550,40 +655,10 @@ impl WasmApp {
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
         let resize_closure = Closure::<dyn Fn()>::new(move || {
-            let guard = resize_state.borrow();
-            if let Some(s) = guard.as_ref() {
-                let window = web_sys::window().unwrap();
-                let dpr = window.device_pixel_ratio();
-                let (logical_width, logical_height) = if resize_container_id.is_some() {
-                    let document = window.document().unwrap();
-                    if let Some(el) = resize_container_id
-                        .as_ref()
-                        .and_then(|id| document.get_element_by_id(id))
-                    {
-                        let rect = el.get_bounding_client_rect();
-                        (rect.width() as u32, rect.height() as u32)
-                    } else {
-                        return;
-                    }
-                } else {
-                    // Full-viewport mode: measure the canvas (== wrapper
-                    // content box = safe area), not `window.innerHeight`.
-                    let rect = s._canvas.get_bounding_client_rect();
-                    (rect.width() as u32, rect.height() as u32)
-                };
-                // Forward the resize to the engine (single call — see
-                // `TurApp::resize`). The canvas's CSS box already follows
-                // layout; its BACKING STORE must NOT be resized here:
-                // setting the `width`/`height` attributes resets the bitmap
-                // to transparent synchronously, which composites as a white
-                // flash until the frame laid out for the new size arrives (a
-                // worker round-trip + vsync later). The engine stamps the
-                // new viewport onto that frame's render batch, and the host
-                // swaps the backing store at the render commit point — the
-                // same task as the repaint — so the old frame stays visible
-                // (CSS-stretched) meanwhile.
-                s.app.resize(logical_width, logical_height, dpr);
-            }
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            sync_viewport_to_dom(&window, &resize_state, &resize_container_id);
         });
 
         // Observe the canvas directly. `ResizeObserver` fires whenever the
@@ -595,6 +670,23 @@ impl WasmApp {
         let resize_observer =
             web_sys::ResizeObserver::new(resize_closure.as_ref().unchecked_ref()).err_to_jsval()?;
         resize_observer.observe(canvas.as_ref());
+
+        // The dpr-change watcher: fires the moment `devicePixelRatio`
+        // leaves the value [`arm_dpr_watcher`] armed for — pixel-ratio
+        // changes the RO above cannot see (unchanged CSS box) and the
+        // correction for its zoom-time stale ratio reads. Armed below,
+        // once the state exists.
+        let dpr_state = state_clone.clone();
+        let dpr_container_id = container_id.clone();
+        let dpr_closure = Rc::new(Closure::<dyn Fn(web_sys::Event)>::new(move |_event| {
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            // The ratio left the armed value — re-measure + resize with
+            // the live value, then re-arm for it.
+            sync_viewport_to_dom(&window, &dpr_state, &dpr_container_id);
+            arm_dpr_watcher(&window, &dpr_state);
+        }));
 
         let pointer_down_state = state_clone.clone();
         let pointer_down_closure =
@@ -1107,6 +1199,11 @@ impl WasmApp {
             _canvas: canvas,
             textarea,
             is_composing: Cell::new(false),
+            // The boot triple — the engine was built for exactly this
+            // viewport, so the RO's initial observation dedups against it.
+            last_resize: Cell::new((logical_width, logical_height, dpr)),
+            _dpr_mql: RefCell::new(None),
+            _dpr_closure: dpr_closure,
             _resize_closure: resize_closure,
             _resize_observer: resize_observer,
             _pointer_down_closure: pointer_down_closure,
@@ -1127,6 +1224,11 @@ impl WasmApp {
         };
 
         *state_clone.borrow_mut() = Some(wasm_state);
+
+        // Arm the dpr watcher for the boot ratio (see `arm_dpr_watcher`).
+        if let Some(window) = web_sys::window() {
+            arm_dpr_watcher(&window, &state_clone);
+        }
 
         // Autonomous loop. The engine owns the frame logic (clock advance
         // is its own `StdClock`, no manual forwarding); this driver just
