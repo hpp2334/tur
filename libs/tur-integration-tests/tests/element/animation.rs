@@ -844,3 +844,98 @@ fn complex_animation_case_runs_the_card_studio() {
         "an infinite loop keeps the width cycling inside the tween range: {w}"
     );
 }
+
+// ---- the corpus implicit-animations case (the mid-flight retarget law) ------
+
+/// The animated box's absolute left, relative to its COMPACT rest position
+/// (`0.0` = compact left 30, `130.0` = expanded left 160). Absolute bounds —
+/// `computed_layout.offset` is parent-relative and the box sits at (0,0)
+/// inside its Positioned wrapper.
+fn implicit_box_rel(app: &TurTestApp, base: f64) -> f64 {
+    let id = app
+        .query_element(&["animated-box"])
+        .expect("animated box not found");
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+        .expect("animated box bounds");
+    b.left - base
+}
+
+/// A real click on the case's keyed toggle (the same tap rail as
+/// `tap_studio` — the toggle is a PointerInteract, only reachable through
+/// the pointer rail).
+fn tap_implicit_toggle(app: &mut TurTestApp) {
+    let id = app
+        .query_element(&["implicit-toggle"])
+        .unwrap_or_else(|| panic!("implicit-toggle not found"));
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+        .unwrap()
+        .center();
+    app.click(b.0, b.1);
+    app.wait_for_timeout(Duration::ZERO);
+}
+
+#[test]
+fn implicit_animations_case_retargets_continuously_midflight() {
+    // Surface the engine's runtime-error rail (root-instance traps log at
+    // WARN; without a subscriber they are silently dropped).
+    let _ = tracing_subscriber::fmt::try_init();
+    // The boa-parity retarget (the animChannel rebase): flipping direction
+    // mid-flight rebases the tween endpoints to the CURRENTLY DISPLAYED
+    // value — every channel continues smoothly and never snaps to the far
+    // endpoint. The slide channel (left 30 ↔ 160 over 600ms easeInOut)
+    // is the sampled witness.
+    let mut app = TurTestApp::new(500.0, 800.0).unwrap();
+    app.load_rut_bundle("implicit-animations").unwrap();
+    let _expanded = app.rut_start_answer();
+    app.wait_for_timeout(Duration::ZERO);
+    let base = {
+        let id = app
+            .query_element(&["animated-box"])
+            .expect("animated box not found");
+        app.get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+            .expect("animated box bounds")
+            .left
+    };
+
+    // Forward: 300ms into the 600ms easeInOut the eased progress is 0.5 →
+    // the box sits mid-slide (rel ~65). The Condition label + the toggle
+    // caption swap with the state atom.
+    tap_implicit_toggle(&mut app);
+    app.wait_for_timeout(Duration::from_millis(300));
+    assert_eq!(
+        app.query_text(&["implicit-label"]).as_deref(),
+        Some("Expanded"),
+        "the card label follows the state atom"
+    );
+    assert_eq!(
+        app.query_text(&["implicit-caption"]).as_deref(),
+        Some("◀ Compact"),
+        "the toggle caption follows the state atom"
+    );
+    let mid = implicit_box_rel(&app, base);
+    assert!(
+        mid > 30.0 && mid < 100.0,
+        "mid-forward the box should sit between the endpoints (rel ~65), got {mid}"
+    );
+
+    // THE LAW: retargeting mid-flight continues from the displayed value —
+    // the box must never jump to the expanded endpoint (rel 130). A snap
+    // lands here at ~128..130; a rebase continues from ~65..96 downward.
+    tap_implicit_toggle(&mut app);
+    app.wait_for_timeout(Duration::from_millis(40));
+    let re = implicit_box_rel(&app, base);
+    assert!(
+        re < 115.0,
+        "a mid-flight retarget must rebase to the displayed value, not snap to the far endpoint: rel {re}"
+    );
+
+    // The retargeted reverse plays a fresh full segment and settles compact.
+    app.wait_for_timeout(Duration::from_millis(800));
+    let settled = implicit_box_rel(&app, base);
+    assert!(
+        settled.abs() < 0.01,
+        "the retargeted reverse settles at the compact endpoint (rel 0), got {settled}"
+    );
+}

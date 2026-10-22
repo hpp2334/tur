@@ -3423,6 +3423,7 @@ dependencies = [
  "rut-native",
  "thiserror 2.0.18",
  "tokio",
+ "tracing-subscriber",
  "tur-animation",
  "tur-engine",
  "tur-filepicker-capability",

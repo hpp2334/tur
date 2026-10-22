@@ -211,6 +211,19 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
         .expect("tur worker: failed to add clipboard bridge listener");
     clip_closure.forget();
 
+    // The filepicker bridge's serving side — the same shape: the save hop
+    // (Blob + `<a download>` are DOM) and the pick round trip (the hidden
+    // `<input type="file">`).
+    let fp_worker = worker.clone();
+    let fp_closure =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |ev: web_sys::MessageEvent| {
+            tur_filepicker_wasm::serve_host_message(&ev, &fp_worker);
+        });
+    worker
+        .add_event_listener_with_callback("message", fp_closure.as_ref().unchecked_ref())
+        .expect("tur worker: failed to add filepicker bridge listener");
+    fp_closure.forget();
+
     // Box the factory + post `[module, memory, ptr]`. The pointer is valid
     // across threads (shared linear memory); the worker reconstitutes it.
     let entry = Box::new(FactoryPayload(factory));
@@ -337,10 +350,17 @@ pub(super) fn install_executor(loop_fut: Pin<Box<dyn Future<Output = ()> + 'stat
     // - `{ t: "tur-clip-read-result", rid, text }` — the clipboard bridge's
     //   read reply (routed into the pending-read slab in
     //   `tur_clipboard_wasm`).
+    // - `{ t: "tur-file-pick-result", rid, files }` — the filepicker
+    //   bridge's pick reply (routed into the pending-pick slab in
+    //   `tur_filepicker_wasm`).
     let onmsg_closure = Closure::<dyn FnMut(MessageEvent)>::new(|ev: MessageEvent| {
         // Clipboard read replies first — they wake their awaiting future
         // (the wake itself re-arms the repoll).
         if tur_clipboard_wasm::route_worker_message(&ev.data()) {
+            return;
+        }
+        // Filepicker pick replies — same shape.
+        if tur_filepicker_wasm::route_worker_message(&ev.data()) {
             return;
         }
         if let Some(obj) = ev.data().dyn_ref::<Object>()

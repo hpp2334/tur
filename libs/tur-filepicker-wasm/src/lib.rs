@@ -7,8 +7,10 @@
 //! `TurRuntimeBuilder::capability(FilePicker::new(WasmFilePicker))`.
 
 mod backend;
+mod bridge;
 
 pub use backend::WasmFilePicker;
+pub use bridge::{route_worker_message, serve_host_message};
 pub use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };

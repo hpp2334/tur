@@ -22,6 +22,9 @@ pub struct Gh {
     // download journey reads it; the footer's formatted `selected` stays
     // presentation-only.
     sel_file: Source<str>;
+    // The download button's status machine ("idle" / "loading" / "done" /
+    // "error" — the boa downloadStatus$): the pill's face swaps on it.
+    dl: Source<str>;
 }
 
 // The boot seed — the boa landing opens on the empty landing form.
@@ -39,5 +42,6 @@ pub fn seed() -> Gh {
         is_empty: source<bool>(false),
         busy: source<bool>(false),
         sel_file: source<str>(""),
+        dl: source<str>("idle"),
     };
 }

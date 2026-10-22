@@ -1,14 +1,18 @@
-// implicit-animations: the Animated* twin — one shared controller eases
-// 0..1 and the a_tick mutation maps the eased progress into the box's
-// animated channels (color sky-blue→indigo, radius 12→40, the
-// SHADOW BLUR bound 16→32 over the static [0,8] offset, the slide
-// left 30→160 and the label's opacity 0.45→1.0). The card itself is
-// FIXED 150×160 (only the decoration animates — the boa
-// AnimatedContainer retarget). The toggle flips the `expanded` atom and
-// retargets the controller (forward/reverse) — the
-// ImplicitlyAnimatedWidget retarget, case-side. The tick and the toggle
-// are MUTATIONS over the channel handles they capture — no ids, no
-// stash; the boot brush seed rides the root Lifecycle's on_mount.
+// implicit-animations: the Animated* twin — the boa animChannel retarget,
+// authored case-side. One shared 600ms easeInOut controller eases 0..1 and
+// the a_tick mutation maps the eased progress through DYNAMIC tween
+// endpoints into the box's animated channels (color sky-blue↔indigo, radius
+// 12↔40, the SHADOW BLUR bound 16↔32 over the static [0,8] offset, the
+// slide left 30↔160 and the label's opacity 0.45↔1.0). The card itself is
+// FIXED 150×160 (only the decoration animates — the boa AnimatedContainer
+// shape). The toggle REBASES the endpoints — begin = the currently
+// displayed value, end = the new target — then plays the controller
+// forward: the ImplicitlyAnimatedWidget retarget, so a mid-flight flip
+// continues from where the card visibly is and never snaps to the far
+// endpoint (pinned by element/animation.rs::
+// implicit_animations_case_retargets_continuously_midflight). The tick and
+// the toggle are MUTATIONS over the channel handles they capture — no ids,
+// no stash; the boot brush seed rides the root Lifecycle's on_mount.
 //
 // Pure kit: every channel is a bound prop over the progress the tick
 // writes — the animation rows end-to-end with no per-channel controllers.
@@ -24,7 +28,7 @@ use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, mutate, source
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, Opacity, anim_ctrl, color_tween_lerp, tween_lerp };
 
-// The tween endpoints (the boa card, retargeted compact ↔ expanded). The
+// The tween targets (the boa card, retargeted compact ↔ expanded). The
 // card box is FIXED 150×160 — the boa AnimatedContainer animates only the
 // decoration.
 let R_MIN: f64 = 12.0;
@@ -40,34 +44,65 @@ let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
 
 entry fn start() -> u64 {
     let expanded: Readable<bool> = source<bool>(false);
-    let progress: Readable<f64> = source<f64>(0.0);
+    // The displayed channels (what the tick writes, what the props bind).
     let color: Readable<u64> = source<u64>(0);
     let blur: Readable<f64> = source<f64>(B_MIN);
     let radius: Readable<f64> = source<f64>(R_MIN);
     let left: Readable<f64> = source<f64>(X_MIN);
     let fade: Readable<f64> = source<f64>(A_MIN);
+    // The dynamic tween endpoints (the rebase rail): begin/end per channel,
+    // seeded settled-compact (begin == end — the boot state is already
+    // "at rest"; the first toggle rebases and plays).
+    let blur_b: Readable<f64> = source<f64>(B_MIN);
+    let blur_e: Readable<f64> = source<f64>(B_MIN);
+    let radius_b: Readable<f64> = source<f64>(R_MIN);
+    let radius_e: Readable<f64> = source<f64>(R_MIN);
+    let left_b: Readable<f64> = source<f64>(X_MIN);
+    let left_e: Readable<f64> = source<f64>(X_MIN);
+    let fade_b: Readable<f64> = source<f64>(A_MIN);
+    let fade_e: Readable<f64> = source<f64>(A_MIN);
+    let color_b: Readable<u64> = source<u64>(BLUE);
+    let color_e: Readable<u64> = source<u64>(BLUE);
 
-    // The tick: eased progress → every animated channel (the channels
-    // ride by capture).
+    // The tick: eased progress through the endpoints → every animated
+    // channel (all the handles ride by capture).
     let a_tick = mutate<f64>(fn (ctx: MutationCtx, t: f64) {
-        ctx.set<f64>(blur, tween_lerp(B_MIN, B_MAX, t));
-        ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, t));
-        ctx.set<f64>(left, tween_lerp(X_MIN, X_MAX, t));
-        ctx.set<f64>(fade, tween_lerp(A_MIN, A_MAX, t));
-        ctx.set<u64>(color, color_tween_lerp(BLUE, INDIGO, t));
+        ctx.set<f64>(blur, tween_lerp(ctx.get<f64>(blur_b), ctx.get<f64>(blur_e), t));
+        ctx.set<f64>(radius, tween_lerp(ctx.get<f64>(radius_b), ctx.get<f64>(radius_e), t));
+        ctx.set<f64>(left, tween_lerp(ctx.get<f64>(left_b), ctx.get<f64>(left_e), t));
+        ctx.set<f64>(fade, tween_lerp(ctx.get<f64>(fade_b), ctx.get<f64>(fade_e), t));
+        ctx.set<u64>(color, color_tween_lerp(ctx.get<u64>(color_b), ctx.get<u64>(color_e), t));
     });
     let ctrl = anim_ctrl(600.0, "easeInOut", 1, a_tick, nil);
 
-    // The toggle: flip the state atom, then retarget the shared
-    // controller — forward plays toward the expanded state, reverse back
-    // to compact.
+    // The toggle: flip the state atom, REBASE the endpoints (begin = the
+    // value on screen right now — mid-flight included; end = the new
+    // target), then play the shared controller forward. This is the boa
+    // animChannel retarget: the displayed value is continuous across the
+    // flip — no snap to the far endpoint.
     let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(expanded, !ctx.get<bool>(expanded));
-        if (ctx.get<bool>(expanded)) {
-            ctrl.forward();
-        } else {
-            ctrl.reverse();
+        let next: bool = !ctx.get<bool>(expanded);
+        ctx.set<bool>(expanded, next);
+        ctx.set<f64>(blur_b, ctx.get<f64>(blur));
+        ctx.set<f64>(radius_b, ctx.get<f64>(radius));
+        ctx.set<f64>(left_b, ctx.get<f64>(left));
+        ctx.set<f64>(fade_b, ctx.get<f64>(fade));
+        ctx.set<u64>(color_b, ctx.get<u64>(color));
+        let mut blur_end: f64 = B_MIN;
+        let mut radius_end: f64 = R_MIN;
+        let mut left_end: f64 = X_MIN;
+        let mut fade_end: f64 = A_MIN;
+        let mut color_end: u64 = BLUE;
+        if (next) {
+            blur_end = B_MAX; radius_end = R_MAX; left_end = X_MAX;
+            fade_end = A_MAX; color_end = INDIGO;
         }
+        ctx.set<f64>(blur_e, blur_end);
+        ctx.set<f64>(radius_e, radius_end);
+        ctx.set<f64>(left_e, left_end);
+        ctx.set<f64>(fade_e, fade_end);
+        ctx.set<u64>(color_e, color_end);
+        ctrl.forward();
     });
 
     // The boot brush seed (the compact sky-blue state; the f64 channels
@@ -79,8 +114,8 @@ entry fn start() -> u64 {
 
     // The Compact↔Expanded label rides the state atom (a Condition swap).
     let label = Condition(expanded)
-        .then_build(fn () -> View { return Text().text(sv("Expanded")).font_size(18.0).color(0xFFFFFFFFu64).build(); })
-        .else_build(fn () -> View { return Text().text(sv("Compact")).font_size(18.0).color(0xFFFFFFFFu64).build(); })
+        .then_build(fn () -> View { return Text().text(sv("Expanded")).font_size(18.0).color(0xFFFFFFFFu64).query_key("implicit-label").build(); })
+        .else_build(fn () -> View { return Text().text(sv("Compact")).font_size(18.0).color(0xFFFFFFFFu64).query_key("implicit-label").build(); })
         .build();
 
     // The animated box: the FIXED 150×160 card (the boa AnimatedContainer
@@ -116,8 +151,8 @@ entry fn start() -> u64 {
                 .color(sv(0x1E293BFFu64))
                 .child(
                     Condition(expanded)
-                        .then_build(fn () -> View { return Text().text(sv("◀ Compact")).font_size(12.0).color(0xE2E8F0FFu64).build(); })
-                        .else_build(fn () -> View { return Text().text(sv("Expand ▶")).font_size(12.0).color(0xE2E8F0FFu64).build(); })
+                        .then_build(fn () -> View { return Text().text(sv("◀ Compact")).font_size(12.0).color(0xE2E8F0FFu64).query_key("implicit-caption").build(); })
+                        .else_build(fn () -> View { return Text().text(sv("Expand ▶")).font_size(12.0).color(0xE2E8F0FFu64).query_key("implicit-caption").build(); })
                         .build(),
                 )
                 .build(),

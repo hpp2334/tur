@@ -235,6 +235,19 @@ fn github_viewer_downloads_the_selected_file() {
     });
     assert!(selected, "the file is selected before the download");
     click_qk(&mut app, &["gh-download"]);
+    // The boa status machine: the pill's face swaps to "Downloading…"
+    // while the fetch rides and flashes "Saved" once the bytes land (the
+    // fake HTTP resolves within one pump, so the loading window is not
+    // poll-stable here — the Saved flash + idle reset are). The key rides
+    // the face TEXT — taps still hit the pad beneath.
+    let saved = wait_for(&app, || {
+        app.query_text(&["gh-download"]).as_deref() == Some("Saved")
+    });
+    assert!(
+        saved,
+        "the pill flashes Saved once the bytes land: {:?}",
+        app.query_text(&["gh-download"])
+    );
     // Poll on the raw fetch (last_save DRAINS the capture log — read it
     // exactly once, after the journey settles).
     let fetched = wait_for(&app, || {
@@ -257,6 +270,16 @@ fn github_viewer_downloads_the_selected_file() {
     };
     assert_eq!(save.name, "README.md");
     assert_eq!(save.bytes, expected);
+    // The flash resets to the idle pair after the confirmation window
+    // (boa STATUS_FLASH_MS).
+    let idle = wait_for(&app, || {
+        app.query_text(&["gh-download"]).as_deref() == Some("Download")
+    });
+    assert!(
+        idle,
+        "the pill resets to idle after the flash: {:?}",
+        app.query_text(&["gh-download"])
+    );
     // The journey leaves no error banner behind.
     assert!(
         app.query_element(&["gh-err"]).is_none(),

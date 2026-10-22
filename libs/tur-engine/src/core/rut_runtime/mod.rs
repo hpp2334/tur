@@ -583,10 +583,16 @@ fn install_tur_pkg(
     // The number lane's stamp (the one KV collapse): `1` — the box held
     // an f64 (reads re-stamp f64), `2` — a u64 (reads re-stamp the u64
     // tag), `3` — an i64 (reads re-stamp the i64 tag), `0` — not a
-    // number (the read stamps by KV kind).
+    // number (the read stamps by KV kind). The u64/i64 split reads the
+    // box's TYPE TAG, not the payload: the VM carries BOTH integer lanes
+    // as `Value::I64` payloads, so a payload-only match mis-stamps every
+    // `source<u64>` mint as i64 and `unopaque<u64>` traps on the read
+    // ("the box holds `i64`, `u64` was recovered").
     rut_vm::pkg_fn!(pkg, "store::rs_box_stamp", (OpaqueRef,) -> u64, move |vm: &mut rut_vm::interp::Vm, v: OpaqueRef| {
+        use rut_core::types::TY_U64;
         Ok(match rut_vm::rut_box_payload(vm, &v) {
             Ok((_, rut_vm::Value::F64(_))) => STAMP_NUM_F64,
+            Ok((TY_U64, rut_vm::Value::I64(_))) => STAMP_NUM_U64,
             Ok((_, rut_vm::Value::I64(_))) => STAMP_NUM_I64,
             _ => 0,
         })

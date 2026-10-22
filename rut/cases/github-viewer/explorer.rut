@@ -16,9 +16,9 @@
 // becomes a visible error banner; a JSON error payload (404 / rate
 // limit) surfaces the API's own message (the scanner lives in json.rut).
 
-use futures::launch_future;
+use futures::{ launch_future, sleep };
 use tur_file_kit::{ save_file };
-use tur_kit::control_flow::control::{ Condition, Each };
+use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{ Align, Axis, BorderPosition, CrossAlign, Cursor, MainAxisSize };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ ListHandle, View, list_new, str_parse_f64 };
@@ -71,22 +71,48 @@ pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
     // Download the selected file: fetch its raw bytes and hand them to the
     // platform save lane. No-op when nothing is selected (the subtle pill
     // state); a missing host capability surfaces through the error banner.
+    // The boa re-entry guard: clicks while a journey (or its flash) is
+    // active are ignored.
     let b_download = mutate(fn (ctx: MutationCtx, _e: nil) {
         let fname = ctx.get<str>(s.sel_file);
         if (fname == "") {
             return;
         }
+        if (ctx.get<str>(s.dl) != "idle") {
+            return;
+        }
         launch_future(download_file(ctx, s, fname));
     });
-    // The download pill's accent state (boa parity: accent + white label
-    // when a FILE is selected, subtle otherwise — two static pills over a
-    // Condition; the label color lane is static-only).
+    // The download pill's status machine (the boa DownloadButton): the
+    // pill's FACE swaps on the dl source — "Downloading…" while the
+    // journey rides, "Saved" / "Failed" flashes, the idle pair (accent
+    // when a FILE is selected, subtle otherwise). One pad, four faces;
+    // the key rides each face's TEXT (tests read the label through it,
+    // taps still hit the pad beneath).
     let has_sel: Readable<bool> = derive<bool>(fn (ctx: DeriveCtx) -> bool {
         return ctx.get<str>(s.sel_file) != "";
     });
-    let dl_accent = ui::pill("gh-download", "Download", b_download, theme::ACCENT, theme::ACCENT_FG);
-    let dl_subtle = ui::pill("gh-download", "Download", b_download, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG);
-    let download = Condition(has_sel).then(dl_accent).else_branch(dl_subtle).build();
+    let dl_idle = Condition(has_sel)
+        .then(dl_face("Download", theme::ACCENT, theme::ACCENT_FG))
+        .else_branch(dl_face("Download", theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
+        .build();
+    let download = MouseRegion()
+        .cursor(Cursor::Pointer)
+        .child(
+            PointerInteract()
+                .on_click(b_download)
+                .child(
+                    Switch()
+                        .value(s.dl)
+                        .cases("loading", dl_face("Downloading…", theme::ACCENT_SOFT, theme::ACCENT))
+                        .cases("done", dl_face("Saved", theme::SUCCESS, theme::ACCENT_FG))
+                        .cases("error", dl_face("Failed", theme::DANGER_SOFT, theme::DANGER))
+                        .fallback(dl_idle)
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
     let list = ScrollView()
         .axis(Axis::Vertical)
         .child(
@@ -375,10 +401,18 @@ fn fail(ctx: MutationCtx, s: state::Gh, msg: str, stay: bool) {
 // The download journey (the boa doDownload twin): fetch the selected
 // file's raw bytes (`HEAD` resolves the default branch — no version
 // tracking needed; raw.githubusercontent.com is CORS-open) and hand them
-// to the platform save lane. An empty body is the transport failure
-// banner; `save_file` answering false means the host carries no save
-// capability (the headless/test degradation).
+// to the platform save lane. The dl source drives the pill's status
+// machine: "loading" while the fetch rides, "done" once the bytes land
+// (the "Saved" flash renders BEFORE the host download's `<a>.click()`
+// stalls the frame loop — the boa 500ms defer), "error" on failure, and
+// the idle reset after the boa STATUS_FLASH_MS confirmation window. An
+// empty body is the transport failure banner; `save_file` answering false
+// means the host carries no save capability (the headless/test
+// degradation).
 async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
+    ctx.set<str>(s.err, "");
+    ctx.set<bool>(s.err_has, false);
+    ctx.set<str>(s.dl, "loading");
     let full = ctx.get<str>(s.repo_full);
     let dir = ctx.get<str>(s.path);
     let mut url = f"https://raw.githubusercontent.com/{full}/HEAD/{fname}";
@@ -388,14 +422,33 @@ async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
     let body = await net_request(url, "GET");
     if (body.len() == 0) {
         fail(ctx, s, "Download failed — the raw host may be offline.", true);
+        ctx.set<str>(s.dl, "error");
+        await sleep(1800);
+        ctx.set<str>(s.dl, "idle");
         return "";
     }
+    ctx.set<str>(s.dl, "done");
+    await sleep(500);
     let ok = await save_file(fname, body);
     if (!ok) {
         fail(ctx, s, "Save not available in this host.", true);
-        return "";
+        ctx.set<str>(s.dl, "error");
     }
+    await sleep(1800);
+    ctx.set<str>(s.dl, "idle");
     return "";
+}
+
+// One download-pill face (the boa dlShell minus the leading icon — a
+// coloured pill with a label). The query key rides the TEXT so the tests
+// read the live label.
+fn dl_face(label: str, bg: u64, fg: u64) -> View {
+    return Container()
+        .padding(9.0)
+        .radius(sv(8.0f64))
+        .color(sv(bg))
+        .child(Text().text(sv(label)).font_size(13.0).color(fg).query_key("gh-download").build())
+        .build();
 }
 
 // ---- helpers ---------------------------------------------------------------
