@@ -116,8 +116,12 @@ mutations are atom ids over one per-instance counter, and rut modules address
 them by raw id (the `rs_*` rows: `rs_source_str` / `rs_set_f64` /
 `rs_derive` / `rs_watch` …). Rust plugins mint atoms via
 `PluginRegisterContext::reactive()` (`build_derive` / `build_mutate` — Rust
-closures over the read/write faces). Engine environment atoms
-(`viewportSize$`) follow the same rail (a backing source + a derive handle).
+closures over the read/write faces). Engine environment atoms follow the
+same rail: two f64 backing sources (`viewport_width` / `viewport_height`,
+CSS-pixel logical units) minted by `TurStdPlugin` and republished by the
+`ResizeSubsystem` on every shell resize — read from rut through the `env`
+rows (`env_viewport_w` / `env_viewport_h`) and the kit wrappers
+(`tur_kit::reactive::viewport_width` / `viewport_height`).
 
 ### Multi-instance model (TurRuntime + TurApp)
 
@@ -203,8 +207,9 @@ rut/                   # all rut package sources (pure rut — no build step;
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
                        #   test-pinned decl MODULE TREE (mod.d.rut root +
                        #   NAME/mod.d.rut per module — store/, ctx/,
-                       #   scalars/, clipboard/, layout/{flex,flexi,stack,
-                       #   pos,box,grid_table}/, text/{core,input}/,
+                       #   scalars/, env/, font/, clipboard/,
+                       #   layout/{flex,flexi,stack,pos,box,grid_table}/,
+                       #   text/{core,input}/,
                        #   gesture/{pointer,focus}/, control_flow/{control,
                        #   lifecycle}/, scroll/, image/, composited/,
                        #   virtual_app/, anim/, net/) — the Rust rows stay

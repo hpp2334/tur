@@ -261,7 +261,7 @@ Light theme shadows are subtle — most separation is done with **background-col
 - **Sidebar**: fixed `200px` width, scrollable list of cases. Hover and selected states per §5.
 - **Editor & Viewer**: each `Expanded({ flex })`. Flex ratio is bound to `layoutMode$` — `split` 1:1, `editor` 2:1, `viewer` 1:2.
 - **Status bar**: single source of truth for runtime state. Always visible.
-- **Minimum viewport**: none — the playground is responsive. At ≥720px CSS width it uses the desktop 3-pane layout; below 720px it collapses to a single full-width pane switched by a bottom tab bar (Cases / Edit / View). The breakpoint is driven by the engine-owned `viewportSize$` atom (`isMobile$ = derive(() => get(viewportSize$).width < 720)`), which the engine syncs each frame from the canvas resize.
+- **Minimum viewport**: none — the playground is responsive. At ≥720px CSS width it uses the desktop 3-pane layout; below 720px it collapses to a single full-width pane switched by a bottom tab bar (Cases / Edit / View), independent from the desktop layout mode (§3.2 — the compact mobile toolbar drops the Split/Edit/View cluster). The breakpoint is driven by the engine-owned viewport atom: `is_mobile` is a one-level derive over the `tur_kit::reactive::viewport_width()` readable (`ctx.get(viewport_width()) < 720.0`), which the engine republishes on every shell resize.
 - **Gutters**: none between panes — separation is by background-color shift (`bg.app` → `bg.panel` → `bg.code`/`bg.viewer` → `bg.elevated` for chrome).
 
 ### 3.2 Layout modes
