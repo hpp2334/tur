@@ -103,6 +103,10 @@ pub struct EditableTextView {
     pub(crate) cursor_color: Option<Val<Color>>,
     pub(crate) font_size: Option<Val<f64>>,
     pub(crate) font_family: Option<Val<String>>,
+    /// Ordered fallback family names consulted after `font_family` (the
+    /// Flutter `fontFamilyFallback` model). Static — set eagerly at author
+    /// time, like `query_key`. `None` = primary only + the engine default.
+    pub(crate) font_family_fallback: Option<Vec<String>>,
     /// Default CSS-style font weight (100–1000). `None` falls back to
     /// parley's default (400). Per-span `weight` overrides this.
     pub(crate) font_weight: Option<Val<f64>>,
@@ -204,6 +208,8 @@ pub(crate) struct EditableLayoutKey {
     pub(crate) revision: u64,
     pub(crate) font_size: f64,
     pub(crate) font_family: Option<String>,
+    pub(crate) font_family_fallback: Option<Vec<String>>,
+    pub(crate) font_epoch: u64,
     pub(crate) font_weight: Option<f64>,
     /// The base brush pushed over the whole text: the resolved `color`, or
     /// `placeholder_color` while the placeholder is displayed.

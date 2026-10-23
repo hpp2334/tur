@@ -1,5 +1,5 @@
 use parley::{
-    Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, Layout, StyleProperty,
+    Alignment, AlignmentOptions, FontStyle, FontWeight, Layout, StyleProperty,
 };
 use std::sync::Arc;
 
@@ -13,6 +13,17 @@ use crate::builtin_plugins::text::text_layout;
 
 use super::element::{TextElement, TextOverflow};
 
+/// The base text style the whole element lays out with (the anonymous
+/// span's defaults; per-span overrides still win per range). One record so
+/// the style travels through the layout/ellipsis paths as a unit.
+#[derive(Clone, Copy)]
+struct BaseStyle<'a> {
+    font_size: f32,
+    weight: Option<f32>,
+    family: Option<&'a str>,
+    family_fallback: Option<&'a [String]>,
+}
+
 /// Build an unbroken parley layout for `text` styled by `spans`.
 ///
 /// Shared by the main layout path and the ellipsis-truncation rebuild. Returns
@@ -23,13 +34,18 @@ fn build_parley_layout(
     text_layout_cx: &mut parley::LayoutContext<[u8; 4]>,
     text: &str,
     spans: &[SpanData],
-    base_font_size: f32,
-    base_weight: Option<f32>,
+    base: BaseStyle<'_>,
 ) -> (Layout<[u8; 4]>, Vec<(usize, usize)>) {
     let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, false);
-    builder.push_default(StyleProperty::FontSize(base_font_size));
-    builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
-    if let Some(w) = base_weight {
+    builder.push_default(StyleProperty::FontSize(base.font_size));
+    // The resolver stack: primary family by NAME, the explicit fallback list
+    // in order, the engine default family always last — the shaper picks per
+    // codepoint across it.
+    builder.push_default(StyleProperty::FontFamily(crate::core::fonts::resolve_font_stack(
+        base.family,
+        base.family_fallback,
+    )));
+    if let Some(w) = base.weight {
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(w)));
     }
 
@@ -80,11 +96,14 @@ fn build_parley_layout(
 fn measure_ellipsis_width(
     font_cx: &mut parley::FontContext,
     text_layout_cx: &mut parley::LayoutContext<[u8; 4]>,
-    font_size: f32,
+    base: BaseStyle<'_>,
 ) -> f32 {
     let mut builder = text_layout_cx.ranged_builder(font_cx, "…", 1.0, false);
-    builder.push_default(StyleProperty::FontSize(font_size));
-    builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
+    builder.push_default(StyleProperty::FontSize(base.font_size));
+    builder.push_default(StyleProperty::FontFamily(crate::core::fonts::resolve_font_stack(
+        base.family,
+        base.family_fallback,
+    )));
     let mut layout: Layout<[u8; 4]> = builder.build("…");
     layout.break_all_lines(None);
     layout.width()
@@ -193,6 +212,8 @@ impl ElementLayout for TextElement {
         let base_weight = cx
             .read_val_opt(self.view.font_weight.as_ref())
             .map(|w| w as f32);
+        let base_font_family = cx.read_val_opt(self.view.font_family.as_ref());
+        let base_font_family_fallback = self.view.font_family_fallback.clone();
         let max_lines = cx.read_val_opt(self.view.max_lines.as_ref());
         let overflow = cx
             .read_val_opt(self.view.overflow.as_ref())
@@ -228,6 +249,9 @@ impl ElementLayout for TextElement {
             full_text: full_text.clone(),
             font_size: base_font_size,
             font_weight: base_weight.map(|w| w as f64),
+            font_family: base_font_family.clone(),
+            font_family_fallback: base_font_family_fallback.clone(),
+            font_epoch: cx.font_epoch(),
             color: resolved_color,
             max_lines,
             overflow,
@@ -270,6 +294,15 @@ impl ElementLayout for TextElement {
         // touch it again after that point.
         let default_color = resolved_color.unwrap_or_else(|| Color::rgb(0, 0, 0));
 
+        // The base style record — borrowed views over the resolved locals
+        // (they outlive every layout built below).
+        let base = BaseStyle {
+            font_size: base_font_size as f32,
+            weight: base_weight,
+            family: base_font_family.as_deref(),
+            family_fallback: base_font_family_fallback.as_deref(),
+        };
+
         // Truncation applies only when an explicit `maxLines > 0` is set AND
         // the overflow mode is not `Visible` (which ignores `maxLines`,
         // matching Flutter).
@@ -283,8 +316,7 @@ impl ElementLayout for TextElement {
                 text_layout_cx,
                 &full_text,
                 &spans,
-                base_font_size as f32,
-                base_weight,
+                base,
             );
             layout.break_all_lines(max_width);
             layout.align(Alignment::Start, AlignmentOptions::default());
@@ -303,8 +335,7 @@ impl ElementLayout for TextElement {
             text_layout_cx,
             &full_text,
             &spans,
-            base_font_size as f32,
-            base_weight,
+            base,
         );
         let leftover = {
             let mut breaker = layout.break_lines();
@@ -352,7 +383,7 @@ impl ElementLayout for TextElement {
             return constraints.constrain(Size::new(width as f64, height as f64));
         };
 
-        let ellipsis_w = measure_ellipsis_width(font_cx, text_layout_cx, base_font_size as f32);
+        let ellipsis_w = measure_ellipsis_width(font_cx, text_layout_cx, base);
         let trunc_byte = compute_trunc_byte(&full_text, nth, ellipsis_w, max_width);
 
         let (truncated_text, truncated_spans) =
@@ -363,8 +394,7 @@ impl ElementLayout for TextElement {
             text_layout_cx,
             &truncated_text,
             &truncated_spans,
-            base_font_size as f32,
-            base_weight,
+            base,
         );
         trunc_layout.break_all_lines(max_width);
         trunc_layout.align(Alignment::Start, AlignmentOptions::default());

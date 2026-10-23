@@ -15,6 +15,8 @@ pub host fn input_obscure_char(p1: opaque, p2: str);
 pub host fn input_placeholder_bound(p1: opaque, p2: u64);
 pub host fn input_multiline(p1: opaque, p2: bool);
 pub host fn input_font_family(p1: opaque, p2: str);
+pub host fn input_font_family_fallback_clear(p1: opaque);
+pub host fn input_font_family_fallback_push(p1: opaque, p2: str);
 pub host fn input_on_input(p1: opaque, p2: u64);
 pub host fn input_on_context_menu(p1: opaque, p2: u64);
 pub host fn input_qkey(p1: opaque, p2: str);

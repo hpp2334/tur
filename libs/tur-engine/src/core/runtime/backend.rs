@@ -150,6 +150,7 @@ impl WorkerBackend {
         let js = &self.internal.instance;
         let inputs = crate::core::rut_runtime::RutRealmInputs {
             clock: self.internal.app_context.borrow().frame_env.clock(),
+            font_rail: self.internal.app_context.borrow().font_rail(),
         };
         let mut rut = crate::core::rut_runtime::RutRuntime::boot_compiled(
             prog,

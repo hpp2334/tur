@@ -2,8 +2,9 @@
 
 use tur_host::text::core::{
   span_add, spans_new, text_bind, text_bind_derived, text_build, text_clip, text_color,
-  text_ellipsis, text_max_lines, text_new, text_overflow_visible, text_qkey, text_selectable,
-  text_size, text_spans, text_text, text_weight,
+  text_ellipsis, text_font_family, text_font_family_fallback_clear,
+  text_font_family_fallback_push, text_max_lines, text_new, text_overflow_visible, text_qkey,
+  text_selectable, text_size, text_spans, text_text, text_weight,
 };
 
 // ---- text family (Text / spans) -------------------------------------------
@@ -36,6 +37,23 @@ impl Text {
   }
   pub fn font_weight(mut self, v: f64) -> Self {
     text_weight(self.spec, v);
+    return self;
+  }
+  // The primary font family — resolved BY NAME (Flutter's `fontFamily`).
+  // Unknown names are skipped (try-next); the engine default family always
+  // closes the stack.
+  pub fn font_family(mut self, v: str) -> Self {
+    text_font_family(self.spec, v);
+    return self;
+  }
+  // The ordered fallback families (Flutter's `fontFamilyFallback`) — the
+  // kit composes the list from clear + pushes (no list type in the row
+  // ABI), so a repeated call REPLACES the previous list.
+  pub fn font_family_fallback(mut self, names: [str]) -> Self {
+    text_font_family_fallback_clear(self.spec);
+    for (let n of names) {
+      text_font_family_fallback_push(self.spec, n);
+    }
     return self;
   }
   pub fn color(mut self, packed: u64) -> Self {

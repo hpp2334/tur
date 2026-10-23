@@ -62,7 +62,7 @@ fn start() -> EditorCx {
     let mode = source<str>("split");
     let editor = Input().controller(ctrl).undo(undo)
         .multiline(true)
-        .font_family("monospace")
+        .font_family("Roboto Mono")
         .font_size(13.0)
         .width_height(0.0, 120.0)
         .query_key("ed")
@@ -302,9 +302,13 @@ fn deep_scroll_clicks_land_where_clicked() {
     let s = scroll_of(&app, ed);
     assert!((s - 25.0 * line_h).abs() < 1.0, "scrolled deep: s={s}");
 
-    // Normal rows around the fold (line 32 is the last fully visible at
-    // this scroll — the 120px viewport shows ~7.9 lines).
-    for &(k, c) in &[(26usize, 2usize), (27, 5), (30, 0), (32, 4)] {
+    // Normal rows around the fold. The 120px viewport shows
+    // `floor(120 / line_h)` fully-visible lines from the scrolled top — 7 at
+    // Roboto Mono's 17.145px pitch — so the deepest clickable row is line 31
+    // (empty; the no-ink case below clicks it). Line 32+ sit past the
+    // viewport bottom at this pitch; clicking them would miss the editor
+    // (correctly — there is nothing there to hit).
+    for &(k, c) in &[(26usize, 2usize), (27, 5), (30, 0)] {
         click_line(&mut app, cal, k, c, s);
         let cursor = cursor_of(&app, ed);
         assert_eq!(

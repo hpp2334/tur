@@ -36,6 +36,9 @@ pub struct TurAppContext {
     /// pixel `Blob` lives on the host thread, shipped via `HostMsg::UploadImage`).
     pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) font_manager: FontManager,
+    /// The runtime's shared font rail (the same Arc the FontManager holds) —
+    /// surfaced for the rut-realm inputs (the font rows' declare/load face).
+    rail: std::sync::Arc<crate::core::fonts::FontRail>,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
@@ -76,18 +79,19 @@ impl TurAppContext {
         focus_manager: Rc<RefCell<FocusManager>>,
         image_manager: Rc<RefCell<ImageManager>>,
         font_context: crate::core::fonts::FontContext,
-        font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
+        font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
         worker_ctx: WorkerContext,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
     ) -> Self {
-        let font_manager = FontManager::from_context(font_context, font_loader);
+        let font_manager = FontManager::from_context(font_context, font_rail.clone());
         Self {
             element_tree: element_tree.clone(),
             mutation_queue,
             focus_manager,
             image_manager,
             font_manager,
+            rail: font_rail,
             text_layout_cx: ParleyLayoutContext::new(),
             screen: Screen::new(),
             platform_event_queue: PlatformEventQueue::new(),
@@ -188,6 +192,10 @@ impl TurAppContext {
             self.mutation_queue.clone(),
             dirty,
         );
+    }
+
+    pub(crate) fn font_rail(&self) -> std::sync::Arc<crate::core::fonts::FontRail> {
+        self.rail.clone()
     }
 
     /// Walk the element tree with a [`RecordingCanvas`] to capture per-node

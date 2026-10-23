@@ -10,7 +10,7 @@ use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerContext;
 use crate::core::subsystem::Subsystem;
 
-use crate::core::fonts::{FontContext, FontLoader};
+use crate::core::fonts::FontContext;
 use crate::error::TurError;
 
 /// Engine → embedder: how to schedule the next frame after a `flush`.
@@ -88,7 +88,7 @@ impl TurAppInternal {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         font_context: FontContext,
-        font_loader: std::sync::Arc<dyn FontLoader>,
+        font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
         clock: std::sync::Arc<dyn Clock>,
         capabilities: crate::core::capability::Capabilities,
         worker_ctx: WorkerContext,
@@ -160,7 +160,7 @@ impl TurAppInternal {
             focus_manager,
             image_manager,
             font_context,
-            font_loader,
+            font_rail,
             worker_ctx.clone(),
             capabilities,
             clock_rc,

@@ -78,6 +78,10 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
         "the clipboard kit — plugin-owned prelude",
     ),
     (
+        "rut/tur_font_kit/",
+        "the font kit — plugin-owned prelude",
+    ),
+    (
         "rut/tur_file_kit/",
         "the filepicker kit — plugin-owned prelude",
     ),

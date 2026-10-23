@@ -1,6 +1,7 @@
 use crate::core::layout::{Constraints, Size};
+use crate::core::fonts::resolve_font_stack;
 use crate::core::render::brush::Color;
-use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
+use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, StyleProperty};
 use std::sync::Arc;
 
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
@@ -9,17 +10,6 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 
 use super::element::{DEFAULT_TEXT_COLOR, EditableTextElement};
-
-/// Map a `fontFamily` string to a parley generic family. Accepts the common
-/// Flutter-style names; falls back to sans-serif. "monospace" is the value
-/// used by the code editor.
-fn generic_family_for(font_family: Option<&str>) -> GenericFamily {
-    match font_family {
-        Some(f) if f.eq_ignore_ascii_case("monospace") => GenericFamily::Monospace,
-        Some(f) if f.eq_ignore_ascii_case("serif") => GenericFamily::Serif,
-        _ => GenericFamily::SansSerif,
-    }
-}
 
 fn brush_arr(c: Color) -> [u8; 4] {
     [c.r(), c.g(), c.b(), c.a()]
@@ -41,6 +31,7 @@ impl ElementLayout for EditableTextElement {
             .read_val_opt(self.view.font_size.as_ref())
             .unwrap_or(14.0);
         let font_family = cx.read_val_opt(self.view.font_family.as_ref());
+        let font_family_fallback = self.view.font_family_fallback.clone();
         let font_weight = cx
             .read_val_opt(self.view.font_weight.as_ref())
             .map(|w| w as f32);
@@ -112,6 +103,8 @@ impl ElementLayout for EditableTextElement {
             revision: self.controller().revision(),
             font_size,
             font_family: font_family.clone(),
+            font_family_fallback: font_family_fallback.clone(),
+            font_epoch: cx.font_epoch(),
             font_weight: font_weight.map(|w| w as f64),
             base_color: text_color,
             placeholder: placeholder_for_key,
@@ -182,8 +175,12 @@ impl ElementLayout for EditableTextElement {
 
         let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0, false);
         builder.push_default(StyleProperty::FontSize(font_size as f32));
-        builder.push_default(StyleProperty::from(generic_family_for(
+        // The resolver stack: primary family by NAME, the explicit fallback
+        // list in order, the engine default family always last — the shaper
+        // picks per codepoint across it.
+        builder.push_default(StyleProperty::FontFamily(resolve_font_stack(
             font_family.as_deref(),
+            font_family_fallback.as_deref(),
         )));
         if let Some(w) = font_weight {
             builder.push_default(StyleProperty::FontWeight(FontWeight::new(w)));

@@ -1426,7 +1426,7 @@ entry fn start() {
     pg_apply_highlight(ctrl.raw(), pg_highlight(src));
     mount(Column().child(
         Input().controller(ctrl).undo(undo_ctrl()).width_height(700.0, 200.0)
-            .font_family("monospace").font_size(13.0)
+            .font_family("Roboto Mono").font_size(13.0)
             .multiline(true).query_key("editor").build()).build());
 }
 "#;

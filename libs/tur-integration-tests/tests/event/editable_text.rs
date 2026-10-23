@@ -548,7 +548,7 @@ entry fn start() {
     let ctrl = text_ctrl();
     tctrl_push_span(ctrl.raw(), "hello");
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("Roboto Mono").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -567,7 +567,7 @@ entry fn start() {
     tctrl_push_span(ctrl.raw(), "import");
     tctrl_push_span(ctrl.raw(), " {");
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("Roboto Mono").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -584,7 +584,7 @@ entry fn start() {
     tctrl_push_span(ctrl.raw(), "def\n");
     tctrl_push_span(ctrl.raw(), "ghi");
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).multiline(true).font_family("Roboto Mono").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -767,7 +767,7 @@ entry fn start() {
         i += 1;
     }
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("monospace").query_key("editor").build();
+    let input = Input().controller(ctrl).width_height(300.0, 100.0).font_size(14.0).font_family("Roboto Mono").query_key("editor").build();
     mount(input);
 }
 "#;
@@ -861,7 +861,7 @@ entry fn start() {
     let ctrl = text_ctrl();
     tctrl_push_span(ctrl.raw(), "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL");
     let undo = undo_ctrl();
-    let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("monospace").query_key("scrolled-input").build();
+    let input = Input().controller(ctrl).font_size(14.0).multiline(true).font_family("Roboto Mono").query_key("scrolled-input").build();
     let col = Column().child(input).build();
     let scroller = ScrollView().axis(Axis::Vertical).child(col).build();
     mount(scroller);

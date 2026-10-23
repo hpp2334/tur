@@ -61,7 +61,7 @@ fn start() -> EditorCx {
         .controller(ctrl)
         .undo(undo)
         .multiline(true)
-        .font_family("monospace")
+        .font_family("Roboto Mono")
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();
@@ -429,7 +429,7 @@ fn start() -> EditorCx {
         .controller(ctrl)
         .undo(undo)
         .multiline(true)
-        .font_family("monospace")
+        .font_family("Roboto Mono")
         .width_height(200.0, 60.0)
         .query_key("ed")
         .build();

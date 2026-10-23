@@ -50,13 +50,30 @@ fn standard_plugins() -> Vec<Box<dyn Plugin>> {
         Box::new(TurStdPlugin),
         Box::new(TurAnimationPlugin),
         Box::new(TurClipboardPlugin),
+        Box::new(tur_engine::TurFontPlugin),
     ]
 }
 
 fn standard_capabilities() -> Capabilities {
     let caps = Capabilities::new();
     caps.insert(tur_engine::Clipboard::new(RecordingClipboard::new()));
+    caps.insert(tur_engine::Fonts::new(RecordingFontProvider));
     caps
+}
+
+/// The decl probe's font provider — never driven (the backends only need
+/// to satisfy `TurFontPlugin`'s presence check).
+struct RecordingFontProvider;
+
+impl tur_engine::FontDataProvider for RecordingFontProvider {
+    fn load(
+        &self,
+        _meta: &tur_engine::core::fonts::FontFaceMeta,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<u8>, tur_engine::error::TurError>> + '_>,
+    > {
+        Box::pin(std::future::ready(Ok(Vec::new())))
+    }
 }
 
 /// The harness's browser plugin shape — the configuration
