@@ -18,6 +18,7 @@
 pub mod clipboard;
 pub mod control_flow;
 pub mod effects;
+pub mod font;
 pub mod focus;
 pub mod gesture;
 pub mod image;
@@ -31,4 +32,5 @@ pub mod text;
 pub mod virtual_app;
 
 pub use clipboard::TurClipboardPlugin;
+pub use font::{Fonts, TurFontPlugin};
 pub use std::TurStdPlugin;

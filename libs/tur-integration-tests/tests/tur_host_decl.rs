@@ -30,7 +30,7 @@ use tur_engine::core::capability::Capabilities;
 use tur_engine::core::plugin::Plugin;
 use tur_engine::core::runtime::probe_register_rut_pkg_exts;
 use tur_engine::core::rut_runtime::{render_tur_host_decl_tree, tur_host_surface};
-use tur_engine::{TurClipboardPlugin, TurStdPlugin};
+use tur_engine::{TurClipboardPlugin, TurFontPlugin, TurStdPlugin};
 use tur_integration_tests::{RecordingClipboard, RecordingHttp};
 use tur_net_capability::TurNetPlugin;
 
@@ -45,24 +45,44 @@ fn workspace_root() -> PathBuf {
 
 /// The standard session's plugin set — the SAME set the corpus compile
 /// gate builds (`TurTestApp::new_with_http`): std + animation + clipboard
-/// + net (the Http capability present, so the net rows install).
+/// + net + fonts (the Http + Fonts capabilities present, so the net and
+/// font rows install).
 fn standard_plugins() -> Vec<Box<dyn Plugin>> {
     vec![
         Box::new(TurStdPlugin),
         Box::new(TurAnimationPlugin),
         Box::new(TurClipboardPlugin),
         Box::new(TurNetPlugin),
+        Box::new(TurFontPlugin),
     ]
 }
 
 /// The standard session's capabilities: the recording clipboard + a fresh
 /// recording http (no requests are ever made — the backends only need to
-/// satisfy `TurNetPlugin`'s presence check).
+/// satisfy the net/font plugins' presence checks).
 fn standard_capabilities() -> Capabilities {
     let caps = Capabilities::new();
     caps.insert(tur_engine::Clipboard::new(RecordingClipboard::new()));
     caps.insert(tur_net_capability::Http::new(RecordingHttp::new()));
+    caps.insert(
+        tur_engine::Fonts::new(RecordingFontProvider),
+    );
     caps
+}
+
+/// The decl probe's font provider — never driven (the backends only need
+/// to satisfy `TurFontPlugin`'s presence check).
+struct RecordingFontProvider;
+
+impl tur_engine::FontDataProvider for RecordingFontProvider {
+    fn load(
+        &self,
+        _meta: &tur_engine::core::fonts::FontFaceMeta,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<u8>, tur_engine::error::TurError>> + '_>,
+    > {
+        Box::pin(std::future::ready(Ok(Vec::new())))
+    }
 }
 
 fn probe_exts() -> Vec<tur_engine::core::rut_runtime::RutPkgExt> {

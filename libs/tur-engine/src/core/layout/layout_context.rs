@@ -73,6 +73,14 @@ impl<'a> LayoutContext<'a> {
         )
     }
 
+    /// The font registration epoch (see `core::fonts::FontRail::epoch`).
+    /// Text layouts fold it into their memo keys: a runtime font
+    /// registration bumps it, so the next layout pass re-shapes every run
+    /// that could now resolve differently (the lazy-font swap).
+    pub fn font_epoch(&self) -> u64 {
+        self.font_manager.font_epoch()
+    }
+
     pub fn set_child_offset(&mut self, child_id: ElementNodeId, offset: Offset) {
         if let Some(node) = self.tree.elements.get_mut(&child_id) {
             node.computed_layout.offset = offset;

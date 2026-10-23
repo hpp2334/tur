@@ -77,6 +77,21 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
             TY_NIL,
             false,
         ),
+        trow("text/core", "text_font_family",
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        trow("text/core", "text_font_family_fallback_clear",
+            vec![TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        trow("text/core", "text_font_family_fallback_push",
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
         trow("text/core", "text_color",
             vec![TY_OPAQUE, TY_U64],
             TY_NIL,
@@ -191,8 +206,20 @@ pub fn install_decl(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
             false,
         ),
         // the font family (the JS `Input().fontFamily(...)` twin — the code
-        // editor pins `"monospace"` so caret math sees uniform glyphs).
+        // editor pins `"Roboto Mono"` so caret math sees uniform glyphs).
         trow("text/input", "input_font_family",
+            vec![TY_OPAQUE, TY_STR],
+            TY_NIL,
+            false,
+        ),
+        // the fallback list (the kit composes it from clear + pushes — no
+        // list type in the row ABI).
+        trow("text/input", "input_font_family_fallback_clear",
+            vec![TY_OPAQUE],
+            TY_NIL,
+            false,
+        ),
+        trow("text/input", "input_font_family_fallback_push",
             vec![TY_OPAQUE, TY_STR],
             TY_NIL,
             false,
@@ -310,6 +337,8 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
             text: None,
             font_size: None,
             font_weight: None,
+            font_family: None,
+            font_family_fallback: None,
             color: None,
             spans: None,
             query_key: None,
@@ -345,6 +374,17 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     });
     rut_vm::pkg_fn!(pkg, "text::core::text_weight", (Opaque<TextView>, f64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, v: f64| {
         b.with_mut(vm, |_vm, t| t.font_weight = Some(Val::Static(v)))
+    });
+    rut_vm::pkg_fn!(pkg, "text::core::text_font_family", (Opaque<TextView>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, v: &str| {
+        b.with_mut(vm, |_vm, t| t.font_family = Some(Val::Static(v.to_string())))
+    });
+    // The fallback list composes from clear + pushes (no list type in the
+    // row ABI) — the kit's `font_family_fallback([..])` loops the pushes.
+    rut_vm::pkg_fn!(pkg, "text::core::text_font_family_fallback_clear", (Opaque<TextView>,) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>| {
+        b.with_mut(vm, |_vm, t| t.font_family_fallback = None)
+    });
+    rut_vm::pkg_fn!(pkg, "text::core::text_font_family_fallback_push", (Opaque<TextView>, &str) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, v: &str| {
+        b.with_mut(vm, |_vm, t| t.font_family_fallback.get_or_insert_with(Vec::new).push(v.to_string()))
     });
     rut_vm::pkg_fn!(pkg, "text::core::text_color", (Opaque<TextView>, u64) -> (), |vm: &mut rut_vm::interp::Vm, b: Opaque<TextView>, v: u64| {
         b.with_mut(vm, |_vm, t| t.color = Some(Val::Static(color_of(v))))
@@ -463,10 +503,19 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
         let ch = ch.chars().next().unwrap_or('\u{2022}').to_string();
         b.with_mut(vm, |_vm, s| s.set_obscuring_character_str(ch))
     });
-    // input_font_family(builder, family) — the JS `fontFamily(...)` twin
-    // (parley generic families: "monospace" / "serif" / sans-serif default).
+    // input_font_family(builder, family) — the JS `fontFamily(...)` twin:
+    // a single family NAME resolved by the engine's resolver stack
+    // (`resolve_font_stack` — primary name, fallback list, default tail).
     rut_vm::pkg_fn!(pkg, "text::input::input_font_family", (Opaque<InputView>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, family: &str| {
         b.with_mut(vm, |_vm, s| s.set_font_family_str(family.to_string()))
+    });
+    // input_font_family_fallback_{clear,push}(builder) — the fallback list
+    // composes from clear + pushes (no list type in the row ABI).
+    rut_vm::pkg_fn!(pkg, "text::input::input_font_family_fallback_clear", (Opaque<InputView>,) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>| {
+        b.with_mut(vm, |_vm, s| s.clear_font_family_fallback())
+    });
+    rut_vm::pkg_fn!(pkg, "text::input::input_font_family_fallback_push", (Opaque<InputView>, &str) -> (), move |vm: &mut rut_vm::interp::Vm, b: Opaque<InputView>, family: &str| {
+        b.with_mut(vm, |_vm, s| s.push_font_family_fallback_str(family.to_string()))
     });
     // input_on_input(builder, atom) — install the sealed on-input
     // mutation on the builder's shared controller (the element enqueues

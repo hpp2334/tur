@@ -58,7 +58,8 @@ fn wasm_font_stack() -> FontManager {
         }),
     };
     load_font_stack(&mut fcx, &BundledWasmFonts);
-    FontManager::from_context(fcx, Arc::new(BundledWasmFonts))
+    let rail = Arc::new(tur_engine::core::fonts::FontRail::new(fcx.clone()));
+    FontManager::from_context(fcx, rail)
 }
 
 /// Shape `text` under `family` and return one `(char, glyph_id)` pair per

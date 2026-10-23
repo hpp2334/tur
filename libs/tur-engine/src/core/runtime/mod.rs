@@ -126,7 +126,11 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 pub struct TurRuntime {
     clock: Arc<dyn Clock>,
     font_context: FontContext,
-    font_loader: Arc<dyn FontLoader>,
+    /// The shared font rail — declarations, the registration epoch, and the
+    /// rail's own shared-collection clone (the rows' registration face).
+    /// One per runtime; every instance's [`FontManager`](crate::core::fonts::FontManager)
+    /// holds a clone of the Arc.
+    font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
     capabilities: Capabilities,
     /// Re-playable capability inserts. Each worker spawned from
     /// [`app_builder`](TurRuntime::app_builder) replays these closures into
@@ -252,7 +256,7 @@ impl TurRuntime {
         // frame-timing probe (`std::time::Instant` is unavailable on wasm).
         let host_clock = clock.clone();
         let font_context = self.font_context.clone();
-        let font_loader = self.font_loader.clone();
+        let font_rail = self.font_rail.clone();
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
         let main_cx = self.main_cx.clone();
@@ -272,7 +276,7 @@ impl TurRuntime {
             build_worker_backend(
                 clock,
                 font_context,
-                font_loader,
+                font_rail,
                 capabilities,
                 &plugins,
                 viewport,
@@ -657,7 +661,7 @@ impl<'rt> TurAppBuilder<'rt> {
 pub(crate) fn build_worker_backend(
     clock: Arc<dyn Clock>,
     font_context: FontContext,
-    font_loader: Arc<dyn FontLoader>,
+    font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
     viewport: (f64, f64),
@@ -675,7 +679,7 @@ pub(crate) fn build_worker_backend(
     let rpc_via_host_drain = !worker_ctx.wakes_host_tasks_cross_thread();
     let mut internal = TurAppInternal::new(
         font_context,
-        font_loader,
+        font_rail,
         clock.clone(),
         capabilities,
         worker_ctx,
@@ -752,14 +756,6 @@ impl crate::core::scheduler::WorkerExecutor for ProbeExecutor {
     }
 }
 
-/// The probe's font loader: registers nothing (the register phase never
-/// loads fonts — the runtime build owns that).
-struct ProbeFontLoader;
-
-impl crate::core::fonts::FontLoader for ProbeFontLoader {
-    fn load_preset_fonts(&self, _fcx: &mut crate::core::fonts::FontContext) {}
-}
-
 /// Run `plugins`' register phase against a SCRATCH instance context and
 /// answer the rut pkg extensions they pushed — no worker, no realm, no
 /// renderer (subsystems are constructed into the discarded collector and
@@ -779,7 +775,7 @@ pub fn probe_register_rut_pkg_exts(
         futures::channel::mpsc::unbounded::<crate::core::scheduler::HostTask>();
     let internal = TurAppInternal::new(
         FontContext::new(),
-        Arc::new(ProbeFontLoader),
+        std::sync::Arc::new(crate::core::fonts::FontRail::new(FontContext::new())),
         clock,
         capabilities,
         crate::core::scheduler::WorkerContext::new(Rc::new(ProbeExecutor)),
@@ -1018,9 +1014,14 @@ impl TurRuntimeBuilder {
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
         // `load_font_stack` = loader presets + the last-resort platform-
-        // symbol face (⌘ & friends) — see `core::fonts`.
-        let mut font_context = FontContext::new();
+        // symbol face (⌘ & friends) — see `core::fonts`. The context uses
+        // the SHARED collection store (`fresh_font_context`), so runtime
+        // font registrations (the lazy rail) propagate to every instance.
+        let mut font_context = crate::core::fonts::fresh_font_context();
         crate::core::fonts::load_font_stack(&mut font_context, font_loader.as_ref());
+        let font_rail = std::sync::Arc::new(crate::core::fonts::FontRail::new(
+            font_context.clone(),
+        ));
 
         // Create the engine-internal main-thread channel + root the drain
         // on the main loop. `build()` runs on the main thread, so
@@ -1084,7 +1085,7 @@ impl TurRuntimeBuilder {
         Ok(Rc::new(TurRuntime {
             clock,
             font_context,
-            font_loader,
+            font_rail,
             capabilities,
             capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),

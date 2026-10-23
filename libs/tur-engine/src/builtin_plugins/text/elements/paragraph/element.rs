@@ -62,6 +62,13 @@ pub struct TextView {
     /// Per-span `weight` overrides this for that span's range. `None` falls
     /// back to parley's default (400 — `FontWeight::NORMAL`).
     pub(crate) font_weight: Option<Val<f64>>,
+    /// Primary font family — resolved BY NAME (Flutter's `fontFamily`).
+    /// `None` = the engine default family.
+    pub(crate) font_family: Option<Val<String>>,
+    /// Ordered fallback families consulted after `font_family` (Flutter's
+    /// `fontFamilyFallback`). Static — set eagerly at author time, like
+    /// `spans`.
+    pub(crate) font_family_fallback: Option<Vec<String>>,
     /// Default color applied to the anonymous span in the plain-text case.
     pub(crate) color: Option<Val<Color>>,
     /// Set eagerly at author time (not reactive).
@@ -107,7 +114,8 @@ impl View for TextView {
 /// `EditableLayoutKey` docs for the memo contract). `Text`'s spans are
 /// parsed eagerly at factory time and never mutated, so span *styles* need
 /// no key component — the resolved joined text plus these props are
-/// sufficient.
+/// sufficient. `font_epoch` rides along: a runtime font registration
+/// (the lazy rail) must re-shape even when every other input held still.
 #[derive(PartialEq)]
 pub(crate) struct TextLayoutKey {
     /// Resolved joined text — constant for the spans path, tracks the
@@ -115,6 +123,9 @@ pub(crate) struct TextLayoutKey {
     pub(crate) full_text: String,
     pub(crate) font_size: f64,
     pub(crate) font_weight: Option<f64>,
+    pub(crate) font_family: Option<String>,
+    pub(crate) font_family_fallback: Option<Vec<String>>,
+    pub(crate) font_epoch: u64,
     /// Anonymous-span color (plain-text path) — it colors the runs.
     pub(crate) color: Option<Color>,
     pub(crate) max_lines: Option<u32>,

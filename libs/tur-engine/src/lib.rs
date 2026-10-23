@@ -24,6 +24,7 @@ pub use crate::builtin_plugins::clipboard::{
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
 pub use crate::builtin_plugins::TurStdPlugin;
+pub use crate::builtin_plugins::font::{FontDataProvider, Fonts, TurFontPlugin};
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an

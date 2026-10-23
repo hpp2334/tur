@@ -594,7 +594,7 @@ fn editor_pane(cx: AppContext) -> View {
     // inside the editable stays at 0 the whole time.
     let editor = Input().controller(cx.ctrl).undo(undo_ctrl()).placeholder(sv("select a case…"))
         .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
-        .font_family("monospace").font_size(13.0)
+        .font_family("Roboto Mono").font_size(13.0)
         .multiline(true).on_input(mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }))
         // The right-click rail: the engine's context-menu gesture opens the
         // menu anchored at the click's canvas point (right-clicking INSIDE

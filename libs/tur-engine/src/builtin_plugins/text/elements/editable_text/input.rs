@@ -28,6 +28,7 @@ pub struct InputView {
     cursor_color: Option<Val<Color>>,
     font_size: Option<Val<f64>>,
     font_family: Option<Val<String>>,
+    font_family_fallback: Option<Vec<String>>,
     font_weight: Option<Val<f64>>,
     multiline: Option<Val<bool>>,
     obscure_text: Option<Val<bool>>,
@@ -47,6 +48,7 @@ impl View for InputView {
             cursor_color: self.cursor_color.clone(),
             font_size: self.font_size.clone(),
             font_family: self.font_family.clone(),
+            font_family_fallback: self.font_family_fallback.clone(),
             font_weight: self.font_weight.clone(),
             multiline: self.multiline.clone(),
             obscure_text: self.obscure_text.clone(),
@@ -81,6 +83,7 @@ impl InputView {
             cursor_color: None,
             font_size: None,
             font_family: None,
+            font_family_fallback: None,
             font_weight: None,
             multiline: None,
             obscure_text: None,
@@ -144,5 +147,15 @@ impl InputView {
     }
     pub(crate) fn set_font_family_str(&mut self, v: String) {
         self.font_family = Some(Val::Static(v));
+    }
+    /// Append one fallback family (the kit composes `font_family_fallback`
+    /// from clear + pushes — no list type in the row ABI).
+    pub(crate) fn push_font_family_fallback_str(&mut self, v: String) {
+        self.font_family_fallback
+            .get_or_insert_with(Vec::new)
+            .push(v);
+    }
+    pub(crate) fn clear_font_family_fallback(&mut self) {
+        self.font_family_fallback = None;
     }
 }

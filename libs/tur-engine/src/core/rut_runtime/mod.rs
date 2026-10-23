@@ -736,6 +736,9 @@ pub struct RutHandles {
     pub host_tx: crate::core::app::HostTx,
     /// The engine's shared clock — the animation rows' `now_ms` source.
     pub clock: Rc<dyn crate::core::clock::Clock>,
+    /// The runtime's shared font rail — the font rows' declare/load face
+    /// (see `core::fonts::FontRail`).
+    pub font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
     /// The engine-wide mutation queue — animation `onTick` callbacks ride
     /// it (same dispatch path the JS controllers used).
     pub mutation_queue:
@@ -1498,6 +1501,7 @@ impl RutRuntime {
             click_seq: std::cell::Cell::new(0),
             host_tx: js_ctx.host_tx.clone(),
             clock: inputs.clock,
+            font_rail: inputs.font_rail,
             mutation_queue: js_ctx.mutation_queue.clone(),
             inst: js_ctx.clone(),
             face,
@@ -1891,6 +1895,10 @@ impl RutRuntime {
 /// same `Clock` the animation subsystem ticks with).
 pub struct RutRealmInputs {
     pub clock: std::rc::Rc<dyn crate::core::clock::Clock>,
+    /// The runtime's shared font rail — the font rows' declare/load face
+    /// (see `core::fonts::FontRail`). Cloned out of the instance's app
+    /// context (the same Arc the FontManager holds).
+    pub font_rail: std::sync::Arc<crate::core::fonts::FontRail>,
 }
 
 /// The pkg-extension context an installer sees: the `tur_host` pkg's decl

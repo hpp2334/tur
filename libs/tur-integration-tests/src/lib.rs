@@ -51,12 +51,33 @@ use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
+use tur_engine::{Clipboard, ClipboardBackend, FontDataProvider, Fonts, TurClipboardPlugin, TurFontPlugin};
 use tur_engine::{TurApp, TurRuntime};
 use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
 use tur_native::NativeFontLoader;
+
+use tur_engine::core::fonts::{FontContext, FontLoader};
+
+/// The harness face set: system fonts (the `NativeFontLoader` presets) PLUS
+/// the two faces the wasm embedder bundles, registered under their real
+/// names ("Roboto", "Roboto Mono" — read from the TTF name tables).
+///
+/// `font_family("Roboto Mono")` — the resolver-model fixtures' spell — must
+/// resolve identically on every host: the name is real on wasm and here,
+/// regardless of what the dev box or CI container has installed.
+struct HarnessFontLoader;
+
+impl FontLoader for HarnessFontLoader {
+    fn load_preset_fonts(&self, fcx: &mut FontContext) {
+        NativeFontLoader::new().load_preset_fonts(fcx);
+        let roboto: &[u8] = include_bytes!("../../tur-wasm/fonts/Roboto-VF.ttf");
+        let mono: &[u8] = include_bytes!("../../tur-wasm/fonts/RobotoMono-VF.ttf");
+        fcx.collection.register_fonts(roboto.to_vec().into(), None);
+        fcx.collection.register_fonts(mono.to_vec().into(), None);
+    }
+}
 use tur_net_capability::{
     Http, HttpBackend, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse, RequestOpts,
     TurNetPlugin,
@@ -123,6 +144,66 @@ impl ClipboardBackend for RecordingClipboard {
 #[derive(Default, Clone)]
 pub struct RecordingHttp {
     inner: std::sync::Arc<RecordingHttpInner>,
+}
+
+/// The harness's lazy-font provider: canned bytes per family name (the
+/// bundled Roboto Mono by default — the caret fixtures' mono face), so
+/// lazy-font fixtures drive the full declare → load → swap rail
+/// deterministically (no IO). Pre-canned faces via [`Self::set_face`].
+pub struct RecordingFontProvider {
+    faces: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
+}
+
+impl Default for RecordingFontProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RecordingFontProvider {
+    pub fn new() -> Self {
+        let mono: &[u8] = include_bytes!("../../tur-wasm/fonts/RobotoMono-VF.ttf");
+        let mut faces = std::collections::HashMap::new();
+        // The fixtures' canned faces: a custom-named mono face (the rename
+        // pin) plus the two shipped families (declared by name).
+        faces.insert("Tur Custom".to_string(), mono.to_vec());
+        faces.insert("Inter".to_string(), mono.to_vec());
+        faces.insert("Roboto".to_string(), {
+            let roboto: &[u8] = include_bytes!("../../tur-wasm/fonts/Roboto-VF.ttf");
+            roboto.to_vec()
+        });
+        faces.insert("Roboto Mono".to_string(), mono.to_vec());
+        Self {
+            faces: std::sync::Mutex::new(faces),
+        }
+    }
+
+    /// Pre-canned bytes for a family (an unknown family fails the load —
+    /// the row completes `false`).
+    pub fn set_face(&self, family: &str, bytes: Vec<u8>) {
+        self.faces
+            .lock()
+            .unwrap()
+            .insert(family.to_string(), bytes);
+    }
+}
+
+impl FontDataProvider for RecordingFontProvider {
+    fn load(
+        &self,
+        meta: &tur_engine::core::fonts::FontFaceMeta,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, TurError>> + '_>>
+    {
+        let bytes = self
+            .faces
+            .lock()
+            .unwrap()
+            .get(&meta.family)
+            .cloned();
+        Box::pin(std::future::ready(
+            bytes.ok_or_else(|| TurError::Other(format!("no canned face for {}", meta.family))),
+        ))
+    }
 }
 
 #[derive(Default)]
@@ -421,6 +502,7 @@ pub struct TurTestApp {
     clipboard: RecordingClipboard,
     http: Option<RecordingHttp>,
     filepicker: Option<RecordingFilePicker>,
+    font_provider: std::sync::Arc<RecordingFontProvider>,
     synthetic_time_ms: u64,
 }
 
@@ -625,6 +707,8 @@ impl TurTestApp {
         rpc_via_host_drain: bool,
     ) -> Result<Self, TurError> {
         let clipboard = RecordingClipboard::new();
+        let font_provider = std::sync::Arc::new(RecordingFontProvider::new());
+        let font_provider_handle = font_provider.clone();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         // Default pool: effectively uncapped → every harness app gets its
         // own dedicated lane thread (the historical threading).
@@ -670,7 +754,7 @@ impl TurTestApp {
             );
         }
         let mut builder = TurRuntime::builder()
-            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+            .font_loader(std::sync::Arc::new(HarnessFontLoader))
             .clock(clock.clone())
             .worker_spawner(spawner)
             .host_loop(driver.host_loop())
@@ -681,7 +765,15 @@ impl TurTestApp {
             })
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
-            .plugin(TurClipboardPlugin);
+            .plugin(TurClipboardPlugin)
+            // The lazy-font rail: the canned provider serves fixture bytes;
+            // TurFontPlugin pushes the font rows + kit (the standard
+            // session's shape).
+            .capability({
+                let fonts = font_provider_handle.clone();
+                move |_| Ok(Fonts::shared(fonts))
+            })
+            .plugin(TurFontPlugin);
         if let Some(http_impl) = http.clone() {
             builder = builder
                 .capability(move |_| Ok(Http::new(http_impl)))
@@ -743,6 +835,7 @@ impl TurTestApp {
             clipboard,
             http,
             filepicker,
+            font_provider,
             synthetic_time_ms: 1_700_000_000_000,
         };
         // Bootstrap: the worker self-paints on load (the initial resize the
@@ -1411,6 +1504,12 @@ impl TurTestApp {
 
     /// Pre-canned response for the next `request(opts).await` from JS.
     /// Panics if this app wasn't constructed via [`Self::new_with_http`].
+    /// Pre-canned bytes for a declared family (the lazy-font rail's
+    /// provider). Call BEFORE the fixture's `load_font_data` runs.
+    pub fn set_font_face(&self, family: &str, bytes: Vec<u8>) {
+        self.font_provider.set_face(family, bytes);
+    }
+
     pub fn set_http_response(&self, outcome: HttpOutcome) {
         self.http
             .as_ref()

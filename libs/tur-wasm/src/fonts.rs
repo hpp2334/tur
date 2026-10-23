@@ -33,21 +33,26 @@ impl WasmFontLoader {
 
 impl FontLoader for WasmFontLoader {
     fn load_preset_fonts(&self, fcx: &mut FontContext) {
+        // register_fonts reads the family names from the TTF name tables, so
+        // `font_family("Roboto")` / `font_family("Roboto Mono")` resolve by
+        // NAME in the resolver's stack (the primary entry), not just via the
+        // generic aliases below.
         let families = fcx
             .collection
             .register_fonts(DEFAULT_FONT.to_vec().into(), None);
         let roboto_ids: Vec<_> = families.into_iter().map(|(id, _)| id).collect();
-        // Roboto is the bundled sans-serif face. Map SansSerif and Serif to it
-        // so that `fontFamily: "serif"` (etc.) still resolves to renderable
-        // glyphs rather than blanks.
+        // Roboto is the bundled sans face — and the engine default family's
+        // target: `resolve_font_stack` always appends `sans-serif` as the
+        // stack tail, so this mapping is the wasm default-font assignment.
+        // (Serif maps to it too — the anti-blank alias; nothing resolves the
+        // serif generic today, but a future serif face lands here.)
         fcx.collection
             .set_generic_families(GenericFamily::SansSerif, roboto_ids.iter().copied());
         fcx.collection
             .set_generic_families(GenericFamily::Serif, roboto_ids.iter().copied());
 
-        // A real monospace face (Roboto Mono) for the code editor, which sets
-        // `fontFamily: "monospace"`. Mapped to its own family id so it renders
-        // truly monospaced instead of falling back to Roboto.
+        // A real monospace face (Roboto Mono) for the code editor, which
+        // spells `font_family("Roboto Mono")` — by name, Flutter-style.
         let mono_families = fcx
             .collection
             .register_fonts(MONO_FONT.to_vec().into(), None);
