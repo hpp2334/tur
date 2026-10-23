@@ -3343,7 +3343,9 @@ dependencies = [
  "tur-android",
  "tur-animation",
  "tur-engine",
+ "tur-filepicker-capability",
  "tur-net-native",
+ "tur-playground",
 ]
 
 [[package]]

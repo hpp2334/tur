@@ -48,6 +48,108 @@ pub use jni::sys::{jboolean, jdouble, jint, jlong};
 
 use std::sync::OnceLock;
 
+/// Side table of **multi-file rut modules**
+/// ([`RutModuleFiles`](tur_engine::core::rut_runtime::RutModuleFiles) — a
+/// root source + its declared `mod` children), keyed by the ROOT source's
+/// [`ModuleSourceRegistry`] handle. `loadModule` resolves its handle through
+/// this table FIRST: a hit loads the whole file tree through the engine's
+/// multi-file rail (`TurApp::load_rut_module_files`); a miss falls through
+/// to the plain single-source rail.
+///
+/// Entries are registered on the Rust side — rut sources embedded in the
+/// embedder's cdylib (`include_str!`), e.g. the demo's playground — so, like
+/// Rust-side source registration via [`with_runtime`](crate::ops::with_runtime),
+/// there is no JNI string/array plumbing for it: a rut module never crosses
+/// the JNI boundary as text. Everything left registered is released wholesale
+/// when the runtime is destroyed; `releaseModuleSource` removes the matching
+/// entry too.
+///
+/// Cheap to clone (one `Arc`); every clone sees the same entries.
+#[derive(Clone, Default)]
+pub struct ModuleFilesRegistry {
+    inner: std::sync::Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<u64, tur_engine::core::rut_runtime::RutModuleFiles>,
+        >,
+    >,
+}
+
+impl ModuleFilesRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a file set under `root_handle` — the root source's
+    /// [`ModuleSourceRegistry`] handle, i.e. the id `loadModule` addresses
+    /// the tree by. Re-registering the same handle replaces the entry.
+    pub fn register(&self, root_handle: u64, files: tur_engine::core::rut_runtime::RutModuleFiles) {
+        self.inner
+            .lock()
+            .expect("module-files registry mutex poisoned")
+            .insert(root_handle, files);
+    }
+
+    /// Look up a file set by its root handle. `None` for stale handles or
+    /// plain single-source handles.
+    pub fn get(&self, handle: u64) -> Option<tur_engine::core::rut_runtime::RutModuleFiles> {
+        self.inner
+            .lock()
+            .expect("module-files registry mutex poisoned")
+            .get(&handle)
+            .cloned()
+    }
+
+    /// Remove a file set. Returns `true` if an entry was actually removed.
+    /// Idempotent for unknown handles.
+    pub fn remove(&self, handle: u64) -> bool {
+        self.inner
+            .lock()
+            .expect("module-files registry mutex poisoned")
+            .remove(&handle)
+            .is_some()
+    }
+}
+
+#[cfg(test)]
+mod module_files_tests {
+    use super::ModuleFilesRegistry;
+    use tur_engine::core::rut_runtime::RutModuleFiles;
+
+    #[test]
+    fn register_get_remove_roundtrip() {
+        let reg = ModuleFilesRegistry::new();
+        let files = RutModuleFiles::from("entry fn start() {}");
+        reg.register(7, files);
+        let got = reg.get(7).expect("registered file set must resolve");
+        assert_eq!(&*got.root, "entry fn start() {}");
+        assert!(got.mods.is_empty());
+        assert!(reg.remove(7));
+        assert!(reg.get(7).is_none(), "removed file set must not resolve");
+        assert!(!reg.remove(7), "double remove is a no-op");
+    }
+
+    #[test]
+    fn plain_source_handles_miss_and_clones_share() {
+        let reg = ModuleFilesRegistry::new();
+        assert!(reg.get(0).is_none(), "0 is reserved");
+        assert!(
+            reg.get(u64::MAX).is_none(),
+            "never-registered handle misses"
+        );
+
+        let clone = reg.clone();
+        let mut files = RutModuleFiles::from("mod a;\n");
+        files.mods.insert(
+            std::sync::Arc::from("a"),
+            std::sync::Arc::from("pub fn x() {}"),
+        );
+        reg.register(3, files);
+        assert!(clone.get(3).is_some(), "clones share entries");
+        assert!(clone.remove(3));
+        assert!(reg.get(3).is_none());
+    }
+}
+
 /// The process `JavaVM`, stashed on the first JNI call so the clipboard backend
 /// and the loop driver can attach the frame thread as needed. Held behind a
 /// `Box` because `JavaVM` is not `Clone` (it wraps a raw `*mut sys::JavaVM`),
@@ -76,7 +178,9 @@ fn system_prop(name: &str) -> Option<String> {
     let mut buf = [0 as c_char; 92];
     let len = unsafe { __system_property_get(c_name.as_ptr(), buf.as_mut_ptr()) };
     if len > 0 {
-        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, len as usize) };
+        // `.cast::<u8>()`: c_char is i8 on x86_64 hosts (the cast is a real
+        // conversion there) but u8 on aarch64-android (a no-op).
+        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), len as usize) };
         Some(String::from_utf8_lossy(bytes).into_owned())
     } else {
         None
@@ -335,14 +439,18 @@ pub mod ops {
             let context_ref = env.new_global_ref(context)?;
             log::info!("createRuntime: spawning tur-host thread + building shared runtime");
             let (host, join) = crate::host_thread::spawn();
-            // The shared module-source registry is allocated on THIS thread
-            // and cloned into the runtime once built — both halves share
-            // entries (Arc), so registerModuleSource stays a cheap
-            // caller-thread op that never waits for the host thread.
+            // The shared module-source registry + the multi-file module
+            // table are allocated on THIS thread and cloned into the runtime
+            // once built — all halves share entries (Arc), so
+            // registerModuleSource (and Rust-side file-set registration via
+            // `with_runtime`) stay cheap caller-thread ops that never wait
+            // for the host thread.
             let module_sources = crate::ModuleSourceRegistry::new();
+            let module_files = crate::ModuleFilesRegistry::new();
             let ms_for_build = module_sources.clone();
+            let mf_for_build = module_files.clone();
             let built = host.call(move |state| {
-                match AndroidRuntime::build(context_ref, ms_for_build, configure) {
+                match AndroidRuntime::build(context_ref, ms_for_build, mf_for_build, configure) {
                     Ok(runtime) => {
                         state.set_runtime(Box::new(runtime));
                         Ok(())
@@ -359,6 +467,7 @@ pub mod ops {
             let route = RuntimeRoute {
                 host,
                 module_sources,
+                module_files,
                 join: Some(join),
             };
             Ok(Box::into_raw(Box::new(route)) as jlong)
@@ -602,7 +711,10 @@ pub mod ops {
     /// failure). The source crosses JNI exactly once, here — `loadModule`
     /// then loads it into any instance of the runtime by handle. Rust
     /// embedders skip even this hop: read the source natively and register
-    /// it via [`with_runtime`].
+    /// it via [`with_runtime`] (a MULTI-FILE rut module registers its root
+    /// source the same way, then adds the file set to the runtime's
+    /// [`ModuleFilesRegistry`](crate::ModuleFilesRegistry) under the root's
+    /// handle — see the compose demo's playground registration).
     ///
     /// The registry is `Arc`-shared between this route and the host-thread
     /// runtime, so this runs directly on the calling thread — no host
@@ -617,13 +729,15 @@ pub mod ops {
 
     /// `releaseModuleSource(env, runtimeHandle, sourceHandle)`
     ///
-    /// Drop a registered module source. Idempotent — an unknown/stale handle
-    /// is a no-op (handles are monotonic ids, never reused). Everything left
+    /// Drop a registered module source — and any multi-file entry registered
+    /// under the same root handle. Idempotent — an unknown/stale handle is a
+    /// no-op (handles are monotonic ids, never reused). Everything left
     /// registered is released wholesale when the runtime is destroyed.
     pub fn release_module_source(env: &mut JNIEnv, runtime_handle: jlong, source_handle: jlong) {
         catch_void(env, "releaseModuleSource", |_env| {
             let route = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
             route.module_sources.remove(source_handle as u64);
+            route.module_files.remove(source_handle as u64);
             Ok(())
         })
     }
@@ -632,13 +746,20 @@ pub mod ops {
     /// **rut** module (`entry fn start()` — the module lifecycle contract),
     /// then request a paint so the module's tree renders on the next frame.
     ///
+    /// The handle resolves through the runtime's registries in order: first
+    /// the [`ModuleFilesRegistry`](crate::ModuleFilesRegistry) — a hit is a
+    /// MULTI-FILE module (root + declared `mod` children), loaded whole
+    /// through the engine's files rail (`TurApp::load_rut_module_files`); a
+    /// miss falls through to the [`ModuleSourceRegistry`](crate::ModuleSourceRegistry)
+    /// single-source rail (`TurApp::load_rut_module_source`).
+    ///
     /// Posted to the tur-host thread (FIFO behind the instance build), so
     /// the calling thread returns immediately; a failed load logs to logcat
-    /// instead of throwing. The registry's `Arc<str>` flows to the worker
-    /// by refcount — no copy, no JNI string traffic. A source produced on
-    /// the Rust side (e.g. an APK asset read via `AAssetManager`)
-    /// therefore reaches the rut VM without ever being serialized across
-    /// the JNI boundary.
+    /// instead of throwing. The registries' `Arc<str>` flows to the worker
+    /// by refcount — no copy, no JNI string traffic. Sources produced on
+    /// the Rust side (e.g. a rut module embedded in the embedder's cdylib
+    /// with `include_str!`) therefore reach the rut VM without ever being
+    /// serialized across the JNI boundary.
     pub fn load_module(env: &mut JNIEnv, handle: jlong, source_handle: jlong) {
         catch_void(env, "loadModule", |_env| {
             let route = handle_to_instance(handle).ok_or("invalid instance handle")?;
@@ -650,6 +771,21 @@ pub mod ops {
                     );
                     return;
                 };
+                // Multi-file rut modules first: the handle names a file set
+                // registered on the runtime (root + mod children — the demo
+                // playground's shape).
+                if let Some(files) = instance.module_files.get(source_handle as u64) {
+                    log::info!(
+                        "loadModule: file set @ handle {source_handle} (root {} bytes, {} mod children)",
+                        files.root.len(),
+                        files.mods.len()
+                    );
+                    match futures::executor::block_on(instance.app.load_rut_module_files(files)) {
+                        Ok(()) => log::info!("loadModule: rut module booted OK (multi-file)"),
+                        Err(e) => log::error!("loadModule: rut module load failed: {e}"),
+                    }
+                    return;
+                }
                 log::info!(
                     "loadModule: source handle {source_handle} ({} bytes)",
                     instance
@@ -852,6 +988,9 @@ pub mod ops {
     /// Push a key event. `action`: 0=DOWN, 1=UP. `key`/`code` are browser-style
     /// strings (the Kotlin side maps Android `KeyEvent.keyCode` → these).
     /// Posted to the tur-host thread.
+    // The 9-arg shape mirrors the JNI trampoline's platform event signature —
+    // Kotlin's `InputMapper` passes the modifiers as separate booleans.
+    #[allow(clippy::too_many_arguments)]
     pub fn push_key(
         env: &mut JNIEnv,
         handle: jlong,
@@ -921,14 +1060,16 @@ pub mod ops {
 
     /// Escape hatch mirroring [`with_app`] for the **runtime** handle: run
     /// `f` with `&`[`AndroidRuntime`]. Used from an embedder's own JNI
-    /// trampolines — the motivating case is registering an APK asset as a
-    /// module source entirely on the Rust side (read via `AAssetManager`,
-    /// then `with_runtime(h, |rt| rt.module_sources.register(source))`),
-    /// so the JS bundle never crosses the JNI boundary (the registry is
-    /// Arc-shared, so that specific case needs no round-trip — this hatch
-    /// exposes the rest of the runtime). Returns `None` if `handle` is
-    /// `0` or stale, in which case `f` is not run. Blocking round-trip
-    /// onto the tur-host thread — `f` and its return value must be `Send`.
+    /// trampolines — the motivating cases are registering a module source
+    /// entirely on the Rust side (read via `AAssetManager`, or embedded
+    /// with `include_str!` — so the source never crosses the JNI boundary
+    /// as a string) and adding a multi-file rut module to
+    /// [`AndroidRuntime::module_files`] under its root source's handle.
+    /// The registries are Arc-shared, so those specific cases need no
+    /// round-trip — this hatch exposes the rest of the runtime. Returns
+    /// `None` if `handle` is `0` or stale, in which case `f` is not run.
+    /// Blocking round-trip onto the tur-host thread — `f` and its return
+    /// value must be `Send`.
     pub fn with_runtime<R: Send + 'static>(
         handle: jlong,
         f: impl FnOnce(&AndroidRuntime) -> R + Send + 'static,
@@ -936,7 +1077,7 @@ pub mod ops {
         let route = handle_to_runtime(handle)?;
         route
             .host
-            .call(move |state| state.runtime().map(|rt| f(rt)))
+            .call(move |state| state.runtime().map(f))
             .ok()
             .flatten()
     }

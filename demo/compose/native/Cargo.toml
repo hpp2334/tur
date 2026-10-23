@@ -20,6 +20,10 @@ tur-net-native.workspace = true
 # Scoped to Android so a host `cargo check --workspace` produces an empty
 # (but compiling) cdylib — the JNI entry points and create fn are android-only.
 [target.'cfg(target_os = "android")'.dependencies]
-# Errors from `createAssetModuleSource` — routed through the global logger
-# (`android_logger`, installed by tur-android's first JNI call).
+# Errors from `createPlaygroundModuleSource` — routed through the global
+# logger (`android_logger`, installed by tur-android's first JNI call).
 log = "0.4"
+# The playground's rut compile service (`pg_*` rows) and the file-picker
+# capability/plugin (registered over the stub backend in lib.rs).
+tur-playground.workspace = true
+tur-filepicker-capability.workspace = true

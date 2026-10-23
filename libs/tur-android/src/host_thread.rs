@@ -202,6 +202,10 @@ pub struct RuntimeRoute {
     /// `releaseModuleSource` (and Rust-side registrations via
     /// [`crate::ops::with_runtime`]) work from any thread.
     pub(crate) module_sources: ModuleSourceRegistry,
+    /// The multi-file rut module table (see [`RuntimeRoute::module_sources`]
+    /// for the sharing story) — `releaseModuleSource` drops entries from
+    /// both tables; `loadModule` resolves file sets first.
+    pub(crate) module_files: crate::ModuleFilesRegistry,
     /// Join handle, taken + joined by `destroyRuntime`.
     pub(crate) join: Option<JoinHandle<()>>,
 }

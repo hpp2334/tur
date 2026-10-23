@@ -8,13 +8,29 @@ description: Use when building, signing, installing, or debugging the tur Androi
 Everything needed to get the tur playground running on an Android device and to
 keep `adb` talking to it from macOS. The native engine glue is `libs/tur-android`
 (an **rlib** — no `.so` of its own); the demo's `.so` (`libtur_demo`) is built
-from `demo/compose/native` (a cdylib that links `tur-android` + the demo plugins);
-the shell is `demo/compose` (Kotlin/Compose); the Compose integration is
+from `demo/compose/native` (a cdylib that links `tur-android` + the demo plugins
+and **embeds the rut playground sources** — see below); the shell is
+`demo/compose` (Kotlin/Compose); the Compose integration is
 `integrations/compose` (a pure-Kotlin AAR with no native code).
 
 Environment: Android cmdline-tools at `/usr/local/share/android-commandlinetools`,
 NDK `27.0.12077973`, JDK 17 at `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
 (set `JAVA_HOME`). adb at `…/platform-tools/adb`. `cargo-ndk` must be installed.
+
+## How the playground ships (no module asset)
+
+The playground is a **rut module** whose sources are embedded in the demo's
+cdylib with `include_str!` (`demo/compose/native/src/lib.rs`: the root —
+`rut/playground/mod.rut` + the generated `cases_gen.rut`, the website's
+`playgroundSource()` concatenation — plus the declared `menu` child,
+`rut/playground/menu.rut`). At startup `MainActivity` calls
+`DemoNative.createPlaygroundModuleSource(runtime)`, which registers the file
+set on the runtime's module registries **Rust-side** and returns the
+root-source handle; `TurView`'s `loadModule(handle)` resolves it as a
+multi-file module and boots the whole tree through the engine's
+`load_rut_module_files` rail. Nothing crosses the JNI boundary as text and
+the APK stages no `playground.js` asset (the old `buildPlaygroundJs` /
+`copyPlaygroundJs` gradle tasks are gone).
 
 ## Build
 
@@ -162,14 +178,15 @@ the **tur-host thread**; the panic hook fires there inside the op wrapper's
 `catch_unwind`, then the wrapper aborts — same total behavior as the old
 JNI-boundary catch, one thread further removed.)
 
-## Rebuilding after an *engine* change
+## Rebuilding after an *engine* (or rut source) change
 
 `gradlew assembleRelease` runs `cargo ndk` via the demo's `:buildDemoNative`
-task, but that task's inputs only watch `demo/compose/native/src` — a change in
-`libs/tur-engine/src` (or `libs/tur-android/src`) is **not** detected, so the
-task stays UP-TO-DATE and the old `.so` ships. After any engine edit, rebuild
-the `.so` directly first, then run gradle (its `:copyDemoNative` re-copies the
-changed artifact):
+task, but that task's inputs only watch `demo/compose/native/src` — a change
+in `libs/tur-engine/src`, `libs/tur-android/src`, **or `rut/`** (the
+playground's sources are `include_str!`-embedded from there) is **not**
+detected, so the task stays UP-TO-DATE and the old `.so` ships. After any
+such edit, rebuild the `.so` directly first, then run gradle (its
+`:copyDemoNative` re-copies the changed artifact):
 
 ```sh
 cargo ndk -t arm64-v8a build --release -p tur-demo

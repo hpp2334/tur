@@ -9,8 +9,9 @@ import org.tur.FrameLoop
  *
  * This is the app's own glue: it loads the `.so` and declares the entry points
  * that build a tur runtime with the **demo's** plugin set (Std + Animation +
- * Clipboard + Net + DemoHelper) and create module sources natively. The
- * standard engine-op symbols (`Java_org_tur_TurNative_*` — createInstance /
+ * Clipboard + Net + the playground's rut compile service + FilePicker over a
+ * stub backend) and register the embedded rut playground as a module source.
+ * The standard engine-op symbols (`Java_org_tur_TurNative_*` — createInstance /
  * pump / input / IME / module sources / …) come from the same `.so` (generated
  * by `tur_android::standard_jni_exports!`) and are resolved by the Kotlin
  * lib's `org.tur.TurNative`; this object only owns the app-specific exports.
@@ -32,18 +33,15 @@ object DemoNative {
     external fun createRuntime(context: Context): Long
 
     /**
-     * Read the APK asset at [path] **on the Rust side** (NDK AAssetManager)
-     * and register it as a module source on [runtimeHandle]'s registry.
-     * Returns an opaque source handle (`0` on failure — a
-     * `RuntimeException` is also thrown).
-     *
-     * The bundle never crosses the Kotlin↔Rust boundary as a string: the
-     * bytes are read natively, registered as a shared `Arc<str>`, and
-     * `TurView` loads it into an instance by handle.
+     * Register the **rut playground** embedded in the native lib (the root
+     * source — `mod.rut` + the generated case registry — plus the declared
+     * `menu` child) on [runtimeHandle]'s registries. Returns the opaque
+     * root-source handle (`0` on failure — a `RuntimeException` is also
+     * thrown), which `TurView` passes to `TurNative.loadModule`; native
+     * resolves it as a multi-file module and boots the whole tree through the
+     * engine's multi-file rut rail. Nothing crosses the Kotlin↔Rust boundary
+     * as text: the sources are `include_str!`-embedded Rust-side, so the APK
+     * ships no module asset.
      */
-    external fun createAssetModuleSource(
-        runtimeHandle: Long,
-        path: String,
-        assets: android.content.res.AssetManager,
-    ): Long
+    external fun createPlaygroundModuleSource(runtimeHandle: Long): Long
 }

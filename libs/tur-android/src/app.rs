@@ -17,10 +17,10 @@ mod imp {
     use std::pin::Pin;
     use std::rc::Rc;
 
-    use tur_engine::core::clock::StdClock;
     use jni::objects::{GlobalRef, JObject, JValue};
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
+    use tur_engine::core::clock::StdClock;
     use tur_engine::core::render::brush::Color;
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
@@ -135,6 +135,13 @@ mod imp {
         /// instance of this runtime by handle, never crossing JNI as a
         /// string. Dropped wholesale with the runtime.
         pub module_sources: ModuleSourceRegistry,
+        /// Multi-file rut module table keyed by the root source's
+        /// `module_sources` handle (see
+        /// [`crate::ModuleFilesRegistry`]). `loadModule` resolves file sets
+        /// first, so a registered tree loads whole through the engine's
+        /// multi-file rail. Cloned into every instance; dropped with the
+        /// runtime.
+        pub module_files: crate::ModuleFilesRegistry,
         /// The default worker pool every instance is assigned to unless the
         /// embedder overrides via `configure`. Effectively uncapped → each
         /// instance gets its own dedicated lane thread (the historical
@@ -154,12 +161,14 @@ mod imp {
         ///
         /// Runs on the **tur-host thread** (`ops::create_runtime` marshals
         /// the build over) — the runtime's `Rc` state (host loop, lane
-        /// registry) is `!Send` and must never cross a thread. `module_sources`
-        /// is the caller-allocated shared registry (the JNI route holds the
-        /// other Arc half, so module sources register from any thread).
+        /// registry) is `!Send` and must never cross a thread.
+        /// `module_sources` and `module_files` are the caller-allocated
+        /// shared registries (the JNI route holds the other Arc halves, so
+        /// module sources and file sets register from any thread).
         pub fn build(
             context: GlobalRef,
             module_sources: ModuleSourceRegistry,
+            module_files: crate::ModuleFilesRegistry,
             configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
         ) -> Result<Self, TurAndroidError> {
             // Register the process JavaVM for the clipboard backend (it attaches
@@ -190,7 +199,7 @@ mod imp {
                 .worker_spawner(worker_spawner)
                 .host_loop(host_loop.clone())
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
-                .clock(std::sync::Arc::new(StdClock::new()))
+                .clock(std::sync::Arc::new(StdClock))
                 .worker_pool(default_worker_pool.clone())
                 .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))))
                 .capability({
@@ -214,6 +223,7 @@ mod imp {
                 tokio,
                 host_loop,
                 module_sources,
+                module_files,
                 default_worker_pool,
             })
         }
@@ -240,8 +250,12 @@ mod imp {
         /// `FrameLoop`. JNI `pump` fires it before polling the loop.
         pub vsync: Rc<AndroidVsyncSource>,
         /// The runtime's shared module-source registry (cloned handle — same
-        /// entries). `loadModule` resolves its `jlong` source handle here.
+        /// entries). `loadModule` resolves its `jlong` source handle here
+        /// (multi-file entries in [`Self::module_files`] first).
         pub module_sources: ModuleSourceRegistry,
+        /// The runtime's multi-file rut module table (cloned handle — same
+        /// entries as the runtime half).
+        pub module_files: crate::ModuleFilesRegistry,
         /// The runtime's main-thread task spawner, polled each `pump`.
         host_loop: Rc<AndroidHostLoop>,
         /// The autonomous frame loop future (`TurAppLooper::run`). The
@@ -284,6 +298,10 @@ mod imp {
         /// construction: `AndroidShell` carries the Choreographer-bound
         /// [`AndroidVsyncSource`] (built by the caller, cloned here for
         /// JNI `fire_vsync` + the wake fn) — see [`AndroidShell`].
+        // The install contract is this 3-tuple (vsync + loop task + wake fn,
+        // threaded into the instance together); a struct would restate each
+        // field once.
+        #[allow(clippy::type_complexity)]
         fn install_frame_loop(
             _app: &Rc<TurApp>,
             looper: TurAppLooper,
@@ -335,7 +353,7 @@ mod imp {
                         let mut cx = std::task::Context::from_waker(&waker);
                         t.as_mut().poll(&mut cx)
                     })
-                    .map_or(false, |p| p.is_ready());
+                    .is_some_and(|p| p.is_ready());
                 if ready {
                     *task = None;
                 }
@@ -512,6 +530,7 @@ mod imp {
                 app,
                 vsync,
                 module_sources: runtime.module_sources.clone(),
+                module_files: runtime.module_files.clone(),
                 host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,
@@ -546,6 +565,7 @@ mod imp {
         pub fn build(
             _context: GlobalRef,
             _module_sources: crate::ModuleSourceRegistry,
+            _module_files: crate::ModuleFilesRegistry,
             _configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)

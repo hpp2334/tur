@@ -1,6 +1,8 @@
-// tur Android demo app — runs the full tur playground (`playground.js`) on a
-// single `TurView`. Build with `./gradlew assembleDebug` (arm64-v8a only;
-// the native .so is aarch64-linux-android).
+// tur Android demo app — runs the full rut playground on a single `TurView`.
+// The playground's rut sources are embedded in `libtur_demo.so`
+// (`demo/compose/native` — `include_str!` of `rut/playground/*`), so there is
+// no module asset to stage. Build with `./gradlew assembleRelease` (arm64-v8a
+// only; the native .so is aarch64-linux-android).
 
 plugins {
     id("com.android.application")
@@ -130,61 +132,8 @@ android.applicationVariants.all {
         .configureEach { dependsOn(copyDemoNative) }
 }
 
-// --- JS asset pipeline ------------------------------------------------------
-//
-// Build the playground-view bundle (`demo/playground-view` → `dist/impl.js`)
-// and copy it into `src/main/assets/playground.js` before the APK packages
-// assets. The bundle is the full tur playground UI (sidebar + editor + viewer)
-// with all ~80 cases inlined as string sources by `scripts/gen-cases.cjs`.
-
-val playgroundPkg = File(workspaceRoot, "demo/playground-view")
-val playgroundDist = File(playgroundPkg, "dist/impl.js")
-val assetsDir = File(projectDir, "src/main/assets")
-val playgroundAsset = File(assetsDir, "playground.js")
-
-val buildPlaygroundJs by tasks.registering(Exec::class) {
-    group = "tur"
-    description = "Build the playground JS bundle (dist/impl.js) via pnpm."
-    outputs.file(playgroundDist)
-    inputs.file(File(playgroundPkg, "package.json"))
-    inputs.dir(File(playgroundPkg, "src"))
-
-    workingDir = File(workspaceRoot, "js")
-    commandLine("pnpm", "--filter", "@tur-ng/playground-view", "build")
-    // Android variant: alias `tur:filepicker` to an in-bundle stub (tur-android
-    // ships no file-picker backend). See rspack.config.ts.
-    environment("TUR_PLATFORM", "android")
-}
-
-val copyPlaygroundJs by tasks.registering(Copy::class) {
-    group = "tur"
-    description = "Copy dist/impl.js into assets/playground.js."
-    dependsOn(buildPlaygroundJs)
-    from(playgroundDist)
-    into(assetsDir)
-    rename { "playground.js" }
-}
-
-// AGP 8.x: hook the asset copy into every variant's asset-merge task. The
-// task name is `merge<Variant>Assets` (e.g. `mergeDebugAssets`).
-android.applicationVariants.all {
-    val variantCapitalized = name.replaceFirstChar { it.uppercase() }
-    tasks.matching { it.name == "merge${variantCapitalized}Assets" }
-        .configureEach { dependsOn(copyPlaygroundJs) }
-    // Lint-vital tasks (`generate<Variant>LintVitalReportModel`,
-    // `lintVitalAnalyze<Variant>`, …) also scan the source assets dir, so they
-    // must run after the playground bundle is copied in — otherwise Gradle 8.x
-    // rejects it as an undeclared implicit dependency. Match all lint-vital
-    // tasks for the variant rather than enumerate names.
-    tasks.matching {
-        it.name.lowercase().contains("lintvital") &&
-            it.name.contains(variantCapitalized)
-    }.configureEach { dependsOn(copyPlaygroundJs) }
-}
-
-// Ensure the assets dir exists so the Copy task has a target even on a clean
-// checkout.
-assetsDir.mkdirs()
+// (The playground ships as rut sources embedded in the demo's cdylib — there
+// is no module-asset pipeline to stage. See demo/compose/native/src/lib.rs.)
 
 // --- Keep `.symtab` in the packaged native lib --------------------------------
 //
