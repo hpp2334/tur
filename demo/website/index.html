@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- `interactive-widget=resizes-content` (Chrome/Android 108+): the
+         layout viewport RESIZES when the soft keyboard opens — the canvas
+         shrinks, the ResizeObserver forwards the new viewport to the
+         engine, and the mobile layout reflows above the keyboard.
+         (Default `resizes-visual` overlays the keyboard on top of the
+         content instead.) iOS Safari ignores the key. NOTE: headless
+         browser verification of the keyboard resize is impossible — no
+         soft keyboard exists there; this needs a device follow-up. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>tur playground</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }

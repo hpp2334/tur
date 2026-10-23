@@ -57,6 +57,15 @@ struct WasmState {
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
+    /// Host-side mirror of the engine's text-input session state — the
+    /// last [`tur_engine::core::shell::TextInputState`] the shell received
+    /// (the engine ships it deduped, on change). The touch handlers read
+    /// this snapshot synchronously INSIDE a user gesture (see the
+    /// touchend in-gesture refocus below): the async engine→shell round
+    /// trip is useless there — by the time a fresh push lands, the
+    /// gesture window that lets `focus()` raise the soft keyboard has
+    /// already closed.
+    text_input: RefCell<tur_engine::core::shell::TextInputState>,
     /// The last viewport triple forwarded to the engine — dedups resize
     /// events across the canvas `ResizeObserver` and the dpr-change
     /// watcher (both can deliver for one zoom change, and the RO always
@@ -127,15 +136,26 @@ impl tur_engine::Shell for WasmShell {
         let Some(wasm) = guard.as_mut() else {
             return;
         };
-        if state.is_editable {
+        // Mirror first — the touchend handler reads this snapshot
+        // synchronously inside the user gesture, so it must never lag the
+        // last shipped state.
+        let is_editable = state.is_editable;
+        *wasm.text_input.borrow_mut() = state;
+        if is_editable {
             let _ = wasm.textarea.focus();
-            if let Some((x, y, _w, _h)) = state.cursor_rect {
+            if let Some((x, y, _w, _h)) = wasm.text_input.borrow().cursor_rect {
                 let _ = wasm
                     .textarea
                     .style()
                     .set_property("left", &format!("{x}px"));
                 let _ = wasm.textarea.style().set_property("top", &format!("{y}px"));
             }
+        } else {
+            // Session closed (the engine's focused editable lost focus):
+            // drop DOM focus too. A textarea left focused would hold the
+            // mobile soft keyboard open over a non-editing surface. No-op
+            // when the textarea isn't focused.
+            let _ = wasm.textarea.blur();
         }
     }
 
@@ -873,11 +893,14 @@ impl WasmApp {
         // - **touchcancel**: push `PointerCancel { device: Touch }`.
         //   The arena releases any captured drag without firing a click.
         //
-        // Soft-keyboard / caret focus does NOT depend on the browser's
-        // synthesized clicks: the engine's focus manager (driven by the
-        // engine-synthesized click) triggers a text-input state push,
-        // which the shell (registered at build time) consumes to
-        // call `textarea.focus()` + position the caret.
+        // Soft-keyboard / caret focus has two rails. The engine rail: the
+        // engine's focus manager (driven by the engine-synthesized click)
+        // triggers a text-input state push, which the shell (registered at
+        // build time) consumes to call `textarea.focus()` + position the
+        // caret. The gesture rail: while a session is already open, the
+        // touchend handler below re-focuses the textarea synchronously
+        // inside the touch gesture — see the in-gesture refocus comment
+        // there.
         let touch_start_state = state_clone.clone();
         let touch_start_closure =
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
@@ -983,6 +1006,27 @@ impl WasmApp {
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
                     }));
+                // In-gesture refocus (mobile soft keyboard). While the
+                // engine's text-input session is OPEN, re-focus the hidden
+                // textarea synchronously here — inside the touchend user
+                // gesture, where `focus()` may still raise the soft
+                // keyboard. This heals keyboard-lost cases the engine's
+                // deduped focus rail can never heal on its own: the OS
+                // dismissed the keyboard / DOM focus was stolen while the
+                // engine session stayed open, so the engine's state did not
+                // change and it would never re-push.
+                //
+                // Deliberately NOT focused when no session is open: a tap
+                // on a non-editable surface must not flash the keyboard —
+                // the FIRST open rides the async engine rail instead
+                // (tap → engine focuses the editable → deduped push →
+                // `request_text_input` above). On iOS Safari that async
+                // first focus never opens the keyboard (out-of-gesture
+                // focus is ignored there); full iOS support is a
+                // follow-up requiring a real device to iterate against.
+                if s.text_input.borrow().is_editable {
+                    let _ = s.textarea.focus();
+                }
             });
 
         canvas
@@ -1199,6 +1243,10 @@ impl WasmApp {
             _canvas: canvas,
             textarea,
             is_composing: Cell::new(false),
+            // The engine's first pump ships the initial closed session
+            // (`TextInputState { is_editable: false, .. }`) — start there
+            // so a tap racing the worker boot reads a sane snapshot.
+            text_input: RefCell::new(tur_engine::core::shell::TextInputState::default()),
             // The boot triple — the engine was built for exactly this
             // viewport, so the RO's initial observation dedups against it.
             last_resize: Cell::new((logical_width, logical_height, dpr)),
