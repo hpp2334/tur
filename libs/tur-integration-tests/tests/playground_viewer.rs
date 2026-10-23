@@ -1407,6 +1407,240 @@ fn playground_editor_divider_drags_and_clamps_the_editor_width() {
     );
 }
 
+// ---- Phase 2 (mobile): the responsive shell -------------------------------------
+// Below the 720px breakpoint the shell collapses to a single full-width pane
+// switched by the 44px bottom tab bar (Cases / Edit / View); the desktop shell
+// survives unchanged above it, and crossing the breakpoint preserves both (the
+// desktop layout mode and the mobile tab are independent rails). The full-width
+// single pane is the soft-keyboard fix: no 200px non-focusable chrome sits over
+// the phone's tap area any more.
+
+/// The playground at the phone size (the 390×844 viewport the boa mobile
+/// view targeted; `isMobile = viewport.width < 720`).
+fn playground_mobile_app() -> TurTestApp {
+    playground_app_sized(390.0, 844.0)
+}
+
+#[test]
+fn playground_mobile_boots_to_the_tab_bar_shell() {
+    let app = playground_mobile_app();
+    let _cx = app.rut_start_answer();
+
+    // The boot case selection rides loadCase: on mobile it jumps to the
+    // viewer — the single pane, filling the width.
+    assert!(
+        app.wait_for(|a| qk_width(a, &["viewer-pane"]) == Some(390.0)),
+        "the single viewer pane fills the width at boot: {:?}",
+        qk_width(&app, &["viewer-pane"])
+    );
+
+    // The 44px full-width tab bar with the three labeled tabs.
+    let bar = app
+        .query_element(&["mobile-tab-bar"])
+        .expect("the mobile tab bar");
+    let b = app
+        .get_element_absolute_bounds(ElementNodeId::new(bar.as_u64()))
+        .unwrap();
+    assert_eq!(b.bottom - b.top, 44.0, "the tab bar band");
+    assert_eq!(b.right - b.left, 390.0, "the tab bar spans the width");
+    for key in ["mobile-tab-cases", "mobile-tab-edit", "mobile-tab-view"] {
+        assert!(
+            app.query_element(&[key]).is_some(),
+            "the {key} tab is probe-able"
+        );
+    }
+
+    // No desktop chrome on mobile: no sidebar, no divider bands, no
+    // Split/Edit/View cluster.
+    assert!(app.query_element(&["sidebar"]).is_none(), "no desktop sidebar");
+    assert!(app.query_element(&["divider"]).is_none(), "no desktop divider");
+    assert!(app.query_element(&["divider2"]).is_none(), "no editor divider");
+    assert!(
+        app.query_element(&["tab-split"]).is_none(),
+        "the layout tabs hide on mobile"
+    );
+    assert!(
+        app.query_element(&["editor-pane"]).is_none(),
+        "the editor pane is behind the Edit tab, not mounted at boot"
+    );
+}
+
+#[test]
+fn playground_mobile_tab_taps_switch_panes() {
+    let mut app = playground_mobile_app();
+    let _cx = app.rut_start_answer();
+
+    // Tap the Cases tab (a real pointer click): the sidebar pane mounts,
+    // full width, and the viewer pane unmounts.
+    click_qk(&mut app, &["mobile-tab-cases"]);
+    assert!(
+        app.wait_for(|a| qk_width(a, &["sidebar"]) == Some(390.0)),
+        "the cases tab mounts the full-width sidebar: {:?}",
+        qk_width(&app, &["sidebar"])
+    );
+    assert!(
+        app.query_element(&["viewer-pane"]).is_none(),
+        "the viewer pane unmounts on the cases tab"
+    );
+
+    // Back to Edit: the editor returns with the loaded source — the shared
+    // controller survived the tab switches.
+    click_qk(&mut app, &["mobile-tab-edit"]);
+    assert!(
+        app.wait_for(|a| qk_width(a, &["editor-pane"]) == Some(390.0)),
+        "the edit tab mounts the full-width editor"
+    );
+    assert_eq!(
+        editor_text(&app),
+        case_source("counter"),
+        "the editor text survived the tab switches"
+    );
+
+    // View: the viewer pane is back.
+    click_qk(&mut app, &["mobile-tab-view"]);
+    assert!(app.wait_for(|a| qk_width(a, &["viewer-pane"]) == Some(390.0)));
+}
+
+#[test]
+fn playground_mobile_case_select_jumps_to_the_viewer() {
+    let mut app = playground_mobile_app();
+    let cx = app.rut_start_answer();
+
+    // Land on the cases tab, then pick a case through the REAL intent path
+    // (a sidebar row tap).
+    click_qk(&mut app, &["mobile-tab-cases"]);
+    assert!(app.query_element(&["row", "counter"]).is_some());
+    let (x, y) = qk_center(&app, &["row", "counter"]);
+    app.click(x, y);
+    assert!(
+        wait_for_state(&app, "ready"),
+        "the tapped case never reached ready: {:?}",
+        app.query_text(&["app-state"])
+    );
+
+    // mobile_tab flipped to "view": the viewer pane is the mounted pane.
+    assert!(
+        app.wait_for(|a| qk_width(a, &["viewer-pane"]) == Some(390.0)),
+        "the case select jumped to the viewer tab"
+    );
+    assert!(
+        app.query_element(&["sidebar"]).is_none(),
+        "the sidebar unmounted with the jump"
+    );
+    assert!(
+        app.query_element(&["editor-pane"]).is_none(),
+        "the editor unmounted with the jump"
+    );
+    // The child is live in the viewer (the case actually runs).
+    let node = app
+        .dev_tool_get_element(app.query_element(&["viewer"]).unwrap())
+        .expect("the viewer host in the dev-tool tree");
+    assert_eq!(node.name, "tur_virtual_app");
+}
+
+#[test]
+fn playground_mobile_resizes_back_to_the_desktop_shell() {
+    let mut app = playground_mobile_app();
+    let _cx = app.rut_start_answer();
+    assert!(app.query_element(&["mobile-tab-bar"]).is_some());
+    assert!(app.query_element(&["divider"]).is_none());
+
+    // Cross the breakpoint upward: the desktop shell returns — the divider
+    // bands back, the tab bar gone, the 200px sidebar seed.
+    app.resize(1280.0, 800.0);
+    assert!(
+        app.wait_for(|a| a.query_element(&["divider"]).is_some()),
+        "the desktop divider returned"
+    );
+    assert!(
+        app.query_element(&["mobile-tab-bar"]).is_none(),
+        "the tab bar unmounted on desktop"
+    );
+    assert_eq!(
+        qk_width(&app, &["sidebar"]),
+        Some(200.0),
+        "the desktop sidebar seed"
+    );
+    let (editor_w, viewer_w) = (
+        qk_width(&app, &["editor-pane"]).expect("the editor pane"),
+        qk_width(&app, &["viewer-pane"]).expect("the viewer pane"),
+    );
+    assert!(
+        editor_w > 300.0 && viewer_w > 300.0,
+        "the desktop panes share the row again: {editor_w} / {viewer_w}"
+    );
+
+    // …and back down: the mobile shell returns (the boot tab selection is
+    // preserved — the desktop layout mode never touched it).
+    app.resize(390.0, 844.0);
+    assert!(
+        app.wait_for(|a| a.query_element(&["mobile-tab-bar"]).is_some()),
+        "the tab bar returned"
+    );
+    assert!(
+        app.query_element(&["divider"]).is_none(),
+        "the desktop divider unmounted again"
+    );
+}
+
+#[test]
+fn playground_cmd_s_recompiles_from_the_focused_editor() {
+    let mut app = playground_mobile_app();
+    let _cx = app.rut_start_answer();
+
+    // The boot jump put the viewer up; the Edit tab brings the editor back.
+    click_qk(&mut app, &["mobile-tab-edit"]);
+    assert!(app.wait_for(|a| qk_width(a, &["editor-pane"]) == Some(390.0)));
+
+    // Auto-run off: the ONLY recompile below is the keyboard rail.
+    click_qk(&mut app, &["autorun"]);
+    app.wait_for_timeout(Duration::ZERO);
+    assert_eq!(
+        app.query_text(&["auto-state"]).as_deref(),
+        Some("\u{2318}S to run"),
+        "auto-run off — the ⌘S hint shows"
+    );
+
+    // Break the source through a REAL tap-to-focus (the Focusable wrapper
+    // must not shadow the editable) + a full-document replace — a single
+    // keystroke would depend on where the click parks the caret (it can
+    // land inside a comment and keep the source compiling).
+    focus_editor(&mut app);
+    type_into_editor(&mut app, "hello world");
+    assert_eq!(
+        editor_text(&app),
+        "hello world",
+        "the tap-to-focus + replace landed"
+    );
+    assert!(
+        app.query_element(&["edited-pill"]).is_some(),
+        "the edited pill appears"
+    );
+
+    // ⌘S recompiles — the same rail the Run button drives.
+    app.send_key_with_modifiers_full("s", false, false, true);
+    assert!(
+        wait_for_state(&app, "compile-error"),
+        "⌘S never recompiled the broken source: {:?}",
+        app.query_text(&["app-state"])
+    );
+    assert_eq!(
+        editor_text(&app),
+        "hello world",
+        "the shortcut inserted nothing into the buffer"
+    );
+
+    // A plain "s" (no modifiers) must NOT recompile: the hint is meta/ctrl
+    // gated. The failed run also left the baseline unmoved (the edited pill
+    // stays — only a successful Run moves it), and auto-run is off.
+    app.wait_for_timeout(Duration::from_millis(700));
+    assert_eq!(
+        app.query_text(&["app-state"]).as_deref(),
+        Some("compile-error"),
+        "a bare keystroke never recompiles with auto-run off"
+    );
+}
+
 // ---- Phase 4 (P0): comment-span metrics pin -------------------------------------
 // The "wide inter-word gaps in editor comments" report: measured against
 // the boa reference, the advances are identical (one monospace cell per
