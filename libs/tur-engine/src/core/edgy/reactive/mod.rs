@@ -22,9 +22,9 @@ pub use store::{
 /// mutation), kept in the shared registry ([`SharedReactive`]). Its value
 /// lives in a store's KV and materializes on first touch: each store holds
 /// its own copy, so the same id in two stores is two independent values.
-/// Engine "environment" atoms (`viewportSize$` …) are ordinary atoms whose
-/// backing the engine writes through the tree's current store (see
-/// [`SharedReactive`] docs).
+/// Engine "environment" atoms (`viewport_width` / `viewport_height`) are
+/// ordinary atoms whose backing the engine writes through the tree's
+/// current store (see [`SharedReactive`] docs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AtomId(pub(crate) u32);
 

@@ -2,12 +2,13 @@
 //! drives it.
 //!
 //! [`Screen`] is **pure data**: the current logical size (CSS pixels) and
-//! the device pixel ratio. The `viewportSize$` atom — its backing source,
-//! the instance-store write rail it publishes through, and the dedup guard
-//! — is owned by [`ResizeSubsystem`] (`resize.rs`), minted and registered
+//! the device pixel ratio. The viewport env atoms (`viewport_width` /
+//! `viewport_height`) — their backing sources, the instance-store write
+//! rail they publish through, and the dedup guard — are owned by
+//! [`ResizeSubsystem`] (`resize.rs`), minted and registered
 //! by `TurStdPlugin` (the canonical plugin-facing engine-atom recipe), and
 //! driven by the shell `Resize` event (updates this state, publishes the
-//! atom, and re-marks the tree root dirty).
+//! atoms, and re-marks the tree root dirty).
 //!
 //! `TurAppContext` owns a [`Screen`] inline; `SubsystemFlushContext.screen`
 //! is a `&mut` borrow into it, so the resize handler drives both the size
@@ -41,7 +42,7 @@ pub struct ScreenViewport {
 
 /// Engine screen state — pure data: the canvas's logical size + DPR.
 /// Updated by [`ResizeSubsystem`] on shell `Resize` events (which also
-/// publishes the new size into `viewportSize$`).
+/// publishes the new size into the viewport env atoms).
 pub struct Screen {
     /// Current canvas logical size, in CSS pixels.
     pub logical_size: (f64, f64),

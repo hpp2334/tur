@@ -91,7 +91,7 @@ pub enum VirtualControl {
         pool: WorkerPoolHandle,
     },
     /// The host element's on-screen rect changed (deduped by the sender).
-    /// Drives the child's `resize` (renderer + `viewportSize$`) and is
+    /// Drives the child's `resize` (renderer + the viewport env atoms) and is
     /// retained host-side for egress translation.
     Resize {
         token: VirtualAppId,
@@ -497,7 +497,7 @@ impl VirtualHost {
     /// Resize the surface. The single implementation — the facade and the
     /// `Resize` control arm both land here. It only forwards the shell
     /// `Resize` event to the worker (so `ResizeSubsystem` updates `Screen`
-    /// / `viewportSize$` and the next flush lays out + paints at the new
+    /// / the viewport env atoms and the next flush lays out + paints at the new
     /// size); the host renderer is NOT touched here. Its geometry syncs at
     /// the render commit point, stamped on the next painted batch (see
     /// `HostBackend::render_batch`) — resizing the backing store at
@@ -522,7 +522,7 @@ impl VirtualHost {
     /// re-ensures every image a frame references before painting it); this
     /// sizes the renderer immediately (safe: nothing has been presented on
     /// it yet), then routes through [`Self::resize`] so the worker's
-    /// `viewportSize$` is seeded with a fresh frame request. Subsequent
+    /// viewport env atoms are seeded with a fresh frame request. Subsequent
     /// geometry changes arrive with painted batches (see
     /// [`Self::resize`]). See [`TurApp::attach_renderer`].
     pub(crate) fn attach_renderer(
@@ -606,7 +606,7 @@ impl VirtualHost {
         // token, never a builder option (the embedder-facing builder can
         // only ever name `ROOT`). Viewport/dpr are placeholders the host
         // element's first `flush_post_layout` rect immediately corrects via
-        // a `Resize` control, fixing `viewportSize$` before the child
+        // a `Resize` control, fixing the viewport env atoms before the child
         // paints anything meaningful.
         let built = self.runtime.spawn_hosted_instance(
             token,

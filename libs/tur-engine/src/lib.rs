@@ -385,8 +385,9 @@ impl TurApp {
     /// Attach (or replace) the instance's renderer — the **attach** half of
     /// the two-phase (initialize → attach) lifecycle. Installs the renderer
     /// into the host-side slot, then routes through [`Self::resize`] so the
-    /// renderer is sized/configured **and** the worker's `viewportSize$` is
-    /// seeded (a fresh frame is requested). The renderer starts with an
+    /// renderer is sized/configured **and** the worker's viewport env atoms
+    /// (`viewport_width` / `viewport_height`) are seeded (a fresh frame is
+    /// requested). The renderer starts with an
     /// empty atlas; retained image resources are re-ensured at the render
     /// commit point before the first frame that paints them (JS-cached
     /// handles only fetch missing ids, so nothing else would re-register

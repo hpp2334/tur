@@ -2,6 +2,7 @@
 // the mutation rail (source / derive / mutate + the ctxs).
 
 use tur_host::ctx::{ ctx_bridge, ctx_get_box, ctx_run_box, ctx_set_box, derive_seal, mutate_seal };
+use tur_host::env::{ env_viewport_h, env_viewport_w };
 use tur_host::store::{ rs_box_stamp, rs_source_box, rs_watch_mut, rs_watch_start, rs_watch_stop };
 
 // ---- reactive helpers (the C8 substrate's authored face) ------------------
@@ -330,6 +331,29 @@ pub fn source<T>(v: T) -> Source<T> {
   let atom = rs_source_box(b);
   let stamp = rs_box_stamp(b);
   return Source<T>::of(ctx_bridge(), atom, false, stamp);
+}
+
+// ---- the engine-environment face: the viewport -----------------------------
+//
+// The engine mints two f64 backing sources at plugin-register time
+// (`viewport_width` / `viewport_height` — CSS-pixel LOGICAL units, the
+// sizes the shell reports) and republishes them on every shell resize.
+// These wrappers hand the SAME atoms to authors as `Readable<f64>`: the
+// mint is the `source<T>` construction over the engine-held atom id (the
+// `env` rows' answer), so `get` serves the fresh value and a derive
+// reading through a ctx dep-tracks the atom — a resize re-runs the
+// derive. The atoms are engine-owned truth: no write face exists.
+
+fn viewport_source(atom: u64) -> Readable<f64> {
+  return Source<f64>::of(ctx_bridge(), atom, false, STAMP_NUM_F64);
+}
+
+pub fn viewport_width() -> Readable<f64> {
+  return viewport_source(env_viewport_w());
+}
+
+pub fn viewport_height() -> Readable<f64> {
+  return viewport_source(env_viewport_h());
 }
 
 // Mint a derived atom whose fn reads through the ctx — dependencies

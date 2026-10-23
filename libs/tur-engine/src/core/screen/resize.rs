@@ -4,58 +4,53 @@ use crate::core::platform::PlatformEvent;
 use crate::core::shell::ShellEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
-/// Publishes shell `Resize` events into the `viewportSize$` atom.
+/// Publishes shell `Resize` events into the `viewport_width` /
+/// `viewport_height` atoms.
 ///
 /// This is the canonical engine-atom pattern (the same shape as the
-/// `CounterSubsystem` plugin recipe): the subsystem owns the **backing**
-/// source — its single value home is the instance store — and the instance
-/// store's bridge (the ordinary `set_source` write rail). The public
-/// `viewportSize$` handle is a derive over the backing, minted together
-/// with this subsystem by `TurStdPlugin::register`. [`crate::core::screen::Screen`]
+/// `CounterSubsystem` plugin recipe): the subsystem owns the two **backing**
+/// sources — their single value home is the instance store — and the
+/// instance store's bridge (the ordinary `set_source` write rail). The
+/// public faces for rut code are the `env` rows' atom ids
+/// (`env_viewport_w` / `env_viewport_h`, resolved through the
+/// `ViewportEnv` plugin state), minted together with this subsystem by
+/// `TurStdPlugin::register`. [`crate::core::screen::Screen`]
 /// stays pure data: only the logical size and dpr live there.
 ///
 /// Engine infrastructure that the std plugin wires: `TurStdPlugin` registers
 /// it FIRST in dispatch order (before gesture / keyboard / ime /
-/// pointer-region), so the atom exists before anything can read it.
+/// pointer-region), so the atoms exist before anything can read them.
 pub struct ResizeSubsystem {
-    /// The `viewportSize$` backing source (the public handle is a derive
-    /// over this).
-    backing: Source<Value>,
+    /// The `viewport_width` backing source (CSS-pixel logical f64).
+    backing_w: Source<f64>,
+    /// The `viewport_height` backing source (CSS-pixel logical f64).
+    backing_h: Source<f64>,
     /// The instance store's write rail.
     bridge: ReactiveBridgeStore,
-    /// Last `(width, height)` pushed into `backing` — guards against
-    /// spurious stale marking (each resize builds a fresh `Value::Map`, and
-    /// maps compare by reference identity, so without this guard every
-    /// resize would dirty the atom even at an unchanged size).
+    /// Last `(width, height)` pushed into the backings — guards against
+    /// spurious stale marking (without this guard every resize would dirty
+    /// the atoms even at an unchanged size).
     last: (f64, f64),
 }
 
 impl ResizeSubsystem {
-    /// Construct with the backing + the instance store's bridge. `initial`
-    /// is the size already carried by the backing's seed (the engine
-    /// builder mints it from the real viewport), so a first resize to that
-    /// same size dedups — the atom already holds the value.
+    /// Construct with the backings + the instance store's bridge.
+    /// `initial` is the size already carried by the backings' seeds (the
+    /// engine builder mints it from the real viewport), so a first resize
+    /// to that same size dedups — the atoms already hold the value.
     pub(crate) fn new(
-        backing: Source<Value>,
+        backing_w: Source<f64>,
+        backing_h: Source<f64>,
         bridge: ReactiveBridgeStore,
         initial: (f64, f64),
     ) -> Self {
         Self {
-            backing,
+            backing_w,
+            backing_h,
             bridge,
             last: initial,
         }
     }
-}
-
-/// Build the `{width, height}` native map (CSS pixels) — the value shape of
-/// the `viewportSize$` atom (its seed in the engine builder, its per-resize
-/// payload here). Realm-free: the native-KV substrate holds the value.
-pub(crate) fn viewport_size_value(width: f64, height: f64) -> Value {
-    Value::map([
-        ("width", Value::Num(width)),
-        ("height", Value::Num(height)),
-    ])
 }
 
 impl Subsystem for ResizeSubsystem {
@@ -76,23 +71,25 @@ impl Subsystem for ResizeSubsystem {
         let size = (*logical_width as f64, *logical_height as f64);
         cx.screen.logical_size = size;
         cx.screen.dpr = *dpr;
-        // Publish the new size into the `viewportSize$` backing through the
+        // Publish the new size into the two viewport backings through the
         // instance store's write rail, so subscribers re-layout in this
         // same fixed-point iteration. `set_source`-with-equal-size dedups
-        // via `last`. Pre-mount the tree is simply rootless —
-        // `mark_root_dirty` is a no-op then.
+        // via `last` (the pair moves together — one guard). Pre-mount the
+        // tree is simply rootless — `mark_root_dirty` is a no-op then.
         //
-        // Realm-free: the atom's value is a native map, so the write never
-        // touches the JS realm (a rut-only instance publishes resizes too).
+        // Realm-free: the atoms' values are plain f64s, so the write never
+        // touches any script realm.
         if size != self.last {
             self.last = size;
-            let value = viewport_size_value(size.0, size.1);
             // A resize can never be a watch loop (it originates from the
             // platform event queue, never inside a watcher callback
             // delivery), so an error here would be an engine invariant
             // violation — log, don't crash.
-            if let Err(e) = self.bridge.set_source(self.backing, value) {
-                tracing::error!("viewportSize$ sync failed: {e}");
+            if let Err(e) = self.bridge.set_source(self.backing_w, Value::Num(size.0)) {
+                tracing::error!("viewport_width sync failed: {e}");
+            }
+            if let Err(e) = self.bridge.set_source(self.backing_h, Value::Num(size.1)) {
+                tracing::error!("viewport_height sync failed: {e}");
             }
         }
         cx.element_tree.borrow_mut().mark_root_dirty();

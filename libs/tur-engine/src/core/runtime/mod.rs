@@ -316,8 +316,8 @@ impl TurRuntime {
         // the geometry the embedder's renderer was constructed with (so the
         // first batch's commit-point sync dedups — no redundant backing
         // -store swap at frame 1), then seed the worker's screen state +
-        // `viewportSize$` before frame 1 via the forwarded shell `Resize`
-        // event.
+        // the `viewport_width` / `viewport_height` env atoms before frame 1
+        // via the forwarded shell `Resize` event.
         host.backend()
             .sync_viewport(crate::core::screen::ScreenViewport {
                 logical_width: viewport.0 as u32,
@@ -418,7 +418,8 @@ impl<'rt> TurAppBuilder<'rt> {
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
     /// target; `dpr` is the device pixel ratio. The engine pushes the
-    /// initial shell `Resize` event into the worker so `viewportSize$`
+    /// initial shell `Resize` event into the worker so the viewport env
+    /// atoms (`viewport_width` / `viewport_height`)
     /// + the host-side renderer are seeded before frame 1.
     pub fn renderer(
         mut self,
@@ -584,8 +585,9 @@ impl<'rt> TurAppBuilder<'rt> {
     /// it (the two-phase initialize → attach lifecycle; the Android
     /// embedder's `createInstance`/`attachInstance` pair).
     ///
-    /// `viewport` sets the initial `viewportSize$` (read by JS layout);
-    /// pass `(0.0, 0.0)` if layout is irrelevant.
+    /// `viewport` sets the initial `viewport_width` / `viewport_height`
+    /// env atoms (read by rut layout); pass `(0.0, 0.0)` if layout is
+    /// irrelevant.
     ///
     /// Returns the app handle together with its [`TurAppLooper`], like
     /// [`Self::build`].
@@ -689,8 +691,9 @@ pub(crate) fn build_worker_backend(
     );
 
     // Seed the worker-side screen state with the build-time viewport. The
-    // `viewportSize$` engine atom — backing source, public derive handle,
-    // and the `ResizeSubsystem` that publishes it — is minted and owned by
+    // viewport env atoms (`viewport_width` / `viewport_height`) — their
+    // backing sources and the `ResizeSubsystem` that publishes them — are
+    // minted and owned by
     // the standard plugin (the canonical plugin-facing engine-atom recipe,
     // see the std plugin), seeded via `PluginRegisterContext::viewport()`.
     internal.app_context.borrow_mut().screen.logical_size = viewport;

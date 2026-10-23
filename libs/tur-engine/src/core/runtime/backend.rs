@@ -837,8 +837,8 @@ impl HostBackend {
     /// applied ([`Self::last_viewport`]), so a steady frame stream never
     /// reconfigures the surface and a resize is applied exactly once — with
     /// the first frame painted for it. A no-op on the renderer itself while
-    /// detached (the shell `Resize` event still reached the worker, so
-    /// `viewportSize$` tracks the size; the next attached renderer is
+    /// detached (the shell `Resize` event still reached the worker, so the
+    /// viewport env atoms track the size; the next attached renderer is
     /// synced by its explicit attach, and the next batch re-syncs).
     pub(crate) fn sync_viewport(&self, viewport: crate::core::screen::ScreenViewport) {
         if self.last_viewport.get() == Some(viewport) {

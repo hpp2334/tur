@@ -186,20 +186,15 @@ impl PluginRegisterContext {
     /// auto-dependency tracker works identically.
     ///
     /// Rust-minted atoms materialize per store like any atom. A plugin that
-    /// publishes engine environment truth should follow the
-    /// `viewportSize$` pattern — the backing's single value home is the
-    /// ENGINE store, exposed via a handle derive that reads it through a
-    /// captured engine-store read face (so every store of the instance
-    /// resolves the same live value), published via the ordinary
-    /// `set_source` write rail from a subsystem:
+    /// publishes engine environment truth should follow the viewport
+    /// pattern (the `viewport_width` / `viewport_height` recipe) — the
+    /// backing's single value home is the ENGINE store, addressed by raw
+    /// id where consumers need it (the env rows), published via the
+    /// ordinary `set_source` write rail from a subsystem:
     ///
     /// ```text
     /// let bridge = ctx.reactive();
-    /// let backing: Source<Value> = bridge.decl_source(initial);
-    /// let engine_read = bridge.read_only();
-    /// let handle = bridge.build_derive(move |_read| {
-    ///     Ok(engine_read.read(Readable::from(backing)))
-    /// });
+    /// let backing: Source<f64> = bridge.decl_source(initial);
     /// // in the subsystem tick (no tree chase — works pre- and post-mount):
     /// //   bridge.set_source(backing, value)
     /// ```
@@ -223,7 +218,8 @@ impl PluginRegisterContext {
     /// The build-time viewport (logical CSS pixels) — the size
     /// [`Screen`](crate::core::screen::Screen) carries when plugins
     /// register (no shell `Resize` can have arrived yet). `TurStdPlugin`
-    /// seeds the `viewportSize$` atom and the dedup guard of its
+    /// seeds the `viewport_width` / `viewport_height` atoms and the dedup
+    /// guard of its
     /// [`ResizeSubsystem`](crate::core::screen::ResizeSubsystem) with it.
     pub fn viewport(&self) -> (f64, f64) {
         self.app.borrow().screen.logical_size

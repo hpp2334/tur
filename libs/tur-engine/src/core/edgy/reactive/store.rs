@@ -35,7 +35,8 @@ use crate::core::edgy::watch::WatcherRegistry;
 //
 // An atom is its seed: id + initial value or closure, no value anywhere
 // until the store materializes it — and the store's KV holds the copy.
-// Engine "environment" atoms (`viewportSize$` …) are ordinary atoms with a
+// Engine "environment" atoms (`viewport_width` / `viewport_height`) are
+// ordinary atoms with a
 // designated home: the backing source materializes in the INSTANCE store
 // (the engine writes it via the ordinary `set_source` rail), and the public
 // handle is a derive whose closure reads the backing through a captured

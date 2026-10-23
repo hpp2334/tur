@@ -42,10 +42,12 @@ use rut_vm::interp::{CallArgs, Ret, Vm};
 mod async_caps;
 mod decl_gen;
 mod derive;
+mod env;
 mod module_files;
 mod mutation;
 
 pub use decl_gen::{mount_host_tree, render_tur_host_decl_tree, tur_host_surface};
+pub use env::ViewportEnv;
 pub use module_files::RutModuleFiles;
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
@@ -381,6 +383,8 @@ pub fn tur_decl_pkg() -> rut_driver::Mounted {
     // ride the driver's five-row family expansion).
     let mut funcs = host_funcs;
     funcs.extend(async_caps::decl_rows());
+    // The engine-environment rows (the viewport atoms' ids).
+    funcs.extend(env::decl_rows());
     let mut pkg = rut_driver::Mounted {
         spec: "tur_host".to_string(),
         namespace: Some("tur_host".to_string()),
@@ -678,6 +682,8 @@ fn install_tur_pkg(
 
     // C6 — async capabilities (clipboard + the bytes helpers).
     async_caps::install(&mut pkg, handles);
+    // The engine-environment rows (the viewport atoms' ids).
+    env::install(&mut pkg, handles);
     // C8 — derived atoms + watch (the guarded flush-time VM call).
     derive::install(&mut pkg, handles);
     // M1 — the mutation rail (the ctx rows + the sealers).
