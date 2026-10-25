@@ -936,7 +936,7 @@ impl TurTestApp {
     }
 
     /// Direct reference to the underlying `TurApp` — for host-side APIs like
-    /// `EventBus::of(app)` that need `&TurApp`.
+    /// `app.event_bus_handle()` that need `&TurApp`.
     pub fn app(&self) -> &TurApp {
         &self.inner
     }

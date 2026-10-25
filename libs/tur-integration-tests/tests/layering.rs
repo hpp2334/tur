@@ -74,6 +74,10 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
     ),
     ("rut/tur_net_kit/", "the net kit — plugin-owned prelude"),
     (
+        "rut/tur_event_kit/",
+        "the event kit — the event bus's plugin-owned prelude",
+    ),
+    (
         "rut/tur_clipboard_kit/",
         "the clipboard kit — plugin-owned prelude",
     ),

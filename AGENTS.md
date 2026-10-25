@@ -231,6 +231,10 @@ rut/                   # all rut package sources (pure rut — no build step;
   tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
                        #   tur-engine builtin_plugins/clipboard/kit.rs —
                        #   pushed as a prelude by TurClipboardPlugin)
+  tur_event_kit/       # the event bus's kit (mod.rut; embedded by
+                       #   tur-engine builtin_plugins/event_bus_kit.rs —
+                       #   pushed as a prelude by TurStdPlugin; the rows
+                       #   spell *_raw twins, the kit owns the names)
   tur_file_kit/        # the filepicker kit (mod.rut; embedded by
                        #   tur-filepicker-capability/src/kit.rs — pushed
                        #   as a prelude by TurFilePickerPlugin; the rows
@@ -359,8 +363,8 @@ Android build + device debugging live in the **`android-dev` skill** at
   The per-case manifests are generated the same way
   (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
-  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_clipboard_kit|
-  tur_file_kit` — the documented
+  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_event_kit|
+  tur_clipboard_kit|tur_file_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
   `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
@@ -578,6 +582,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;
   cancel rides the task opaque's cancel row (`net_stream` + `task_cancel`).
+- The event bus (`core::event_bus` — mechanism; the `tur_event_kit` rail):
+  a bidirectional multiplexed byte channel between the embedder and the
+  module, keyed by `channel_id: u64`. Module side: `event_on(channel,
+  mutate<bytes>(..))` / `event_send(channel, bytes)`; embedder side:
+  `TurApp::event_bus_handle()` → `emit_to_module` / `on_bus_event`.
+  Point-to-point per channel, no broadcast, silent drop on handler-less
+  channels, next-flush delivery (the sealed-handler mutation rail —
+  net-stream chunks' exact mechanism). The boa-era `core::event_bus`'s
+  rut-era port; handlers are `Mutation<bytes>` (SEAL_BYTES, 10).
 - Runtime errors: VM task traps + face traps ship as
   `HostMsg::RuntimeError{report}` to the embedder (see
   `core::app::runtime_error`); the virtual-app status rail reports child

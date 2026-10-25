@@ -1,3 +1,4 @@
+mod bus;
 mod caret_into_view;
 mod click;
 mod click_integrity;

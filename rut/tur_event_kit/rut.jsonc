@@ -1,0 +1,7 @@
+{
+  "name": "tur_event_kit",
+  "deps": {
+    "tur_host": { "path": "../tur_host" },
+    "tur_kit": { "path": "../tur_kit" }
+  }
+}

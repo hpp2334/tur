@@ -40,6 +40,7 @@ use futures::StreamExt;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
 use crate::core::clock::Clock;
+use crate::core::event_bus::EventBusHandle;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::rut_runtime::RutModuleFiles;
@@ -318,6 +319,15 @@ impl WorkerBackend {
             }
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
+            }
+            WorkerMsg::EventBusToModule { channel_id, payload } => {
+                // Queue for the bus subsystem's next-flush drain (silent
+                // drop happens THERE — handler-less channels never enqueue).
+                if let Some(bus) = self.internal.instance.plugin_state::<
+                    crate::core::event_bus::EventBusState,
+                >() {
+                    bus.push_to_module(channel_id, payload);
+                }
             }
             WorkerMsg::BlurFocus => {
                 // The hosting parent took focus away (the ClearFocus
@@ -613,6 +623,12 @@ pub(crate) struct HostBackend {
     /// re-encode + re-raster when a new batch carries identical content
     /// (see [`Self::render_batch`]).
     last_frame_fingerprint: Cell<Option<u64>>,
+    /// The event bus handle — the embedder's cross-thread face over the
+    /// host↔module byte channel (`emit_to_module` / `on_bus_event`; the
+    /// boa-era `EventBusHandle`'s rut-era port). Cloned out by
+    /// `TurApp::event_bus_handle`; `apply_msg` dispatches
+    /// `HostMsg::EventBusToEmbedder` through it.
+    event_bus: EventBusHandle,
     /// The runtime clock — times the host-side render-commit phases for
     /// the frame-timing probe. Held as an `Arc` clone;
     /// `std::time::Instant` is unavailable on wasm.
@@ -691,6 +707,9 @@ impl HostBackend {
         // kick an idle Web Worker's JS event loop without a sync
         // `Atomics.wait`). Called after every host→worker send below.
         let worker_wake = worker_ticket.wake();
+        // The bus handle's own clone (the struct literal moves `worker_wake`
+        // into its field before `event_bus:` evaluates).
+        let bus_wake = worker_wake.clone();
 
         (
             Self {
@@ -706,6 +725,7 @@ impl HostBackend {
                 last_viewport: Cell::new(None),
                 frame_timing_enabled: Cell::new(false),
                 last_frame_fingerprint: Cell::new(None),
+                event_bus: EventBusHandle::new(worker_tx.clone(), bus_wake),
                 clock,
             },
             host_rx,
@@ -719,10 +739,15 @@ impl HostBackend {
         self.worker_wake.clone()
     }
 
+    /// The event bus handle (cloned out to `TurApp::event_bus_handle`).
+    pub(crate) fn event_bus_handle_clone(&self) -> EventBusHandle {
+        self.event_bus.clone()
+    }
+
     /// Send a fire-and-forget [`WorkerMsg`] (no Reply slot). Used by
     /// `push_platform_event`, `push_app_event`,
-    /// `emit_to_js`. Wakes the worker cross-thread after the send (no-op on
-    /// native; `postMessage` on wasm).
+    /// `EventBusHandle::emit_to_module`. Wakes the worker cross-thread
+    /// after the send (no-op on native; `postMessage` on wasm).
     pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
         let _ = self.worker_tx.unbounded_send(msg);
         self.wake_worker();
@@ -981,6 +1006,13 @@ impl HostBackend {
                     ShellCommand::SetCursor(cursor) => shell.set_cursor(cursor),
                     ShellCommand::RequestTextInput(state) => shell.request_text_input(state),
                 }
+                MsgOutcome::Continue
+            }
+            HostMsg::EventBusToEmbedder {
+                channel_id,
+                payload,
+            } => {
+                self.event_bus.dispatch_to_host(channel_id, payload);
                 MsgOutcome::Continue
             }
             HostMsg::FrameOutcome(Ok(outcome)) => MsgOutcome::Frame(outcome),
