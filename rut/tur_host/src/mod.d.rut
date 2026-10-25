@@ -21,6 +21,7 @@ pub mod composited;
 pub mod control_flow;
 pub mod ctx;
 pub mod env;
+pub mod event_bus;
 pub mod font;
 pub mod gesture;
 pub mod image;

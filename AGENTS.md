@@ -231,6 +231,10 @@ rut/                   # all rut package sources (pure rut — no build step;
   tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
                        #   tur-engine builtin_plugins/clipboard/kit.rs —
                        #   pushed as a prelude by TurClipboardPlugin)
+  tur_event_kit/       # the event bus's kit (mod.rut; embedded by
+                       #   tur-engine builtin_plugins/event_bus_kit.rs —
+                       #   pushed as a prelude by TurStdPlugin; the rows
+                       #   spell *_raw twins, the kit owns the names)
   tur_file_kit/        # the filepicker kit (mod.rut; embedded by
                        #   tur-filepicker-capability/src/kit.rs — pushed
                        #   as a prelude by TurFilePickerPlugin; the rows
@@ -359,8 +363,8 @@ Android build + device debugging live in the **`android-dev` skill** at
   The per-case manifests are generated the same way
   (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
-  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_clipboard_kit|
-  tur_file_kit` — the documented
+  kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_event_kit|
+  tur_clipboard_kit|tur_file_kit` — the documented
   exceptions live in the test's commented allowlist: the playground's
   pg_*/rs_derive/second-use-line accommodations, the generated
   `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
@@ -498,22 +502,35 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is the **std-v14 tag** (`09dea6a2`, 2026-10-24) — the tag
-  lane the std packages publish through. tur consumes the std `json`
-  pkg from it: vendored sources (`builtin_plugins/std_json/vendor/`)
-  offered to modules by `TurStdPlugin` (dep closure strbuild/pouch/
-  nmapset + the strbuild_host/nmap_host bodies from `rut-std`), and
-  github-viewer's `schema.rut` decodes the GitHub API through
-  `decodeJson<T>` (structural `decode` members on the record's own
-  impl). ONE LAW discovered the hard way: **a packed (linked-compiled)
-  std pkg takes NO consumer-typed instantiation** — `decodeJson<AppRec>`
-  instantiates in JSON'S unit, and a packed unit refuses it ("template
-  calls `AppRec.decode`, but no surface carries that member — corrupt
-  or doctored"). The precompiled kit lane therefore stages json as an
-  UNLINKED source group (see `json_free_root_uses` in the kit_bundle
-  test); never add a `use json::…` line to the pack root. The upstream
-  CLI example's local-shim pattern (`T::decode(r)` in a consumer-side
-  generic fn) is the escape hatch when a pkg MUST ride linked.
+- The rut pin is **latest main** (`932ba3d8`, 2026-10-25) — 20 commits
+  past the std-v14 tag (`09dea6a2`, 2026-10-24): the mirror-seed law +
+  the bodyless-callee verify (the packed-stub SEGV family), multi-line
+  literals, the unified run lane. Raw-rev pin (never a tag/branch), and
+  the tag lane is how the upstream std packages publish. tur consumes
+  the std `json` pkg from it: vendored sources
+  (`builtin_plugins/std_json/vendor/`) offered to modules by
+  `TurStdPlugin` (dep closure strbuild/pouch/nmapset + the
+  strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
+  discovered the hard way: **a packed (linked-compiled) std pkg takes NO
+  consumer-typed instantiation** — json's generic bodies are
+  owner-anchored (sealed at its pack time), so a consumer's direct
+  `decodeJson<AppRec>` call refuses ("template calls `AppRec.decode`,
+  but no surface carries that member — corrupt or doctored"). Consumer
+  code therefore instantiates through the **LOCAL SHIM** (the upstream
+  CLI example's pattern): a consumer-side generic fn over `T::decode`
+  (`decode_str<T>` in github-viewer's schema.rut, spelled after
+  `decodeJson`'s reader-route tail) — it monomorphizes in the
+  CONSUMER'S unit, where the instantiation is legal. json stays an
+  UNLINKED source group — two link attempts, both dead: at 09dea6a2 the
+  packed unit's bodyless host-row stubs SEGV'd in the VM's h_call (the
+  mirror-stub family), and at 932ba3d8 — where the mirror-seed + verify
+  fixes landed — the same SEGV remains: the verify law covers the
+  driver's OWN load lane, while tur installs the strbuild_host/nmap_host
+  bodies through its `boot_pkgs` hook, which doesn't seed the packed
+  stubs. Suspected upstream gap (report material): boot-installed
+  host-body pkgs don't participate in the mirror-seed protocol. The CI
+  test budget is instead held by the profile: deps build at -O1 (see
+  the `[profile.dev.package."*"]` note in Cargo.toml).
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
   single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
   head — a second (`use tur_anim_kit::…` in the root, even UNUSED)
@@ -578,6 +595,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   workspace are gone; `@tur-ng/website` remains (the private website shell).
 - Async: capability rows are async functions awaited through the rut weave;
   cancel rides the task opaque's cancel row (`net_stream` + `task_cancel`).
+- The event bus (`core::event_bus` — mechanism; the `tur_event_kit` rail):
+  a bidirectional multiplexed byte channel between the embedder and the
+  module, keyed by `channel_id: u64`. Module side: `event_on(channel,
+  mutate<bytes>(..))` / `event_send(channel, bytes)`; embedder side:
+  `TurApp::event_bus_handle()` → `emit_to_module` / `on_bus_event`.
+  Point-to-point per channel, no broadcast, silent drop on handler-less
+  channels, next-flush delivery (the sealed-handler mutation rail —
+  net-stream chunks' exact mechanism). The boa-era `core::event_bus`'s
+  rut-era port; handlers are `Mutation<bytes>` (SEAL_BYTES, 10).
 - Runtime errors: VM task traps + face traps ship as
   `HostMsg::RuntimeError{report}` to the embedder (see
   `core::app::runtime_error`); the virtual-app status rail reports child

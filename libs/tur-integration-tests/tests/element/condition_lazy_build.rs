@@ -198,14 +198,16 @@ fn switch_case_build_invokes_only_when_the_key_activates() {
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("idle"));
 
     // Activate "a": the case builder runs now — marker + side effect.
-    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 1.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 1.0)
+        .unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "a"]).as_deref(), Some("A"));
     assert_eq!(app.query_text(&["sw", "label"]).as_deref(), Some("built-a"));
     assert_eq!(app.query_text(&["sw", "fb"]), None);
 
     // Back to "b": the fallback remounts.
-    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 0.0).unwrap();
+    app.call_rut_entry_cx_f64("probe_tab", tab_atom, 0.0)
+        .unwrap();
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(app.query_text(&["sw", "fb"]).as_deref(), Some("fallback"));
     assert_eq!(app.query_text(&["sw", "a"]), None);

@@ -249,7 +249,10 @@ fn animation_controller_repeats() {
 fn animation_controller_status_transitions() {
     let (mut app, cx) = new_controller_app();
     // Probe BEFORE starting: the controller rests at `stopped`.
-    assert!(probe(&mut app, cx).starts_with("stopped|"), "initial status");
+    assert!(
+        probe(&mut app, cx).starts_with("stopped|"),
+        "initial status"
+    );
 
     app.call_rut_entry_cx("do_forward", cx).unwrap();
     app.wait_for_timeout(Duration::ZERO);

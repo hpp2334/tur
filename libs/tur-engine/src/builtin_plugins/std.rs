@@ -96,6 +96,13 @@ impl Plugin for TurStdPlugin {
         install_scroll(ctx)?;
         install_gesture(ctx)?;
         install_input(ctx)?;
+        // The event bus — the bidirectional multiplexed byte channel
+        // between the embedder and the module. The MECHANISM (state +
+        // subsystem + the `event_bus` rows) installs from core
+        // (`core::event_bus` — pure mechanism, the layering law); the
+        // authored face rides here as the `tur_event_kit` prelude (core
+        // never fills preludes).
+        crate::core::event_bus::install(ctx);
         // CompositedTransformTarget/Follower + createLayerLink + tracking
         // subsystem (the link registry rides the plugin-state channel) +
         // its families' rows.
@@ -113,6 +120,11 @@ impl Plugin for TurStdPlugin {
         // standard plugin set compiles.
         ctx.push_rut_ext(std::rc::Rc::new(|cx: &mut crate::core::rut_runtime::RutPkgCx<'_>| {
             cx.preludes.push(crate::kit::tur_kit_pkg());
+            // The event kit — the bus's authored face (`event_on` /
+            // `event_send`), beside the mechanism rows `core::event_bus`
+            // installed above.
+            cx.preludes
+                .push(crate::builtin_plugins::event_bus_kit::event_kit_pkg());
             // The std json offering (rut's `json` + its dep closure) —
             // same registration shape, the offered-set lane: modules
             // spell `use json::{ decodeJson };` (builtin_plugins/std_json

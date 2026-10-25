@@ -187,6 +187,13 @@ pub enum WorkerMsg {
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
+    /// A host→module bus message (the embedder's
+    /// [`EventBusHandle::emit_to_module`](crate::core::event_bus::EventBusHandle)):
+    /// pushed onto the worker-side bus queue; the bus subsystem drains it
+    /// during flush and fires the module handlers registered on the channel
+    /// (the `event_on` kit rail). Messages for handler-less channels are
+    /// dropped there — standard pub/sub, no broadcast.
+    EventBusToModule { channel_id: u64, payload: Vec<u8> },
     /// Clear the instance's focus. Sent by a hosting parent through the
     /// virtual-app control rail ([`VirtualControl::ClearFocus`] — a
     /// pointer click elsewhere in the parent took focus away from the
@@ -297,6 +304,12 @@ pub enum HostMsg {
     /// sits inside this host", which is what makes key routing work); the
     /// embedder-hosted root has no parent — dropped there.
     FocusChanged { focused: bool },
+    /// A module→host bus message (the module's `event_send` kit rail):
+    /// routed to the host-side handlers registered on the channel via
+    /// [`EventBusHandle::on_bus_event`](crate::core::event_bus::EventBusHandle)
+    /// — dispatched in `apply_msg`. A handler-less channel drops the
+    /// message silently (standard pub/sub, no broadcast).
+    EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
     /// Enable/disable host-side frame-timing collection (the per-frame
@@ -405,6 +418,10 @@ impl fmt::Debug for WorkerMsg {
                 .finish(),
             Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
+            Self::EventBusToModule { channel_id, .. } => f
+                .debug_struct("EventBusToModule")
+                .field("channel_id", channel_id)
+                .finish_non_exhaustive(),
             Self::BlurFocus => f.write_str("BlurFocus"),
             Self::RegisterImageMetadata { id, .. } => {
                 f.debug_tuple("RegisterImageMetadata").field(id).finish()
@@ -440,6 +457,10 @@ impl fmt::Debug for HostMsg {
                 .debug_struct("FocusChanged")
                 .field("focused", focused)
                 .finish(),
+            Self::EventBusToEmbedder { channel_id, .. } => f
+                .debug_struct("EventBusToEmbedder")
+                .field("channel_id", channel_id)
+                .finish_non_exhaustive(),
             Self::Destroyed => write!(f, "Destroyed"),
             Self::FrameTimingEnabled(on) => f.debug_tuple("FrameTimingEnabled").field(on).finish(),
             Self::DevToolReply { .. } => f.write_str("DevToolReply"),

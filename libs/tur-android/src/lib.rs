@@ -1035,7 +1035,7 @@ pub mod ops {
     /// Escape hatch for embedders: run `f` with `&TurApp` for the given
     /// instance handle. Used from an embedder's *own* JNI trampolines (its
     /// cdylib) to reach plugin-installed per-instance data — e.g.
-    /// `with_app(h, |app| EventBus::of(app))` — or to nudge a wake:
+    /// `with_app(h, |app| app.event_bus_handle())` — or to nudge a wake:
     /// `with_app(h, |app| app.request_frame())`.
     ///
     /// Not part of [`standard_jni_exports!`](crate::standard_jni_exports!)

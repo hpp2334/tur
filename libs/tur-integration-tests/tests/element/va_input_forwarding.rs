@@ -90,11 +90,7 @@ entry fn start() {{
 fn setup_with_child_src(
     child_src: &str,
     wait_key: &str,
-) -> (
-    TurTestApp,
-    Rc<tur_engine::TurApp>,
-    Option<u64>,
-) {
+) -> (TurTestApp, Rc<tur_engine::TurApp>, Option<u64>) {
     let wait_key = wait_key.to_string();
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_rut_module(&parent_module(child_src)).unwrap();
@@ -183,8 +179,7 @@ fn host_id(app: &TurTestApp) -> Option<u64> {
 /// The child controller's current text (the `sync` probe's answered str
 /// over the held context).
 fn child_text(child: &Rc<tur_engine::TurApp>, cx: u64) -> String {
-    futures::executor::block_on(child.call_rut_entry_cx_str("sync", cx))
-        .expect("sync probe")
+    futures::executor::block_on(child.call_rut_entry_cx_str("sync", cx)).expect("sync probe")
 }
 
 /// Keys typed at the parent reach the focused Input inside the child: the

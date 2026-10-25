@@ -1,14 +1,15 @@
 //! The std json offering gate: modules compiled against the engine's
-//! offered set can `use json::{ decodeJson }` — rut's std serde package
+//! offered set can `use json::{ .. }` — rut's std serde package
 //! (vendored from the pinned rut checkout, offered through
 //! `TurStdPlugin`'s std-json rail with its `strbuild`/`pouch`/`nmapset`
 //! dep closure + the two `*_host` body pkgs installed from `rut-std`).
 //!
 //! What this pins:
-//! - the pkg is OFFERED (the app names `json` in a use line),
-//! - the owner-anchored generic instantiation crosses (`decodeJson<Repo>`
-//!   monomorphizes in json's unit AT THE SESSION COMPILE — the source
-//!   lane's whole point),
+//! - the pkg is OFFERED and rides the kit bundle LINKED (compiled at
+//!   pack time — no per-session source compile),
+//! - consumer-typed instantiation crosses via the LOCAL SHIM (a
+//!   consumer-side generic fn over `T::decode` — json's own `decodeJson<T>`
+//!   is owner-anchored and unseedable from the packed unit),
 //! - a consumer record satisfies `JsonDeserialize` structurally (the
 //!   decode member on its own inherent impl),
 //! - the (?T, ?E) pair law: success and failure both land.
@@ -21,7 +22,7 @@ use tur_integration_tests::TurTestApp;
 /// `description` is null, `language` is absent, `owner` is unknown to the
 /// schema (skipped), and `stars` carries the i64 lane.
 const DECODE_RUT: &str = r#"
-use json::{ DecodeErrorKind, DecodeJsonError, JsonReader, decodeJson };
+use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::reactive::{ sv };
@@ -83,9 +84,26 @@ impl Repo {
     }
 }
 
+
+// The local decode shim — the upstream CLI example's pattern. json rides
+// the kit bundle LINKED, and its generic bodies are owner-anchored
+// (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
+// unit, `T::decode(r)` dispatches the record's own decode member.
+fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
+    let mut r = JsonReader::of(s);
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError { kind: DecodeErrorKind::Trailing, at: at as i64, got: got, expected: "end of input" });
+    }
+    return (v, nil);
+}
+
 entry fn start() -> u64 {
     let payload = "{\"full_name\":\"facebook/react\",\"description\":null,\"owner\":{\"login\":\"facebook\"},\"stargazers_count\":231000}";
-    let (repo, e) = decodeJson<Repo>(payload);
+    let (repo, e) = decode_str<Repo>(payload);
     let label = if (e != nil) {
         "decode failed"
     } else {
@@ -101,7 +119,7 @@ entry fn start() -> u64 {
 /// The failure rail: a 404-shaped payload (no full_name) decodes to the
 /// WrongType error — the case's degradation story rides the pair law.
 const ERROR_RUT: &str = r#"
-use json::{ DecodeErrorKind, DecodeJsonError, JsonReader, decodeJson };
+use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::reactive::{ sv };
@@ -146,9 +164,26 @@ impl Repo {
     }
 }
 
+
+// The local decode shim — the upstream CLI example's pattern. json rides
+// the kit bundle LINKED, and its generic bodies are owner-anchored
+// (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
+// unit, `T::decode(r)` dispatches the record's own decode member.
+fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
+    let mut r = JsonReader::of(s);
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError { kind: DecodeErrorKind::Trailing, at: at as i64, got: got, expected: "end of input" });
+    }
+    return (v, nil);
+}
+
 entry fn start() -> u64 {
     let payload = "{\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest\"}";
-    let (repo, e) = decodeJson<Repo>(payload);
+    let (repo, e) = decode_str<Repo>(payload);
     let label = if (e != nil) {
         f"err:{e.kind}"
     } else {
@@ -161,11 +196,11 @@ entry fn start() -> u64 {
 }
 "#;
 
-/// Two records + two `decodeJson<T>` instantiations in ONE module — the
+/// Two records + two shim instantiations in ONE module — the
 /// github-viewer shape (RepoPayload + ApiError). Pins the instantiation
 /// ledger across distinct consumer types.
 const TWO_RECORDS_RUT: &str = r#"
-use json::{ DecodeJsonError, JsonReader, decodeJson };
+use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader };
 use tur_kit::handles::{ mount };
 use tur_kit::layout::flex::{ Column };
 use tur_kit::reactive::{ sv };
@@ -229,9 +264,26 @@ impl Beta {
     }
 }
 
+
+// The local decode shim — the upstream CLI example's pattern. json rides
+// the kit bundle LINKED, and its generic bodies are owner-anchored
+// (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
+// unit, `T::decode(r)` dispatches the record's own decode member.
+fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
+    let mut r = JsonReader::of(s);
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError { kind: DecodeErrorKind::Trailing, at: at as i64, got: got, expected: "end of input" });
+    }
+    return (v, nil);
+}
+
 entry fn start() -> u64 {
-    let (a, ea) = decodeJson<Alpha>("{\"tag\":\"x\"}");
-    let (b, eb) = decodeJson<Beta>("{\"note\":\"y\"}");
+    let (a, ea) = decode_str<Alpha>("{\"tag\":\"x\"}");
+    let (b, eb) = decode_str<Beta>("{\"note\":\"y\"}");
     let ta = if (ea != nil) { "errA" } else if (a == nil) { "nilA" } else { a.tag };
     let tb = if (eb != nil) { "errB" } else if (b == nil) { "nilB" } else { b.note };
     mount(Column()
@@ -248,7 +300,12 @@ fn rut_text_of(app: &TurTestApp) -> String {
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -262,7 +319,7 @@ fn std_json_decodes_two_records_in_one_module() {
     assert_eq!(
         rut_text_of(&app),
         "x/y",
-        "two distinct consumer types instantiate decodeJson in one unit"
+        "two distinct consumer types instantiate the shim in one unit"
     );
 }
 

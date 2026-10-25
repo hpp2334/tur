@@ -269,10 +269,18 @@ fn countdown_pill_runs_then_pauses_then_resets() {
     // Two ticks in (remaining 58 ≠ initial 60): pausing shows Paused.
     advance_seconds(&mut app, 2);
     click_qk(&mut app, &["btn-pause"]);
-    assert_eq!(pill_text(&app), "Paused", "a stopped mid-run clock is Paused");
+    assert_eq!(
+        pill_text(&app),
+        "Paused",
+        "a stopped mid-run clock is Paused"
+    );
 
     click_qk(&mut app, &["btn-reset"]);
-    assert_eq!(pill_text(&app), "Ready", "reset restores remaining == initial");
+    assert_eq!(
+        pill_text(&app),
+        "Ready",
+        "reset restores remaining == initial"
+    );
 }
 
 #[test]

@@ -258,10 +258,7 @@ impl TurVelloApp {
             .parent()
             .and_then(|p| p.parent())
             .expect("failed to resolve workspace root");
-        let path = workspace_root
-            .join("rut/cases")
-            .join(name)
-            .join("mod.rut");
+        let path = workspace_root.join("rut/cases").join(name).join("mod.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         futures::executor::block_on(self.inner.borrow().app.load_rut_module(source.as_str()))
             .map_err(TurError::from)?;

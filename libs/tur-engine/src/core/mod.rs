@@ -5,6 +5,7 @@ pub mod clock;
 pub mod dev;
 pub mod edgy;
 pub mod element;
+pub mod event_bus;
 pub mod elements;
 pub mod focus;
 pub mod fonts;

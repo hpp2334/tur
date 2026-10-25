@@ -1,0 +1,34 @@
+// tur_event_kit (mod.rut) — the event bus's kit prelude (the authored face
+// over this plugin's `tur` host-pkg rows). Owned by the plugin that owns
+// the rows (the layering law applied to the kit): `TurStdPlugin` registers
+// it as a compile-session prelude next to the rows — the bus is engine
+// infrastructure, every standard module sees it.
+//
+// Handler law (the mutation rail): the host→module handler is a SEALED
+// MUTATION — `mutate<bytes>(fn (ctx: MutationCtx, payload: bytes) { ... })`;
+// each message enqueues the invocation and the flush's mutation pass
+// delivers it with the mounted-store ctx (the net-stream chunk rail).
+
+use tur_host::event_bus::{ event_on_raw, event_send_raw };
+use tur_kit::reactive::{ Mutation };
+
+// The seal tag the bus installs under — the kit spells the same number as
+// its own const (rut_runtime::seal_tags::MUT_BYTES; one law, two
+// spellings, exactly as tur_kit/tur_net_kit mirror them).
+let SEAL_BYTES: u64 = 10;
+
+// Register the module-side handler for host→module bytes messages on
+// `channel`. Point-to-point: a message targets exactly one channel, a
+// channel with no handler drops it silently (standard pub/sub — no
+// broadcast). Delivery is at-most-once, on the next flush.
+pub fn event_on(channel: u64, handler: Mutation<bytes>) {
+  event_on_raw(channel, handler.seal(SEAL_BYTES));
+}
+
+// Push a byte payload to the host-side handlers registered on `channel`
+// (the embedder's `EventBusHandle::on_bus_event`). The payload is opaque
+// bytes — whatever structure (ids, JSON, ...) it carries is the app's
+// business (developer-managed correlation, as ever).
+pub fn event_send(channel: u64, payload: bytes) {
+  event_send_raw(channel, payload);
+}

@@ -435,6 +435,17 @@ impl TurApp {
         self.host.request_frame();
     }
 
+    /// The event bus handle — the embedder's cross-thread face over the
+    /// host↔module byte channel. `emit_to_module(channel, bytes)` pushes
+    /// bytes to the module's `event_on(channel, ..)` handlers (next-flush
+    /// delivery); `on_bus_event(channel, handler)` receives the module's
+    /// `event_send(channel, bytes)` payloads. Point-to-point per channel,
+    /// no broadcast, silent drop on handler-less channels. Cheap clone —
+    /// keep one per producer/consumer site, or share one.
+    pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
+        self.host.backend().event_bus_handle_clone()
+    }
+
     /// Mark the app as destroyed. Subsequent `wake` attempts short-circuit.
     /// Sends `WorkerMsg::Destroy` to drain the worker. Destroys every hosted
     /// virtual app first (each child's module cleanup runs in its own

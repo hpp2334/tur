@@ -18,6 +18,7 @@
 pub mod clipboard;
 pub mod control_flow;
 pub mod effects;
+pub mod event_bus_kit;
 pub mod font;
 pub mod focus;
 pub mod gesture;

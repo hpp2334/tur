@@ -2563,7 +2563,7 @@ dependencies = [
 [[package]]
 name = "rut-ast"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-core",
  "rut-lexer",
@@ -2572,12 +2572,12 @@ dependencies = [
 [[package]]
 name = "rut-core"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 
 [[package]]
 name = "rut-driver"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2594,12 +2594,12 @@ dependencies = [
 [[package]]
 name = "rut-lexer"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 
 [[package]]
 name = "rut-lir"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2609,7 +2609,7 @@ dependencies = [
 [[package]]
 name = "rut-native"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-core",
  "rut-driver",
@@ -2619,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "rut-parser"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2629,7 +2629,7 @@ dependencies = [
 [[package]]
 name = "rut-semantic"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-ast",
  "rut-lexer",
@@ -2639,7 +2639,7 @@ dependencies = [
 [[package]]
 name = "rut-std"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "hashbrown 0.14.5",
  "rut-core",
@@ -2649,7 +2649,7 @@ dependencies = [
 [[package]]
 name = "rut-vm"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-core",
  "rut-vm-threaded",
@@ -2658,7 +2658,7 @@ dependencies = [
 [[package]]
 name = "rut-vm-threaded"
 version = "0.2.0"
-source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
+source = "git+https://github.com/hpp2334/rut?rev=932ba3d8d4d6cf5afc7903469c5c533b843bdf9e#932ba3d8d4d6cf5afc7903469c5c533b843bdf9e"
 dependencies = [
  "rut-core",
 ]

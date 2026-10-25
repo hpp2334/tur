@@ -45,10 +45,7 @@ fn collect_rut_sources(dir: &Path, out: &mut Vec<PathBuf>) {
                 continue;
             }
             collect_rut_sources(&path, out);
-        } else if path
-            .extension()
-            .is_some_and(|e| e == "rs" || e == "rut")
-        {
+        } else if path.extension().is_some_and(|e| e == "rs" || e == "rut") {
             out.push(path);
         }
     }
@@ -74,13 +71,14 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
     ),
     ("rut/tur_net_kit/", "the net kit — plugin-owned prelude"),
     (
+        "rut/tur_event_kit/",
+        "the event kit — the event bus's plugin-owned prelude",
+    ),
+    (
         "rut/tur_clipboard_kit/",
         "the clipboard kit — plugin-owned prelude",
     ),
-    (
-        "rut/tur_font_kit/",
-        "the font kit — plugin-owned prelude",
-    ),
+    ("rut/tur_font_kit/", "the font kit — plugin-owned prelude"),
     (
         "rut/tur_file_kit/",
         "the filepicker kit — plugin-owned prelude",
@@ -282,7 +280,9 @@ fn tur_host_is_kits_only() {
             .to_string_lossy()
             .to_string();
         if rel.ends_with("tests/layering.rs")
-            || TUR_HOST_IMPORT_EXCEPTIONS.iter().any(|(s, _)| rel.contains(s))
+            || TUR_HOST_IMPORT_EXCEPTIONS
+                .iter()
+                .any(|(s, _)| rel.contains(s))
         {
             // The law's own source names the spellings it bans.
             continue;
@@ -329,7 +329,9 @@ fn raw_reactive_rail_has_no_call_sites() {
             .to_string_lossy()
             .to_string();
         if rel.ends_with("tests/layering.rs")
-            || RAW_RAIL_CALL_EXCEPTIONS.iter().any(|(s, _)| rel.contains(s))
+            || RAW_RAIL_CALL_EXCEPTIONS
+                .iter()
+                .any(|(s, _)| rel.contains(s))
         {
             continue;
         }
@@ -343,7 +345,9 @@ fn raw_reactive_rail_has_no_call_sites() {
             let t = line.trim();
             // A definition line (`pub fn rs_derive(` / `fn rs_watch(`) is
             // the wrapper's home, not a call site.
-            if t.contains("fn rs_derive(") || t.contains("fn rs_derive2(") || t.contains("fn rs_watch(")
+            if t.contains("fn rs_derive(")
+                || t.contains("fn rs_derive2(")
+                || t.contains("fn rs_watch(")
             {
                 continue;
             }

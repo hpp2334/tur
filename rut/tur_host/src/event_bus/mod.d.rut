@@ -1,0 +1,4 @@
+// tur_host/src/event_bus — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn event_on_raw(p1: u64, p2: u64);
+pub host fn event_send_raw(p1: u64, p2: bytes);

@@ -1100,8 +1100,7 @@ entry fn start() {
 #[test]
 fn click_on_wrapped_single_line_input_lands_on_clicked_visual_line() {
     let mut app = TurTestApp::new(120.0, 300.0).unwrap();
-    app.load_rut_module(CLICK_SOFTWRAP_SINGLE_BUNDLE)
-        .unwrap();
+    app.load_rut_module(CLICK_SOFTWRAP_SINGLE_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_under(&app, &["softwrap-single-input"]);

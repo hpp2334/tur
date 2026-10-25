@@ -370,4 +370,3 @@ fn context_menu_paste_then_undo_restores_text() {
 // (live re-highlight on every keystroke) and ensures undo entries are only
 // created for actual text changes.
 // ---------------------------------------------------------------------------
-

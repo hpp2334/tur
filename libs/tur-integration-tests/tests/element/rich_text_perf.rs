@@ -185,7 +185,8 @@ fn width_change_invalidates_memo() {
     // Narrower constraint → narrower max_width → new memo key. (The bound
     // wrapper's width drives the editable's constraint — the same contract
     // the JS twin pinned through a window resize.)
-    app.call_rut_entry_cx_f64("set_width", width_atom, 320.0).unwrap();
+    app.call_rut_entry_cx_f64("set_width", width_atom, 320.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         shape_count(&app, id),
@@ -194,7 +195,8 @@ fn width_change_invalidates_memo() {
     );
 
     // Back to the original width → another (different) key → reshape again.
-    app.call_rut_entry_cx_f64("set_width", width_atom, 400.0).unwrap();
+    app.call_rut_entry_cx_f64("set_width", width_atom, 400.0)
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(shape_count(&app, id), before + 2);
 }

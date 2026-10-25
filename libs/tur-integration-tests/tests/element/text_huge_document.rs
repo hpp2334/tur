@@ -14,7 +14,10 @@
 
 use tur_integration_tests::TurTestApp;
 
-/// 4000 lines ≈ 168 KiB of text — well past the 65 535-byte wrap.
+/// 2000 lines ≈ 84 KiB of text — past the 65 535-byte wrap with margin.
+/// (Was 4000 lines / 168 KiB; the wrap contract doesn't need the extra
+/// mass and the parley shaping cost per pump made this the suite's
+/// longest non-playground test — the CI test budget is tight.)
 const HUGE_EDITOR: &str = r##"
 use tur_kit::handles::{ text_ctrl };
 use tur_host::text::input::{ tctrl_push_span };
@@ -26,7 +29,7 @@ use tur_kit::text::input::{ Input };
 entry fn start() {
     let ctrl = text_ctrl();
     let mut i = 0;
-    while (i < 4000) {
+    while (i < 2000) {
         tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;
     }
@@ -43,9 +46,9 @@ fn huge_document_layout_and_paint_does_not_panic() {
     app.load_rut_module(HUGE_EDITOR).expect("load huge editor");
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // Layout + paint the whole document repeatedly (scroll offsets change
+    // Layout + paint the document repeatedly (scroll offsets change
     // which lines are on screen, exercising the wrapped-range region).
-    for i in 0..6 {
+    for i in 0..4 {
         let outcome = app.pump();
         assert!(
             outcome.painted,

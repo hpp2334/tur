@@ -47,34 +47,37 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# the std-v14 tag (09dea6a2, 2026-10-24) — the tag lane tur consumes the
-# upstream std packages through (the engine offers the json closure to
-# modules; see builtin_plugins/std_json/). Past the previous pin
+# latest main (932ba3d8, 2026-10-25) — 20 commits past the std-v14 tag
+# (09dea6a2, 2026-10-24): the mirror-seed law + the bodyless-callee
+# verify (the packed-stub SEGV family the json-link experiment hit),
+# multi-line literals, the unified run lane. The tag lane is how tur
+# consumes the upstream std packages (the engine offers the json closure
+# to modules; see builtin_plugins/std_json/). Past the previous pin
 # (ca5e523c): the src/ shells + source-zip deps over the wire, the
 # pack-std compiled-wire fix, and the srczip dep mounts.
 # Same nightly pin as this workspace (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
-rut-parser = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d", default-features = false }
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
+rut-parser = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
-rut-ast = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast / rut-parser only — no LSP
 # types, no serde), pinned to the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d" }
+rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e" }
 # The native pkg-dir walker/loader (`load_path_session` — the REAL
 # discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
-rut-native = { git = "https://github.com/hpp2334/rut", rev = "09dea6a24b4e380eb7f9077f2e0abdf5f057e80d", default-features = false }
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "932ba3d8d4d6cf5afc7903469c5c533b843bdf9e", default-features = false }
 
 
 num-derive = "0.4"
@@ -119,8 +122,16 @@ winit = "0.30"
 # Deps almost never need variable-level debuginfo in dev builds; keep only
 # line tables (backtraces stay useful) to cut target/ size roughly in half.
 # Workspace crates keep full debuginfo from the default dev profile.
+# Deps also build at -O1: the test suite is dominated by the rut VM
+# (a tree-walking interpreter — every case/kit compile in every fixture
+# rides it) and parley's text shaping, both DEPENDENCIES. Debug-speed
+# interpretation made the CI Cargo-test budget the binding constraint;
+# -O1 on deps runs the suite ~2x faster while tur-* crates (the code
+# being iterated on) stay fast to build with full debuginfo. The test
+# profile inherits this override (`cargo nextest run` = test profile).
 [profile.dev.package."*"]
 debug = "line-tables-only"
+opt-level = 1
 
 [profile.wasm-dev]
 inherits = "dev"
