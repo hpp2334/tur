@@ -502,11 +502,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is the **std-v14 tag** (`09dea6a2`, 2026-10-24) — the tag
-  lane the std packages publish through. tur consumes the std `json`
-  pkg from it: vendored sources (`builtin_plugins/std_json/vendor/`)
-  offered to modules by `TurStdPlugin` (dep closure strbuild/pouch/
-  nmapset + the strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
+- The rut pin is **latest main** (`932ba3d8`, 2026-10-25) — 20 commits
+  past the std-v14 tag (`09dea6a2`, 2026-10-24): the mirror-seed law +
+  the bodyless-callee verify (the packed-stub SEGV family), multi-line
+  literals, the unified run lane. Raw-rev pin (never a tag/branch), and
+  the tag lane is how the upstream std packages publish. tur consumes
+  the std `json` pkg from it: vendored sources
+  (`builtin_plugins/std_json/vendor/`) offered to modules by
+  `TurStdPlugin` (dep closure strbuild/pouch/nmapset + the
+  strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
   discovered the hard way: **a packed (linked-compiled) std pkg takes NO
   consumer-typed instantiation** — json's generic bodies are
   owner-anchored (sealed at its pack time), so a consumer's direct
@@ -517,12 +521,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`decode_str<T>` in github-viewer's schema.rut, spelled after
   `decodeJson`'s reader-route tail) — it monomorphizes in the
   CONSUMER'S unit, where the instantiation is legal. json stays an
-  UNLINKED source group (an attempt to link it — the pack root binding
-  `json::JsonReader` — passed the single-file fixtures but SEGV'd the
-  seven-file github-viewer case in the VM's h_call; the pack boundary ×
-  multi-file consumer interaction is upstream territory). The CI test
-  budget is instead held by the profile: deps build at -O1 (see the
-  `[profile.dev.package."*"]` note in Cargo.toml).
+  UNLINKED source group — two link attempts, both dead: at 09dea6a2 the
+  packed unit's bodyless host-row stubs SEGV'd in the VM's h_call (the
+  mirror-stub family), and at 932ba3d8 — where the mirror-seed + verify
+  fixes landed — the same SEGV remains: the verify law covers the
+  driver's OWN load lane, while tur installs the strbuild_host/nmap_host
+  bodies through its `boot_pkgs` hook, which doesn't seed the packed
+  stubs. Suspected upstream gap (report material): boot-installed
+  host-body pkgs don't participate in the mirror-seed protocol. The CI
+  test budget is instead held by the profile: deps build at -O1 (see
+  the `[profile.dev.package."*"]` note in Cargo.toml).
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
   single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
   head — a second (`use tur_anim_kit::…` in the root, even UNUSED)

@@ -166,19 +166,20 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
 /// lib pkg so the pack's compile closure LINKS every group (see below).
 /// The synthetic root's `use` lines — one REAL binding per offered lib
 /// pkg so the pack's compile closure LINKS every group. ONE LAW HERE:
-/// `json` is NEVER linked. Its generic entries (`decodeJson<T>`) are
-/// owner-anchored — a consumer's `decodeJson<AppRecord>` instantiates
-/// in JSON'S unit, and a packed unit takes no post-pack instantiation
-/// ("no surface carries that member — corrupt or doctored"). json rides
-/// the bundle as an unlinked SOURCE group; the load lane compiles it
-/// per session, where consumer instantiations are legal. Consumer typed
-/// decodes spell the LOCAL SHIM (a consumer-side generic fn over
-/// `T::decode` — schema.rut's `decode_str`; the upstream CLI example's
-/// pattern) — legal either way, and the spelling to keep when json
-/// eventually rides linked. (An attempt to link json — the root binding
-/// `json::JsonReader` — passed the single-file fixture tests but SEGV'd
-/// the seven-file github-viewer case in the VM's h_call; the pack
-/// boundary × multi-file consumer interaction is upstream territory.)
+/// `json` is NEVER linked. Two attempts, both dead:
+/// - at rut 09dea6a2: a consumer's typed instantiation in json's packed
+///   unit refused (owner-anchored generics), and shim-migrated consumers
+///   SEGV'd in the VM's h_call — the packed unit's bodyless host-row
+///   stubs hit "dangling as_ptr()" (rut's mirror-stub family).
+/// - at rut 932ba3d8 (the mirror-seed + verify fixes): the verify law
+///   only covers the driver's OWN load lane — tur installs the
+///   strbuild_host/nmap_host bodies through its `boot_pkgs` hook, which
+///   doesn't seed the packed stubs, so the same h_call SEGV remains.
+/// Suspected upstream gap: boot-installed host-body pkgs don't
+/// participate in the mirror-seed protocol. Until that's resolved json
+/// rides the bundle as an unlinked SOURCE group; consumers spell the
+/// LOCAL SHIM (a consumer-side generic fn over `T::decode` —
+/// schema.rut's `decode_str`), the upstream CLI pattern.
 fn json_free_root_uses(extra: &str) -> String {
     format!(
         "use tur_kit::handles::{{ mount }};\n\
