@@ -1,0 +1,130 @@
+// VENDORED from rut @09dea6a2 (std-v14) — rut/pouch/src/mod.rut, unmodified below this line.
+// Provenance law: re-vendor on rut pin bumps if upstream's file changes.
+// pouch — the growable sequence package: `Vec<T>` in rut over
+// the non-growable heap array `[T]`.
+//
+//   [v; n]           the repeat construction — n slots filled with v
+//   a[i] get/set     (ArrGet / ArrSet)
+//   a.len()          the allocated length — the capacity
+//
+// The backing is a nullable-handle array (`buf: [?T]`, `[nil; cap]`):
+// the repeat needs a VALUE and a generic `T` has none —
+// `nil` is the slot's zero, and `push`/element stores take the value's
+// handle (a share — no copy). The fused `v[i]`/`for (x of v)` lowering
+// treats the `?T` handles as ordinary slots: loads yield the
+// `?T` (uses auto-deref), stores take the coerced handle, so reads and
+// writes alias the stored cells — binding an element copies nothing.
+//
+// Sequence syntax (`v[i]`, `v[i] = x`, `for (x of v)`) lowers through the
+// `[iterable]` contract, which resolves the `buf`/`len`
+// backing fields directly — never a per-element method call.
+// The builtin `Vec` natives are gone; this class is the sequence type.
+
+// The type body is FIELDS ONLY — every method lives in the
+// inherent `impl Vec<T>` block below, the type's module only.
+pub class Vec<T> {
+    buf: [?T];          // capacity == buf.len() == cap; nil = the slot's zero
+    len: i32;           // live length
+    cap: i32;           // capacity mirrored, so `push`'s hot path never
+                        // re-reads the `buf` handle (its GetF is an RC op)
+}
+
+impl<T> Vec<T> {
+    pub fn new() -> Self {
+        return Vec::with_capacity(0);
+    }
+
+    pub fn with_capacity(cap: i32) -> Self {
+        return Self { buf: [nil; cap], len: 0, cap: cap };
+    }
+
+    // `filled(v, n)` — n slots of `v` (the repeat, boxed for
+    // the caller): the value-carrying construction. A scalar fill is the
+    // memset-class op; the old `zeroed(n)` cannot exist generically — a
+    // generic `T` has no zero value to fill with.
+    pub fn filled(v: T, n: i32) -> Self {
+        let mut buf: [?T] = [nil; n];
+        for (let mut i = 0; i < n; i += 1) {
+            buf[i] = v;
+        }
+        return Self { buf: buf, len: n, cap: n };
+    }
+
+    // `slice(from, to) -> ?Vec<T>` is compiler-lowered:
+    // an O(1) fixed-length window over this vector's backing array,
+    // boxed as the nullable (the `T → ?T`). Writes through the
+    // window hit this vector; the window is fixed-length and detaches
+    // if this vector grows. (Not a rut method — declared here as the
+    // surface contract.)
+
+    pub fn push(mut self, v: T) -> nil {
+        if (self.len == self.cap) {
+            let mut cap = self.cap * 2;
+            if (cap == 0) {
+                cap = 4;
+            }
+            let mut next: [?T] = [nil; cap];
+            for (let mut i = 0; i < self.len; i += 1) {
+                next[i] = self.buf[i];
+            }
+            self.buf = next;
+            self.cap = cap;
+        }
+        self.buf[self.len] = v;
+        self.len += 1;
+    }
+
+    /// Removes and returns the last element. Traps on an empty Vec —
+    /// guard with `len() > 0` (v1.1: no `Option`; the tuple convention
+    /// carries errors, and an empty pop is a contract breach, not an
+    /// error value).
+    pub fn pop(mut self) -> T {
+        self.len -= 1;
+        return self.buf[self.len];
+    }
+
+    pub fn from(arr: [T]) -> Self {
+        let n = arr.len();
+        let mut v = Self { buf: [nil; n], len: n, cap: n };
+        for (let mut i = 0; i < n; i += 1) {
+            v.buf[i] = arr[i];
+        }
+        return v;
+    }
+
+    // Copy the live elements into a fresh, exactly-sized `[T]`. The
+    // backing `buf` may have spare capacity, so `buf.len()` is not the
+    // live length — this is the bridge from the growable `Vec` to the
+    // fixed array (`string_join` consumes the chunks of a `Vec<str>`
+    // this way). The seed-fill exists because a `[T]` can only be born
+    // from a value: the first live element seeds the allocation, the
+    // loop overwrites every slot with its own element.
+    pub fn as_array(self) -> [T] {
+        let n = self.len;
+        if (n == 0) {
+            let empty: [T] = [];
+            return empty;
+        }
+        let mut a: [T] = [self.buf[0]; n];
+        for (let mut i = 0; i < n; i += 1) {
+            a[i] = self.buf[i];
+        }
+        return a;
+    }
+}
+
+// `Vec<u8>` is the mutable binary builder; `freeze_bytes` copies exactly
+// the live length (not the capacity) into the immutable `bytes`. The
+// module-level form is the v22 stability law's restructure: the body
+// only typechecks at T := u8 (a `[u8]` target fed from the `[T]` field),
+// so a generic member could not lower to an instantiation-independent
+// template — the concrete wrapper is the recipe's answer, and the
+// member spelling moves to the call site.
+pub fn freeze_bytes(v: Vec<u8>) -> bytes {
+    let n = v.len;
+    let mut a: [u8] = [0u8; n];
+    for (let mut i = 0; i < n; i += 1) {
+        a[i] = v.buf[i];
+    }
+    return bytes::from(a);
+}

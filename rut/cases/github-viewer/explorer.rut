@@ -14,7 +14,8 @@
 // value; the tap mutations capture the bundle. Degradation: an empty
 // response body (the net row completes empty on transport failure)
 // becomes a visible error banner; a JSON error payload (404 / rate
-// limit) surfaces the API's own message (the scanner lives in json.rut).
+// limit) surfaces the API's own message (the payload records + decodes
+// live in schema.rut, over rut's std json).
 
 use futures::{ launch_future, sleep };
 use tur_file_kit::{ save_file };
@@ -332,19 +333,24 @@ pub async fn open_repo(ctx: MutationCtx, s: state::Gh) -> str {
         return "";
     }
     let meta = body.decode();
-    let name = json::json_get_str(meta, "full_name");
-    if (name == "") {
+    let m = schema::decode_repo_meta(meta);
+    if (m.full_name == nil) {
         ctx.set<bool>(s.busy, false);
-        let msg = json::json_get_str(meta, "message");
-        if (msg == "") {
-            fail(ctx, s, "Unexpected response from the GitHub API.", false);
-        } else {
+        if (m.message != nil) {
+            let msg: str = m.message;
             fail(ctx, s, f"{msg} — check the name (owner/repo).", false);
+        } else {
+            fail(ctx, s, "Unexpected response from the GitHub API.", false);
         }
         return "";
     }
-    ctx.set<str>(s.desc, json::json_get_str(meta, "description"));
-    ctx.set<str>(s.stats, fmt_stats(meta));
+    let mut desc: str = "";
+    if (m.desc != nil) {
+        let d: str = m.desc;
+        desc = d;
+    }
+    ctx.set<str>(s.desc, desc);
+    ctx.set<str>(s.stats, fmt_stats(m));
     ctx.set<str>(s.path, "");
     ctx.set<str>(s.selected, "");
     ctx.set<str>(s.sel_file, "");
@@ -372,15 +378,14 @@ async fn fetch_dir(ctx: MutationCtx, s: state::Gh) -> str {
     }
     let text = body.decode();
     let fresh = list_new();
-    let ndirs = json::json_contents(text, fresh, true);
-    let nfiles = json::json_contents(text, fresh, false);
-    if (ndirs < 0 || nfiles < 0) {
+    let n = schema::fill_contents(text, fresh);
+    if (n < 0) {
         ctx.set<bool>(s.busy, false);
         fail(ctx, s, "Unexpected file-list response from the GitHub API.", true);
         return "";
     }
     ctx.set<opaque>(s.files, fresh.raw());
-    ctx.set<bool>(s.is_empty, ndirs + nfiles == 0);
+    ctx.set<bool>(s.is_empty, n == 0);
     ctx.set<bool>(s.busy, false);
     ctx.set<str>(s.mode, "explorer");
     return "";
@@ -490,26 +495,23 @@ pub fn parse_repo(draft: str) -> str {
 
 // "rust · stars 12.3k · forks 4.5k · issues 123" — the language folded in
 // when present.
-fn fmt_stats(meta: str) -> str {
-    let lang = json::json_get_str(meta, "language");
-    let stars = json::json_get_str(meta, "stargazers_count");
-    let forks = json::json_get_str(meta, "forks_count");
-    let issues = json::json_get_str(meta, "open_issues_count");
+fn fmt_stats(m: schema::RepoPayload) -> str {
     let mut out = "";
-    if (lang != "") {
+    if (m.language != nil) {
+        let lang: str = m.language;
         out = f"{out}{lang} · ";
     }
-    return f"{out}stars {fmt_count(stars)} · forks {fmt_count(forks)} · issues {fmt_count(issues)}";
+    return f"{out}stars {fmt_count(m.stars)} · forks {fmt_count(m.forks)} · issues {fmt_count(m.issues)}";
 }
 
-// 12345 → "12.3k"; 123 → "123".
-fn fmt_count(s: str) -> str {
-    let v: f64 = str_parse_f64(s);
-    if (v >= 1000.0) {
-        let d = ((v / 1000.0) * 10.0) as u64;
+// 12345 → "12.3k"; 123 → "123" (integer lane — one truncating division,
+// the old float spelling's exact semantics).
+fn fmt_count(v: i64) -> str {
+    if (v >= 1000) {
+        let d: i64 = v * 10 / 1000;
         return f"{d / 10}.{d % 10}k";
     }
-    return f"{v as u64}";
+    return f"{v}";
 }
 
 // 2739 → "2.7 KB"; 12 → "12 B". (pub + qualified call sites: the bare

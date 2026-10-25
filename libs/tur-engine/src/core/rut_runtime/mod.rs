@@ -694,6 +694,8 @@ fn install_tur_pkg(
     let mut ext_decl = Vec::new();
     let mut ext_consts = Vec::new();
     let mut ext_preludes = Vec::new();
+    let mut ext_offered = Vec::new();
+    let mut boot_pkgs = Vec::new();
     for ext in exts {
         ext(&mut RutPkgCx {
             decl: &mut ext_decl,
@@ -701,10 +703,18 @@ fn install_tur_pkg(
             pkg: &mut pkg,
             handles: Some(handles),
             preludes: &mut ext_preludes,
+            offered: &mut ext_offered,
+            boot_pkgs: &mut boot_pkgs,
         });
     }
 
     hosts.install_host_pkg(ctx, pkg);
+    // The plugin-owned host pkgs' bodies (rut-std's strbuild_host /
+    // nmap_host behind the std json offering) — the decls already ride
+    // the offered set; the bodies install beside tur_host's.
+    for p in boot_pkgs {
+        hosts.install_host_pkg(ctx, p);
+    }
 }
 // ---------------------------------------------------------------------------
 // RutHandles — per-instance bridge state shared with the row closures.
@@ -1244,8 +1254,12 @@ impl RutRuntime {
     }
     /// The standard offered set — everything but the app pkg: the
     /// `tur_host` decl pkg (the engine rows + every extension's rows,
-    /// tree-mounted), the async weave (`async_host` + `futures`), and
-    /// the extensions' prelude modules (the kit et al.).
+    /// tree-mounted), the async weave (`async_host` + `futures`), the
+    /// extensions' prelude modules (the kit et al.), and the
+    /// extensions' offered lib pkgs (rut's std `json` closure —
+    /// `use json::{ decodeJson };` in modules; rides SOURCE, never a
+    /// linked pack group, so consumer-typed generic instantiations are
+    /// legal).
     /// [`Self::compile_files`] roots the app at exactly this set, and
     /// the precompiled-kit lane matches a build-time-packed copy of it
     /// by [`Self::offered_fingerprint`].
@@ -1258,6 +1272,8 @@ impl RutRuntime {
         let mut ext_decl: Vec<rut_driver::HostRow> = Vec::new();
         let mut ext_consts: Vec<(String, TypeId, u64)> = Vec::new();
         let mut preludes: Vec<rut_driver::Mounted> = Vec::new();
+        let mut offered_ext: Vec<rut_driver::Mounted> = Vec::new();
+        let mut boot_pkgs = Vec::new();
         let mut probe = rut_vm::interp::HostPkg::new("tur_host");
         for ext in exts {
             ext(&mut RutPkgCx {
@@ -1266,6 +1282,8 @@ impl RutRuntime {
                 pkg: &mut probe,
                 handles: None,
                 preludes: &mut preludes,
+                offered: &mut offered_ext,
+                boot_pkgs: &mut boot_pkgs,
             });
         }
         let mut tur_pkg = tur_decl_pkg();
@@ -1303,6 +1321,7 @@ impl RutRuntime {
         vec![tur_pkg, async_host]
             .into_iter()
             .chain(preludes)
+            .chain(offered_ext)
             .chain(std::iter::once(futures))
             .collect()
     }
@@ -1927,6 +1946,16 @@ pub struct RutPkgCx<'a> {
     /// source compiles (the kit — the authored builder surface). Core
     /// never fills this; the standard bundle assembly does.
     pub preludes: &'a mut Vec<rut_driver::Mounted>,
+    /// OFFERED lib pkgs — nameable libraries beyond the host surface
+    /// (`use json::{ decodeJson };`), contributed by plugins (the std
+    /// json closure, registered by the standard bundle assembly). They
+    /// join the session's offered set (ambient nameability, the
+    /// precompiled-lane fingerprint); core never fills this.
+    pub offered: &'a mut Vec<rut_driver::Mounted>,
+    /// Extra HOST pkg bodies installed at boot — plugin-owned pkgs whose
+    /// decls ride `offered` and whose Rust bodies ship in `rut-std`
+    /// (`strbuild_host` / `nmap_host`). Ignored at the compile probe.
+    pub boot_pkgs: &'a mut Vec<rut_vm::interp::HostPkg>,
 }
 
 /// A rut pkg extension: plugin-owned rows for the `tur_host` pkg (e.g.

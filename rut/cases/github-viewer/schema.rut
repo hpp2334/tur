@@ -1,0 +1,295 @@
+// schema — the GitHub API's payload records over rut's std json
+// (`use json::{ decodeJson }` — the engine offers the std pkg to
+// modules): one decode per payload, the structural-satisfaction law
+// (each record spells its own `decode` member on its inherent impl),
+// and the (?T, ?E) pair law absorbed into friendly answers.
+//
+// `parse_repo` keeps the case's degradation story: a 404 / rate-limit
+// payload answers `full_name == nil` with `message` carried (the error
+// envelope decodes separately after the main decode refuses); a
+// malformed body answers all-nil (the caller's generic banner).
+// `fill_contents` walks the contents array once (dirs pushed first —
+// the listing's order) and answers the pushed count, -1 when the body
+// is not an array of the expected shape.
+//
+// The array row rides a LOCAL generic shim (the upstream CLI example's
+// pattern): a bare `Vec<T>` satisfies nothing, and `JsonArr<T>`'s bound
+// is the encode direction — this case never encodes, so the reader
+// loop keeps the recursive shape in one spelled place.
+
+use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader, decodeJson };
+use pouch::{ Vec };
+use tur_kit::handles::{ ListHandle };
+
+// The repo-meta payload. Every field optional-absorbent: `full_name`
+// present is the success marker; `description` / `language` may be
+// JSON null; the counts default to 0.
+pub struct RepoPayload {
+    full_name: ?str;
+    message: ?str;
+    desc: ?str;
+    language: ?str;
+    stars: i64;
+    forks: i64;
+    issues: i64;
+}
+
+// The optional-string read: `null` → nil, a string → some, anything
+// else (or a truncated body) → the reader's error — the caller unwinds
+// on `r.failed()`.
+fn read_opt_str(mut r: JsonReader) -> ?str {
+    if (r.try_null()) {
+        return nil;
+    }
+    let v = r.read_str();
+    if (r.failed()) {
+        return nil;
+    }
+    return v;
+}
+
+impl RepoPayload {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        r.begin_object();
+        let mut full_name: ?str = nil;
+        let mut message: ?str = nil;
+        let mut desc: ?str = nil;
+        let mut language: ?str = nil;
+        let mut stars: i64 = 0;
+        let mut forks: i64 = 0;
+        let mut issues: i64 = 0;
+        while (r.more()) {
+            let k = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            when (k) {
+                "full_name" -> {
+                    let v = r.read_str();
+                    if (r.failed()) { return (nil, r.error()); }
+                    full_name = v;
+                },
+                "message" -> {
+                    message = read_opt_str(r);
+                    if (r.failed()) { return (nil, r.error()); }
+                },
+                "description" -> {
+                    desc = read_opt_str(r);
+                    if (r.failed()) { return (nil, r.error()); }
+                },
+                "language" -> {
+                    language = read_opt_str(r);
+                    if (r.failed()) { return (nil, r.error()); }
+                },
+                "stargazers_count" -> {
+                    let v = r.read_i64();
+                    if (r.failed()) { return (nil, r.error()); }
+                    stars = v;
+                },
+                "forks_count" -> {
+                    let v = r.read_i64();
+                    if (r.failed()) { return (nil, r.error()); }
+                    forks = v;
+                },
+                "open_issues_count" -> {
+                    let v = r.read_i64();
+                    if (r.failed()) { return (nil, r.error()); }
+                    issues = v;
+                },
+                // GitHub adds keys over time — skipped, never a failure.
+                else -> { r.skip_value(); },
+            }
+            if (r.failed()) { return (nil, r.error()); }
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        return (RepoPayload {
+            full_name: full_name,
+            message: message,
+            desc: desc,
+            language: language,
+            stars: stars,
+            forks: forks,
+            issues: issues,
+        }, nil);
+    }
+}
+
+// The API's error envelope (404 / rate limit): `message` + whatever
+// else GitHub spells — only the message is read.
+struct ApiError {
+    message: str;
+}
+
+impl ApiError {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        r.begin_object();
+        let mut message: ?str = nil;
+        while (r.more()) {
+            let k = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            when (k) {
+                "message" -> {
+                    let v = r.read_str();
+                    if (r.failed()) { return (nil, r.error()); }
+                    message = v;
+                },
+                else -> { r.skip_value(); },
+            }
+            if (r.failed()) { return (nil, r.error()); }
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        if (message == nil) {
+            return (nil, DecodeJsonError {
+                kind: DecodeErrorKind::WrongType,
+                at: 0,
+                got: "",
+                expected: "message",
+            });
+        }
+        let m: str = message;
+        return (ApiError { message: m }, nil);
+    }
+}
+
+// One contents entry: `type` ("dir" | "file"), `name`, `size` (bytes;
+// directories carry none — 0).
+struct ContentRow {
+    kind: str;
+    name: str;
+    size: i64;
+}
+
+impl ContentRow {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        r.begin_object();
+        let mut kind: ?str = nil;
+        let mut name: ?str = nil;
+        let mut size: i64 = 0;
+        while (r.more()) {
+            let k = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            when (k) {
+                "type" -> {
+                    let v = r.read_str();
+                    if (r.failed()) { return (nil, r.error()); }
+                    kind = v;
+                },
+                "name" -> {
+                    let v = r.read_str();
+                    if (r.failed()) { return (nil, r.error()); }
+                    name = v;
+                },
+                "size" -> {
+                    let v = r.read_i64();
+                    if (r.failed()) { return (nil, r.error()); }
+                    size = v;
+                },
+                else -> { r.skip_value(); },
+            }
+            if (r.failed()) { return (nil, r.error()); }
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        if (kind == nil || name == nil) {
+            return (nil, DecodeJsonError {
+                kind: DecodeErrorKind::WrongType,
+                at: 0,
+                got: "",
+                expected: "type/name",
+            });
+        }
+        let kd: str = kind;
+        let nm: str = name;
+        return (ContentRow { kind: kd, name: nm, size: size }, nil);
+    }
+}
+
+// The contents array — the LOCAL generic shim (a bare Vec satisfies
+// nothing; the reader loop monomorphizes at T = ContentRow here).
+fn decode_rows<T requires JsonDeserialize>(mut r: JsonReader) -> (?Vec<T>, ?DecodeJsonError) {
+    let mut v = Vec<T>::new();
+    r.begin_array();
+    while (r.more()) {
+        let (x, e) = T::decode(r);
+        if (e != nil) { return (nil, e); }
+        v.push(x);
+    }
+    r.end_array();
+    if (r.failed()) { return (nil, r.error()); }
+    return (v, nil);
+}
+
+// The repo-meta entry: decode; on refusal try the error envelope; a
+// malformed body answers all-nil (the generic banner).
+pub fn decode_repo_meta(text: str) -> RepoPayload {
+    let (p, e) = decodeJson<RepoPayload>(text);
+    if (e == nil) {
+        return p;
+    }
+    let (q, e2) = decodeJson<ApiError>(text);
+    if (e2 == nil) {
+        return RepoPayload {
+            full_name: nil,
+            message: q.message,
+            desc: nil,
+            language: nil,
+            stars: 0,
+            forks: 0,
+            issues: 0,
+        };
+    }
+    return RepoPayload {
+        full_name: nil,
+        message: nil,
+        desc: nil,
+        language: nil,
+        stars: 0,
+        forks: 0,
+        issues: 0,
+    };
+}
+
+// The listing fill: decode the array once, push dirs first then files
+// ("d|name" / "f|name|bytes" — the display list's rows). Answers the
+// pushed count, or -1 when the body is not the expected shape.
+pub fn fill_contents(text: str, out: ListHandle) -> i32 {
+    let (rows, e) = decodeJson2Rows(text);
+    if (e != nil) {
+        return -1;
+    }
+    let mut n: i32 = 0;
+    for (let row of rows) {
+        if (row.kind == "dir") {
+            out.push(f"d|{row.name}");
+            n = n + 1;
+        }
+    }
+    for (let row of rows) {
+        if (row.kind != "dir") {
+            out.push(f"f|{row.name}|{row.size}");
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// The array entry over the local shim (decodeJson is single-rooted; the
+// array root rides the shim's trailing-data check spelled here).
+fn decodeJson2Rows(text: str) -> (?Vec<ContentRow>, ?DecodeJsonError) {
+    let mut r = JsonReader::of(text);
+    let (v, e) = decode_rows<ContentRow>(r);
+    if (e != nil) {
+        return (nil, e);
+    }
+    if (!r.at_end()) {
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError {
+            kind: DecodeErrorKind::Trailing,
+            at: at as i64,
+            got: got,
+            expected: "end of input",
+        });
+    }
+    return (v, nil);
+}

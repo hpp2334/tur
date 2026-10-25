@@ -1,9 +1,0 @@
-// tur_host/layout/flexi — GENERATED (see the root mod.d.rut's header; do not edit by hand).
-
-pub host fn flexi_new() -> opaque;
-pub host fn flexi_flex(p1: opaque, p2: f64);
-pub host fn flexi_flex_bound(p1: opaque, p2: u64);
-pub host fn flexi_fit(p1: opaque, p2: u64);
-pub host fn flexi_qkey(p1: opaque, p2: str);
-pub host fn flexi_child(p1: opaque, p2: opaque);
-pub host fn flexi_build(p1: opaque) -> opaque;

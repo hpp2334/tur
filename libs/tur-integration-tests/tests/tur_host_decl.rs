@@ -4,12 +4,13 @@
 //!
 //! 1. `rut/tur_host/` — the GENERATED decl MODULE TREE of the standard
 //!    session's merged `tur_host` surface (`tur_decl_pkg()` + every
-//!    plugin's RutPkgExt rows): a `mod.d.rut` root (the auto-discovered
-//!    default root beside the manifest — the manifest spells no
-//!    `entry`) plus one `NAME/mod.d.rut` per module, recursive
-//!    (`layout/flex/mod.d.rut` nests under `layout`). The Rust rows
-//!    stay the compile truth; this test rebuilds the file set and diffs
-//!    it — drift fails the suite until the tree is deliberately
+//!    plugin's RutPkgExt rows): a `src/mod.d.rut` root (the
+//!    auto-discovered default root under the pkg's src/ shell — the
+//!    std-v14 pkg grammar; the manifest spells no `entry`) plus one
+//!    `src/NAME/mod.d.rut` per module, recursive
+//!    (`src/layout/flex/mod.d.rut` nests under `src/layout`). The Rust
+//!    rows stay the compile truth; this test rebuilds the file set and
+//!    diffs it — drift fails the suite until the tree is deliberately
 //!    regenerated (bless mode: `TUR_BLESS_TUR_HOST_DECL=1`). The
 //!    committed tree must also load through the driver's REAL discovery
 //!    lane with a row set EXACTLY the live one (paths included).
@@ -140,9 +141,10 @@ fn tur_host_decl_tree_matches_the_standard_session() {
         return;
     }
 
-    // The disk walk: every directory under rut/tur_host carries a
-    // mod.d.rut (rut.jsonc beside the root only); the walked set
-    // {rel path → bytes} is EXACTLY the renderer's file set.
+    // The disk walk: every directory under rut/tur_host/src carries a
+    // mod.d.rut (the src/ shell is the std-v14 pkg grammar; rut.jsonc
+    // beside the src/ dir only); the walked set {rel path → bytes} is
+    // EXACTLY the renderer's file set (keys carry the src/ shell).
     let mut disk: std::collections::BTreeMap<String, String> = Default::default();
     fn walk_dir(dir: &Path, rel: &str, disk: &mut std::collections::BTreeMap<String, String>) {
         let mod_d = dir.join("mod.d.rut");
@@ -151,12 +153,12 @@ fn tur_host_decl_tree_matches_the_standard_session() {
             "{} must carry mod.d.rut (one directory, one decl module)",
             dir.display()
         );
-        // the key is the renderer's rel path (`mod.d.rut` at the root,
-        // `NAME/mod.d.rut` under it)
+        // the key is the renderer's rel path (`src/mod.d.rut` at the
+        // root, `src/NAME/mod.d.rut` under it)
         let key = if rel.is_empty() {
-            "mod.d.rut".to_string()
+            "src/mod.d.rut".to_string()
         } else {
-            format!("{rel}/mod.d.rut")
+            format!("src/{rel}/mod.d.rut")
         };
         disk.insert(
             key,
@@ -182,7 +184,7 @@ fn tur_host_decl_tree_matches_the_standard_session() {
             }
         }
     }
-    walk_dir(&pkg_dir, "", &mut disk);
+    walk_dir(&pkg_dir.join("src"), "", &mut disk);
     let live_map: std::collections::BTreeMap<String, String> = live
         .iter()
         .map(|(rel, text)| (rel.clone(), text.clone()))
@@ -336,11 +338,11 @@ fn tur_host_manifest_declares_the_tree() {
     );
     assert!(
         manifest.entry.type_path.is_none(),
-        "the tur_host manifest spells NO entry — `mod.d.rut` beside the \
-         manifest is the auto-discovered default root (lib parity)"
+        "the tur_host manifest spells NO entry — `src/mod.d.rut` under the \
+         pkg's src/ shell is the auto-discovered default root (lib parity)"
     );
     assert!(
-        pkg_dir.join("mod.d.rut").is_file(),
+        pkg_dir.join("src/mod.d.rut").is_file(),
         "the default root surface exists"
     );
 }

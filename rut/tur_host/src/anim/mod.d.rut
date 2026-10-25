@@ -1,0 +1,25 @@
+// tur_host/src/anim — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn el_opacity(p1: f64, p2: opaque) -> opaque;
+pub host fn el_opacity_bound(p1: u64, p2: opaque) -> opaque;
+pub host fn el_transform(p1: f64, p2: f64, p3: f64, p4: f64, p5: opaque) -> opaque;
+pub host fn el_transform_angle_bound(p1: f64, p2: u64, p3: f64, p4: f64, p5: opaque) -> opaque;
+pub host fn el_transform_scale_bound(p1: u64, p2: f64, p3: f64, p4: f64, p5: opaque) -> opaque;
+pub host fn el_transform_translate_bound(p1: f64, p2: f64, p3: u64, p4: u64, p5: opaque) -> opaque;
+pub host fn anim_ctrl_mut(p1: f64, p2: str, p3: u64, p4: u64, p5: u64) -> opaque;
+pub host fn anim_forward(p1: opaque);
+pub host fn anim_reverse(p1: opaque);
+pub host fn anim_pause(p1: opaque);
+pub host fn anim_resume(p1: opaque);
+pub host fn anim_stop(p1: opaque);
+pub host fn anim_seek(p1: opaque, p2: f64);
+pub host fn anim_value(p1: opaque) -> f64;
+pub host fn anim_status(p1: opaque) -> str;
+pub host fn anim_repeat(p1: opaque, p2: u64);
+pub host fn anim_speed(p1: opaque, p2: f64);
+pub host fn tween_lerp(p1: f64, p2: f64, p3: f64) -> f64;
+pub host fn color_tween_lerp(p1: u64, p2: u64, p3: f64) -> u64;
+pub host fn tween_lerp_raw(p1: f64, p2: f64, p3: f64) -> f64;
+pub host fn color_tween_lerp_raw(p1: u64, p2: u64, p3: f64) -> u64;
+pub host fn curve_eval_raw(p1: str, p2: f64) -> f64;
+pub host fn curve_eval(p1: str, p2: f64) -> f64;

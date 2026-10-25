@@ -1,0 +1,132 @@
+// state — the per-piece state bundle and the deal. All per-piece state
+// rides ARRAYS OF SOURCES in one `Pieces` struct (the plan's
+// `shadow_c[i]` shape): left/top (the drag rail), the target slot, a
+// brush, the label str, the shadow channels, the lift scale, the placed
+// flag — plus the drag scratch. Every drag mutation captures the struct
+// + its piece index (no id rails).
+
+use tur_kit::reactive::{ MutationCtx, Source, bridge, source };
+
+pub struct Pieces {
+    px: [Source<f64>]; // left anchors (the drag rail)
+    py: [Source<f64>]; // top anchors
+    sl: [Source<f64>]; // target slots (the snap math reads them)
+    br: [Source<u64>]; // fill brushes (bright on deal, dim when placed)
+    lb: [Source<str>]; // labels (re-set by deal)
+    ok: [Source<bool>]; // placed flags
+    sc: [Source<u64>]; // shadow colors (the state shadow)
+    sb: [Source<f64>]; // shadow blurs
+    sd: [Source<f64>]; // shadow dys
+    sx: [Source<f64>]; // lift scales
+    drag: Source<f64>; // the dragged piece (-1 = none)
+    last: Source<f64>; // the just-released piece (the settle keeps animating it)
+    gx0: Source<f64>; // grab point (global)
+    gy0: Source<f64>;
+    x0: Source<f64>; // the piece's position at grab
+    y0: Source<f64>;
+}
+
+// Nine fresh f64 sources (the per-piece channel mint).
+fn m9() -> [Source<f64>] {
+    return [
+        source<f64>(0.0), source<f64>(0.0), source<f64>(0.0), source<f64>(0.0), source<f64>(0.0),
+        source<f64>(0.0), source<f64>(0.0), source<f64>(0.0), source<f64>(0.0),
+    ];
+}
+
+// Nine fresh brush sources (the per-piece fill/shadow-color mint; the
+// packed color rides the u64 lane now).
+fn b9() -> [Source<u64>] {
+    return [
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
+    ];
+}
+
+// The bundle constructor (struct literals take a bare head — one
+// module; the boot calls this instead of spelling the literal).
+pub fn mint() -> Pieces {
+    return Pieces {
+        px: m9(),
+        py: m9(),
+        sl: m9(),
+        br: b9(),
+        lb: [
+            source<str>("?"), source<str>("?"), source<str>("?"), source<str>("?"), source<str>("?"),
+            source<str>("?"), source<str>("?"), source<str>("?"), source<str>("?"),
+        ],
+        ok: [
+            source<bool>(false), source<bool>(false), source<bool>(false), source<bool>(false),
+            source<bool>(false), source<bool>(false), source<bool>(false), source<bool>(false),
+            source<bool>(false),
+        ],
+        sc: b9(),
+        sb: m9(),
+        sd: m9(),
+        sx: m9(),
+        drag: source<f64>(-1.0),
+        last: source<f64>(-1.0),
+        gx0: source<f64>(0.0),
+        gy0: source<f64>(0.0),
+        x0: source<f64>(0.0),
+        y0: source<f64>(0.0),
+    };
+}
+
+// ---- the deal (boot + Shuffle share it) ----------------------------------------
+
+// Re-shuffle the targets, re-deal the pieces to the tray in id order, and
+// reset every placed/counter/solved source. The deck is a value array
+// (rut index writes); Fisher-Yates over the LCG below.
+pub fn deal(ctx: MutationCtx, p: Pieces, count: Source<f64>, solved: Source<bool>,
+        seed: Source<f64>) {
+    let mut deck: [f64] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    let mut i: i32 = 0;
+    while (i < 9) {
+        deck[i] = i as f64;
+        i = i + 1;
+    }
+    let mut j: i32 = 0;
+    while (j < 8) {
+        let k = j + (rnd(ctx, seed) as i32 % (9 - j));
+        let a = deck[j];
+        deck[j] = deck[k];
+        deck[k] = a;
+        j = j + 1;
+    }
+    let mut b: u64 = 0;
+    while (b < 9) {
+        let s = deck[b as i32] as u64;
+        ctx.set<f64>(p.sl[b as i32], s as f64);
+        ctx.set<str>(p.lb[b as i32], theme::fmt_slot(s as f64));
+        ctx.set<u64>(p.br[b as i32], theme::bright(s));
+        ctx.set<f64>(p.px[b as i32], theme::tray_x(b));
+        ctx.set<f64>(p.py[b as i32], theme::tray_y(b));
+        ctx.set<bool>(p.ok[b as i32], false);
+        // The state shadow resets to loose; the lift scale to 1.
+        ctx.set<u64>(p.sc[b as i32], theme::SHADOW_LOOSE);
+        ctx.set<f64>(p.sb[b as i32], 10.0);
+        ctx.set<f64>(p.sd[b as i32], 4.0);
+        ctx.set<f64>(p.sx[b as i32], 1.0);
+        b = b + 1;
+    }
+    ctx.set<f64>(count, 0.0);
+    ctx.set<bool>(solved, false);
+    ctx.set<f64>(p.drag, -1.0);
+    ctx.set<f64>(p.last, -1.0);
+}
+
+// Park-Miller in f64 (48271 × 2^31 < 2^53 — exact). Fixed boot seed: deals
+// are deterministic per session, shuffles advance the state.
+fn rnd(ctx: MutationCtx, seed: Source<f64>) -> f64 {
+    let s = ctx.get<f64>(seed);
+    let n = (s * 48271.0) % 2147483647.0;
+    ctx.set<f64>(seed, n);
+    return n;
+}
+
+// The boot face's ctx — `deal` seeds the channels before the first flush
+// (the entry rail's bridge crossing).
+pub fn boot_ctx() -> MutationCtx {
+    return MutationCtx::over(bridge());
+}

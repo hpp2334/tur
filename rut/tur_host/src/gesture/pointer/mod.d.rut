@@ -1,0 +1,20 @@
+// tur_host/src/gesture/pointer — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn pi_new() -> opaque;
+pub host fn pi_on_click(p1: opaque, p2: u64);
+pub host fn pi_mut_down(p1: opaque, p2: u64);
+pub host fn pi_mut_move(p1: opaque, p2: u64);
+pub host fn pi_mut_up(p1: opaque, p2: u64);
+pub host fn pi_on_context_menu(p1: opaque, p2: u64);
+pub host fn pi_behavior(p1: opaque, p2: u64);
+pub host fn pi_qkey(p1: opaque, p2: str);
+pub host fn pi_child(p1: opaque, p2: opaque);
+pub host fn pi_build(p1: opaque) -> opaque;
+pub host fn mr_new() -> opaque;
+pub host fn mr_on_enter(p1: opaque, p2: u64);
+pub host fn mr_on_exit(p1: opaque, p2: u64);
+pub host fn mr_cursor(p1: opaque, p2: u64);
+pub host fn mr_cursor_bound(p1: opaque, p2: u64);
+pub host fn mr_behavior(p1: opaque, p2: u64);
+pub host fn mr_child(p1: opaque, p2: opaque);
+pub host fn mr_build(p1: opaque) -> opaque;

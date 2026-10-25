@@ -102,13 +102,15 @@ fn browser_capabilities() -> Capabilities {
 
 /// Stage one offered pkg to a sibling directory (relative `../name` dep
 /// paths keep resolving). Manifests derive from the pkg's own manifest
-/// (name, kind, deps); the flat host pkg (async_host — root surface
-/// only, no mods) spells `entry.type` because the PACK's flat-host arm
-/// requires it (the walk's auto-discovery does not cross the pack
-/// boundary).
+/// (name, kind, deps); host surfaces stage as the std-v14 default root
+/// (`src/mod.d.rut` — the same file the walk's auto-discovery finds).
 fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) {
     let dir = root.join(&pkg.spec);
-    fs::create_dir_all(&dir).expect("stage dir");
+    // The std-v14 pkg grammar: every module file lives under the src/
+    // shell (`src/mod.rut` for a lib body, `src/mod.d.rut` for a host
+    // surface, children beside their declaring file).
+    let src = dir.join("src");
+    fs::create_dir_all(&src).expect("stage dir");
     let mut manifest = String::new();
     match &pkg.body {
         MountedBody::Host { .. } => {
@@ -116,10 +118,6 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
                 "{{ \"name\": \"{}\", \"type\": \"host\"",
                 pkg.spec
             ));
-            if pkg.mods.is_empty() {
-                // flat host surface — the pack wants the entry spelled
-                manifest.push_str(", \"entry\": { \"type\": \"./mod.d.rut\" }");
-            }
         }
         MountedBody::Source { .. } => {
             manifest.push_str(&format!("{{ \"name\": \"{}\"", pkg.spec));
@@ -142,21 +140,23 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
     fs::write(dir.join("rut.jsonc"), manifest).expect("manifest");
     match &pkg.body {
         MountedBody::Source { text, .. } => {
-            fs::write(dir.join("mod.rut"), text).expect("root module");
+            fs::write(src.join("mod.rut"), text).expect("root module");
         }
         MountedBody::Host { root_surface, .. } => {
             let text = root_surface.as_deref().unwrap_or("");
-            fs::write(dir.join("mod.d.rut"), text).expect("root surface");
+            fs::write(src.join("mod.d.rut"), text).expect("root surface");
         }
         _ => unreachable!(),
     }
     for (path, m) in &pkg.mods {
-        let mdir = dir.join(path);
+        let mdir = src.join(path);
         fs::create_dir_all(&mdir).expect("mod dir");
         fs::write(mdir.join(&m.file), &m.text).expect("mod file");
     }
     if let Some((name, text)) = extra_root_file {
-        fs::write(dir.join(name), text).expect("extra root file");
+        let path = src.join(name);
+        fs::create_dir_all(path.parent().unwrap()).expect("extra root dir");
+        fs::write(path, text).expect("extra root file");
     }
 }
 
@@ -164,6 +164,22 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
 /// answer (bundle bytes, offered-set fingerprint). `root_uses` spells
 /// the synthetic root's `use` lines — one REAL binding per offered
 /// lib pkg so the pack's compile closure LINKS every group (see below).
+/// The synthetic root's `use` lines — one REAL binding per offered lib
+/// pkg so the pack's compile closure LINKS every group. ONE LAW HERE:
+/// `json` is NEVER linked. Its generic entries (`decodeJson<T>`) are
+/// owner-anchored — a consumer's `decodeJson<AppRecord>` instantiates
+/// in JSON'S unit, and a packed unit takes no post-pack instantiation
+/// ("no surface carries that member — corrupt or doctored"). json rides
+/// the bundle as an unlinked SOURCE group; the load lane compiles it
+/// per session, where consumer instantiations are legal.
+fn json_free_root_uses(extra: &str) -> String {
+    format!(
+        "use tur_kit::handles::{{ mount }};\n\
+         use tur_anim_kit::{{ anim_ctrl }};\n\
+         use futures::{{ sleep }};\n{extra}"
+    )
+}
+
 fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) -> (Vec<u8>, u64) {
     let exts =
         probe_register_rut_pkg_exts(plugins, caps, (400.0, 600.0))
@@ -175,7 +191,8 @@ fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) ->
     let _ = fs::remove_dir_all(&tmp);
     for pkg in &offered {
         // async_host lowers FLAT (rows only — no root surface text
-        // survives the lowering); stage the vendored decl file verbatim.
+        // survives the lowering); stage the vendored decl file verbatim
+        // as the default root under the src/ shell.
         let extra: Option<(&str, &str)> = if pkg.spec == "async_host" {
             let vendored = fs::read_to_string(
                 workspace_root().join("libs/tur-engine/src/core/rut_runtime/async_host.d.rut"),
@@ -194,9 +211,9 @@ fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) ->
     // the root never uses rides as a source file set, and the load
     // lane would recompile it — the whole win gone.)
     let root = tmp.join("tur_std");
-    fs::create_dir_all(&root).expect("root dir");
+    fs::create_dir_all(root.join("src")).expect("root dir");
     fs::write(
-        root.join("mod.rut"),
+        root.join("src/mod.rut"),
         format!(
             "// staged root — the offered set's pack root\n{root_uses}"
         ),
@@ -281,9 +298,7 @@ fn kit_bundles_are_pinned() {
         "std_kit",
         &standard_plugins(),
         standard_capabilities(),
-        "use tur_kit::handles::{ mount };\n\
-         use tur_anim_kit::{ anim_ctrl };\n\
-         use futures::{ sleep };\n",
+        &json_free_root_uses(""),
     );
     // The browser shape — `TurTestApp::new_with_http` /
     // `new_with_http_and_plugins` (the corpus sweep, the net tests, the
@@ -296,9 +311,6 @@ fn kit_bundles_are_pinned() {
         "browser_kit",
         &browser_plugins(),
         browser_capabilities(),
-        "use tur_kit::handles::{ mount };\n\
-         use tur_anim_kit::{ anim_ctrl };\n\
-         use futures::{ sleep };\n\
-         use tur_net_kit::{ net_request };\n",
+        &json_free_root_uses("use tur_net_kit::{ net_request };\n"),
     );
 }

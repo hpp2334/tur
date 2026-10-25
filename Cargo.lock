@@ -605,6 +605,7 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -2561,8 +2562,8 @@ dependencies = [
 
 [[package]]
 name = "rut-ast"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-core",
  "rut-lexer",
@@ -2570,13 +2571,13 @@ dependencies = [
 
 [[package]]
 name = "rut-core"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 
 [[package]]
 name = "rut-driver"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2592,13 +2593,13 @@ dependencies = [
 
 [[package]]
 name = "rut-lexer"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 
 [[package]]
 name = "rut-lir"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2607,8 +2608,8 @@ dependencies = [
 
 [[package]]
 name = "rut-native"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-core",
  "rut-driver",
@@ -2617,8 +2618,8 @@ dependencies = [
 
 [[package]]
 name = "rut-parser"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-ast",
  "rut-core",
@@ -2627,8 +2628,8 @@ dependencies = [
 
 [[package]]
 name = "rut-semantic"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-ast",
  "rut-lexer",
@@ -2637,8 +2638,8 @@ dependencies = [
 
 [[package]]
 name = "rut-std"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "hashbrown 0.14.5",
  "rut-core",
@@ -2647,8 +2648,8 @@ dependencies = [
 
 [[package]]
 name = "rut-vm"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-core",
  "rut-vm-threaded",
@@ -2656,8 +2657,8 @@ dependencies = [
 
 [[package]]
 name = "rut-vm-threaded"
-version = "0.1.0"
-source = "git+https://github.com/hpp2334/rut?rev=ca5e523c44616f7d9842c06f751f1255e015dfca#ca5e523c44616f7d9842c06f751f1255e015dfca"
+version = "0.2.0"
+source = "git+https://github.com/hpp2334/rut?rev=09dea6a24b4e380eb7f9077f2e0abdf5f057e80d#09dea6a24b4e380eb7f9077f2e0abdf5f057e80d"
 dependencies = [
  "rut-core",
 ]
@@ -4781,16 +4782,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
 dependencies = [
  "crc32fast",
+ "flate2",
  "indexmap",
  "memchr",
  "typed-path",
+ "zopfli",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[package]]
+name = "zopfli"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f05cd8797d63865425ff89b5c4a48804f35ba0ce8d125800027ad6017d2b5249"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "log",
+ "simd-adler32",
+]
 
 [[package]]
 name = "zune-core"

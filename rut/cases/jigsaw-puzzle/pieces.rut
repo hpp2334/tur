@@ -1,0 +1,133 @@
+// pieces — the drag state machine: one `piece` view per id, three
+// per-piece mutations over the bundle (grab / follow / release), the
+// bound left/top anchors (the drag rail), the state shadow, and the
+// lift Transform.
+
+use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl_install };
+use tur_kit::flags::{ Align, BorderPosition };
+use tur_kit::gesture::pointer::{ PointerEvent, PointerInteract };
+use tur_kit::handles::{ View };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::stack::{ Positioned };
+use tur_kit::reactive::{ MutationCtx, Source, mutate, sv };
+use tur_kit::text::core::{ Text };
+
+// The controller install — the kit's seal-id door (`anim_ctrl_install`)
+// over the caller's already-sealed tick/end ids. U64s cross modules;
+// Mutation values do not (the std-v14 carried-inst interner refuses a
+// `Mutation<f64>` param crossing), and this case's root cannot bind
+// tur_anim_kit heads at all. The caller seals in ITS OWN frame (start's
+// — the closures must outlive their defining call).
+pub fn install_ctrl(tick: u64, end: u64) -> AnimCtrl {
+    return anim_ctrl_install(180.0, "easeOut", 1, tick, end);
+}
+
+pub fn piece(i: u64, p: state::Pieces, count: Source<f64>, solved: Source<bool>, lift: AnimCtrl) -> View {
+    // Grab: placed pieces stop answering; a new grab interrupts the
+    // previous settle (parking that piece at rest), then the lift runs and
+    // the shadow hardens.
+    let b_down = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
+        if (ctx.get<bool>(p.ok[i as i32])) {
+            return;
+        }
+        let prev = ctx.get<f64>(p.last);
+        if (prev >= 0.0 && prev != i as f64) {
+            ctx.set<f64>(p.sx[prev as i32], 1.0);
+        }
+        ctx.set<f64>(p.drag, i as f64);
+        ctx.set<f64>(p.last, i as f64);
+        ctx.set<f64>(p.gx0, ev.global.x);
+        ctx.set<f64>(p.gy0, ev.global.y);
+        ctx.set<f64>(p.x0, ctx.get<f64>(p.px[i as i32]));
+        ctx.set<f64>(p.y0, ctx.get<f64>(p.py[i as i32]));
+        lift.forward();
+        ctx.set<u64>(p.sc[i as i32], theme::SHADOW_DRAG);
+        ctx.set<f64>(p.sb[i as i32], 28.0);
+        ctx.set<f64>(p.sd[i as i32], 12.0);
+    });
+    // Follow: frame-formulated from the grab anchor (absolute — no drift).
+    let b_move = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
+        if (ctx.get<f64>(p.drag) != i as f64) {
+            return;
+        }
+        ctx.set<f64>(p.px[i as i32], ctx.get<f64>(p.x0) + (ev.global.x - ctx.get<f64>(p.gx0)));
+        ctx.set<f64>(p.py[i as i32], ctx.get<f64>(p.y0) + (ev.global.y - ctx.get<f64>(p.gy0)));
+    });
+    // Release: within SNAP_T² of the target the piece snaps + locks (dim
+    // fill, own-hue glow, counted, maybe solved); otherwise it settles
+    // back to the loose shadow where it was dropped.
+    let b_up = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
+        if (ctx.get<f64>(p.drag) != i as f64) {
+            return;
+        }
+        ctx.set<f64>(p.drag, -1.0);
+        let nx = ctx.get<f64>(p.px[i as i32]);
+        let ny = ctx.get<f64>(p.py[i as i32]);
+        let s = ctx.get<f64>(p.sl[i as i32]) as u64;
+        let tx = theme::slot_x(s);
+        let ty = theme::slot_y(s);
+        let d2 = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+        if (d2 >= theme::SNAP_T2) {
+            ctx.set<u64>(p.sc[i as i32], theme::SHADOW_LOOSE);
+            ctx.set<f64>(p.sb[i as i32], 10.0);
+            ctx.set<f64>(p.sd[i as i32], 4.0);
+            lift.reverse();
+            return; // the piece stays where it was dropped
+        }
+        ctx.set<f64>(p.px[i as i32], tx);
+        ctx.set<f64>(p.py[i as i32], ty);
+        ctx.set<bool>(p.ok[i as i32], true);
+        ctx.set<u64>(p.br[i as i32], theme::dim(s));
+        ctx.set<u64>(p.sc[i as i32], theme::glow(s));
+        ctx.set<f64>(p.sb[i as i32], 18.0);
+        ctx.set<f64>(p.sd[i as i32], 4.0);
+        let c = ctx.get<f64>(count) + 1.0;
+        ctx.set<f64>(count, c);
+        if (c >= 9.0) {
+            ctx.set<bool>(solved, true);
+        }
+        lift.reverse();
+    });
+
+    let face = Container()
+        .width_height(theme::PIECE, theme::PIECE)
+        .color(p.br[i as i32])
+        .radius(sv(14.0f64))
+        .border(0xFFFFFFFFu64, 2.0, BorderPosition::Inside)
+        .shadow_color(p.sc[i as i32])
+        .shadow_blur(p.sb[i as i32])
+        .shadow_dy(p.sd[i as i32])
+        .alignment(Align::Center)
+        .query_key(f"jw/piece-{i}")
+        .child(
+            Text()
+                .text(p.lb[i as i32])
+                .font_size(28.0)
+                .color(0xFFFFFFFFu64)
+                .query_key(f"jw/piece-{i}-label")
+                .build(),
+        )
+        .build();
+    let pad = PointerInteract()
+        .on_pointer_down(b_down)
+        .on_pointer_move(b_move)
+        .on_pointer_up(b_up)
+        .query_key(f"jw/pad-{i}")
+        .child(face)
+        .build();
+    // The boa lift: the pad rides a Transform whose scale is the piece's
+    // bound source (the shared controller eases it 1 → 1.1 on grab, back
+    // on release).
+    return Positioned()
+        .left(p.px[i as i32])
+        .top(p.py[i as i32])
+        .width(theme::PIECE)
+        .height(theme::PIECE)
+        .child(
+            Transform(1.0, 0.0, 0.0, 0.0)
+                .scale(p.sx[i as i32])
+                .child(pad)
+                .build(),
+        )
+        .build();
+}

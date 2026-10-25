@@ -205,8 +205,8 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   single-file NAME.rut spelling) + the generated
                        #   <name>/rut.jsonc + README)
   tur_host/            # the host pkg's manifest (type=host) + the GENERATED,
-                       #   test-pinned decl MODULE TREE (mod.d.rut root +
-                       #   NAME/mod.d.rut per module — store/, ctx/,
+                       #   test-pinned decl MODULE TREE (src/mod.d.rut root
+                       #   + src/NAME/mod.d.rut per module — store/, ctx/,
                        #   scalars/, env/, font/, clipboard/,
                        #   layout/{flex,flexi,stack,pos,box,grid_table}/,
                        #   text/{core,input}/,
@@ -339,10 +339,11 @@ Android build + device debugging live in the **`android-dev` skill** at
   showcase splits ride the single-file form)
   (`entry.lib`/`entry.libs` are REPEALED upstream — they refuse loudly).
   A `type: "host"` pkg organizes its surface as a DECL MODULE TREE the
-  same way: `mod.d.rut` beside the manifest is the auto-discovered root
-  (lib parity — the manifest's `entry.type` is OPTIONAL; when spelled it
-  wins, NEITHER present is a loud error, and a `mod.rut` beside a host
-  manifest stays refused), each `pub mod NAME;` mounts `NAME/mod.d.rut`
+  same way: `src/mod.d.rut` under the pkg's src/ shell is the
+  auto-discovered root at the std-v14 pin (lib parity — the manifest's
+  `entry.type` is OPTIONAL; when spelled it wins, NEITHER present is a
+  loud error, and a `mod.rut` beside a host manifest stays refused),
+  each `pub mod NAME;` mounts `NAME/mod.d.rut`
   beside it, recursive (`net/tls` nests under `net`). The rows carry
   their module paths (`HostRow { path, .. }` — slash-separated relative
   to the pkg root), the VM bodies register under the scope-relative
@@ -497,6 +498,42 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
+- The rut pin is the **std-v14 tag** (`09dea6a2`, 2026-10-24) — the tag
+  lane the std packages publish through. tur consumes the std `json`
+  pkg from it: vendored sources (`builtin_plugins/std_json/vendor/`)
+  offered to modules by `TurStdPlugin` (dep closure strbuild/pouch/
+  nmapset + the strbuild_host/nmap_host bodies from `rut-std`), and
+  github-viewer's `schema.rut` decodes the GitHub API through
+  `decodeJson<T>` (structural `decode` members on the record's own
+  impl). ONE LAW discovered the hard way: **a packed (linked-compiled)
+  std pkg takes NO consumer-typed instantiation** — `decodeJson<AppRec>`
+  instantiates in JSON'S unit, and a packed unit refuses it ("template
+  calls `AppRec.decode`, but no surface carries that member — corrupt
+  or doctored"). The precompiled kit lane therefore stages json as an
+  UNLINKED source group (see `json_free_root_uses` in the kit_bundle
+  test); never add a `use json::…` line to the pack root. The upstream
+  CLI example's local-shim pattern (`T::decode(r)` in a consumer-side
+  generic fn) is the escape hatch when a pkg MUST ride linked.
+- The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
+  single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
+  head — a second (`use tur_anim_kit::…` in the root, even UNUSED)
+  panics the carried-inst interner (`types.rs:487`, subtract overflow);
+  bind extra pkg heads in a CHILD file. **(2)** record literals take a
+  BARE head — construct cross-module structs behind a constructor fn in
+  the defining module (`state::mint()`), never `state::Pieces { … }`.
+  **(3)** cross-module TYPE positions qualify (`p: state::Pieces`).
+  **(4)** fn-VALUES never cross a module boundary — `then_build(ui::win)`
+  hits an unreachable ("the module's fn resolves in the fn-value lane");
+  wrap in a local closure (`then_build(fn () -> View { return ui::win();
+  })`). **(5)** params written through `ctx.set` take CONCRETE
+  `Source<T>` (the origin law — a `Readable<T>` param's origin is
+  untracked cross-module). **(6)** sealed-mutation values
+  (`Mutation<f64>`) cannot cross either — mint the mutations in start
+  (their closures must outlive the defining call: a controller whose
+  closures were minted inside a fn that returns goes deaf), seal
+  root-side with the kit's mirror tags (SEAL_F64 = 2 / SEAL_NIL = 0),
+  and hand the u64 ids over — `tur_anim_kit::anim_ctrl_install` is the
+  door (jigsaw's `pieces::install_ctrl` is the pattern).
 - Linting: biome (root workspace; `pnpm lint` at the repo root).
 - The rut compile laws (pin 0eea7e95): **every leaf must bind, in the FILE
   that spelled it** — a `use` binds its OWN file (the root's `use` never

@@ -1,0 +1,86 @@
+// VENDORED from rut @09dea6a2 (std-v14) — rut/strbuild/src/mod.rut, unmodified below this line.
+// Provenance law: re-vendor on rut pin bumps if upstream's file changes.
+// strbuild/strbuild.rut — the 10th std pkg: the growable string
+// builder, a class over HOST fns (the ink/Logger pattern — the
+// `strbuild_host` decl pkg declares the rows, this pkg is the rut
+// face over them; the bodies live in `rut-std`). Core ships zero
+// string-building machinery: the builder's state is one `opaque`
+// handle owning the host's buffer, and every member is ONE forwarded
+// host call — the share law rides the box (appends through an alias
+// are visible through the original), growth is charged against the
+// embedder's heap budget host-side, and `build` is the one
+// materialization.
+//
+//   pub class StringBuilder — the growable builder
+//     new()               grow from small
+//     with_cap(cap)       pre-size to a capacity HINT (octets;
+//                         advisory — behavior is identical for
+//                         every hint, only the allocation differs;
+//                         negative traps Invalid at the host fn)
+//     append(value: str)  append a str's octets in place — O(|s|)
+//                         amortized
+//     append_code(cp: u32)  append one codepoint (invalid scalars mint
+//                         U+FFFD — the str::from_code rule, decided at
+//                         the host fn, not here)
+//     len() -> i32        the CODEPOINT count so far (tracked, O(1))
+//     build() -> str      the ONE materialization: a fresh immutable
+//                         str; the builder KEEPS its buffer (build
+//                         twice answers the same text; the built str
+//                         is immune to later appends)
+//
+// Sharing is the law underneath (bindings share the ONE instance
+// cell, whose `out` slot shares the ONE host box): appends through an
+// alias are visible through the original; copies happen at exactly
+// two engineered points (build's materialization, growth's prefix
+// move). Methods live in an `impl` block; mutating members take the
+// `mut self` receiver (the checker's license to mutate through the
+// shared handle, never a copy trigger).
+//
+// For the common accumulator shape — `out = f"{out}{t}"` — no builder
+// is needed at all: the engine's concat fast path appends in place,
+// linear in the total output.
+//
+// NO MORE MEMBERS ON RECORD: clear/reserve/capacity/append_char/
+// append_i64 have no host fn and no call site — adding one is a
+// surface conversation for zero need.
+
+use strbuild_host::{ sb_new, sb_push, sb_push_code, sb_len, sb_finish };
+
+pub class StringBuilder {
+    out: opaque;          // the host box — the whole pkg is this field
+}
+
+impl StringBuilder {
+    // grow from small
+    [constructor] pub fn new() -> Self {
+        return Self { out: sb_new(0) };
+    }
+
+    // the pre-sized mint: `cap` is an OCTET hint (negative traps
+    // Invalid at the host fn); the hint is advisory — behavior is
+    // identical for every cap; only the allocation differs.
+    pub fn with_cap(cap: i32) -> Self {
+        return Self { out: sb_new(cap) };
+    }
+
+    // append a str's octets IN PLACE through the shared box
+    pub fn append(mut self, value: str) {
+        sb_push(self.out, value);
+    }
+
+    // append one codepoint — the host fn's U+FFFD rule for invalid scalars
+    pub fn append_code(mut self, cp: u32) {
+        sb_push_code(self.out, cp);
+    }
+
+    // codepoints so far — tracked at append time, O(1), never a scan
+    pub fn len(self) -> i32 {
+        return sb_len(self.out);
+    }
+
+    // the ONE materialization: a fresh immutable str copied from the
+    // buffer; the builder keeps its buffer (the finish-keeps-buffer law)
+    pub fn build(self) -> str {
+        return sb_finish(self.out);
+    }
+}

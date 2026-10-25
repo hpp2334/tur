@@ -1,0 +1,36 @@
+// tur_host/src/mod.d.rut — GENERATED from the engine's `tur_host` rows; do
+// not edit by hand. The Rust rows are the compile truth
+// (tur-engine/src/core/rut_runtime: `tur_decl_pkg()` + every plugin's
+// RutPkgExt rows, the bodies installed by `install_tur_pkg`); this tree
+// is the test-pinned SNAPSHOT of that surface (a `type = "host"` pkg —
+// `src/mod.d.rut` under the pkg's src/ shell is the auto-discovered root;
+// the manifest spells no `entry`). Regenerate with the pin test's bless
+// mode:
+//   TUR_BLESS_TUR_HOST_DECL=1 cargo nextest run -p tur-integration-tests
+//     tur_host_decl
+// Param names are positional (p1..pn) — the engine rows carry none; the
+// crossing is positional too. The surface organizes as a MODULE TREE:
+// each `pub mod X;` mounts `X/mod.d.rut` beside this file, and a
+// consumer's use path spells the tree
+// (`use tur_host::store::{ rs_source_str };`; root rows stay flat —
+// `use tur_host::{ mount };`).
+
+pub mod anim;
+pub mod clipboard;
+pub mod composited;
+pub mod control_flow;
+pub mod ctx;
+pub mod env;
+pub mod font;
+pub mod gesture;
+pub mod image;
+pub mod layout;
+pub mod net;
+pub mod scalars;
+pub mod scroll;
+pub mod store;
+pub mod text;
+pub mod virtual_app;
+
+pub host fn mount(p1: opaque);
+pub host fn mount_raw(p1: opaque);

@@ -1,0 +1,23 @@
+// tur_host/src/control_flow/control — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn cond_new(p1: u64) -> opaque;
+pub host fn cond_then(p1: opaque, p2: opaque);
+pub host fn cond_else(p1: opaque, p2: opaque);
+pub host fn cond_then_build(p1: opaque, p2: opaque);
+pub host fn cond_else_build(p1: opaque, p2: opaque);
+pub host fn cond_qkey(p1: opaque, p2: str);
+pub host fn cond_build(p1: opaque) -> opaque;
+pub host fn switch_new() -> opaque;
+pub host fn switch_value_source(p1: opaque, p2: u64);
+pub host fn switch_value_derived(p1: opaque, p2: u64);
+pub host fn switch_case(p1: opaque, p2: str, p3: opaque);
+pub host fn switch_case_build(p1: opaque, p2: str, p3: opaque);
+pub host fn switch_fallback(p1: opaque, p2: opaque);
+pub host fn switch_qkey(p1: opaque, p2: str);
+pub host fn switch_build(p1: opaque) -> opaque;
+pub host fn each_new(p1: u64) -> opaque;
+pub host fn each_builder(p1: opaque, p2: opaque);
+pub host fn each_build(p1: opaque) -> opaque;
+pub host fn frag_new() -> opaque;
+pub host fn frag_child(p1: opaque, p2: opaque);
+pub host fn frag_build(p1: opaque) -> opaque;

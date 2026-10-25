@@ -113,6 +113,11 @@ impl Plugin for TurStdPlugin {
         // standard plugin set compiles.
         ctx.push_rut_ext(std::rc::Rc::new(|cx: &mut crate::core::rut_runtime::RutPkgCx<'_>| {
             cx.preludes.push(crate::kit::tur_kit_pkg());
+            // The std json offering (rut's `json` + its dep closure) —
+            // same registration shape, the offered-set lane: modules
+            // spell `use json::{ decodeJson };` (builtin_plugins/std_json
+            // owns the vendoring; rut-std ships the *_host bodies).
+            crate::builtin_plugins::std_json::push_offering(cx);
         }));
 
         Ok(())

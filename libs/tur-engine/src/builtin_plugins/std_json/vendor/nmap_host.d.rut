@@ -1,0 +1,116 @@
+// VENDORED from rut @09dea6a2 (std-v14) — rut/nmap_host/src/nmap.d.rut, unmodified below this line.
+// Provenance law: re-vendor on rut pin bumps if upstream's file changes.
+// nmap_host/nmap.d.rut — the native key-table experiment's host surface:
+// `pub host fn` decls only — the bodies live in rut-std's
+// `nmap::pkg()`. This file is mirrored BYTE-FOR-BYTE
+// by the test fixture `crates/rut-cli/tests/data/nmap_host/nmap.d.rut` —
+// update BOTH when the surface changes.
+//
+// nmap-hostvals P5: the VALUES live in the entries. `map_cap` retired
+// (with the values host-side there is no rut-side sidecar left to
+// pre-size; the table's own with_capacity hint rides `map_new`'s `cap`).
+// The boxed-key law (the structural-interfaces fork): KEYS and VALUES
+// both SEAL — `opaque(k)`/`opaque(v)` at the wrapper's edge, the host
+// opens the key box for hash/eq and admits the closed key set, the
+// entry retains the value box, `-> ?opaque` answers the STORED box
+// (nil = absent; the aliasing law rides the box — two gets name one
+// box, and `opaque::downcast<V>` IS the box's inner cell), and
+// `map_hvremove` releases the held box in-crossing (the box's own
+// release walks the payload).
+// Reading an `Empty` entry — an `hput` birth with no value — TRAPS
+// loudly (a caller bug, never a silent nil, §0.8 g), and so does a
+// `Bits` cell (a raw `map_val_set_*` store is not a seal box; read it
+// through the raw lanes, never a reinterpret).
+//
+// The native side owns KEYS (closed set: the integer primitives,
+// `bool`, `str`, `bytes`), their HASHES, their HANDLES, and now the
+// VALUE BOXES as `HashMap` entries — hashed with the pinned mapset
+// constants (mix64 / FNV-1a 64, bit-for-bit) through an identity
+// hasher, compared by CONTENT, released by the payload's `finalize`
+// hook at store-entry death.
+
+pub host fn map_new(cap: i64) -> opaque;
+
+pub host fn map_len(m: opaque) -> i32;
+
+// ---- the raw val lanes (nmapset-round3; RE-BASED at nmap-hostvals
+// P4) -----------------------------------------------------------------
+// Raw u64 bits in/out, ONE pair for every primitive val kind
+// (i64/u64/f64/bool — the wrapper reinterprets client-side). The
+// address is a live birth HANDLE from the h-family (slots died with
+// the probing core): the bits land in that key's entry, releasing any
+// displaced reference cell first (P5). Bounds are the table's live
+// births; a removed key's handle traps (`no live entry`), never
+// reinterpreted. `map_val_get_u/f` answers the stored bits iff the
+// entry's tag is Bits — the `Empty` placeholder an `hput` birth holds
+// TRAPS on a valued read, and so does a `Ref` cell from the valued
+// lanes (never a reinterpret).
+//
+// The f pair is the same storage through an `f64`-typed crossing:
+// `to_bits`/`from_bits` at the boundary, raw bits byte-for-byte both
+// directions (rut has no float bitcast).
+
+pub host fn map_val_set_u(m: opaque, handle: i32, v: u64);
+
+pub host fn map_val_get_u(m: opaque, handle: i32) -> u64;
+
+pub host fn map_val_set_f(m: opaque, handle: i32, v: f64);
+
+pub host fn map_val_get_f(m: opaque, handle: i32) -> f64;
+
+// ---- the fused handle lanes (the boxed-key law) — the h-family -----
+// ONE crossing per op, ALL control flow host-side. The table carries a
+// STABLE birth handle per key (assigned at first insert, never
+// recycled); `map_hput` inserts or replaces via the entry API and
+// answers the packed `(handle << 1) | newly` in i64: bit 0 is the
+// newly bit (a replace answers bit 0 = 0; `HashSet` shares the lane
+// and reads exactly that bit), the rest the handle. Growth is std's —
+// internal, and invisible to every answer (the handle is a birth, not
+// an address, so nothing ever relocates). `map_hfind`/`map_hremove`
+// answer the key's handle, or `-1` when absent — `map_hremove`
+// releases the entry's held value box in-crossing and answers the dead
+// key's own handle; a re-insert is a NEW birth.
+//
+// THE KEY SEALS: `k: opaque` is the wrapper's `opaque(k)` box, and the
+// HOST opens it — the register word's raw bits for the integer and
+// `bool` lanes (bits ARE the key identity, bit-for-bit the words the
+// typed lanes bucketed), the octets for `str`/`bytes` (the same FNV-1a
+// 64). Anything outside the closed key set traps `Invalid` by name —
+// the wrapper's union bound is the compile-time admission, the host's
+// decode is the defense.
+
+pub host fn map_hput(m: opaque, k: opaque) -> i64;
+
+pub host fn map_hfind(m: opaque, k: opaque) -> i32;
+
+pub host fn map_hremove(m: opaque, k: opaque) -> i32;
+
+pub host fn map_hput_sv(m: opaque, parent: str, off: i32, len: i32) -> i64;
+
+pub host fn map_hfind_sv(m: opaque, parent: str, off: i32, len: i32) -> i32;
+
+pub host fn map_hremove_sv(m: opaque, parent: str, off: i32, len: i32) -> i32;
+
+// ---- the valued lanes (the boxed-key law; values seal as ever) -----
+// The value crosses INSIDE the put as a SEALED box (`v: opaque`), the
+// key as its own seal box (`k: opaque` — opened host-side for hash/eq,
+// never stored; a fresh insert materializes the owned copy, the one
+// alloc the probe law always had). ONE crossing per op, the entry API
+// with the box inside. The packed put answer is bit-identical to the
+// h-family's; the gets answer the stored box (nil = absent); the
+// removes release the held box and answer the dead key's handle or
+// `-1`. The `_sv` twins key over a borrowed `(parent, off, len)` BYTE
+// range with the UTF-8 boundary trap — the same key and entry as the
+// `str` box of the equal content.
+
+pub host fn map_hvput(m: opaque, k: opaque, v: opaque) -> i64;
+
+pub host fn map_hvget(m: opaque, k: opaque) -> ?opaque;
+
+pub host fn map_hvremove(m: opaque, k: opaque) -> i32;
+
+pub host fn map_hvput_sv(m: opaque, parent: str, off: i32, len: i32, v: opaque) -> i64;
+
+pub host fn map_hvget_sv(m: opaque, parent: str, off: i32, len: i32) -> ?opaque;
+
+pub host fn map_hvremove_sv(m: opaque, parent: str, off: i32, len: i32) -> i32;

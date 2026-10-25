@@ -1,4 +1,4 @@
-// VENDORED from rut @3b4d2cc — rut/futures/mod.rut, unmodified.
+// VENDORED from rut @09dea6a2 (std-v14) — rut/futures/src/mod.rut, unmodified.
 // Provenance law: the typed launcher surface (launch_future / sleep / select2 / select_all / completer) as rut source over the async_host engine rows. Re-vendor on rut bumps if upstream's file changes.
 
 // futures/futures.rut — the standard launcher surface in rut

@@ -28,6 +28,7 @@ pub mod lazy_container;
 pub mod lifecycle;
 pub mod scroll;
 pub mod std;
+pub mod std_json;
 pub mod text;
 pub mod virtual_app;
 

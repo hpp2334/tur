@@ -1,0 +1,168 @@
+// ui — the shared chrome: the slot ghosts, the board/tray backgrounds,
+// the top bar (the Shuffle pill + the derive badge), and the win banner.
+
+use tur_kit::flags::{ Align, BorderPosition, CrossAlign, Cursor, MainAlign };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ View };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Row };
+use tur_kit::layout::stack::{ Positioned };
+use tur_kit::reactive::{ DeriveCtx, Mutation, Readable, derive, sv };
+use tur_kit::text::core::{ Text };
+
+pub fn ghost(s: u64) -> View {
+    return Positioned()
+        .left(sv(theme::slot_x(s)))
+        .top(sv(theme::slot_y(s)))
+        .width(theme::PIECE)
+        .height(theme::PIECE)
+        .child(
+            Container()
+                .width_height(theme::PIECE, theme::PIECE)
+                .color(sv(0x1E293BFFu64))
+                .border(0x475569FFu64, 1.0, BorderPosition::Inside)
+                .radius(sv(12.0f64))
+                .alignment(Align::Center)
+                .query_key(f"jw/ghost-{s}")
+                .child(
+                    Text()
+                        .text(sv(theme::fmt_slot(s as f64)))
+                        .font_size(18.0)
+                        .color(0x64748BFFu64)
+                        .query_key(f"jw/ghost-{s}-num")
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+}
+
+pub fn board_bg() -> View {
+    let w = theme::BOARD_W + 4.0;
+    return Positioned()
+        .left(sv(theme::BOARD_X - 2.0))
+        .top(sv(theme::BOARD_Y - 2.0))
+        .width(w)
+        .height(w)
+        .child(
+            Container()
+                .width_height(w, w)
+                .color(sv(0x0F172AFFu64))
+                .border(0x3B82F6FFu64, 2.0, BorderPosition::Inside)
+                .radius(sv(16.0f64))
+                .shadow(0x3B82F628u64, 18.0, 0.0, 0.0)
+                .build(),
+        )
+        .build();
+}
+
+pub fn tray_bg() -> View {
+    let w = theme::BOARD_W + 4.0;
+    return Positioned()
+        .left(sv(theme::TRAY_X - 2.0))
+        .top(sv(theme::TRAY_Y - 2.0))
+        .width(w)
+        .height(w)
+        .child(
+            Container()
+                .width_height(w, w)
+                .color(sv(0x0A0F1DFFu64))
+                .border(0x334155FFu64, 1.0, BorderPosition::Inside)
+                .radius(sv(16.0f64))
+                .build(),
+        )
+        .build();
+}
+
+// The top bar: the Shuffle pill (its mutation re-deals) + the badge (the
+// derive over the count source).
+pub fn top_bar(b_shuffle: Mutation<nil>, count: Readable<f64>) -> View {
+    let badge: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
+        let n = ctx.get<f64>(count) as u64;
+        return f"{n} / 9 placed";
+    });
+    let pill = Container()
+        .padding(10.0)
+        .radius(sv(20.0f64))
+        .color(sv(0x4F46E5FFu64))
+        .border(0x818CF8FFu64, 1.0, BorderPosition::Inside)
+        .shadow(0x4F46E578u64, 12.0, 0.0, 4.0)
+        .child(
+            Text()
+                .text(sv("Shuffle"))
+                .font_size(13.0)
+                .color(0xFFFFFFFFu64)
+                .build(),
+        )
+        .build();
+    let chip = Container()
+        .padding(10.0)
+        .radius(sv(8.0f64))
+        .color(sv(0x1E293BFFu64))
+        .border(0x334155FFu64, 1.0, BorderPosition::Inside)
+        .child(
+            Text()
+                .text(badge)
+                .font_size(14.0)
+                .color(0xE2E8F0FFu64)
+                .query_key("jw/counter")
+                .build(),
+        )
+        .build();
+    return Positioned()
+        .left(sv(12.0f64))
+        .right(12.0)
+        .top(sv(12.0f64))
+        .child(
+            Row()
+                .main_alignment(MainAlign::SpaceBetween)
+                .cross_alignment(CrossAlign::Center)
+                .child(
+                    MouseRegion()
+                        .cursor(Cursor::Pointer)
+                        .child(
+                            PointerInteract()
+                                .on_click(b_shuffle)
+                                .query_key("jw/shuffle")
+                                .child(pill)
+                                .build(),
+                        )
+                        .build(),
+                )
+                .child(chip)
+                .build(),
+        )
+        .build();
+}
+
+pub fn win_banner() -> View {
+    return Positioned()
+        .left(sv(0.0f64))
+        .top(sv(0.0f64))
+        .right(0.0)
+        .bottom(0.0)
+        .child(
+            Container()
+                .color(sv(0x020617C8u64))
+                .alignment(Align::Center)
+                .child(
+                    Container()
+                        .padding(24.0)
+                        .radius(sv(18.0f64))
+                        .color(sv(0x4F46E5FFu64))
+                        .border(0x818CF8FFu64, 2.0, BorderPosition::Inside)
+                        .shadow(0x4F46E5B4u64, 32.0, 0.0, 8.0)
+                        .query_key("jw/banner")
+                        .child(
+                            Text()
+                                .text(sv("Solved!"))
+                                .font_size(36.0)
+                                .color(0xFFFFFFFFu64)
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+}

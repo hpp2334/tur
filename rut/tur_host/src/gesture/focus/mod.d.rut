@@ -1,0 +1,9 @@
+// tur_host/src/gesture/focus — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn focus_new() -> opaque;
+pub host fn focus_on_key_down(p1: opaque, p2: u64);
+pub host fn focus_on_focus(p1: opaque, p2: u64);
+pub host fn focus_on_blur(p1: opaque, p2: u64);
+pub host fn focus_child(p1: opaque, p2: opaque);
+pub host fn focus_build(p1: opaque) -> opaque;
+pub host fn focus_request(p1: u64);

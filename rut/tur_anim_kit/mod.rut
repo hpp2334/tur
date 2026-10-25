@@ -112,6 +112,18 @@ pub fn anim_ctrl_tick(duration_ms: f64, curve: str, repeat: u64, on_tick: Mutati
   return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, on_tick.seal(SEAL_F64), 0));
 }
 
+// The seal-id install — the multi-file law's door: Mutation values cannot
+// cross a module boundary (the std-v14 carried-inst interner refuses a
+// `Mutation<f64>` param crossing), and a consumer's ROOT cannot bind this
+// pkg's heads at all. A child module therefore seals the caller's
+// mutations with the mirror tags (SEAL_F64 = 2 / SEAL_NIL = 0 — spelled
+// in the consumer beside the call) and hands the ids over. The closures'
+// defining scope must be the caller's boot scope (start's) — a seal
+// inside a fn frame that returns goes deaf.
+pub fn anim_ctrl_install(duration_ms: f64, curve: str, repeat: u64, tick: u64, end: u64) -> AnimCtrl {
+  return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, tick, end));
+}
+
 // The end-only twin — `anim_ctrl_end(dur, curve, repeat, end)`.
 pub fn anim_ctrl_end(duration_ms: f64, curve: str, repeat: u64, on_end: Mutation<nil>) -> AnimCtrl {
   return AnimCtrl(anim_ctrl_mut(duration_ms, curve, repeat, 0, on_end.seal(SEAL_NIL)));

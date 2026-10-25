@@ -19,11 +19,14 @@ The case corpus drives three consumers:
 ## The per-case contract (rut)
 
 A case is a **declared module tree** rooted at its `mod.rut`. Most
-cases are the degenerate one-file tree — exactly as before; the three
-showcase splits are full trees whose CHILDREN ride the loader's
+cases are the degenerate one-file tree — exactly as before; the
+multi-file splits are full trees whose CHILDREN ride the loader's
 single-file spelling: `github-viewer` (7 files:
-explorer/json/landing/state/theme/ui), `todolist` (5:
-data/modals/task/theme), `grid-gallery` (3: color/gallery). The corpus
+explorer/schema/landing/state/theme/ui — schema is the payload records
+over rut's std json), `todolist` (5:
+data/modals/task/theme), `grid-gallery` (3: color/gallery),
+`jigsaw-puzzle` (5: pieces/state/theme/ui — the game split; its
+std-v14 multi-file laws live in AGENTS.md). The corpus
 walkers (`read_case_files` in the harness, `walkModTree` in the case
 generator) follow `mod` EDGES only — single-file cases remain exactly
 as before, and a stray undeclared directory on disk is invisible (the
@@ -139,7 +142,7 @@ ledger below is the final state):
 | case | parity | gap |
 |---|---|---|
 | `complex-animation` | ✅ upgraded | was a bare opacity tween; now the "Animated Card Studio" (controller transport, speed/curve/loop selectors, status badge + % readout, width + hue + opacity channels) — motion verified natively AND in the wasm viewer side-by-side. Remaining vs boa: static card radius (no bound-radius row), no orbiting dot (no trig rows in the engine VM's offer set), Transform rotation static (the `el_transform` row takes no atom). |
-| `jigsaw-puzzle` | ⚠️ thin | boa is a full 3×3 board game (shuffle, placed counter, scramble); rut is the one-tile drag fixture (by design — the corpus regression fixture family). |
+| `jigsaw-puzzle` | ✅ upgraded | now the full 3×3 board game (shuffled targets, tray deal, snap + placed lock, the "N / 9 placed" badge, Shuffle, the Solved! overlay, the state shadows + the 180ms lift) — the whole loop pinned natively (`hit_test_dead_zones`); split into 5 files at the std-v14 pin. |
 | `grid-gallery` | ⚠️ thin | boa: interactive gallery (aspect + density chips, selection ring); rut: three static dark tiles. |
 | `grid-aspect` | ⚠️ thin | boa: 10-tile HSL grid over `childAspectRatio: 2`; rut: three fixed 100×100 tiles in a Row (no Grid). |
 | `grid-basic` | ⚠️ thin | boa: 12-cell derived-count grid; rut: 2×2 static. |

@@ -6,7 +6,7 @@
 // the subtrees carry the state bundle (state.rut), the palette + the
 // codepoints (theme.rut), the shared chrome (ui.rut), the landing
 // (landing.rut), the explorer + the net journeys (explorer.rut), and
-// the JSON scanner (json.rut).
+// the payload schema over rut's std json (schema.rut).
 //
 // Host surface: the async journeys ride rut's own async — they take
 // their handles as PARAMETERS (the `Gh` bundle of sources) and the
@@ -15,7 +15,7 @@
 // the wasm build fetches it directly. Degradation: an empty response
 // body (the net row completes empty on transport failure) becomes a
 // visible error banner; a JSON error payload (404 / rate limit) surfaces
-// the API's own message (see explorer.rut + json.rut).
+// the API's own message (see explorer.rut + schema.rut).
 //
 // Rust-boundary notes for future editors: unannotated float locals are
 // `f32` by the default-width rule (annotate `: f64` when handing them to
@@ -31,7 +31,7 @@ mod theme;
 mod ui;
 mod landing;
 mod explorer;
-mod json;
+mod schema;
 
 use tur_kit::control_flow::control::{ Switch };
 use tur_kit::flags::{ CrossAlign };

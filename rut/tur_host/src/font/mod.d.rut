@@ -1,0 +1,5 @@
+// tur_host/src/font — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn font_declare(p1: str);
+pub host fn font_declare_face(p1: str, p2: f64, p3: bool);
+pub host async fn font_load_data(p1: str) -> bool;

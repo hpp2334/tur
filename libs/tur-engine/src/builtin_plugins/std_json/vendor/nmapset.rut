@@ -1,0 +1,157 @@
+// VENDORED from rut @09dea6a2 (std-v14) — rut/nmapset/src/mod.rut, unmodified below this line.
+// Provenance law: re-vendor on rut pin bumps if upstream's file changes.
+// nmapset/nmapset.rut — `HashMap`/`HashSet` as a thin wrapper over the
+// `nmap_host` table: the whole state is one `opaque` handle and every
+// method is a single host call. Key admission is the compile-time
+// union bound (no `f32`/`f64` — float keys have no stable equality
+// contract); a user-defined key type fails at instantiation (escape
+// hatch: encode it canonically to `bytes`). Values release host-side,
+// in-crossing on replace/remove and at the table's death (the
+// payload's `finalize` hook).
+//
+// THE ALIASING LAW: `get` answers the STORED cell, not a copy — two
+// gets of one key name one cell until a replace re-stores (held
+// pointers keep reading the pre-replace cell; remove nils the map's
+// slot but not an independently held pointer).
+//
+// THE SEAL LAW (the boxed-key lane, the structural-interfaces fork):
+// keys and values both cross as erasure boxes — `opaque(k)` /
+// `opaque(v)` spelled at this wrapper's edge, never inserted for you.
+// The host opens the key box for hash/eq (the closed key set's own
+// bits/octets; anything else is an `Invalid` trap) and retains the
+// value box; `get` answers the stored box and recovers with
+// `opaque::downcast<V>` (the box IS the `?V`, its payload the inner
+// cell — the aliasing law rides the box).
+//
+// (The old `KeyLane` dispatch — a private interface satisfied per
+// primitive — is gone with the interface fork: member-set satisfaction
+// needs the members ON the type, and primitives carry none. The box is
+// the spelled, sound shape.)
+
+use nmap_host::{ map_new, map_len,
+            map_hput, map_hfind, map_hremove,
+            map_hput_sv, map_hfind_sv, map_hremove_sv,
+            map_hvput, map_hvget, map_hvremove,
+            map_hvput_sv, map_hvget_sv, map_hvremove_sv };
+
+// ---------------------------------------------------- the owners ----
+
+// `HashMap<K, V>` — the host table behind one `opaque` handle: keys,
+// hashes, handles, and the value cells all live host-side. Admission
+// is the union bound itself.
+pub class HashMap<K requires i8 | i16 | i32 | i64 | u8 | u16 | u32 | u64 | bool | str | bytes, V> {
+    t: opaque;    // the host table — the whole state
+}
+
+impl<K, V> HashMap<K, V> {
+    [constructor] pub fn new() -> Self {
+        return HashMap::with_capacity(8);
+    }
+
+    // `n` is the host table's reserve hint.
+    pub fn with_capacity(n: i32) -> Self {
+        return Self { t: map_new(n as i64) };
+    }
+
+    // `true` when the key was newly added, `false` when an existing
+    // key's value was replaced (bit 0 of the packed answer). The value
+    // SEALS at this edge (the erasure box) — the map never
+    // learns what V is; the key seals with it, opened host-side for
+    // hash/eq only.
+    pub fn put(mut self, k: K, v: V) -> bool {
+        let ans = map_hvput(self.t, opaque(k), opaque(v));
+        return (ans & 1) == 1;
+    }
+
+    // `nil` = absent; a hit answers the stored cell
+    // (the aliasing law). The stored box IS the `?V` after the
+    // downcast — its payload is the inner cell, so held results keep
+    // reading the pre-replace value exactly as before.
+    pub fn get(self, k: K) -> ?V {
+        let cell = map_hvget(self.t, opaque(k));
+        if (cell == nil) { return nil; }
+        return opaque::downcast<V>(cell);
+    }
+
+    pub fn has(self, k: K) -> bool {
+        return map_hfind(self.t, opaque(k)) >= 0;
+    }
+
+    // `true` = was present; the held value releases in-crossing.
+    // Handles are never reused — a re-insert is a new entry.
+    pub fn remove(mut self, k: K) -> bool {
+        return map_hvremove(self.t, opaque(k)) >= 0;
+    }
+
+    pub fn len(self) -> i32 {
+        return map_len(self.t);
+    }
+
+    // ---- range-keyed methods (the sv lanes) -------------------------
+    // The key is a borrowed `(parent, off, len)` BYTE range of a `str`
+    // value, hashed and compared over the range (no key cell minted on
+    // a probe; a fresh insert stores one owned copy) — a range key IS
+    // the `str` key of the same content: same hash, entry, handle.
+    // `off`/`len` are byte offsets; a window off UTF-8 boundaries or
+    // past the parent's end is the host's `Invalid` trap, the table
+    // left intact. Contract: K = str.
+
+    /// Insert-or-replace over a byte-range key; `true` = newly added.
+    /// On a replace the stored key keeps its original bytes. The value
+    /// seals at this edge, as in `put`.
+    pub fn put_range(mut self, parent: str, off: i32, len: i32, v: V) -> bool {
+        let ans = map_hvput_sv(self.t, parent, off, len, opaque(v));
+        return (ans & 1) == 1;
+    }
+
+    /// `nil` = absent; a hit answers the stored value (the `get` law,
+    /// through the box).
+    pub fn get_range(self, parent: str, off: i32, len: i32) -> ?V {
+        let cell = map_hvget_sv(self.t, parent, off, len);
+        if (cell == nil) { return nil; }
+        return opaque::downcast<V>(cell);
+    }
+
+    pub fn has_range(self, parent: str, off: i32, len: i32) -> bool {
+        return map_hfind_sv(self.t, parent, off, len) >= 0;
+    }
+
+    /// `true` = was present.
+    pub fn remove_range(mut self, parent: str, off: i32, len: i32) -> bool {
+        return map_hvremove_sv(self.t, parent, off, len) >= 0;
+    }
+}
+
+// `HashSet<T>` — the same host table, no value machinery: it shares
+// the map's `hput` lane and reads bit 0 of the packed answer, the
+// handle ignored.
+pub class HashSet<T requires i8 | i16 | i32 | i64 | u8 | u16 | u32 | u64 | bool | str | bytes> {
+    t: opaque;
+}
+
+impl<T> HashSet<T> {
+    [constructor] pub fn new() -> Self {
+        return HashSet::with_capacity(8);
+    }
+
+    pub fn with_capacity(n: i32) -> Self {
+        return Self { t: map_new(n as i64) };
+    }
+
+    // `true` when the element was newly added (bit 0 of the answer).
+    pub fn put(mut self, t: T) -> bool {
+        return (map_hput(self.t, opaque(t)) & 1) == 1;
+    }
+
+    pub fn has(self, t: T) -> bool {
+        return map_hfind(self.t, opaque(t)) >= 0;
+    }
+
+    pub fn remove(self, t: T) -> bool {
+        return map_hremove(self.t, opaque(t)) >= 0;
+    }
+
+    pub fn len(self) -> i32 {
+        return map_len(self.t);
+    }
+}

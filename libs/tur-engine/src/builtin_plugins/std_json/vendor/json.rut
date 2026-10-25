@@ -1,0 +1,1878 @@
+// VENDORED from rut @09dea6a2 (std-v14) — rut/json/src/mod.rut, unmodified below this line.
+// Provenance law: re-vendor on rut pin bumps if upstream's file changes.
+// json — the 9th std pkg (the rut-json batch, phase 1): DIRECT
+// schema-driven JSON for rut (docs/rut-json-survey.md is this file's
+// contract; the §0 rulings are embedded verbatim below where they bind).
+//
+//   pub fn encodeJson<T requires JsonSerialize>(v: T) -> (?str, ?EncodeJsonError);
+//   pub fn decodeJson<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError);
+//   pub fn decodeJsonBytes<T requires JsonDeserialize>(b: bytes) -> (?T, ?DecodeJsonError);
+//   pub interface JsonSerialize   { fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError; }
+//   pub interface JsonDeserialize { fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError); }
+//
+// THE LAW (survey §0, verbatim):
+// - (?T, ?E) with the EXACTLY-ONE-NIL invariant: success = (value, nil),
+//   failure = (nil, err). Never a non-nullable E. json polices the pair
+//   on ITSELF through the pkg test suite; the engine never does.
+// - JsonDeserialize uses `Self`, NOT a `<T>` param: a type
+//   parameter would permit decoding an A-reader into B.
+// - Streams are NEVER nilable: `mut w: JsonWriter` / `mut r: JsonReader`
+//   (sharing is the default; `?` only where absence is a
+//   legitimate state). The survey's `w: mut JsonWriter` spells
+//   `mut w: JsonWriter` here — the tree's mut-on-binding form (a
+//   normalization, not a deviation).
+// - encode RETURNS `?EncodeJsonError` (not nil): the rc heap can be
+//   cyclic — a Depth failure is EXPECTED, data not trap.
+// - Error types: payloadless enum (kind) + fixed-field struct (details)
+//   — the language has no data-carrying enums.
+// - DEPENDENCY DIRECTION (the serde model): json owns the interfaces;
+//   ALL container wrappers live in json (the wrapper families at the
+//   foot of this file, over the pouch/nmapset deps); user types
+//   satisfy the interfaces STRUCTURALLY — by spelling the members on
+//   their own inherent impls. No runtime reflection, no registration,
+//   no containers -> json.
+// - THE WRAPPER LAW (the structural-interfaces fork): primitives and
+//   bare containers never satisfy anything — they have no members to
+//   have. The wrapper families (`JsonI64`, `JsonF64`, `SOpt`, `JsonArr`,
+//   and the foot-of-file `JsonVec`/`JMap*`/`JSet`) are the spelled,
+//   per-call manufacture: `encodeJson(JsonI64(64))`, never
+//   `encodeJson(64)` — nothing is auto-inserted, forever.
+//
+// DECODE MODEL (survey §2.1): DIRECT — every type's `decode(r)` reads
+// its own expectations straight off the cursor; there is NO DOM. A
+// `Vec<Row>` decode mints exactly the program's own values, once.
+//
+// THE NUMBER POLICY (survey §2.4): the EXPECTED type decides the
+// grammar. i64 takes integer lexemes only (a `.`/exponent lexeme or an
+// overflow is `WrongType` naming the lexeme — never a silent wrap);
+// f64 parses in two tiers: tier 1 is IEEE-exact (mantissa ≤ 18 digits,
+// |e| ≤ 22 — a split 32-bit-halves 128-bit product rounded ONCE for
+// e ≥ 0, an exact-quotient single rounding for e < 0 over exact powers
+// of ten); tier 2 (bigger mantissas or exponents) is best-effort ±1 ulp
+// — the one place json's output can differ from an engine-grade parser,
+// disclosed here and in the survey. Encode renders `f"{v}"`: i64
+// decimal, f64 the shortest string that round-trips (`-0` preserved).
+//
+// THE DEPTH LIMIT (survey §2.5): 128 levels, BOTH directions, a
+// json-pkg limit — never an engine limit. Encode enforces it on
+// begin_object/begin_array: the rc heap leaks strong cycles by law, so
+// walking a cyclic structure answers (nil, Depth-err) — the
+// expected failure. Decode enforces it on container entry.
+//
+// THE READER (survey §2.2, reshaped by the json-perf batch phase 2): a
+// direct cursor over the doc str. The codepoint-split column is GONE —
+// `JsonReader::of` materializes nothing (the split was 15.1% of the
+// json-roundtrip row's fuel); every classify rides the general
+// scan/classify primitive (`str::scan`: a host-side loop over a
+// caller-supplied `[u8]` class table, one rut call per token boundary
+// instead of one op per codepoint), single-codepoint reads ride
+// `code_at`, and literal prefixes ride `starts_with`. Cursor arithmetic
+// and offsets stay CODEPOINT-based exactly as before (`at`/`got`
+// semantics unchanged; token payloads still carve as O(1)
+// views of `src`). The strict UTF-8 DFA (§2.2) gates the bytes entry —
+// `bytes::decode()` is LOSSY, never trusted on unvalidated input;
+// invalid octets answer `InvalidUtf8`, never a silent U+FFFD.
+//
+// THE WRITER (survey §2.3, reshaped by the json-perf batch: phase 1's
+// chunk buffer, finished by phase 2's growable builder): per-event
+// output appends into a StringBuilder — the std strbuild pkg's
+// growable builder, amortized O(1) per append with one
+// final materialization at build(). Phase 1's
+// intermediate shape composed events into a bounded chunk buffer that
+// drained into a str field accumulator; the builder deletes that
+// machinery entirely — no cap checks, no flushes, and the ~400
+// O(|out|) drain copies per rep are gone (the survey's §4 field-append
+// mechanism, first priced at ~750x a local append). `at` is measured
+// straight off the builder, so error offsets are identical to every
+// earlier shape; the container stack is lazy: keys/counts ride in fixed
+// 128-slot columns (the depth cap) and assemble into the `$.a[2].b`
+// path ONLY on failure — the happy path never formats.
+//
+// ESCAPES (survey §2.3): exactly RFC 8259 — `"` `\` and the C0 controls;
+// DEL and non-ASCII pass through. Surrogates cannot occur in a rut str;
+// the READER closes the loop: a `\uD800` escape with no valid pair is
+// `Unexpected`, never a silent replacement char.
+//
+// THIS BASE IS POUCH-FREE BY LAW (survey §2.7): no `Vec` anywhere — the
+// reader/writer grow over fixed `[?T]`/`[T]` columns sized by their own
+// limits, so json mounts light when no peer is present. The container
+// impl rows (Vec via pouch; the HashMap/HashSet family via nmapset)
+// live in the impl-only group files the peer gate appends when the
+// peer is in the program's closure.
+//
+// THE WRITER'S ACCUMULATOR (strbuild batch phase 1): the builder rides
+// the std `strbuild` pkg — `StringBuilder`, the 10th std pkg's
+// class-method face over the host builder (`[deps] strbuild` below is
+// the edge). Same calls, same answers: `push` -> `append`,
+// `push_code` -> `append_code`, `finish` -> `build`, `len` stays
+// `len`, and the three mints go through `with_cap` (the pkg
+// constructor is where a pre-size is spelled). The exactly-one-nil
+// laws, the sticky failure, the offsets — all untouched.
+
+use strbuild::{ StringBuilder };
+
+// ---- errors (survey §0: kind enum + fixed-field struct) ----
+
+pub enum DecodeErrorKind { Unexpected, Truncated, InvalidUtf8, WrongType, Depth, Trailing }
+pub enum EncodeErrorKind { Depth, NotFinite, KeyUnsupported }
+
+pub struct DecodeJsonError {
+    kind: DecodeErrorKind;
+    at: i64;        // codepoint offset in the input doc
+    got: str;       // the offending text (failure path only — never built on success)
+    expected: str;  // what the schema asked for here
+}
+
+pub struct EncodeJsonError {
+    kind: EncodeErrorKind;
+    at: i64;        // codepoint offset in the output so far
+    path: str;      // the lazily-built `$.rows[3].name` spelling
+}
+
+// ---- the writer (survey §2.3) ----
+
+pub class JsonWriter {
+    out: StringBuilder; // THE accumulator — the std builder pkg's class
+    depth: i32;         // open container count (the 128 cap)
+    st_kind: [i32];     // per level: 1 object, 2 array — 128 slots, the cap
+    st_key: [?str];     // per object level: the pending key (nil until key())
+    st_n: [i32];        // per level: children written (comma bookkeeping)
+    top: i32;           // open levels
+    k: ?EncodeErrorKind; // sticky failure — nil until a step fails
+    at: i64;
+    path: str;
+    qt: [u8];           // quote's escape-class table: `"`->1, `\`->2,
+                        // C0 controls->3, everything else 0 (safe)
+}
+
+impl JsonWriter {
+    pub fn new() -> Self {
+        let mut qt: [u8] = [0; 257];
+        qt[0x22] = 1;
+        qt[0x5C] = 2;
+        let mut c: i32 = 0;
+        while (c < 0x20) { qt[c] = 3; c += 1; }
+        return Self { out: StringBuilder::with_cap(1024), depth: 0, st_kind: [0; 128],
+                      st_key: [nil; 128], st_n: [0; 128], top: 0, k: nil,
+                      at: 0, path: "", qt: qt };
+    }
+
+    // the finished document — the builder's ONE materialization.
+    // Unbalanced begin/end is a caller bug and returns the accumulator
+    // as-is (the sticky model reports real failures; the finalized error
+    // set has no kind for misuse).
+    pub fn finish(mut self) -> str {
+        return self.out.build();
+    }
+
+    pub fn failed(self) -> bool {
+        return self.k != nil;
+    }
+
+    // the sticky failure as the error struct, once, on demand
+    pub fn error(self) -> ?EncodeJsonError {
+        if (self.k == nil) { return nil; }
+        let kd: EncodeErrorKind = self.k;
+        return EncodeJsonError { kind: kd, at: self.at, path: self.path };
+    }
+
+    fn fail(mut self, kind: EncodeErrorKind) {
+        if (self.k != nil) { return; }
+        // `at` is the output offset so far — every push is already in
+        // the builder, so the offset counts every emitted byte
+        // (byte-exact with the chunk shape this batch replaced)
+        self.k = kind;
+        self.at = self.out.len() as i64;
+        self.path = self.build_path();
+    }
+
+    // `$.rows[3].name` — assembled ONLY here (failure path)
+    fn build_path(self) -> str {
+        let mut p = "$";
+        let mut i: i32 = 0;
+        while (i < self.top) {
+            if (self.st_kind[i] == 1) {
+                let kk = self.st_key[i];
+                if (kk == nil) {
+                    p = f"{p}.?";
+                } else {
+                    let kn: str = kk;
+                    p = f"{p}.{kn}";
+                }
+            } else {
+                p = f"{p}[{self.st_n[i]}]";
+            }
+            i += 1;
+        }
+        return p;
+    }
+
+    // the parent level's comma + child count for a VALUE write. The
+    // builder's amortized growth needs no cap checks — appends are
+    // O(1) amortized all the way to a multi-MB document
+    fn value_comma(mut self) {
+        if (self.top > 0 && self.st_n[self.top - 1] > 0 && self.st_kind[self.top - 1] == 2) {
+            self.out.append(",");
+        }
+        if (self.top > 0) {
+            self.st_n[self.top - 1] += 1;
+        }
+    }
+
+    pub fn begin_object(mut self) {
+        if (self.failed()) { return; }
+        if (self.depth >= 128) { self.fail(EncodeErrorKind::Depth); return; }
+        self.value_comma();
+        self.st_kind[self.top] = 1;
+        self.st_key[self.top] = nil;
+        self.st_n[self.top] = 0;
+        self.top += 1;
+        self.depth += 1;
+        self.out.append("{");
+    }
+
+    pub fn begin_array(mut self) {
+        if (self.failed()) { return; }
+        if (self.depth >= 128) { self.fail(EncodeErrorKind::Depth); return; }
+        self.value_comma();
+        self.st_kind[self.top] = 2;
+        self.st_key[self.top] = nil;
+        self.st_n[self.top] = 0;
+        self.top += 1;
+        self.depth += 1;
+        self.out.append("[");
+    }
+
+    // an unbalanced end is a caller bug — clamped, never traps
+    pub fn end_object(mut self) {
+        if (self.failed()) { return; }
+        if (self.top > 0) {
+            self.top -= 1;
+            self.depth -= 1;
+            self.out.append("}");
+        }
+    }
+
+    pub fn end_array(mut self) {
+        if (self.failed()) { return; }
+        if (self.top > 0) {
+            self.top -= 1;
+            self.depth -= 1;
+            self.out.append("]");
+        }
+    }
+
+    // the `"k":` half — the object level's comma belongs to the key
+    pub fn key(mut self, k: str) {
+        if (self.failed()) { return; }
+        if (self.top > 0 && self.st_kind[self.top - 1] == 1) {
+            if (self.st_n[self.top - 1] > 0) {
+                self.out.append(",");
+            }
+            self.st_n[self.top - 1] += 1;
+            self.st_key[self.top - 1] = k;
+        }
+        self.out.append(self.quote(k));
+        self.out.append(":");
+    }
+
+    // an escaped JSON string (value position — no comma for objects,
+    // the key's; arrays comma through value_comma)
+    pub fn write_str(mut self, s: str) {
+        if (self.failed()) { return; }
+        self.value_comma();
+        self.out.append(self.quote(s));
+    }
+
+    // pre-rendered JSON (numbers, true/false/null — the impls' fast lane)
+    pub fn write_raw(mut self, t: str) {
+        if (self.failed()) { return; }
+        self.value_comma();
+        self.out.append(t);
+    }
+
+    pub fn write_i64(mut self, v: i64) {
+        self.write_raw(f"{v}");
+    }
+
+    pub fn write_bool(mut self, b: bool) {
+        if (b) {
+            self.write_raw("true");
+            return;
+        }
+        self.write_raw("false");
+    }
+
+    // f64 renders through the f-string — Rust's `{}` IS the shortest
+    // string that round-trips (`1` for 1.0, `-0` for -0.0). inf/nan have
+    // NO JSON spelling: NotFinite — never the null cop-out, never a trap
+    // (survey §2.3's census additions, exercised).
+    pub fn write_f64(mut self, v: f64) {
+        if (self.failed()) { return; }
+        if (v != v || v > 1.7976931348623157e308f64 || v < -1.7976931348623157e308f64) {
+            self.fail(EncodeErrorKind::NotFinite);
+            return;
+        }
+        self.write_raw(f"{v}");
+    }
+
+    // the escape policy: exactly RFC 8259 — `"` `\` and C0 controls; the
+    // shorthands first, other controls \u00xx, everything else verbatim.
+    // The clean check is ONE host-side scan (the escape-class table's
+    // first nonzero class is the first escape; class 0 at end = clean) —
+    // the phase-1 reverted octet scan and the slice-per-char walk it
+    // replaced both die here.
+    fn quote(self, s: str) -> str {
+        let r = s.scan(0, self.qt);
+        if ((r & 255) == 0) {
+            // the clean path: one append, zero per-char work
+            return f"\"{s}\"";
+        }
+        return self.quote_slow(s, (r >> 8) as i32);
+    }
+
+    // escape from `first` (the first escape site) on; the clean prefix
+    // [0, first) appends as one piece. Builds through a StringBuilder
+    // (the std builder pkg's class) — the
+    // local f-string accumulator it replaces was the one place the
+    // slice-per-char disease could still reach an escaped doc.
+    fn quote_slow(self, s: str, first: i32) -> str {
+        let b = StringBuilder::with_cap(s.len() * 2 + 2);
+        b.append("\"");
+        if (first > 0) { b.append(s.slice(0, first)); }
+        let n = s.len();
+        let mut i: i32 = first;
+        while (i < n) {
+            let c = s.code_at(i) as i32;
+            if (c == 0x22) {
+                b.append("\\\"");
+            } else if (c == 0x5C) {
+                b.append("\\\\");
+            } else if (c == 0x08) {
+                b.append("\\b");
+            } else if (c == 0x0C) {
+                b.append("\\f");
+            } else if (c == 0x0A) {
+                b.append("\\n");
+            } else if (c == 0x0D) {
+                b.append("\\r");
+            } else if (c == 0x09) {
+                b.append("\\t");
+            } else if (c < 0x20) {
+                // \u00xx — c < 0x20, so both hex digits come from the low byte
+                let hex = "0123456789abcdef";
+                let hi = (c >> 4) & 15;
+                let lo = c & 15;
+                let hs = hex.slice(hi, hi + 1);
+                let ls = hex.slice(lo, lo + 1);
+                b.append(f"\\u00{hs}{ls}");
+            } else {
+                let ch = s.slice(i, i + 1);
+                b.append(ch);
+            }
+            i += 1;
+        }
+        b.append("\"");
+        return b.build();
+    }
+}
+
+// ---- the reader (survey §2.2: the direct cursor) ----
+
+pub class JsonReader {
+    src: str;     // the doc itself — token payloads carve as views
+    n: i32;       // codepoint count (s.len() at open)
+    pos: i32;     // codepoint cursor (at / offsets are codepoints everywhere)
+    depth: i32;   // open container count (the 128 cap)
+    tok: [u8];    // dispatch class table: ws->0 (keep scanning), `{`->2,
+                  // `}`->3, `[`->4, `]`->5, `"`->6, `,`->7, `-`->8,
+                  // digits->9, `t`->10, `f`->11, `n`->12, `+`->13,
+                  // everything else (incl. all non-ASCII)->1
+    dig: [u8];    // number-lexeme table: digits->0 (keep scanning),
+                  // `.`->2, `e`/`E`->3, `+`/`-`->4, everything else->1
+    stp: [u8];    // string-body stop table: `"`->1, C0 controls->2,
+                  // `\`->3, everything else 0 (content)
+    k: ?DecodeErrorKind; // sticky failure — nil until a step fails
+    at: i32;
+    got: str;
+    expected: str;
+}
+
+impl JsonReader {
+    pub fn of(s: str) -> Self {
+        // the split column is GONE: no [?u32] materialization, no
+        // per-codepoint walk — the doc is the cursor's own text
+        let mut tok: [u8] = [1; 257];
+        tok[0x20] = 0; tok[0x09] = 0; tok[0x0A] = 0; tok[0x0D] = 0;
+        tok[0x7B] = 2; tok[0x7D] = 3; tok[0x5B] = 4; tok[0x5D] = 5;
+        tok[0x22] = 6; tok[0x2C] = 7; tok[0x2D] = 8; tok[0x2B] = 13;
+        tok[0x74] = 10; tok[0x66] = 11; tok[0x6E] = 12;
+        let mut d: i32 = 0x30;
+        while (d <= 0x39) { tok[d] = 9; d += 1; }
+        let mut dig: [u8] = [1; 257];
+        let mut g: i32 = 0x30;
+        while (g <= 0x39) { dig[g] = 0; g += 1; }
+        dig[0x2E] = 2; dig[0x65] = 3; dig[0x45] = 3; dig[0x2B] = 4; dig[0x2D] = 4;
+        let mut stp: [u8] = [0; 257];
+        stp[0x22] = 1; stp[0x5C] = 3;
+        let mut c: i32 = 0;
+        while (c < 0x20) { stp[c] = 2; c += 1; }
+        return Self { src: s, n: s.len(), pos: 0, depth: 0,
+                      tok: tok, dig: dig, stp: stp,
+                      k: nil, at: 0, got: "", expected: "" };
+    }
+
+    pub fn failed(self) -> bool {
+        return self.k != nil;
+    }
+
+    // introspection for impls that build their own diagnostics
+    pub fn err_got(self) -> str {
+        return self.got;
+    }
+
+    pub fn err_expected(self) -> str {
+        return self.expected;
+    }
+
+    pub fn err_at(self) -> i32 {
+        return self.at;
+    }
+
+    // the sticky failure as the error struct, once, on demand — the
+    // entry assembles its pair here and never on the happy path
+    pub fn error(self) -> ?DecodeJsonError {
+        if (self.k == nil) { return nil; }
+        let kd: DecodeErrorKind = self.k;
+        return DecodeJsonError { kind: kd, at: self.at as i64, got: self.got, expected: self.expected };
+    }
+
+    fn fail(mut self, kind: DecodeErrorKind, at: i32, got: str, expected: str) {
+        if (self.k != nil) { return; }
+        self.k = kind;
+        self.at = at;
+        self.got = got;
+        self.expected = expected;
+    }
+
+    fn peek(self) -> i32 {
+        if (self.pos >= self.n) { return -1; }
+        return self.src.code_at(self.pos) as i32;
+    }
+
+    fn char_text(self, p: i32) -> str {
+        if (p < 0 || p >= self.n) { return ""; }
+        return str::from_code(self.src.code_at(p));
+    }
+
+    pub fn skip_ws(mut self) {
+        // ONE host-side scan: ws is exactly the tok table's class-0 set,
+        // so the scan's stop is the first non-whitespace codepoint
+        let r = self.src.scan(self.pos, self.tok);
+        self.pos = (r >> 8) as i32;
+    }
+
+    // ws-skipped cursor — the mark/rewind seam the [T] decode uses for
+    // its two-pass count-then-decode (same-module field write)
+    pub fn here(mut self) -> i32 {
+        self.skip_ws();
+        return self.pos;
+    }
+
+    // the unconsumed doc from the ws-skipped cursor (Trailing's `got`)
+    pub fn rest(mut self) -> str {
+        self.skip_ws();
+        if (self.pos >= self.n) { return ""; }
+        return self.src.slice(self.pos, self.n);
+    }
+
+    pub fn at_end(mut self) -> bool {
+        self.skip_ws();
+        return self.pos >= self.n;
+    }
+
+    // consume `null` if it is next — the ?T row's nil law
+    pub fn try_null(mut self) -> bool {
+        self.skip_ws();
+        if (self.lit_consume("null")) { return true; }
+        if (self.peek() == 0x6E) {
+            self.fail(DecodeErrorKind::Unexpected, self.pos, self.lit_text(4), "null");
+        }
+        return false;
+    }
+
+    // does the codepoint run at pos spell `lit`? (no consume) — one
+    // host-side compare, no per-index str cells
+    fn lit(self, lit: str) -> bool {
+        return self.src.starts_with(self.pos, lit);
+    }
+
+    // the first `k` codepoints at pos as text (bounded — for `got`)
+    fn lit_text(self, k: i32) -> str {
+        let mut end = self.pos + k;
+        if (end > self.n) { end = self.n; }
+        if (self.pos >= end) { return ""; }
+        return self.src.slice(self.pos, end);
+    }
+
+    fn lit_consume(mut self, lit: str) -> bool {
+        if (self.lit(lit)) {
+            self.pos += lit.len();
+            return true;
+        }
+        return false;
+    }
+
+    pub fn read_bool(mut self) -> bool {
+        self.skip_ws();
+        if (self.lit("true")) { self.pos += 4; return true; }
+        if (self.lit("false")) { self.pos += 5; return false; }
+        if (self.pos >= self.n) {
+            self.fail(DecodeErrorKind::Truncated, self.n, "", "a bool");
+            return false;
+        }
+        let c = self.peek();
+        if (c == 0x74 || c == 0x66) {
+            // a broken true/false is a grammar miss, not a type mismatch
+            self.fail(DecodeErrorKind::Unexpected, self.pos, self.lit_text(5), "true or false");
+            return false;
+        }
+        self.fail(DecodeErrorKind::WrongType, self.pos, self.char_text(self.pos), "a bool");
+        return false;
+    }
+
+    // a plain digit run — the RFC 8259 leading-zero law belongs to the
+    // INTEGER part only (frac digits may lead with zeros), so it lives
+    // in check_lead_zero, not here. ONE host-side scan over the dig
+    // table (digits are its class-0 set).
+    fn digit_run(mut self) -> i32 {
+        let r = self.src.scan(self.pos, self.dig);
+        let end = (r >> 8) as i32;
+        let count = end - self.pos;
+        self.pos = end;
+        return count;
+    }
+
+    // the integer part's leading-zero law: `0` may stand alone or lead
+    // a fraction, never head a multi-digit integer
+    fn check_lead_zero(mut self, first: i32) -> bool {
+        if (self.pos - first >= 2 && self.src.code_at(first) as i32 == 0x30) {
+            self.fail(DecodeErrorKind::Unexpected, first, self.lexeme_from(first), "a JSON number");
+            return false;
+        }
+        return true;
+    }
+
+    fn lexeme_from(self, start: i32) -> str {
+        if (start >= self.n) { return ""; }
+        return self.src.slice(start, self.n);
+    }
+
+    fn signed_head(mut self, what: str) -> bool {
+        // `-` then a digit — shared by both number readers; sticky on a miss
+        if (self.peek() == 0x2D) {
+            self.pos += 1;
+        }
+        let c = self.peek();
+        if (c < 0x30 || c > 0x39) {
+            if (c == -1) {
+                self.fail(DecodeErrorKind::Truncated, self.n, "", what);
+            } else {
+                self.fail(DecodeErrorKind::WrongType, self.pos, self.char_text(self.pos), what);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    pub fn read_i64(mut self) -> i64 {
+        self.skip_ws();
+        let start = self.pos;
+        let neg = self.peek() == 0x2D;
+        if (!self.signed_head("an i64")) { return 0; }
+        let digit_start = self.pos;
+        let digits = self.digit_run();
+        if (self.failed()) { return 0; }
+        if (!self.check_lead_zero(digit_start)) { return 0; }
+        if (digits <= 0) {
+            // unreachable — signed_head admits a digit — kept for symmetry
+            self.fail(DecodeErrorKind::Truncated, self.n, "", "an i64");
+            return 0;
+        }
+        // the schema-vs-doc law (§2.4): a float LEXEME into i64 is
+        // WrongType naming the whole lexeme — never a silent wrap
+        let c = self.peek();
+        if (c == 0x2E || c == 0x65 || c == 0x45) {
+            self.scan_float_tail();
+            self.fail(DecodeErrorKind::WrongType, start, self.src.slice(start, self.pos), "an i64");
+            return 0;
+        }
+        // negative accumulation keeps i64::MIN exact: acc ≤ 0 always.
+        // The fold pre-checks its bounds (no wrapping ops): `acc * 10`
+        // runs only when acc ≥ MIN/10, and `acc - d` only when the
+        // result stays ≥ MIN. A positive literal folding to MIN (2^63
+        // exactly) overflows.
+        let mut acc: i64 = 0;
+        let mut overflow = false;
+        let mut i = digit_start;
+        let end = self.pos;
+        while (i < end) {
+            let d = (self.src.code_at(i) as i32 - 0x30) as i64;
+            if (acc < -922337203685477580i64) {
+                // acc * 10 would escape i64
+                overflow = true;
+                break;
+            }
+            acc = acc * 10;
+            if (acc < -9223372036854775807i64 - 1i64 + d) {
+                overflow = true;
+                break;
+            }
+            acc = acc - d;
+            i += 1;
+        }
+        if (!overflow && !neg && acc == -9223372036854775807i64 - 1i64) {
+            overflow = true;
+        }
+        if (overflow) {
+            self.fail(DecodeErrorKind::WrongType, start, self.src.slice(start, self.pos), "an i64");
+            return 0;
+        }
+        // the negative accumulation folds MIN exactly; the positive
+        // literal mirrors it (the 2^63 case already demoted above)
+        if (neg) { return acc; }
+        return -acc;
+    }
+
+    // the exponent/frac tail after an integer head — grammar only (the
+    // i64 reader just needs to consume the lexeme it names in `got`)
+    fn scan_float_tail(mut self) {
+        if (self.peek() == 0x2E) {
+            self.pos += 1;
+            let fd = self.digit_run();
+            if (self.failed()) { return; }
+            if (fd <= 0) {
+                if (self.pos >= self.n) {
+                    self.fail(DecodeErrorKind::Truncated, self.n, "", "a JSON number");
+                } else {
+                    self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "a JSON number");
+                }
+                return;
+            }
+        }
+        let c = self.peek();
+        if (c == 0x65 || c == 0x45) {
+            self.pos += 1;
+            if (self.peek() == 0x2B || self.peek() == 0x2D) {
+                self.pos += 1;
+            }
+            let ed = self.digit_run();
+            if (self.failed()) { return; }
+            if (ed <= 0) {
+                if (self.pos >= self.n) {
+                    self.fail(DecodeErrorKind::Truncated, self.n, "", "a JSON number");
+                } else {
+                    self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "a JSON number");
+                }
+            }
+        }
+    }
+
+    // the next token's NUMBER lexeme, grammatically consumed — the
+    // numeric widths beyond the base matrix (the group files' u64
+    // values; the menu's i8..u32) parse from this text with their own
+    // checked folds
+    pub fn read_number_text(mut self) -> str {
+        self.skip_ws();
+        let start = self.pos;
+        if (!self.signed_head("a number")) { return ""; }
+        let digit_start = self.pos;
+        let _ = self.digit_run();
+        if (self.failed()) { return ""; }
+        if (!self.check_lead_zero(digit_start)) { return ""; }
+        self.scan_float_tail();
+        if (self.failed()) { return ""; }
+        return self.src.slice(start, self.pos);
+    }
+
+    pub fn read_f64(mut self) -> f64 {
+        self.skip_ws();
+        let start = self.pos;
+        if (!self.signed_head("an f64")) { return 0.0; }
+        let digit_start = self.pos;
+        let id = self.digit_run();
+        if (self.failed()) { return 0.0; }
+        if (!self.check_lead_zero(digit_start)) { return 0.0; }
+        let mut frac_len: i32 = 0;
+        let mut exp_val: i64 = 0;
+        if (self.peek() == 0x2E) {
+            self.pos += 1;
+            frac_len = self.digit_run();
+            if (self.failed()) { return 0.0; }
+            if (frac_len <= 0) {
+                if (self.pos >= self.n) {
+                    self.fail(DecodeErrorKind::Truncated, self.n, "", "an f64");
+                } else {
+                    self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "an f64");
+                }
+                return 0.0;
+            }
+        }
+        if (self.peek() == 0x65 || self.peek() == 0x45) {
+            self.pos += 1;
+            let mut eneg = false;
+            if (self.peek() == 0x2B || self.peek() == 0x2D) {
+                eneg = self.peek() == 0x2D;
+                self.pos += 1;
+            }
+            let ed = self.digit_run();
+            if (self.failed()) { return 0.0; }
+            if (ed <= 0) {
+                if (self.pos >= self.n) {
+                    self.fail(DecodeErrorKind::Truncated, self.n, "", "an f64");
+                } else {
+                    self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "an f64");
+                }
+                return 0.0;
+            }
+            // the exponent folds with a sanity clamp — |e| beyond a few
+            // hundred is ±inf/0 territory, scaled below; the fold
+            // pre-checks its bound, never wraps
+            let mut ev: i64 = 0;
+            let mut ei = self.pos - ed;
+            while (ei < self.pos) {
+                if (ev > 99999) {
+                    ev = 100000;
+                    break;
+                }
+                let d = (self.src.code_at(ei) as i32 - 0x30) as i64;
+                ev = ev * 10 + d;
+                ei += 1;
+            }
+            if (eneg) { exp_val = -ev; } else { exp_val = ev; }
+        }
+        // `12` with id == 0 is impossible (signed_head admitted a digit);
+        // `.` with no int head (".5") already failed the leading-zero/
+        // digit-run law above — id+frac_len ≥ 1 holds here
+        let neg = self.src.code_at(start) as i32 == 0x2D;
+        let mut int_start = start;
+        if (neg) { int_start = start + 1; }
+        let int_len = id;
+        return self.build_f64(int_start, int_len, frac_len, exp_val, neg);
+    }
+
+    // the two-tier parse (survey §2.4). Digits live at
+    // [int_start, int_start+int_len) then [f_start, f_start+frac_len)
+    // in the doc; `exp` is the written exponent.
+    fn build_f64(mut self, int_start: i32, int_len: i32, frac_len: i32, exp: i64, neg: bool) -> f64 {
+        let f_start = int_start + int_len + 1; // past the '.'
+        let total = int_len + frac_len;
+        // leading zeros of the mantissa strip off — they only shift the
+        // exponent. Without this, `0.000…025` folds to m=0 and every
+        // small number decodes as zero.
+        let mut p0: i32 = 0;
+        while (p0 < total) {
+            let mut zi = int_start + p0;
+            if (p0 >= int_len) { zi = f_start + (p0 - int_len); }
+            if (self.src.code_at(zi) as i32 != 0x30) { break; }
+            p0 += 1;
+        }
+        if (p0 >= total) {
+            // every digit zero — IEEE zero, sign preserved
+            if (neg) { return -0.0; }
+            return 0.0;
+        }
+        // fold the first 18 significant digits into i64 (exact — the
+        // fold pre-checks its bound, never wraps; anything bigger
+        // demotes to tier 2)
+        let mut keep = total - p0;
+        if (keep > 18) { keep = 18; }
+        let mut m: i64 = 0;
+        let mut overflow = false;
+        let mut taken = 0;
+        while (taken < keep) {
+            let mut src_i = int_start + p0 + taken;
+            if (p0 + taken >= int_len) { src_i = f_start + (p0 + taken - int_len); }
+            let d = (self.src.code_at(src_i) as i32 - 0x30) as i64;
+            if (m > 922337203685477579i64) {
+                overflow = true;
+                break;
+            }
+            m = m * 10;
+            if (m > 9223372036854775807i64 - d) {
+                overflow = true;
+                break;
+            }
+            m = m + d;
+            taken += 1;
+        }
+        // the dropped tail: positional zeros merge into the exponent;
+        // anything else is tier 2's disclosed truncation
+        let mut dropped_zero = true;
+        let mut rest = total - p0 - taken;
+        let mut rest_i = int_start + p0 + taken;
+        if (p0 + taken >= int_len) { rest_i = f_start + (p0 + taken - int_len); }
+        while (rest > 0) {
+            if (self.src.code_at(rest_i) as i32 != 0x30) { dropped_zero = false; }
+            rest_i += 1;
+            rest -= 1;
+        }
+        // the first kept digit's weight is 10^(int_len-1-p0+exp); the
+        // fold absorbs kept-1 more decades — complete as it stands: the
+        // dropped tail is either zeros (no value) or tier 2's disclosed
+        // truncation
+        let mut e = exp + (int_len - 1 - p0) as i64 - (keep - 1) as i64;
+        let mut v: f64 = 0.0;
+        let mut tier2 = overflow || !dropped_zero || e > 22 || e < -22;
+        if (!tier2) {
+            if (e >= 0) {
+                // m × 10^e, one rounding: 5^e < 2^53 for e ≤ 22, so
+                // m×5^e is an exact 128-bit product and the e-bit left
+                // shift is exact — round once (survey §2.4's split law)
+                let mut p5: u64 = 1;
+                let mut k: i64 = 0;
+                while (k < e) {
+                    p5 = p5 * 5;
+                    k += 1;
+                }
+                let pp = mul_u64_u128(m as u64, p5);
+                v = round_exact_scaled(pp.0, pp.1, e as i32);
+            } else {
+                if (m <= 9007199254740992i64) {
+                    // m is f64-exact; 10^k is exact for k ≤ 22; the
+                    // quotient rounds ONCE (exact-real division)
+                    v = m as f64 / pow10_exact(-e);
+                } else {
+                    tier2 = true;
+                }
+            }
+        }
+        if (tier2) {
+            // best-effort ±1 ulp (disclosed): fold, then scale by the
+            // exact power table in ≤22 chunks, clamping at ±inf/0
+            v = m as f64;
+            let mut e2 = e;
+            while (e2 > 22) {
+                v = v * pow10_exact(22);
+                e2 -= 22;
+                if (v > 1.7976931348623157e308f64) { v = 1.7976931348623157e308f64 * 2.0; e2 = 0; }
+            }
+            while (e2 < -22) {
+                v = v / pow10_exact(22);
+                e2 += 22;
+                if (v > 0.0 && v < 2.2250738585072014e-308f64) { v = 0.0; e2 = 0; }
+            }
+            if (e2 > 0) { v = v * pow10_exact(e2); }
+            if (e2 < 0) { v = v / pow10_exact(-e2); }
+        }
+        if (neg) { return -v; }
+        return v;
+    }
+
+    // read_str — verbatim docs carve as ONE view; escaped docs
+    // build through a StringBuilder. The body scan is ONE host-side pass per
+    // token piece: the stp table's classes are `"`->1, control->2,
+    // `\`->3, content 0 (keep scanning) — the walk the phase-2 scan
+    // primitive replaces paid one peek + three compares per codepoint
+    pub fn read_str(mut self) -> str {
+        self.skip_ws();
+        if (self.peek() != 0x22) {
+            if (self.pos >= self.n) {
+                self.fail(DecodeErrorKind::Truncated, self.n, "", "a string");
+            } else {
+                self.fail(DecodeErrorKind::WrongType, self.pos, self.char_text(self.pos), "a string");
+            }
+            return "";
+        }
+        self.pos += 1;
+        let start = self.pos;
+        let mut esc = false;
+        while (true) {
+            let r = self.src.scan(self.pos, self.stp);
+            let stop = (r >> 8) as i32;
+            let cls = (r & 255) as i32;
+            if (cls == 0) {
+                // end of doc, no close quote
+                self.pos = stop;
+                self.fail(DecodeErrorKind::Truncated, self.n, "", "a string");
+                return "";
+            }
+            if (cls == 2) {
+                // a raw control character is invalid JSON — never carried
+                self.pos = stop;
+                self.fail(DecodeErrorKind::Unexpected, stop, self.char_text(stop), "a string");
+                return "";
+            }
+            if (cls == 3) {
+                // the escape: the next codepoint is consumed blindly
+                // (the old walk's exact shape — a control after a
+                // backslash is not re-checked, semantics preserved)
+                esc = true;
+                self.pos = stop + 1;
+                if (self.pos >= self.n) {
+                    self.fail(DecodeErrorKind::Truncated, self.n, "", "a string");
+                    return "";
+                }
+                self.pos = stop + 2;
+                continue;
+            }
+            // cls == 1: the close quote — carve the payload as a view
+            let raw = self.src.slice(start, stop);
+            self.pos = stop + 1;
+            if (!esc) { return raw; }
+            return self.unescape(raw);
+        }
+    }
+
+    fn unescape(mut self, raw: str) -> str {
+        let rl = raw.len();
+        let mut b = StringBuilder::with_cap(rl);
+        let mut i: i32 = 0;
+        while (i < rl) {
+            let c = raw.code_at(i) as i32;
+            if (c != 0x5C) {
+                b.append(raw.slice(i, i + 1));
+                i += 1;
+                continue;
+            }
+            i += 1;
+            if (i >= rl) {
+                self.fail(DecodeErrorKind::Unexpected, self.pos, "\\", "an escape");
+                return "";
+            }
+            let e = raw.code_at(i) as i32;
+            if (e == 0x22) { b.append("\""); i += 1; continue; }
+            if (e == 0x5C) { b.append("\\"); i += 1; continue; }
+            if (e == 0x2F) { b.append("/"); i += 1; continue; }
+            if (e == 0x62) { b.append("\b"); i += 1; continue; }
+            if (e == 0x66) { b.append("\f"); i += 1; continue; }
+            if (e == 0x6E) { b.append("\n"); i += 1; continue; }
+            if (e == 0x72) { b.append("\r"); i += 1; continue; }
+            if (e == 0x74) { b.append("\t"); i += 1; continue; }
+            if (e == 0x75) {
+                i += 1;
+                let h = self.hex4_at(raw, i);
+                if (self.failed()) { return ""; }
+                let cp = h.0;
+                let nx = h.1;
+                if (cp >= 0xD800 && cp <= 0xDBFF) {
+                    // a high surrogate MUST pair: \uDC00-\uDFFF next —
+                    // an unpaired escape is invalid JSON rut cannot
+                    // represent: Unexpected, never a silent replacement
+                    let ok = nx + 6 <= rl
+                        && raw.code_at(nx) as i32 == 0x5C
+                        && raw.code_at(nx + 1) as i32 == 0x75;
+                    if (!ok) {
+                        self.fail(DecodeErrorKind::Unexpected, self.pos, raw.slice(i - 2, nx), "a surrogate pair");
+                        return "";
+                    }
+                    let h2 = self.hex4_at(raw, nx + 2);
+                    if (self.failed()) { return ""; }
+                    let lo = h2.0;
+                    if (lo < 0xDC00 || lo > 0xDFFF) {
+                        self.fail(DecodeErrorKind::Unexpected, self.pos, raw.slice(i - 2, nx + 6), "a surrogate pair");
+                        return "";
+                    }
+                    let joined: u32 = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                    b.append_code(joined);
+                    i = nx + 6;
+                    continue;
+                }
+                if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                    // a lone low surrogate cannot occur in any rut str —
+                    // never a silent replacement char (survey §2.3)
+                    self.fail(DecodeErrorKind::Unexpected, self.pos, raw.slice(i - 2, i + 4), "a codepoint");
+                    return "";
+                }
+                b.append_code(cp);
+                i = nx;
+                continue;
+            }
+            let ec = raw.slice(i, i + 1);
+            let got = f"\\{ec}";
+            self.fail(DecodeErrorKind::Unexpected, self.pos, got, "an escape");
+            return "";
+        }
+        return b.build();
+    }
+
+    // four hex digits at raw[i..i+4] -> (value, next index); sticky
+    // Unexpected on any non-hex
+    fn hex4_at(mut self, raw: str, i: i32) -> (u32, i32) {
+        let mut v: u32 = 0;
+        let mut j: i32 = 0;
+        while (j < 4) {
+            let c = raw.code_at(i + j) as i32;
+            let d = hex_digit(c);
+            if (d < 0) {
+                self.fail(DecodeErrorKind::Unexpected, self.pos, raw.slice(i + j, i + j + 1), "4 hex digits");
+                return (0, i);
+            }
+            v = v * 16 + d as u32;
+            j += 1;
+        }
+        return (v, i + 4);
+    }
+
+    // ---- containers ----
+
+    pub fn begin_array(mut self) {
+        self.begin_any(0x5B, "an array");
+    }
+
+    pub fn begin_object(mut self) {
+        self.begin_any(0x7B, "an object");
+    }
+
+    fn begin_any(mut self, opener: i32, what: str) {
+        self.skip_ws();
+        if (self.failed()) { return; }
+        self.depth += 1;
+        if (self.depth > 128) {
+            // survey §2.5: enforced on container entry, at the bracket
+            self.fail(DecodeErrorKind::Depth, self.pos, "", what);
+            return;
+        }
+        if (self.peek() != opener) {
+            if (self.pos >= self.n) {
+                self.fail(DecodeErrorKind::Truncated, self.n, "", what);
+            } else {
+                self.fail(DecodeErrorKind::WrongType, self.pos, self.char_text(self.pos), what);
+            }
+            return;
+        }
+        self.pos += 1;
+    }
+
+    pub fn end_array(mut self) {
+        self.end_any(0x5D);
+    }
+
+    pub fn end_object(mut self) {
+        self.end_any(0x7D);
+    }
+
+    fn end_any(mut self, closer: i32) {
+        if (self.failed()) { return; }
+        if (self.depth > 0) { self.depth -= 1; }
+        self.skip_ws();
+        if (self.peek() != closer) {
+            if (self.pos >= self.n) {
+                self.fail(DecodeErrorKind::Truncated, self.n, self.char_text(self.pos), "the container's closer");
+            } else {
+                self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "the container's closer");
+            }
+            return;
+        }
+        self.pos += 1;
+    }
+
+    // more elements/members? consumes the separating comma — the loop
+    // shape every decode impl spells:
+    //   r.begin_array(); while (r.more()) { .. T::decode(r) .. } r.end_array();
+    // The ws-skip and the look-ahead are ONE fused scan: the tok
+    // table's classes dispatch `,` `]` `}` and "a value" without a
+    // second peek.
+    pub fn more(mut self) -> bool {
+        if (self.failed()) { return false; }
+        let r = self.src.scan(self.pos, self.tok);
+        self.pos = (r >> 8) as i32;
+        let c = (r & 255) as i32;
+        if (c == 0) { return false; }   // end of input
+        if (c == 7) {
+            // ',': consumed — but a comma promises another element/
+            // member: `[1,]` is a grammar miss, never silent acceptance
+            self.pos += 1;
+            let r2 = self.src.scan(self.pos, self.tok);
+            self.pos = (r2 >> 8) as i32;
+            let c2 = (r2 & 255) as i32;
+            if (c2 == 5 || c2 == 3) {
+                self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "an element or member");
+                return false;
+            }
+            return true;
+        }
+        return !(c == 5 || c == 3);
+    }
+
+    // an object member's `"key":` half — read_str + the colon
+    pub fn next_key(mut self) -> str {
+        let k = self.read_str();
+        if (self.failed()) { return ""; }
+        self.skip_ws();
+        if (self.peek() != 0x3A) {
+            if (self.pos >= self.n) {
+                self.fail(DecodeErrorKind::Truncated, self.n, "", "':'");
+            } else {
+                self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "':'");
+            }
+            return "";
+        }
+        self.pos += 1;
+        return k;
+    }
+
+    // skip one value grammatically — unknown keys and the [T] two-pass
+    // count ride this; container recursion re-enters the depth law.
+    // The dispatch is the fused scan: ws-skip + the token's class in
+    // one host-side call.
+    pub fn skip_value(mut self) {
+        if (self.failed()) { return; }
+        let r = self.src.scan(self.pos, self.tok);
+        self.pos = (r >> 8) as i32;
+        let c = (r & 255) as i32;
+        if (c == 0) { return; }
+        if (c == 2) {
+            self.begin_object();
+            while (self.more()) {
+                let _ = self.next_key();
+                if (self.failed()) { return; }
+                self.skip_value();
+                if (self.failed()) { return; }
+            }
+            self.end_object();
+            return;
+        }
+        if (c == 4) {
+            self.begin_array();
+            while (self.more()) {
+                self.skip_value();
+                if (self.failed()) { return; }
+            }
+            self.end_array();
+            return;
+        }
+        if (c == 6) {
+            let _ = self.read_str();
+            return;
+        }
+        if (c == 10 || c == 11) {
+            let _ = self.read_bool();
+            return;
+        }
+        if (c == 12) {
+            let _ = self.try_null();
+            return;
+        }
+        // a number: the f64 grammar is the union's superset
+        if (c == 8 || c == 9) {
+            let _ = self.read_f64();
+            return;
+        }
+        self.fail(DecodeErrorKind::Unexpected, self.pos, self.char_text(self.pos), "a JSON value");
+    }
+}
+
+// one hex digit's value, or -1 when c is not 0-9/a-f/A-F
+fn hex_digit(c: i32) -> i32 {
+    if (c >= 0x30 && c <= 0x39) { return c - 0x30; }
+    if (c >= 0x61 && c <= 0x66) { return c - 0x57; }
+    if (c >= 0x41 && c <= 0x46) { return c - 0x37; }
+    return -1;
+}
+
+// the exact 128-bit product of two u64s -> (hi, lo); 32-bit lanes, no
+// wrapping anywhere
+fn mul_u64_u128(a: u64, b: u64) -> (u64, u64) {
+    let a_hi = a >> 32;
+    let a_lo = a & 0xFFFFFFFFu64;
+    let b_hi = b >> 32;
+    let b_lo = b & 0xFFFFFFFFu64;
+    let ll = a_lo * b_lo;
+    let lh = a_lo * b_hi;
+    let hl = a_hi * b_lo;
+    let hh = a_hi * b_hi;
+    let mid = lh + hl;
+    let lo = ll + ((mid & 0xFFFFFFFFu64) << 32);
+    let mut carry = mid >> 32;
+    if (lo < ll) { carry += 1; }
+    let hi = hh + carry;
+    return (hi, lo);
+}
+
+// 10^k for k in 0..=22 — EXACT as f64 (5^22 < 2^53, survey §2.4)
+fn pow10_exact(k: i64) -> f64 {
+    let mut p: f64 = 1.0;
+    let mut i: i64 = 0;
+    while (i < k) {
+        p = p * 10.0;
+        i += 1;
+    }
+    return p;
+}
+
+// value = (hi:lo) × 2^shift, every bit exact — round to nearest f64 ONCE
+// (ties to even). The tier-1 e ≥ 0 path: the product m×5^e is an exact
+// 128-bit integer, the ×2^e is exact, so this is a correctly-rounded
+// f64 — the same guarantee class as serde_json's fast path.
+fn round_exact_scaled(hi: u64, lo: u64, shift: i32) -> f64 {
+    // bit length of (hi:lo)
+    let mut bl: i32 = 0;
+    if (hi != 0) {
+        let mut t = hi;
+        while (t != 0) {
+            t = t >> 1;
+            bl += 1;
+        }
+        bl += 64;
+    } else {
+        let mut t = lo;
+        while (t != 0) {
+            t = t >> 1;
+            bl += 1;
+        }
+    }
+    if (bl == 0) { return 0.0; }
+    // total binary exponent of the value
+    let total = bl + shift;
+    if (total <= 53) {
+        // the whole value fits 53 bits — exact small integer
+        let mut v = (lo as f64) + (hi as f64) * 18446744073709551616.0f64;
+        let mut k = shift;
+        while (k > 0) {
+            v = v * 2.0;
+            k -= 1;
+        }
+        return v;
+    }
+    if (total - 53 > 1023) {
+        return 1.7976931348623157e308f64 * 2.0; // +inf
+    }
+    if (total - 53 < -1074) {
+        return 0.0;
+    }
+    // extract the top 53 bits, guard bit, sticky
+    let mut mant: u64 = 0;
+    let mut guard = false;
+    let mut sticky = false;
+    let mut i: i32 = 0;
+    while (i < bl) {
+        let pos = bl - 1 - i;
+        let mut bit: u64 = 0;
+        if (pos >= 64) {
+            bit = (hi >> ((pos - 64) as u64)) & 1u64;
+        } else {
+            bit = (lo >> (pos as u64)) & 1u64;
+        }
+        if (i < 53) {
+            mant = mant * 2 + bit;
+        } else if (i == 53) {
+            guard = bit == 1u64;
+        } else if (bit == 1u64) {
+            sticky = true;
+        }
+        i += 1;
+    }
+    if (guard && (sticky || mant & 1u64 == 1u64)) {
+        mant += 1;
+        // a carry to exactly 2^53 needs no renormalization: 2^53 is an
+        // exact f64 and the scale below multiplies it once more
+    }
+    let mut v = mant as f64;
+    // mant holds min(bl, 53) bits — the scale shrinks when the value
+    // was already short
+    let mut k = total - 53;
+    if (bl < 53) { k = shift; }
+    while (k > 0) {
+        v = v * 2.0;
+        k -= 1;
+    }
+    while (k < 0) {
+        v = v * 0.5;
+        k += 1;
+    }
+    return v;
+}
+
+// ---- the interfaces (survey §0, the locked surface verbatim) ----
+
+pub interface JsonSerialize {
+    fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError;
+}
+
+pub interface JsonDeserialize {
+    fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError);
+}
+
+// ---- the wrapper families (the scalar rows) --------------------------
+// One newtype class per scalar shape, both members, one spelled
+// accessor. A primitive crosses ONLY inside its wrapper:
+// `encodeJson(JsonI64(64))` — the wrapper is the manufacture, the
+// call site spells it.
+
+pub class JsonI64(i64);
+
+impl JsonI64 {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.write_i64(self.inner);
+        return nil;
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let v = r.read_i64();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JsonI64(v), nil);
+    }
+    pub fn get(self) -> i64 { return self.inner; }
+}
+
+// f64 — shortest round-trip encode (non-finite -> NotFinite); the
+// two-tier decode (tier 1 exact, tier 2 ±1 ulp best-effort, §2.4)
+pub class JsonF64(f64);
+
+impl JsonF64 {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.write_f64(self.inner);
+        return nil;
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let v = r.read_f64();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JsonF64(v), nil);
+    }
+    pub fn get(self) -> f64 { return self.inner; }
+}
+
+// bool — `true`/`false` only; `1`/`0` are WrongType (§2.4)
+pub class JsonBool(bool);
+
+impl JsonBool {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.write_bool(self.inner);
+        return nil;
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let v = r.read_bool();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JsonBool(v), nil);
+    }
+    pub fn get(self) -> bool { return self.inner; }
+}
+
+// str — escaped per RFC 8259; any JSON string decodes
+pub class JsonStr(str);
+
+impl JsonStr {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.write_str(self.inner);
+        return nil;
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let v = r.read_str();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JsonStr(v), nil);
+    }
+    pub fn get(self) -> str { return self.inner; }
+}
+
+// u64 — DECODE ONLY (JSON integers beyond i64's reach ride the gnu64
+// fold below; the encode half never had a row — an out-of-i64-range
+// u64 has no JSON producer here). The wrapper family's one asymmetric
+// member set: satisfaction is per-interface, so JsonU64 satisfies
+// JsonDeserialize alone.
+pub class JsonU64(u64);
+
+impl JsonU64 {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let t = r.read_number_text();
+        if (r.failed()) { return (nil, r.error()); }
+        let v = gnu64(t);
+        if (v == nil) {
+            return (nil, DecodeJsonError {
+                kind: DecodeErrorKind::WrongType,
+                at: r.here() as i64,
+                got: t,
+                expected: "a u64",
+            });
+        }
+        return (JsonU64(v), nil);
+    }
+    pub fn get(self) -> u64 { return self.inner; }
+}
+
+// the u64 digit fold — pre-checks its bound (no wrapping ops)
+fn gnu64(t: str) -> ?u64 {
+    let n = t.len();
+    if (n == 0) { return nil; }
+    let mut acc: u64 = 0;
+    let mut i: i32 = 0;
+    while (i < n) {
+        let c = t.slice(i, i + 1).code() as i32;
+        if (c < 0x30 || c > 0x39) { return nil; }
+        let (m, ok1) = acc.checked_mul(10u64);
+        let d = (c - 0x30) as u64;
+        let (a, ok2) = m.checked_add(d);
+        if (!ok1 || !ok2) { return nil; }
+        acc = a;
+        i += 1;
+    }
+    return acc;
+}
+
+// SOpt<T> — the optional row (survey §2.6): nil -> null, else T; null
+// -> nil, else T. THIS wrapper is what makes every optional field one
+// `?T`. The bound is the ENCODE direction (the wrapper's T must be
+// encodable); the decode member delegates to `T::decode` per
+// instantiation, so a decode-only T (JsonU64) cannot ride SOpt — spell
+// the optional inline in that shape's own decode (the struct-decode
+// convention anyway).
+pub class SOpt<T requires JsonSerialize | JsonDeserialize>(?T);
+
+impl<T> SOpt<T> {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        if (self.inner == nil) {
+            w.write_raw("null");
+            return nil;
+        }
+        let v: T = self.inner;
+        return v.encode(w);
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        if (r.try_null()) {
+            // success with an absent value: (nil, nil) — the pair law's
+            // ?T reading (§3's matrix pins this row separately)
+            let none: ?T = nil;
+            return (SOpt(none), nil);
+        }
+        if (r.failed()) { return (nil, r.error()); }
+        let (v, e) = T::decode(r);
+        if (e != nil) { return (nil, e); }
+        let some: ?T = v;
+        let ok: ?Self = SOpt(some);
+        return (ok, nil);
+    }
+    pub fn get(self) -> ?T { return self.inner; }
+}
+
+// JsonArr<T> — the structural array row. Encode walks forward; decode
+// counts grammatically (skip_value), rewinds, and decodes into an
+// exactly-sized column — the base is pouch-free by law, so the count
+// comes from the doc, not a growable. (The growable shape is the
+// foot-of-file `JsonVec`.)
+pub class JsonArr<T requires JsonSerialize | JsonDeserialize>([T]);
+
+impl<T> JsonArr<T> {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.begin_array();
+        for (let x of self.inner) {
+            let e = x.encode(w);
+            if (e != nil) { return e; }
+        }
+        w.end_array();
+        return nil;
+    }
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mark = r.here();
+        // pass 1: the element count, grammatically
+        r.begin_array();
+        let mut count: i32 = 0;
+        while (r.more()) {
+            r.skip_value();
+            if (r.failed()) { return (nil, r.error()); }
+            count += 1;
+        }
+        r.end_array();
+        if (r.failed()) { return (nil, r.error()); }
+        // rewind (same-module field access — the reader is json's own)
+        r.pos = mark;
+        // pass 2: the elements
+        r.begin_array();
+        let mut buf: [?T] = [nil; count];
+        let mut first: ?T = nil;
+        let mut i: i32 = 0;
+        while (r.more()) {
+            let (x, e) = T::decode(r);
+            if (e != nil) { return (nil, e); }
+            buf[i] = x;
+            if (i == 0) { first = x; }
+            i += 1;
+        }
+        r.end_array();
+        if (r.failed()) { return (nil, r.error()); }
+        if (count == 0) {
+            let empty: [T] = [];
+            let none: ?Self = JsonArr(empty);
+            return (none, nil);
+        }
+        // materialize the fixed array — the first element seeds it
+        // (pouch's `as_array` construction law, generic T has no zero)
+        let seed: T = first;
+        let mut a: [T] = [seed; count];
+        let mut j: i32 = 0;
+        while (j < count) {
+            a[j] = buf[j];
+            j += 1;
+        }
+        let ok: ?Self = JsonArr(a);
+        return (ok, nil);
+    }
+    pub fn to_arr(self) -> [T] { return self.inner; }
+}
+
+// ---- the entries (survey §0; the pair is minted ONLY here) ----
+
+// The exactly-one-nil invariant: success (doc, nil), failure (nil, err).
+// `let (s, e) = encodeJson(v);` destructures in return position — no
+// record mints (02ced3e's fusion; this pkg is its real-world proof).
+pub fn encodeJson<T requires JsonSerialize>(v: T) -> (?str, ?EncodeJsonError) {
+    let mut w = JsonWriter::new();
+    let e = v.encode(w);
+    if (e != nil) { return (nil, e); }
+    return (w.finish(), nil);
+}
+
+pub fn decodeJson<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
+    let mut r = JsonReader::of(s);
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        // trailing garbage after the value + whitespace
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError { kind: DecodeErrorKind::Trailing, at: at as i64, got: got, expected: "end of input" });
+    }
+    return (v, nil);
+}
+
+// STRICT UTF-8 (survey §2.2): the DFA validates every octet first —
+// `bytes::decode()` is lossy and is never trusted on unvalidated input;
+// an invalid octet answers InvalidUtf8 naming the offset and the hex
+// byte, never a silent U+FFFD. Valid bytes re-enter the SAME str cursor.
+pub fn decodeJsonBytes<T requires JsonDeserialize>(b: bytes) -> (?T, ?DecodeJsonError) {
+    let n = b.len();
+    let mut i: i32 = 0;
+    while (i < n) {
+        let c = b[i] as i32;
+        if (c < 0x80) { i += 1; continue; }
+        if (c < 0xC2) { return (nil, utf8_err(c as u32, i)); }
+        if (c < 0xE0) {
+            let bad = utf8_cont(b, i + 1, n);
+            if (bad >= 0) { return (nil, utf8_err(bad_byte(b, bad, n), bad)); }
+            i += 2;
+            continue;
+        }
+        if (c < 0xF0) {
+            let bad = utf8_cont(b, i + 1, n);
+            if (bad >= 0) { return (nil, utf8_err(bad_byte(b, bad, n), bad)); }
+            let c1 = b[i + 1] as i32;
+            if (c == 0xE0 && c1 < 0xA0) { return (nil, utf8_err(c1 as u32, i + 1)); }
+            if (c == 0xED && c1 > 0x9F) { return (nil, utf8_err(c1 as u32, i + 1)); }
+            let bad2 = utf8_cont(b, i + 2, n);
+            if (bad2 >= 0) { return (nil, utf8_err(bad_byte(b, bad2, n), bad2)); }
+            i += 3;
+            continue;
+        }
+        if (c < 0xF5) {
+            let bad = utf8_cont(b, i + 1, n);
+            if (bad >= 0) { return (nil, utf8_err(bad_byte(b, bad, n), bad)); }
+            let c1 = b[i + 1] as i32;
+            if (c == 0xF0 && c1 < 0x90) { return (nil, utf8_err(c1 as u32, i + 1)); }
+            if (c == 0xF4 && c1 > 0x8F) { return (nil, utf8_err(c1 as u32, i + 1)); }
+            let bad2 = utf8_cont(b, i + 2, n);
+            if (bad2 >= 0) { return (nil, utf8_err(bad_byte(b, bad2, n), bad2)); }
+            let bad3 = utf8_cont(b, i + 3, n);
+            if (bad3 >= 0) { return (nil, utf8_err(bad_byte(b, bad3, n), bad3)); }
+            i += 4;
+            continue;
+        }
+        return (nil, utf8_err(c as u32, i));
+    }
+    let mut r = JsonReader::of(b.decode());
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError { kind: DecodeErrorKind::Trailing, at: at as i64, got: got, expected: "end of input" });
+    }
+    return (v, nil);
+}
+
+// a continuation octet: 0x80..=0xBF; answers the offending index (≥ 0)
+// or −1 when clean; a truncated sequence names the position it ends at
+fn utf8_cont(b: bytes, i: i32, n: i32) -> i32 {
+    if (i >= n) { return i; }
+    let c = b[i] as i32;
+    if (c >= 0x80 && c < 0xC0) { return -1; }
+    return i;
+}
+
+// the offending octet's value — 0 when the sequence simply ends (a
+// truncated continuation has no octet to name)
+fn bad_byte(b: bytes, at: i32, n: i32) -> u32 {
+    if (at >= n) { return 0; }
+    return b[at] as u32;
+}
+
+fn utf8_err(byte: u32, at: i32) -> ?DecodeJsonError {
+    let hex = "0123456789abcdef";
+    let hi = (byte >> 4) & 15;
+    let lo = byte & 15;
+    let hs = hex.slice(hi as i32, hi as i32 + 1);
+    let ls = hex.slice(lo as i32, lo as i32 + 1);
+    return DecodeJsonError { kind: DecodeErrorKind::InvalidUtf8, at: at as i64, got: f"0x{hs}{ls}", expected: "UTF-8" };
+}
+
+
+// ---- the container wrapper families (json's own source) ------------
+//
+// The old `[peer-deps]` group files (group-pouch.rut / group-nmapset.rut)
+// folded here when the peer key retired: the wrappers are plain
+// root-module source, and `pouch` / `nmapset` are plain deps (the
+// manifest's rows), so every consumer gets the whole surface and the
+// packed bundle carries the deps closed (the v11 `deps/` wire).
+//
+// THE WRAPPER LAW (the structural-interfaces fork): `Vec` is pouch's
+// class, and satisfaction is having the members on the type's own
+// inherent impl — json cannot grow members on another module's class,
+// and a bare container never derives. The wrapper is the spelled
+// manufacture: `encodeJson(JsonVec(rows))` at the entry,
+// `decodeJson<JsonVec<DocRow>>(doc)` at the sink, `to_vec()` unwraps.
+
+use pouch::{ Vec };
+
+// The survey §2.6 matrix rows, wrapped: `Vec<T>` encodes an array,
+// decodes an array — elements through T's own members, per
+// instantiation (the template law: this body monomorphizes per
+// `JsonVec<..>` shape, so `x.encode(w)` / `T::decode(r)` bind the
+// concrete members — nested `JsonVec<JsonVec<i64>>` closes
+// recursively). The bound is the ENCODE direction; the decode member
+// delegates to `T::decode` per instantiation (a decode-only T spells
+// its array shape through `JsonArr`, the base's pouch-free row).
+pub class JsonVec<T requires JsonSerialize | JsonDeserialize>(Vec<T>);
+
+impl<T> JsonVec<T> {
+    pub fn encode(self, mut w: JsonWriter) -> ?EncodeJsonError {
+        w.begin_array();
+        for (let x of self.inner) {
+            let e = x.encode(w);
+            if (e != nil) { return e; }
+        }
+        w.end_array();
+        return nil;
+    }
+
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut v = Vec<T>::new();
+        r.begin_array();
+        while (r.more()) {
+            let (x, e) = T::decode(r);
+            if (e != nil) { return (nil, e); }
+            v.push(x);
+        }
+        r.end_array();
+        if (r.failed()) { return (nil, r.error()); }
+        let ok: ?Self = JsonVec(v);
+        return (ok, nil);
+    }
+
+    // the unwrap: the materialized Vec
+    pub fn to_vec(self) -> Vec<T> { return self.inner; }
+}
+
+// ---- the map/set wrapper family (over the nmapset dep) -------------
+//
+// One wrapper per KEY SHAPE (`JMapStr`, `JMapI64`, `JMapBool`,
+// `JMapU64`, `JMapBytes`) plus `JSet<T>`: the KEY is a primitive, and
+// primitives carry no members, so the key-text parse cannot dispatch
+// through the type — it is baked into the wrapper. The key law (the
+// survey §2.6's prim-key policy): `str` verbatim, integers decimal,
+// `bool` true/false; an unparsable key text is WrongType naming the
+// text; duplicates that normalize together ("01" and "1") are LAST
+// WINS — nmapset's `put` semantics. (`f64` keys have no row: the union
+// bound never admitted them — floats have no stable equality contract
+// — so there was never a shape to wrap.) `bytes` keys have no JSON
+// spelling: the wrapper exists so the LAW is testable — every decode
+// answers WrongType with the disclosure in `expected`.
+//
+// The value lane is V's OWN `decode` dispatch, per instantiation: the
+// scalar values ride json's wrapper shapes (`JsonI64`, `JsonU64`, …)
+// — a bare primitive value cannot satisfy the bound, so
+// `JMapStr<JsonU64>` is the u64-valued spelling, `to_map()` answers
+// `HashMap<str, JsonU64>`, and each entry reads through its own
+// `get()`.
+//
+// THE ENCODE HALF IS NOT LANDED — disclosed, not dropped silently:
+// json can encode a map only by WALKING it, and nmapset ships no
+// iteration surface (`keys`/`values`/`iter`). An nmapset iteration
+// surface is the recorded menu item, and the encode wrappers land
+// with it. The decode half is functional.
+
+use nmapset::{ HashMap, HashSet };
+
+// ---- the key-text folds (§2.6), one private fn per key shape ------
+
+// §2.6's key-text law is LENIENT where JSON values are strict: `"01"`
+// and `"1"` normalize together (last wins), so the fold skips no
+// grammar and accepts leading zeros — only the width bound is
+// enforced (pre-checked, never wraps)
+fn key_i64(t: str) -> ?i64 {
+    let n = t.len();
+    if (n == 0) { return nil; }
+    let mut i: i32 = 0;
+    let mut neg = false;
+    let first = t.slice(0, 1).code() as i32;
+    if (first == 0x2D) {
+        neg = true;
+        i = 1;
+        if (n == 1) { return nil; }
+    }
+    let mut acc: i64 = 0;
+    while (i < n) {
+        let c = t.slice(i, i + 1).code() as i32;
+        if (c < 0x30 || c > 0x39) { return nil; }
+        if (acc < -922337203685477580i64) { return nil; }
+        acc = acc * 10;
+        if (acc < -9223372036854775807i64 - 1i64 + (c - 0x30) as i64) { return nil; }
+        acc = acc - (c - 0x30) as i64;
+        i += 1;
+    }
+    if (!neg && acc == -9223372036854775807i64 - 1i64) { return nil; }
+    if (neg) { return acc; }
+    return -acc;
+}
+
+// the u64 key fold — the base's gnu64 (the same law)
+fn key_u64(t: str) -> ?u64 {
+    return gnu64(t);
+}
+
+fn key_bool(t: str) -> ?bool {
+    if (t == "true") { return true; }
+    if (t == "false") { return false; }
+    return nil;
+}
+
+// the WrongType mint for an unparsable key text (the failure law:
+// the text names itself; `at` rides the reader's position)
+fn map_err(at: i64, kt: str, want: str) -> DecodeJsonError {
+    return DecodeJsonError {
+        kind: DecodeErrorKind::WrongType,
+        at: at,
+        got: kt,
+        expected: want,
+    };
+}
+
+// ---- the family ----------------------------------------------------
+
+pub class JMapStr<V requires JsonDeserialize>(HashMap<str, V>);
+
+impl<V> JMapStr<V> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut m = HashMap<str, V>::new();
+        r.begin_object();
+        while (r.more()) {
+            let kt = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            // verbatim (escaped by the reader's string law already)
+            let kk: str = kt;
+            let (v, e) = V::decode(r);
+            if (e != nil) { return (nil, e); }
+            let _ = m.put(kk, v);
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JMapStr(m), nil);
+    }
+    pub fn to_map(self) -> HashMap<str, V> { return self.inner; }
+}
+
+pub class JMapI64<V requires JsonDeserialize>(HashMap<i64, V>);
+
+impl<V> JMapI64<V> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut m = HashMap<i64, V>::new();
+        r.begin_object();
+        while (r.more()) {
+            let kt = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            let k = key_i64(kt);
+            if (k == nil) { return (nil, map_err(r.here() as i64, kt, "a key this map's key type can parse")); }
+            let kk: i64 = k;
+            let (v, e) = V::decode(r);
+            if (e != nil) { return (nil, e); }
+            let _ = m.put(kk, v);
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JMapI64(m), nil);
+    }
+    pub fn to_map(self) -> HashMap<i64, V> { return self.inner; }
+}
+
+pub class JMapBool<V requires JsonDeserialize>(HashMap<bool, V>);
+
+impl<V> JMapBool<V> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut m = HashMap<bool, V>::new();
+        r.begin_object();
+        while (r.more()) {
+            let kt = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            let k = key_bool(kt);
+            if (k == nil) { return (nil, map_err(r.here() as i64, kt, "a key this map's key type can parse")); }
+            let kk: bool = k;
+            let (v, e) = V::decode(r);
+            if (e != nil) { return (nil, e); }
+            let _ = m.put(kk, v);
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JMapBool(m), nil);
+    }
+    pub fn to_map(self) -> HashMap<bool, V> { return self.inner; }
+}
+
+pub class JMapU64<V requires JsonDeserialize>(HashMap<u64, V>);
+
+impl<V> JMapU64<V> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut m = HashMap<u64, V>::new();
+        r.begin_object();
+        while (r.more()) {
+            let kt = r.next_key();
+            if (r.failed()) { return (nil, r.error()); }
+            let k = key_u64(kt);
+            if (k == nil) { return (nil, map_err(r.here() as i64, kt, "a key this map's key type can parse")); }
+            let kk: u64 = k;
+            let (v, e) = V::decode(r);
+            if (e != nil) { return (nil, e); }
+            let _ = m.put(kk, v);
+        }
+        r.end_object();
+        if (r.failed()) { return (nil, r.error()); }
+        return (JMapU64(m), nil);
+    }
+    pub fn to_map(self) -> HashMap<u64, V> { return self.inner; }
+}
+
+pub class JMapBytes<V requires JsonDeserialize>(HashMap<bytes, V>);
+
+impl<V> JMapBytes<V> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        r.begin_object();
+        let kt = r.next_key();
+        if (r.failed()) { return (nil, r.error()); }
+        return (nil, map_err(r.here() as i64, kt, "a key type JSON can spell (bytes keys have no JSON spelling)"));
+    }
+    pub fn to_map(self) -> HashMap<bytes, V> { return self.inner; }
+}
+
+pub class JSet<T requires JsonDeserialize>(HashSet<T>);
+
+impl<T> JSet<T> {
+    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+        let mut s = HashSet<T>::new();
+        r.begin_array();
+        while (r.more()) {
+            let (x, e) = T::decode(r);
+            if (e != nil) { return (nil, e); }
+            let _ = s.put(x);
+        }
+        r.end_array();
+        if (r.failed()) { return (nil, r.error()); }
+        let ok: ?Self = JSet(s);
+        return (ok, nil);
+    }
+    pub fn to_set(self) -> HashSet<T> { return self.inner; }
+}

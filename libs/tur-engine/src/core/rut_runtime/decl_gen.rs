@@ -1,11 +1,11 @@
 //! The `tur_host` decl-surface generator: the merged pkg surface
 //! ([`tur_decl_pkg`] + every extension's rows, the exact assembly a boot
 //! compiles against) rendered as the pkg's DECL MODULE TREE — a
-//! decls-organized `mod.d.rut` root + one file per module under it.
+//! decls-organized `src/mod.d.rut` root + one file per module under it.
 //!
 //! The Rust rows stay the compile truth; the rendered tree is the
 //! committed, test-pinned snapshot at `rut/tur_host/` (the pkg is
-//! `type = "host"`; `mod.d.rut` beside its `rut.jsonc` is the
+//! `type = "host"`; `src/mod.d.rut` under the pkg's src/ shell is the
 //! auto-discovered root — no `entry` is spelled). The pin test
 //! (`tur_host_decl` in tur-integration-tests) rebuilds the file set
 //! from the standard session and diffs it — a Rust row that drifts
@@ -60,6 +60,8 @@ pub fn tur_host_surface(exts: &[RutPkgExt]) -> (Vec<HostRow>, Vec<(String, TypeI
     let mut consts_out: Vec<(String, TypeId, u64)> = Vec::new();
     let mut pkg = rut_vm::interp::HostPkg::new("tur_host");
     let mut preludes: Vec<rut_driver::Mounted> = Vec::new();
+    let mut offered: Vec<rut_driver::Mounted> = Vec::new();
+    let mut boot_pkgs = Vec::new();
     for ext in exts {
         ext(&mut RutPkgCx {
             decl: &mut ext_decl,
@@ -67,6 +69,8 @@ pub fn tur_host_surface(exts: &[RutPkgExt]) -> (Vec<HostRow>, Vec<(String, TypeI
             pkg: &mut pkg,
             handles: None,
             preludes: &mut preludes,
+            offered: &mut offered,
+            boot_pkgs: &mut boot_pkgs,
         });
     }
     if let MountedBody::Host {
@@ -106,15 +110,16 @@ fn row_line(f: &HostRow) -> String {
 }
 
 /// The root file's header — the generated-artifact note, the bless
-/// instructions, and the entry law (the `mod.d.rut` root is
+/// instructions, and the entry law (the `src/mod.d.rut` root is
 /// auto-discovered; no `entry` is spelled in the manifest).
-const ROOT_HEADER: &str = "// tur_host/mod.d.rut — GENERATED from the engine's `tur_host` rows; do\n\
+const ROOT_HEADER: &str = "// tur_host/src/mod.d.rut — GENERATED from the engine's `tur_host` rows; do\n\
 // not edit by hand. The Rust rows are the compile truth\n\
 // (tur-engine/src/core/rut_runtime: `tur_decl_pkg()` + every plugin's\n\
 // RutPkgExt rows, the bodies installed by `install_tur_pkg`); this tree\n\
 // is the test-pinned SNAPSHOT of that surface (a `type = \"host\"` pkg —\n\
-// `mod.d.rut` beside rut.jsonc is the auto-discovered root; the manifest\n\
-// spells no `entry`). Regenerate with the pin test's bless mode:\n\
+// `src/mod.d.rut` under the pkg's src/ shell is the auto-discovered root;\n\
+// the manifest spells no `entry`). Regenerate with the pin test's bless\n\
+// mode:\n\
 //   TUR_BLESS_TUR_HOST_DECL=1 cargo nextest run -p tur-integration-tests\n\
 //     tur_host_decl\n\
 // Param names are positional (p1..pn) — the engine rows carry none; the\n\
@@ -231,12 +236,14 @@ pub fn mount_host_tree(pkg: &mut rut_driver::Mounted) {
 }
 
 /// Render the merged surface as the COMPLETE decl-tree file set —
-/// `(rel path, text)` pairs rooted at `rut/tur_host/`: the `mod.d.rut`
+/// `(rel path, text)` pairs rooted at `rut/tur_host/`: the `src/mod.d.rut`
 /// root (the header, the root rows, and the sorted `pub mod` decls)
-/// plus one `NAME/mod.d.rut` per module — intermediate domain dirs
-/// included (`layout/mod.d.rut` carries the `pub mod flex;` decls; the
-/// rows live in `layout/flex/mod.d.rut`). Deterministic: modules sort by
-/// path (the root first), rows keep install order within a module.
+/// plus one `src/NAME/mod.d.rut` per module — intermediate domain dirs
+/// included (`src/layout/mod.d.rut` carries the `pub mod flex;` decls;
+/// the rows live in `src/layout/flex/mod.d.rut`). The `src/` shell is
+/// the std-v14 pkg grammar (the real walk's default root). Deterministic:
+/// modules sort by path (the root first), rows keep install order within
+/// a module.
 pub fn render_tur_host_decl_tree(exts: &[RutPkgExt]) -> Vec<(String, String)> {
     let (funcs, consts) = tur_host_surface(exts);
     // The surface grammar has no const spelling (the manifest's `consts`
@@ -253,16 +260,16 @@ pub fn render_tur_host_decl_tree(exts: &[RutPkgExt]) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
     for (path, rows) in &modules {
         let rel = if path.is_empty() {
-            "mod.d.rut".to_string()
+            "src/mod.d.rut".to_string()
         } else {
-            format!("{path}/mod.d.rut")
+            format!("src/{path}/mod.d.rut")
         };
         let mut text = String::new();
         if path.is_empty() {
             text.push_str(ROOT_HEADER);
         } else {
             text.push_str(&format!(
-                "// tur_host/{path} — GENERATED (see the root mod.d.rut's \
+                "// tur_host/src/{path} — GENERATED (see the root mod.d.rut's \
                  header; do not edit by hand).\n\n"
             ));
         }

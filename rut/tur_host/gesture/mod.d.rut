@@ -1,4 +1,0 @@
-// tur_host/gesture — GENERATED (see the root mod.d.rut's header; do not edit by hand).
-
-pub mod focus;
-pub mod pointer;

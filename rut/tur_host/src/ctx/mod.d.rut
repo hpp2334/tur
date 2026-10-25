@@ -1,0 +1,20 @@
+// tur_host/src/ctx — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn ctx_get_box(p1: opaque, p2: u64, p3: u64) -> opaque;
+pub host fn ctx_set_box(p1: opaque, p2: u64, p3: opaque);
+pub host fn ctx_run_box(p1: opaque, p2: u64, p3: opaque);
+pub host fn ctx_bridge() -> opaque;
+pub host fn ctx_get_f64(p1: opaque, p2: u64) -> f64;
+pub host fn ctx_get_str(p1: opaque, p2: u64) -> str;
+pub host fn ctx_get_bool(p1: opaque, p2: u64) -> bool;
+pub host fn ctx_get_value(p1: opaque, p2: u64) -> opaque;
+pub host fn ctx_get_opaque(p1: opaque, p2: u64) -> opaque;
+pub host fn ctx_set_f64(p1: opaque, p2: u64, p3: f64);
+pub host fn ctx_set_str(p1: opaque, p2: u64, p3: str);
+pub host fn ctx_set_bool(p1: opaque, p2: u64, p3: bool);
+pub host fn ctx_set_value(p1: opaque, p2: u64, p3: opaque);
+pub host fn ctx_set_opaque(p1: opaque, p2: u64, p3: opaque);
+pub host fn ctx_run_nil(p1: opaque, p2: u64);
+pub host fn ctx_run_f64(p1: opaque, p2: u64, p3: f64);
+pub host fn mutate_seal(p1: opaque, p2: u64) -> u64;
+pub host fn derive_seal(p1: opaque, p2: u64) -> u64;

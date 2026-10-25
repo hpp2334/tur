@@ -1,0 +1,7 @@
+// tur_host/src/control_flow/lifecycle — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn lc_new() -> opaque;
+pub host fn lc_on_mount(p1: opaque, p2: u64);
+pub host fn lc_before_destroy(p1: opaque, p2: opaque);
+pub host fn lc_child(p1: opaque, p2: opaque);
+pub host fn lc_build(p1: opaque) -> opaque;

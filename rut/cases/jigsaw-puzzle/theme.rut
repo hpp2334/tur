@@ -1,0 +1,119 @@
+// theme — the boa geometry, the palette, and the slot/label math. Pure
+// values: no kit imports.
+//
+// The boa palette: hue = (slot * 47) % 360 — bright while loose, dim once
+// placed (s 60→35, l 55→42). The placed-piece GLOW is the slot's bright
+// hue at alpha 140 (the boa pieceRgb shadow — the resolved look). Loose
+// pieces carry the black soft shadow, dragged pieces the hard one.
+
+// ---- the boa geometry --------------------------------------------------------
+
+pub let CELL: f64 = 60.0;
+pub let GAP_HALF: f64 = 2.0; // GAP / 2 — each piece insets 2px inside its cell
+pub let PIECE: f64 = 56.0; // CELL - GAP
+pub let BOARD_W: f64 = 180.0; // 3 * CELL
+pub let BOARD_X: f64 = 100.0;
+pub let BOARD_Y: f64 = 60.0;
+pub let TRAY_X: f64 = 100.0;
+pub let TRAY_Y: f64 = 300.0; // BOARD_Y + BOARD_W + 60
+pub let SNAP_T: f64 = 28.0;
+pub let SNAP_T2: f64 = 784.0; // SNAP_T squared (distances compare squared)
+pub let PLAY_W: f64 = 380.0;
+pub let PLAY_H: f64 = 520.0; // TRAY_Y + BOARD_W + 40
+
+// ---- the palette ---------------------------------------------------------------
+
+pub let BRI0: u64 = 0xD14747FFu64;
+pub let BRI1: u64 = 0xD1B347FFu64;
+pub let BRI2: u64 = 0x83D147FFu64;
+pub let BRI3: u64 = 0x47D178FFu64;
+pub let BRI4: u64 = 0x47BFD1FFu64;
+pub let BRI5: u64 = 0x4753D1FFu64;
+pub let BRI6: u64 = 0xA847D1FFu64;
+pub let BRI7: u64 = 0xD1478FFFu64;
+pub let BRI8: u64 = 0xD16C47FFu64;
+pub let DIM0: u64 = 0x914646FFu64;
+pub let DIM1: u64 = 0x918046FFu64;
+pub let DIM2: u64 = 0x669146FFu64;
+pub let DIM3: u64 = 0x469160FFu64;
+pub let DIM4: u64 = 0x468791FFu64;
+pub let DIM5: u64 = 0x464C91FFu64;
+pub let DIM6: u64 = 0x7A4691FFu64;
+pub let DIM7: u64 = 0x91466CFFu64;
+pub let DIM8: u64 = 0x915A46FFu64;
+pub let GLOW0: u64 = 0xD147478Cu64;
+pub let GLOW1: u64 = 0xD1B3478Cu64;
+pub let GLOW2: u64 = 0x83D1478Cu64;
+pub let GLOW3: u64 = 0x47D1788Cu64;
+pub let GLOW4: u64 = 0x47BFD18Cu64;
+pub let GLOW5: u64 = 0x4753D18Cu64;
+pub let GLOW6: u64 = 0xA847D18Cu64;
+pub let GLOW7: u64 = 0xD1478F8Cu64;
+pub let GLOW8: u64 = 0xD16C478Cu64;
+pub let SHADOW_LOOSE: u64 = 0x0000006Eu64; // black @110
+pub let SHADOW_DRAG: u64 = 0x000000B4u64; // black @180
+pub let LIFT_MAX: f64 = 1.1;
+
+// ---- the lookups + the geometry -------------------------------------------------
+
+pub fn slot_x(s: u64) -> f64 {
+    return BOARD_X + (s % 3) as f64 * CELL + GAP_HALF;
+}
+
+pub fn slot_y(s: u64) -> f64 {
+    return BOARD_Y + (s / 3) as f64 * CELL + GAP_HALF;
+}
+
+pub fn tray_x(i: u64) -> f64 {
+    return TRAY_X + (i % 3) as f64 * CELL + GAP_HALF;
+}
+
+pub fn tray_y(i: u64) -> f64 {
+    return TRAY_Y + (i / 3) as f64 * CELL + GAP_HALF;
+}
+
+pub fn bright(s: u64) -> u64 {
+    if (s == 0) { return BRI0; }
+    if (s == 1) { return BRI1; }
+    if (s == 2) { return BRI2; }
+    if (s == 3) { return BRI3; }
+    if (s == 4) { return BRI4; }
+    if (s == 5) { return BRI5; }
+    if (s == 6) { return BRI6; }
+    if (s == 7) { return BRI7; }
+    return BRI8;
+}
+
+// The placed glow: the slot's bright hue at alpha 140.
+pub fn glow(s: u64) -> u64 {
+    if (s == 0) { return GLOW0; }
+    if (s == 1) { return GLOW1; }
+    if (s == 2) { return GLOW2; }
+    if (s == 3) { return GLOW3; }
+    if (s == 4) { return GLOW4; }
+    if (s == 5) { return GLOW5; }
+    if (s == 6) { return GLOW6; }
+    if (s == 7) { return GLOW7; }
+    return GLOW8;
+}
+
+pub fn dim(s: u64) -> u64 {
+    if (s == 0) { return DIM0; }
+    if (s == 1) { return DIM1; }
+    if (s == 2) { return DIM2; }
+    if (s == 3) { return DIM3; }
+    if (s == 4) { return DIM4; }
+    if (s == 5) { return DIM5; }
+    if (s == 6) { return DIM6; }
+    if (s == 7) { return DIM7; }
+    return DIM8;
+}
+
+// ---- the label formats ------------------------------------------------------------
+
+// The piece label: its target slot, 1-based (crossed to the ghost's static
+// text too; deal re-sets the bound labels on every re-deal).
+pub fn fmt_slot(v: f64) -> str {
+    let n = v as u64 + 1;
+    return f"{n}";
+}

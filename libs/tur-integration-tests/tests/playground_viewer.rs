@@ -469,7 +469,7 @@ fn playground_multi_file_case_opens_its_file_list() {
         app.query_element(&["file", "mod.rut"]).is_some(),
         "the root file row"
     );
-    for child in ["explorer", "json", "landing", "state", "theme", "ui"] {
+    for child in ["explorer", "schema", "landing", "state", "theme", "ui"] {
         let label = format!("{child}.rut");
         assert!(
             app.query_element(&["file", label.as_str()]).is_some(),

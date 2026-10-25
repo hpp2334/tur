@@ -1,0 +1,27 @@
+// tur_host/src/store — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn rs_source_str(p1: str) -> u64;
+pub host fn rs_set_str(p1: u64, p2: str);
+pub host fn rs_get_str(p1: u64) -> str;
+pub host fn rs_source_f64() -> u64;
+pub host fn rs_set_f64(p1: u64, p2: f64);
+pub host fn rs_get_f64(p1: u64) -> f64;
+pub host fn rs_source_bool(p1: bool) -> u64;
+pub host fn rs_set_bool(p1: u64, p2: bool);
+pub host fn rs_get_bool(p1: u64) -> bool;
+pub host fn rs_list_new() -> opaque;
+pub host fn rs_list_push(p1: opaque, p2: str);
+pub host fn rs_map_new() -> opaque;
+pub host fn rs_map_set(p1: opaque, p2: str, p3: str);
+pub host fn rs_source_value(p1: opaque) -> u64;
+pub host fn rs_set_value(p1: u64, p2: opaque);
+pub host fn rs_get_value(p1: u64) -> opaque;
+pub host fn rs_value_len(p1: opaque) -> u64;
+pub host fn rs_value_item(p1: opaque, p2: u64) -> str;
+pub host fn rs_value_get(p1: opaque, p2: str) -> str;
+pub host fn rs_set_brush(p1: u64, p2: u64);
+pub host fn rs_watch_mut(p1: u64, p2: u64) -> opaque;
+pub host fn rs_watch_start(p1: opaque);
+pub host fn rs_watch_stop(p1: opaque);
+pub host fn rs_source_box(p1: opaque) -> u64;
+pub host fn rs_box_stamp(p1: opaque) -> u64;

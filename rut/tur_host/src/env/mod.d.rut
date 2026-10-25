@@ -1,0 +1,4 @@
+// tur_host/src/env — GENERATED (see the root mod.d.rut's header; do not edit by hand).
+
+pub host fn env_viewport_w() -> u64;
+pub host fn env_viewport_h() -> u64;
