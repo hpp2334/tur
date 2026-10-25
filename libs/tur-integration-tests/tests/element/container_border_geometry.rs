@@ -95,12 +95,7 @@ fn inside_border_stroke_deflates_the_corner_radius() {
     app.wait_for_timeout(Duration::ZERO);
 
     let ops = Rc::new(RefCell::new(Vec::new()));
-    app.attach_renderer(
-        Box::new(OpsRenderer { ops: ops.clone() }),
-        100,
-        100,
-        1.0,
-    );
+    app.attach_renderer(Box::new(OpsRenderer { ops: ops.clone() }), 100, 100, 1.0);
     app.wait_for_timeout(Duration::ZERO);
 
     let ops = ops.borrow();
@@ -110,28 +105,36 @@ fn inside_border_stroke_deflates_the_corner_radius() {
 
     // Inside: path 18.5×18.5 r5.25 at (0.75, 0.75) — the stroke's outer
     // edge lands exactly on the fill's r6 boundary.
-    let (off, size, radius, width) = stroke_of(&ops, blue)
-        .expect("the inside border stroke must paint");
+    let (off, size, radius, width) =
+        stroke_of(&ops, blue).expect("the inside border stroke must paint");
     assert_close(off.x, 0.75, "inside offset.x");
     assert_close(off.y, 0.75, "inside offset.y");
     assert_close(size.width, 18.5, "inside size.width");
     assert_close(size.height, 18.5, "inside size.height");
-    assert_close(radius, 6.0 - 1.5 / 2.0, "inside corner radius (deflate by bw/2)");
+    assert_close(
+        radius,
+        6.0 - 1.5 / 2.0,
+        "inside corner radius (deflate by bw/2)",
+    );
     assert_close(width, 1.5, "inside stroke width");
 
     // Outside: path 21.5×21.5 r6.75 at (−0.75, −0.75).
-    let (off, size, radius, width) = stroke_of(&ops, green)
-        .expect("the outside border stroke must paint");
+    let (off, size, radius, width) =
+        stroke_of(&ops, green).expect("the outside border stroke must paint");
     assert_close(off.x, -0.75, "outside offset.x");
     assert_close(off.y, -0.75, "outside offset.y");
     assert_close(size.width, 21.5, "outside size.width");
     assert_close(size.height, 21.5, "outside size.height");
-    assert_close(radius, 6.0 + 1.5 / 2.0, "outside corner radius (inflate by bw/2)");
+    assert_close(
+        radius,
+        6.0 + 1.5 / 2.0,
+        "outside corner radius (inflate by bw/2)",
+    );
     assert_close(width, 1.5, "outside stroke width");
 
     // Center: straddles the boundary as-is — 20×20 r6 at the origin.
-    let (off, size, radius, width) = stroke_of(&ops, purple)
-        .expect("the center border stroke must paint");
+    let (off, size, radius, width) =
+        stroke_of(&ops, purple).expect("the center border stroke must paint");
     assert_close(off.x, 0.0, "center offset.x");
     assert_close(off.y, 0.0, "center offset.y");
     assert_close(size.width, 20.0, "center size.width");

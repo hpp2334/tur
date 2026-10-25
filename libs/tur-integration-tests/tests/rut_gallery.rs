@@ -31,9 +31,18 @@ fn gallery_grid_stays_mounted_across_chip_rekeys() {
         app.query_element(&["gallery", "grid"]).is_some(),
         "the grid mounts at boot"
     );
-    assert_eq!(app.query_text(&["gallery", "subtitle"]).as_deref(), Some("tile #0"));
-    assert_eq!(app.query_text(&["gallery", "aspect-label"]).as_deref(), Some("1:1"));
-    assert_eq!(app.query_text(&["gallery", "extent"]).as_deref(), Some("maxExtent 150"));
+    assert_eq!(
+        app.query_text(&["gallery", "subtitle"]).as_deref(),
+        Some("tile #0")
+    );
+    assert_eq!(
+        app.query_text(&["gallery", "aspect-label"]).as_deref(),
+        Some("1:1")
+    );
+    assert_eq!(
+        app.query_text(&["gallery", "extent"]).as_deref(),
+        Some("maxExtent 150")
+    );
 
     // An aspect re-key rebuilds the grid (the fresh 16:9 case) without a
     // gap — the subtree must never drop.
@@ -68,7 +77,10 @@ fn gallery_grid_stays_mounted_across_chip_rekeys() {
         app.query_element(&["gallery", "grid"]).is_some(),
         "the grid survives the round-trip"
     );
-    assert_eq!(app.query_text(&["gallery", "extent"]).as_deref(), Some("maxExtent 150"));
+    assert_eq!(
+        app.query_text(&["gallery", "extent"]).as_deref(),
+        Some("maxExtent 150")
+    );
 
     // A TILE TAP selects the tapped tile (the audit's gallery journey):
     // tap tile 4 (row 1, col 1 of the 3-col 1:1 grid) — the subtitle's

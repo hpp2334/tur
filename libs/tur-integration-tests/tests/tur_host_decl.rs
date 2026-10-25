@@ -65,9 +65,7 @@ fn standard_capabilities() -> Capabilities {
     let caps = Capabilities::new();
     caps.insert(tur_engine::Clipboard::new(RecordingClipboard::new()));
     caps.insert(tur_net_capability::Http::new(RecordingHttp::new()));
-    caps.insert(
-        tur_engine::Fonts::new(RecordingFontProvider),
-    );
+    caps.insert(tur_engine::Fonts::new(RecordingFontProvider));
     caps
 }
 

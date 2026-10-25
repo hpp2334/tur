@@ -181,9 +181,8 @@ fn json_free_root_uses(extra: &str) -> String {
 }
 
 fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) -> (Vec<u8>, u64) {
-    let exts =
-        probe_register_rut_pkg_exts(plugins, caps, (400.0, 600.0))
-            .expect("the session's register probe");
+    let exts = probe_register_rut_pkg_exts(plugins, caps, (400.0, 600.0))
+        .expect("the session's register probe");
     let offered = RutRuntime::offered_pkgs(&exts);
     let fp = RutRuntime::offered_fingerprint(&offered);
 
@@ -214,9 +213,7 @@ fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) ->
     fs::create_dir_all(root.join("src")).expect("root dir");
     fs::write(
         root.join("src/mod.rut"),
-        format!(
-            "// staged root — the offered set's pack root\n{root_uses}"
-        ),
+        format!("// staged root — the offered set's pack root\n{root_uses}"),
     )
     .expect("root module");
     let mut deps = String::new();

@@ -19,7 +19,10 @@
 //!
 //! The module fixture logs deliveries into a bound Text (the `bus/log`
 //! query key — the same probe rail the corpus cases use); the host side
-//! collects received bytes into a shared vec.
+//! collects received bytes into a shared vec. The suite is THREE journeys
+//! (one app each — a fresh app compiles the fixture, ~1.7s a ride; the
+//! CI test budget is tight) covering the same ground the eight-test shape
+//! did: the assertions below are the union.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -28,10 +31,10 @@ use tur_engine::builtin_plugins::text::elements::TextElement;
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
-// The event-bus fixture — the six rails under test. Handlers log `cN`
-// markers into one bound Text; channel 7 also forwards every payload back
-// to the host on channel 9 (the round-trip rail). Channel 12 binds only
-// when the embedder calls the `late_bind` entry.
+/// The bus fixture module — the rails under test. Handlers log `cN`
+/// markers into one bound Text; channel 7 also forwards every payload back
+/// to the host on channel 9 (the round-trip rail). Channel 12 binds only
+/// when the embedder calls the `late_bind` entry.
 const FIXTURE: &str = r#"
 use tur_event_kit::{ event_on, event_send };
 use tur_kit::handles::{ mount };
@@ -89,11 +92,9 @@ entry fn late_bind(cx: opaque, _n: u64) {
 }
 "#;
 
-fn bus_app() -> (
-    TurTestApp,
-    tur_engine::core::event_bus::EventBusHandle,
-    u64,
-) {
+type Received = Arc<Mutex<Vec<(u64, Vec<u8>)>>>;
+
+fn bus_app() -> (TurTestApp, tur_engine::core::event_bus::EventBusHandle, u64) {
     let app = TurTestApp::new(300.0, 200.0).unwrap();
     app.load_rut_module(FIXTURE).unwrap();
     // Boot: register the handlers + mount the tree (the context token is
@@ -120,123 +121,76 @@ fn bus_log(app: &TurTestApp) -> String {
     .unwrap_or_default()
 }
 
-// ===========================================================================
-// Host → module
-// ===========================================================================
-
 #[test]
-fn host_emits_bytes_module_handler_logs() {
+fn host_to_module_deliveries_isolation_and_silent_drop() {
     let (app, bus, _cx) = bus_app();
+
+    // Single + multiple: every queued message delivers, in order.
     bus.emit_to_module(7, b"ping".to_vec());
-    app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(bus_log(&app), "c7 ", "the channel-7 handler logs the delivery");
-}
-
-#[test]
-fn host_emits_multiple_messages_module_collects_all() {
-    let (app, bus, _cx) = bus_app();
-    bus.emit_to_module(7, b"one".to_vec());
     bus.emit_to_module(7, b"two".to_vec());
     bus.emit_to_module(7, b"three".to_vec());
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         bus_log(&app),
         "c7 c7 c7 ",
-        "every queued message delivers, in order"
+        "single + multiple deliver in order"
     );
-}
 
-// ===========================================================================
-// Channel isolation + silent drop
-// ===========================================================================
-
-#[test]
-fn channel_isolation_message_only_fires_its_channel() {
-    let (app, bus, _cx) = bus_app();
+    // Channel isolation: a message on N never fires handlers on other
+    // channels.
     bus.emit_to_module(8, b"for-eight".to_vec());
     bus.emit_to_module(7, b"for-seven".to_vec());
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         bus_log(&app),
-        "c8 c7 ",
-        "a message on channel N never fires handlers on other channels"
+        "c7 c7 c7 c8 c7 ",
+        "isolation: c8 fires only c8"
     );
-}
 
-#[test]
-fn silent_drop_on_handlerless_channel_then_delivery_still_works() {
-    let (app, bus, _cx) = bus_app();
+    // Silent drop: a handler-less channel drops quietly and doesn't
+    // disturb the others.
     bus.emit_to_module(99, b"nobody-home".to_vec());
-    bus.emit_to_module(7, b"after".to_vec());
     app.wait_for_timeout(Duration::ZERO);
     assert_eq!(
         bus_log(&app),
-        "c7 ",
-        "the handler-less drop is silent and doesn't disturb other channels"
+        "c7 c7 c7 c8 c7 ",
+        "the handler-less drop is silent"
     );
 }
 
-// ===========================================================================
-// Module → host (the round-trip rail: channel 7 forwards to channel 9)
-// ===========================================================================
-
 #[test]
-fn module_sends_bytes_host_handler_receives() {
+fn module_to_host_round_trip_and_host_handler_isolation() {
     let (app, bus, _cx) = bus_app();
-    let received: Arc<Mutex<Vec<(u64, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
-    let received2 = received.clone();
+    let received: Received = Arc::new(Mutex::new(Vec::new()));
+    let received9 = received.clone();
     bus.on_bus_event(9, move |bytes| {
-        received2.lock().unwrap().push((9, bytes));
+        received9.lock().unwrap().push((9, bytes));
     });
-
-    let payload = b"round-trip-payload".to_vec();
-    bus.emit_to_module(7, payload.clone());
-    app.wait_for_timeout(Duration::ZERO);
-
-    let got = received.lock().unwrap().clone();
-    assert_eq!(got, vec![(9, payload)], "the payload round-trips unchanged");
-}
-
-#[test]
-fn module_to_host_multiple_messages_and_channel_isolation() {
-    let (app, bus, _cx) = bus_app();
-    let received: Arc<Mutex<Vec<(u64, Vec<u8>)>>> = Arc::new(Mutex::new(Vec::new()));
-    let received2 = received.clone();
-    bus.on_bus_event(9, move |bytes| {
-        received2.lock().unwrap().push((9, bytes));
-    });
-
-    bus.emit_to_module(7, b"a".to_vec());
-    bus.emit_to_module(8, b"not-forwarded".to_vec()); // channel 8 doesn't forward
-    bus.emit_to_module(7, b"b".to_vec());
-    app.wait_for_timeout(Duration::ZERO);
-
-    let got = received.lock().unwrap().clone();
-    assert_eq!(
-        got,
-        vec![(9, b"a".to_vec()), (9, b"b".to_vec())],
-        "only channel-7 payloads forward, in order"
-    );
-    assert_eq!(bus_log(&app), "c7 c8 c7 ", "the log rail saw all three");
-}
-
-// ===========================================================================
-// Host-side channel isolation + late registration
-// ===========================================================================
-
-#[test]
-fn host_handler_isolation_module_send_only_fires_its_channel() {
-    let (app, bus, _cx) = bus_app();
     let hits: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::new()));
     let hits9 = hits.clone();
     bus.on_bus_event(9, move |_| hits9.lock().unwrap().push(9));
     let hits10 = hits.clone();
     bus.on_bus_event(10, move |_| hits10.lock().unwrap().push(10));
 
-    bus.emit_to_module(7, b"x".to_vec()); // forwards to 9 only
+    // Two forwards (channel 7) with a non-forwarding message between
+    // (channel 8 — the module doesn't forward it; and no host handler on
+    // any channel 8 handler rail fires).
+    bus.emit_to_module(7, b"a".to_vec());
+    bus.emit_to_module(8, b"not-forwarded".to_vec());
+    bus.emit_to_module(7, b"round-trip-payload".to_vec());
     app.wait_for_timeout(Duration::ZERO);
 
-    assert_eq!(*hits.lock().unwrap(), vec![9], "channel 10's host handler never fires");
+    assert_eq!(
+        received.lock().unwrap().clone(),
+        vec![(9, b"a".to_vec()), (9, b"round-trip-payload".to_vec())],
+        "byte fidelity: payloads round-trip host→module→host unchanged, in order"
+    );
+    assert_eq!(
+        *hits.lock().unwrap(),
+        vec![9, 9],
+        "host handlers: channel isolation"
+    );
+    assert_eq!(bus_log(&app), "c7 c8 c7 ", "the log rail saw all three");
 }
 
 #[test]

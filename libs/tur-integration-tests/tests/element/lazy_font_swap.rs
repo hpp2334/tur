@@ -45,9 +45,7 @@ entry fn load(_cx: opaque) {
 
 /// Natural width of the query-keyed label element.
 fn label_width(app: &TurTestApp) -> f64 {
-    let id = app
-        .query_element(&["label"])
-        .expect("the lazy-font label");
+    let id = app.query_element(&["label"]).expect("the lazy-font label");
     let b = app
         .get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
         .unwrap();

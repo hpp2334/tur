@@ -73,7 +73,9 @@ fn shape(
     let mut layout_cx = LayoutContext::<[u8; 4]>::new();
     let mut builder = layout_cx.ranged_builder(mgr.font_context(), text, 1.0, false);
     builder.push_default(StyleProperty::FontSize(11.0));
-    builder.push_default(StyleProperty::FontFamily(resolve_font_stack(family, fallback)));
+    builder.push_default(StyleProperty::FontFamily(resolve_font_stack(
+        family, fallback,
+    )));
     let mut layout = builder.build(text);
     layout.break_all_lines(None);
 

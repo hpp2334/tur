@@ -25,7 +25,12 @@ fn text_at(app: &TurTestApp, key: &'static str) -> String {
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()

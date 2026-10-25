@@ -99,4 +99,3 @@ fn caret_into_view_scrolls_to_caret() {
         "viewport should be near the top after returning the caret to line 0 (got {after_up})",
     );
 }
-

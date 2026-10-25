@@ -20,7 +20,12 @@ fn rut_text_of(app: &TurTestApp) -> String {
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -31,7 +36,12 @@ fn rut_text_at(app: &TurTestApp, key: &'static str) -> String {
     let id = tur_engine::core::element::ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<tur_engine::builtin_plugins::text::TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -81,7 +91,11 @@ fn a_click_mutation_writes_and_the_derived_label_repaints() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_rut_module(COUNTER_RUT).unwrap();
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_text_of(&app), "0 clicks", "the derive rendered initially");
+    assert_eq!(
+        rut_text_of(&app),
+        "0 clicks",
+        "the derive rendered initially"
+    );
 
     let (px, py) = element_center(&app, "pad");
     for n in 1..=3u64 {
@@ -168,7 +182,10 @@ fn b_mutations_drain_queued_in_order_and_the_watch_observes_the_write() {
     let down = transcript[base..].find("|down").expect("down landed") + base;
     let up = transcript[base..].find("|up").expect("up landed") + base;
     let click = transcript[base..].find("|click").expect("click landed") + base;
-    assert!(down < up && up < click, "enqueue order preserved: {transcript}");
+    assert!(
+        down < up && up < click,
+        "enqueue order preserved: {transcript}"
+    );
     assert!(
         transcript[click..].contains("|w"),
         "the store-write observer fired after the click's write: {transcript}"
@@ -250,9 +267,22 @@ fn d_ctx_run_composes_and_return_values_flow() {
         }
         app.wait_for_timeout(Duration::from_millis(25));
     };
-    assert!(settled, "the composition settled: out={:?} log={:?}", rut_text_of(&app), rut_text_at(&app, "log"));
-    assert_eq!(rut_text_of(&app), "r=22", "the arg crossed and the target's effect landed");
-    assert_eq!(rut_text_at(&app, "log"), "|marked", "the nil-arg composition ran");
+    assert!(
+        settled,
+        "the composition settled: out={:?} log={:?}",
+        rut_text_of(&app),
+        rut_text_at(&app, "log")
+    );
+    assert_eq!(
+        rut_text_of(&app),
+        "r=22",
+        "the arg crossed and the target's effect landed"
+    );
+    assert_eq!(
+        rut_text_at(&app, "log"),
+        "|marked",
+        "the nil-arg composition ran"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -323,12 +353,20 @@ fn e_ctx_reads_reach_sources_and_derives() {
     let (px, py) = element_center(&app, "pad");
     app.click(px, py);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_text_of(&app), "expanded=false", "the negated read landed");
+    assert_eq!(
+        rut_text_of(&app),
+        "expanded=false",
+        "the negated read landed"
+    );
 
     let (sx, sy) = element_center(&app, "snap");
     app.click(sx, sy);
     app.wait_for_timeout(Duration::ZERO);
-    assert_eq!(rut_text_at(&app, "readback"), "n=3", "the derive read inside the mutation matched");
+    assert_eq!(
+        rut_text_at(&app, "readback"),
+        "n=3",
+        "the derive read inside the mutation matched"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +454,10 @@ fn f_drag_mutations_receive_typed_pointer_events() {
             && transcript.contains(&format!(",{}", origin.1 as u64)),
         "the move's global-minus-local landed the pad origin: {transcript}"
     );
-    assert!(transcript.contains("|ul"), "the up's button decodes primary: {transcript}");
+    assert!(
+        transcript.contains("|ul"),
+        "the up's button decodes primary: {transcript}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +493,10 @@ fn g_clicks_never_remount_the_tree() {
         app.wait_for_timeout(Duration::ZERO);
     }
     let after = snapshot(&app);
-    assert_eq!(before, after, "the mutation passes repainted in place — no remounts");
+    assert_eq!(
+        before, after,
+        "the mutation passes repainted in place — no remounts"
+    );
     assert_eq!(rut_text_of(&app), "3 clicks", "the writes landed");
 }
 
@@ -651,7 +695,10 @@ fn mutation_site_clipboard_launch_round_trips() {
             None => {}
         }
         if std::time::Instant::now() > deadline {
-            panic!("the mutation-site clipboard write never landed: {:?}", label_of(&app));
+            panic!(
+                "the mutation-site clipboard write never landed: {:?}",
+                label_of(&app)
+            );
         }
         app.wait_for_timeout(std::time::Duration::from_millis(25));
     };

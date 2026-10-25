@@ -417,7 +417,8 @@ fn placeholder_bound_swaps_through_the_live_atom() {
 
     // The placeholder atom swap must re-resolve the input cleanly (no
     // trap, no stale subtree) and leave the value intact.
-    app.call_rut_entry_cx("probe_hint", app.rut_start_answer()).unwrap();
+    app.call_rut_entry_cx("probe_hint", app.rut_start_answer())
+        .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_value(&app, id),

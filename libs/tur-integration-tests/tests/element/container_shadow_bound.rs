@@ -121,8 +121,7 @@ fn shadow_atom_writes_repaint_without_remount() {
 
     let cx = app.rut_start_answer();
     app.call_rut_entry_cx("retint", cx).unwrap();
-    app.call_rut_entry_cx("resteepen", cx)
-        .unwrap(); // the dy channel mints third
+    app.call_rut_entry_cx("resteepen", cx).unwrap(); // the dy channel mints third
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // The SAME element id — a rebuild would have minted a new one.

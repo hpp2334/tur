@@ -95,12 +95,7 @@ impl Renderer for OpsRenderer {
 
 fn attach_capturing(app: &TurTestApp, w: u32, h: u32) -> Rc<RefCell<Vec<CanvasOp>>> {
     let ops = Rc::new(RefCell::new(Vec::new()));
-    app.attach_renderer(
-        Box::new(OpsRenderer { ops: ops.clone() }),
-        w,
-        h,
-        1.0,
-    );
+    app.attach_renderer(Box::new(OpsRenderer { ops: ops.clone() }), w, h, 1.0);
     ops
 }
 

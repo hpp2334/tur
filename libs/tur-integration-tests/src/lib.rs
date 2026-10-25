@@ -51,7 +51,9 @@ use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::core::shell::{Cursor, ShellEvent, TextInputState};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::{Clipboard, ClipboardBackend, FontDataProvider, Fonts, TurClipboardPlugin, TurFontPlugin};
+use tur_engine::{
+    Clipboard, ClipboardBackend, FontDataProvider, Fonts, TurClipboardPlugin, TurFontPlugin,
+};
 use tur_engine::{TurApp, TurRuntime};
 use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
@@ -181,10 +183,7 @@ impl RecordingFontProvider {
     /// Pre-canned bytes for a family (an unknown family fails the load —
     /// the row completes `false`).
     pub fn set_face(&self, family: &str, bytes: Vec<u8>) {
-        self.faces
-            .lock()
-            .unwrap()
-            .insert(family.to_string(), bytes);
+        self.faces.lock().unwrap().insert(family.to_string(), bytes);
     }
 }
 
@@ -192,17 +191,11 @@ impl FontDataProvider for RecordingFontProvider {
     fn load(
         &self,
         meta: &tur_engine::core::fonts::FontFaceMeta,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, TurError>> + '_>>
-    {
-        let bytes = self
-            .faces
-            .lock()
-            .unwrap()
-            .get(&meta.family)
-            .cloned();
-        Box::pin(std::future::ready(
-            bytes.ok_or_else(|| TurError::Other(format!("no canned face for {}", meta.family))),
-        ))
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, TurError>> + '_>> {
+        let bytes = self.faces.lock().unwrap().get(&meta.family).cloned();
+        Box::pin(std::future::ready(bytes.ok_or_else(|| {
+            TurError::Other(format!("no canned face for {}", meta.family))
+        })))
     }
 }
 
@@ -743,11 +736,9 @@ impl TurTestApp {
                 include_bytes!("../assets/std_kit.rutbundle"),
                 std_fp,
             );
-            let browser_fp = u64::from_str_radix(
-                include_str!("../assets/browser_kit.fingerprint").trim(),
-                16,
-            )
-            .expect("the browser kit fingerprint hex");
+            let browser_fp =
+                u64::from_str_radix(include_str!("../assets/browser_kit.fingerprint").trim(), 16)
+                    .expect("the browser kit fingerprint hex");
             let _ = tur_engine::core::rut_runtime::set_precompiled_kit(
                 include_bytes!("../assets/browser_kit.rutbundle"),
                 browser_fp,

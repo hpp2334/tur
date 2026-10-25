@@ -66,9 +66,7 @@ fn second_touch_drag_after_release_still_registers() {
     // After the second drag the deltas should be non-zero (the second drag's
     // moves registered). drag-delta-tracking exposes deltas via its bound
     // `drag-info` Text.
-    let s = app
-        .query_text(&["drag-info"])
-        .unwrap_or_default();
+    let s = app.query_text(&["drag-info"]).unwrap_or_default();
     let parts: Vec<f64> = s
         .split(',')
         .map(|p| p.trim().parse().unwrap_or(9999.0))

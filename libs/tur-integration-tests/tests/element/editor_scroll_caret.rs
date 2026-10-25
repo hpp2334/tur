@@ -405,8 +405,8 @@ use tur_engine::core::element::NodeId;
 use tur_engine::core::frame_env::FrameEnv;
 use tur_engine::core::image_resource::{ImageManager, ImageResourceId};
 use tur_engine::core::layout::{Geometry, Offset, Size};
-use tur_engine::core::render::brush::{Brush, Color};
 use tur_engine::core::render::Canvas;
+use tur_engine::core::render::brush::{Brush, Color};
 use tur_engine::core::text::text_layout::TextLayoutData;
 use vello_common::kurbo::Affine;
 
@@ -480,8 +480,7 @@ enum PaintOp {
     Other,
 }
 
-#[derive(Default)]
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct ClipRecorder {
     ops: Vec<PaintOp>,
 }
@@ -498,15 +497,7 @@ impl Canvas for ClipRecorder {
         self.ops.push(PaintOp::FillText);
     }
     fn draw_image(&mut self, _r: ImageResourceId, _n: Size, _t: Affine) {}
-    fn draw_shadow(
-        &mut self,
-        _o: Offset,
-        _s: Size,
-        _c: &Color,
-        _r: f64,
-        _b: f64,
-        _so: (f64, f64),
-    ) {
+    fn draw_shadow(&mut self, _o: Offset, _s: Size, _c: &Color, _r: f64, _b: f64, _so: (f64, f64)) {
     }
     fn push_clip(&mut self, o: Offset, s: Size) {
         self.ops.push(PaintOp::PushClip {
@@ -569,7 +560,10 @@ fn scrolled_paint_is_clipped_to_the_editor_bounds() {
     app.wheel(0.0, 200.0, 100.0, 30.0);
     app.wait_for_timeout(ZERO);
     let scrolled = scroll_of(&app, ed);
-    assert!(scrolled > 50.0, "fixture precondition: scrolled, got {scrolled}");
+    assert!(
+        scrolled > 50.0,
+        "fixture precondition: scrolled, got {scrolled}"
+    );
 
     let seg = editable_paint_ops(&app, ed);
     let fill = seg

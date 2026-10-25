@@ -67,7 +67,10 @@ fn shape(mgr: &mut FontManager, family: Option<&str>, text: &str) -> Vec<(char, 
         .map(|(offset, ch)| {
             let cluster = parley::Cluster::from_byte_index(&layout, offset)
                 .unwrap_or_else(|| panic!("no cluster for {ch:?}"));
-            let g = cluster.glyphs().next().unwrap_or_else(|| panic!("no glyph for {ch:?}"));
+            let g = cluster
+                .glyphs()
+                .next()
+                .unwrap_or_else(|| panic!("no glyph for {ch:?}"));
             (ch, g.id, g.advance)
         })
         .collect()
@@ -93,7 +96,10 @@ fn declared_face_shapes_on_fallback_until_loaded() {
     let (mut mgr, rail) = harness();
     rail.declare(mono_meta("Tur Custom"));
     let shaped = shape(&mut mgr, Some("Tur Custom"), "AI");
-    assert!(shaped.iter().all(|&(_, gid, _)| gid != 0), "non-tofu via the default tail");
+    assert!(
+        shaped.iter().all(|&(_, gid, _)| gid != 0),
+        "non-tofu via the default tail"
+    );
     let a = shaped[0].2;
     let b = shaped[1].2;
     assert!(
@@ -113,7 +119,10 @@ fn finish_load_registers_under_the_declared_name() {
     let mono: &[u8] = include_bytes!("../../../tur-wasm/fonts/RobotoMono-VF.ttf");
     assert!(rail.finish_load(&meta, mono), "the load registers");
     let shaped = shape(&mut mgr, Some("Tur Custom"), "AIl1.");
-    assert!(shaped.iter().all(|&(_, gid, _)| gid != 0), "non-tofu after load");
+    assert!(
+        shaped.iter().all(|&(_, gid, _)| gid != 0),
+        "non-tofu after load"
+    );
     let adv: Vec<f32> = shaped.iter().map(|&(_, _, a)| a).collect();
     assert!(
         adv.iter().all(|a| advances_eq(*a, adv[0])),
@@ -206,7 +215,11 @@ fn overridden_faces_are_distinct_declarations() {
         overridden_style: None,
         overridden_width: None,
     });
-    assert_eq!(rail.declared_faces("Inter").len(), 2, "default + bold faces");
+    assert_eq!(
+        rail.declared_faces("Inter").len(),
+        2,
+        "default + bold faces"
+    );
 
     let mono: &[u8] = include_bytes!("../../../tur-wasm/fonts/RobotoMono-VF.ttf");
     let faces = rail.begin_load("Inter");
@@ -217,5 +230,8 @@ fn overridden_faces_are_distinct_declarations() {
     // A bold request still resolves the family (the renamed face carries
     // overridden_weight 700; fontique matches nearest).
     let shaped = shape(&mut mgr, Some("Inter"), "AI");
-    assert!(shaped.iter().all(|&(_, gid, _)| gid != 0), "bold request non-tofu");
+    assert!(
+        shaped.iter().all(|&(_, gid, _)| gid != 0),
+        "bold request non-tofu"
+    );
 }

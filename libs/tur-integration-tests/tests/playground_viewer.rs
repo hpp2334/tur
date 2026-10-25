@@ -1452,9 +1452,18 @@ fn playground_mobile_boots_to_the_tab_bar_shell() {
 
     // No desktop chrome on mobile: no sidebar, no divider bands, no
     // Split/Edit/View cluster.
-    assert!(app.query_element(&["sidebar"]).is_none(), "no desktop sidebar");
-    assert!(app.query_element(&["divider"]).is_none(), "no desktop divider");
-    assert!(app.query_element(&["divider2"]).is_none(), "no editor divider");
+    assert!(
+        app.query_element(&["sidebar"]).is_none(),
+        "no desktop sidebar"
+    );
+    assert!(
+        app.query_element(&["divider"]).is_none(),
+        "no desktop divider"
+    );
+    assert!(
+        app.query_element(&["divider2"]).is_none(),
+        "no editor divider"
+    );
     assert!(
         app.query_element(&["tab-split"]).is_none(),
         "the layout tabs hide on mobile"
