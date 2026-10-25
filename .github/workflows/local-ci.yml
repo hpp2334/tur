@@ -6,7 +6,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTC_WRAPPER: sccache
-  SCCACHE_CACHE_SIZE: 2G
+  # 2G thrashed once the deps built at -O1 (`[profile.dev.package."*"]
+  # opt-level = 1` — the test-budget fix): every run evicted the entries
+  # it was about to need and recompiled the dep tree cold. 10G holds the
+  # full dep tree; disk has hundreds of GB.
+  SCCACHE_CACHE_SIZE: 10G
 
 jobs:
   ci:

@@ -1,8 +1,11 @@
 // schema — the GitHub API's payload records over rut's std json
-// (`use json::{ decodeJson }` — the engine offers the std pkg to
-// modules): one decode per payload, the structural-satisfaction law
-// (each record spells its own `decode` member on its inherent impl),
-// and the (?T, ?E) pair law absorbed into friendly answers.
+// (`use json::{ … }` — the engine offers the std pkg to modules, LINKED
+// in the precompiled kit bundle): one decode per payload, the
+// structural-satisfaction law (each record spells its own `decode`
+// member on its inherent impl), and the (?T, ?E) pair law absorbed into
+// friendly answers. Consumer-typed instantiation rides the LOCAL SHIM
+// (`decode_str<T>` — the upstream CLI example's pattern; the pkg entry
+// `decodeJson<T>` is owner-anchored and unseedable from a packed unit).
 //
 // `parse_repo` keeps the case's degradation story: a 404 / rate-limit
 // payload answers `full_name == nil` with `message` carried (the error
@@ -17,9 +20,34 @@
 // is the encode direction — this case never encodes, so the reader
 // loop keeps the recursive shape in one spelled place.
 
-use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader, decodeJson };
+use json::{ DecodeErrorKind, DecodeJsonError, JsonDeserialize, JsonReader };
 use pouch::{ Vec };
 use tur_kit::handles::{ ListHandle };
+
+// The local decode shim — the upstream CLI example's pattern. json rides
+// the precompiled kit bundle LINKED, and its generic-fn bodies are
+// owner-anchored (sealed at json's pack time — a consumer-typed
+// `decodeJson<RepoPayload>` instantiation there refuses: "no surface
+// carries that member"). A LOCAL generic fn monomorphizes in THIS unit;
+// `T::decode(r)` dispatches the record's own decode member. The body is
+// the pkg entry's reader-route tail spelled verbatim.
+fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
+    let mut r = JsonReader::of(s);
+    let (v, e) = T::decode(r);
+    if (e != nil) { return (nil, e); }
+    if (!r.at_end()) {
+        // trailing garbage after the value + whitespace
+        let at = r.here();
+        let got = r.rest();
+        return (nil, DecodeJsonError {
+            kind: DecodeErrorKind::Trailing,
+            at: at as i64,
+            got: got,
+            expected: "end of input",
+        });
+    }
+    return (v, nil);
+}
 
 // The repo-meta payload. Every field optional-absorbent: `full_name`
 // present is the success marker; `description` / `language` may be
@@ -222,11 +250,11 @@ fn decode_rows<T requires JsonDeserialize>(mut r: JsonReader) -> (?Vec<T>, ?Deco
 // The repo-meta entry: decode; on refusal try the error envelope; a
 // malformed body answers all-nil (the generic banner).
 pub fn decode_repo_meta(text: str) -> RepoPayload {
-    let (p, e) = decodeJson<RepoPayload>(text);
+    let (p, e) = decode_str<RepoPayload>(text);
     if (e == nil) {
         return p;
     }
-    let (q, e2) = decodeJson<ApiError>(text);
+    let (q, e2) = decode_str<ApiError>(text);
     if (e2 == nil) {
         return RepoPayload {
             full_name: nil,

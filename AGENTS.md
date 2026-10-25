@@ -506,18 +506,23 @@ Android build + device debugging live in the **`android-dev` skill** at
   lane the std packages publish through. tur consumes the std `json`
   pkg from it: vendored sources (`builtin_plugins/std_json/vendor/`)
   offered to modules by `TurStdPlugin` (dep closure strbuild/pouch/
-  nmapset + the strbuild_host/nmap_host bodies from `rut-std`), and
-  github-viewer's `schema.rut` decodes the GitHub API through
-  `decodeJson<T>` (structural `decode` members on the record's own
-  impl). ONE LAW discovered the hard way: **a packed (linked-compiled)
-  std pkg takes NO consumer-typed instantiation** — `decodeJson<AppRec>`
-  instantiates in JSON'S unit, and a packed unit refuses it ("template
-  calls `AppRec.decode`, but no surface carries that member — corrupt
-  or doctored"). The precompiled kit lane therefore stages json as an
-  UNLINKED source group (see `json_free_root_uses` in the kit_bundle
-  test); never add a `use json::…` line to the pack root. The upstream
-  CLI example's local-shim pattern (`T::decode(r)` in a consumer-side
-  generic fn) is the escape hatch when a pkg MUST ride linked.
+  nmapset + the strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
+  discovered the hard way: **a packed (linked-compiled) std pkg takes NO
+  consumer-typed instantiation** — json's generic bodies are
+  owner-anchored (sealed at its pack time), so a consumer's direct
+  `decodeJson<AppRec>` call refuses ("template calls `AppRec.decode`,
+  but no surface carries that member — corrupt or doctored"). Consumer
+  code therefore instantiates through the **LOCAL SHIM** (the upstream
+  CLI example's pattern): a consumer-side generic fn over `T::decode`
+  (`decode_str<T>` in github-viewer's schema.rut, spelled after
+  `decodeJson`'s reader-route tail) — it monomorphizes in the
+  CONSUMER'S unit, where the instantiation is legal. json stays an
+  UNLINKED source group (an attempt to link it — the pack root binding
+  `json::JsonReader` — passed the single-file fixtures but SEGV'd the
+  seven-file github-viewer case in the VM's h_call; the pack boundary ×
+  multi-file consumer interaction is upstream territory). The CI test
+  budget is instead held by the profile: deps build at -O1 (see the
+  `[profile.dev.package."*"]` note in Cargo.toml).
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
   single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
   head — a second (`use tur_anim_kit::…` in the root, even UNUSED)

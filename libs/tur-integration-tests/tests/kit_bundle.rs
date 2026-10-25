@@ -171,7 +171,14 @@ fn stage_pkg(root: &Path, pkg: &Mounted, extra_root_file: Option<(&str, &str)>) 
 /// in JSON'S unit, and a packed unit takes no post-pack instantiation
 /// ("no surface carries that member — corrupt or doctored"). json rides
 /// the bundle as an unlinked SOURCE group; the load lane compiles it
-/// per session, where consumer instantiations are legal.
+/// per session, where consumer instantiations are legal. Consumer typed
+/// decodes spell the LOCAL SHIM (a consumer-side generic fn over
+/// `T::decode` — schema.rut's `decode_str`; the upstream CLI example's
+/// pattern) — legal either way, and the spelling to keep when json
+/// eventually rides linked. (An attempt to link json — the root binding
+/// `json::JsonReader` — passed the single-file fixture tests but SEGV'd
+/// the seven-file github-viewer case in the VM's h_call; the pack
+/// boundary × multi-file consumer interaction is upstream territory.)
 fn json_free_root_uses(extra: &str) -> String {
     format!(
         "use tur_kit::handles::{{ mount }};\n\

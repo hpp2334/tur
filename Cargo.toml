@@ -119,8 +119,16 @@ winit = "0.30"
 # Deps almost never need variable-level debuginfo in dev builds; keep only
 # line tables (backtraces stay useful) to cut target/ size roughly in half.
 # Workspace crates keep full debuginfo from the default dev profile.
+# Deps also build at -O1: the test suite is dominated by the rut VM
+# (a tree-walking interpreter — every case/kit compile in every fixture
+# rides it) and parley's text shaping, both DEPENDENCIES. Debug-speed
+# interpretation made the CI Cargo-test budget the binding constraint;
+# -O1 on deps runs the suite ~2x faster while tur-* crates (the code
+# being iterated on) stay fast to build with full debuginfo. The test
+# profile inherits this override (`cargo nextest run` = test profile).
 [profile.dev.package."*"]
 debug = "line-tables-only"
+opt-level = 1
 
 [profile.wasm-dev]
 inherits = "dev"
