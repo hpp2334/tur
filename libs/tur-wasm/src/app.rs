@@ -166,53 +166,100 @@ impl tur_engine::Shell for WasmShell {
     }
 }
 
-/// Measure the canvas (full-viewport mode) or its container, read the live
+/// Measure the resize ANCHOR's content box, read the live
 /// `devicePixelRatio`, and forward a resize to the engine when the viewport
-/// triple actually changed. Shared by the canvas `ResizeObserver` (CSS-box
+/// triple actually changed. Shared by the anchor `ResizeObserver` (CSS-box
 /// changes) and the dpr-change watcher ([`arm_dpr_watcher`] — pixel-ratio
 /// changes the RO cannot see); the dedup absorbs their overlap (the RO's
 /// initial observation, and zoom changes that fire both).
+///
+/// The anchor is the element whose box TRACKS THE WINDOW — the safe-area
+/// wrapper (full-viewport mode) or the embed container — never the canvas:
+/// the canvas's CSS box is PINNED to the last-rendered viewport (see
+/// `WebGlVelloRenderer::resize`), so between a window change and the render
+/// commit point the canvas no longer reflects the live viewport.
 ///
 /// The canvas's BACKING STORE must NOT be resized here: setting the
 /// `width`/`height` attributes resets the bitmap to transparent
 /// synchronously, which composites as a white flash until the frame laid
 /// out for the new size arrives (a worker round-trip + vsync later). The
 /// engine stamps the new viewport onto that frame's render batch, and the
-/// host swaps the backing store at the render commit point — the same
-/// task as the repaint — so the old frame stays visible (CSS-stretched)
-/// meanwhile.
+/// host swaps the backing store AND the CSS pin at the render commit point
+/// — the same task as the repaint — so the old frame stays visible,
+/// UNDISTORTED (letterboxed against the page), meanwhile.
 fn sync_viewport_to_dom(
     window: &web_sys::Window,
     state: &Rc<RefCell<Option<WasmState>>>,
-    container_id: &Option<String>,
+    anchor: &web_sys::Element,
 ) {
     let guard = state.borrow();
     let Some(s) = guard.as_ref() else {
         return;
     };
     let dpr = window.device_pixel_ratio();
-    // Full-viewport mode measures the canvas (== wrapper content box =
-    // safe area), not `window.innerHeight`; container mode measures the
-    // container's box. Either way the canvas — not `window.innerWidth` —
-    // is the authoritative viewport.
-    let (logical_width, logical_height) = if let Some(id) = container_id {
-        let Some(document) = window.document() else {
-            return;
-        };
-        let Some(el) = document.get_element_by_id(id) else {
-            return;
-        };
-        let rect = el.get_bounding_client_rect();
-        (rect.width() as u32, rect.height() as u32)
-    } else {
-        let rect = s._canvas.get_bounding_client_rect();
-        (rect.width() as u32, rect.height() as u32)
-    };
+    let (logical_width, logical_height) = anchor_content_box(window, anchor);
     let next = (logical_width, logical_height, dpr);
     if s.last_resize.replace(next) == next {
         return;
     }
     s.app.resize(logical_width, logical_height, dpr);
+}
+
+/// The anchor element's CONTENT box in CSS px — the box the pinned canvas
+/// fills. The full-viewport wrapper carries `env(safe-area-inset-*)`
+/// paddings that must stay out of the engine viewport, so the padding box
+/// (`clientWidth`/`clientHeight`) is corrected by the computed paddings —
+/// the same value the ResizeObserver's `contentRect` reports for
+/// content-box observation. Read live on every call; clamped to ≥1 so a
+/// degenerate 0×0 anchor (minimized window, `display:none`) forwards a
+/// 1×1 viewport rather than a zero surface.
+fn anchor_content_box(window: &web_sys::Window, el: &web_sys::Element) -> (u32, u32) {
+    let mut width = el.client_width() as f64;
+    let mut height = el.client_height() as f64;
+    if let Ok(Some(style)) = window.get_computed_style(el) {
+        let px = |name: &str| -> f64 {
+            style
+                .get_property_value(name)
+                .ok()
+                .and_then(|v| v.trim_end_matches("px").parse::<f64>().ok())
+                .unwrap_or(0.0)
+        };
+        width -= px("padding-left") + px("padding-right");
+        height -= px("padding-top") + px("padding-bottom");
+    }
+    (width.max(1.0) as u32, height.max(1.0) as u32)
+}
+
+/// Resolve a client-space event position to canvas-local logical px, or
+/// `None` when it lands outside the canvas box.
+///
+/// The pinned CSS box means the canvas can lag the window during a
+/// resize's commit gap — smaller than the viewport (letterbox, grow) or
+/// larger (clip, shrink). Events outside the box carry no meaningful
+/// engine coordinate (the engine viewport IS the canvas box), so they are
+/// dropped rather than forwarded with negative or overflowing positions.
+/// In steady state the box exactly covers the viewport and nothing is
+/// ever dropped.
+fn canvas_local(s: &WasmState, client_x: f64, client_y: f64) -> Option<Offset> {
+    let rect = s._canvas.get_bounding_client_rect();
+    let x = client_x - rect.left();
+    let y = client_y - rect.top();
+    if !(0.0..=rect.width()).contains(&x) || !(0.0..=rect.height()).contains(&y) {
+        return None;
+    }
+    Some(Offset::new(x, y))
+}
+
+/// [`canvas_local`]'s CLAMPING twin, for gesture TERMINATIONS
+/// (`PointerUp`): a drag that started in-bounds must always be released —
+/// dropping its up would strand the engine's gesture composer in
+/// drag-capture (the lost-mouseup failure mode the mouse listeners'
+/// comment describes). An out-of-box up lands at the clamped edge instead.
+fn canvas_local_clamped(s: &WasmState, client_x: f64, client_y: f64) -> Offset {
+    let rect = s._canvas.get_bounding_client_rect();
+    let x = (client_x - rect.left()).clamp(0.0, rect.width());
+    let y = (client_y - rect.top()).clamp(0.0, rect.height());
+    Offset::new(x, y)
 }
 
 /// (Re-)arm the dpr-change watcher: a `matchMedia` query for the CURRENT
@@ -462,20 +509,20 @@ impl WasmApp {
                 .ok_or_else(|| JsValue::from_str("no body"))?
         };
 
-        if container_id.is_some() {
+        // The resize ANCHOR — the element whose box tracks the window.
+        // The `ResizeObserver` (and the dpr watcher's re-measure) read
+        // THIS box, never the canvas's: the canvas's CSS box is PINNED to
+        // the last-rendered viewport by the renderer (see
+        // `WebGlVelloRenderer::resize`), so between a window change and
+        // the render commit point it lags deliberately (the old frame
+        // shows undistorted — letterboxed/clipped — meanwhile).
+        let resize_anchor: web_sys::Element = if container_id.is_some() {
             container.append_child(&canvas).err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("width", "100%")
-                .err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("height", "100%")
-                .err_to_jsval()?;
             canvas
                 .style()
                 .set_property("display", "block")
                 .err_to_jsval()?;
+            container.clone().into()
         } else {
             // Full-viewport mode: wrap the canvas in a div that owns the
             // safe, visible viewport. The wrapper is sized in dynamic
@@ -486,6 +533,11 @@ impl WasmApp {
             // device notch / home indicator. The canvas fills the content
             // box, so the engine viewport == the non-occluded render area
             // — safe-area stays transparent to the app.
+            //
+            // `overflow: hidden` clips the canvas during a shrink's commit
+            // gap (pinned at the old, larger size — the CSS-pin law), and
+            // `display: block` keeps the canvas out of inline baseline
+            // layout.
             let wrapper = document
                 .create_element("div")
                 .err_to_jsval()?
@@ -508,17 +560,12 @@ impl WasmApp {
                 .err_to_jsval()?;
             ws.set_property("padding-left", "env(safe-area-inset-left)")
                 .err_to_jsval()?;
+            ws.set_property("overflow", "hidden").err_to_jsval()?;
             // Match the app background (#fbfcfd = tokens.bg.app) so the
-            // safe-area strip is seamless with the rendered canvas.
+            // safe-area strip is seamless with the rendered canvas — and
+            // so a grow's letterbox area (before the resized frame lands)
+            // shows the app background, not the page.
             ws.set_property("background", "#fbfcfd").err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("width", "100%")
-                .err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("height", "100%")
-                .err_to_jsval()?;
             canvas
                 .style()
                 .set_property("display", "block")
@@ -532,7 +579,8 @@ impl WasmApp {
                 .err_to_jsval()?;
             body.append_child(&wrapper).err_to_jsval()?;
             wrapper.append_child(&canvas).err_to_jsval()?;
-        }
+            wrapper.clone().into()
+        };
 
         // Claim touch gestures for the app. With `touch-action: none` the
         // browser will not pan/zoom the page on touch-drag (we translate
@@ -602,18 +650,14 @@ impl WasmApp {
             .append_child(&textarea)
             .err_to_jsval()?;
 
-        // Measure the canvas's own rendered rect (CSS px). For full-viewport
-        // mode this equals the wrapper's content box = the safe, visible
-        // area (dvh minus safe-area padding); for container mode it's the
-        // container's box. Either way the canvas — not `window.innerWidth` —
-        // is the authoritative viewport.
-        let (logical_width, logical_height) = if container_id.is_some() {
-            let rect = container.get_bounding_client_rect();
-            (rect.width() as u32, rect.height() as u32)
-        } else {
-            let rect = canvas.get_bounding_client_rect();
-            (rect.width() as u32, rect.height() as u32)
-        };
+        // Measure the anchor's content box (CSS px) — the same box the
+        // RO will measure, so the seeded `last_resize` dedups the RO's
+        // initial observation. For full-viewport mode this is the
+        // wrapper's safe-area-excluded box; for container mode the
+        // container's. Either way the anchor — not `window.innerWidth`
+        // and not the canvas (pinned by the renderer construction below)
+        // — is the authoritative viewport.
+        let (logical_width, logical_height) = anchor_content_box(&window, &resize_anchor);
         let dpr = window.device_pixel_ratio();
 
         let physical_width = (logical_width as f64 * dpr) as u32;
@@ -673,23 +717,33 @@ impl WasmApp {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         let resize_state = state_clone.clone();
-        let resize_container_id = container_id.clone();
+        let resize_anchor_for_ro = resize_anchor.clone();
         let resize_closure = Closure::<dyn Fn()>::new(move || {
             let Some(window) = web_sys::window() else {
                 return;
             };
-            sync_viewport_to_dom(&window, &resize_state, &resize_container_id);
+            sync_viewport_to_dom(&window, &resize_state, &resize_anchor_for_ro);
         });
 
-        // Observe the canvas directly. `ResizeObserver` fires whenever the
-        // canvas border-box changes — covering window resize, orientation
-        // change, *and* the mobile URL-bar slide (the wrapper's `dvh` height
-        // changes → canvas resizes). `window` "resize" alone does not fire
-        // on the URL-bar slide, so it is not used. The callback ignores its
-        // entries argument and re-measures the canvas rect.
+        // Observe the resize ANCHOR (wrapper/container), in CONTENT-BOX
+        // mode — the box the pinned canvas fills. `ResizeObserver` fires
+        // whenever that box changes — covering window resize, orientation
+        // change, *and* the mobile URL-bar slide (the wrapper's `dvh`
+        // height changes → content box resizes). `window` "resize" alone
+        // does not fire on the URL-bar slide, so it is not used. The
+        // callback ignores its entries argument and re-measures the
+        // anchor's content box. (Observing the canvas is no longer
+        // possible: its CSS box is pinned to the last-rendered viewport
+        // and no longer tracks the window.)
         let resize_observer =
             web_sys::ResizeObserver::new(resize_closure.as_ref().unchecked_ref()).err_to_jsval()?;
-        resize_observer.observe(canvas.as_ref());
+        let ro_options = web_sys::ResizeObserverOptions::new();
+        ro_options.set_box(web_sys::ResizeObserverBoxOptions::ContentBox);
+        // No fallback for browsers without the `box` option: WebIDL ignores
+        // unknown dictionary members, so they observe border-box instead
+        // (window resizes still fire; only safe-area-only changes are
+        // missed).
+        resize_observer.observe_with_options(&resize_anchor, &ro_options);
 
         // The dpr-change watcher: fires the moment `devicePixelRatio`
         // leaves the value [`arm_dpr_watcher`] armed for — pixel-ratio
@@ -697,14 +751,14 @@ impl WasmApp {
         // correction for its zoom-time stale ratio reads. Armed below,
         // once the state exists.
         let dpr_state = state_clone.clone();
-        let dpr_container_id = container_id.clone();
+        let dpr_anchor = resize_anchor.clone();
         let dpr_closure = Rc::new(Closure::<dyn Fn(web_sys::Event)>::new(move |_event| {
             let Some(window) = web_sys::window() else {
                 return;
             };
             // The ratio left the armed value — re-measure + resize with
             // the live value, then re-arm for it.
-            sync_viewport_to_dom(&window, &dpr_state, &dpr_container_id);
+            sync_viewport_to_dom(&window, &dpr_state, &dpr_anchor);
             arm_dpr_watcher(&window, &dpr_state);
         }));
 
@@ -713,9 +767,11 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let guard = pointer_down_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    let rect = s._canvas.get_bounding_client_rect();
-                    let x = event.client_x() as f64 - rect.left();
-                    let y = event.client_y() as f64 - rect.top();
+                    let Some(position) =
+                        canvas_local(s, event.client_x() as f64, event.client_y() as f64)
+                    else {
+                        return;
+                    };
                     // Normalize macOS Ctrl+click (a primary-button press with
                     // Ctrl held) to a secondary/right button so the engine's
                     // gesture arena derives a context-menu from it. Other
@@ -728,7 +784,7 @@ impl WasmApp {
                     let time_ms = event.time_stamp() as u64;
                     s.app
                         .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
-                            position: Offset::new(x, y),
+                            position,
                             button,
                             time_ms,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
@@ -759,14 +815,17 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let guard = pointer_up_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    let rect = s._canvas.get_bounding_client_rect();
-                    let x = event.client_x() as f64 - rect.left();
-                    let y = event.client_y() as f64 - rect.top();
+                    // Clamped, not dropped: a drag started in-bounds must
+                    // always be released even if the finger/mouse left the
+                    // (pinned, possibly shrunken) canvas box (see
+                    // `canvas_local_clamped`).
+                    let position =
+                        canvas_local_clamped(s, event.client_x() as f64, event.client_y() as f64);
                     let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
                     let time_ms = event.time_stamp() as u64;
                     s.app
                         .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
-                            position: Offset::new(x, y),
+                            position,
                             button,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
@@ -786,13 +845,15 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let guard = pointer_move_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    let rect = s._canvas.get_bounding_client_rect();
-                    let x = event.client_x() as f64 - rect.left();
-                    let y = event.client_y() as f64 - rect.top();
+                    let Some(position) =
+                        canvas_local(s, event.client_x() as f64, event.client_y() as f64)
+                    else {
+                        return;
+                    };
                     let time_ms = event.time_stamp() as u64;
                     s.app
                         .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
-                            position: Offset::new(x, y),
+                            position,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
                         }));
@@ -830,9 +891,12 @@ impl WasmApp {
                 let guard = wheel_state.borrow();
                 if let Some(s) = guard.as_ref() {
                     const LINE_PX: f64 = 16.0;
+                    let Some(position) =
+                        canvas_local(s, event.client_x() as f64, event.client_y() as f64)
+                    else {
+                        return;
+                    };
                     let rect = s._canvas.get_bounding_client_rect();
-                    let x = event.client_x() as f64 - rect.left();
-                    let y = event.client_y() as f64 - rect.top();
                     // DOM_DELTA_PIXEL = 0, _LINE = 1, _PAGE = 2.
                     let (delta_x, delta_y) = match event.delta_mode() {
                         web_sys::WheelEvent::DOM_DELTA_LINE => {
@@ -847,7 +911,7 @@ impl WasmApp {
                     s.app.push_platform_event(ShellEvent::Wheel {
                         delta_x,
                         delta_y,
-                        position: Offset::new(x, y),
+                        position,
                     });
                 }
             });
@@ -911,13 +975,14 @@ impl WasmApp {
                 let Some(s) = guard.as_ref() else {
                     return;
                 };
-                let rect = s._canvas.get_bounding_client_rect();
-                let x = t.client_x() as f64 - rect.left();
-                let y = t.client_y() as f64 - rect.top();
+                let Some(position) = canvas_local(s, t.client_x() as f64, t.client_y() as f64)
+                else {
+                    return;
+                };
                 let time_ms = event.time_stamp() as u64;
                 s.app
                     .push_platform_event(ShellEvent::Pointer(PointerInput::PointerDown {
-                        position: Offset::new(x, y),
+                        position,
                         button: tur_engine::core::layout::MouseButton::Left,
                         time_ms,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
@@ -942,13 +1007,14 @@ impl WasmApp {
                 let Some(s) = guard.as_ref() else {
                     return;
                 };
-                let rect = s._canvas.get_bounding_client_rect();
-                let x = t.client_x() as f64 - rect.left();
-                let y = t.client_y() as f64 - rect.top();
+                let Some(position) = canvas_local(s, t.client_x() as f64, t.client_y() as f64)
+                else {
+                    return;
+                };
                 let time_ms = event.time_stamp() as u64;
                 s.app
                     .push_platform_event(ShellEvent::Pointer(PointerInput::PointerMove {
-                        position: Offset::new(x, y),
+                        position,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
                     }));
@@ -995,13 +1061,15 @@ impl WasmApp {
                 let Some(s) = guard.as_ref() else {
                     return;
                 };
-                let rect = s._canvas.get_bounding_client_rect();
-                let x = t.client_x() as f64 - rect.left();
-                let y = t.client_y() as f64 - rect.top();
+                // Clamped, not dropped: the touch may have drifted outside
+                // the (pinned, possibly shrunken) canvas box mid-drag — its
+                // up must still release the gesture (see
+                // `canvas_local_clamped`).
+                let position = canvas_local_clamped(s, t.client_x() as f64, t.client_y() as f64);
                 let time_ms = event.time_stamp() as u64;
                 s.app
                     .push_platform_event(ShellEvent::Pointer(PointerInput::PointerUp {
-                        position: Offset::new(x, y),
+                        position,
                         button: tur_engine::core::layout::MouseButton::Left,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,

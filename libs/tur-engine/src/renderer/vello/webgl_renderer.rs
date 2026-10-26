@@ -50,7 +50,9 @@ impl WebGlVelloRenderer {
     /// Create a new WebGL renderer bound to the given canvas.
     ///
     /// The canvas's backing buffer (`width`/`height` attributes) must already
-    /// be set to the physical pixel dimensions (`logical * dpr`).
+    /// be set to the physical pixel dimensions (`logical * dpr`). The canvas's
+    /// CSS box is pinned here to the logical dimensions — the birth of the
+    /// pin law (see [`TurRenderer::resize`]).
     pub fn new(
         canvas: HtmlCanvasElement,
         logical_width: u32,
@@ -62,6 +64,15 @@ impl WebGlVelloRenderer {
 
         let renderer = WebGlRenderer::new(&canvas);
         let scene = new_scene(physical_width, physical_height);
+
+        // Pin the CSS box to the logical size: the bitmap and its CSS box
+        // must be 1:1 from the first composite on (see `resize`).
+        let _ = canvas
+            .style()
+            .set_property("width", &format!("{logical_width}px"));
+        let _ = canvas
+            .style()
+            .set_property("height", &format!("{logical_height}px"));
 
         WebGlVelloRenderer {
             renderer,
@@ -159,6 +170,26 @@ impl TurRenderer for WebGlVelloRenderer {
         // in the gap (the resize white flash).
         self.canvas.set_width(self.physical_width);
         self.canvas.set_height(self.physical_height);
+        // PIN the CSS box to the new logical size — the same task as the
+        // backing-store swap, so the browser can never composite a
+        // mismatched pair (that mismatch is the resize STRETCH: a canvas
+        // whose CSS box tracks the window while its bitmap lags a round
+        // trip behind scales the old frame to the new box — circles into
+        // ellipses, text smeared). With the pin, the bitmap and its CSS
+        // box are always 1:1: between the window change and the commit
+        // point the old frame shows UNDISTORTED — letterboxed (grow) or
+        // clipped (shrink) against the page — and the new size lands
+        // atomically with its repaint. The embedder's resize detection
+        // therefore observes the canvas's ANCHOR (wrapper/container), not
+        // the canvas: the pinned box no longer tracks the window.
+        let _ = self
+            .canvas
+            .style()
+            .set_property("width", &format!("{logical_width}px"));
+        let _ = self
+            .canvas
+            .style()
+            .set_property("height", &format!("{logical_height}px"));
         // The hybrid `Scene` is created with fixed pixel dimensions, so it must
         // be recreated on resize.
         self.scene = new_scene(self.physical_width, self.physical_height);
