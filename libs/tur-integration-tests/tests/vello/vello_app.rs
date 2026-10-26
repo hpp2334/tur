@@ -13,7 +13,7 @@ use tur_engine::core::render::brush::Color;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
-use tur_native::NativeFontLoader;
+use tur_integration_tests::HarnessFontLoader;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TurVelloError {
@@ -200,7 +200,10 @@ impl TurVelloApp {
         let runtime = TurRuntime::builder()
             .worker_spawner(driver.worker_spawner())
             .host_loop(driver.host_loop())
-            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+            // Bundled Roboto/Roboto Mono under their real names (+ system fonts) —
+            // the element harness's loader, so text fixtures resolve the SAME
+            // face on any host (the wasm site ships the same TTFs).
+            .font_loader(std::sync::Arc::new(HarnessFontLoader))
             .clock(std::sync::Arc::new(tur_engine::core::clock::StdClock))
             .worker_pool(pool.clone())
             .plugin(TurStdPlugin)
@@ -260,7 +263,14 @@ impl TurVelloApp {
             .expect("failed to resolve workspace root");
         let path = workspace_root.join("rut/cases").join(name).join("mod.rut");
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        futures::executor::block_on(self.inner.borrow().app.load_rut_module(source.as_str()))
+        self.load_source(&source)
+    }
+
+    /// [`Self::load_bundle`] over an inline source — fixtures that need
+    /// computed geometry (pixel-exact fractional offsets) rather than a
+    /// corpus file.
+    pub fn load_source(&self, source: &str) -> Result<(), TurVelloError> {
+        futures::executor::block_on(self.inner.borrow().app.load_rut_module(source))
             .map_err(TurError::from)?;
         // Drive the module's initial render to quiescence.
         self.wait_for_timeout(Duration::ZERO);
