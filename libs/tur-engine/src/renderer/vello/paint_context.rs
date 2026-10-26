@@ -270,12 +270,45 @@ impl Canvas for VelloPaintContext<'_> {
             self.scene.set_paint(PaintType::Solid(brush_color));
             self.scene.set_fill_rule(Fill::NonZero);
 
+            // Snap each line's baseline to the nearest DEVICE pixel (axis-
+            // aligned transforms only): glifo's glyph draw floors the run
+            // translation (`ty.floor()` in its atlas renderer), so a
+            // baseline on a fractional row lands up to a full pixel high —
+            // unevenly per line, since flex stacks accumulate fractional
+            // line heights. Rounding to nearest here makes the upstream
+            // floor exact (max error 0.5px, uniform) while the unhinted
+            // outlines keep their subpixel AA inside the raster. The delta
+            // is per LINE (not per glyph) so combining marks keep their
+            // shaped offsets; rotated or skewed runs keep raw positions
+            // (they skip the absorbing paths).
+            let [_, tb, tc, td, _, tf] = transform.as_coeffs();
+            let baseline_delta = if tb == 0.0 && tc == 0.0 && td != 0.0 {
+                layout
+                    .line_infos
+                    .get(run.line_index)
+                    .map(|line| {
+                        let dev = td * f64::from(line.baseline) + tf;
+                        (((dev.round() - tf) / td) as f32) - line.baseline
+                    })
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            };
+
             let scene = &mut self.scene;
             let resources = &mut self.resources;
             let builder = scene.glyph_run(resources, &run.font);
             builder
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
+                // Unhinted outlines (Flutter-style): glifo defaults to
+                // vertical-only hinting, which grid-fits cap tops and
+                // baselines to whole pixels — flat capitals render with a
+                // hard-cut top edge (the playground's "Designing" slice at
+                // dpr 100%). The absorbed transforms never satisfy the
+                // atlas cache's y-flip requirement anyway, so hinting buys
+                // nothing here; subpixel AA does.
+                .hint(false)
                 // Cache rasterized glyphs in vello's persistent `GlyphAtlas`
                 // (lives on `Resources`, survives `scene.reset()`). Steady
                 // state replaces per-frame bezier→strip flattening with a
@@ -285,7 +318,7 @@ impl Canvas for VelloPaintContext<'_> {
                 .fill_glyphs(run.glyphs.iter().map(|g| Glyph {
                     id: g.id,
                     x: g.x,
-                    y: g.y,
+                    y: g.y + baseline_delta,
                 }));
 
             if run.underline
@@ -296,7 +329,7 @@ impl Canvas for VelloPaintContext<'_> {
                     .last()
                     .map(|g| g.x + g.advance)
                     .unwrap_or(first.x + first.advance);
-                let underline_y = first.y + run.font_size * 0.15;
+                let underline_y = first.y + baseline_delta + run.font_size * 0.15;
                 self.scene.set_stroke(Stroke::new(1.0));
                 self.scene.stroke_path(
                     &Line::new(

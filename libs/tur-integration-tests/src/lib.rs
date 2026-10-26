@@ -69,7 +69,7 @@ use tur_engine::core::fonts::{FontContext, FontLoader};
 /// `font_family("Roboto Mono")` — the resolver-model fixtures' spell — must
 /// resolve identically on every host: the name is real on wasm and here,
 /// regardless of what the dev box or CI container has installed.
-struct HarnessFontLoader;
+pub struct HarnessFontLoader;
 
 impl FontLoader for HarnessFontLoader {
     fn load_preset_fonts(&self, fcx: &mut FontContext) {
