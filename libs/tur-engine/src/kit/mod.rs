@@ -53,8 +53,8 @@ const VIRTUAL_APP_RUT: &str = include_str!("../../../../rut/tur_kit/virtual_app/
 /// rides the pkg body (never a row); every declared child (the four
 /// decls-only domain roots included) is a row here, keyed by mod path.
 /// The `tur_host_decl` pin test diffs this set against the disk tree.
-pub fn tur_kit_mods() -> Vec<(&'static str, rut_ast::ast::Vis, &'static str)> {
-    use rut_ast::ast::Vis;
+pub fn tur_kit_mods() -> Vec<(&'static str, rut_ast::Vis, &'static str)> {
+    use rut_ast::Vis;
     vec![
         ("", Vis::Pub, TUR_KIT_ROOT),
         ("dispatch", Vis::Pkg, DISPATCH_RUT),
@@ -103,7 +103,6 @@ pub fn tur_kit_pkg() -> Mounted {
     }
     Mounted {
         spec: "tur_kit".to_string(),
-        namespace: Some("tur_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_kit", &["tur_host"]),
         body: MountedBody::Source {
             text: TUR_KIT_ROOT.to_string(),

@@ -3,7 +3,7 @@
 //! `buildHighlightSpans` rail, now over the upstream `rut-semantic`
 //! classifier instead of token-text classes alone).
 //!
-//! The pipeline: `rut_semantic::classify_source` (normalize → lex →
+//! The pipeline: `rut_semantic::ParsedDoc::parse` (normalize → lex →
 //! best-effort parse → token + AST name classes → comment gap scan; broken
 //! source degrades to token classes — never a wrong color) → the palette
 //! table below → the tiling fill. The legend deliberately leaves
@@ -50,23 +50,31 @@ pub struct PgSpans(pub Vec<SpanData>);
 /// Classify `src` into the colored span run the editor controller renders
 /// (text + color only; every other style inherits the element's defaults).
 /// The join of the answer's texts is the CRLF-normalized source — spans
-/// index the normalized text (`classify_source`'s contract, normalized
+/// index the normalized text (the `ParsedDoc`'s `src` contract, normalized
 /// identically here), and applying the run normalizes the editor content
 /// for free.
 pub fn highlight_spans(src: &str) -> Vec<SpanData> {
-    let norm = rut_lexer::lexer::normalize(src);
-    let classes = rut_semantic::classify_source(src, rut_parser::Mode::Impl);
+    let doc = rut_semantic::ParsedDoc::parse(rut_parser::Mode::Impl, src);
+    let norm = doc.src();
+    // The comment side table: the classifier no longer scans comment
+    // gaps (ParsedDoc carries no comment table — the doc chains live on
+    // the decl nodes), so the fill collects them here over the same
+    // normalized text and merges them into the classified run.
+    let comments = rut_lexer::lexer::lex_normalized(norm, true).2;
+    let mut classes: Vec<(rut_semantic::Span, TokenType)> = doc.spans().to_vec();
+    classes.extend(comments.iter().map(|c| (c.span, TokenType::Comment)));
+    classes.sort_by_key(|(span, _)| span.lo);
     let mut b = Builder {
-        src: &norm,
+        src: norm,
         spans: Vec::new(),
         pos: 0,
     };
     let mut pos = 0usize;
-    for (span, ty) in &classes {
+    for (span, ty) in classes {
         let lo = span.lo as usize;
         let hi = span.hi as usize;
         b.gap(pos, lo);
-        b.emit(lo, hi, classify(*ty, &norm[lo..hi]));
+        b.emit(lo, hi, classify(ty, &norm[lo..hi]));
         pos = hi.max(pos);
     }
     b.gap(pos, norm.len());

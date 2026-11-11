@@ -11,7 +11,6 @@ pub const TUR_ANIM_KIT_RUT: &str = include_str!("../../../rut/tur_anim_kit/mod.r
 pub fn tur_anim_kit_pkg() -> rut_driver::Mounted {
     rut_driver::Mounted {
         spec: "tur_anim_kit".to_string(),
-        namespace: Some("tur_anim_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_anim_kit", &["tur_host", "tur_kit"]),
         body: rut_driver::MountedBody::Source {
             text: TUR_ANIM_KIT_RUT.to_string(),

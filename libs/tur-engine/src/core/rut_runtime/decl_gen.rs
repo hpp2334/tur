@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use rut_ast::ast::Vis;
+use rut_ast::Vis;
 use rut_core::types::{
     TY_BOOL, TY_BYTES, TY_F32, TY_F64, TY_I8, TY_I16, TY_I32, TY_I64, TY_NIL, TY_OPAQUE,
     TY_OPT_BYTES, TY_OPT_OPAQUE, TY_OPT_STR, TY_STR, TY_U8, TY_U16, TY_U32, TY_U64, TypeId,

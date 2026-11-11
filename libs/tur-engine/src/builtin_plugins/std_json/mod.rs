@@ -5,7 +5,7 @@
 //! modules spell `use json::{ decodeJson };` against the engine.
 //!
 //! Everything here is VENDORED from the pinned rut checkout (the
-//! std-v14 tag rev in the workspace Cargo.toml) — provenance lives in
+//! raw master rev in the workspace Cargo.toml) — provenance lives in
 //! each file's header comment; re-vendor on rut pin bumps if upstream's
 //! files change. The sources are mounted via `Mounted::source` (the
 //! `futures` precedent): the session compiles them, and the
