@@ -11,7 +11,6 @@ pub const FONT_KIT_RUT: &str = include_str!("../../../../../rut/tur_font_kit/mod
 pub fn font_kit_pkg() -> rut_driver::Mounted {
     rut_driver::Mounted {
         spec: "tur_font_kit".to_string(),
-        namespace: Some("tur_font_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_font_kit", &["tur_host"]),
         body: rut_driver::MountedBody::Source {
             text: FONT_KIT_RUT.to_string(),

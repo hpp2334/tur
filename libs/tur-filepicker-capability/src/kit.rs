@@ -10,7 +10,6 @@ pub const FILE_KIT_RUT: &str = include_str!("../../../rut/tur_file_kit/mod.rut")
 pub fn file_kit_pkg() -> rut_driver::Mounted {
     rut_driver::Mounted {
         spec: "tur_file_kit".to_string(),
-        namespace: Some("tur_file_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_file_kit", &["tur_host"]),
         body: rut_driver::MountedBody::Source {
             text: FILE_KIT_RUT.to_string(),

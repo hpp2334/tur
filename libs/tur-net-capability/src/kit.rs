@@ -10,7 +10,6 @@ pub const NET_KIT_RUT: &str = include_str!("../../../rut/tur_net_kit/mod.rut");
 pub fn net_kit_pkg() -> rut_driver::Mounted {
     rut_driver::Mounted {
         spec: "tur_net_kit".to_string(),
-        namespace: Some("tur_net_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_net_kit", &["tur_host", "tur_kit"]),
         body: rut_driver::MountedBody::Source {
             text: NET_KIT_RUT.to_string(),

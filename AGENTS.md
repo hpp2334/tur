@@ -502,15 +502,45 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest main** (`932ba3d8`, 2026-10-25) — 20 commits
-  past the std-v14 tag (`09dea6a2`, 2026-10-24): the mirror-seed law +
-  the bodyless-callee verify (the packed-stub SEGV family), multi-line
-  literals, the unified run lane. Raw-rev pin (never a tag/branch), and
-  the tag lane is how the upstream std packages publish. tur consumes
-  the std `json` pkg from it: vendored sources
-  (`builtin_plugins/std_json/vendor/`) offered to modules by
+- The rut pin is **latest main** (`b44924f5`, 2026-11-12) — master past
+  `c49170be` by ONE commit, tur's own upstream fix ("module-resident
+  generics ride the pack lanes again"): surface rows resolve back to
+  the unit-local bare decls (`resolve_local_fn`), so the closed-union
+  enumeration seeds AND the template roots key the ids the checker
+  knows, and the templates-must-emit gates read
+  `generic_surface_served` (the ledger-consulting serving check — no
+  wire change). Under `c49170be` the template bodies of every
+  module-resident generic compiled EMPTY (the "unknown fn — already
+  diagnosed" silent lane), so a consumer's explicit `mutate<T>(..)`
+  against a packed kit refused ("served by neither its pack-time
+  ledger nor its template bodies") unless the pack closure had already
+  instantiated the same shape — pinned upstream by
+  `rut-driver/tests/packed_module_generic.rs`. `c49170be` itself is 61
+  commits past the previous pin (`932ba3d8`, 2026-10-25): the AST v2
+  tree (typed arenas + the capsule store; rut-fmt/rut-lir/rut-driver/
+  rut-semantic all lower on it — `rut_ast::ast` closed, its node types
+  re-exported at the crate root), the Parsed/ParsedDoc/Analysis
+  artifact capsules (private fields; `ParsedDoc::parse(Mode, src)`
+  replaces `classify_source` — tur's highlighter rides
+  `.spans()`/`.src()` and collects the comment table itself via
+  `lex_normalized`), `pub use` joining the grammar, the namespace
+  mechanism DYING (`Mounted.namespace` and the manifest `namespace`
+  key are gone — module paths and bare consts are the spellings),
+  RawSymbol → Symbol, the lsp lanes merging into rut-lsp-wasm, and the
+  editing-state reshape (SessionState in state.rs, the Stir/Wake lane,
+  depEngine dies, indexFile/indexModAt renamed). Past 932ba3d8: the
+  mirror-seed law + the bodyless-callee verify (the packed-stub SEGV
+  family), multi-line literals, the unified run lane. Raw-rev pin
+  (never a tag/branch), and the tag lane is how the upstream std
+  packages publish. tur consumes the std `json` pkg from it: vendored
+  sources (`builtin_plugins/std_json/vendor/`) offered to modules by
   `TurStdPlugin` (dep closure strbuild/pouch/nmapset + the
-  strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
+  strbuild_host/nmap_host bodies from `rut-std`; the nmapset +
+  nmap_host files re-vendored at c49170be for the `for..of` iteration
+  lanes — `map_iter_new`/`map_iter_next` — which rut-std's bodies
+  register, so a stale vendored decl trips the VM's surface-mirror
+  law: "host fn `nmap_host::map_iter_new` is bound but declared by no
+  mounted package"). ONE LAW
   discovered the hard way: **a packed (linked-compiled) std pkg takes NO
   consumer-typed instantiation** — json's generic bodies are
   owner-anchored (sealed at its pack time), so a consumer's direct

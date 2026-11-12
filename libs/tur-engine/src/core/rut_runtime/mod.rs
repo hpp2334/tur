@@ -387,7 +387,6 @@ pub fn tur_decl_pkg() -> rut_driver::Mounted {
     funcs.extend(env::decl_rows());
     let mut pkg = rut_driver::Mounted {
         spec: "tur_host".to_string(),
-        namespace: Some("tur_host".to_string()),
         body: MountedBody::Host {
             host_funcs: funcs,
             consts: Vec::new(),

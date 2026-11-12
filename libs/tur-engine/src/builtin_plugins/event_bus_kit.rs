@@ -13,7 +13,6 @@ pub const EVENT_KIT_RUT: &str = include_str!("../../../../rut/tur_event_kit/mod.
 pub fn event_kit_pkg() -> rut_driver::Mounted {
     rut_driver::Mounted {
         spec: "tur_event_kit".to_string(),
-        namespace: Some("tur_event_kit".to_string()),
         manifest: rut_driver::Manifest::lib("tur_event_kit", &["tur_host", "tur_kit"]),
         body: rut_driver::MountedBody::Source {
             text: EVENT_KIT_RUT.to_string(),
