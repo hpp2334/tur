@@ -240,9 +240,9 @@ fn generate(plugins: &[Box<dyn Plugin>], caps: Capabilities, root_uses: &str) ->
     }
     fs::write(
         root.join("rut.jsonc"),
-        format!(
-            "{{ \"name\": \"tur_std\", \"format\": \"rutbundle\", \"format_version\": 12, \"deps\": {{ {deps} }} }}"
-        ),
+        // no format/format_version keys — retired upstream: the version
+        // lives in the bundle container, stamped by the packer itself.
+        format!("{{ \"name\": \"tur_std\", \"deps\": {{ {deps} }} }}"),
     )
     .expect("root manifest");
 

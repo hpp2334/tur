@@ -54,7 +54,7 @@ pub struct PgSpans(pub Vec<SpanData>);
 /// identically here), and applying the run normalizes the editor content
 /// for free.
 pub fn highlight_spans(src: &str) -> Vec<SpanData> {
-    let doc = rut_semantic::ParsedDoc::parse(rut_parser::Mode::Impl, src);
+    let doc = rut_semantic::ParsedDoc::parse(rut_semantic::Mode::Impl, src.to_owned());
     let norm = doc.src();
     // The comment side table: the classifier no longer scans comment
     // gaps (ParsedDoc carries no comment table — the doc chains live on
@@ -329,7 +329,7 @@ mod tests {
         }
         assert_eq!(
             pos,
-            rut_lexer::lexer::normalize(src).len(),
+            rut_lexer::lexer::canonical(src).len(),
             "runs tile the source"
         );
     }
