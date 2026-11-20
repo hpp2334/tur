@@ -507,12 +507,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   consolidation: (1) **rut-semantic DIES** — its modules absorb into the
   new `rut-lsp` core (split from rut-lsp-wasm), sealed behind the
   PRIVACY WALL (`Lsp` + `Io` are rut-lsp's only public doors), and
-  `ParsedDoc` becomes `Document` (private). tur's highlighter therefore
-  went TUR-SIDE: a token-walk classifier over the public lexer/ast
-  surfaces (`lex_canonical` + `RESERVED_KW`/`PRIMITIVE_TYS` from
-  `rut_ast::parser`), reproducing the old pinned color behavior (see
-  `tur-playground/src/highlight.rs`); the `rut-semantic` dependency is
-  DELETED. (2) **the drop-mut law**: `mut` is fully removed from the
+  `ParsedDoc` becomes `Document` (private). tur's highlighter rides the
+  ACTOR now: one `Lsp` session per thread, its loop future booted onto a
+  tur-owned `futures::executor::LocalPool` through `Lsp::boot`'s spawn
+  seam (`spawn_native` is native-gated upstream — a tur-owned pool
+  compiles on wasm32 too), so `pool.run_until(lsp.analyze(..))` answers
+  SYNCHRONOUSLY on the worker lane (no thread, no runtime, no parking);
+  the answer's flat LSP semantic-token delta stream (UTF-16 positions)
+  decodes back to byte spans over the canonical text, `legend()` names
+  map onto the palette (see `tur-playground/src/highlight.rs`); the
+  `rut-semantic` dependency is DELETED. (2) **the drop-mut law**: `mut` is fully removed from the
   keyword table — bindings are mutable by default, `const` is the
   shallow opt-out; every tur .rut source (kit, cases, playground,
   futures.rut embed, test fixtures in raw strings) was swept. (3)

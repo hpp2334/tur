@@ -50,9 +50,10 @@ tur-wasm = { path = "libs/tur-wasm" }
 # latest main (0ca49f6d, 2026-11-21) — 57 commits past the previous pin
 # (847c5c8f, 2026-11-13), a huge consolidation: rut-semantic DIES (absorbed
 # into rut-lsp behind the privacy wall — Lsp/Io its only public doors;
-# ParsedDoc became the private Document; tur's highlighter is now a
-# tur-side token-walk classifier and the rut-semantic dependency is
-# deleted); the drop-mut law (mut fully removed — mutable by default,
+# ParsedDoc became the private Document; tur's highlighter rides the
+# rut-lsp ACTOR now — the loop on a tur-owned LocalPool via boot's spawn
+# seam, analyze() driven synchronously through run_until — and the
+# rut-semantic dependency is deleted); the drop-mut law (mut fully removed — mutable by default,
 # `const` the shallow opt-out; every tur .rut source swept, fixtures in
 # raw strings included); grammar deletions (inline mod form, x? postfix,
 # ~x, constructor patterns, const-generic args; `host`/`when`-style
@@ -79,14 +80,18 @@ rut-driver = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5
 rut-vm = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
 rut-std = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
 # The playground's syntax highlighting classifies rut source through the
-# upstream semantic classifier (`pg_highlight`); `normalize` still slices
-# the source tur-side — the same lexer rev the parser rides.
+# rut-lsp actor (`pg_highlight` — the Lsp handle driven inline over a
+# LocalPool: `analyze`'s semantic-token stream + `legend`), replacing
+# the rut-semantic classifier the privacy wall sealed away. rut-lexer
+# stays a direct dep for the canonical text + the comment side table.
 rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
+rut-lsp = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
+# The AST + grammar half (the parser lives inside rut-ast since the
+# merge) — the kit embeds + decl tree ride it. Pinned to the same rev
+# as the engine crates.
 rut-ast = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
-# The AST-semantic classifier behind `pg_highlight` — token + name classes
-# over spans. Pure frontend (rut-lexer / rut-ast only — no LSP types, no
-# serde; the parser half lives inside rut-ast since the merge), pinned to
-# the same rev as the engine crates.
+# The native pkg-dir walker/loader (`load_path_session` — the REAL
+# discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
 rut-native = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04", default-features = false }
 

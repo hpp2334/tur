@@ -12,4 +12,10 @@ rut-vm = { workspace = true }
 rut-driver = { workspace = true }
 rut-core = { workspace = true }
 rut-lexer = { workspace = true }
-rut-ast = { workspace = true }
+rut-lsp = { workspace = true }
+# The highlight drives the Lsp actor inline: the loop future rides a
+# futures LocalPool (wasm-safe — `spawn_native` is native-gated upstream,
+# `boot(spawn)` is the open seam), and the JSON envelopes decode via
+# serde_json.
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
+serde_json = "1"
