@@ -1,6 +1,6 @@
-// VENDORED from rut @09dea6a2 (std-v14) — rut/strbuild/src/mod.rut, unmodified below this line.
+// VENDORED from rut @0ca49f6d (std-v18) — rut/strbuild/src/mod.rut, unmodified below this line.
 // Provenance law: re-vendor on rut pin bumps if upstream's file changes.
-// strbuild/strbuild.rut — the 10th std pkg: the growable string
+// strbuild/src/mod.rut — the 10th std pkg: the growable string
 // builder, a class over HOST fns (the ink/Logger pattern — the
 // `strbuild_host` decl pkg declares the rows, this pkg is the rut
 // face over them; the bodies live in `rut-std`). Core ships zero
@@ -33,7 +33,7 @@
 // alias are visible through the original; copies happen at exactly
 // two engineered points (build's materialization, growth's prefix
 // move). Methods live in an `impl` block; mutating members take the
-// `mut self` receiver (the checker's license to mutate through the
+// `self` receiver (the checker's license to mutate through the
 // shared handle, never a copy trigger).
 //
 // For the common accumulator shape — `out = f"{out}{t}"` — no builder
@@ -64,12 +64,12 @@ impl StringBuilder {
     }
 
     // append a str's octets IN PLACE through the shared box
-    pub fn append(mut self, value: str) {
+    pub fn append(self, value: str) {
         sb_push(self.out, value);
     }
 
     // append one codepoint — the host fn's U+FFFD rule for invalid scalars
-    pub fn append_code(mut self, cp: u32) {
+    pub fn append_code(self, cp: u32) {
         sb_push_code(self.out, cp);
     }
 

@@ -73,7 +73,7 @@ use tur_kit::text::input::{ Input };
 entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 44.0).query_key("editor").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 44.0).query_key("editor").build();
     mount(input);
 }
 "#,

@@ -22,7 +22,7 @@ pub fn seed_tasks() -> ListHandle {
 
 fn idx_of(s: str, from: i32, c: u32) -> i32 {
     let n = s.len();
-    let mut k = from;
+    let k = from;
     while (k < n) {
         if (s.code_at(k) == c) {
             return k;
@@ -71,7 +71,7 @@ pub fn toggle_task(ctx: MutationCtx, tasks: Source<opaque>, idx: u64) {
     let old = ctx.get<opaque>(tasks);
     let count = value_len(old);
     let fresh = list_new();
-    let mut k: u64 = 0;
+    let k: u64 = 0;
     while (k < count) {
         let item = value_item(old, k);
         if (k == idx) {
@@ -94,7 +94,7 @@ pub fn append_task(ctx: MutationCtx, tasks: Source<opaque>, row: str) {
     let old = ctx.get<opaque>(tasks);
     let fresh = list_new();
     let count = value_len(old);
-    let mut k: u64 = 0;
+    let k: u64 = 0;
     while (k < count) {
         fresh.push(value_item(old, k));
         k = k + 1;
@@ -109,8 +109,8 @@ pub fn append_task(ctx: MutationCtx, tasks: Source<opaque>, row: str) {
 pub fn recount(ctx: MutationCtx, tasks: Source<opaque>, n: Source<f64>, done: Source<f64>) {
     let old = ctx.get<opaque>(tasks);
     let count = value_len(old);
-    let mut dones: u64 = 0;
-    let mut k: u64 = 0;
+    let dones: u64 = 0;
+    let k: u64 = 0;
     while (k < count) {
         if (item_done(value_item(old, k))) {
             dones = dones + 1;
@@ -124,11 +124,11 @@ pub fn recount(ctx: MutationCtx, tasks: Source<opaque>, n: Source<f64>, done: So
 // ASCII trim (the spaces around a draft).
 pub fn trim(s: str) -> str {
     let n = s.len();
-    let mut a = 0;
+    let a = 0;
     while (a < n && s.code_at(a) == 32) {
         a = a + 1;
     }
-    let mut b = n;
+    let b = n;
     while (b > a && s.code_at(b - 1) == 32) {
         b = b - 1;
     }

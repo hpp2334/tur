@@ -27,7 +27,7 @@ entry fn start() -> u64 {
         ctx.set<str>(phase, "up");
     });
 
-    let mut stack = Stack()
+    let stack = Stack()
         .alignment(Align::TopLeft)
         .child(SizedBox(400.0, 400.0).child(Container().build()).build());
 

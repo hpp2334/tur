@@ -21,7 +21,7 @@ impl Text {
   // selects the lane: a derived binds through the derive rail, an `sv()`
   // literal lowers through the static row (pure read off the box), a
   // source binds directly.
-  pub fn text(mut self, r: reactive::Readable<str>) -> Self {
+  pub fn text(self, r: reactive::Readable<str>) -> Self {
     if (r.is_derived()) {
       text_bind_derived(self.spec, r.atom_id());
     } else if (r.atom_id() == 0) {
@@ -31,60 +31,60 @@ impl Text {
     }
     return self;
   }
-  pub fn font_size(mut self, v: f64) -> Self {
+  pub fn font_size(self, v: f64) -> Self {
     text_size(self.spec, v);
     return self;
   }
-  pub fn font_weight(mut self, v: f64) -> Self {
+  pub fn font_weight(self, v: f64) -> Self {
     text_weight(self.spec, v);
     return self;
   }
   // The primary font family — resolved BY NAME (Flutter's `fontFamily`).
   // Unknown names are skipped (try-next); the engine default family always
   // closes the stack.
-  pub fn font_family(mut self, v: str) -> Self {
+  pub fn font_family(self, v: str) -> Self {
     text_font_family(self.spec, v);
     return self;
   }
   // The ordered fallback families (Flutter's `fontFamilyFallback`) — the
   // kit composes the list from clear + pushes (no list type in the row
   // ABI), so a repeated call REPLACES the previous list.
-  pub fn font_family_fallback(mut self, names: [str]) -> Self {
+  pub fn font_family_fallback(self, names: [str]) -> Self {
     text_font_family_fallback_clear(self.spec);
     for (let n of names) {
       text_font_family_fallback_push(self.spec, n);
     }
     return self;
   }
-  pub fn color(mut self, packed: u64) -> Self {
+  pub fn color(self, packed: u64) -> Self {
     text_color(self.spec, packed);
     return self;
   }
-  pub fn max_lines(mut self, n: u64) -> Self {
+  pub fn max_lines(self, n: u64) -> Self {
     text_max_lines(self.spec, n);
     return self;
   }
-  pub fn clip(mut self) -> Self {
+  pub fn clip(self) -> Self {
     text_clip(self.spec);
     return self;
   }
-  pub fn ellipsis(mut self) -> Self {
+  pub fn ellipsis(self) -> Self {
     text_ellipsis(self.spec);
     return self;
   }
-  pub fn overflow_visible(mut self) -> Self {
+  pub fn overflow_visible(self) -> Self {
     text_overflow_visible(self.spec);
     return self;
   }
-  pub fn selectable(mut self, v: bool) -> Self {
+  pub fn selectable(self, v: bool) -> Self {
     text_selectable(self.spec, v);
     return self;
   }
-  pub fn spans(mut self, list: Spans) -> Self {
+  pub fn spans(self, list: Spans) -> Self {
     text_spans(self.spec, list.spec);
     return self;
   }
-  pub fn query_key(mut self, k: str) -> Self {
+  pub fn query_key(self, k: str) -> Self {
     text_qkey(self.spec, k);
     return self;
   }
@@ -101,7 +101,7 @@ impl Spans {
   [constructor] pub fn builder() -> Self {
     return Self { spec: spans_new() };
   }
-  pub fn add(mut self, text: str, size: f64, packed: u64, weight: f64, span_flags: flags::SpanFlags) -> Self {
+  pub fn add(self, text: str, size: f64, packed: u64, weight: f64, span_flags: flags::SpanFlags) -> Self {
     span_add(self.spec, text, size, packed, weight, flags::span_flags_code(span_flags));
     return self;
   }

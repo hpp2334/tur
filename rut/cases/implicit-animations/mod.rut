@@ -88,11 +88,11 @@ entry fn start() -> u64 {
         ctx.set<f64>(left_b, ctx.get<f64>(left));
         ctx.set<f64>(fade_b, ctx.get<f64>(fade));
         ctx.set<u64>(color_b, ctx.get<u64>(color));
-        let mut blur_end: f64 = B_MIN;
-        let mut radius_end: f64 = R_MIN;
-        let mut left_end: f64 = X_MIN;
-        let mut fade_end: f64 = A_MIN;
-        let mut color_end: u64 = BLUE;
+        let blur_end: f64 = B_MIN;
+        let radius_end: f64 = R_MIN;
+        let left_end: f64 = X_MIN;
+        let fade_end: f64 = A_MIN;
+        let color_end: u64 = BLUE;
         if (next) {
             blur_end = B_MAX; radius_end = R_MAX; left_end = X_MAX;
             fade_end = A_MAX; color_end = INDIGO;

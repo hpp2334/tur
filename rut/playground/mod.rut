@@ -328,7 +328,7 @@ entry fn start() -> opaque {
     // The sidebar's case list (from the generated registry).
     let names = list_new();
     let n = pg_case_count();
-    let mut i = 0;
+    let i = 0;
     while (i < n as i32) {
         names.push(pg_case_name(i as u64));
         i += 1;
@@ -354,7 +354,7 @@ entry fn start() -> opaque {
     // dummies — the REAL controllers (whose end closures thread `cx`)
     // assign into the record right after construction (the shared-cell
     // write; the dummy never fires a meaningful end).
-    let mut cx = AppContext {
+    let cx = AppContext {
         names: source<opaque>(names.raw()),
         selected: source<str>(""),
         sel: source<f64>(-1.0),
@@ -415,8 +415,8 @@ entry fn start() -> opaque {
     // Boot selection (the boa INITIAL_CASE): select + run `counter` so
     // the editor loads its source, the viewer renders the case and the
     // status settles to ready without a tap. The ctx is the entry rail's.
-    let mut boot = 0;
-    let mut i = 0;
+    let boot = 0;
+    let i = 0;
     while (i < n as i32) {
         if (pg_case_name(i as u64) == "counter") {
             boot = i;
@@ -452,7 +452,7 @@ fn seed_controller() -> VAppCtrl {
 // Watch the controller's status rail (the boa-model `Watch` over the
 // typed `status_source`): the transitions deliver into `on_vstat`, which
 // settles the viewer's state atoms through its ctx.
-fn watch_controller(mut cx: AppContext, vctrl: VAppCtrl) {
+fn watch_controller(cx: AppContext, vctrl: VAppCtrl) {
     let stat = vctrl.status_source();
     let w = watch<str>(stat, mutate(fn (ctx: MutationCtx, _e: nil) {
         on_vstat(ctx, cx, stat, vctrl);
@@ -949,7 +949,7 @@ fn status_bar(cx: AppContext) -> View {
 // (and centers its label) while visible; the hidden branch is a
 // decoration-less box that passes pointers through to the child.
 fn ready_viewer(cx: AppContext) -> View {
-    let host = VirtualApp().bind(cx.app_atom).query_key("viewer").build();
+    let vapp = VirtualApp().bind(cx.app_atom).query_key("viewer").build();
     let overlay = Condition(cx.hint_on)
         .then(Container().color(sv(CARD_BG)).alignment(Align::Center)
             .child(Text().text(cx.hint).font_size(13.0).color(TEXT_TERTIARY)
@@ -959,7 +959,7 @@ fn ready_viewer(cx: AppContext) -> View {
         .build();
     return Container().padding(12.0).color(sv(BG_VIEWER))
         .child(Container().color(sv(CARD_BG)).query_key("viewer-card")
-            .child(Stack().fit(StackFit::Expand).child(host).child(overlay).build())
+            .child(Stack().fit(StackFit::Expand).child(vapp).child(overlay).build())
             .build())
         .build();
 }
@@ -1298,7 +1298,7 @@ fn file_tap(ctx: MutationCtx, cx: AppContext, fi: u64) {
     ctx.set<f64>(cx.fsel, fi as f64);
 }
 
-fn case_tap(ctx: MutationCtx, mut cx: AppContext, idx: u64) {
+fn case_tap(ctx: MutationCtx, cx: AppContext, idx: u64) {
     // Save the outgoing file's edit first (the editor still holds it).
     let prev = ctx.get<str>(cx.selected);
     save_file(cx, prev, pg_case_file_path(prev, ctx.get<f64>(cx.fsel) as u64));
@@ -1315,7 +1315,7 @@ fn case_tap(ctx: MutationCtx, mut cx: AppContext, idx: u64) {
     let files = list_new();
     let n = pg_case_file_count(name);
     if (n > 1) {
-        let mut j: u64 = 0;
+        let j: u64 = 0;
         while (j < n) {
             files.push(pg_case_file_path(name, j));
             j = j + 1;
@@ -1387,7 +1387,7 @@ fn editor_key(ctx: MutationCtx, cx: AppContext, ev: KeydownEvent) {
     }
 }
 
-fn do_run(ctx: MutationCtx, mut cx: AppContext) {
+fn do_run(ctx: MutationCtx, cx: AppContext) {
     let name = ctx.get<str>(cx.selected);
     // The ACTIVE file — the editor's current content ("" = the root).
     let active = pg_case_file_path(name, ctx.get<f64>(cx.fsel) as u64);
@@ -1403,7 +1403,7 @@ fn do_run(ctx: MutationCtx, mut cx: AppContext) {
     // root-only case (or a cleared selection) stages nothing — the
     // historical single-string compile.
     let n = pg_case_file_count(name);
-    let mut j: u64 = 0;
+    let j: u64 = 0;
     while (j < n) {
         let path = pg_case_file_path(name, j);
         if (path != "" && path != active) {
@@ -1417,7 +1417,7 @@ fn do_run(ctx: MutationCtx, mut cx: AppContext) {
 
     // The root's text: the editor's live content when the root IS the
     // active file, else the (cached) registry text.
-    let mut root_text = file_text(cx, name, "");
+    let root_text = file_text(cx, name, "");
     if (active == "") {
         root_text = cx.ctrl.text();
     }
@@ -1473,7 +1473,7 @@ fn do_run(ctx: MutationCtx, mut cx: AppContext) {
 fn reset_case(ctx: MutationCtx, cx: AppContext) {
     let name = ctx.get<str>(cx.selected);
     let n = pg_case_file_count(name);
-    let mut j: u64 = 0;
+    let j: u64 = 0;
     while (j < n) {
         let path = pg_case_file_path(name, j);
         cx.cache.set(cache_key(name, path), f"1{pg_case_file_source(name, path)}");
@@ -1501,18 +1501,18 @@ fn set_dragging(ctx: MutationCtx, cx: AppContext, on: bool) {
     }
 }
 
-fn div_down(ctx: MutationCtx, mut cx: AppContext, gx: f64) {
+fn div_down(ctx: MutationCtx, cx: AppContext, gx: f64) {
     cx.dragx = gx;
     set_dragging(ctx, cx, true);
 }
 
-fn div_move(ctx: MutationCtx, mut cx: AppContext, gx: f64) {
+fn div_move(ctx: MutationCtx, cx: AppContext, gx: f64) {
     if (!ctx.get<bool>(cx.dragging)) {
         return;
     }
     let dx = gx - cx.dragx;
     cx.dragx = gx;
-    let mut w = ctx.get<f64>(cx.sbw) + dx;
+    let w = ctx.get<f64>(cx.sbw) + dx;
     if (w < 200.0) {
         w = 200.0;
     }
@@ -1542,18 +1542,18 @@ fn set_edragging(ctx: MutationCtx, cx: AppContext, on: bool) {
     }
 }
 
-fn ediv_down(ctx: MutationCtx, mut cx: AppContext, gx: f64) {
+fn ediv_down(ctx: MutationCtx, cx: AppContext, gx: f64) {
     cx.edragx = gx;
     set_edragging(ctx, cx, true);
 }
 
-fn ediv_move(ctx: MutationCtx, mut cx: AppContext, gx: f64) {
+fn ediv_move(ctx: MutationCtx, cx: AppContext, gx: f64) {
     if (!ctx.get<bool>(cx.edragging)) {
         return;
     }
     let dx = gx - cx.edragx;
     cx.edragx = gx;
-    let mut w = ctx.get<f64>(cx.edw) + dx;
+    let w = ctx.get<f64>(cx.edw) + dx;
     if (w < 360.0) {
         w = 360.0;
     }
@@ -1569,7 +1569,7 @@ fn ediv_up(ctx: MutationCtx, cx: AppContext) {
 
 // The auto-run toggle. Turning auto-run OFF also cancels any pending
 // debounced run.
-fn b_autorun(ctx: MutationCtx, mut cx: AppContext) {
+fn b_autorun(ctx: MutationCtx, cx: AppContext) {
     let on = ctx.get<bool>(cx.autorun);
     ctx.set<bool>(cx.autorun, !on);
     if (!on) {
@@ -1595,12 +1595,12 @@ fn b_autorun(ctx: MutationCtx, mut cx: AppContext) {
 // The tab hover intents (the segmented control's per-tab lift — the boa
 // LayoutButton): entering marks the index, exiting clears it; all three
 // brushes repaint either way.
-fn tab_enter(ctx: MutationCtx, mut cx: AppContext, i: u64) {
+fn tab_enter(ctx: MutationCtx, cx: AppContext, i: u64) {
     cx.tab_h = i as f64;
     repaint_tabs(ctx, cx);
 }
 
-fn tab_exit(ctx: MutationCtx, mut cx: AppContext, i: u64) {
+fn tab_exit(ctx: MutationCtx, cx: AppContext, i: u64) {
     let cur = cx.tab_h;
     cx.tab_h = -1.0;
     if (cur == i as f64) {
@@ -1619,7 +1619,7 @@ fn repaint_tabs(ctx: MutationCtx, cx: AppContext) {
 // controlTray / controlSelected / controlTrayHover law).
 fn paint_tab(ctx: MutationCtx, cx: AppContext, idx: u64, brush: Readable<u64>) {
     let mode = ctx.get<str>(cx.layout);
-    let mut selected = false;
+    let selected = false;
     if (idx == 0 && mode == "split") {
         selected = true;
     }
@@ -1648,7 +1648,7 @@ fn set_layout(ctx: MutationCtx, cx: AppContext, mode: str) {
 // pill, and with auto-run on restart the debounced recompile+respawn —
 // a 500 ms one-shot animation controller that a newer edit stops
 // (cancellation = stop; no generation guard needed).
-fn on_edit(ctx: MutationCtx, mut cx: AppContext) {
+fn on_edit(ctx: MutationCtx, cx: AppContext) {
     mark_edited(ctx, cx);
     cx.debounce.stop();
     if (ctx.get<bool>(cx.autorun)) {
@@ -1669,7 +1669,7 @@ fn mark_edited(ctx: MutationCtx, cx: AppContext) {
 
 // The "compiled Xs ago" clock: a 1 Hz one-shot that restarts itself (the
 // status bar's derive re-formats the label — no polling anywhere else).
-fn on_clock_end(ctx: MutationCtx, mut cx: AppContext) {
+fn on_clock_end(ctx: MutationCtx, cx: AppContext) {
     ctx.set<f64>(cx.ago, ctx.get<f64>(cx.ago) + 1.0);
     cx.clock.forward();
 }

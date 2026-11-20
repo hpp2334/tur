@@ -20,7 +20,7 @@ impl Switch {
   }
   // The ONE reactive value prop: the handle's kind selects the row
   // (source binds directly, a derived through the derive rail).
-  pub fn value(mut self, r: reactive::Readable<str>) -> Self {
+  pub fn value(self, r: reactive::Readable<str>) -> Self {
     if (r.is_derived()) {
       switch_value_derived(self.spec, r.atom_id());
     } else {
@@ -30,21 +30,21 @@ impl Switch {
   }
   // Appends one case — the historical `cases` prop's crossing (`case` is
   // a reserved word in rut).
-  pub fn cases(mut self, key: str, branch: handles::View) -> Self {
+  pub fn cases(self, key: str, branch: handles::View) -> Self {
     switch_case(self.spec, key, branch.raw());
     return self;
   }
   // The lazy case twin: the branch is a FN VALUE, invoked when the key
   // activates (fresh read of live state).
-  pub fn case_build(mut self, key: str, cb: fn() -> handles::View) -> Self {
+  pub fn case_build(self, key: str, cb: fn() -> handles::View) -> Self {
     switch_case_build(self.spec, key, opaque(cb));
     return self;
   }
-  pub fn fallback(mut self, branch: handles::View) -> Self {
+  pub fn fallback(self, branch: handles::View) -> Self {
     switch_fallback(self.spec, branch.raw());
     return self;
   }
-  pub fn query_key(mut self, k: str) -> Self {
+  pub fn query_key(self, k: str) -> Self {
     switch_qkey(self.spec, k);
     return self;
   }
@@ -61,11 +61,11 @@ impl Condition {
   [constructor] pub fn builder(r: reactive::Readable<bool>) -> Self {
     return Self { spec: cond_new(r.atom_id()) };
   }
-  pub fn then(mut self, branch: handles::View) -> Self {
+  pub fn then(self, branch: handles::View) -> Self {
     cond_then(self.spec, branch.raw());
     return self;
   }
-  pub fn else_branch(mut self, branch: handles::View) -> Self {
+  pub fn else_branch(self, branch: handles::View) -> Self {
     cond_else(self.spec, branch.raw());
     return self;
   }
@@ -73,15 +73,15 @@ impl Condition {
   // at activation and re-invoked at every re-activation — the built
   // subtree reads LIVE state each time it mounts (the boa callback
   // semantic; e.g. a modal reads the draft at open time).
-  pub fn then_build(mut self, cb: fn() -> handles::View) -> Self {
+  pub fn then_build(self, cb: fn() -> handles::View) -> Self {
     cond_then_build(self.spec, opaque(cb));
     return self;
   }
-  pub fn else_build(mut self, cb: fn() -> handles::View) -> Self {
+  pub fn else_build(self, cb: fn() -> handles::View) -> Self {
     cond_else_build(self.spec, opaque(cb));
     return self;
   }
-  pub fn query_key(mut self, k: str) -> Self {
+  pub fn query_key(self, k: str) -> Self {
     cond_qkey(self.spec, k);
     return self;
   }
@@ -98,7 +98,7 @@ impl Each {
   [constructor] pub fn builder(r: reactive::Readable<opaque>) -> Self {
     return Self { spec: each_new(r.atom_id()) };
   }
-  pub fn item_builder(mut self, cb: fn(u64, str) -> handles::View) -> Self {
+  pub fn item_builder(self, cb: fn(u64, str) -> handles::View) -> Self {
     each_builder(self.spec, opaque(cb));
     return self;
   }
@@ -115,11 +115,11 @@ impl Fragment {
   [constructor] pub fn builder() -> Self {
     return Self { spec: frag_new() };
   }
-  pub fn child(mut self, c: handles::View) -> Self {
+  pub fn child(self, c: handles::View) -> Self {
     frag_child(self.spec, c.raw());
     return self;
   }
-  pub fn children(mut self, cs: [handles::View]) -> Self {
+  pub fn children(self, cs: [handles::View]) -> Self {
     for (let c of cs) {
       frag_child(self.spec, c.raw());
     }

@@ -20,7 +20,7 @@ struct AppContext {
 entry fn start() -> opaque {
     let key: Source<str> = source<str>("a");
 
-    let mut sw = Switch().value(key);
+    let sw = Switch().value(key);
     sw.cases("a", Text().text(sv("AAA")).query_key("case_a").build());
     sw.cases("b", Text().text(sv("BBB")).query_key("case_b").build());
     sw.fallback(Text().text(sv("FALL")).query_key("case_fallback").build());
@@ -159,7 +159,7 @@ entry fn start() -> opaque {
 
     // The unified value prop over the derived handle (the kind rides the
     // handle: a derived binds through the derive rail).
-    let mut sw = Switch().value(derived);
+    let sw = Switch().value(derived);
     sw.cases("a", Text().text(sv("AAA")).query_key("d_case_a").build());
     sw.cases("b", Text().text(sv("BBB")).query_key("d_case_b").build());
     sw.fallback(Text().text(sv("FALL")).query_key("d_case_fallback").build());

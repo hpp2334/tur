@@ -180,7 +180,7 @@ entry fn start() -> u64 {
         paint_loop(ctx, lp, ctx.get<bool>(loop_flag));
     });
 
-    let mut col = Column()
+    let col = Column()
         .main_alignment(MainAlign::Center)
         .cross_alignment(CrossAlign::Center)
         .child(Text().text(sv("Animated Card Studio")).font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
@@ -298,7 +298,7 @@ fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<
 }
 
 fn make_ctrl(tick: ?Mutation<f64>, end: ?Mutation<nil>, curve: f64, looping: bool) -> AnimCtrl {
-    let mut repeat: u64 = 1;
+    let repeat: u64 = 1;
     if (looping) {
         repeat = 18446744073709551615.0 as u64; // the infinite crossing
     }

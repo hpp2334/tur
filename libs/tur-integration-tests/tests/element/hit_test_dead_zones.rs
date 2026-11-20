@@ -261,7 +261,7 @@ entry fn start() -> u64 {
         .query_key("dz/piece-pad")
         .child(b)
         .build();
-    let mut stack = Stack()
+    let stack = Stack()
         .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 300.0).child(Container().build()).build())
         .build();

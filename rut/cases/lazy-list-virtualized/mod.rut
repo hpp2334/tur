@@ -45,9 +45,9 @@ entry fn start() {
 // The i'th '|'-separated slot of a data string.
 fn slot(data: str, i: u64) -> str {
     let n = data.len();
-    let mut start = 0;
-    let mut k = 0;
-    let mut cur: u64 = 0;
+    let start = 0;
+    let k = 0;
+    let cur: u64 = 0;
     while (k <= n) {
         if (k == n || data.code_at(k) == 124) {
             if (cur == i) {
@@ -64,7 +64,7 @@ fn slot(data: str, i: u64) -> str {
 // The first ',' from `from` (the r,g,b splitter).
 fn idx_of(s: str, from: i32, c: u32) -> i32 {
     let n = s.len();
-    let mut k = from;
+    let k = from;
     while (k < n) {
         if (s.code_at(k) == c) {
             return k;
@@ -105,7 +105,7 @@ fn zebra_fill(i: u64) -> u64 {
 fn row(i: u64) -> View {
     let name = name_for(i);
     let n = name.len();
-    let mut sp = 0;
+    let sp = 0;
     while (sp < n) {
         if (name.code_at(sp) == 32) {
             break;

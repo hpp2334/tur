@@ -28,7 +28,7 @@ use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
-    let mut i = 0;
+    let i = 0;
     while (i < 2000) {
         tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;

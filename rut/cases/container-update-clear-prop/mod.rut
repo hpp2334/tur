@@ -16,7 +16,7 @@ entry fn start() -> u64 {
         ctx.set<u64>(color, 0);
     });
 
-    let mut outer = Container().width_height(200.0, 100.0).padding(20.0);
+    let outer = Container().width_height(200.0, 100.0).padding(20.0);
 
     let checkbox = Container()
         .width_height(40.0, 40.0)

@@ -88,7 +88,7 @@ struct IdCx {{
 
 entry fn start() -> opaque {{
     let atom: Source<str> = source<str>("{value}");
-    let mut txt = Text().text(atom).query_key("id").build();
+    let txt = Text().text(atom).query_key("id").build();
     mount(txt);
     return opaque(IdCx {{ atom: atom }});
 }}
@@ -173,7 +173,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("only-in-A");
-    let mut txt = Text().text(atom).query_key("a_only").build();
+    let txt = Text().text(atom).query_key("a_only").build();
     mount(txt);
 }
 "#,
@@ -218,7 +218,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("42");
-    let mut txt = Text().text(atom).query_key("val").build();
+    let txt = Text().text(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -256,7 +256,7 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() {
     let atom: Readable<str> = source<str>("7");
-    let mut txt = Text().text(atom).query_key("val").build();
+    let txt = Text().text(atom).query_key("val").build();
     mount(txt);
 }
 "#,
@@ -297,7 +297,7 @@ entry fn start() {{
     // (a late interface dispatch on Source<str> misbinds once several
     // modules boot on one runtime).
     let atom: Source<str> = source<str>("{i}");
-    let mut txt = Text().text(atom).query_key("idx").build();
+    let txt = Text().text(atom).query_key("idx").build();
     mount(txt);
 }}
 "#
@@ -564,7 +564,7 @@ struct FlipCx {
 
 entry fn start() -> opaque {
     let atom: Source<str> = source<str>("from-A");
-    let mut txt = Text().text(atom).query_key("id").build();
+    let txt = Text().text(atom).query_key("id").build();
     mount(txt);
     return opaque(FlipCx { atom: atom });
 }

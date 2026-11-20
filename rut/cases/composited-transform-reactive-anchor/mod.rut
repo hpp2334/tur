@@ -15,7 +15,7 @@ entry fn start() -> u64 {
         ctx.set<f64>(anchor, 8.0);
     });
     let link = layer_link();
-    let mut stack = Stack()
+    let stack = Stack()
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();

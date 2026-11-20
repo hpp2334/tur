@@ -47,51 +47,48 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 tur-wasm = { path = "libs/tur-wasm" }
 
 # rut scripting language (github.com/hpp2334/rut) — tracked pin, bumped to
-# latest main (847c5c8f, 2026-11-13) — 18 commits past the previous pin
-# (b44924f5, 2026-11-12), the head of five landed lines: (1) the
-# todolist-web source-zip port (`Mounted::from_srczip` — the in-memory
-# twin of the url-dep mount; the example off the retired v12 bundle
-# lane). (2) the typed reply boundary (complete_stored / walk_now
-# return values). (3) the surface-consts swap: the manifest consts
-# table retires into the decl surface (`pub let` rows in .d.rut; the
-# manifest's consts/format/format_version keys refuse loudly on the
-# strict lane — compat retains all three for the frozen envelopes), the
-# `inf`/`-inf` literals land, ModuleLet lowers to consts, and std-v17
-# is cut (calc only — the other eight zips repack byte-identical, so
-# tur's vendored json closure is UNCHANGED at this pin, verified
-# byte-for-byte). (4) the parser merge: rut-parser folds into rut-ast
-# (`rut_ast::parser`, one crate two halves; `Mode` re-exported by
-# rut-semantic — tur's rut-parser dependency is deleted, the
-# highlighter spells `rut_semantic::Mode`). (5) the normalize zero-copy
-# reshape (by-value entries + `lex_canonical`; `ParsedDoc::parse` takes
-# the source String by value) plus the item/member modifier grammar
-# nodes and the lsp verbatim sweep. The tag lane is how tur consumes
-# the upstream std packages (the engine offers the json closure to
-# modules; see builtin_plugins/std_json/ — the vendored sources ride
-# this pin unchanged from 09dea6a2/std-v14).
+# latest main (0ca49f6d, 2026-11-21) — 57 commits past the previous pin
+# (847c5c8f, 2026-11-13), a huge consolidation: rut-semantic DIES (absorbed
+# into rut-lsp behind the privacy wall — Lsp/Io its only public doors;
+# ParsedDoc became the private Document; tur's highlighter is now a
+# tur-side token-walk classifier and the rut-semantic dependency is
+# deleted); the drop-mut law (mut fully removed — mutable by default,
+# `const` the shallow opt-out; every tur .rut source swept, fixtures in
+# raw strings included); grammar deletions (inline mod form, x? postfix,
+# ~x, constructor patterns, const-generic args; `host`/`when`-style
+# words reserved — bindings named them refuse); bundle wire 12-only +
+# binary VERSION 23 (the compat lane dies; Manifest.legacy_entry gone —
+# entry.type_path is the only entry key; kit bundles re-blessed); the
+# run chain reshape (RutRun::pkg takes Offer — &Bundle/HostPkg; source
+# Mounted data rides RutRun::mount; VmBuilder lost .hooks — HostHooks
+# died; alloc_str_cell/alloc_bytes_cell died — marshal through
+# Ret::into_slot); and std-v18 (nmapset values move host-side;
+# json/nmapset/pouch/strbuild/nmap_host sources changed — tur's
+# vendored closure re-vendored @0ca49f6d, strbuild_host.d.rut rode
+# unchanged). At 847c5c8f: the parser merge (rut-parser folds into
+# rut-ast), the surface-consts swap (manifest consts/format keys retire;
+# inf literals), Mounted::from_srczip, the normalize zero-copy reshape
+# (lex_canonical).
 # Same nightly pin as this workspace (nightly-2026-07-15).
-rut-core = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
-rut-driver = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8", default-features = false }
+rut-core = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
+rut-driver = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04", default-features = false }
 # rut-driver's default-on `http` feature pulls reqwest + tokio — tokio does
 # not compile on wasm32. tur mounts only local dirs (mount_std_* / mount_dir
 # from a local path) and never uses the url-dep lane, so it stays off for
 # every target.
-rut-vm = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
-rut-std = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
+rut-vm = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
+rut-std = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
 # The playground's syntax highlighting classifies rut source through the
 # upstream semantic classifier (`pg_highlight`); `normalize` still slices
 # the source tur-side — the same lexer rev the parser rides.
-rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
-rut-ast = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
+rut-lexer = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
+rut-ast = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04" }
 # The AST-semantic classifier behind `pg_highlight` — token + name classes
 # over spans. Pure frontend (rut-lexer / rut-ast only — no LSP types, no
 # serde; the parser half lives inside rut-ast since the merge), pinned to
 # the same rev as the engine crates.
-rut-semantic = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8" }
-# The native pkg-dir walker/loader (`load_path_session` — the REAL
-# discovery lane the tur_host decl-tree pin test loads the committed
 # tree through). Pinned to the same rev as the engine crates.
-rut-native = { git = "https://github.com/hpp2334/rut", rev = "847c5c8f59f358d737a71962be000baccf4e3fe8", default-features = false }
+rut-native = { git = "https://github.com/hpp2334/rut", rev = "0ca49f6def63c46be5ef8f050e5ea1436fe60b04", default-features = false }
 
 
 num-derive = "0.4"

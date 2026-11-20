@@ -1,15 +1,20 @@
-//! The playground's syntax highlighting — semantic classes for rut source
-//! as a flat colored span run for the editor controller (the boa
-//! `buildHighlightSpans` rail, now over the upstream `rut-semantic`
-//! classifier instead of token-text classes alone).
+//! The playground's syntax highlighting — colored span classes for rut
+//! source as a flat colored span run for the editor controller (the boa
+//! `buildHighlightSpans` rail).
 //!
-//! The pipeline: `rut_semantic::ParsedDoc::parse` (normalize → lex →
-//! best-effort parse → token + AST name classes → comment gap scan; broken
-//! source degrades to token classes — never a wrong color) → the palette
-//! table below → the tiling fill. The legend deliberately leaves
-//! structural punctuation (commas, semicolons, braces, dots) unclassified
-//! and has no literal class, so the fill colors the gap bytes: whitespace
-//! stretches plain, punctuation operators, and tur's contextual item
+//! The pipeline is a TOKEN-WALK classifier tur-side: `lex_canonical`
+//! (normalize → lex, one call) gives the token stream + the comment side
+//! table, and the walker below classes every token — keywords by the
+//! upstream reserved table, literals by token kind, and names by a small
+//! positional rule set (fn-decl names, call/method callees, the `::` path
+//! conventions, the primitive type table). It replaced the upstream
+//! `rut-semantic` classifier, which the rut-lsp merge sealed behind
+//! rut-lsp's privacy wall (`Lsp`/`Io` are its only public doors — the
+//! async actor JSON envelopes are no lane for a sync in-process
+//! highlighter); the pinned color behavior is unchanged.
+//!
+//! Un-classified bytes fall to the tiling fill: whitespace stretches
+//! plain, structural punctuation operators, and tur's contextual item
 //! keyword `entry` (`entry fn` — outside upstream's reserved table)
 //! keyword teal. The runs join back to exactly the normalized source
 //! (`set_spans` replaces the document; CRLF normalization stays free).
@@ -27,7 +32,10 @@
 //! `editor_comment_spans_keep_uniform_monospace_advances` in the
 //! playground gate.
 
-use rut_semantic::TokenType;
+use rut_ast::parser::{PRIMITIVE_TYS, RESERVED_KW};
+use rut_lexer::lexer::lex_canonical;
+use rut_lexer::span::Span;
+use rut_lexer::token::{FPart, Tok, Token};
 
 use tur_engine::builtin_plugins::text::controller::SpanData;
 use tur_engine::core::rut_runtime::color_of;
@@ -47,59 +55,168 @@ const CODE_TYPE: u64 = 0x6D28D9FF; // code.type — type/class/enum names
 /// span run (text + color only), sealed for the rut realm as an opaque.
 pub struct PgSpans(pub Vec<SpanData>);
 
+/// The legend class each token walks into — the old upstream classifier's
+/// visible classes, restated tur-side (Variable/Parameter/Property were
+/// always plain ink; one `Plain` class carries them).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Class {
+    Keyword,
+    Number,
+    String,
+    Comment,
+    Operator,
+    Literal,
+    Function,
+    Type,
+    Plain,
+}
+
+impl Class {
+    fn color(self) -> u64 {
+        match self {
+            Class::Keyword => CODE_KEYWORD,
+            Class::Number => CODE_NUMBER,
+            Class::String => CODE_STRING,
+            Class::Comment => CODE_COMMENT,
+            Class::Operator => CODE_OPERATOR,
+            Class::Literal => CODE_LITERAL,
+            Class::Function => CODE_FUNCTION,
+            Class::Type => CODE_TYPE,
+            Class::Plain => CODE_FG,
+        }
+    }
+}
+
 /// Classify `src` into the colored span run the editor controller renders
 /// (text + color only; every other style inherits the element's defaults).
 /// The join of the answer's texts is the CRLF-normalized source — spans
-/// index the normalized text (the `ParsedDoc`'s `src` contract, normalized
-/// identically here), and applying the run normalizes the editor content
-/// for free.
+/// index the normalized text (the lexer's canonical text contract), and
+/// applying the run normalizes the editor content for free.
 pub fn highlight_spans(src: &str) -> Vec<SpanData> {
-    let doc = rut_semantic::ParsedDoc::parse(rut_semantic::Mode::Impl, src.to_owned());
-    let norm = doc.src();
-    // The comment side table: the classifier no longer scans comment
-    // gaps (ParsedDoc carries no comment table — the doc chains live on
-    // the decl nodes), so the fill collects them here over the same
-    // normalized text and merges them into the classified run.
-    let comments = rut_lexer::lexer::lex_normalized(norm, true).2;
-    let mut classes: Vec<(rut_semantic::Span, TokenType)> = doc.spans().to_vec();
-    classes.extend(comments.iter().map(|c| (c.span, TokenType::Comment)));
+    let (norm, toks, _diags, comments, _lines) = lex_canonical(src.to_owned(), true);
+    let mut classes: Vec<(Span, Class)> = Vec::new();
+    walk(&toks, 0, &mut classes);
+    classes.extend(comments.iter().map(|c| (c.span, Class::Comment)));
     classes.sort_by_key(|(span, _)| span.lo);
     let mut b = Builder {
-        src: norm,
+        src: &norm,
         spans: Vec::new(),
         pos: 0,
     };
     let mut pos = 0usize;
-    for (span, ty) in classes {
+    for (span, class) in classes {
         let lo = span.lo as usize;
         let hi = span.hi as usize;
         b.gap(pos, lo);
-        b.emit(lo, hi, classify(ty, &norm[lo..hi]));
+        b.emit(lo, hi, class.color());
         pos = hi.max(pos);
     }
     b.gap(pos, norm.len());
     b.spans
 }
 
-/// One legend class → its palette color. Keywords whose text is a literal
-/// keep the literal brown (`true` / `false` / `nil` classify as keywords —
-/// the legend has no literal class). `Variable` / `Parameter` /
-/// `Property` stay plain ink (distinct colors deferred — one table row
-/// each, later).
-fn classify(ty: TokenType, text: &str) -> u64 {
-    match ty {
-        TokenType::Keyword if matches!(text, "true" | "false" | "nil") => CODE_LITERAL,
-        TokenType::Keyword => CODE_KEYWORD,
-        TokenType::Number => CODE_NUMBER,
-        TokenType::String => CODE_STRING,
-        TokenType::Comment => CODE_COMMENT,
-        TokenType::Operator => CODE_OPERATOR,
-        TokenType::EnumMember => CODE_LITERAL,
-        TokenType::Function | TokenType::Method => CODE_FUNCTION,
-        TokenType::Type | TokenType::Enum | TokenType::Class | TokenType::Interface
-        | TokenType::Namespace => CODE_TYPE,
-        TokenType::Variable | TokenType::Parameter | TokenType::Property => CODE_FG,
+/// The token walker: classes every token, tracking brace depth for the
+/// callee rule (a call inside a body colors its callee `Function`; a
+/// top-level bare call — part of no item, the old classifier's gap —
+/// stays unclassified so the fill paints it operator, byte-faithful to
+/// the pinned behavior).
+fn walk(toks: &[Token], mut depth: u32, out: &mut Vec<(Span, Class)>) {
+    for (i, t) in toks.iter().enumerate() {
+        match &t.tok {
+            Tok::Int(..) | Tok::Float(..) => out.push((t.span, Class::Number)),
+            Tok::Str(_) | Tok::RawStr(_) => out.push((t.span, Class::String)),
+            Tok::FStr(f) => fstring(f, t.span, depth, out),
+            Tok::Bool(_) => out.push((t.span, Class::Literal)),
+            Tok::Ident(name) => {
+                if let Some(class) = ident_class(name, i, toks, depth) {
+                    out.push((t.span, class));
+                }
+            }
+            Tok::LBrace => {
+                out.push((t.span, Class::Operator));
+                depth += 1;
+            }
+            Tok::RBrace => {
+                depth = depth.saturating_sub(1);
+                out.push((t.span, Class::Operator));
+            }
+            Tok::Eof => {}
+            _ => out.push((t.span, Class::Operator)),
+        }
     }
+}
+
+/// One f-string literal: the prologue, the stretches between holes, and
+/// the tail color as the string; each hole's token stream (spans real,
+/// the closing `}` included) recurses through the walker — hole names
+/// classify by the same rules, the hole braces read as operators.
+fn fstring(f: &rut_lexer::token::FStrTok, span: Span, depth: u32, out: &mut Vec<(Span, Class)>) {
+    let mut cursor = span.lo;
+    for part in &f.parts {
+        if let FPart::Hole(hole) = part
+            && let Some(first) = hole.first()
+        {
+            if cursor < first.span.lo {
+                out.push((Span { lo: cursor, hi: first.span.lo }, Class::String));
+            }
+            walk(hole, depth, out);
+            cursor = hole.last().map_or(first.span.lo, |t| t.span.hi);
+        }
+    }
+    if cursor < span.hi {
+        out.push((Span { lo: cursor, hi: span.hi }, Class::String));
+    }
+}
+
+/// One identifier's class by text + positional context, or `None` to
+/// leave it unclassified (the fill paints it — the top-level callee gap).
+#[allow(clippy::too_many_lines)]
+fn ident_class(name: &str, i: usize, toks: &[Token], depth: u32) -> Option<Class> {
+    // `nil` — the null literal rode the keyword table before the legend
+    // grew no literal class; it keeps the literal brown.
+    if name == "nil" {
+        return Some(Class::Literal);
+    }
+    // tur's contextual item keyword (upstream's reserved table keeps its
+    // distance — `entry fn` is a tur spelling).
+    if name == "entry" {
+        return Some(Class::Keyword);
+    }
+    if RESERVED_KW.contains(&name) {
+        return Some(Class::Keyword);
+    }
+    if PRIMITIVE_TYS.contains(&name) {
+        return Some(Class::Type);
+    }
+    let prev_is = |text: &str| i > 0 && matches!(&toks[i - 1].tok, Tok::Ident(k) if k == text);
+    let next_is_lparen = matches!(toks.get(i + 1).map(|t| &t.tok), Some(Tok::LParen));
+    // decl names: `fn f` colors function; a type decl head colors type.
+    if prev_is("fn") {
+        return Some(Class::Function);
+    }
+    if prev_is("class") || prev_is("enum") || prev_is("interface") {
+        return Some(Class::Type);
+    }
+    // The `::` path law: capitalized path segs read as types, a
+    // capitalized last seg as an enum member (`.` is value access only).
+    if name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_uppercase())
+    {
+        let after_path = matches!(&toks[i.saturating_sub(1)].tok, Tok::Colon2);
+        return Some(if after_path { Class::Literal } else { Class::Type });
+    }
+    // Call + method-call callees (a method rides `.name(`). A TOP-LEVEL
+    // bare call is part of no item — unclassified, so the fill paints
+    // it operator (the old classifier's gap, byte-faithful).
+    if next_is_lparen {
+        if depth > 0 {
+            return Some(Class::Function);
+        }
+        return None;
+    }
+    Some(Class::Plain)
 }
 
 /// The run builder: appends non-overlapping colored runs in source order,
@@ -141,9 +258,9 @@ impl<'a> Builder<'a> {
     }
 
     /// The unclassified gap `[lo, hi)`: whitespace stays plain, structural
-    /// punctuation colors as an operator (the legend leaves it out — the
-    /// boa look survives), and the contextual item keyword `entry` keeps
-    /// its keyword ink.
+    /// punctuation colors as an operator (the classifier leaves it out —
+    /// the boa look survives), and the contextual item keyword `entry`
+    /// keeps its keyword ink.
     fn gap(&mut self, lo: usize, hi: usize) {
         let bytes = self.src.as_bytes();
         let mut i = lo;

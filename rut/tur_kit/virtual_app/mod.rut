@@ -20,19 +20,19 @@ impl VirtualApp {
   [constructor] pub fn builder() -> Self {
     return Self { spec: va_new() };
   }
-  pub fn controller(mut self, c: handles::VAppCtrl) -> Self {
+  pub fn controller(self, c: handles::VAppCtrl) -> Self {
     va_controller_set(self.spec, c.raw());
     return self;
   }
-  pub fn bind(mut self, atom: u64) -> Self {
+  pub fn bind(self, atom: u64) -> Self {
     va_bind(self.spec, atom);
     return self;
   }
-  pub fn width_height(mut self, w: f64, h: f64) -> Self {
+  pub fn width_height(self, w: f64, h: f64) -> Self {
     va_size(self.spec, w, h);
     return self;
   }
-  pub fn query_key(mut self, k: str) -> Self {
+  pub fn query_key(self, k: str) -> Self {
     va_qkey(self.spec, k);
     return self;
   }
@@ -51,11 +51,11 @@ impl CompositedTarget {
   [constructor] pub fn builder() -> Self {
     return Self { spec: ct_target_new() };
   }
-  pub fn link(mut self, l: LinkCtrl) -> Self {
+  pub fn link(self, l: LinkCtrl) -> Self {
     ct_target_link(self.spec, l.inner);
     return self;
   }
-  pub fn child(mut self, c: handles::View) -> Self {
+  pub fn child(self, c: handles::View) -> Self {
     ct_target_child(self.spec, c.raw());
     return self;
   }
@@ -72,11 +72,11 @@ impl CompositedFollower {
   [constructor] pub fn builder() -> Self {
     return Self { spec: ct_follower_new() };
   }
-  pub fn link(mut self, l: LinkCtrl) -> Self {
+  pub fn link(self, l: LinkCtrl) -> Self {
     ct_follower_link(self.spec, l.inner);
     return self;
   }
-  pub fn target_anchor(mut self, v: flags::Align) -> Self {
+  pub fn target_anchor(self, v: flags::Align) -> Self {
     ct_follower_target_anchor(self.spec, flags::align_code(v));
     return self;
   }
@@ -84,19 +84,19 @@ impl CompositedFollower {
   // anchor rail). The `_bound` spelling is a DOCUMENTED EXCEPTION — the
   // enum lane owns the plain name (`target_anchor(flags::Align)`), so the
   // type-mismatched `Readable<f64>` lane keeps its suffix.
-  pub fn target_anchor_bound(mut self, r: reactive::Readable<f64>) -> Self {
+  pub fn target_anchor_bound(self, r: reactive::Readable<f64>) -> Self {
     ct_follower_target_anchor_bound(self.spec, r.atom_id());
     return self;
   }
-  pub fn follower_anchor(mut self, v: flags::Align) -> Self {
+  pub fn follower_anchor(self, v: flags::Align) -> Self {
     ct_follower_follower_anchor(self.spec, flags::align_code(v));
     return self;
   }
-  pub fn offset(mut self, x: f64, y: f64) -> Self {
+  pub fn offset(self, x: f64, y: f64) -> Self {
     ct_follower_offset(self.spec, x, y);
     return self;
   }
-  pub fn child(mut self, c: handles::View) -> Self {
+  pub fn child(self, c: handles::View) -> Self {
     ct_follower_child(self.spec, c.raw());
     return self;
   }

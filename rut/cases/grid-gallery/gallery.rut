@@ -16,7 +16,7 @@ use tur_kit::text::core::{ Text };
 // would share one cell across every pad (each tap answering with the
 // last index) — a literal per tile gives each pad its own index.
 pub fn gallery_grid(aspect: f64, max_cross: f64, rings: [Source<u64>], sel: Readable<f64>) -> View {
-    let mut grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
+    let grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
     grid.child(tile([0.0], rings, sel));
     grid.child(tile([1.0], rings, sel));
     grid.child(tile([2.0], rings, sel));
@@ -128,9 +128,9 @@ pub fn set_density_mutation(maxext: Readable<f64>, akey: Readable<str>, dkey: Re
 
 // Paint a chip trio: the active index indigo, the others slate.
 pub fn paint_chips(ctx: MutationCtx, chips: [Source<u64>], on_idx: u64) {
-    let mut i: i32 = 0;
+    let i: i32 = 0;
     while (i < 3) {
-        let mut c: u64 = color::CHIP_OFF;
+        let c: u64 = color::CHIP_OFF;
         if (i as u64 == on_idx) {
             c = color::CHIP_ON;
         }

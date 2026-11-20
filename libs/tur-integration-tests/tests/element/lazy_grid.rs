@@ -23,7 +23,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(10000.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
@@ -166,7 +166,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(100.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = LazyGrid().item_builder(cell).count(count).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
@@ -388,7 +388,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(1000.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).axis(Axis::Horizontal).max_cross(100.0).aspect(1.0).query_key("lg").build();
+    let lg = LazyGrid().item_builder(cell).count(count).axis(Axis::Horizontal).max_cross(100.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
@@ -483,7 +483,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(12.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
+    let lg = LazyGrid().item_builder(cell).count(count).max_cross(150.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);
@@ -541,7 +541,7 @@ fn cell(i: u64) -> View {
 
 entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(6.0);
-    let mut lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
+    let lg = LazyGrid().item_builder(cell).count(count).max_cross(145.0).aspect(1.0).query_key("lg").build();
     let lg = lg;
     let root = Expanded().flex(sv(1.0f64)).child(lg).build();
     mount(root);

@@ -14,7 +14,7 @@ use tur_kit::reactive::{ sv };
 
 entry fn start() {
     let fill_builder = Container().color(sv(0x404040FFu64));
-    let mut fill = Expanded().flex(sv(1.0f64)).child(fill_builder.build()).query_key("fill").build();
+    let fill = Expanded().flex(sv(1.0f64)).child(fill_builder.build()).query_key("fill").build();
     let fill = fill;
     let col = Column().child(fill);
     mount(col.build());

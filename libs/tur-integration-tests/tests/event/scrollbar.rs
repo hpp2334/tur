@@ -15,14 +15,14 @@ use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() -> u64 {
-    let mut content = Column();
-    let mut i = 0;
+    let content = Column();
+    let i = 0;
     while (i < 12) {
         let b = Container().width_height(280.0, 50.0).color(sv(0x4488CCFFu64));
         content.child(b.build());
         i += 1;
     }
-    let mut scroller = ScrollView().axis(Axis::Vertical).child(content.build()).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(content.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
     return rs_source_f64();

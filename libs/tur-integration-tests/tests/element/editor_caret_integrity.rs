@@ -42,8 +42,8 @@ struct EditorCx {
 }
 
 fn long_doc() -> str {
-    let mut text = "";
-    let mut i = 0;
+    let text = "";
+    let i = 0;
     while (i < 80) {
         if (i % 7 == 3) {
             text = f"{text}\n";
@@ -93,7 +93,7 @@ fn editor_cx(cx: opaque) -> EditorCx {
 
 entry fn set_mode(cx: opaque, code: f64) {
     let c = editor_cx(cx);
-    let mut name = "split";
+    let name = "split";
     if (code == 1.0) { name = "edit"; }
     if (code == 2.0) { name = "view"; }
     entry_ctx().set<str>(c.mode, name);

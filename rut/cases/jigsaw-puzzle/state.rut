@@ -80,13 +80,13 @@ pub fn mint() -> Pieces {
 // (rut index writes); Fisher-Yates over the LCG below.
 pub fn deal(ctx: MutationCtx, p: Pieces, count: Source<f64>, solved: Source<bool>,
         seed: Source<f64>) {
-    let mut deck: [f64] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    let mut i: i32 = 0;
+    let deck: [f64] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    let i: i32 = 0;
     while (i < 9) {
         deck[i] = i as f64;
         i = i + 1;
     }
-    let mut j: i32 = 0;
+    let j: i32 = 0;
     while (j < 8) {
         let k = j + (rnd(ctx, seed) as i32 % (9 - j));
         let a = deck[j];
@@ -94,7 +94,7 @@ pub fn deal(ctx: MutationCtx, p: Pieces, count: Source<f64>, solved: Source<bool
         deck[k] = a;
         j = j + 1;
     }
-    let mut b: u64 = 0;
+    let b: u64 = 0;
     while (b < 9) {
         let s = deck[b as i32] as u64;
         ctx.set<f64>(p.sl[b as i32], s as f64);

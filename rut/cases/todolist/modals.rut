@@ -160,7 +160,7 @@ pub fn remove_modal(tasks: Source<opaque>, n: Source<f64>, done: Source<f64>,
         let old = ctx.get<opaque>(tasks);
         let fresh = list_new();
         let count = value_len(old);
-        let mut k: u64 = 0;
+        let k: u64 = 0;
         while (k < count) {
             if (k != target) {
                 fresh.push(value_item(old, k));

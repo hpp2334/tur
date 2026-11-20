@@ -35,11 +35,11 @@ struct Repo {
 }
 
 impl Repo {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut name: ?str = nil;
-        let mut desc: ?str = nil;
-        let mut stars: ?i64 = nil;
+        let name: ?str = nil;
+        let desc: ?str = nil;
+        let stars: ?i64 = nil;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -75,7 +75,7 @@ impl Repo {
         }
         let nm: str = name;
         let st: i64 = stars;
-        let mut ds: str = "";
+        let ds: str = "";
         if (desc != nil) {
             let v: str = desc;
             ds = v;
@@ -90,7 +90,7 @@ impl Repo {
 // (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
 // unit, `T::decode(r)` dispatches the record's own decode member.
 fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
-    let mut r = JsonReader::of(s);
+    let r = JsonReader::of(s);
     let (v, e) = T::decode(r);
     if (e != nil) { return (nil, e); }
     if (!r.at_end()) {
@@ -131,10 +131,10 @@ struct Repo {
 }
 
 impl Repo {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut name: ?str = nil;
-        let mut stars: ?i64 = nil;
+        let name: ?str = nil;
+        let stars: ?i64 = nil;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -170,7 +170,7 @@ impl Repo {
 // (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
 // unit, `T::decode(r)` dispatches the record's own decode member.
 fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
-    let mut r = JsonReader::of(s);
+    let r = JsonReader::of(s);
     let (v, e) = T::decode(r);
     if (e != nil) { return (nil, e); }
     if (!r.at_end()) {
@@ -211,9 +211,9 @@ struct Alpha {
 }
 
 impl Alpha {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut tag: ?str = nil;
+        let tag: ?str = nil;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -240,9 +240,9 @@ struct Beta {
 }
 
 impl Beta {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut note: ?str = nil;
+        let note: ?str = nil;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -270,7 +270,7 @@ impl Beta {
 // (sealed at json's pack time); a LOCAL generic fn monomorphizes in THIS
 // unit, `T::decode(r)` dispatches the record's own decode member.
 fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
-    let mut r = JsonReader::of(s);
+    let r = JsonReader::of(s);
     let (v, e) = T::decode(r);
     if (e != nil) { return (nil, e); }
     if (!r.at_end()) {

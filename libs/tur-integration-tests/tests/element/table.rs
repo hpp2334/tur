@@ -56,7 +56,7 @@ fn row_cell(i: u64, _col: u64) -> View {
 
 fn rows_of(n: u64) -> ListHandle {
     let list: ListHandle = list_new();
-    let mut i = 0;
+    let i = 0;
     while (i < n as i32) {
         list.push(f"row {i}");
         i += 1;
@@ -69,7 +69,7 @@ entry fn start() -> u64 {
 
     let cols = TableCols().fixed(100.0).flex(1.0, 40.0).flex(3.0, 0.0);
 
-    let mut t = Table().columns(cols).rows(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
+    let t = Table().columns(cols).rows(rows).row_builder(row_cell).header_builder(header_row).query_key("t").build();
     mount(t);
     return rows.atom_id();
 }
@@ -149,7 +149,7 @@ fn body_cell(_row: u64, _col: u64) -> View {
 
 fn rows_of(n: u64) -> ListHandle {
     let list: ListHandle = list_new();
-    let mut i: u64 = 0;
+    let i: u64 = 0;
     while (i < n) {
         list.push(f"r{i}");
         i = i + 1;

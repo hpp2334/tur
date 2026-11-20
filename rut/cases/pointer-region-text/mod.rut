@@ -17,7 +17,7 @@ entry fn start() -> u64 {
     let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
         ctx.set<str>(state, "exited");
     });
-    let mut col = Column().cross_alignment(CrossAlign::Start);
+    let col = Column().cross_alignment(CrossAlign::Start);
 
     let b = Container()
         .width_height(100.0, 50.0)

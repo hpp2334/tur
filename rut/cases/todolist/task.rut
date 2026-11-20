@@ -134,7 +134,7 @@ fn checkbox_face(done: bool, ico: [u64]) -> View {
 
 // The title + optional subtitle; done tasks mute the title.
 fn title_block(title: str, desc: str, done: bool) -> View {
-    let mut fg = theme::TEXT;
+    let fg = theme::TEXT;
     if (done) {
         fg = theme::TEXT_STRIKE;
     }

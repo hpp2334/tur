@@ -33,8 +33,8 @@ struct EditorCx {
 
 fn start() -> EditorCx {
     let ctrl = text_ctrl();
-    let mut text = "";
-    let mut i = 0;
+    let text = "";
+    let i = 0;
     while (i < 40) {
         text = f"{text}line {i}\n";
         i = i + 1;

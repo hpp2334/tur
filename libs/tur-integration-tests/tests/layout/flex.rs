@@ -21,7 +21,7 @@ use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let mut col = Column();
+    let col = Column();
 
     // Stretch Row under an unbounded cross axis (non-flex child of a
     // Column): Stretch degrades to loose cross.
@@ -34,7 +34,7 @@ entry fn start() {
     // Expanded inside a Column with unbounded height: the flex child lays
     // out as inflexible (natural size), never a zero slot and never
     // infinity.
-    let mut flex_col = Column().query_key("flex-col");
+    let flex_col = Column().query_key("flex-col");
     let sized = Container().width_height(10.0, 50.0);
     flex_col.child(Expanded().flex(sv(1.0f64)).child(sized.build()).build());
     col.child(flex_col.build());

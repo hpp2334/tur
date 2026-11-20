@@ -371,8 +371,8 @@ use tur_kit::flags::{ Axis }; use tur_kit::handles::{ mount }; use tur_kit::layo
 use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let mut col = Column();
-    let mut i = 0;
+    let col = Column();
+    let i = 0;
     while (i < 60) {
         col.child(Text().text(sv(f"row {i}")).font_size(16.0).color(0x222222FF).build());
         i += 1;
@@ -450,8 +450,8 @@ use tur_kit::flags::{ Align, Axis, BorderPosition, Clip }; use tur_kit::gesture:
 fn join_into(items: u64, label: u64) {
     let v = rs_get_value(items);
     let n = rs_value_len(v);
-    let mut joined = "";
-    for (let mut i = 0; i < n as i32; i += 1) {
+    let joined = "";
+    for (let i = 0; i < n as i32; i += 1) {
         joined = f"{joined}|{rs_value_item(v, i as u64)}";
     }
     rs_set_str(label, joined);
@@ -483,7 +483,7 @@ entry fn start() -> u64 {
         let v = rs_get_value(items);
         let n = rs_value_len(v);
         let fresh = rs_list_new();
-        for (let mut i = 0; i < n as i32; i += 1) {
+        for (let i = 0; i < n as i32; i += 1) {
             rs_list_push(fresh, rs_value_item(v, i as u64));
         }
         rs_list_push(fresh, "gamma");
@@ -863,7 +863,7 @@ entry fn start() {
         .clip(Clip::AntiAlias)
         .alignment(Align::BottomRight)
         .child(Text().text(sv("corner")).build());
-    let mut root = Column().child(styled.build());
+    let root = Column().child(styled.build());
 
     // SizedBox: exactly 90 x 40 around its child.
     root.child(SizedBox(90.0, 40.0).child(Text().text(sv("sized")).build()).build());
@@ -957,7 +957,7 @@ entry fn start() -> u64 {
         ctx.set<str>(label, f"{ctx.get<str>(label)}|tap {ctx.get<f64>(seq) as u64}");
     });
     let menu = PointerInteract().on_context_menu(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
-        let mut b = "other";
+        let b = "other";
         if (ev.button == MouseButton::Right) {
             b = "right";
         }

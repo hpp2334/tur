@@ -32,7 +32,7 @@ use tur_kit::handles::{ ListHandle };
 // `T::decode(r)` dispatches the record's own decode member. The body is
 // the pkg entry's reader-route tail spelled verbatim.
 fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
-    let mut r = JsonReader::of(s);
+    let r = JsonReader::of(s);
     let (v, e) = T::decode(r);
     if (e != nil) { return (nil, e); }
     if (!r.at_end()) {
@@ -65,7 +65,7 @@ pub struct RepoPayload {
 // The optional-string read: `null` → nil, a string → some, anything
 // else (or a truncated body) → the reader's error — the caller unwinds
 // on `r.failed()`.
-fn read_opt_str(mut r: JsonReader) -> ?str {
+fn read_opt_str(r: JsonReader) -> ?str {
     if (r.try_null()) {
         return nil;
     }
@@ -77,15 +77,15 @@ fn read_opt_str(mut r: JsonReader) -> ?str {
 }
 
 impl RepoPayload {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut full_name: ?str = nil;
-        let mut message: ?str = nil;
-        let mut desc: ?str = nil;
-        let mut language: ?str = nil;
-        let mut stars: i64 = 0;
-        let mut forks: i64 = 0;
-        let mut issues: i64 = 0;
+        let full_name: ?str = nil;
+        let message: ?str = nil;
+        let desc: ?str = nil;
+        let language: ?str = nil;
+        let stars: i64 = 0;
+        let forks: i64 = 0;
+        let issues: i64 = 0;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -148,9 +148,9 @@ struct ApiError {
 }
 
 impl ApiError {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut message: ?str = nil;
+        let message: ?str = nil;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -188,11 +188,11 @@ struct ContentRow {
 }
 
 impl ContentRow {
-    pub fn decode(mut r: JsonReader) -> (?Self, ?DecodeJsonError) {
+    pub fn decode(r: JsonReader) -> (?Self, ?DecodeJsonError) {
         r.begin_object();
-        let mut kind: ?str = nil;
-        let mut name: ?str = nil;
-        let mut size: i64 = 0;
+        let kind: ?str = nil;
+        let name: ?str = nil;
+        let size: i64 = 0;
         while (r.more()) {
             let k = r.next_key();
             if (r.failed()) { return (nil, r.error()); }
@@ -234,8 +234,8 @@ impl ContentRow {
 
 // The contents array — the LOCAL generic shim (a bare Vec satisfies
 // nothing; the reader loop monomorphizes at T = ContentRow here).
-fn decode_rows<T requires JsonDeserialize>(mut r: JsonReader) -> (?Vec<T>, ?DecodeJsonError) {
-    let mut v = Vec<T>::new();
+fn decode_rows<T requires JsonDeserialize>(r: JsonReader) -> (?Vec<T>, ?DecodeJsonError) {
+    let v = Vec<T>::new();
     r.begin_array();
     while (r.more()) {
         let (x, e) = T::decode(r);
@@ -285,7 +285,7 @@ pub fn fill_contents(text: str, out: ListHandle) -> i32 {
     if (e != nil) {
         return -1;
     }
-    let mut n: i32 = 0;
+    let n: i32 = 0;
     for (let row of rows) {
         if (row.kind == "dir") {
             out.push(f"d|{row.name}");
@@ -304,7 +304,7 @@ pub fn fill_contents(text: str, out: ListHandle) -> i32 {
 // The array entry over the local shim (decodeJson is single-rooted; the
 // array root rides the shim's trailing-data check spelled here).
 fn decodeJson2Rows(text: str) -> (?Vec<ContentRow>, ?DecodeJsonError) {
-    let mut r = JsonReader::of(text);
+    let r = JsonReader::of(text);
     let (v, e) = decode_rows<ContentRow>(r);
     if (e != nil) {
         return (nil, e);

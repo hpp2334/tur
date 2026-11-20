@@ -258,8 +258,8 @@ fn kit_tree_matches_the_embed() {
         "the kit is a lib pkg"
     );
     assert!(
-        manifest.legacy_entry.lib.is_none() && manifest.legacy_entry.libs.is_empty(),
-        "the kit manifest spells the REPEALED entry.lib/entry.libs keys — \
+        manifest.entry.type_path.is_none(),
+        "the kit manifest spells an entry key — \
          the root module is the walk's mod.rut"
     );
 

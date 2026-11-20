@@ -18,7 +18,7 @@ entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
     // flags bit 0 = multiline, bit 1 = obscure.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(sv(true)).query_key("input").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).obscure(sv(true)).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());

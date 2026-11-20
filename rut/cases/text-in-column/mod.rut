@@ -6,7 +6,7 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut col = Column().cross_alignment(CrossAlign::Start);
+    let col = Column().cross_alignment(CrossAlign::Start);
     let first = Text().text(sv("First")).font_size(14.0);
     let second = Text().text(sv("Second")).font_size(14.0);
     col.child(first.build());

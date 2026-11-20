@@ -9,7 +9,7 @@
 // form — `Opacity(0.5)` / `Transform(scale, rotate, tx, ty)` — over each
 // class's `[constructor] fn builder()` (the `.builder()` long form stays
 // valid — byte-identical lowering), and CHAIN it:
-// `let o = Opacity(0.5).child(kid);` — never `let mut o` + `o.child(..);`
+// `let o = Opacity(0.5).child(kid);` — never `let o` + `o.child(..);`
 // statement runs.
 //
 // Reactive law (the kit-wide one-name law, anim edition): the reactive
@@ -96,11 +96,11 @@ impl AnimCtrl {
 }
 
 pub fn anim_ctrl(duration_ms: f64, curve: str, repeat: u64, on_tick: ?Mutation<f64>, on_end: ?Mutation<nil>) -> AnimCtrl {
-  let mut tick: u64 = 0;
+  let tick: u64 = 0;
   if (on_tick != nil) {
     tick = on_tick.seal(SEAL_F64);
   }
-  let mut end: u64 = 0;
+  let end: u64 = 0;
   if (on_end != nil) {
     end = on_end.seal(SEAL_NIL);
   }
@@ -166,7 +166,7 @@ impl Opacity {
   // The ONE reactive opacity prop over `Readable<f64>`: a live source
   // rides the bound row at build, an `sv()` literal stores the static
   // value (the ctor `Opacity(0.5)` stays valid — last bind wins).
-  pub fn value(mut self, r: Readable<f64>) -> Self {
+  pub fn value(self, r: Readable<f64>) -> Self {
     if (r.atom_id() == 0) {
       self.value = r.get();
       self.r = nil;
@@ -175,7 +175,7 @@ impl Opacity {
     }
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(self, c: View) -> Self {
     self.kid = c.inner;
     return self;
   }
@@ -212,7 +212,7 @@ impl Transform {
   // combo), the `sv()` lane stores the static value. The angle
   // re-resolves through the subscribe → relayout rail and the subtree
   // NEVER re-mounts (no rebuild channel).
-  pub fn rotate(mut self, r: Readable<f64>) -> Self {
+  pub fn rotate(self, r: Readable<f64>) -> Self {
     if (r.atom_id() == 0) {
       self.rotate = r.get();
       self.rotate_r = nil;
@@ -226,7 +226,7 @@ impl Transform {
   }
   // The ONE reactive uniform scale over `Readable<f64>` (same lanes —
   // last bind wins).
-  pub fn scale(mut self, r: Readable<f64>) -> Self {
+  pub fn scale(self, r: Readable<f64>) -> Self {
     if (r.atom_id() == 0) {
       self.scale = r.get();
       self.scale_r = nil;
@@ -242,7 +242,7 @@ impl Transform {
   // independently sv-able or live (the translate row is the one
   // multi-channel shape; the bind lanes clear the other channels — last
   // bind wins).
-  pub fn translate(mut self, tx: Readable<f64>, ty: Readable<f64>) -> Self {
+  pub fn translate(self, tx: Readable<f64>, ty: Readable<f64>) -> Self {
     if (tx.atom_id() == 0) {
       self.tx = tx.get();
       self.tx_r = nil;
@@ -259,7 +259,7 @@ impl Transform {
     self.rotate_r = nil;
     return self;
   }
-  pub fn child(mut self, c: View) -> Self {
+  pub fn child(self, c: View) -> Self {
     self.kid = c.inner;
     return self;
   }
@@ -271,11 +271,11 @@ impl Transform {
       return View(el_transform_scale_bound(self.scale_r.atom_id(), self.rotate, self.tx, self.ty, self.kid));
     }
     if (self.tx_r != nil || self.ty_r != nil) {
-      let mut tx_atom: u64 = 0;
+      let tx_atom: u64 = 0;
       if (self.tx_r != nil) {
         tx_atom = self.tx_r.atom_id();
       }
-      let mut ty_atom: u64 = 0;
+      let ty_atom: u64 = 0;
       if (self.ty_r != nil) {
         ty_atom = self.ty_r.atom_id();
       }

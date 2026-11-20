@@ -8,7 +8,7 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut col = Column();
+    let col = Column();
     let b = Container()
         .padding(48.0)
         .query_key("container")

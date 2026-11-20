@@ -33,8 +33,8 @@ entry fn start() {
 
 // The aspect-2 grid: 10 hue cells labeled #i.
 fn aspect_grid() -> View {
-    let mut grid = Grid().max_cross(160.0).aspect(2.0).spacing(6.0, 6.0).query_key("grid-aspect");
-    let mut i: u64 = 0;
+    let grid = Grid().max_cross(160.0).aspect(2.0).spacing(6.0, 6.0).query_key("grid-aspect");
+    let i: u64 = 0;
     while (i < 10) {
         let cell = Container()
             .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
@@ -48,8 +48,8 @@ fn aspect_grid() -> View {
 // The fixed-extent grid: main_extent pins each row at 40px tall
 // (overriding the aspect), same 10-cell ramp.
 fn extent_grid() -> View {
-    let mut grid = Grid().max_cross(160.0).main_extent(40.0).spacing(6.0, 6.0).query_key("grid-aspect-extent");
-    let mut i: u64 = 0;
+    let grid = Grid().max_cross(160.0).main_extent(40.0).spacing(6.0, 6.0).query_key("grid-aspect-extent");
+    let i: u64 = 0;
     while (i < 10) {
         let cell = Container()
             .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
@@ -68,9 +68,9 @@ fn hsl_packed(h: f64, s: f64, l: f64) -> u64 {
     let hue: f64 = h % 360.0;
     let hp: f64 = hue / 60.0;
     let x: f64 = c * (1.0 - abs_f(hp % 2.0 - 1.0));
-    let mut r1: f64 = 0.0;
-    let mut g1: f64 = 0.0;
-    let mut b1: f64 = 0.0;
+    let r1: f64 = 0.0;
+    let g1: f64 = 0.0;
+    let b1: f64 = 0.0;
     if (hp < 1.0) {
         r1 = c;
         g1 = x;

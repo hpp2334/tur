@@ -111,7 +111,7 @@ fn one_list() -> ListHandle {
 // bridge.
 fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -> View {
     let read = MutationCtx::over(bridge());
-    let mut max_cross: f64 = 140.0;
+    let max_cross: f64 = 140.0;
     if (read.get<bool>(dense)) {
         max_cross = 85.0;
     }
@@ -205,9 +205,9 @@ fn hsl_packed(h: f64, s: f64, l: f64) -> u64 {
     let hue: f64 = h % 360.0;
     let hp: f64 = hue / 60.0;
     let x: f64 = c * (1.0 - abs_f(hp % 2.0 - 1.0));
-    let mut r1: f64 = 0.0;
-    let mut g1: f64 = 0.0;
-    let mut b1: f64 = 0.0;
+    let r1: f64 = 0.0;
+    let g1: f64 = 0.0;
+    let b1: f64 = 0.0;
     if (hp < 1.0) {
         r1 = c;
         g1 = x;

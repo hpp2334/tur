@@ -44,8 +44,8 @@ struct EditorCx {
 }
 
 fn long_doc() -> str {
-    let mut text = "";
-    let mut i = 0;
+    let text = "";
+    let i = 0;
     while (i < 40) {
         text = f"{text}line {i}\n";
         i = i + 1;
