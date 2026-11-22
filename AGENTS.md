@@ -502,41 +502,46 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest main** (`0ca49f6d`, 2026-11-21) — 57 commits
-  past the previous pin (`847c5c8f`, 2026-11-13), the head of a huge
-  consolidation: (1) **rut-semantic DIES** — its modules absorb into the
-  new `rut-lsp` core (split from rut-lsp-wasm), sealed behind the
-  PRIVACY WALL (`Lsp` + `Io` are rut-lsp's only public doors), and
-  `ParsedDoc` becomes `Document` (private). tur's highlighter rides the
-  ACTOR now: one `Lsp` session per thread, its loop future booted onto a
+- The rut pin is **latest main** (`460e8887`, 2026-11-22) — 25 commits
+  past the previous pin (`0ca49f6d`, 2026-11-21): the GLOB LEAF lands
+  (`use pkg::*` + the brace star — a grammar feature; the driver's
+  glob expansion binds the pub surface — tur's sources spell no globs
+  yet, the surface-law test's allowlist is the gate), the Name
+  vocabulary (every AST name carries its span), NodeKindId becomes the
+  closed enum `AnyHandle::kind` carries, the rut-ast Doc pipeline +
+  edit door, and rut-lsp's mounted-world layer split (its own shell +
+  MountedFile migration — the Lsp/Io ABI HELD: tur's actor-driven
+  highlighter rode through untouched). No `rut/*` std source moved at
+  this step (no re-vendor; std-v18 remains the current envelope). At
+  `0ca49f6d`, the huge consolidation: (1) **rut-semantic DIES** —
+  absorbed into rut-lsp behind the PRIVACY WALL (`Lsp` + `Io` are
+  rut-lsp's only public doors); tur's highlighter rides the ACTOR now:
+  one `Lsp` session per thread, its loop future booted onto a
   tur-owned `futures::executor::LocalPool` through `Lsp::boot`'s spawn
   seam (`spawn_native` is native-gated upstream — a tur-owned pool
-  compiles on wasm32 too), so `pool.run_until(lsp.analyze(..))` answers
-  SYNCHRONOUSLY on the worker lane (no thread, no runtime, no parking);
-  the answer's flat LSP semantic-token delta stream (UTF-16 positions)
-  decodes back to byte spans over the canonical text, `legend()` names
-  map onto the palette (see `tur-playground/src/highlight.rs`); the
-  `rut-semantic` dependency is DELETED. (2) **the drop-mut law**: `mut` is fully removed from the
-  keyword table — bindings are mutable by default, `const` is the
-  shallow opt-out; every tur .rut source (kit, cases, playground,
-  futures.rut embed, test fixtures in raw strings) was swept. (3)
-  **grammar deletions**: the inline `mod NAME { }` form dies (one mod
-  grammar, declaration-only), `x?` postfix, `~x`, constructor patterns,
-  const-generic args, the `fn async f` alias — and `entry`/`host`-style
+  compiles on wasm32 too), so `pool.run_until(lsp.analyze(..))`
+  answers SYNCHRONOUSLY on the worker lane (no thread, no runtime, no
+  parking); the answer's flat LSP semantic-token delta stream (UTF-16
+  positions) decodes back to byte spans over the canonical text,
+  `legend()` names map onto the palette (see
+  `tur-playground/src/highlight.rs`). (2) **the drop-mut law**: `mut`
+  is fully removed from the keyword table — bindings are mutable by
+  default, `const` is the shallow opt-out; every tur .rut source (kit,
+  cases, playground, futures.rut embed, test fixtures in raw strings)
+  was swept. (3) **grammar deletions**: the inline `mod NAME { }` form
+  dies (one mod grammar, declaration-only), `x?` postfix, `~x`,
+  constructor patterns, const-generic args — and `entry`/`host`-style
   contextual words are now RESERVED (`let host`/`let when` bindings
-  refuse; the playground + two fixtures were renamed). (4) **wire 23 /
-  bundle wire 12-only**: the compat lane dies, `Manifest.legacy_entry`
-  is gone (the only entry key is `entry.type_path`), and the kit
-  bundles re-bless. (5) **the run chain reshapes**: `RutRun::pkg` takes
-  `Offer` (`&Bundle`/`HostPkg`) — source `Mounted` data rides
-  `RutRun::mount` (the data door); the VM builder lost `.hooks`
-  (HostHooks died), `alloc_str_cell`/`alloc_bytes_cell` died (marshal
-  through `<String/Vec<u8> as rut_vm::interp::Ret>::into_slot`). (6)
-  **std-v18** is cut — nmapset's values move HOST-SIDE (nmap-hostvals
-  P5: every value lives in the entry as a sealed `opaque(v)` box) and
-  json/nmapset/pouch/strbuild/nmap_host sources changed: tur's vendored
-  closure is RE-VENDORED at this pin (headers say @0ca49f6d/std-v18;
-  strbuild_host.d.rut rode unchanged). Raw-rev pin (never a
+  refuse). (4) **wire 23 / bundle wire 12-only**: the compat lane
+  dies, `Manifest.legacy_entry` is gone (the only entry key is
+  `entry.type_path`). (5) **the run chain reshapes**: `RutRun::pkg`
+  takes `Offer` (`&Bundle`/`HostPkg`) — source `Mounted` data rides
+  `RutRun::mount` (the data door); the VM builder lost `.hooks`,
+  `alloc_str_cell`/`alloc_bytes_cell` died (marshal through
+  `<String/Vec<u8> as rut_vm::interp::Ret>::into_slot`). (6) **std-v18**
+  is cut — nmapset's values move HOST-SIDE (nmap-hostvals P5) and
+  json/nmapset/pouch/strbuild/nmap_host sources changed: tur's
+  vendored closure is RE-VENDORED at that pin. Raw-rev pin (never a
   tag/branch), and the tag lane is how the upstream std packages
   publish. tur consumes the std `json` pkg from it: vendored sources
   (`builtin_plugins/std_json/vendor/`) offered to modules by
