@@ -79,6 +79,13 @@ pub enum RutEntryArgs {
     CxU64(u64, u64),
     /// `entry fn(opaque, f64)` — the context + a float.
     CxF64(u64, f64),
+    /// `entry fn(opaque, str, str)` — the context + the (op, args) pair:
+    /// the plugin-epoch dispatch shape (the request payload rides the call,
+    /// no stash inbox).
+    CxStrStr(u64, String, String),
+    /// `entry fn(opaque, str, bytes)` — the dispatch shape over binary
+    /// args.
+    CxStrBytes(u64, String, Vec<u8>),
 }
 
 /// The entry RPC's answer slot — `tur_start_answer`'s channel extended to
@@ -94,6 +101,8 @@ pub enum RutEntryAnswer {
     U64(u64),
     F64(f64),
     Str(String),
+    /// An answered `bytes` — the binary reply lane (`entry fn(…) -> bytes`).
+    Bytes(Vec<u8>),
 }
 
 impl RutEntryAnswer {
@@ -141,8 +150,19 @@ pub enum WorkerMsg {
     /// sets can be large (the playground ships multi-file trees) — `Arc`
     /// lets the message be duplicated cheaply if needed; a root-only set
     /// is the historical single-string shape.
+    ///
+    /// `start_cx` is the EMBEDDER-SUPPLIED START ARGUMENT: the identity
+    /// the embedder minted for this load (the `entry fn start(cx: opaque)`
+    /// crossing). The engine wraps it in a VM-side opaque box at boot and
+    /// registers it in the entry slots under this identity, so a module
+    /// whose `start` declares a `cx` param receives it and the cx entry
+    /// lanes deliver THIS handle (not the start answer) when addressed by
+    /// the same id. `None` = today's no-arg boot (every existing load).
+    /// The u64 is the whole crossing because an `OpaqueRef` is heap-backed
+    /// (worker-side) and cannot travel the embedder → worker channel.
     LoadRutModule {
         files: Arc<crate::core::rut_runtime::RutModuleFiles>,
+        start_cx: Option<u64>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
     /// Call a named `entry fn` on the loaded rut module — the
@@ -159,9 +179,7 @@ pub enum WorkerMsg {
     },
     /// Read the loaded rut module's `entry fn start() -> u64` answer
     /// (0 when `start` returns nil or no rut module is loaded).
-    RutStartAnswer {
-        reply: ReplySender<u64>,
-    },
+    RutStartAnswer { reply: ReplySender<u64> },
     /// Dev-tool snapshot request (the E3 rut-row surface): the worker
     /// serializes the requested view of its live state to a JSON string
     /// (see `core::dev`).
@@ -500,14 +518,23 @@ mod tests {
     use super::*;
 
     /// `Arc<RutModuleFiles>` is the canonical file-set carrier — verify it
-    /// round-trips through `WorkerMsg::LoadRutModule` without clone friction.
+    /// round-trips through `WorkerMsg::LoadRutModule` without clone friction
+    /// (and that the message stays Send with the start-cx aboard).
     #[test]
     fn load_module_carries_arc_str() {
         let (tx, _rx) = Reply::<Result<(), ModuleError>>::pair();
-        let files: Arc<crate::core::rut_runtime::RutModuleFiles> =
-            Arc::new(crate::core::rut_runtime::RutModuleFiles::from("entry fn start() {}"));
-        let msg = WorkerMsg::LoadRutModule { files, reply: tx };
-        assert!(matches!(msg, WorkerMsg::LoadRutModule { .. }));
+        let files: Arc<crate::core::rut_runtime::RutModuleFiles> = Arc::new(
+            crate::core::rut_runtime::RutModuleFiles::from("entry fn start() {}"),
+        );
+        let msg = WorkerMsg::LoadRutModule {
+            files,
+            start_cx: Some(7),
+            reply: tx,
+        };
+        assert!(
+            matches!(msg, WorkerMsg::LoadRutModule { start_cx: Some(7), .. }),
+            "the start cx rides the message"
+        );
     }
 
     /// `ModuleError` Display strings are stable (used for diagnostics).

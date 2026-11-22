@@ -40,13 +40,13 @@ use futures::StreamExt;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{HostMsg, HostRx, HostTx, Reply, ShellCommand, WorkerRx, WorkerTx};
 use crate::core::clock::Clock;
-use crate::core::event_bus::EventBusHandle;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::event_bus::EventBusHandle;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
-use crate::core::rut_runtime::RutModuleFiles;
 use crate::core::render::{
     RenderCommand, RenderCommandBatch, Renderer, fingerprint_batch, referenced_image_ids,
 };
+use crate::core::rut_runtime::RutModuleFiles;
 use crate::core::scheduler::WorkerTicket;
 use crate::error::TurError;
 
@@ -133,16 +133,23 @@ impl WorkerBackend {
     ///
     /// The whole path — parse, boot, `start`, and `apply_root` (the
     /// rut-built tree is pure Rust `Rc<dyn View>`) — is script-runtime-free.
-    fn load_rut_module_inner(&self, files: &RutModuleFiles) -> Result<(), ModuleError> {
+    ///
+    /// `start_cx` is the embedder-supplied start argument (`Option<u64>`,
+    /// the identity the engine wraps at boot — see
+    /// [`RutRuntime::boot_compiled`]).
+    fn load_rut_module_inner(
+        &self,
+        files: &RutModuleFiles,
+        start_cx: Option<u64>,
+    ) -> Result<(), ModuleError> {
         let exts = self.internal.instance.rut_pkg_exts.borrow().clone();
         // Parse-first contract, paid ONCE: compile before any teardown runs
         // (a broken module never destroys the running tree) and KEEP the
         // program for the boot — the old pre-flight (`parse_check_files`)
         // compiled the whole session a second time in `boot_files` just to
         // throw the first result away.
-        let (prog, host_ctx) =
-            crate::core::rut_runtime::RutRuntime::compile_files(files, &exts)
-                .map_err(ModuleError::Parse)?;
+        let (prog, host_ctx) = crate::core::rut_runtime::RutRuntime::compile_files(files, &exts)
+            .map_err(ModuleError::Parse)?;
 
         // Module lifecycle contract: run the previous module's cleanup +
         // clear its leftover root tree before the new module runs.
@@ -159,6 +166,7 @@ impl WorkerBackend {
             js.clone(),
             inputs,
             &exts,
+            start_cx,
         )?;
 
         // Apply the root the module's `start` stashed via `tur_host::mount` —
@@ -218,7 +226,9 @@ impl WorkerBackend {
             RutEntryArgs::None
             | RutEntryArgs::Cx(_)
             | RutEntryArgs::CxU64(..)
-            | RutEntryArgs::CxF64(..) => {
+            | RutEntryArgs::CxF64(..)
+            | RutEntryArgs::CxStrStr(..)
+            | RutEntryArgs::CxStrBytes(..) => {
                 let mut rut_guard = self.rut.borrow_mut();
                 let Some(rut) = rut_guard.as_mut() else {
                     return Err(ModuleError::Eval(
@@ -238,6 +248,17 @@ impl WorkerBackend {
                     RutEntryArgs::CxF64(token, b) => {
                         let cx = rut.entry_slot_handle(token)?;
                         rut.call_entry_cx_f64(name, &cx, b)?
+                    }
+                    // The dispatch shapes: the token addresses the boot
+                    // handle (the embedder-supplied start identity — the
+                    // id the host already holds), op + args ride the call.
+                    RutEntryArgs::CxStrStr(token, op, args) => {
+                        let cx = rut.entry_slot_handle(token)?;
+                        rut.call_entry_cx_str_str(name, &cx, &op, &args)?
+                    }
+                    RutEntryArgs::CxStrBytes(token, op, args) => {
+                        let cx = rut.entry_slot_handle(token)?;
+                        rut.call_entry_cx_str_bytes(name, &cx, &op, &args)?
                     }
                     RutEntryArgs::Nums { .. } => unreachable!("matched above"),
                 };
@@ -270,8 +291,12 @@ impl WorkerBackend {
                 // `worker_loop` (record-only, no pump); this arm only keeps
                 // the dispatch exhaustive.
             }
-            WorkerMsg::LoadRutModule { files, reply } => {
-                let res = self.load_rut_module_inner(&files);
+            WorkerMsg::LoadRutModule {
+                files,
+                start_cx,
+                reply,
+            } => {
+                let res = self.load_rut_module_inner(&files, start_cx);
                 self.wake_if_dirty();
                 reply.send(res);
             }
@@ -320,12 +345,17 @@ impl WorkerBackend {
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
             }
-            WorkerMsg::EventBusToModule { channel_id, payload } => {
+            WorkerMsg::EventBusToModule {
+                channel_id,
+                payload,
+            } => {
                 // Queue for the bus subsystem's next-flush drain (silent
                 // drop happens THERE — handler-less channels never enqueue).
-                if let Some(bus) = self.internal.instance.plugin_state::<
-                    crate::core::event_bus::EventBusState,
-                >() {
+                if let Some(bus) = self
+                    .internal
+                    .instance
+                    .plugin_state::<crate::core::event_bus::EventBusState>()
+                {
                     bus.push_to_module(channel_id, payload);
                 }
             }
@@ -1080,21 +1110,45 @@ impl HostBackend {
     ) -> Result<(), ModuleError> {
         let source = source.into();
         tracing::info!("load_rut_module: booting module ({} bytes)", source.len());
-        self.load_rut_module_files(RutModuleFiles::from(source)).await
+        self.load_rut_module_files(RutModuleFiles::from(source), None)
+            .await
+    }
+
+    /// [`Self::load_rut_module`] with the EMBEDDER-SUPPLIED START
+    /// ARGUMENT: `start_cx` is the identity the embedder minted for this
+    /// load (the `entry fn start(cx: opaque)` crossing — the engine wraps
+    /// it at boot and the cx entry lanes deliver it under the same id).
+    pub(crate) async fn load_rut_module_cx(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+        start_cx: u64,
+    ) -> Result<(), ModuleError> {
+        let source = source.into();
+        tracing::info!(
+            "load_rut_module: booting module ({} bytes, start cx {start_cx})",
+            source.len()
+        );
+        self.load_rut_module_files(RutModuleFiles::from(source), Some(start_cx))
+            .await
     }
 
     /// Module load over a whole file tree — the RPC entry behind
     /// [`TurApp::load_rut_module_files`]. Same lifecycle and
-    /// cancellation contract as [`Self::load_rut_module`].
+    /// cancellation contract as [`Self::load_rut_module`]. `start_cx`:
+    /// `None` = the historical no-arg boot; `Some(identity)` = the
+    /// embedder-supplied start argument.
     pub(crate) async fn load_rut_module_files(
         &self,
         files: RutModuleFiles,
+        start_cx: Option<u64>,
     ) -> Result<(), ModuleError> {
         let files = Arc::new(files);
         let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        let _ = self
-            .worker_tx
-            .unbounded_send(WorkerMsg::LoadRutModule { files, reply: tx });
+        let _ = self.worker_tx.unbounded_send(WorkerMsg::LoadRutModule {
+            files,
+            start_cx,
+            reply: tx,
+        });
         self.wake_worker();
         match rx.rx.await {
             Ok(res) => res,
@@ -1115,9 +1169,7 @@ impl HostBackend {
     ) -> Result<(), ModuleError> {
         let name = std::sync::Arc::from(name);
         let args = crate::core::app::RutEntryArgs::Nums { a, b };
-        self.call_rut_entry_args(&name, args)
-            .await
-            .map(|_| ())
+        self.call_rut_entry_args(&name, args).await.map(|_| ())
     }
 
     /// The entry rail's answer-carrying lanes — the RPC entries behind
