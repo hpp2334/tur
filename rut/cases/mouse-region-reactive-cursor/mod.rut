@@ -3,19 +3,26 @@
 // enter/exit rails are (empty) mutations; the `set_cursor` probe writes
 // the raw atom id the entry rail hands it through the kit's bridge/over
 // probe rail (the sanctioned raw-atom hatch).
-use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion }; use tur_kit::handles::{ mount }; use tur_kit::layout::box::{ Container }; use tur_kit::layout::flex::{ Column }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv }; use tur_kit::text::core::{ Text };use tur_kit::flags::{ HitTestBehavior };
-
+use tur_kit::gesture::pointer::{ EnterEvent, ExitEvent, MouseRegion };
+use tur_kit::handles::{ mount };
+use tur_kit::layout::box::{ Container };
+use tur_kit::layout::flex::{ Column };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv };
+use tur_kit::text::core::{ Text };
+use tur_kit::flags::{ HitTestBehavior };
 
 entry fn start() -> u64 {
     let cursor: Readable<str> = source<str>("pointer");
     let state = source<str>("");
-    let b_enter = mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) {
-    });
-    let b_exit = mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) {
-    });
+    let b_enter = mutate<EnterEvent>(fn (_ctx: MutationCtx, _ev: EnterEvent) { });
+    let b_exit = mutate<ExitEvent>(fn (_ctx: MutationCtx, _ev: ExitEvent) { });
     let col = Column();
     let b = Container().width_height(100.0, 50.0).child(Text().text(state).build());
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(HitTestBehavior::Opaque).child(b.build()).build());
+    col.child(
+        MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor_bound(cursor).behavior(
+            HitTestBehavior::Opaque,
+        ).child(b.build()).build(),
+    );
     let ct = Text().text(cursor).query_key("cursor-atom");
     col.child(ct.build());
     mount(col.build());

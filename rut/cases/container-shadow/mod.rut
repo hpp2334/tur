@@ -7,11 +7,12 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let b = Container()
-        .width_height(200.0, 200.0)
-        .color(sv(0xFFFFFFFFu64))
-        .radius(sv(8.0f64))
-        .shadow(0x00000050u64, 12.0, 4.0, 4.0)
-        .child(Text().text(sv("Shadow")).font_size(16.0).build());
+    let b =
+        Container().width_height(200.0, 200.0).color(sv(4294967295u64)).radius(sv(8.0f64)).shadow(
+            80u64,
+            12.0,
+            4.0,
+            4.0,
+        ).child(Text().text(sv("Shadow")).font_size(16.0).build());
     mount(b.build());
 }

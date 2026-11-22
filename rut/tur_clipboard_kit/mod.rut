@@ -13,11 +13,11 @@ use tur_host::clipboard::{ clipboard_read_raw, clipboard_write_raw };
 // Read the platform clipboard text (empty when denied/unavailable — the
 // same degradation the JS bridge documents). Async: `await clipboard_read()`.
 pub async fn clipboard_read() -> str {
-  return await clipboard_read_raw();
+    return await clipboard_read_raw();
 }
 
 // Write text to the platform clipboard (resolves when the write lands; a
 // missing capability degrades to a no-op). Async: `await clipboard_write(..)`.
 pub async fn clipboard_write(text: str) {
-  await clipboard_write_raw(text);
+    await clipboard_write_raw(text);
 }

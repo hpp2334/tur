@@ -20,17 +20,25 @@
 // panel background; tiles carry a 6px radius (the audit's "rounded hue
 // tiles"); the aspect re-derive remounts the grid (scroll resets) where
 // boa reflows in place.
-use tur_kit::control_flow::control::{ Each }; use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize }; use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract }; use tur_kit::handles::{ ListHandle, View, list_new, mount }; use tur_kit::layout::box::{ Container, SizedBox }; use tur_kit::layout::flex::{ Column, Expanded, Row }; use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv }; use tur_kit::scroll::{ LazyGrid }; use tur_kit::text::core::{ Text };use tur_kit::layout::grid_table::{ Grid };
-
+use tur_kit::control_flow::control::{ Each };
+use tur_kit::flags::{ CrossAlign, Cursor, MainAxisSize };
+use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
+use tur_kit::handles::{ ListHandle, View, list_new, mount };
+use tur_kit::layout::box::{ Container, SizedBox };
+use tur_kit::layout::flex::{ Column, Expanded, Row };
+use tur_kit::reactive::{ Mutation, MutationCtx, Readable, Source, bridge, mutate, source, sv };
+use tur_kit::scroll::{ LazyGrid };
+use tur_kit::text::core::{ Text };
+use tur_kit::layout::grid_table::{ Grid };
 
 // The boa palette (the deep-slate gallery chrome).
-let PAGE_BG: u64 = 0x0F172AFFu64;
-let TITLE_FG: u64 = 0xF1F5F9FFu64;
-let SUB_FG: u64 = 0x94A3B8FFu64;
-let PANEL_BG: u64 = 0x020617FFu64;
-let CHIP_ON: u64 = 0x6366F1FFu64;
-let CHIP_OFF: u64 = 0x1E293BFFu64;
-let CHIP_FG: u64 = 0xE2E8F0FFu64;
+let PAGE_BG: u64 = 253176575u64;
+let TITLE_FG: u64 = 4059429375u64;
+let SUB_FG: u64 = 2493757695u64;
+let PANEL_BG: u64 = 33953791u64;
+let CHIP_ON: u64 = 1667691007u64;
+let CHIP_OFF: u64 = 506018815u64;
+let CHIP_FG: u64 = 3806916863u64;
 
 entry fn start() {
     let aspect: Readable<f64> = source<f64>(1.0);
@@ -40,9 +48,8 @@ entry fn start() {
 
     // The five chip brushes (Square / Wide / Tall / Normal / Dense),
     // seeded to the boot state (Square + Normal).
-    let chips: [Source<u64>] = [
-        source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0),
-    ];
+    let chips: [Source<u64>] =
+        [source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0), source<u64>(0)];
     paint_chips(MutationCtx::over(bridge()), aspect, dense, chips);
 
     // The chip taps: write the state, repaint the trio, remount the grid.
@@ -52,45 +59,38 @@ entry fn start() {
     let b_normal = dense_mutation(aspect, dense, chips, items, false);
     let b_dense = dense_mutation(aspect, dense, chips, items, true);
 
-    let col = Column()
-        .cross_alignment(CrossAlign::Start)
-        .query_key("gallery/col")
-        .child(Text().text(sv("Lazy Grid Gallery")).font_size(18.0).color(TITLE_FG).query_key("gallery/header").build())
-        .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text(sv("6,000 tiles · only the visible rows mount — scroll to explore")).font_size(12.0).color(SUB_FG).build())
-        .child(SizedBox(0.0, 12.0).build())
-        .child(
-            Row()
-                .main_axis_size(MainAxisSize::Min)
-                .child(chip(chips[0], "gallery/a-square", "Square", b_square))
-                .child(SizedBox(6.0, 0.0).build())
-                .child(chip(chips[1], "gallery/a-wide", "Wide", b_wide))
-                .child(SizedBox(6.0, 0.0).build())
-                .child(chip(chips[2], "gallery/a-tall", "Tall", b_tall))
-                .build(),
-        )
-        .child(SizedBox(0.0, 8.0).build())
-        .child(
-            Row()
-                .main_axis_size(MainAxisSize::Min)
-                .child(chip(chips[3], "gallery/d-normal", "Normal", b_normal))
-                .child(SizedBox(6.0, 0.0).build())
-                .child(chip(chips[4], "gallery/d-dense", "Dense", b_dense))
-                .build(),
-        )
-        .child(SizedBox(0.0, 12.0).build())
-        .child(
-            Expanded().flex(sv(1.0f64)).child(
-                Container()
-                    .color(sv(PANEL_BG))
-                    .radius(sv(10.0f64))
-                    .child(Each(items).item_builder(fn (_i: u64, _s: str) -> View {
-                        return grid_of(aspect, dense, count);
-                    }).build())
-                    .build(),
+    let col =
+        Column().cross_alignment(CrossAlign::Start).query_key("gallery/col").child(
+            Text().text(sv("Lazy Grid Gallery")).font_size(18.0).color(TITLE_FG).query_key(
+                "gallery/header",
             ).build(),
-        )
-        .build();
+        ).child(SizedBox(0.0, 4.0).build()).child(
+            Text().text(sv("6,000 tiles · only the visible rows mount — scroll to explore")).font_size(
+                12.0,
+            ).color(SUB_FG).build(),
+        ).child(SizedBox(0.0, 12.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).child(
+                chip(chips[0], "gallery/a-square", "Square", b_square),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                chip(chips[1], "gallery/a-wide", "Wide", b_wide),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                chip(chips[2], "gallery/a-tall", "Tall", b_tall),
+            ).build(),
+        ).child(SizedBox(0.0, 8.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).child(
+                chip(chips[3], "gallery/d-normal", "Normal", b_normal),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                chip(chips[4], "gallery/d-dense", "Dense", b_dense),
+            ).build(),
+        ).child(SizedBox(0.0, 12.0).build()).child(
+            Expanded().flex(sv(1.0f64)).child(
+                Container().color(sv(PANEL_BG)).radius(sv(10.0f64)).child(
+                    Each(items).item_builder(
+                        fn (_i: u64, _s: str) -> View { return grid_of(aspect, dense, count); },
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
 
     mount(Container().color(sv(PAGE_BG)).padding(16.0).child(col).build());
 }
@@ -115,25 +115,20 @@ fn grid_of(aspect: Readable<f64>, dense: Readable<bool>, count: Readable<f64>) -
     if (read.get<bool>(dense)) {
         max_cross = 85.0;
     }
-    return LazyGrid()
-        .item_builder(tile)
-        .count(count)
-        .max_cross(max_cross)
-        .aspect(read.get<f64>(aspect))
-        .overscan(2)
-        .query_key("gallery/grid")
-        .build();
+    return
+        LazyGrid().item_builder(tile).count(count).max_cross(max_cross).aspect(read.get<f64>(aspect)).overscan(
+            2,
+        ).query_key("gallery/grid").build();
 }
 
 // One tile: the rounded hue face (hue = (i*37) % 360 at 52/48) with the
 // index label, inset 2 in its cell (the spacing stand-in — see the header
 // note).
 fn tile(i: u64) -> View {
-    let face = Container()
-        .color(sv(hsl_packed(((i * 37) % 360) as f64, 52.0, 48.0)))
-        .radius(sv(6.0f64))
-        .child(Text().text(sv(f"{i}")).font_size(10.0).color(CHIP_FG).build())
-        .build();
+    let face =
+        Container().color(sv(hsl_packed((i * 37 % 360) as f64, 52.0, 48.0))).radius(sv(6.0f64)).child(
+            Text().text(sv(f"{i}")).font_size(10.0).color(CHIP_FG).build(),
+        ).build();
     return Container().padding(2.0).child(face).build();
 }
 
@@ -141,44 +136,57 @@ fn tile(i: u64) -> View {
 
 // A pill chip: the fill rides its brush source (indigo when active).
 fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
-    let face = Container()
-        .padding(7.0)
-        .radius(sv(7.0f64))
-        .color(r)
-        .child(Text().text(sv(label)).font_size(12.0).color(CHIP_FG).build())
-        .build();
-    return MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(m).query_key(key).child(face).build())
-        .build();
+    let face =
+        Container().padding(7.0).radius(sv(7.0f64)).color(r).child(
+            Text().text(sv(label)).font_size(12.0).color(CHIP_FG).build(),
+        ).build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(m).query_key(key).child(face).build(),
+        ).build();
 }
 
 // ---- the chip taps -------------------------------------------------------------
 
 // An aspect tap's mutation: write the value, repaint the chips, remount
 // the grid.
-fn aspect_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u64>],
-                   items: Readable<opaque>, v: f64) -> Mutation<nil> {
-    return mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<f64>(aspect, v);
-        paint_chips(ctx, aspect, dense, chips);
-        ctx.set<opaque>(items, one_list().raw());
-    });
+fn aspect_mutation(
+    aspect: Readable<f64>,
+    dense: Readable<bool>,
+    chips: [Source<u64>],
+    items: Readable<opaque>,
+    v: f64,
+) -> Mutation<nil> {
+    return
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<f64>(aspect, v);
+                paint_chips(ctx, aspect, dense, chips);
+                ctx.set<opaque>(items, one_list().raw());
+            },
+        );
 }
 
 // A density tap's mutation (the mirror twin over the bool).
-fn dense_mutation(aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u64>],
-                  items: Readable<opaque>, d: bool) -> Mutation<nil> {
-    return mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(dense, d);
-        paint_chips(ctx, aspect, dense, chips);
-        ctx.set<opaque>(items, one_list().raw());
-    });
+fn dense_mutation(
+    aspect: Readable<f64>,
+    dense: Readable<bool>,
+    chips: [Source<u64>],
+    items: Readable<opaque>,
+    d: bool,
+) -> Mutation<nil> {
+    return
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<bool>(dense, d);
+                paint_chips(ctx, aspect, dense, chips);
+                ctx.set<opaque>(items, one_list().raw());
+            },
+        );
 }
 
 // The five chip brushes over the live state (boa: derive-driven pills).
-fn paint_chips(ctx: MutationCtx, aspect: Readable<f64>, dense: Readable<bool>,
-               chips: [Source<u64>]) {
+fn paint_chips(ctx: MutationCtx, aspect: Readable<f64>, dense: Readable<bool>, chips: [Source<u64>]) {
     let a = ctx.get<f64>(aspect);
     let d = ctx.get<bool>(dense);
     ctx.set<u64>(chips[0], chip_color(a > 0.5 && a < 1.5));

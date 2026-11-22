@@ -16,7 +16,8 @@ use tur_kit::text::core::{ Text };
 // would share one cell across every pad (each tap answering with the
 // last index) — a literal per tile gives each pad its own index.
 pub fn gallery_grid(aspect: f64, max_cross: f64, rings: [Source<u64>], sel: Readable<f64>) -> View {
-    let grid = Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
+    let grid =
+        Grid().max_cross(max_cross).aspect(aspect).spacing(8.0, 8.0).query_key("gallery/grid");
     grid.child(tile([0.0], rings, sel));
     grid.child(tile([1.0], rings, sel));
     grid.child(tile([2.0], rings, sel));
@@ -56,74 +57,84 @@ pub fn gallery_grid(aspect: f64, max_cross: f64, rings: [Source<u64>], sel: Read
 // would point every pad at the last iteration's cell).
 fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
     let i: u64 = ii[0] as u64;
-    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let prev = ctx.get<f64>(sel) as i32;
-        ctx.set<u64>(rings[prev], 0x00000000u64);
-        ctx.set<f64>(sel, ii[0]);
-        ctx.set<u64>(rings[ii[0] as i32], color::RING_ON);
-    });
-    let face = Container()
-        .color(sv(color::hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0)))
-        .radius(sv(5.0f64))
-        .child(Text().text(sv(f"{i}")).font_size(13.0).color(color::LABEL_FG).build())
-        .build();
-    let framed = Container()
-        .color(rings[i as i32])
-        .radius(sv(8.0f64))
-        .padding(3.0)
-        .child(face)
-        .build();
-    return MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(b_tap).child(framed).build())
-        .build();
+    let b_tap =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let prev = ctx.get<f64>(sel) as i32;
+                ctx.set<u64>(rings[prev], 0u64);
+                ctx.set<f64>(sel, ii[0]);
+                ctx.set<u64>(rings[ii[0] as i32], color::RING_ON);
+            },
+        );
+    let face =
+        Container().color(sv(color::hsl_packed(i as f64 * 360.0 / 27.0, 58.0, 54.0))).radius(
+            sv(5.0f64),
+        ).child(Text().text(sv(f"{i}")).font_size(13.0).color(color::LABEL_FG).build()).build();
+    let framed =
+        Container().color(rings[i as i32]).radius(sv(8.0f64)).padding(3.0).child(face).build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(b_tap).child(framed).build(),
+        ).build();
 }
 
 // A pill chip: the fill rides its brush source (indigo when active).
 pub fn chip(r: Readable<u64>, key: str, label: str, m: Mutation<nil>) -> View {
-    let face = Container()
-        .padding(7.0)
-        .radius(sv(7.0f64))
-        .color(r)
-        .child(Text().text(sv(label)).font_size(12.0).color(color::CHIP_FG).build())
-        .build();
-    return MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(
-            PointerInteract()
-                .on_click(m)
-                .query_key(key)
-                .child(face)
-                .build(),
-        )
-        .build();
+    let face =
+        Container().padding(7.0).radius(sv(7.0f64)).color(r).child(
+            Text().text(sv(label)).font_size(12.0).color(color::CHIP_FG).build(),
+        ).build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(m).query_key(key).child(face).build(),
+        ).build();
 }
 
 // ---- the chip taps -------------------------------------------------------------
 
 // One aspect chip's mutation: write the key + the recomposed mode string +
 // the aspect value, then repaint the trio.
-pub fn set_aspect_mutation(aspect: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
-                       mode: Readable<str>, chips: [Source<u64>], key: str, v: f64,
-                       on_idx: u64) -> Mutation<nil> {
-    return mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<str>(akey, key);
-        ctx.set<str>(mode, f"{key}/{ctx.get<str>(dkey)}");
-        ctx.set<f64>(aspect, v);
-        paint_chips(ctx, chips, on_idx);
-    });
+pub fn set_aspect_mutation(
+    aspect: Readable<f64>,
+    akey: Readable<str>,
+    dkey: Readable<str>,
+    mode: Readable<str>,
+    chips: [Source<u64>],
+    key: str,
+    v: f64,
+    on_idx: u64,
+) -> Mutation<nil> {
+    return
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<str>(akey, key);
+                ctx.set<str>(mode, f"{key}/{ctx.get<str>(dkey)}");
+                ctx.set<f64>(aspect, v);
+                paint_chips(ctx, chips, on_idx);
+            },
+        );
 }
 
 // One density chip's mutation (the mirror twin).
-pub fn set_density_mutation(maxext: Readable<f64>, akey: Readable<str>, dkey: Readable<str>,
-                        mode: Readable<str>, chips: [Source<u64>], key: str, v: f64,
-                        on_idx: u64) -> Mutation<nil> {
-    return mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<str>(dkey, key);
-        ctx.set<str>(mode, f"{ctx.get<str>(akey)}/{key}");
-        ctx.set<f64>(maxext, v);
-        paint_chips(ctx, chips, on_idx);
-    });
+pub fn set_density_mutation(
+    maxext: Readable<f64>,
+    akey: Readable<str>,
+    dkey: Readable<str>,
+    mode: Readable<str>,
+    chips: [Source<u64>],
+    key: str,
+    v: f64,
+    on_idx: u64,
+) -> Mutation<nil> {
+    return
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<str>(dkey, key);
+                ctx.set<str>(mode, f"{ctx.get<str>(akey)}/{key}");
+                ctx.set<f64>(maxext, v);
+                paint_chips(ctx, chips, on_idx);
+            },
+        );
 }
 
 // Paint a chip trio: the active index indigo, the others slate.

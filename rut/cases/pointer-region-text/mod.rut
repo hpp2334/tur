@@ -11,21 +11,24 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let state: Readable<str> = source<str>("idle");
-    let b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
-        ctx.set<str>(state, "entered");
-    });
-    let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
-        ctx.set<str>(state, "exited");
-    });
+    let b_enter =
+        mutate<EnterEvent>(
+            fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<str>(state, "entered"); },
+        );
+    let b_exit =
+        mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<str>(state, "exited"); });
     let col = Column().cross_alignment(CrossAlign::Start);
 
-    let b = Container()
-        .width_height(100.0, 50.0)
-        .color(sv(0xCCCCCCFFu64))
-        .alignment(Align::Center)
-        .child(Text().text(state).query_key("region-text").build());
+    let b =
+        Container().width_height(100.0, 50.0).color(sv(3435973887u64)).alignment(Align::Center).child(
+            Text().text(state).query_key("region-text").build(),
+        );
 
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor::Auto).behavior(HitTestBehavior::Opaque).child(b.build()).build());
+    col.child(
+        MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor::Auto).behavior(
+            HitTestBehavior::Opaque,
+        ).child(b.build()).build(),
+    );
     mount(col.build());
     return state.atom_id();
 }

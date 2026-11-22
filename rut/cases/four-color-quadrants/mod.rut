@@ -12,10 +12,11 @@ fn quad(color: u64) -> View {
 }
 
 entry fn start() {
-    let stack = Stack()
-        .child(Positioned().left(sv(0.0f64)).top(sv(0.0f64)).child(quad(0xFF0000FFu64)).build())
-        .child(Positioned().left(sv(100.0f64)).top(sv(0.0f64)).child(quad(0x00FF00FFu64)).build())
-        .child(Positioned().left(sv(0.0f64)).top(sv(100.0f64)).child(quad(0x0000FFFFu64)).build())
-        .child(Positioned().left(sv(100.0f64)).top(sv(100.0f64)).child(quad(0xFFFF00FFu64)).build());
+    let stack =
+        Stack().child(
+            Positioned().left(sv(0.0f64)).top(sv(0.0f64)).child(quad(4278190335u64)).build(),
+        ).child(Positioned().left(sv(100.0f64)).top(sv(0.0f64)).child(quad(16711935u64)).build()).child(
+            Positioned().left(sv(0.0f64)).top(sv(100.0f64)).child(quad(65535u64)).build(),
+        ).child(Positioned().left(sv(100.0f64)).top(sv(100.0f64)).child(quad(4294902015u64)).build());
     mount(stack.build());
 }

@@ -34,17 +34,23 @@ use tur_kit::handles::{ ListHandle };
 fn decode_str<T requires JsonDeserialize>(s: str) -> (?T, ?DecodeJsonError) {
     let r = JsonReader::of(s);
     let (v, e) = T::decode(r);
-    if (e != nil) { return (nil, e); }
+    if (e != nil) {
+        return (nil, e);
+    }
     if (!r.at_end()) {
         // trailing garbage after the value + whitespace
         let at = r.here();
         let got = r.rest();
-        return (nil, DecodeJsonError {
-            kind: DecodeErrorKind::Trailing,
-            at: at as i64,
-            got: got,
-            expected: "end of input",
-        });
+        return
+            (
+                nil,
+                DecodeJsonError {
+                    kind: DecodeErrorKind::Trailing,
+                    at: at as i64,
+                    got: got,
+                    expected: "end of input",
+                }
+            );
     }
     return (v, nil);
 }
@@ -88,56 +94,80 @@ impl RepoPayload {
         let issues: i64 = 0;
         while (r.more()) {
             let k = r.next_key();
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
             when (k) {
                 "full_name" -> {
                     let v = r.read_str();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     full_name = v;
                 },
                 "message" -> {
                     message = read_opt_str(r);
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                 },
                 "description" -> {
                     desc = read_opt_str(r);
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                 },
                 "language" -> {
                     language = read_opt_str(r);
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                 },
                 "stargazers_count" -> {
                     let v = r.read_i64();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     stars = v;
                 },
                 "forks_count" -> {
                     let v = r.read_i64();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     forks = v;
                 },
                 "open_issues_count" -> {
                     let v = r.read_i64();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     issues = v;
                 },
                 // GitHub adds keys over time — skipped, never a failure.
                 else -> { r.skip_value(); },
             }
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
         }
         r.end_object();
-        if (r.failed()) { return (nil, r.error()); }
-        return (RepoPayload {
-            full_name: full_name,
-            message: message,
-            desc: desc,
-            language: language,
-            stars: stars,
-            forks: forks,
-            issues: issues,
-        }, nil);
+        if (r.failed()) {
+            return (nil, r.error());
+        }
+        return
+            (
+                RepoPayload {
+                    full_name: full_name,
+                    message: message,
+                    desc: desc,
+                    language: language,
+                    stars: stars,
+                    forks: forks,
+                    issues: issues,
+                },
+                nil
+            );
     }
 }
 
@@ -153,26 +183,38 @@ impl ApiError {
         let message: ?str = nil;
         while (r.more()) {
             let k = r.next_key();
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
             when (k) {
                 "message" -> {
                     let v = r.read_str();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     message = v;
                 },
                 else -> { r.skip_value(); },
             }
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
         }
         r.end_object();
-        if (r.failed()) { return (nil, r.error()); }
+        if (r.failed()) {
+            return (nil, r.error());
+        }
         if (message == nil) {
-            return (nil, DecodeJsonError {
-                kind: DecodeErrorKind::WrongType,
-                at: 0,
-                got: "",
-                expected: "message",
-            });
+            return
+                (
+                    nil,
+                    DecodeJsonError {
+                        kind: DecodeErrorKind::WrongType,
+                        at: 0,
+                        got: "",
+                        expected: "message",
+                    }
+                );
         }
         let m: str = message;
         return (ApiError { message: m }, nil);
@@ -195,36 +237,52 @@ impl ContentRow {
         let size: i64 = 0;
         while (r.more()) {
             let k = r.next_key();
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
             when (k) {
                 "type" -> {
                     let v = r.read_str();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     kind = v;
                 },
                 "name" -> {
                     let v = r.read_str();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     name = v;
                 },
                 "size" -> {
                     let v = r.read_i64();
-                    if (r.failed()) { return (nil, r.error()); }
+                    if (r.failed()) {
+                        return (nil, r.error());
+                    }
                     size = v;
                 },
                 else -> { r.skip_value(); },
             }
-            if (r.failed()) { return (nil, r.error()); }
+            if (r.failed()) {
+                return (nil, r.error());
+            }
         }
         r.end_object();
-        if (r.failed()) { return (nil, r.error()); }
+        if (r.failed()) {
+            return (nil, r.error());
+        }
         if (kind == nil || name == nil) {
-            return (nil, DecodeJsonError {
-                kind: DecodeErrorKind::WrongType,
-                at: 0,
-                got: "",
-                expected: "type/name",
-            });
+            return
+                (
+                    nil,
+                    DecodeJsonError {
+                        kind: DecodeErrorKind::WrongType,
+                        at: 0,
+                        got: "",
+                        expected: "type/name",
+                    }
+                );
         }
         let kd: str = kind;
         let nm: str = name;
@@ -239,11 +297,15 @@ fn decode_rows<T requires JsonDeserialize>(r: JsonReader) -> (?Vec<T>, ?DecodeJs
     r.begin_array();
     while (r.more()) {
         let (x, e) = T::decode(r);
-        if (e != nil) { return (nil, e); }
+        if (e != nil) {
+            return (nil, e);
+        }
         v.push(x);
     }
     r.end_array();
-    if (r.failed()) { return (nil, r.error()); }
+    if (r.failed()) {
+        return (nil, r.error());
+    }
     return (v, nil);
 }
 
@@ -256,25 +318,27 @@ pub fn decode_repo_meta(text: str) -> RepoPayload {
     }
     let (q, e2) = decode_str<ApiError>(text);
     if (e2 == nil) {
-        return RepoPayload {
+        return
+            RepoPayload {
+                full_name: nil,
+                message: q.message,
+                desc: nil,
+                language: nil,
+                stars: 0,
+                forks: 0,
+                issues: 0,
+            };
+    }
+    return
+        RepoPayload {
             full_name: nil,
-            message: q.message,
+            message: nil,
             desc: nil,
             language: nil,
             stars: 0,
             forks: 0,
             issues: 0,
         };
-    }
-    return RepoPayload {
-        full_name: nil,
-        message: nil,
-        desc: nil,
-        language: nil,
-        stars: 0,
-        forks: 0,
-        issues: 0,
-    };
 }
 
 // The listing fill: decode the array once, push dirs first then files
@@ -312,12 +376,16 @@ fn decodeJson2Rows(text: str) -> (?Vec<ContentRow>, ?DecodeJsonError) {
     if (!r.at_end()) {
         let at = r.here();
         let got = r.rest();
-        return (nil, DecodeJsonError {
-            kind: DecodeErrorKind::Trailing,
-            at: at as i64,
-            got: got,
-            expected: "end of input",
-        });
+        return
+            (
+                nil,
+                DecodeJsonError {
+                    kind: DecodeErrorKind::Trailing,
+                    at: at as i64,
+                    got: got,
+                    expected: "end of input",
+                }
+            );
     }
     return (v, nil);
 }

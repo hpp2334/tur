@@ -120,26 +120,68 @@
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
 use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{
-    Align, Axis, BorderPosition, Clip, CrossAlign, Cursor, MainAlign, MainAxisSize, StackFit,
+    Align,
+    Axis,
+    BorderPosition,
+    Clip,
+    CrossAlign,
+    Cursor,
+    MainAlign,
+    MainAxisSize,
+    StackFit,
 };
 use tur_kit::gesture::focus::{ Focusable };
 use tur_kit::gesture::pointer::{
-    ContextMenuEvent, EnterEvent, ExitEvent, InputEvent, KeydownEvent, MouseRegion, PointerEvent, PointerInteract,
+    ContextMenuEvent,
+    EnterEvent,
+    ExitEvent,
+    InputEvent,
+    KeydownEvent,
+    MouseRegion,
+    PointerEvent,
+    PointerInteract,
 };
-use tur_kit::handles::{ MapHandle, TextCtrl, UndoCtrl, VAppCtrl, View, list_new, map_new, mount, text_ctrl, undo_ctrl };
+use tur_kit::handles::{
+    MapHandle,
+    TextCtrl,
+    UndoCtrl,
+    VAppCtrl,
+    View,
+    list_new,
+    map_new,
+    mount,
+    text_ctrl,
+    undo_ctrl,
+};
 use tur_kit::image::{ Image, image_resource_svg };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
 use tur_kit::reactive::{
-    DeriveCtx, Mutation, MutationCtx, Readable, Source, Watch, bridge, derive, entry_ctx, mutate,
-    source, sv, viewport_width, watch,
+    DeriveCtx,
+    Mutation,
+    MutationCtx,
+    Readable,
+    Source,
+    Watch,
+    bridge,
+    derive,
+    entry_ctx,
+    mutate,
+    source,
+    sv,
+    viewport_width,
+    watch,
 };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 use tur_kit::text::input::{ Input };
 use tur_kit::virtual_app::{
-    VirtualApp, virtual_app_atom, virtual_app_controller, virtual_app_set, virtual_app_source,
+    VirtualApp,
+    virtual_app_atom,
+    virtual_app_controller,
+    virtual_app_set,
+    virtual_app_source,
     virtual_app_source_handle,
 };
 use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
@@ -147,7 +189,6 @@ use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, 
 // The editor's context menu (the child module — its own scope carries the
 // async surfaces; see menu.rut's header).
 mod menu;
-
 
 // ---- design tokens ---------------------------------------------------------
 //
@@ -166,74 +207,76 @@ mod menu;
 // packed value (its origin is in the trailing comment) instead of aliasing.
 
 // primitives — ink (warm-tinted neutrals)
-let INK_50: u64 = 0xFBFCFDFFu64;
-let INK_100: u64 = 0xF4F6F9FFu64;
-let INK_150: u64 = 0xECEFF4FFu64;
-let INK_200: u64 = 0xE1E5ECFFu64;
-let INK_300: u64 = 0xD4D9E0FFu64;
-let INK_400: u64 = 0xB8C0CCFFu64;
-let INK_500: u64 = 0x8A94A3FFu64;
-let INK_600: u64 = 0x5E6878FFu64;
-let INK_700: u64 = 0x3A4250FFu64;
-let INK_800: u64 = 0x1F2530FFu64;
-let INK_900: u64 = 0x0A0E14FFu64;
+let INK_50: u64 = 4227661311u64;
+let INK_100: u64 = 4109826559u64;
+let INK_150: u64 = 3975148799u64;
+let INK_200: u64 = 3789942015u64;
+let INK_300: u64 = 3571048703u64;
+let INK_400: u64 = 3099643135u64;
+let INK_500: u64 = 2324997119u64;
+let INK_600: u64 = 1583905023u64;
+let INK_700: u64 = 977424639u64;
+let INK_800: u64 = 522531071u64;
+let INK_900: u64 = 168695039u64;
 
 // primitives — teal (the saturated cyan-leaning signature)
-let TEAL_200: u64 = 0x7DF5D0FFu64;
-let TEAL_300: u64 = 0x00E8B8FFu64;
-let TEAL_400: u64 = 0x00C69AFFu64;
-let TEAL_500: u64 = 0x00A886FFu64;
-let TEAL_600: u64 = 0x008A6EFFu64;
-let TEAL_700: u64 = 0x006E58FFu64;
-let TEAL_800: u64 = 0x005440FFu64;
+let TEAL_200: u64 = 2113261823u64;
+let TEAL_300: u64 = 15251711u64;
+let TEAL_400: u64 = 13015807u64;
+let TEAL_500: u64 = 11044607u64;
+let TEAL_600: u64 = 9072383u64;
+let TEAL_700: u64 = 7231743u64;
+let TEAL_800: u64 = 5521663u64;
 
 // primitives — coral (the warm complement; used sparingly)
-let CORAL_300: u64 = 0xFFB3A3FFu64;
-let CORAL_400: u64 = 0xFF8A72FFu64;
-let CORAL_500: u64 = 0xE85D44FFu64;
-let CORAL_700: u64 = 0xB03A1FFFu64;
+let CORAL_300: u64 = 4289963007u64;
+let CORAL_400: u64 = 4287263487u64;
+let CORAL_500: u64 = 3898426623u64;
+let CORAL_700: u64 = 2956599295u64;
 
 // primitives — status (AA on ink.50; info reuses teal.700)
-let STATUS_SUCCESS: u64 = 0x00A06BFFu64;
-let STATUS_WARNING: u64 = 0xC47700FFu64;
-let STATUS_ERROR: u64 = 0xD63A2FFFu64;
-let STATUS_INFO: u64 = 0x006E58FFu64;
+let STATUS_SUCCESS: u64 = 10513407u64;
+let STATUS_WARNING: u64 = 3296133375u64;
+let STATUS_ERROR: u64 = 3594137599u64;
+let STATUS_INFO: u64 = 7231743u64;
 
 // semantic layer — what the views use (origin primitives in the comments)
-let BG_APP: u64 = 0xFBFCFDFFu64; // ink.50
-let BG_PANEL: u64 = 0xF4F6F9FFu64; // ink.100
-let BG_ELEVATED: u64 = 0xECEFF4FFu64; // ink.150
-let BG_HOVER: u64 = 0xE1E5ECFFu64; // ink.200 (bg.hover / bg.controlTray)
-let BG_STRONG_HOVER: u64 = 0xD4D9E0FFu64; // ink.300 (bg.strongHover)
-let BG_SELECTED: u64 = 0x7DF5D0FFu64; // teal.200
-let BG_CODE: u64 = 0xFBFCFDFFu64; // ink.50
-let BG_VIEWER: u64 = 0xFBFCFDFFu64; // ink.50 (bg.viewer)
-let BG_DANGER: u64 = 0xFFF0EEFFu64; // #fff0ee (bg.danger)
-let TEXT_PRIMARY: u64 = 0x1F2530FFu64; // ink.800
-let TEXT_BODY: u64 = 0x3A4250FFu64; // ink.700
-let TEXT_SECONDARY: u64 = 0x5E6878FFu64; // ink.600
-let TEXT_TERTIARY: u64 = 0x8A94A3FFu64; // ink.500
-let TEXT_PLACEHOLDER: u64 = 0xB8C0CCFFu64; // ink.400
-let TEXT_CODE: u64 = 0x1F2530FFu64; // ink.800 (code.fg)
-let TEXT_ON_ACCENT: u64 = 0x0A0E14FFu64; // ink.900 (text.onAccent)
-let TEXT_ON_DANGER: u64 = 0x8A1A14FFu64; // #8a1a14 (text.onDanger)
-let TEXT_INVERSE: u64 = 0xFBFCFDFFu64; // ink.50 (text.inverse)
-let BORDER_SUBTLE: u64 = 0xD4D9E0FFu64; // ink.300 (border.subtle)
-let ACCENT_CURSOR: u64 = 0x00A886FFu64; // teal.500
-let ACCENT_PRIMARY: u64 = 0x00C69AFFu64; // teal.400
-let BTN_PRIMARY_HOVER: u64 = 0x00E8B8FFu64; // teal.300 (bg.button.primaryHover)
-let BTN_GHOST: u64 = 0xFBFCFDFFu64; // ink.50 (bg.button.ghost)
-let ACCENT_SOLID: u64 = 0x00A886FFu64; // teal.500 (the brand mark)
-let ACCENT_COMPLEMENT: u64 = 0xFF8A72FFu64; // coral.400 (the edited dot)
+let BG_APP: u64 = 4227661311u64; // ink.50
+let BG_PANEL: u64 = 4109826559u64; // ink.100
+let BG_ELEVATED: u64 = 3975148799u64; // ink.150
+let BG_HOVER: u64 = 3789942015u64; // ink.200 (bg.hover / bg.controlTray)
+let BG_STRONG_HOVER: u64 = 3571048703u64; // ink.300 (bg.strongHover)
+let BG_SELECTED: u64 = 2113261823u64; // teal.200
+let BG_CODE: u64 = 4227661311u64; // ink.50
+let BG_VIEWER: u64 = 4227661311u64; // ink.50 (bg.viewer)
+let BG_DANGER: u64 = 4293979903u64; // #fff0ee (bg.danger)
+let TEXT_PRIMARY: u64 = 522531071u64; // ink.800
+let TEXT_BODY: u64 = 977424639u64; // ink.700
+let TEXT_SECONDARY: u64 = 1583905023u64; // ink.600
+let TEXT_TERTIARY: u64 = 2324997119u64; // ink.500
+let TEXT_PLACEHOLDER: u64 = 3099643135u64; // ink.400
+let TEXT_CODE: u64 = 522531071u64; // ink.800 (code.fg)
+let TEXT_ON_ACCENT: u64 = 168695039u64; // ink.900 (text.onAccent)
+let TEXT_ON_DANGER: u64 = 2316965119u64; // #8a1a14 (text.onDanger)
+let TEXT_INVERSE: u64 = 4227661311u64; // ink.50 (text.inverse)
+let BORDER_SUBTLE: u64 = 3571048703u64; // ink.300 (border.subtle)
+let ACCENT_CURSOR: u64 = 11044607u64; // teal.500
+let ACCENT_PRIMARY: u64 = 13015807u64; // teal.400
+let BTN_PRIMARY_HOVER: u64 = 15251711u64; // teal.300 (bg.button.primaryHover)
+let BTN_GHOST: u64 = 4227661311u64; // ink.50 (bg.button.ghost)
+let ACCENT_SOLID: u64 = 11044607u64; // teal.500 (the brand mark)
+let ACCENT_COMPLEMENT: u64 = 4287263487u64; // coral.400 (the edited dot)
 // The viewer's inset card (the boa build measures (248,250,252) inside the
 // ink.50 pane — the ink.100-family card surface the case renders on).
-let CARD_BG: u64 = 0xF8FAFCFFu64; // #f8fafc
+let CARD_BG: u64 = 4177198335u64; // #f8fafc
 
 // The toolbar's icon resources — the boa icons.ts SVGs (the ▶ / ↻ pair),
 // rasterised once at boot through `image_resource_svg` and laid out at
 // 10 / 12 px like the reference buttons.
-let RUN_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>";
-let RESET_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 2.13-9.36L1 10\"/></svg>";
+let RUN_ICON_SVG: str =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"#ffffff\"><polygon points=\"6 4 20 12 6 20\"/></svg>";
+let RESET_ICON_SVG: str =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3A4250\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 2.13-9.36L1 10\"/></svg>";
 // feather glyph shapes, the toolbar's stroke style).
 // feather glyph shapes, the reset icon's stroke style).
 
@@ -243,41 +286,41 @@ let RESET_ICON_SVG: str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\
 // shared-cell `f64` fields (written through `mut cx` bindings).
 struct AppContext {
     // the sidebar's case list (the Each's source)
-    names: Source<opaque>,
+    names: Source<opaque>;
     // the toolbar's case-name readout
-    selected: Source<str>,
+    selected: Source<str>;
     // the selection + hover rails (the row brushes derive over them)
-    sel: Source<f64>,
-    hover: Source<f64>,
+    sel: Source<f64>;
+    hover: Source<f64>;
     // the selected case's file list + the file-selection/hover rails (the
     // sidebar's file sublist; a fresh list mints on every case tap — the
     // Each's rebuild trigger is list identity). The root file is index 0.
-    files: Source<opaque>,
-    fsel: Source<f64>,
-    fhover: Source<f64>,
+    files: Source<opaque>;
+    fsel: Source<f64>;
+    fhover: Source<f64>;
     // the per-case-per-file edit cache (keyed "{name}|{path}"; values
     // carry a "1" presence sentinel — MapHandle::get answers "" for an
     // absent key, and an EMPTIED file must not read as a miss). Plain
     // (non-reactive): the editor reads it directly on a file switch.
-    cache: MapHandle,
+    cache: MapHandle;
     // the app-state rail: the status bar's dot + label AND the viewer's
     // state Switch both read it (the watch deliveries settle it)
-    state: Source<str>,
-    verr: Source<str>,
-    hint: Source<str>,
-    hint_on: Source<bool>,
+    state: Source<str>;
+    verr: Source<str>;
+    hint: Source<str>;
+    hint_on: Source<bool>;
     // the viewer's reactive `app$` binding atom
-    app_atom: u64,
+    app_atom: u64;
     // the toolbar/status rails
-    edited: Source<bool>,
-    autorun: Source<bool>,
-    layout: Source<str>,
-    ago: Source<f64>,
-    compiled: Source<str>,
-    dot: Source<u64>,
-    tab_split: Source<u64>,
-    tab_edit: Source<u64>,
-    tab_view: Source<u64>,
+    edited: Source<bool>;
+    autorun: Source<bool>;
+    layout: Source<str>;
+    ago: Source<f64>;
+    compiled: Source<str>;
+    dot: Source<u64>;
+    tab_split: Source<u64>;
+    tab_edit: Source<u64>;
+    tab_view: Source<u64>;
     // the phase-2 mobile rails: the bottom tab bar's selection (the boa
     // MobileTab — "cases" / "edit" / "view", independent from the desktop
     // `layout`, so crossing the breakpoint preserves both), the
@@ -286,42 +329,42 @@ struct AppContext {
     // mid-face ctx.get on a derived atom would demand materialization
     // through a nested VM face, the no-reentrancy refusal), and the
     // viewport-width SOURCE the intents read instead (a plain KV read)
-    mobile_tab: Source<str>,
-    is_mobile: Readable<bool>,
-    viewport_w: Readable<f64>,
+    mobile_tab: Source<str>;
+    is_mobile: Readable<bool>;
+    viewport_w: Readable<f64>;
     // the phase-E rails: the sidebar width (the divider's atom — the
     // clamp lives in the drag intent; the boa seed is 200), the divider's
     // drag brush and drag flag
-    sbw: Source<f64>,
-    dragging: Source<bool>,
-    div_bar: Source<u64>,
+    sbw: Source<f64>;
+    dragging: Source<bool>;
+    div_bar: Source<u64>;
     // the phase-4 P0 rails: the editor↔viewer divider (the boa
     // editorWidth$ — the split-mode editor pane rides this atom, the
     // drag intent clamps 360–900)
-    edw: Source<f64>,
-    edragging: Source<bool>,
-    ediv_bar: Source<u64>,
+    edw: Source<f64>;
+    edragging: Source<bool>;
+    ediv_bar: Source<u64>;
     // the toolbar buttons' hover brushes
-    run_h: Source<u64>,
-    reset_h: Source<u64>,
+    run_h: Source<u64>;
+    reset_h: Source<u64>;
     // handles
-    ctrl: TextCtrl,
-    clock: AnimCtrl,
-    debounce: AnimCtrl,
-    vctrl: VAppCtrl,
+    ctrl: TextCtrl;
+    clock: AnimCtrl;
+    debounce: AnimCtrl;
+    vctrl: VAppCtrl;
     // the toolbar icons' resource ids (minted once at boot)
-    run_icon: u64,
-    reset_icon: u64,
+    run_icon: u64;
+    reset_icon: u64;
     // the editor's context menu (the right-click rail) — the child
     // module's bundle (the overlay + the Cut/Copy/Paste/Select-All
     // intents + the clipboard journeys live in `menu.rut`; its own scope
     // carries the async surfaces — see menu.rut's header)
-    menu: menu::MenuCx,
+    menu: menu::MenuCx;
     // the shared-cell scratch (the tab hover index, the two dividers'
     // drag-start x — non-reactive, written through `mut cx`)
-    tab_h: f64,
-    dragx: f64,
-    edragx: f64,
+    tab_h: f64;
+    dragx: f64;
+    edragx: f64;
 }
 
 entry fn start() -> opaque {
@@ -343,9 +386,8 @@ entry fn start() -> opaque {
     // minted HERE and captured: row calls inside the derive body would
     // nest a VM face into the drain.
     let vw: Readable<f64> = viewport_width();
-    let is_mobile: Readable<bool> = derive<bool>(fn (ctx: DeriveCtx) -> bool {
-        return ctx.get<f64>(vw) < 720.0;
-    });
+    let is_mobile: Readable<bool> =
+        derive<bool>(fn (ctx: DeriveCtx) -> bool { return ctx.get<f64>(vw) < 720.0; });
 
     // The brushes seed at the mint (the boot state needs no paint pass):
     // the dot leads green (ready), the split tab carries the selected
@@ -354,57 +396,70 @@ entry fn start() -> opaque {
     // dummies — the REAL controllers (whose end closures thread `cx`)
     // assign into the record right after construction (the shared-cell
     // write; the dummy never fires a meaningful end).
-    let cx = AppContext {
-        names: source<opaque>(names.raw()),
-        selected: source<str>(""),
-        sel: source<f64>(-1.0),
-        hover: source<f64>(-1.0),
-        files: source<opaque>(list_new().raw()),
-        fsel: source<f64>(0.0),
-        fhover: source<f64>(-1.0),
-        cache: map_new(),
-        state: source<str>("ready"),
-        verr: source<str>(""),
-        hint: source<str>("(no case)"),
-        hint_on: source<bool>(true),
-        app_atom: virtual_app_atom(),
-        edited: source<bool>(false),
-        autorun: source<bool>(true),
-        layout: source<str>("split"),
-        ago: source<f64>(0.0),
-        compiled: source<str>(""),
-        dot: source<u64>(STATUS_SUCCESS),
-        tab_split: source<u64>(BG_APP),
-        tab_edit: source<u64>(0),
-        tab_view: source<u64>(0),
-        mobile_tab: source<str>("edit"),
-        is_mobile: is_mobile,
-        viewport_w: vw,
-        sbw: source<f64>(200.0),
-        dragging: source<bool>(false),
-        div_bar: source<u64>(BORDER_SUBTLE),
-        edw: source<f64>(600.0),
-        edragging: source<bool>(false),
-        ediv_bar: source<u64>(BORDER_SUBTLE),
-        run_h: source<u64>(ACCENT_PRIMARY),
-        reset_h: source<u64>(BTN_GHOST),
-        ctrl: ctrl,
-        clock: anim_ctrl_open(1000.0, "linear", 0),
-        debounce: anim_ctrl_open(500.0, "linear", 0),
-        vctrl: seed_controller(),
-        run_icon: image_resource_svg(RUN_ICON_SVG),
-        reset_icon: image_resource_svg(RESET_ICON_SVG),
-        menu: menu::boot(ctrl),
-        tab_h: -1.0,
-        dragx: 0.0,
-        edragx: 0.0,
-    };
-    cx.clock = anim_ctrl_end(1000.0, "linear", 0, mutate(fn (ctx: MutationCtx, _e: nil) { on_clock_end(ctx, cx); }));
-    cx.debounce = anim_ctrl_end(500.0, "linear", 0, mutate(fn (ctx: MutationCtx, _e: nil) { on_debounce_end(ctx, cx); }));
+    let cx =
+        AppContext {
+            names: source<opaque>(names.raw()),
+            selected: source<str>(""),
+            sel: source<f64>(-1.0),
+            hover: source<f64>(-1.0),
+            files: source<opaque>(list_new().raw()),
+            fsel: source<f64>(0.0),
+            fhover: source<f64>(-1.0),
+            cache: map_new(),
+            state: source<str>("ready"),
+            verr: source<str>(""),
+            hint: source<str>("(no case)"),
+            hint_on: source<bool>(true),
+            app_atom: virtual_app_atom(),
+            edited: source<bool>(false),
+            autorun: source<bool>(true),
+            layout: source<str>("split"),
+            ago: source<f64>(0.0),
+            compiled: source<str>(""),
+            dot: source<u64>(STATUS_SUCCESS),
+            tab_split: source<u64>(BG_APP),
+            tab_edit: source<u64>(0),
+            tab_view: source<u64>(0),
+            mobile_tab: source<str>("edit"),
+            is_mobile: is_mobile,
+            viewport_w: vw,
+            sbw: source<f64>(200.0),
+            dragging: source<bool>(false),
+            div_bar: source<u64>(BORDER_SUBTLE),
+            edw: source<f64>(600.0),
+            edragging: source<bool>(false),
+            ediv_bar: source<u64>(BORDER_SUBTLE),
+            run_h: source<u64>(ACCENT_PRIMARY),
+            reset_h: source<u64>(BTN_GHOST),
+            ctrl: ctrl,
+            clock: anim_ctrl_open(1000.0, "linear", 0),
+            debounce: anim_ctrl_open(500.0, "linear", 0),
+            vctrl: seed_controller(),
+            run_icon: image_resource_svg(RUN_ICON_SVG),
+            reset_icon: image_resource_svg(RESET_ICON_SVG),
+            menu: menu::boot(ctrl),
+            tab_h: -1.0,
+            dragx: 0.0,
+            edragx: 0.0,
+        };
+    (cx.clock) =
+        anim_ctrl_end(
+            1000.0,
+            "linear",
+            0,
+            mutate(fn (ctx: MutationCtx, _e: nil) { on_clock_end(ctx, cx); }),
+        );
+    (cx.debounce) =
+        anim_ctrl_end(
+            500.0,
+            "linear",
+            0,
+            mutate(fn (ctx: MutationCtx, _e: nil) { on_debounce_end(ctx, cx); }),
+        );
 
     // The timers start now: the ago clock runs, the debounce waits for
     // the first edit.
-    cx.clock.forward();
+    (cx.clock).forward();
 
     // The controller's status watch (the boa-model Watch — the delivery
     // settles the viewer's state atoms through its ctx).
@@ -454,9 +509,8 @@ fn seed_controller() -> VAppCtrl {
 // settles the viewer's state atoms through its ctx.
 fn watch_controller(cx: AppContext, vctrl: VAppCtrl) {
     let stat = vctrl.status_source();
-    let w = watch<str>(stat, mutate(fn (ctx: MutationCtx, _e: nil) {
-        on_vstat(ctx, cx, stat, vctrl);
-    }));
+    let w =
+        watch<str>(stat, mutate(fn (ctx: MutationCtx, _e: nil) { on_vstat(ctx, cx, stat, vctrl); }));
     w.start();
 }
 
@@ -467,18 +521,14 @@ fn watch_controller(cx: AppContext, vctrl: VAppCtrl) {
 // controller write refreshes the mounted editable in place (see
 // `case_tap`).
 fn build_ui(cx: AppContext) {
-    let shell = Condition(cx.is_mobile)
-        .then(mobile_shell(cx))
-        .else_branch(desktop_shell(cx))
-        .query_key("shell")
-        .build();
+    let shell =
+        Condition(cx.is_mobile).then(mobile_shell(cx)).else_branch(desktop_shell(cx)).query_key(
+            "shell",
+        ).build();
 
     // The overlay rides a root Stack (the countdown modal's pattern): the
     // shell fills, the context menu paints on top when open.
-    let root = Stack().fit(StackFit::Expand)
-        .child(shell)
-        .child(menu::overlay(cx.menu))
-        .build();
+    let root = Stack().fit(StackFit::Expand).child(shell).child(menu::overlay(cx.menu)).build();
 
     mount(root);
 }
@@ -503,32 +553,14 @@ fn desktop_shell(cx: AppContext) -> View {
 
     let sbar = status_bar(cx);
 
-
-    let shell = Column().cross_alignment(CrossAlign::Stretch)
-
-        .child(toolbar)
-
-        .child(Expanded().flex(sv(1.0f64))
-
-            .child(Row().cross_alignment(CrossAlign::Stretch)
-
-                .child(sidebar)
-
-                .child(divider)
-
-                .child(editor_slot)
-
-                .child(edivider_slot)
-
-                .child(viewer_slot)
-
-                .build())
-
-            .build())
-
-        .child(sbar)
-
-        .build();
+    let shell =
+        Column().cross_alignment(CrossAlign::Stretch).child(toolbar).child(
+            Expanded().flex(sv(1.0f64)).child(
+                Row().cross_alignment(CrossAlign::Stretch).child(sidebar).child(divider).child(
+                    editor_slot,
+                ).child(edivider_slot).child(viewer_slot).build(),
+            ).build(),
+        ).child(sbar).build();
 
     return shell;
 }
@@ -547,21 +579,17 @@ fn mobile_shell(cx: AppContext) -> View {
 
     let viewer_pane = viewer_pane(cx);
 
-    let pane_slot = Switch().value(cx.mobile_tab)
-        .cases("cases", sidebar)
-        .cases("edit", editor_pane)
-        .fallback(viewer_pane)
-        .query_key("mobile-pane")
-        .build();
+    let pane_slot =
+        Switch().value(cx.mobile_tab).cases("cases", sidebar).cases("edit", editor_pane).fallback(
+            viewer_pane,
+        ).query_key("mobile-pane").build();
 
     let sbar = status_bar(cx);
 
-    return Column().cross_alignment(CrossAlign::Stretch)
-        .child(toolbar)
-        .child(Expanded().flex(sv(1.0f64)).child(pane_slot).build())
-        .child(mobile_tab_bar(cx))
-        .child(sbar)
-        .build();
+    return
+        Column().cross_alignment(CrossAlign::Stretch).child(toolbar).child(
+            Expanded().flex(sv(1.0f64)).child(pane_slot).build(),
+        ).child(mobile_tab_bar(cx)).child(sbar).build();
 }
 
 // ---- the mobile tab bar ------------------------------------------------
@@ -569,15 +597,20 @@ fn mobile_shell(cx: AppContext) -> View {
 // border) holding three Expanded tabs. The fixed height matters — a row of
 // only flex children would take the whole cross axis.
 fn mobile_tab_bar(cx: AppContext) -> View {
-    let bar = Row().cross_alignment(CrossAlign::Stretch)
-        .child(Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "Cases", "cases", "mobile-tab-cases")).build())
-        .child(Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "Edit", "edit", "mobile-tab-edit")).build())
-        .child(Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "View", "view", "mobile-tab-view")).build())
-        .build();
-    return Container().width_height(0.0, 44.0).color(sv(BG_ELEVATED))
-        .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("mobile-tab-bar")
-        .child(bar)
-        .build();
+    let bar =
+        Row().cross_alignment(CrossAlign::Stretch).child(
+            Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "Cases", "cases", "mobile-tab-cases")).build(),
+        ).child(
+            Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "Edit", "edit", "mobile-tab-edit")).build(),
+        ).child(
+            Expanded().flex(sv(1.0f64)).child(mobile_tab(cx, "View", "view", "mobile-tab-view")).build(),
+        ).build();
+    return
+        Container().width_height(0.0, 44.0).color(sv(BG_ELEVATED)).border(
+            BORDER_SUBTLE,
+            1.0,
+            BorderPosition::Inside,
+        ).query_key("mobile-tab-bar").child(bar).build();
 }
 
 // One tab (the side_item paint law): the 2px full-width accent indicator
@@ -589,75 +622,78 @@ fn mobile_tab_bar(cx: AppContext) -> View {
 // the rail.
 fn mobile_tab(cx: AppContext, label: str, tab: str, key: str) -> View {
     let sel = cx.mobile_tab;
-    let indicator = derive(fn (ctx: DeriveCtx) -> u64 {
-        if (ctx.get<str>(sel) == tab) {
-            return ACCENT_SOLID;
-        }
-        return 0;
-    });
+    let indicator =
+        derive(
+            fn (ctx: DeriveCtx) -> u64 {
+                if (ctx.get<str>(sel) == tab) {
+                    return ACCENT_SOLID;
+                }
+                return 0;
+            },
+        );
     let active_label = Text().text(sv(label)).font_size(12.0).color(ACCENT_SOLID).build();
     let idle_label = Text().text(sv(label)).font_size(12.0).color(TEXT_SECONDARY).build();
-    let label_text = Switch().value(cx.mobile_tab)
-        .cases(tab, active_label)
-        .fallback(idle_label)
-        .build();
-    let body = Column().cross_alignment(CrossAlign::Stretch)
-        .child(Container().height(sv(2.0f64)).color(indicator).build())
-        .child(Expanded().flex(sv(1.0f64))
-            .child(Container().padding(12.0).alignment(Align::Center)
-                .child(label_text)
-                .build())
-            .build())
-        .build();
-    return MouseRegion().cursor(Cursor::Pointer)
-        .child(PointerInteract()
-            .on_click(mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<str>(sel, tab); }))
-            .query_key(key)
-            .child(body)
-            .build())
-        .build();
+    let label_text =
+        Switch().value(cx.mobile_tab).cases(tab, active_label).fallback(idle_label).build();
+    let body =
+        Column().cross_alignment(CrossAlign::Stretch).child(
+            Container().height(sv(2.0f64)).color(indicator).build(),
+        ).child(
+            Expanded().flex(sv(1.0f64)).child(
+                Container().padding(12.0).alignment(Align::Center).child(label_text).build(),
+            ).build(),
+        ).build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(
+                mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<str>(sel, tab); }),
+            ).query_key(key).child(body).build(),
+        ).build();
 }
 
-    // ---- sidebar ------------------------------------------------------
-    // The width rides the divider's atom; the rows paint their own
-    // selection/hover brushes (see `side_item`).
+// ---- sidebar ------------------------------------------------------
+// The width rides the divider's atom; the rows paint their own
+// selection/hover brushes (see `side_item`).
 fn sidebar(cx: AppContext) -> View {
-    return Container().width(cx.sbw).color(sv(BG_PANEL)).query_key("sidebar")
-        .child(sidebar_body(cx))
-        .build();
+    return
+        Container().width(cx.sbw).color(sv(BG_PANEL)).query_key("sidebar").child(sidebar_body(cx)).build();
 }
 
 // The mobile twin: the single pane fills the width (the width atom is a
 // desktop rail — the drag strip is not mounted on mobile).
 fn sidebar_mobile(cx: AppContext) -> View {
-    return Container().color(sv(BG_PANEL)).query_key("sidebar")
-        .child(sidebar_body(cx))
-        .build();
+    return Container().color(sv(BG_PANEL)).query_key("sidebar").child(sidebar_body(cx)).build();
 }
 
 // The sidebar's shared body: the CASES header (the boa SidebarHeader —
 // 10px tertiary label + the registry count, space-between) over the
 // scrolling case list.
 fn sidebar_body(cx: AppContext) -> View {
-    let cases_header = Container().padding(14.0)
-        .child(Row().main_alignment(MainAlign::SpaceBetween)
-            .child(Text().text(sv("CASES")).font_size(10.0).color(TEXT_TERTIARY).build())
-            .child(Text().text(sv(f"{pg_case_count()}")).font_size(10.0).color(TEXT_TERTIARY)
-                .query_key("cases-count").build())
-            .build())
-        .build();
-    return Column().cross_alignment(CrossAlign::Stretch)
-        .child(cases_header)
-        .child(Expanded().flex(sv(1.0f64))
-            .child(ScrollView().axis(Axis::Vertical)
-                .child(Column().cross_alignment(CrossAlign::Stretch)
-                    .child(Each(cx.names).item_builder(fn (i: u64, name: str) -> View { return side_item(cx, i, name); }).build()).build())
-                .build())
-            .build())
-        .build();
+    let cases_header =
+        Container().padding(14.0).child(
+            Row().main_alignment(MainAlign::SpaceBetween).child(
+                Text().text(sv("CASES")).font_size(10.0).color(TEXT_TERTIARY).build(),
+            ).child(
+                Text().text(sv(f"{pg_case_count()}")).font_size(10.0).color(TEXT_TERTIARY).query_key(
+                    "cases-count",
+                ).build(),
+            ).build(),
+        ).build();
+    return
+        Column().cross_alignment(CrossAlign::Stretch).child(cases_header).child(
+            Expanded().flex(sv(1.0f64)).child(
+                ScrollView().axis(Axis::Vertical).child(
+                    Column().cross_alignment(CrossAlign::Stretch).child(
+                        Each(cx.names).item_builder(
+                            fn (i: u64, name: str) -> View { return side_item(cx, i, name); },
+                        ).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
 }
-    // ---- toolbar --------------------------------------------------------
-    // Brand (left) — case name (center, expands) — actions (right).
+// ---- toolbar --------------------------------------------------------
+// Brand (left) — case name (center, expands) — actions (right).
 fn toolbar(cx: AppContext) -> View {
     // ---- toolbar --------------------------------------------------------
     // Brand (left) — case name (center, expands) — actions (right): Run,
@@ -665,92 +701,109 @@ fn toolbar(cx: AppContext) -> View {
     // tab cluster sits on the toolbar's right side). Mobile (the boa
     // responsive toolbar): compact paddings (8 vs 12), no "playground"
     // subtitle, no layout-tabs cluster — the bottom tab bar replaces it.
-    let brand = Condition(cx.is_mobile)
-        .then(Container().padding(8.0)
-            .child(Row().main_axis_size(MainAxisSize::Min)
-                .child(Text().text(sv("tur")).font_size(14.0).color(ACCENT_SOLID).build())
-                .build())
-            .build())
-        .else_branch(Container().padding(12.0)
-            .child(Row().main_axis_size(MainAxisSize::Min)
-                .child(Text().text(sv("tur")).font_size(14.0).color(ACCENT_SOLID).build())
-                .child(SizedBox(4.0, 0.0).build())
-                .child(Text().text(sv("playground")).font_size(11.0).color(TEXT_SECONDARY).build())
-                .build())
-            .build())
-        .build();
-    let case_name = Condition(cx.is_mobile)
-        .then(Container().padding(8.0)
-            .child(Expanded().flex(sv(1.0f64))
-                .child(Text().text(cx.selected).font_size(13.0).color(TEXT_BODY)
-                    .query_key("case-name").build())
-                .build())
-            .build())
-        .else_branch(Container().padding(12.0)
-            .child(Expanded().flex(sv(1.0f64))
-                .child(Text().text(cx.selected).font_size(13.0).color(TEXT_BODY)
-                    .query_key("case-name").build())
-                .build())
-            .build())
-        .build();
+    let brand =
+        Condition(cx.is_mobile).then(
+            Container().padding(8.0).child(
+                Row().main_axis_size(MainAxisSize::Min).child(
+                    Text().text(sv("tur")).font_size(14.0).color(ACCENT_SOLID).build(),
+                ).build(),
+            ).build(),
+        ).else_branch(
+            Container().padding(12.0).child(
+                Row().main_axis_size(MainAxisSize::Min).child(
+                    Text().text(sv("tur")).font_size(14.0).color(ACCENT_SOLID).build(),
+                ).child(SizedBox(4.0, 0.0).build()).child(
+                    Text().text(sv("playground")).font_size(11.0).color(TEXT_SECONDARY).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    let case_name =
+        Condition(cx.is_mobile).then(
+            Container().padding(8.0).child(
+                Expanded().flex(sv(1.0f64)).child(
+                    Text().text(cx.selected).font_size(13.0).color(TEXT_BODY).query_key("case-name").build(),
+                ).build(),
+            ).build(),
+        ).else_branch(
+            Container().padding(12.0).child(
+                Expanded().flex(sv(1.0f64)).child(
+                    Text().text(cx.selected).font_size(13.0).color(TEXT_BODY).query_key("case-name").build(),
+                ).build(),
+            ).build(),
+        ).build();
     // The action buttons carry hover brushes (MouseRegion enter/exit — the
     // same rail the sidebar rows ride): Run brightens to teal.300, Reset
     // lifts from the ghost ink to the hover ink (the boa button rails).
     // Compact content-sized buttons (padding 6, radius 6) with the ▶ / ↻
     // icons at 10 / 12 px — the boa RunButton / ResetButton metrics.
-    let run = MouseRegion()
-        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<u64>(cx.run_h, BTN_PRIMARY_HOVER); }))
-        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.run_h, ACCENT_PRIMARY); }))
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { run_case(ctx, cx); })).query_key("run")
-            .child(Container().padding(6.0).radius(sv(6.0f64)).color(cx.run_h)
-                .child(Row().main_axis_size(MainAxisSize::Min)
-                    .child(Image(cx.run_icon).width(10.0).height(10.0).build())
-                    .child(SizedBox(4.0, 0.0).build())
-                    .child(Text().text(sv("Run")).color(TEXT_ON_ACCENT).font_size(12.0).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    let reset = MouseRegion()
-        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<u64>(cx.reset_h, BG_HOVER); }))
-        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.reset_h, BTN_GHOST); }))
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { reset_case(ctx, cx); })).query_key("reset")
-            .child(Container().padding(6.0).radius(sv(6.0f64)).color(cx.reset_h)
-                .child(Row().main_axis_size(MainAxisSize::Min)
-                    .child(Image(cx.reset_icon).width(12.0).height(12.0).build())
-                    .child(SizedBox(4.0, 0.0).build())
-                    .child(Text().text(sv("Reset")).color(TEXT_SECONDARY).font_size(12.0).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    let actions = Row().main_axis_size(MainAxisSize::Min)
-        .child(run)
-        .child(SizedBox(6.0, 0.0).build())
-        .child(reset)
-        .child(SizedBox(12.0, 0.0).build())
-        .child(auto_toggle(cx))
-        .child(SizedBox(12.0, 0.0).build())
-        .child(Condition(cx.is_mobile)
-            .then(SizedBox(0.0, 0.0).build())
-            .else_branch(layout_tabs(cx))
-            .build())
-        .child(SizedBox(12.0, 0.0).build())
-        .build();
-    let toolbar = Container().width_height(0.0, 48.0).color(sv(BG_ELEVATED))
-        .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("toolbar")
-        .child(Row()
-            .child(brand)
-            .child(Expanded().flex(sv(1.0f64)).child(case_name).build())
-            .child(actions)
-            .build())
-        .build();
+    let run =
+        MouseRegion().on_enter(
+            mutate<EnterEvent>(
+                fn (ctx: MutationCtx, _ev: EnterEvent) {
+                    ctx.set<u64>(cx.run_h, BTN_PRIMARY_HOVER);
+                },
+            ),
+        ).on_exit(
+            mutate<ExitEvent>(
+                fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.run_h, ACCENT_PRIMARY); },
+            ),
+        ).cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { run_case(ctx, cx); })).query_key(
+                "run",
+            ).child(
+                Container().padding(6.0).radius(sv(6.0f64)).color(cx.run_h).child(
+                    Row().main_axis_size(MainAxisSize::Min).child(
+                        Image(cx.run_icon).width(10.0).height(10.0).build(),
+                    ).child(SizedBox(4.0, 0.0).build()).child(
+                        Text().text(sv("Run")).color(TEXT_ON_ACCENT).font_size(12.0).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    let reset =
+        MouseRegion().on_enter(
+            mutate<EnterEvent>(
+                fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<u64>(cx.reset_h, BG_HOVER); },
+            ),
+        ).on_exit(
+            mutate<ExitEvent>(
+                fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<u64>(cx.reset_h, BTN_GHOST); },
+            ),
+        ).cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(
+                mutate(fn (ctx: MutationCtx, _e: nil) { reset_case(ctx, cx); }),
+            ).query_key("reset").child(
+                Container().padding(6.0).radius(sv(6.0f64)).color(cx.reset_h).child(
+                    Row().main_axis_size(MainAxisSize::Min).child(
+                        Image(cx.reset_icon).width(12.0).height(12.0).build(),
+                    ).child(SizedBox(4.0, 0.0).build()).child(
+                        Text().text(sv("Reset")).color(TEXT_SECONDARY).font_size(12.0).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    let actions =
+        Row().main_axis_size(MainAxisSize::Min).child(run).child(SizedBox(6.0, 0.0).build()).child(
+            reset,
+        ).child(SizedBox(12.0, 0.0).build()).child(auto_toggle(cx)).child(
+            SizedBox(12.0, 0.0).build(),
+        ).child(
+            Condition(cx.is_mobile).then(SizedBox(0.0, 0.0).build()).else_branch(layout_tabs(cx)).build(),
+        ).child(SizedBox(12.0, 0.0).build()).build();
+    let toolbar =
+        Container().width_height(0.0, 48.0).color(sv(BG_ELEVATED)).border(
+            BORDER_SUBTLE,
+            1.0,
+            BorderPosition::Inside,
+        ).query_key("toolbar").child(
+            Row().child(brand).child(Expanded().flex(sv(1.0f64)).child(case_name).build()).child(
+                actions,
+            ).build(),
+        ).build();
     return toolbar;
 }
-    // ---- editor pane ----------------------------------------------------
-    // The `input_on_input` rail: every user edit delivers `on_edit`.
+// ---- editor pane ----------------------------------------------------
+// The `input_on_input` rail: every user edit delivers `on_edit`.
 fn editor_pane(cx: AppContext) -> View {
     // ---- editor pane ----------------------------------------------------
     // The `input_on_input` rail: every user edit delivers `on_edit` (the
@@ -767,33 +820,42 @@ fn editor_pane(cx: AppContext) -> View {
     // lines never leave the pane), and the caret-follow rides
     // `ensure_caret_visible`'s ScrollView branch. The self-scroller
     // inside the editable stays at 0 the whole time.
-    let editor = Input().controller(cx.ctrl).undo(undo_ctrl()).placeholder(sv("select a case…"))
-        .color(TEXT_CODE).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR)
-        .font_family("Roboto Mono").font_size(13.0)
-        .multiline(true).on_input(mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }))
-        // The right-click rail: the engine's context-menu gesture opens the
-        // menu anchored at the click's canvas point (right-clicking INSIDE
-        // an active selection preserves it, so the menu's Cut/Copy operate
-        // on what the user right-clicked).
-        .on_context_menu(mutate<ContextMenuEvent>(fn (ctx: MutationCtx, ev: ContextMenuEvent) { menu::open(ctx, cx.menu, ev); }))
-        .query_key("editor").build();
-    let editor_pane = Container().color(sv(BG_CODE)).padding(12.0).query_key("editor-pane")
-        .child(ScrollView().axis(Axis::Vertical).query_key("editor-scroll")
-            .child(Column().cross_alignment(CrossAlign::Stretch).child(editor).build())
-            .build())
-        .build();
+    let editor =
+        Input().controller(cx.ctrl).undo(undo_ctrl()).placeholder(sv("select a case…")).color(
+            TEXT_CODE,
+        ).placeholder_color(TEXT_PLACEHOLDER).cursor_color(ACCENT_CURSOR).font_family("Roboto Mono").font_size(
+            13.0,
+        ).multiline(true).on_input(
+            mutate<InputEvent>(fn (ctx: MutationCtx, _ev: InputEvent) { on_edit(ctx, cx); }),
+        ).on_context_menu(
+            // The right-click rail: the engine's context-menu gesture opens the
+            // menu anchored at the click's canvas point (right-clicking INSIDE
+            // an active selection preserves it, so the menu's Cut/Copy operate
+            // on what the user right-clicked).
+            mutate<ContextMenuEvent>(
+                fn (ctx: MutationCtx, ev: ContextMenuEvent) { menu::open(ctx, cx.menu, ev); },
+            ),
+        ).query_key("editor").build();
+    let editor_pane =
+        Container().color(sv(BG_CODE)).padding(12.0).query_key("editor-pane").child(
+            ScrollView().axis(Axis::Vertical).query_key("editor-scroll").child(
+                Column().cross_alignment(CrossAlign::Stretch).child(editor).build(),
+            ).build(),
+        ).build();
     // The ⌘S / Ctrl+S rail (the status bar's "⌘S to run" hint): keydowns
     // bubble from the focused editable to this ancestor Focusable (the
     // engine walks the focused element's ancestors). The wrapper stays out
     // of hit-testing's way — a tap still resolves to the deeper editable,
     // so tap-to-focus is unchanged.
-    return Focusable()
-        .on_key_down(mutate<KeydownEvent>(fn (ctx: MutationCtx, ev: KeydownEvent) { editor_key(ctx, cx, ev); }))
-        .child(editor_pane)
-        .build();
+    return
+        Focusable().on_key_down(
+            mutate<KeydownEvent>(
+                fn (ctx: MutationCtx, ev: KeydownEvent) { editor_key(ctx, cx, ev); },
+            ),
+        ).child(editor_pane).build();
 }
-    // ---- viewer pane ----------------------------------------------------
-    // The boa Viewer shape: the pane is the ink.50 surface.
+// ---- viewer pane ----------------------------------------------------
+// The boa Viewer shape: the pane is the ink.50 surface.
 fn viewer_pane(cx: AppContext) -> View {
     // ---- viewer pane ----------------------------------------------------
     // The boa Viewer shape: the pane is the ink.50 surface and the READY
@@ -806,21 +868,20 @@ fn viewer_pane(cx: AppContext) -> View {
     // The "(no case)" / "starting..." hint is the FallbackView shape — an
     // overlay the child's first frame paints over (the Condition drops it
     // once the child settles).
-    let viewer_pane = Container().color(sv(BG_VIEWER)).query_key("viewer-pane")
-        .child(Switch().value(cx.state)
-            .cases("error", error_view("Runtime error", cx.verr))
-            .cases("compile-error", error_view("Compile error", cx.verr))
-            .fallback(ready_viewer(cx))
-            .query_key("viewer-switch")
-            .build())
-        .build();
+    let viewer_pane =
+        Container().color(sv(BG_VIEWER)).query_key("viewer-pane").child(
+            Switch().value(cx.state).cases("error", error_view("Runtime error", cx.verr)).cases(
+                "compile-error",
+                error_view("Compile error", cx.verr),
+            ).fallback(ready_viewer(cx)).query_key("viewer-switch").build(),
+        ).build();
     return viewer_pane;
 }
-    // ---- pane slots (the layout modes) ----------------------------------
-    // Split: the editor pane carries the fixed editor-width atom (the
-    // second divider's drag target), the viewer is Expanded. Edit: the
-    // editor fills the row and the viewer shells into a zero-width
-    // container; View: the editor does (the boa shell trick).
+// ---- pane slots (the layout modes) ----------------------------------
+// Split: the editor pane carries the fixed editor-width atom (the
+// second divider's drag target), the viewer is Expanded. Edit: the
+// editor fills the row and the viewer shells into a zero-width
+// container; View: the editor does (the boa shell trick).
 fn editor_slot(cx: AppContext, editor_pane: View) -> View {
     // ---- pane slots (the layout modes) ----------------------------------
     // Split: the editor pane carries the fixed editor-width atom (the
@@ -832,23 +893,22 @@ fn editor_slot(cx: AppContext, editor_pane: View) -> View {
     // bleeding over the visible pane). `width(0)` / `height(0)` are REAL
     // zeros (the box_width / box_height rows — `width_height`'s 0 would
     // mean "unset").
-    let slot = Switch().value(cx.layout)
-        .cases("view", Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge)
-            .child(editor_pane).build())
-        .cases("split", Container().width(cx.edw).child(editor_pane).build())
-        .fallback(Expanded().flex(sv(1.0f64)).child(editor_pane).build())
-        .query_key("editor-slot")
-        .build();
+    let slot =
+        Switch().value(cx.layout).cases(
+            "view",
+            Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge).child(editor_pane).build(),
+        ).cases("split", Container().width(cx.edw).child(editor_pane).build()).fallback(
+            Expanded().flex(sv(1.0f64)).child(editor_pane).build(),
+        ).query_key("editor-slot").build();
     return slot;
 }
 
 fn viewer_slot(cx: AppContext, viewer_pane: View) -> View {
-    let slot = Switch().value(cx.layout)
-        .cases("edit", Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge)
-            .child(viewer_pane).build())
-        .fallback(Expanded().flex(sv(1.0f64)).child(viewer_pane).build())
-        .query_key("viewer-slot")
-        .build();
+    let slot =
+        Switch().value(cx.layout).cases(
+            "edit",
+            Container().width(sv(0.0f64)).height(sv(0.0f64)).clip(Clip::HardEdge).child(viewer_pane).build(),
+        ).fallback(Expanded().flex(sv(1.0f64)).child(viewer_pane).build()).query_key("viewer-slot").build();
     return slot;
 }
 
@@ -859,19 +919,25 @@ fn divider(cx: AppContext) -> View {
     // its bar across the whole grab strip) that turns the brand teal
     // while dragging. Drag intents resize the sidebar-width atom (clamped
     // 200–720 in `div_move` — the drag corpus's delta-tracking pattern).
-    let divider = MouseRegion().cursor(Cursor::ColResize)
-        .child(PointerInteract()
-            .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_down(ctx, cx, ev.global.x); }))
-            .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { div_move(ctx, cx, ev.global.x); }))
-            .on_pointer_up(mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { div_up(ctx, cx); })).query_key("divider")
-            .child(Container().width(sv(8.0f64)).color(cx.div_bar).build())
-            .build())
-        .build();
+    let divider =
+        MouseRegion().cursor(Cursor::ColResize).child(
+            PointerInteract().on_pointer_down(
+                mutate<PointerEvent>(
+                    fn (ctx: MutationCtx, ev: PointerEvent) { div_down(ctx, cx, (ev.global).x); },
+                ),
+            ).on_pointer_move(
+                mutate<PointerEvent>(
+                    fn (ctx: MutationCtx, ev: PointerEvent) { div_move(ctx, cx, (ev.global).x); },
+                ),
+            ).on_pointer_up(
+                mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { div_up(ctx, cx); }),
+            ).query_key("divider").child(Container().width(sv(8.0f64)).color(cx.div_bar).build()).build(),
+        ).build();
     return divider;
 }
-    // ---- the editor↔viewer divider ---------------------------------------
-    // The boa shell's second VDivider: visible and draggable only in
-    // split mode.
+// ---- the editor↔viewer divider ---------------------------------------
+// The boa shell's second VDivider: visible and draggable only in
+// split mode.
 fn edivider_slot(cx: AppContext) -> View {
     // ---- the editor↔viewer divider ---------------------------------------
     // The boa shell's second VDivider: an 8px ink.300 band like the
@@ -880,68 +946,70 @@ fn edivider_slot(cx: AppContext) -> View {
     // `ediv_move` — the same delta-tracking drag rail as the sidebar
     // divider above). Outside split mode the pane Switch shells it into a
     // zero box (the boa Condition on `layoutMode === "split"`).
-    let edivider = MouseRegion().cursor(Cursor::ColResize)
-        .child(PointerInteract()
-            .on_pointer_down(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_down(ctx, cx, ev.global.x); }))
-            .on_pointer_move(mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) { ediv_move(ctx, cx, ev.global.x); }))
-            .on_pointer_up(mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { ediv_up(ctx, cx); })).query_key("divider2")
-            .child(Container().width(sv(8.0f64)).color(cx.ediv_bar).build())
-            .build())
-        .build();
-    let edivider_slot = Switch().value(cx.layout)
-        .cases("edit", SizedBox(0.0, 0.0).build())
-        .cases("view", SizedBox(0.0, 0.0).build())
-        .fallback(edivider)
-        .query_key("divider2-slot")
-        .build();
+    let edivider =
+        MouseRegion().cursor(Cursor::ColResize).child(
+            PointerInteract().on_pointer_down(
+                mutate<PointerEvent>(
+                    fn (ctx: MutationCtx, ev: PointerEvent) { ediv_down(ctx, cx, (ev.global).x); },
+                ),
+            ).on_pointer_move(
+                mutate<PointerEvent>(
+                    fn (ctx: MutationCtx, ev: PointerEvent) { ediv_move(ctx, cx, (ev.global).x); },
+                ),
+            ).on_pointer_up(
+                mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) { ediv_up(ctx, cx); }),
+            ).query_key("divider2").child(Container().width(sv(8.0f64)).color(cx.ediv_bar).build()).build(),
+        ).build();
+    let edivider_slot =
+        Switch().value(cx.layout).cases("edit", SizedBox(0.0, 0.0).build()).cases(
+            "view",
+            SizedBox(0.0, 0.0).build(),
+        ).fallback(edivider).query_key("divider2-slot").build();
     return edivider_slot;
 }
-    // ---- status bar -------------------------------------------------------
-    // The state dot + label, the edited pill, the ago clock, the
-    // auto-run state and the version.
+// ---- status bar -------------------------------------------------------
+// The state dot + label, the edited pill, the ago clock, the
+// auto-run state and the version.
 fn status_bar(cx: AppContext) -> View {
     // The str-format derive (the kit's lambda rail — the old rs_derive
     // workaround retired: the interning family is fixed upstream and the
     // lambda spelling holds at this pin even with the menu's async
     // surfaces in the root scope).
-    let ago_d: Readable<str> = derive(fn (ctx: DeriveCtx) -> str {
-        return fmt_ago(ctx.get<f64>(cx.ago));
-    });
+    let ago_d: Readable<str> =
+        derive(fn (ctx: DeriveCtx) -> str { return fmt_ago(ctx.get<f64>(cx.ago)); });
     // The state label mirrors the dot's law: green while fine, the status
     // red for the failure states (the boa status bar colors both).
-    let sbar_left = Container().padding(4.0)
-        .child(Row().main_axis_size(MainAxisSize::Min)
-            .child(SizedBox(8.0, 0.0).build())
-            .child(Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(cx.dot)
-                .query_key("status-dot").build())
-            .child(SizedBox(6.0, 0.0).build())
-            .child(state_label(cx))
-            .child(edited_pill(cx))
-            .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text(ago_d).font_size(11.0).color(TEXT_TERTIARY)
-                .query_key("compiled-ago").build())
-            .build())
-        .build();
-    let sbar_right = Container().padding(4.0)
-        .child(Row().main_axis_size(MainAxisSize::Min)
-            .child(auto_state_text(cx))
-            .child(SizedBox(12.0, 0.0).build())
-            .child(Text().text(sv("tur v0.1")).font_size(11.0).color(TEXT_TERTIARY).build())
-            .child(SizedBox(8.0, 0.0).build())
-            .build())
-        .build();
-    let sbar = Container().width_height(0.0, 22.0).color(sv(BG_ELEVATED))
-        .border(BORDER_SUBTLE, 1.0, BorderPosition::Inside).query_key("status-bar")
-        .alignment(Align::Center)
-        .child(Row().main_alignment(MainAlign::SpaceBetween)
-            .child(sbar_left)
-            .child(sbar_right)
-            .build())
-        .build();
+    let sbar_left =
+        Container().padding(4.0).child(
+            Row().main_axis_size(MainAxisSize::Min).child(SizedBox(8.0, 0.0).build()).child(
+                Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(cx.dot).query_key(
+                    "status-dot",
+                ).build(),
+            ).child(SizedBox(6.0, 0.0).build()).child(state_label(cx)).child(edited_pill(cx)).child(
+                SizedBox(12.0, 0.0).build(),
+            ).child(
+                Text().text(ago_d).font_size(11.0).color(TEXT_TERTIARY).query_key("compiled-ago").build(),
+            ).build(),
+        ).build();
+    let sbar_right =
+        Container().padding(4.0).child(
+            Row().main_axis_size(MainAxisSize::Min).child(auto_state_text(cx)).child(
+                SizedBox(12.0, 0.0).build(),
+            ).child(Text().text(sv("tur v0.1")).font_size(11.0).color(TEXT_TERTIARY).build()).child(
+                SizedBox(8.0, 0.0).build(),
+            ).build(),
+        ).build();
+    let sbar =
+        Container().width_height(0.0, 22.0).color(sv(BG_ELEVATED)).border(
+            BORDER_SUBTLE,
+            1.0,
+            BorderPosition::Inside,
+        ).query_key("status-bar").alignment(Align::Center).child(
+            Row().main_alignment(MainAlign::SpaceBetween).child(sbar_left).child(sbar_right).build(),
+        ).build();
 
     return sbar;
 }
-
 
 // The live viewer: the boa ReadyViewer shape — 12px of pane ink around
 // the inset `CARD_BG` card (the measured (248,250,252) surface) hosting
@@ -950,53 +1018,50 @@ fn status_bar(cx: AppContext) -> View {
 // decoration-less box that passes pointers through to the child.
 fn ready_viewer(cx: AppContext) -> View {
     let vapp = VirtualApp().bind(cx.app_atom).query_key("viewer").build();
-    let overlay = Condition(cx.hint_on)
-        .then(Container().color(sv(CARD_BG)).alignment(Align::Center)
-            .child(Text().text(cx.hint).font_size(13.0).color(TEXT_TERTIARY)
-                .query_key("viewer/hint").build())
-            .build())
-        .else_branch(SizedBox(0.0, 0.0).build())
-        .build();
-    return Container().padding(12.0).color(sv(BG_VIEWER))
-        .child(Container().color(sv(CARD_BG)).query_key("viewer-card")
-            .child(Stack().fit(StackFit::Expand).child(vapp).child(overlay).build())
-            .build())
-        .build();
+    let overlay =
+        Condition(cx.hint_on).then(
+            Container().color(sv(CARD_BG)).alignment(Align::Center).child(
+                Text().text(cx.hint).font_size(13.0).color(TEXT_TERTIARY).query_key("viewer/hint").build(),
+            ).build(),
+        ).else_branch(SizedBox(0.0, 0.0).build()).build();
+    return
+        Container().padding(12.0).color(sv(BG_VIEWER)).child(
+            Container().color(sv(CARD_BG)).query_key("viewer-card").child(
+                Stack().fit(StackFit::Expand).child(vapp).child(overlay).build(),
+            ).build(),
+        ).build();
 }
 
 // The error panels — the boa RuntimeErrorView / ErrorPanel shape: red
 // panel, "!" badge, title + message (the message atom is shared: the
 // compile diags and the child's `va_error` land in the same rail).
 fn error_view(title_text: str, err: Readable<str>) -> View {
-    return Container().color(sv(BG_DANGER)).padding(24.0).alignment(Align::Center)
-        .child(Column().cross_alignment(CrossAlign::Center)
-            .child(Container().width_height(32.0, 32.0).radius(sv(16.0f64)).color(sv(STATUS_ERROR))
-                .alignment(Align::Center)
-                .child(Text().text(sv("!")).font_size(18.0).color(TEXT_INVERSE).build())
-                .build())
-            .child(SizedBox(0.0, 16.0).build())
-            .child(Text().text(sv(title_text)).font_size(14.0).color(TEXT_ON_DANGER).build())
-            .child(SizedBox(0.0, 8.0).build())
-            .child(Text().text(err).font_size(12.0).color(TEXT_ON_DANGER).build())
-            .build())
-        .build();
+    return
+        Container().color(sv(BG_DANGER)).padding(24.0).alignment(Align::Center).child(
+            Column().cross_alignment(CrossAlign::Center).child(
+                Container().width_height(32.0, 32.0).radius(sv(16.0f64)).color(sv(STATUS_ERROR)).alignment(
+                    Align::Center,
+                ).child(Text().text(sv("!")).font_size(18.0).color(TEXT_INVERSE).build()).build(),
+            ).child(SizedBox(0.0, 16.0).build()).child(
+                Text().text(sv(title_text)).font_size(14.0).color(TEXT_ON_DANGER).build(),
+            ).child(SizedBox(0.0, 8.0).build()).child(
+                Text().text(err).font_size(12.0).color(TEXT_ON_DANGER).build(),
+            ).build(),
+        ).build();
 }
 
 // The status bar's state label — the Switch rides the app-state atom:
 // the failure states read in the status red, everything else in the
 // success green (the boa label coloring; the dot leads, text confirms).
 fn state_label(cx: AppContext) -> View {
-    let ok = Text().text(cx.state).font_size(11.0).color(STATUS_SUCCESS)
-        .query_key("app-state").build();
-    let err_a = Text().text(cx.state).font_size(11.0).color(STATUS_ERROR)
-        .query_key("app-state").build();
-    let err_b = Text().text(cx.state).font_size(11.0).color(STATUS_ERROR)
-        .query_key("app-state").build();
-    return Switch().value(cx.state)
-        .cases("error", err_a)
-        .cases("compile-error", err_b)
-        .fallback(ok)
-        .build();
+    let ok =
+        Text().text(cx.state).font_size(11.0).color(STATUS_SUCCESS).query_key("app-state").build();
+    let err_a =
+        Text().text(cx.state).font_size(11.0).color(STATUS_ERROR).query_key("app-state").build();
+    let err_b =
+        Text().text(cx.state).font_size(11.0).color(STATUS_ERROR).query_key("app-state").build();
+    return
+        Switch().value(cx.state).cases("error", err_a).cases("compile-error", err_b).fallback(ok).build();
 }
 
 // The auto-run toggle — the boa pill with its leading caption: the 11px
@@ -1005,55 +1070,64 @@ fn state_label(cx: AppContext) -> View {
 // Condition (both branches carry the `autorun` query key; only one
 // mounts).
 fn auto_toggle(cx: AppContext) -> View {
-    let on = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
-        .child(Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(ACCENT_PRIMARY))
-            .child(Stack().fit(StackFit::Expand)
-                .child(Positioned().top(sv(2.0f64)).left(sv(14.0f64))
-                    .child(Container().width_height(12.0, 12.0).radius(sv(999.0f64))
-                        .color(sv(TEXT_INVERSE)).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    let off = PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key("autorun")
-        .child(Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(BG_HOVER))
-            .child(Stack().fit(StackFit::Expand)
-                .child(Positioned().top(sv(2.0f64)).left(sv(2.0f64))
-                    .child(Container().width_height(12.0, 12.0).radius(sv(999.0f64))
-                        .color(sv(TEXT_INVERSE)).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    return Row().main_axis_size(MainAxisSize::Min)
-        .child(Text().text(sv("auto")).font_size(11.0).color(TEXT_SECONDARY)
-            .query_key("auto-caption").build())
-        .child(SizedBox(6.0, 0.0).build())
-        .child(Condition(cx.autorun).then(on).else_branch(off).build())
-        .build();
+    let on =
+        PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key(
+            "autorun",
+        ).child(
+            Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(ACCENT_PRIMARY)).child(
+                Stack().fit(StackFit::Expand).child(
+                    Positioned().top(sv(2.0f64)).left(sv(14.0f64)).child(
+                        Container().width_height(12.0, 12.0).radius(sv(999.0f64)).color(
+                            sv(TEXT_INVERSE),
+                        ).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    let off =
+        PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { b_autorun(ctx, cx); })).query_key(
+            "autorun",
+        ).child(
+            Container().width_height(28.0, 16.0).radius(sv(999.0f64)).color(sv(BG_HOVER)).child(
+                Stack().fit(StackFit::Expand).child(
+                    Positioned().top(sv(2.0f64)).left(sv(2.0f64)).child(
+                        Container().width_height(12.0, 12.0).radius(sv(999.0f64)).color(
+                            sv(TEXT_INVERSE),
+                        ).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    return
+        Row().main_axis_size(MainAxisSize::Min).child(
+            Text().text(sv("auto")).font_size(11.0).color(TEXT_SECONDARY).query_key("auto-caption").build(),
+        ).child(SizedBox(6.0, 0.0).build()).child(
+            Condition(cx.autorun).then(on).else_branch(off).build(),
+        ).build();
 }
 
 // The status bar's auto-run caption ("auto-run on" while the toggle is
 // live, the "⌘S to run" keyboard hint otherwise — the boa status bar's
 // right cluster).
 fn auto_state_text(cx: AppContext) -> View {
-    let on = Text().text(sv("auto-run on")).font_size(11.0).color(TEXT_TERTIARY)
-        .query_key("auto-state").build();
-    let off = Text().text(sv("\u{2318}S to run")).font_size(11.0).color(TEXT_TERTIARY)
-        .query_key("auto-state").build();
+    let on =
+        Text().text(sv("auto-run on")).font_size(11.0).color(TEXT_TERTIARY).query_key("auto-state").build();
+    let off =
+        Text().text(sv("⌘S to run")).font_size(11.0).color(TEXT_TERTIARY).query_key("auto-state").build();
     return Condition(cx.autorun).then(on).else_branch(off).build();
 }
 
 // The edited pill — a coral dot + "edited", visible only while the editor
 // text differs from the last-compiled source.
 fn edited_pill(cx: AppContext) -> View {
-    let pill = Row().main_axis_size(MainAxisSize::Min)
-        .child(SizedBox(12.0, 0.0).build())
-        .child(Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(sv(ACCENT_COMPLEMENT))
-            .query_key("edited-pill").build())
-        .child(SizedBox(6.0, 0.0).build())
-        .child(Text().text(sv("edited")).font_size(11.0).color(TEXT_TERTIARY).build())
-        .build();
+    let pill =
+        Row().main_axis_size(MainAxisSize::Min).child(SizedBox(12.0, 0.0).build()).child(
+            Container().width_height(6.0, 6.0).radius(sv(999.0f64)).color(sv(ACCENT_COMPLEMENT)).query_key(
+                "edited-pill",
+            ).build(),
+        ).child(SizedBox(6.0, 0.0).build()).child(
+            Text().text(sv("edited")).font_size(11.0).color(TEXT_TERTIARY).build(),
+        ).build();
     return Condition(cx.edited).then(pill).else_branch(SizedBox(0.0, 0.0).build()).build();
 }
 
@@ -1062,26 +1136,52 @@ fn edited_pill(cx: AppContext) -> View {
 // MouseRegion delivers the hover lift (the index rides the shared-cell
 // scratch).
 fn tab_button(cx: AppContext, label: str, m: Mutation<nil>, key: str, brush: Readable<u64>, idx: u64) -> View {
-    return MouseRegion()
-        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { tab_enter(ctx, cx, idx); }))
-        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { tab_exit(ctx, cx, idx); }))
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(m).query_key(key)
-            .child(Container().padding(6.0).radius(sv(4.0f64)).color(brush)
-                .child(Text().text(sv(label)).font_size(11.0).color(TEXT_SECONDARY).build())
-                .build())
-            .build())
-        .build();
+    return
+        MouseRegion().on_enter(
+            mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { tab_enter(ctx, cx, idx); }),
+        ).on_exit(
+            mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { tab_exit(ctx, cx, idx); }),
+        ).cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(m).query_key(key).child(
+                Container().padding(6.0).radius(sv(4.0f64)).color(brush).child(
+                    Text().text(sv(label)).font_size(11.0).color(TEXT_SECONDARY).build(),
+                ).build(),
+            ).build(),
+        ).build();
 }
 
 // The Split / Edit / View segmented control (the boa toolbar's right
 // cluster): a tray with the three tabs.
 fn layout_tabs(cx: AppContext) -> View {
-    let tray = Row().main_axis_size(MainAxisSize::Min)
-        .child(tab_button(cx, "Split", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "split"); }), "tab-split", cx.tab_split, 0))
-        .child(tab_button(cx, "Edit", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "edit"); }), "tab-edit", cx.tab_edit, 1))
-        .child(tab_button(cx, "View", mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "view"); }), "tab-view", cx.tab_view, 2))
-        .build();
+    let tray =
+        Row().main_axis_size(MainAxisSize::Min).child(
+            tab_button(
+                cx,
+                "Split",
+                mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "split"); }),
+                "tab-split",
+                cx.tab_split,
+                0,
+            ),
+        ).child(
+            tab_button(
+                cx,
+                "Edit",
+                mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "edit"); }),
+                "tab-edit",
+                cx.tab_edit,
+                1,
+            ),
+        ).child(
+            tab_button(
+                cx,
+                "View",
+                mutate(fn (ctx: MutationCtx, _e: nil) { set_layout(ctx, cx, "view"); }),
+                "tab-view",
+                cx.tab_view,
+                2,
+            ),
+        ).build();
     return Container().radius(sv(6.0f64)).color(sv(BG_HOVER)).padding(2.0).child(tray).build();
 }
 
@@ -1097,46 +1197,56 @@ fn layout_tabs(cx: AppContext) -> View {
 fn side_item(cx: AppContext, i: u64, name: str) -> View {
     let sel = cx.sel;
     let hov = cx.hover;
-    let bar = derive(fn (ctx: DeriveCtx) -> u64 {
-        if (ctx.get<f64>(sel) == i as f64) {
-            return ACCENT_SOLID;
-        }
-        return 0;
-    });
-    let bg = derive(fn (ctx: DeriveCtx) -> u64 {
-        let s = ctx.get<f64>(sel) == i as f64;
-        let h = ctx.get<f64>(hov) == i as f64;
-        if (s) {
-            if (h) {
-                return BG_STRONG_HOVER;
-            }
-            return BG_ELEVATED;
-        }
-        if (h) {
-            return BG_HOVER;
-        }
-        return 0;
-    });
-    let row = Container().padding(8.0)
-        .query_key(f"row/{name}")
-        .child(Row().main_axis_size(MainAxisSize::Min)
-            // The reserved 3px bar (never clips — boa's trick): teal when
-            // selected, transparent otherwise, so the label never shifts.
-            .child(Container().width_height(3.0, 20.0).radius(sv(2.0f64)).color(bar).build())
-            .child(SizedBox(8.0, 0.0).build())
-            .child(Expanded().flex(sv(1.0f64))
-                .child(Container().radius(sv(5.0f64)).padding(7.0).color(bg)
-                    .child(Text().text(sv(name)).color(TEXT_BODY).font_size(13.0).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    let item = MouseRegion()
-        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { row_enter(ctx, cx, i); }))
-        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { row_exit(ctx, cx, i); }))
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { case_tap(ctx, cx, i); })).child(row).build())
-        .build();
+    let bar =
+        derive(
+            fn (ctx: DeriveCtx) -> u64 {
+                if (ctx.get<f64>(sel) == i as f64) {
+                    return ACCENT_SOLID;
+                }
+                return 0;
+            },
+        );
+    let bg =
+        derive(
+            fn (ctx: DeriveCtx) -> u64 {
+                let s = ctx.get<f64>(sel) == i as f64;
+                let h = ctx.get<f64>(hov) == i as f64;
+                if (s) {
+                    if (h) {
+                        return BG_STRONG_HOVER;
+                    }
+                    return BG_ELEVATED;
+                }
+                if (h) {
+                    return BG_HOVER;
+                }
+                return 0;
+            },
+        );
+    let row =
+        Container().padding(8.0).query_key(f"row/{name}").child(
+            Row().main_axis_size(MainAxisSize::Min).child(
+                // The reserved 3px bar (never clips — boa's trick): teal when
+                // selected, transparent otherwise, so the label never shifts.
+                Container().width_height(3.0, 20.0).radius(sv(2.0f64)).color(bar).build(),
+            ).child(SizedBox(8.0, 0.0).build()).child(
+                Expanded().flex(sv(1.0f64)).child(
+                    Container().radius(sv(5.0f64)).padding(7.0).color(bg).child(
+                        Text().text(sv(name)).color(TEXT_BODY).font_size(13.0).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    let item =
+        MouseRegion().on_enter(
+            mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { row_enter(ctx, cx, i); }),
+        ).on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { row_exit(ctx, cx, i); })).cursor(
+            Cursor::Pointer,
+        ).child(
+            PointerInteract().on_click(
+                mutate(fn (ctx: MutationCtx, _e: nil) { case_tap(ctx, cx, i); }),
+            ).child(row).build(),
+        ).build();
     // The file sublist — a Switch over the shared case-name source: only
     // the SELECTED case's row mounts its file list (the proven
     // plain-source structural rail — a derived-bool Condition does not
@@ -1147,17 +1257,17 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
     // single-file cases, so the Each mounts nothing (zero footprint — the
     // indent lives inside the file row, not in a wrapper here).
     let files_r = cx.files;
-    let sublist = Switch().value(cx.selected)
-        .cases(name, Each(files_r).item_builder(fn (fi: u64, path: str) -> View {
-            return side_file_item(cx, fi, path);
-        }).build())
-        .fallback(SizedBox(0.0, 0.0).build())
-        .build();
-    return Column().cross_alignment(CrossAlign::Stretch)
-        .child(SizedBox(0.0, 2.0).build())
-        .child(item)
-        .child(sublist)
-        .build();
+    let sublist =
+        Switch().value(cx.selected).cases(
+            name,
+            Each(files_r).item_builder(
+                fn (fi: u64, path: str) -> View { return side_file_item(cx, fi, path); },
+            ).build(),
+        ).fallback(SizedBox(0.0, 0.0).build()).build();
+    return
+        Column().cross_alignment(CrossAlign::Stretch).child(SizedBox(0.0, 2.0).build()).child(item).child(
+            sublist,
+        ).build();
 }
 
 // One file row in the selected case's sublist — the side_item pattern at
@@ -1171,46 +1281,55 @@ fn side_item(cx: AppContext, i: u64, name: str) -> View {
 fn side_file_item(cx: AppContext, fi: u64, path: str) -> View {
     let sel = cx.fsel;
     let hov = cx.fhover;
-    let dot = derive(fn (d: DeriveCtx) -> u64 {
-        if (d.get<f64>(sel) == fi as f64) {
-            return ACCENT_SOLID;
-        }
-        return 0;
-    });
-    let bg = derive(fn (d: DeriveCtx) -> u64 {
-        let s = d.get<f64>(sel) == fi as f64;
-        let h = d.get<f64>(hov) == fi as f64;
-        if (s) {
-            if (h) {
-                return BG_STRONG_HOVER;
-            }
-            return BG_ELEVATED;
-        }
-        if (h) {
-            return BG_HOVER;
-        }
-        return 0;
-    });
+    let dot =
+        derive(
+            fn (d: DeriveCtx) -> u64 {
+                if (d.get<f64>(sel) == fi as f64) {
+                    return ACCENT_SOLID;
+                }
+                return 0;
+            },
+        );
+    let bg =
+        derive(
+            fn (d: DeriveCtx) -> u64 {
+                let s = d.get<f64>(sel) == fi as f64;
+                let h = d.get<f64>(hov) == fi as f64;
+                if (s) {
+                    if (h) {
+                        return BG_STRONG_HOVER;
+                    }
+                    return BG_ELEVATED;
+                }
+                if (h) {
+                    return BG_HOVER;
+                }
+                return 0;
+            },
+        );
     let label = file_label(path);
-    let row = Container().padding(4.0)
-        .query_key(f"file/{label}")
-        .child(Row().main_axis_size(MainAxisSize::Min)
-            .child(SizedBox(23.0, 0.0).build())
-            .child(Container().width_height(4.0, 4.0).radius(sv(2.0f64)).color(dot).build())
-            .child(SizedBox(6.0, 0.0).build())
-            .child(Expanded().flex(sv(1.0f64))
-                .child(Container().radius(sv(4.0f64)).padding(5.0).color(bg)
-                    .child(Text().text(sv(label)).color(TEXT_SECONDARY).font_size(12.0).build())
-                    .build())
-                .build())
-            .build())
-        .build();
-    return MouseRegion()
-        .on_enter(mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { frow_enter(ctx, cx, fi); }))
-        .on_exit(mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { frow_exit(ctx, cx, fi); }))
-        .cursor(Cursor::Pointer)
-        .child(PointerInteract().on_click(mutate(fn (ctx: MutationCtx, _e: nil) { file_tap(ctx, cx, fi); })).child(row).build())
-        .build();
+    let row =
+        Container().padding(4.0).query_key(f"file/{label}").child(
+            Row().main_axis_size(MainAxisSize::Min).child(SizedBox(23.0, 0.0).build()).child(
+                Container().width_height(4.0, 4.0).radius(sv(2.0f64)).color(dot).build(),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                Expanded().flex(sv(1.0f64)).child(
+                    Container().radius(sv(4.0f64)).padding(5.0).color(bg).child(
+                        Text().text(sv(label)).color(TEXT_SECONDARY).font_size(12.0).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
+    return
+        MouseRegion().on_enter(
+            mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) { frow_enter(ctx, cx, fi); }),
+        ).on_exit(
+            mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { frow_exit(ctx, cx, fi); }),
+        ).cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(
+                mutate(fn (ctx: MutationCtx, _e: nil) { file_tap(ctx, cx, fi); }),
+            ).child(row).build(),
+        ).build();
 }
 
 // The hover intents: entering moves the hover rail (the derives repaint
@@ -1260,12 +1379,12 @@ fn cache_key(name: str, path: str) -> str {
 
 // The editor's current text lands in the outgoing file's cache slot.
 fn save_file(cx: AppContext, name: str, path: str) {
-    cx.cache.set(cache_key(name, path), f"1{cx.ctrl.text()}");
+    (cx.cache).set(cache_key(name, path), f"1{(cx.ctrl).text()}");
 }
 
 // A file's text: the cached edit when present, the registry otherwise.
 fn file_text(cx: AppContext, name: str, path: str) -> str {
-    let hit = cx.cache.get(cache_key(name, path));
+    let hit = (cx.cache).get(cache_key(name, path));
     if (hit != "") {
         return hit.slice(1, hit.len());
     }
@@ -1346,8 +1465,8 @@ fn case_tap(ctx: MutationCtx, cx: AppContext, idx: u64) {
 // every character. The apply keeps the caret, so the auto-run's
 // re-highlight never yanks it either.
 fn load_editor(cx: AppContext, text: str) {
-    cx.ctrl.set_text(text);
-    pg_apply_highlight(cx.ctrl.raw(), pg_highlight(text));
+    (cx.ctrl).set_text(text);
+    pg_apply_highlight((cx.ctrl).raw(), pg_highlight(text));
 }
 
 // The test rail's probe: select + run by sidebar index (the held
@@ -1366,7 +1485,7 @@ entry fn select_file(cx: opaque, i: u64) {
 // the caller's str atom (the start answer).
 entry fn probe(cx: opaque) {
     let c = probe_cx(cx);
-    entry_ctx().set<str>(c.state, c.vctrl.status());
+    entry_ctx().set<str>(c.state, (c.vctrl).status());
 }
 
 // Compile the editor's current source; on success destroy the previous
@@ -1381,7 +1500,7 @@ fn run_case(ctx: MutationCtx, cx: AppContext) {
 // the Run button drives (the KeydownEvent mask: bit1 ctrl / bit3 meta).
 // Every other keystroke — including a bare "s" — falls through.
 fn editor_key(ctx: MutationCtx, cx: AppContext, ev: KeydownEvent) {
-    let cmd = ((ev.modifiers & 8) != 0) || ((ev.modifiers & 2) != 0);
+    let cmd = ev.modifiers & 8 != 0 || ev.modifiers & 2 != 0;
     if (ev.key == "s" && cmd) {
         run_case(ctx, cx);
     }
@@ -1412,14 +1531,14 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
         j = j + 1;
     }
     if (active != "") {
-        pg_files_put(active, cx.ctrl.text());
+        pg_files_put(active, (cx.ctrl).text());
     }
 
     // The root's text: the editor's live content when the root IS the
     // active file, else the (cached) registry text.
     let root_text = file_text(cx, name, "");
     if (active == "") {
-        root_text = cx.ctrl.text();
+        root_text = (cx.ctrl).text();
     }
 
     let id = pg_compile(root_text);
@@ -1436,9 +1555,9 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
     // and swap the viewer's reactive `app$` atom — the mounted
     // `VirtualAppView` rebinds in the same flush and the new child
     // spawns. The new controller's status rail is watched in its place.
-    cx.vctrl.destroy();
+    (cx.vctrl).destroy();
     let vctrl = virtual_app_controller(virtual_app_source_handle(id));
-    cx.vctrl = vctrl;
+    (cx.vctrl) = vctrl;
     watch_controller(cx, vctrl);
     virtual_app_set(cx.app_atom, vctrl);
 
@@ -1446,8 +1565,8 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
     // colors land — the apply keeps the caret where the user left it; the
     // text itself is already current, only the colors refresh). The
     // highlight covers the ACTIVE file — the editor's own text.
-    let active_text = cx.ctrl.text();
-    pg_apply_highlight(cx.ctrl.raw(), pg_highlight(active_text));
+    let active_text = (cx.ctrl).text();
+    pg_apply_highlight((cx.ctrl).raw(), pg_highlight(active_text));
 
     // The status rail: spawning (the watch deliveries settle it into
     // ready/error).
@@ -1476,7 +1595,7 @@ fn reset_case(ctx: MutationCtx, cx: AppContext) {
     let j: u64 = 0;
     while (j < n) {
         let path = pg_case_file_path(name, j);
-        cx.cache.set(cache_key(name, path), f"1{pg_case_file_source(name, path)}");
+        (cx.cache).set(cache_key(name, path), f"1{pg_case_file_source(name, path)}");
         j = j + 1;
     }
     load_file(cx, name, pg_case_file_path(name, ctx.get<f64>(cx.fsel) as u64));
@@ -1502,7 +1621,7 @@ fn set_dragging(ctx: MutationCtx, cx: AppContext, on: bool) {
 }
 
 fn div_down(ctx: MutationCtx, cx: AppContext, gx: f64) {
-    cx.dragx = gx;
+    (cx.dragx) = gx;
     set_dragging(ctx, cx, true);
 }
 
@@ -1511,7 +1630,7 @@ fn div_move(ctx: MutationCtx, cx: AppContext, gx: f64) {
         return;
     }
     let dx = gx - cx.dragx;
-    cx.dragx = gx;
+    (cx.dragx) = gx;
     let w = ctx.get<f64>(cx.sbw) + dx;
     if (w < 200.0) {
         w = 200.0;
@@ -1543,7 +1662,7 @@ fn set_edragging(ctx: MutationCtx, cx: AppContext, on: bool) {
 }
 
 fn ediv_down(ctx: MutationCtx, cx: AppContext, gx: f64) {
-    cx.edragx = gx;
+    (cx.edragx) = gx;
     set_edragging(ctx, cx, true);
 }
 
@@ -1552,7 +1671,7 @@ fn ediv_move(ctx: MutationCtx, cx: AppContext, gx: f64) {
         return;
     }
     let dx = gx - cx.edragx;
-    cx.edragx = gx;
+    (cx.edragx) = gx;
     let w = ctx.get<f64>(cx.edw) + dx;
     if (w < 360.0) {
         w = 360.0;
@@ -1575,7 +1694,7 @@ fn b_autorun(ctx: MutationCtx, cx: AppContext) {
     if (!on) {
         return;
     }
-    cx.debounce.stop();
+    (cx.debounce).stop();
 }
 
 // The layout tabs.
@@ -1596,13 +1715,13 @@ fn b_autorun(ctx: MutationCtx, cx: AppContext) {
 // LayoutButton): entering marks the index, exiting clears it; all three
 // brushes repaint either way.
 fn tab_enter(ctx: MutationCtx, cx: AppContext, i: u64) {
-    cx.tab_h = i as f64;
+    (cx.tab_h) = i as f64;
     repaint_tabs(ctx, cx);
 }
 
 fn tab_exit(ctx: MutationCtx, cx: AppContext, i: u64) {
     let cur = cx.tab_h;
-    cx.tab_h = -1.0;
+    (cx.tab_h) = -1.0;
     if (cur == i as f64) {
         repaint_tabs(ctx, cx);
     }
@@ -1650,9 +1769,9 @@ fn set_layout(ctx: MutationCtx, cx: AppContext, mode: str) {
 // (cancellation = stop; no generation guard needed).
 fn on_edit(ctx: MutationCtx, cx: AppContext) {
     mark_edited(ctx, cx);
-    cx.debounce.stop();
+    (cx.debounce).stop();
     if (ctx.get<bool>(cx.autorun)) {
-        cx.debounce.forward();
+        (cx.debounce).forward();
     }
 }
 
@@ -1662,7 +1781,7 @@ fn on_debounce_end(ctx: MutationCtx, cx: AppContext) {
 }
 
 fn mark_edited(ctx: MutationCtx, cx: AppContext) {
-    let text = cx.ctrl.text();
+    let text = (cx.ctrl).text();
     let dirty = text != ctx.get<str>(cx.compiled);
     ctx.set<bool>(cx.edited, dirty);
 }
@@ -1671,7 +1790,7 @@ fn mark_edited(ctx: MutationCtx, cx: AppContext) {
 // status bar's derive re-formats the label — no polling anywhere else).
 fn on_clock_end(ctx: MutationCtx, cx: AppContext) {
     ctx.set<f64>(cx.ago, ctx.get<f64>(cx.ago) + 1.0);
-    cx.clock.forward();
+    (cx.clock).forward();
 }
 
 fn fmt_ago(v: f64) -> str {
@@ -1713,4 +1832,3 @@ fn set_state(ctx: MutationCtx, cx: AppContext, s: str) {
         ctx.set<u64>(cx.dot, STATUS_ERROR);
     }
 }
-

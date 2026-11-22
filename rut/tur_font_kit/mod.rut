@@ -14,14 +14,14 @@ use tur_host::font::{ font_declare, font_declare_face, font_load_data };
 // Declare a family's default face — pure metadata, no IO, no location (the
 // host's provider owns where the bytes come from).
 pub fn declare_font(family: str) {
-  font_declare(family);
+    font_declare(family);
 }
 
 // Declare a SPECIFIC static face of the family (the overridden_weight /
 // overridden_style selectors the provider catalogs by). Multi-face families
 // declare once per face.
 pub fn declare_font_face(family: str, weight: f64, italic: bool) {
-  font_declare_face(family, weight, italic);
+    font_declare_face(family, weight, italic);
 }
 
 // Materialize a declared family: fetch each pending face's bytes through
@@ -31,5 +31,5 @@ pub fn declare_font_face(family: str, weight: f64, italic: bool) {
 // Text under the family renders on the resolver stack's fallback until this
 // lands — launch it (not await it) for the fallback-then-swap UX.
 pub async fn load_font_data(family: str) -> bool {
-  return await font_load_data(family);
+    return await font_load_data(family);
 }

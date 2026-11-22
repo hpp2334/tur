@@ -8,15 +8,18 @@ use tur_kit::scroll::{ LazyList };
 fn item(i: u64) -> View {
     let b = Container().width_height(80.0, 300.0);
     if (i % 2 == 0) {
-        b.color(sv(0x303030FFu64));
+        b.color(sv(808464639u64));
     } else {
-        b.color(sv(0x1A1A1AFFu64));
+        b.color(sv(437918463u64));
     }
     return b.build();
 }
 
 entry fn start() {
     let count = source<f64>(50.0);
-    let list = LazyList().item_builder(item).count(count).axis(Axis::Horizontal).item_extent(80.0).query_key("lazy-list-row").build();
+    let list =
+        LazyList().item_builder(item).count(count).axis(Axis::Horizontal).item_extent(80.0).query_key(
+            "lazy-list-row",
+        ).build();
     mount(list);
 }

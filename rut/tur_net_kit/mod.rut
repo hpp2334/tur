@@ -22,11 +22,11 @@ let SEAL_BYTES: u64 = 10;
 // The body calls the `net_request_raw` twin because this fn's own name
 // shadows the row's.
 pub async fn net_request(url: str, method: str) -> bytes {
-  return await net_request_raw(url, method);
+    return await net_request_raw(url, method);
 }
 
 // Stream a response body: the chunk mutation fires once per chunk (the
 // returned task's `task_cancel` wire-aborts the download).
 pub fn net_stream(url: str, method: str, on_chunk: Mutation<bytes>) -> opaque {
-  return net_stream_mut(url, method, on_chunk.seal(SEAL_BYTES));
+    return net_stream_mut(url, method, on_chunk.seal(SEAL_BYTES));
 }

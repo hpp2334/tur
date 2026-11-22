@@ -792,7 +792,12 @@ fn playground_auto_run_respawns_after_the_debounce() {
 
     // A keystroke breaks the source; after the 500 ms debounce the
     // auto-run recompiles and the viewer flips to the compile error.
+    // The caret lands wherever the fixed-pixel focus click put it —
+    // `Home` first pins the insertion to a LINE START, so the typed `x`
+    // breaks the source for ANY case layout (a bare unbound `x` or a
+    // syntax error — never a harmless in-string / in-comment insertion).
     focus_editor(&mut app);
+    app.send_key("Home");
     app.send_key("x");
     app.wait_for_timeout(Duration::from_secs(1));
     assert_eq!(

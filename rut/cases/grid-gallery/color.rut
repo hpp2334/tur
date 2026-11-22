@@ -2,15 +2,15 @@
 // tile ramp (hsl → the packed 0xRRGGBBAA color).
 
 // The boa palette (deep slate page, indigo active chips).
-pub let PAGE_BG: u64 = 0x0F172AFFu64;
-pub let TITLE_FG: u64 = 0xF1F5F9FFu64;
-pub let SUB_FG: u64 = 0x94A3B8FFu64;
-pub let PANEL_BG: u64 = 0x020617FFu64;
-pub let CHIP_ON: u64 = 0x6366F1FFu64;
-pub let CHIP_OFF: u64 = 0x1E293BFFu64;
-pub let CHIP_FG: u64 = 0xE2E8F0FFu64;
-pub let LABEL_FG: u64 = 0xFFFFFFFFu64;
-pub let RING_ON: u64 = 0xFFFFFFFFu64;
+pub let PAGE_BG: u64 = 253176575u64;
+pub let TITLE_FG: u64 = 4059429375u64;
+pub let SUB_FG: u64 = 2493757695u64;
+pub let PANEL_BG: u64 = 33953791u64;
+pub let CHIP_ON: u64 = 1667691007u64;
+pub let CHIP_OFF: u64 = 506018815u64;
+pub let CHIP_FG: u64 = 3806916863u64;
+pub let LABEL_FG: u64 = 4294967295u64;
+pub let RING_ON: u64 = 4294967295u64;
 
 // hsl(h, s%, l%) → the packed 0xRRGGBBAA color (the boa tile ramp).
 pub fn hsl_packed(h: f64, s: f64, l: f64) -> u64 {

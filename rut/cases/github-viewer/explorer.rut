@@ -33,199 +33,170 @@ use tur_net_kit::{ net_request };
 
 pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
     // Back: up one directory, or back to the landing when at the root.
-    let b_back = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let cur = ctx.get<str>(s.path);
-        if (cur == "") {
-            go_landing(ctx, s);
-            return;
-        }
-        let n = cur.len();
-        let sep: i32 = -1;
-        let k = 0;
-        while (k < n) {
-            if (cur.code_at(k) == theme::C_SLASH) {
-                sep = k;
-            }
-            k = k + 1;
-        }
-        if (sep < 0) {
-            ctx.set<str>(s.path, "");
-        } else {
-            ctx.set<str>(s.path, cur.slice(0, sep));
-        }
-        ctx.set<str>(s.selected, "");
-        ctx.set<str>(s.sel_file, "");
-        launch_future(fetch_dir(ctx, s));
-    });
+    let b_back =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let cur = ctx.get<str>(s.path);
+                if (cur == "") {
+                    go_landing(ctx, s);
+                    return;
+                }
+                let n = cur.len();
+                let sep: i32 = -1;
+                let k = 0;
+                while (k < n) {
+                    if (cur.code_at(k) == theme::C_SLASH) {
+                        sep = k;
+                    }
+                    k = k + 1;
+                }
+                if (sep < 0) {
+                    ctx.set<str>(s.path, "");
+                } else {
+                    ctx.set<str>(s.path, cur.slice(0, sep));
+                }
+                ctx.set<str>(s.selected, "");
+                ctx.set<str>(s.sel_file, "");
+                launch_future(fetch_dir(ctx, s));
+            },
+        );
     // The crumb tap: back to the repo ROOT listing (the boa
     // navigateToRoot); the handles bind at the launch site.
-    let b_root = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<str>(s.path, "");
-        ctx.set<str>(s.selected, "");
-        ctx.set<str>(s.sel_file, "");
-        launch_future(fetch_dir(ctx, s));
-    });
+    let b_root =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<str>(s.path, "");
+                ctx.set<str>(s.selected, "");
+                ctx.set<str>(s.sel_file, "");
+                launch_future(fetch_dir(ctx, s));
+            },
+        );
     // Re-fetch the current directory.
-    let b_refresh = mutate(fn (ctx: MutationCtx, _e: nil) {
-        launch_future(fetch_dir(ctx, s));
-    });
+    let b_refresh = mutate(fn (ctx: MutationCtx, _e: nil) { launch_future(fetch_dir(ctx, s)); });
     // Download the selected file: fetch its raw bytes and hand them to the
     // platform save lane. No-op when nothing is selected (the subtle pill
     // state); a missing host capability surfaces through the error banner.
     // The boa re-entry guard: clicks while a journey (or its flash) is
     // active are ignored.
-    let b_download = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let fname = ctx.get<str>(s.sel_file);
-        if (fname == "") {
-            return;
-        }
-        if (ctx.get<str>(s.dl) != "idle") {
-            return;
-        }
-        launch_future(download_file(ctx, s, fname));
-    });
+    let b_download =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let fname = ctx.get<str>(s.sel_file);
+                if (fname == "") {
+                    return;
+                }
+                if (ctx.get<str>(s.dl) != "idle") {
+                    return;
+                }
+                launch_future(download_file(ctx, s, fname));
+            },
+        );
     // The download pill's status machine (the boa DownloadButton): the
     // pill's FACE swaps on the dl source — "Downloading…" while the
     // journey rides, "Saved" / "Failed" flashes, the idle pair (accent
     // when a FILE is selected, subtle otherwise). One pad, four faces;
     // the key rides each face's TEXT (tests read the label through it,
     // taps still hit the pad beneath).
-    let has_sel: Readable<bool> = derive<bool>(fn (ctx: DeriveCtx) -> bool {
-        return ctx.get<str>(s.sel_file) != "";
-    });
-    let dl_idle = Condition(has_sel)
-        .then(dl_face("Download", theme::ACCENT, theme::ACCENT_FG))
-        .else_branch(dl_face("Download", theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
-        .build();
-    let download = MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(
-            PointerInteract()
-                .on_click(b_download)
-                .child(
-                    Switch()
-                        .value(s.dl)
-                        .cases("loading", dl_face("Downloading…", theme::ACCENT_SOFT, theme::ACCENT))
-                        .cases("done", dl_face("Saved", theme::SUCCESS, theme::ACCENT_FG))
-                        .cases("error", dl_face("Failed", theme::DANGER_SOFT, theme::DANGER))
-                        .fallback(dl_idle)
-                        .build(),
-                )
-                .build(),
-        )
-        .build();
-    let list = ScrollView()
-        .axis(Axis::Vertical)
-        .child(
-            Column()
-                .cross_alignment(CrossAlign::Stretch)
-                .main_axis_size(MainAxisSize::Min)
-                .child(Each(s.files).item_builder(fn (i: u64, f: str) -> View {
-                    return item_file(i, f, s, ico_folder, ico_file);
-                }).build())
-                .build(),
-        )
-        .build();
-    let loading = Container()
-        .alignment(Align::Center)
-        .child(Text().text(sv("Loading…")).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-loading").build())
-        .build();
-    let empty = Container()
-        .alignment(Align::Center)
-        .padding(40.0)
-        .child(
-            Column()
-                .cross_alignment(CrossAlign::Center)
-                .main_axis_size(MainAxisSize::Min)
-                .child(Text().text(sv("This folder is empty")).font_size(14.0).color(theme::TEXT).build())
-                .child(SizedBox(0.0, 6.0).build())
-                .child(Text().text(sv("No files to show at this path.")).font_size(12.0).color(theme::TEXT_SUBTLE).build())
-                .build(),
-        )
-        .build();
-    return Column()
-        .cross_alignment(CrossAlign::Stretch)
-        .child(
-            Row()
-                .cross_alignment(CrossAlign::Center)
-                .child(
-                    PointerInteract()
-                        .on_click(b_back)
-                        .query_key("gh-back")
-                        .child(
-                            Container()
-                                .padding(9.0)
-                                .radius(sv(8.0f64))
-                                .color(sv(theme::SUBTLE_BUTTON))
-                                .child(Text().text(sv("Back")).font_size(13.0).color(theme::SUBTLE_BUTTON_FG).build())
-                                .build(),
-                        )
-                        .build(),
-                )
-                .child(SizedBox(10.0, 0.0).build())
+    let has_sel: Readable<bool> =
+        derive<bool>(fn (ctx: DeriveCtx) -> bool { return ctx.get<str>(s.sel_file) != ""; });
+    let dl_idle =
+        Condition(has_sel).then(dl_face("Download", theme::ACCENT, theme::ACCENT_FG)).else_branch(
+            dl_face("Download", theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG),
+        ).build();
+    let download =
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(b_download).child(
+                Switch().value(s.dl).cases(
+                    "loading",
+                    dl_face("Downloading…", theme::ACCENT_SOFT, theme::ACCENT),
+                ).cases("done", dl_face("Saved", theme::SUCCESS, theme::ACCENT_FG)).cases(
+                    "error",
+                    dl_face("Failed", theme::DANGER_SOFT, theme::DANGER),
+                ).fallback(dl_idle).build(),
+            ).build(),
+        ).build();
+    let list =
+        ScrollView().axis(Axis::Vertical).child(
+            Column().cross_alignment(CrossAlign::Stretch).main_axis_size(MainAxisSize::Min).child(
+                Each(s.files).item_builder(
+                    fn (i: u64, f: str) -> View { return item_file(i, f, s, ico_folder, ico_file); },
+                ).build(),
+            ).build(),
+        ).build();
+    let loading =
+        Container().alignment(Align::Center).child(
+            Text().text(sv("Loading…")).font_size(13.0).color(theme::TEXT_SUBTLE).query_key(
+                "gh-loading",
+            ).build(),
+        ).build();
+    let empty =
+        Container().alignment(Align::Center).padding(40.0).child(
+            Column().cross_alignment(CrossAlign::Center).main_axis_size(MainAxisSize::Min).child(
+                Text().text(sv("This folder is empty")).font_size(14.0).color(theme::TEXT).build(),
+            ).child(SizedBox(0.0, 6.0).build()).child(
+                Text().text(sv("No files to show at this path.")).font_size(12.0).color(
+                    theme::TEXT_SUBTLE,
+                ).build(),
+            ).build(),
+        ).build();
+    return
+        Column().cross_alignment(CrossAlign::Stretch).child(
+            Row().cross_alignment(CrossAlign::Center).child(
+                PointerInteract().on_click(b_back).query_key("gh-back").child(
+                    Container().padding(9.0).radius(sv(8.0f64)).color(sv(theme::SUBTLE_BUTTON)).child(
+                        Text().text(sv("Back")).font_size(13.0).color(theme::SUBTLE_BUTTON_FG).build(),
+                    ).build(),
+                ).build(),
+            ).child(SizedBox(10.0, 0.0).build()).child(
                 // The repo crumb (the boa RepoCrumb): a clickable chip that
                 // navigates back to the repo root. 13px accent, padding 4 —
                 // no invented weight. The crumb keeps the PARSED draft
                 // identity (the crumb source is never overwritten by the
                 // API's full_name). The key rides the TEXT (the tests read
                 // the label through it; taps still hit the pad beneath).
-                .child(
-                    MouseRegion()
-                        .cursor(Cursor::Pointer)
-                        .child(
-                            PointerInteract()
-                                .on_click(b_root)
-                                .child(
-                                    Container().padding(4.0).child(
-                                        Text().text(s.repo_full).font_size(13.0).color(theme::ACCENT).query_key("gh-crumb").build(),
-                                    ).build(),
-                                )
-                                .build(),
-                        )
-                        .build(),
-                )
-                .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text(s.path).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-path").build())
-                .build(),
-        )
-        .child(SizedBox(0.0, 4.0).build())
-        .child(Text().text(s.desc).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-desc").build())
-        .child(SizedBox(0.0, 8.0).build())
-        .child(ui::error_banner(s))
-        .child(SizedBox(0.0, 8.0).build())
-        .child(
-            Row()
-                .cross_alignment(CrossAlign::Center)
-                .child(ui::pill("gh-refresh", "Refresh", b_refresh, theme::SUBTLE_BUTTON, theme::SUBTLE_BUTTON_FG))
-                .child(SizedBox(10.0, 0.0).build())
-                .child(download)
-                .child(SizedBox(10.0, 0.0).build())
-                .child(Text().text(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build())
-                .build(),
-        )
-        .child(SizedBox(0.0, 8.0).build())
-        .child(
-            Expanded()
-                .flex(sv(1.0f64))
+                MouseRegion().cursor(Cursor::Pointer).child(
+                    PointerInteract().on_click(b_root).child(
+                        Container().padding(4.0).child(
+                            Text().text(s.repo_full).font_size(13.0).color(theme::ACCENT).query_key(
+                                "gh-crumb",
+                            ).build(),
+                        ).build(),
+                    ).build(),
+                ).build(),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                Text().text(s.path).font_size(13.0).color(theme::TEXT_SUBTLE).query_key("gh-path").build(),
+            ).build(),
+        ).child(SizedBox(0.0, 4.0).build()).child(
+            Text().text(s.desc).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-desc").build(),
+        ).child(SizedBox(0.0, 8.0).build()).child(ui::error_banner(s)).child(
+            SizedBox(0.0, 8.0).build(),
+        ).child(
+            Row().cross_alignment(CrossAlign::Center).child(
+                ui::pill(
+                    "gh-refresh",
+                    "Refresh",
+                    b_refresh,
+                    theme::SUBTLE_BUTTON,
+                    theme::SUBTLE_BUTTON_FG,
+                ),
+            ).child(SizedBox(10.0, 0.0).build()).child(download).child(SizedBox(10.0, 0.0).build()).child(
+                Text().text(s.stats).font_size(12.0).color(theme::TEXT_MUTED).query_key("gh-stats").build(),
+            ).build(),
+        ).child(SizedBox(0.0, 8.0).build()).child(
+            Expanded().flex(sv(1.0f64)).child(
                 // The file list (the boa fileListView): busy → "Loading…" in
                 // the list area; else empty → the empty state; else the list.
-                .child(
-                    Condition(s.busy)
-                        .then(loading)
-                        .else_branch(
-                            Condition(s.is_empty).then(empty).else_branch(list).build(),
-                        )
-                        .build(),
-                )
-                .build(),
-        )
-        .child(
-            Container()
-                .padding(6.0)
-                .child(Text().text(s.selected).font_size(12.0).color(theme::TEXT_SUBTLE).query_key("gh-selected").build())
-                .build(),
-        )
-        .build();
+                Condition(s.busy).then(loading).else_branch(
+                    Condition(s.is_empty).then(empty).else_branch(list).build(),
+                ).build(),
+            ).build(),
+        ).child(
+            Container().padding(6.0).child(
+                Text().text(s.selected).font_size(12.0).color(theme::TEXT_SUBTLE).query_key(
+                    "gh-selected",
+                ).build(),
+            ).build(),
+        ).build();
 }
 
 // One listing row: folder/file icon + name + size. The row tap captures
@@ -253,53 +224,53 @@ fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> Vi
     if (!is_dir) {
         icon = ico_file;
     }
-    let b_tap = mutate(fn (ctx: MutationCtx, _e: nil) {
-        if (s.starts_with(0, "d|")) {
-            let dname = s.slice(2, s.len());
-            let cur = ctx.get<str>(g.path);
-            let next = dname;
-            if (cur != "") {
-                next = f"{cur}/{dname}";
-            }
-            ctx.set<str>(g.path, next);
-            ctx.set<str>(g.selected, "");
-            ctx.set<str>(g.sel_file, "");
-            launch_future(fetch_dir(ctx, g));
-            return;
-        }
-        let rn = s.len();
-        let k = 2;
-        while (k < rn) {
-            if (s.code_at(k) == theme::C_PIPE) {
-                break;
-            }
-            k = k + 1;
-        }
-        let fname = s.slice(2, k);
-        let size = explorer::fmt_size(s.slice(k + 1, rn));
-        ctx.set<str>(g.selected, f"{fname} — {size}");
-        ctx.set<str>(g.sel_file, fname);
-    });
-    let row = Row()
-        .cross_alignment(CrossAlign::Center)
-        .child(Image(icon).width(17.0).height(17.0).query_key("gh-row-icon").build())
-        .child(SizedBox(10.0, 0.0).build())
-        .child(Expanded().flex(sv(1.0f64)).child(Text().text(sv(name)).font_size(13.0).color(theme::TEXT).build()).build())
-        .child(SizedBox(10.0, 0.0).build())
-        .child(Text().text(sv(size_txt)).font_size(11.0).color(theme::TEXT_SUBTLE).build())
-        .build();
-    let card = Container()
-        .padding(9.0)
-        .radius(sv(8.0f64))
-        .color(sv(theme::PANEL))
-        .border(theme::BORDER, 1.0, BorderPosition::Inside)
-        .child(row)
-        .build();
-    return PointerInteract()
-        .on_click(b_tap)
-        .query_key("gh-row")
-        .child(card)
-        .build();
+    let b_tap =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                if (s.starts_with(0, "d|")) {
+                    let dname = s.slice(2, s.len());
+                    let cur = ctx.get<str>(g.path);
+                    let next = dname;
+                    if (cur != "") {
+                        next = f"{cur}/{dname}";
+                    }
+                    ctx.set<str>(g.path, next);
+                    ctx.set<str>(g.selected, "");
+                    ctx.set<str>(g.sel_file, "");
+                    launch_future(fetch_dir(ctx, g));
+                    return;
+                }
+                let rn = s.len();
+                let k = 2;
+                while (k < rn) {
+                    if (s.code_at(k) == theme::C_PIPE) {
+                        break;
+                    }
+                    k = k + 1;
+                }
+                let fname = s.slice(2, k);
+                let size = explorer::fmt_size(s.slice(k + 1, rn));
+                ctx.set<str>(g.selected, f"{fname} — {size}");
+                ctx.set<str>(g.sel_file, fname);
+            },
+        );
+    let row =
+        Row().cross_alignment(CrossAlign::Center).child(
+            Image(icon).width(17.0).height(17.0).query_key("gh-row-icon").build(),
+        ).child(SizedBox(10.0, 0.0).build()).child(
+            Expanded().flex(sv(1.0f64)).child(
+                Text().text(sv(name)).font_size(13.0).color(theme::TEXT).build(),
+            ).build(),
+        ).child(SizedBox(10.0, 0.0).build()).child(
+            Text().text(sv(size_txt)).font_size(11.0).color(theme::TEXT_SUBTLE).build(),
+        ).build();
+    let card =
+        Container().padding(9.0).radius(sv(8.0f64)).color(sv(theme::PANEL)).border(
+            theme::BORDER,
+            1.0,
+            BorderPosition::Inside,
+        ).child(row).build();
+    return PointerInteract().on_click(b_tap).query_key("gh-row").child(card).build();
 }
 
 // ---- actions ---------------------------------------------------------------
@@ -448,12 +419,10 @@ async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
 // coloured pill with a label). The query key rides the TEXT so the tests
 // read the live label.
 fn dl_face(label: str, bg: u64, fg: u64) -> View {
-    return Container()
-        .padding(9.0)
-        .radius(sv(8.0f64))
-        .color(sv(bg))
-        .child(Text().text(sv(label)).font_size(13.0).color(fg).query_key("gh-download").build())
-        .build();
+    return
+        Container().padding(9.0).radius(sv(8.0f64)).color(sv(bg)).child(
+            Text().text(sv(label)).font_size(13.0).color(fg).query_key("gh-download").build(),
+        ).build();
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -501,7 +470,8 @@ fn fmt_stats(m: schema::RepoPayload) -> str {
         let lang: str = m.language;
         out = f"{out}{lang} · ";
     }
-    return f"{out}stars {fmt_count(m.stars)} · forks {fmt_count(m.forks)} · issues {fmt_count(m.issues)}";
+    return
+        f"{out}stars {fmt_count(m.stars)} · forks {fmt_count(m.forks)} · issues {fmt_count(m.issues)}";
 }
 
 // 12345 → "12.3k"; 123 → "123" (integer lane — one truncating division,

@@ -15,7 +15,7 @@ use tur_host::filepicker::{ pick_file_raw, save_file_raw };
 // ("" when cancelled/denied — the same degradation the row documents).
 // Async: `await pick_file()`.
 pub async fn pick_file() -> str {
-  return await pick_file_raw();
+    return await pick_file_raw();
 }
 
 // Persist `bytes` under file name `name` through the platform save lane
@@ -24,5 +24,5 @@ pub async fn pick_file() -> str {
 // this host" — the caller's degradation signal). Async:
 // `await save_file(..)`.
 pub async fn save_file(name: str, bytes: bytes) -> bool {
-  return await save_file_raw(name, bytes);
+    return await save_file_raw(name, bytes);
 }

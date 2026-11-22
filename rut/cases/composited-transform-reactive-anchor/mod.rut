@@ -11,21 +11,25 @@ use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 
 entry fn start() -> u64 {
     let anchor: Readable<f64> = source<f64>(0.0);
-    let b_flip = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<f64>(anchor, 8.0);
-    });
+    let b_flip = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<f64>(anchor, 8.0); });
     let link = layer_link();
-    let stack = Stack()
-        .child(SizedBox(400.0, 600.0).child(Container().build()).build());
+    let stack = Stack().child(SizedBox(400.0, 600.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();
     stack.child(Positioned().left(sv(100.0f64)).top(sv(80.0f64)).child(target).build());
-    let red = Container().width_height(20.0, 20.0).color(sv(0xFF0000FFu64));
-    let follower = CompositedFollower().link(link).target_anchor_bound(anchor).follower_anchor(Align::TopLeft).child(red.build()).build();
+    let red = Container().width_height(20.0, 20.0).color(sv(4278190335u64));
+    let follower =
+        CompositedFollower().link(link).target_anchor_bound(anchor).follower_anchor(Align::TopLeft).child(
+            red.build(),
+        ).build();
     stack.child(follower);
 
-    let btn = Container().width_height(60.0, 30.0).color(sv(0x4F46E1FFu64));
-    stack.child(Positioned().left(sv(20.0f64)).top(sv(540.0f64)).child(PointerInteract().on_click(b_flip).child(btn.build()).build()).build());
+    let btn = Container().width_height(60.0, 30.0).color(sv(1330045439u64));
+    stack.child(
+        Positioned().left(sv(20.0f64)).top(sv(540.0f64)).child(
+            PointerInteract().on_click(b_flip).child(btn.build()).build(),
+        ).build(),
+    );
     mount(stack.build());
     return anchor.atom_id();
 }

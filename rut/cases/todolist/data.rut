@@ -12,7 +12,7 @@ pub fn seed_tasks() -> ListHandle {
     let items = list_new();
     items.push("Buy groceries|Milk, eggs, sourdough, coffee beans|0");
     items.push("Walk the dog|30 minutes around the park|1");
-    items.push("Finish quarterly report|Q2 numbers + projection slides for Monday's review|0");
+    items.push("Finish quarterly report|Q2 numbers + projection slides for Monday\'s review|0");
     items.push("Call mom|Birthday planning for Saturday|0");
     items.push("Read chapter 4|Designing Data-Intensive Applications|0");
     return items;

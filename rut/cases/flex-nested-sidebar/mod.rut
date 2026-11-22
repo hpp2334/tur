@@ -7,12 +7,15 @@ use tur_kit::layout::flex::{ Column, Row };
 
 entry fn start() {
     let row = Row();
-    let sidebar = Container()
-        .width_height(200.0, 0.0)
-        .child(Column().cross_alignment(CrossAlign::Start).child(box_wh(0.0, 40.0)).build());
+    let sidebar =
+        Container().width_height(200.0, 0.0).child(
+            Column().cross_alignment(CrossAlign::Start).child(box_wh(0.0, 40.0)).build(),
+        );
     row.child(sidebar.build());
-    let content = Container()
-        .child(Column().cross_alignment(CrossAlign::Start).child(box_wh(0.0, 30.0)).build());
+    let content =
+        Container().child(
+            Column().cross_alignment(CrossAlign::Start).child(box_wh(0.0, 30.0)).build(),
+        );
     row.child(content.build());
     mount(row.build());
 }

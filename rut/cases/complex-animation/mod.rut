@@ -26,7 +26,17 @@ use tur_kit::handles::{ View, list_new, math_cos, math_sin, mount };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
 use tur_kit::layout::stack::{ Positioned, Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
+use tur_kit::reactive::{
+    DeriveCtx,
+    Mutation,
+    MutationCtx,
+    Readable,
+    Source,
+    derive,
+    mutate,
+    source,
+    sv,
+};
 use tur_kit::text::core::{ Text };
 use tur_anim_kit::{ AnimCtrl, Transform, anim_ctrl, color_tween_lerp, tween_lerp };
 
@@ -40,25 +50,28 @@ let ORBIT_CX: f64 = 140.0;
 let ORBIT_CY: f64 = 80.0;
 let ORBIT_R: f64 = 80.0;
 let TAU: f64 = 6.283185307179586;
-let HUE_MIN: u64 = 0x6366F1FFu64;
-let HUE_MAX: u64 = 0xE85D44FFu64;
-let GREEN: u64 = 0x22C55EFFu64;
-let AMBER: u64 = 0xF59E0BFFu64;
-let INDIGO: u64 = 0x6366F1FFu64;
-let SLATE: u64 = 0x94A3B8FFu64;
-let CHIP_ON: u64 = 0x1E293BFFu64;
-let CHIP_OFF: u64 = 0xE2E8F0FFu64;
-let CURVE_ON: u64 = 0x0D9488FFu64;
-let LOOP_ON: u64 = 0xDB2777FFu64;
+let HUE_MIN: u64 = 1667691007u64;
+let HUE_MAX: u64 = 3898426623u64;
+let GREEN: u64 = 583360255u64;
+let AMBER: u64 = 4120775679u64;
+let INDIGO: u64 = 1667691007u64;
+let SLATE: u64 = 2493757695u64;
+let CHIP_ON: u64 = 506018815u64;
+let CHIP_OFF: u64 = 3806916863u64;
+let CURVE_ON: u64 = 227838207u64;
+let LOOP_ON: u64 = 3676796927u64;
 
 entry fn start() -> u64 {
     let progress: Readable<f64> = source<f64>(0.0);
     let width: Readable<f64> = source<f64>(W_MIN);
     let hue: Readable<u64> = source<u64>(0);
-    let pct: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
-        let v = ctx.get<f64>(progress);
-        return f"{((v * 100.0) + 0.5) as u64}%";
-    });
+    let pct: Readable<str> =
+        derive<str>(
+            fn (ctx: DeriveCtx) -> str {
+                let v = ctx.get<f64>(progress);
+                return f"{(v * 100.0 + 0.5) as u64}%";
+            },
+        );
     let status: Readable<str> = source<str>("STOPPED");
     let badge: Readable<u64> = source<u64>(0);
     let loop_on: Readable<bool> = source<bool>(false);
@@ -81,14 +94,17 @@ entry fn start() -> u64 {
     // IS the bound angle's source — Transform().rotate reads it
     // reactively; the tick just advances it; no list rewrite, no
     // re-mount).
-    let a_tick: ?Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
-        ctx.set<f64>(width, tween_lerp(W_MIN, W_MAX, v));
-        ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, v));
-        ctx.set<u64>(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
-        ctx.set<f64>(progress, v);
-        ctx.set<f64>(orbit_x, ORBIT_CX + ORBIT_R * math_cos(TAU * v));
-        ctx.set<f64>(orbit_y, ORBIT_CY + ORBIT_R * math_sin(TAU * v));
-    });
+    let a_tick: ?Mutation<f64> =
+        mutate<f64>(
+            fn (ctx: MutationCtx, v: f64) {
+                ctx.set<f64>(width, tween_lerp(W_MIN, W_MAX, v));
+                ctx.set<f64>(radius, tween_lerp(R_MIN, R_MAX, v));
+                ctx.set<u64>(hue, color_tween_lerp(HUE_MIN, HUE_MAX, v));
+                ctx.set<f64>(progress, v);
+                ctx.set<f64>(orbit_x, ORBIT_CX + ORBIT_R * math_cos(TAU * v));
+                ctx.set<f64>(orbit_y, ORBIT_CY + ORBIT_R * math_sin(TAU * v));
+            },
+        );
 
     // The controller slot: every mutation reads the LIVE controller
     // through it (the curve/loop swaps replace it). The placeholder here
@@ -98,47 +114,68 @@ entry fn start() -> u64 {
     let controller: Readable<opaque> = source<opaque>(list_new().raw());
 
     // The end: status → the badge label + the fill brush.
-    let a_end: ?Mutation<nil> = mutate(fn (ctx: MutationCtx, _e: nil) {
-        sync(ctx, AnimCtrl(ctx.get<opaque>(controller)), status, badge);
-    });
+    let a_end: ?Mutation<nil> =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                sync(ctx, AnimCtrl(ctx.get<opaque>(controller)), status, badge);
+            },
+        );
 
     // The boot controller.
     let ctrl = anim_ctrl(2400.0, "easeInOut", 1, a_tick, a_end);
 
     // The transport mutations (the controller rides the slot).
-    let b_play = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.forward();
-        sync(ctx, c, status, badge);
-    });
-    let b_pause = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.pause();
-        sync(ctx, c, status, badge);
-    });
-    let b_resume = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.resume();
-        sync(ctx, c, status, badge);
-    });
-    let b_reverse = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.reverse();
-        sync(ctx, c, status, badge);
-    });
-    let b_stop = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.stop();
-        sync(ctx, c, status, badge);
-    });
+    let b_play =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.forward();
+                sync(ctx, c, status, badge);
+            },
+        );
+    let b_pause =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.pause();
+                sync(ctx, c, status, badge);
+            },
+        );
+    let b_resume =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.resume();
+                sync(ctx, c, status, badge);
+            },
+        );
+    let b_reverse =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.reverse();
+                sync(ctx, c, status, badge);
+            },
+        );
+    let b_stop =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.stop();
+                sync(ctx, c, status, badge);
+            },
+        );
 
     // The speed rail: one named typed mutation carries the chip index;
     // each chip pad composes it with its own arg (the composition shape).
-    let b_speed = mutate<f64>(fn (ctx: MutationCtx, idx: f64) {
-        let c = AnimCtrl(ctx.get<opaque>(controller));
-        c.speed(speed_factor(idx));
-        paint_speed(ctx, sp0, sp1, sp2, sp3, idx);
-    });
+    let b_speed =
+        mutate<f64>(
+            fn (ctx: MutationCtx, idx: f64) {
+                let c = AnimCtrl(ctx.get<opaque>(controller));
+                c.speed(speed_factor(idx));
+                paint_speed(ctx, sp0, sp1, sp2, sp3, idx);
+            },
+        );
     let b_speed0 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 0.0); });
     let b_speed1 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 1.0); });
     let b_speed2 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_speed, 2.0); });
@@ -147,11 +184,24 @@ entry fn start() -> u64 {
     // The curve rail: same shape — retimes via the recreate-and-seek (a
     // fresh controller over the same progress atom, seeked to the
     // displayed eased progress, swapped into the slot).
-    let b_curve = mutate<f64>(fn (ctx: MutationCtx, idx: f64) {
-        ctx.set<f64>(curve_idx, idx);
-        recreate(ctx, controller, curve_idx, loop_flag, progress, status, badge, a_tick, a_end);
-        paint_curve(ctx, cv0, cv1, cv2, cv3, idx);
-    });
+    let b_curve =
+        mutate<f64>(
+            fn (ctx: MutationCtx, idx: f64) {
+                ctx.set<f64>(curve_idx, idx);
+                recreate(
+                    ctx,
+                    controller,
+                    curve_idx,
+                    loop_flag,
+                    progress,
+                    status,
+                    badge,
+                    a_tick,
+                    a_end,
+                );
+                paint_curve(ctx, cv0, cv1, cv2, cv3, idx);
+            },
+        );
     let b_curve0 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 0.0); });
     let b_curve1 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 1.0); });
     let b_curve2 = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.run<f64>(b_curve, 2.0); });
@@ -159,63 +209,92 @@ entry fn start() -> u64 {
 
     // The loop toggle: flip the flag (mirror it into the chip's state
     // atom), swap in an infinite controller, repaint the chip.
-    let b_loop = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let next = !ctx.get<bool>(loop_flag);
-        ctx.set<bool>(loop_flag, next);
-        ctx.set<bool>(loop_on, next);
-        recreate(ctx, controller, curve_idx, loop_flag, progress, status, badge, a_tick, a_end);
-        paint_loop(ctx, lp, next);
-    });
+    let b_loop =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let next = !ctx.get<bool>(loop_flag);
+                ctx.set<bool>(loop_flag, next);
+                ctx.set<bool>(loop_on, next);
+                recreate(
+                    ctx,
+                    controller,
+                    curve_idx,
+                    loop_flag,
+                    progress,
+                    status,
+                    badge,
+                    a_tick,
+                    a_end,
+                );
+                paint_loop(ctx, lp, next);
+            },
+        );
 
     // The mount seed: the boot controller lands in the slot, then the
     // boot brush paints (the badge, the indigo card, the selected chips —
     // the f64/str channels seed at their mints above). The lifecycle
     // surface delivers the typed `MountEvent`.
-    let seed = mutate<MountEvent>(fn (ctx: MutationCtx, _ev: MountEvent) {
-        ctx.set<opaque>(controller, ctrl.raw());
-        ctx.set<u64>(badge, SLATE);
-        ctx.set<u64>(hue, HUE_MIN); // the card boots indigo (the bound-brush seed)
-        paint_speed(ctx, sp0, sp1, sp2, sp3, 1.0);
-        paint_curve(ctx, cv0, cv1, cv2, cv3, 3.0);
-        paint_loop(ctx, lp, ctx.get<bool>(loop_flag));
-    });
+    let seed =
+        mutate<MountEvent>(
+            fn (ctx: MutationCtx, _ev: MountEvent) {
+                ctx.set<opaque>(controller, ctrl.raw());
+                ctx.set<u64>(badge, SLATE);
+                ctx.set<u64>(
+                    hue, // the card boots indigo (the bound-brush seed)
+                    HUE_MIN,
+                );
+                paint_speed(ctx, sp0, sp1, sp2, sp3, 1.0);
+                paint_curve(ctx, cv0, cv1, cv2, cv3, 3.0);
+                paint_loop(ctx, lp, ctx.get<bool>(loop_flag));
+            },
+        );
 
-    let col = Column()
-        .main_alignment(MainAlign::Center)
-        .cross_alignment(CrossAlign::Center)
-        .child(Text().text(sv("Animated Card Studio")).font_size(16.0).color(0x0F172AFFu64).query_key("cas-title").build())
-        .child(SizedBox(0.0, 4.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(status_badge(status, badge)).child(gap(12.0)).child(
-            Text().text(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
-        ).build())
-        .child(SizedBox(0.0, 32.0).build())
-        .child(stage(orbit_x, orbit_y, width, hue, radius, progress))
-        .child(SizedBox(0.0, 32.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).child(pill("Play", GREEN, b_play, "cas-play")).child(gap(6.0))
-            .child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0))
-            .child(pill("Resume", 0x0EA5E9FFu64, b_resume, "cas-resume")).child(gap(6.0))
-            .child(pill("Reverse", 0x8B5CF6FFu64, b_reverse, "cas-reverse")).child(gap(6.0))
-            .child(pill("Stop", 0xEF4444FFu64, b_stop, "cas-stop")).build())
-        .child(SizedBox(0.0, 16.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text(sv("Speed:")).font_size(11.0).color(0x64748BFFu64).build())
-            .child(gap(8.0))
-            .child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0))
-            .child(chip(sp1, "1x", b_speed1, "cas-s1")).child(gap(4.0))
-            .child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0))
-            .child(chip(sp3, "4x", b_speed3, "cas-s3")).build())
-        .child(SizedBox(0.0, 12.0).build())
-        .child(Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(Text().text(sv("Curve:")).font_size(11.0).color(0x64748BFFu64).build())
-            .child(gap(8.0))
-            .child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0))
-            .child(chip(cv1, "easeIn", b_curve1, "cas-c1")).child(gap(4.0))
-            .child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0))
-            .child(chip(cv3, "easeInOut", b_curve3, "cas-c3")).child(gap(12.0))
-            .child(loop_chip(lp, loop_on, b_loop)).build())
-        .child(SizedBox(0.0, 16.0).build())
-        .child(Text().text(sv("Controls: pause mid-play, change speed/curve, resume")).font_size(10.0).color(0x94A3B8FFu64).build());
+    let col =
+        Column().main_alignment(MainAlign::Center).cross_alignment(CrossAlign::Center).child(
+            Text().text(sv("Animated Card Studio")).font_size(16.0).color(253176575u64).query_key(
+                "cas-title",
+            ).build(),
+        ).child(SizedBox(0.0, 4.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+                status_badge(status, badge),
+            ).child(gap(12.0)).child(
+                Text().text(pct).font_size(12.0).color(1196780031u64).query_key("cas-pct").build(),
+            ).build(),
+        ).child(SizedBox(0.0, 32.0).build()).child(
+            stage(orbit_x, orbit_y, width, hue, radius, progress),
+        ).child(SizedBox(0.0, 32.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).child(pill("Play", GREEN, b_play, "cas-play")).child(
+                gap(6.0),
+            ).child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0)).child(
+                pill("Resume", 245754367u64, b_resume, "cas-resume"),
+            ).child(gap(6.0)).child(pill("Reverse", 2338125567u64, b_reverse, "cas-reverse")).child(
+                gap(6.0),
+            ).child(pill("Stop", 4014228735u64, b_stop, "cas-stop")).build(),
+        ).child(SizedBox(0.0, 16.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+                Text().text(sv("Speed:")).font_size(11.0).color(1685359615u64).build(),
+            ).child(gap(8.0)).child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0)).child(
+                chip(sp1, "1x", b_speed1, "cas-s1"),
+            ).child(gap(4.0)).child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0)).child(
+                chip(sp3, "4x", b_speed3, "cas-s3"),
+            ).build(),
+        ).child(SizedBox(0.0, 12.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+                Text().text(sv("Curve:")).font_size(11.0).color(1685359615u64).build(),
+            ).child(gap(8.0)).child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0)).child(
+                chip(cv1, "easeIn", b_curve1, "cas-c1"),
+            ).child(gap(4.0)).child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0)).child(
+                chip(cv3, "easeInOut", b_curve3, "cas-c3"),
+            ).child(gap(12.0)).child(loop_chip(lp, loop_on, b_loop)).build(),
+        ).child(SizedBox(0.0, 16.0).build()).child(
+            Text().text(sv("Controls: pause mid-play, change speed/curve, resume")).font_size(10.0).color(
+                2493757695u64,
+            ).build(),
+        );
     // The root Lifecycle fires the seed at mount (a transparent
     // pass-through around the unchanged page chain).
-    let page = Container().color(sv(0xF8FAFCFFu64)).alignment(Align::Center).child(col.build()).build();
+    let page =
+        Container().color(sv(4177198335u64)).alignment(Align::Center).child(col.build()).build();
     mount(Lifecycle().on_mount(seed).child(page).build());
     return progress.atom_id();
 }
@@ -225,25 +304,29 @@ entry fn start() -> u64 {
 // The boa stage: a 360×200 canvas with the card at (100, 20) and the
 // orbiting dot riding its bound anchors (the tick writes
 // cx + r·cos / cy + r·sin of the eased progress).
-fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> View {
-    let dot = Positioned()
-        .left(orbit_x)
-        .top(orbit_y)
-        .child(
-            Container()
-                .width_height(20.0, 20.0)
-                .radius(sv(999.0f64))
-                .color(sv(GREEN))
-                .shadow(0x22C55E78u64, 16.0, 0.0, 0.0)
-                .query_key("cas-dot")
-                .build(),
-        )
-        .build();
-    return Stack()
-        .child(SizedBox(360.0, 200.0).build())
-        .child(Positioned().left(sv(100.0f64)).top(sv(20.0f64)).child(card(width, hue, radius, progress)).build())
-        .child(dot)
-        .build();
+fn stage(
+    orbit_x: Readable<f64>,
+    orbit_y: Readable<f64>,
+    width: Readable<f64>,
+    hue: Readable<u64>,
+    radius: Readable<f64>,
+    progress: Readable<f64>,
+) -> View {
+    let dot =
+        Positioned().left(orbit_x).top(orbit_y).child(
+            Container().width_height(20.0, 20.0).radius(sv(999.0f64)).color(sv(GREEN)).shadow(
+                583360120u64,
+                16.0,
+                0.0,
+                0.0,
+            ).query_key("cas-dot").build(),
+        ).build();
+    return
+        Stack().child(SizedBox(360.0, 200.0).build()).child(
+            Positioned().left(sv(100.0f64)).top(sv(20.0f64)).child(
+                card(width, hue, radius, progress),
+            ).build(),
+        ).child(dot).build();
 }
 
 // The card: width + hue + radius ride their atoms (the tick's write
@@ -252,36 +335,46 @@ fn stage(orbit_x: Readable<f64>, orbit_y: Readable<f64>, width: Readable<f64>, h
 // live atom (the subscribe → relayout rail) and the subtree never
 // re-mounts. Boa's square is opaque — no opacity channel.
 fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> View {
-    let square = Container().width_height(60.0, 60.0).color(sv(0xFFFFFFFFu64)).radius(sv(12.0f64)).build();
+    let square =
+        Container().width_height(60.0, 60.0).color(sv(4294967295u64)).radius(sv(12.0f64)).build();
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate(progress).child(square).build();
-    return Container().width(width).height(sv(160.0f64)).color(hue).radius(radius)
-        .shadow(0x0F172A50u64, 24.0, 0.0, 8.0)
-        .alignment(Align::Center)
-        .query_key("cas-card")
-        .child(spin)
-        .build();
+    return
+        Container().width(width).height(sv(160.0f64)).color(hue).radius(radius).shadow(
+            253176400u64,
+            24.0,
+            0.0,
+            8.0,
+        ).alignment(Align::Center).query_key("cas-card").child(spin).build();
 }
 
 // The loop chip: the fill rides its brush atom; the label swaps
 // "Loop" ↔ "Loop ✓" (white when on) through the state atom — boa's
 // derive-driven label, case-side.
 fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) -> View {
-    return PointerInteract().on_click(b_loop).child(
-        Container().padding(6.0).radius(sv(6.0f64)).color(lp).query_key("cas-loop").child(
-            Condition(loop_on)
-                .then_build(fn () -> View { return Text().text(sv("Loop ✓")).font_size(10.0).color(0xFFFFFFFFu64).build(); })
-                .else_build(fn () -> View { return Text().text(sv("Loop")).font_size(10.0).color(0x475569FFu64).build(); })
-                .build(),
-        ).build(),
-    ).build();
+    return
+        PointerInteract().on_click(b_loop).child(
+            Container().padding(6.0).radius(sv(6.0f64)).color(lp).query_key("cas-loop").child(
+                Condition(loop_on).then_build(
+                    fn () -> View {
+                        return
+                            Text().text(sv("Loop ✓")).font_size(10.0).color(4294967295u64).build();
+                    },
+                ).else_build(
+                    fn () -> View {
+                        return Text().text(sv("Loop")).font_size(10.0).color(1196780031u64).build();
+                    },
+                ).build(),
+            ).build(),
+        ).build();
 }
 
 // The status badge: the label bound to the status atom, the fill bound to
 // the badge brush atom.
 fn status_badge(status: Readable<str>, badge: Readable<u64>) -> View {
-    return Container().padding(6.0).radius(sv(999.0f64)).color(badge).child(
-        Text().text(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
-    ).build();
+    return
+        Container().padding(6.0).radius(sv(999.0f64)).color(badge).child(
+            Text().text(status).font_size(10.0).color(4294967295u64).query_key("cas-status").build(),
+        ).build();
 }
 
 // ---- controller swaps -----------------------------------------------------------
@@ -289,7 +382,17 @@ fn status_badge(status: Readable<str>, badge: Readable<u64>) -> View {
 // Swap in a fresh controller (the live curve idx + loop flag) seeked to
 // the DISPLAYED eased progress — boa's `ctx.get(progress$)` — so a
 // mid-play curve switch continues from the value on screen.
-fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<f64>, loop_flag: Readable<bool>, progress: Readable<f64>, status: Readable<str>, badge: Readable<u64>, tick: ?Mutation<f64>, end: ?Mutation<nil>) {
+fn recreate(
+    ctx: MutationCtx,
+    controller: Readable<opaque>,
+    curve_idx: Readable<f64>,
+    loop_flag: Readable<bool>,
+    progress: Readable<f64>,
+    status: Readable<str>,
+    badge: Readable<u64>,
+    tick: ?Mutation<f64>,
+    end: ?Mutation<nil>,
+) {
     let t = ctx.get<f64>(progress);
     let next = make_ctrl(tick, end, ctx.get<f64>(curve_idx), ctx.get<bool>(loop_flag));
     next.seek(t);
@@ -300,22 +403,34 @@ fn recreate(ctx: MutationCtx, controller: Readable<opaque>, curve_idx: Readable<
 fn make_ctrl(tick: ?Mutation<f64>, end: ?Mutation<nil>, curve: f64, looping: bool) -> AnimCtrl {
     let repeat: u64 = 1;
     if (looping) {
-        repeat = 18446744073709551615.0 as u64; // the infinite crossing
+        repeat = 18446744073709552000.0 as u64; // the infinite crossing
     }
     return anim_ctrl(2400.0, curve_name(curve), repeat, tick, end);
 }
 
 fn curve_name(idx: f64) -> str {
-    if (idx < 0.5) { return "linear"; }
-    if (idx < 1.5) { return "easeIn"; }
-    if (idx < 2.5) { return "easeOut"; }
+    if (idx < 0.5) {
+        return "linear";
+    }
+    if (idx < 1.5) {
+        return "easeIn";
+    }
+    if (idx < 2.5) {
+        return "easeOut";
+    }
     return "easeInOut";
 }
 
 fn speed_factor(idx: f64) -> f64 {
-    if (idx < 0.5) { return 0.5; }
-    if (idx < 1.5) { return 1.0; }
-    if (idx < 2.5) { return 2.0; }
+    if (idx < 0.5) {
+        return 0.5;
+    }
+    if (idx < 1.5) {
+        return 1.0;
+    }
+    if (idx < 2.5) {
+        return 2.0;
+    }
     return 4.0;
 }
 
@@ -327,31 +442,61 @@ fn sync(ctx: MutationCtx, c: AnimCtrl, status: Readable<str>, badge: Readable<u6
 }
 
 fn upper(s: str) -> str {
-    if (s == "stopped") { return "STOPPED"; }
-    if (s == "forward") { return "FORWARD"; }
-    if (s == "reverse") { return "REVERSE"; }
-    if (s == "paused") { return "PAUSED"; }
-    if (s == "completed") { return "COMPLETED"; }
+    if (s == "stopped") {
+        return "STOPPED";
+    }
+    if (s == "forward") {
+        return "FORWARD";
+    }
+    if (s == "reverse") {
+        return "REVERSE";
+    }
+    if (s == "paused") {
+        return "PAUSED";
+    }
+    if (s == "completed") {
+        return "COMPLETED";
+    }
     return s;
 }
 
 fn badge_color(s: str) -> u64 {
-    if (s == "forward" || s == "reverse") { return GREEN; }
-    if (s == "paused") { return AMBER; }
-    if (s == "completed") { return INDIGO; }
+    if (s == "forward" || s == "reverse") {
+        return GREEN;
+    }
+    if (s == "paused") {
+        return AMBER;
+    }
+    if (s == "completed") {
+        return INDIGO;
+    }
     return SLATE;
 }
 
 // ---- the chip paint helpers (the selected-state brushes) -----------------------
 
-fn paint_speed(ctx: MutationCtx, sp0: Readable<u64>, sp1: Readable<u64>, sp2: Readable<u64>, sp3: Readable<u64>, sel: f64) {
+fn paint_speed(
+    ctx: MutationCtx,
+    sp0: Readable<u64>,
+    sp1: Readable<u64>,
+    sp2: Readable<u64>,
+    sp3: Readable<u64>,
+    sel: f64,
+) {
     ctx.set<u64>(sp0, chip_color(sel == 0.0));
     ctx.set<u64>(sp1, chip_color(sel == 1.0));
     ctx.set<u64>(sp2, chip_color(sel == 2.0));
     ctx.set<u64>(sp3, chip_color(sel == 3.0));
 }
 
-fn paint_curve(ctx: MutationCtx, cv0: Readable<u64>, cv1: Readable<u64>, cv2: Readable<u64>, cv3: Readable<u64>, sel: f64) {
+fn paint_curve(
+    ctx: MutationCtx,
+    cv0: Readable<u64>,
+    cv1: Readable<u64>,
+    cv2: Readable<u64>,
+    cv3: Readable<u64>,
+    sel: f64,
+) {
     ctx.set<u64>(cv0, curve_chip_color(sel == 0.0));
     ctx.set<u64>(cv1, curve_chip_color(sel == 1.0));
     ctx.set<u64>(cv2, curve_chip_color(sel == 2.0));
@@ -363,17 +508,23 @@ fn paint_loop(ctx: MutationCtx, lp: Readable<u64>, on: bool) {
 }
 
 fn chip_color(sel: bool) -> u64 {
-    if (sel) { return CHIP_ON; }
+    if (sel) {
+        return CHIP_ON;
+    }
     return CHIP_OFF;
 }
 
 fn curve_chip_color(sel: bool) -> u64 {
-    if (sel) { return CURVE_ON; }
+    if (sel) {
+        return CURVE_ON;
+    }
     return CHIP_OFF;
 }
 
 fn loop_color(on: bool) -> u64 {
-    if (on) { return LOOP_ON; }
+    if (on) {
+        return LOOP_ON;
+    }
     return CHIP_OFF;
 }
 
@@ -382,20 +533,22 @@ fn loop_color(on: bool) -> u64 {
 // A transport pill (the boa Button): a PointerInteract pad over a colored
 // label.
 fn pill(label: str, color: u64, cb: Mutation<nil>, key: str) -> View {
-    return PointerInteract().on_click(cb).child(
-        Container().padding(8.0).radius(sv(6.0f64)).color(sv(color)).query_key(key).child(
-            Text().text(sv(label)).font_size(11.0).color(0xFFFFFFFFu64).build(),
-        ).build(),
-    ).build();
+    return
+        PointerInteract().on_click(cb).child(
+            Container().padding(8.0).radius(sv(6.0f64)).color(sv(color)).query_key(key).child(
+                Text().text(sv(label)).font_size(11.0).color(4294967295u64).build(),
+            ).build(),
+        ).build();
 }
 
 // A selectable chip (speed / curve / loop): the fill rides its brush atom.
 fn chip(atom: Readable<u64>, label: str, cb: Mutation<nil>, key: str) -> View {
-    return PointerInteract().on_click(cb).child(
-        Container().padding(6.0).radius(sv(6.0f64)).color(atom).query_key(key).child(
-            Text().text(sv(label)).font_size(10.0).color(0x475569FFu64).build(),
-        ).build(),
-    ).build();
+    return
+        PointerInteract().on_click(cb).child(
+            Container().padding(6.0).radius(sv(6.0f64)).color(atom).query_key(key).child(
+                Text().text(sv(label)).font_size(10.0).color(1196780031u64).build(),
+            ).build(),
+        ).build();
 }
 
 fn gap(w: f64) -> View {

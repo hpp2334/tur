@@ -1,35 +1,39 @@
 // gesture/focus — the focus family (Focusable).
 
 use tur_host::gesture::focus::{
-  focus_build, focus_child, focus_new, focus_on_blur, focus_on_focus, focus_on_key_down,
+    focus_build,
+    focus_child,
+    focus_new,
+    focus_on_blur,
+    focus_on_focus,
+    focus_on_key_down,
 };
 
 pub class Focusable {
-  spec: opaque;
+    spec: opaque;
 }
 
 impl Focusable {
-  [constructor] pub fn builder() -> Self {
-    return Self { spec: focus_new() };
-  }
-  pub fn on_key_down(self, m: reactive::Mutation<gesture::pointer::KeydownEvent>) -> Self {
-    focus_on_key_down(self.spec, m.seal(reactive::SEAL_KEY));
-    return self;
-  }
-  pub fn on_focus(self, m: reactive::Mutation<gesture::pointer::FocusEvent>) -> Self {
-    focus_on_focus(self.spec, m.seal(reactive::SEAL_FOCUS));
-    return self;
-  }
-  pub fn on_blur(self, m: reactive::Mutation<gesture::pointer::BlurEvent>) -> Self {
-    focus_on_blur(self.spec, m.seal(reactive::SEAL_BLUR));
-    return self;
-  }
-  pub fn child(self, c: handles::View) -> Self {
-    focus_child(self.spec, c.raw());
-    return self;
-  }
-  pub fn build(self) -> handles::View {
-    return handles::View(focus_build(self.spec));
-  }
+    [constructor] pub fn builder() -> Self {
+        return Self { spec: focus_new() };
+    }
+    pub fn on_key_down(self, m: reactive::Mutation<gesture::pointer::KeydownEvent>) -> Self {
+        focus_on_key_down(self.spec, m.seal(reactive::SEAL_KEY));
+        return self;
+    }
+    pub fn on_focus(self, m: reactive::Mutation<gesture::pointer::FocusEvent>) -> Self {
+        focus_on_focus(self.spec, m.seal(reactive::SEAL_FOCUS));
+        return self;
+    }
+    pub fn on_blur(self, m: reactive::Mutation<gesture::pointer::BlurEvent>) -> Self {
+        focus_on_blur(self.spec, m.seal(reactive::SEAL_BLUR));
+        return self;
+    }
+    pub fn child(self, c: handles::View) -> Self {
+        focus_child(self.spec, c.raw());
+        return self;
+    }
+    pub fn build(self) -> handles::View {
+        return handles::View(focus_build(self.spec));
+    }
 }
-

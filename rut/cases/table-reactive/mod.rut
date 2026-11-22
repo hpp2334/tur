@@ -24,18 +24,28 @@ use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Expanded };
 use tur_kit::layout::grid_table::{ Table, TableCols };
 use tur_kit::reactive::{
-    DeriveCtx, Mutation, MutationCtx, Readable, Source, bridge, derive, entry_ctx, mutate, source, sv,
+    DeriveCtx,
+    Mutation,
+    MutationCtx,
+    Readable,
+    Source,
+    bridge,
+    derive,
+    entry_ctx,
+    mutate,
+    source,
+    sv,
 };
 use tur_kit::text::core::{ Text };
 
 // The boa palette (dark slate table on the #0b1220 frame).
-let HDR_ON: u64 = 0x334155FFu64;
-let HDR_OFF: u64 = 0x0F172AFFu64;
-let STRIPE: u64 = 0x1E293BFFu64;
-let HEADER_FG: u64 = 0x94A3B8FFu64;
-let CELL_HI: u64 = 0xF8FAFCFFu64;
-let CELL_FG: u64 = 0xCBD5E1FFu64;
-let STATUS_FG: u64 = 0x64748BFFu64;
+let HDR_ON: u64 = 859919871u64;
+let HDR_OFF: u64 = 253176575u64;
+let STRIPE: u64 = 506018815u64;
+let HEADER_FG: u64 = 2493757695u64;
+let CELL_HI: u64 = 4177198335u64;
+let CELL_FG: u64 = 3419791871u64;
+let STATUS_FG: u64 = 1685359615u64;
 
 entry fn start() -> u64 {
     let sort_key: Readable<str> = source<str>("moons");
@@ -49,24 +59,29 @@ entry fn start() -> u64 {
     // boot state is MOONS ascending (boa's `source<SortKey>("moons")`).
     let fills: [Source<u64>] = [source<u64>(0), source<u64>(0), source<u64>(0)];
     paint_header(entry_ctx(), fills, 1);
-    let labels: [Readable<str>] = [
-        hdr_label("name", "PLANET", sort_key, sort_dir),
-        hdr_label("moons", "MOONS", sort_key, sort_dir),
-        hdr_label("gravity", "GRAVITY (m/s²)", sort_key, sort_dir),
-    ];
-    let taps: [Mutation<nil>] = [
-        sort_mutation("name", fills, sort_key, sort_dir, rows),
-        sort_mutation("moons", fills, sort_key, sort_dir, rows),
-        sort_mutation("gravity", fills, sort_key, sort_dir, rows),
-    ];
+    let labels: [Readable<str>] =
+        [
+            hdr_label("name", "PLANET", sort_key, sort_dir),
+            hdr_label("moons", "MOONS", sort_key, sort_dir),
+            hdr_label("gravity", "GRAVITY (m/s²)", sort_key, sort_dir),
+        ];
+    let taps: [Mutation<nil>] =
+        [
+            sort_mutation("name", fills, sort_key, sort_dir, rows),
+            sort_mutation("moons", fills, sort_key, sort_dir, rows),
+            sort_mutation("gravity", fills, sort_key, sort_dir, rows),
+        ];
 
     // The status line (boa's derive over the load state).
-    let status: Readable<str> = derive<str>(fn (ctx: DeriveCtx) -> str {
-        if (!ctx.get<bool>(loaded)) {
-            return "Loading…";
-        }
-        return f"Loaded {ctx.get<f64>(count) as u64} rows · click a header to sort";
-    });
+    let status: Readable<str> =
+        derive<str>(
+            fn (ctx: DeriveCtx) -> str {
+                if (!ctx.get<bool>(loaded)) {
+                    return "Loading…";
+                }
+                return f"Loaded {ctx.get<f64>(count) as u64} rows · click a header to sort";
+            },
+        );
 
     // The fake fetch rides rut's own async (boa loads at mount; start is
     // the boot): 300 ms, then the rows flow in pre-sorted. The launch site
@@ -75,26 +90,21 @@ entry fn start() -> u64 {
     launch_future(loader(entry_ctx(), rows, loaded, count, sort_key, sort_dir));
 
     let cols = TableCols().flex(2.0, 0.0).flex(1.0, 0.0).flex(1.0, 0.0);
-    let table = Table()
-        .columns(cols)
-        .rows(rows)
-        .header_builder(fn (col: u64) -> View {
-            return header_cell(col, fills, labels, taps);
-        })
-        .row_builder(fn (row: u64, col: u64) -> View {
-            return body_cell(row, col, rows);
-        })
-        .stripes(0x00000000u64, STRIPE)
-        .query_key("table-reactive")
-        .build();
+    let table =
+        Table().columns(cols).rows(rows).header_builder(
+            fn (col: u64) -> View { return header_cell(col, fills, labels, taps); },
+        ).row_builder(fn (row: u64, col: u64) -> View { return body_cell(row, col, rows); }).stripes(
+            0u64,
+            STRIPE,
+        ).query_key("table-reactive").build();
 
-    let page = Column()
-        .cross_alignment(CrossAlign::Stretch)
-        .child(table)
-        .child(SizedBox(0.0, 12.0).build())
-        .child(Text().text(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build())
-        .build();
-    mount(Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(page).build()).build());
+    let page =
+        Column().cross_alignment(CrossAlign::Stretch).child(table).child(SizedBox(0.0, 12.0).build()).child(
+            Text().text(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build(),
+        ).build();
+    mount(
+        Expanded().flex(sv(1.0f64)).child(Container().color(sv(185737471u64)).child(page).build()).build(),
+    );
     return rows.atom_id();
 }
 
@@ -103,31 +113,16 @@ entry fn start() -> u64 {
 // One header cell (built once per column — reactive content flows through
 // the bound label + the painted fill): pointer cursor, tap = sort, the
 // active column highlighted with its direction marker.
-fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>],
-               taps: [Mutation<nil>]) -> View {
+fn header_cell(col: u64, fills: [Source<u64>], labels: [Readable<str>], taps: [Mutation<nil>]) -> View {
     let i: i32 = col as i32;
-    return MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(
-            PointerInteract()
-                .on_click(taps[i])
-                .query_key(f"hdr/{hdr_key(col)}")
-                .child(
-                    Container()
-                        .padding(8.0)
-                        .color(fills[i])
-                        .child(
-                            Text()
-                                .text(labels[i])
-                                .font_size(12.0)
-                                .color(HEADER_FG)
-                                .build(),
-                        )
-                        .build(),
-                )
-                .build(),
-        )
-        .build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(taps[i]).query_key(f"hdr/{hdr_key(col)}").child(
+                Container().padding(8.0).color(fills[i]).child(
+                    Text().text(labels[i]).font_size(12.0).color(HEADER_FG).build(),
+                ).build(),
+            ).build(),
+        ).build();
 }
 
 // The column's sort key (the query key + the mutation knob).
@@ -144,15 +139,18 @@ fn hdr_key(col: u64) -> str {
 // The live header label: the bare label unless active, then the direction
 // marker (boa's HeaderCell text derive).
 fn hdr_label(key: str, label: str, sort_key: Readable<str>, sort_dir: Readable<f64>) -> Readable<str> {
-    return derive<str>(fn (ctx: DeriveCtx) -> str {
-        if (ctx.get<str>(sort_key) != key) {
-            return label;
-        }
-        if (ctx.get<f64>(sort_dir) > 0.0) {
-            return f"{label} ^";
-        }
-        return f"{label} v";
-    });
+    return
+        derive<str>(
+            fn (ctx: DeriveCtx) -> str {
+                if (ctx.get<str>(sort_key) != key) {
+                    return label;
+                }
+                if (ctx.get<f64>(sort_dir) > 0.0) {
+                    return f"{label} ^";
+                }
+                return f"{label} v";
+            },
+        );
 }
 
 // The header fills: the active column #334155, the rest #0f172a (boa's
@@ -173,25 +171,36 @@ fn paint_header(ctx: MutationCtx, fills: [Source<u64>], on: u64) {
 
 // One column's tap: same key flips the direction, a new key resets to
 // ascending; then the sorted view is recomputed and the active fill moves.
-fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_dir: Readable<f64>,
-                 rows: Readable<opaque>) -> Mutation<nil> {
-    return mutate(fn (ctx: MutationCtx, _e: nil) {
-        if (ctx.get<str>(sort_key) == key) {
-            ctx.set<f64>(sort_dir, -ctx.get<f64>(sort_dir));
-        } else {
-            ctx.set<str>(sort_key, key);
-            ctx.set<f64>(sort_dir, 1.0);
-        }
-        ctx.set<opaque>(rows, sorted_rows(ctx.get<opaque>(rows), key, ctx.get<f64>(sort_dir)));
-        let on: u64 = 0;
-        if (key == "moons") {
-            on = 1;
-        }
-        if (key == "gravity") {
-            on = 2;
-        }
-        paint_header(ctx, fills, on);
-    });
+fn sort_mutation(
+    key: str,
+    fills: [Source<u64>],
+    sort_key: Readable<str>,
+    sort_dir: Readable<f64>,
+    rows: Readable<opaque>,
+) -> Mutation<nil> {
+    return
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                if (ctx.get<str>(sort_key) == key) {
+                    ctx.set<f64>(sort_dir, -ctx.get<f64>(sort_dir));
+                } else {
+                    ctx.set<str>(sort_key, key);
+                    ctx.set<f64>(sort_dir, 1.0);
+                }
+                ctx.set<opaque>(
+                    rows,
+                    sorted_rows(ctx.get<opaque>(rows), key, ctx.get<f64>(sort_dir)),
+                );
+                let on: u64 = 0;
+                if (key == "moons") {
+                    on = 1;
+                }
+                if (key == "gravity") {
+                    on = 2;
+                }
+                paint_header(ctx, fills, on);
+            },
+        );
 }
 
 // The sorted view of the data — a FRESH list per call (the Table's rebuild
@@ -215,7 +224,7 @@ fn sorted_rows(data: opaque, key: str, dir: f64) -> opaque {
             }
             i += 1;
         }
-        used[best as i32] = true;
+        (used[best as i32]) = true;
         fresh.push(value_item(data, best as u64));
         k += 1;
     }
@@ -279,11 +288,10 @@ fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
     if (col == 0) {
         fg = CELL_HI;
     }
-    return Container()
-        .padding(8.0)
-        .query_key(f"tr/row{row as u64}/c{col as u64}")
-        .child(Text().text(sv(text)).font_size(14.0).color(fg).build())
-        .build();
+    return
+        Container().padding(8.0).query_key(f"tr/row{row as u64}/c{col as u64}").child(
+            Text().text(sv(text)).font_size(14.0).color(fg).build(),
+        ).build();
 }
 
 // The i'th '|'-separated slot of a data string.
@@ -324,8 +332,14 @@ fn fake_rows() -> ListHandle {
 
 // The 300 ms fake API: the delay rides the engine's frame-precise sleep,
 // then the rows land sorted under the live sort state.
-async fn loader(ctx: MutationCtx, rows: Readable<opaque>, loaded: Readable<bool>,
-                count: Readable<f64>, sort_key: Readable<str>, sort_dir: Readable<f64>) -> str {
+async fn loader(
+    ctx: MutationCtx,
+    rows: Readable<opaque>,
+    loaded: Readable<bool>,
+    count: Readable<f64>,
+    sort_key: Readable<str>,
+    sort_dir: Readable<f64>,
+) -> str {
     await sleep(300);
     let raw = fake_rows().raw();
     ctx.set<opaque>(rows, sorted_rows(raw, ctx.get<str>(sort_key), ctx.get<f64>(sort_dir)));

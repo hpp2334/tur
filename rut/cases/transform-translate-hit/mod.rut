@@ -17,22 +17,21 @@ entry fn start() {
 
     // The tap: flip the hit source (the mutation captures the handle —
     // no id rail, no stash).
-    let b_hit = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(hit, true);
-    });
+    let b_hit = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<bool>(hit, true); });
 
-    let stack = Stack()
-        .alignment(Align::TopLeft)
-        .child(SizedBox(400.0, 600.0).child(Container().build()).build());
+    let stack =
+        Stack().alignment(Align::TopLeft).child(
+            SizedBox(400.0, 600.0).child(Container().build()).build(),
+        );
 
-    let indigo = Container().width_height(40.0, 40.0).color(sv(0x4F46E1FFu64));
+    let indigo = Container().width_height(40.0, 40.0).color(sv(1330045439u64));
     let pi = PointerInteract().on_click(b_hit).child(indigo.build()).build();
     stack.child(Transform(1.0, 0.0, 100.0, 80.0).child(pi).build());
 
     // The confirmation box appears when the click registers (the else
     // branch is a Text — not a container — so the container count grows
     // by exactly one when the red box mounts).
-    let red = Container().width_height(40.0, 40.0).color(sv(0xFF0000FFu64));
+    let red = Container().width_height(40.0, 40.0).color(sv(4278190335u64));
     stack.child(Condition(hit).then(red.build()).else_branch(Text().text(sv("")).build()).build());
 
     mount(stack.build());

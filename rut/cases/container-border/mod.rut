@@ -7,13 +7,13 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let b = Container()
-        .width_height(200.0, 200.0)
-        .padding(16.0)
-        .color(sv(0xFFFFFFFFu64))
-        .border(0x000000FFu64, 2.0, BorderPosition::Inside)
-        .radius(sv(8.0f64))
-        .child(Text().text(sv("Border")).font_size(16.0).build())
-        .query_key("border-container");
+    let b =
+        Container().width_height(200.0, 200.0).padding(16.0).color(sv(4294967295u64)).border(
+            255u64,
+            2.0,
+            BorderPosition::Inside,
+        ).radius(sv(8.0f64)).child(Text().text(sv("Border")).font_size(16.0).build()).query_key(
+            "border-container",
+        );
     mount(b.build());
 }

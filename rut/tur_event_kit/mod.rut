@@ -22,7 +22,7 @@ let SEAL_BYTES: u64 = 10;
 // channel with no handler drops it silently (standard pub/sub — no
 // broadcast). Delivery is at-most-once, on the next flush.
 pub fn event_on(channel: u64, handler: Mutation<bytes>) {
-  event_on_raw(channel, handler.seal(SEAL_BYTES));
+    event_on_raw(channel, handler.seal(SEAL_BYTES));
 }
 
 // Push a byte payload to the host-side handlers registered on `channel`
@@ -30,5 +30,5 @@ pub fn event_on(channel: u64, handler: Mutation<bytes>) {
 // bytes — whatever structure (ids, JSON, ...) it carries is the app's
 // business (developer-managed correlation, as ever).
 pub fn event_send(channel: u64, payload: bytes) {
-  event_send_raw(channel, payload);
+    event_send_raw(channel, payload);
 }

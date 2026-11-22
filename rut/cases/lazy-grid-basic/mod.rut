@@ -12,23 +12,19 @@ use tur_kit::scroll::{ LazyGrid };
 use tur_kit::text::core::{ Text };
 
 fn cell(i: u64) -> View {
-    let tile = Container()
-        .color(sv(hsl_packed(((i * 47) % 360) as f64, 55.0, 50.0)))
-        .child(Text().text(sv(f"{i}")).font_size(11.0).color(0xFFFFFFFFu64).build())
-        .build();
+    let tile =
+        Container().color(sv(hsl_packed((i * 47 % 360) as f64, 55.0, 50.0))).child(
+            Text().text(sv(f"{i}")).font_size(11.0).color(4294967295u64).build(),
+        ).build();
     return Container().padding(2.0).child(tile).build();
 }
 
 entry fn start() {
     let count = source<f64>(500.0);
-    let grid = LazyGrid()
-        .item_builder(cell)
-        .count(count)
-        .max_cross(110.0)
-        .aspect(1.0)
-        .overscan(1)
-        .query_key("lazy-grid-basic")
-        .build();
+    let grid =
+        LazyGrid().item_builder(cell).count(count).max_cross(110.0).aspect(1.0).overscan(1).query_key(
+            "lazy-grid-basic",
+        ).build();
     mount(grid);
 }
 

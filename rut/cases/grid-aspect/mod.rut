@@ -13,21 +13,16 @@ use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
-let LABEL_FG: u64 = 0xFFFFFFFFu64;
-let CAPTION_FG: u64 = 0x94A3B8FFu64;
+let LABEL_FG: u64 = 4294967295u64;
+let CAPTION_FG: u64 = 2493757695u64;
 
 entry fn start() {
-    let page = Column()
-        .cross_alignment(CrossAlign::Start)
-        .main_axis_size(MainAxisSize::Min)
-        .child(Text().text(sv("aspect 2:1 (10 cells)")).font_size(11.0).color(CAPTION_FG).build())
-        .child(SizedBox(0.0, 6.0).build())
-        .child(aspect_grid())
-        .child(SizedBox(0.0, 16.0).build())
-        .child(Text().text(sv("mainAxisExtent 40 (10 cells)")).font_size(11.0).color(CAPTION_FG).build())
-        .child(SizedBox(0.0, 6.0).build())
-        .child(extent_grid())
-        .build();
+    let page =
+        Column().cross_alignment(CrossAlign::Start).main_axis_size(MainAxisSize::Min).child(
+            Text().text(sv("aspect 2:1 (10 cells)")).font_size(11.0).color(CAPTION_FG).build(),
+        ).child(SizedBox(0.0, 6.0).build()).child(aspect_grid()).child(SizedBox(0.0, 16.0).build()).child(
+            Text().text(sv("mainAxisExtent 40 (10 cells)")).font_size(11.0).color(CAPTION_FG).build(),
+        ).child(SizedBox(0.0, 6.0).build()).child(extent_grid()).build();
     mount(ScrollView().child(page).build());
 }
 
@@ -36,9 +31,10 @@ fn aspect_grid() -> View {
     let grid = Grid().max_cross(160.0).aspect(2.0).spacing(6.0, 6.0).query_key("grid-aspect");
     let i: u64 = 0;
     while (i < 10) {
-        let cell = Container()
-            .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
-            .child(Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build());
+        let cell =
+            Container().color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0))).child(
+                Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build(),
+            );
         grid.child(cell.build());
         i = i + 1;
     }
@@ -48,12 +44,14 @@ fn aspect_grid() -> View {
 // The fixed-extent grid: main_extent pins each row at 40px tall
 // (overriding the aspect), same 10-cell ramp.
 fn extent_grid() -> View {
-    let grid = Grid().max_cross(160.0).main_extent(40.0).spacing(6.0, 6.0).query_key("grid-aspect-extent");
+    let grid =
+        Grid().max_cross(160.0).main_extent(40.0).spacing(6.0, 6.0).query_key("grid-aspect-extent");
     let i: u64 = 0;
     while (i < 10) {
-        let cell = Container()
-            .color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0)))
-            .child(Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build());
+        let cell =
+            Container().color(sv(hsl_packed(i as f64 * 36.0 + 40.0, 60.0, 55.0))).child(
+                Text().text(sv(f"#{i}")).font_size(12.0).color(LABEL_FG).build(),
+            );
         grid.child(cell.build());
         i = i + 1;
     }
