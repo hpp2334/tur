@@ -11,15 +11,20 @@ use tur_kit::text::core::{ Text };
 
 entry fn start() -> u64 {
     let state: Readable<str> = source<str>("");
-    let b_enter = mutate<EnterEvent>(fn (ctx: MutationCtx, _ev: EnterEvent) {
-        ctx.set<str>(state, "entered");
-    });
-    let b_exit = mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) {
-        ctx.set<str>(state, "exited");
-    });
+    let b_enter =
+        mutate<EnterEvent>(
+            fn (ctx: MutationCtx, _ev: EnterEvent) { ctx.set<str>(state, "entered"); },
+        );
+    let b_exit =
+        mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<str>(state, "exited"); });
     let col = Column();
-    let b = Container().width_height(100.0, 50.0).child(Text().text(state).query_key("mr-state").build());
-    col.child(MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor::ColResize).behavior(HitTestBehavior::Opaque).child(b.build()).build());
+    let b =
+        Container().width_height(100.0, 50.0).child(Text().text(state).query_key("mr-state").build());
+    col.child(
+        MouseRegion().on_enter(b_enter).on_exit(b_exit).cursor(Cursor::ColResize).behavior(
+            HitTestBehavior::Opaque,
+        ).child(b.build()).build(),
+    );
     mount(col.build());
     return state.atom_id();
 }

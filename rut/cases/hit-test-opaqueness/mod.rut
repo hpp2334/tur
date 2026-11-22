@@ -17,18 +17,24 @@ entry fn start() -> u64 {
 
     // The down count rides its own source (the mutation captures both
     // handles — no id rail, no stash).
-    let g_down = mutate<PointerEvent>(fn (ctx: MutationCtx, _ev: PointerEvent) {
-        ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
-        ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
-    });
+    let g_down =
+        mutate<PointerEvent>(
+            fn (ctx: MutationCtx, _ev: PointerEvent) {
+                ctx.set<f64>(count, ctx.get<f64>(count) + 1.0);
+                ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
+            },
+        );
 
     let stack = Stack().alignment(Align::TopLeft);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
-    let target = Container()
-        .width_height(400.0, 600.0)
-        .child(Text().text(downs).query_key("beneath-downs").build());
-    stack.child(PointerInteract().on_pointer_down(g_down).query_key("rut/gesture").child(target.build()).build());
+    let target =
+        Container().width_height(400.0, 600.0).child(
+            Text().text(downs).query_key("beneath-downs").build(),
+        );
+    stack.child(
+        PointerInteract().on_pointer_down(g_down).query_key("rut/gesture").child(target.build()).build(),
+    );
 
     // A decoration-less full-size Container — transparent.
     let plain = Container().width_height(400.0, 600.0).query_key("plain");
@@ -40,7 +46,8 @@ entry fn start() -> u64 {
 
     // A translucent MouseRegion over the right half (x 200..400).
     let region_child = SizedBox(200.0, 600.0).child(Container().build()).query_key("region").build();
-    let region = MouseRegion().cursor(Cursor::Auto).behavior(HitTestBehavior::Translucent).child(region_child).build();
+    let region =
+        MouseRegion().cursor(Cursor::Auto).behavior(HitTestBehavior::Translucent).child(region_child).build();
     stack.child(Positioned().left(sv(200.0f64)).width(200.0).height(600.0).child(region).build());
 
     mount(stack.build());

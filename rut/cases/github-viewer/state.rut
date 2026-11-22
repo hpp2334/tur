@@ -29,19 +29,20 @@ pub struct Gh {
 
 // The boot seed — the boa landing opens on the empty landing form.
 pub fn seed() -> Gh {
-    return Gh {
-        mode: source<str>("landing"),
-        err: source<str>(""),
-        err_has: source<bool>(false),
-        repo_full: source<str>(""),
-        desc: source<str>(""),
-        stats: source<str>(""),
-        path: source<str>(""),
-        selected: source<str>(""),
-        files: source<opaque>(list_new().raw()),
-        is_empty: source<bool>(false),
-        busy: source<bool>(false),
-        sel_file: source<str>(""),
-        dl: source<str>("idle"),
-    };
+    return
+        Gh {
+            mode: source<str>("landing"),
+            err: source<str>(""),
+            err_has: source<bool>(false),
+            repo_full: source<str>(""),
+            desc: source<str>(""),
+            stats: source<str>(""),
+            path: source<str>(""),
+            selected: source<str>(""),
+            files: source<opaque>(list_new().raw()),
+            is_empty: source<bool>(false),
+            busy: source<bool>(false),
+            sel_file: source<str>(""),
+            dl: source<str>("idle"),
+        };
 }

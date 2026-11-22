@@ -16,6 +16,7 @@ fn row(i: u64) -> View {
 
 entry fn start() {
     let count = source<f64>(20.0);
-    let list = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("lazy-list-basic").build();
+    let list =
+        LazyList().item_builder(row).count(count).item_extent(50.0).query_key("lazy-list-basic").build();
     mount(list);
 }

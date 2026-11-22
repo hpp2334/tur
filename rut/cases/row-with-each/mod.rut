@@ -19,10 +19,13 @@ entry fn start() {
     seg.push("b");
     let seg_atom = source<opaque>(seg.raw());
 
-    let col = Column()
-        .cross_alignment(CrossAlign::Stretch)
-        .child(Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(Each(seg_atom).item_builder(item).build()).build())
-        .child(SizedBox(40.0, 10.0).child(Container().build()).build())
-        .child(Expanded().flex(sv(1.0f64)).child(Container().build()).build());
+    let col =
+        Column().cross_alignment(CrossAlign::Stretch).child(
+            Row().child(SizedBox(16.0, 16.0).child(Container().build()).build()).child(
+                Each(seg_atom).item_builder(item).build(),
+            ).build(),
+        ).child(SizedBox(40.0, 10.0).child(Container().build()).build()).child(
+            Expanded().flex(sv(1.0f64)).child(Container().build()).build(),
+        );
     mount(col.build());
 }

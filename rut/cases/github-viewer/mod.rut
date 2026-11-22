@@ -58,21 +58,19 @@ entry fn start() -> u64 {
     let b_sug1 = landing::sug_mutation(ctrl, s, "tailwindlabs/tailwindcss");
     let b_sug2 = landing::sug_mutation(ctrl, s, "vuejs/core");
     // The Browse tap: read the draft, validate the owner/name shape, launch.
-    let b_browse = mutate(fn (ctx: MutationCtx, _e: nil) {
-        landing::open_draft(ctx, s, ctrl.text());
-    });
+    let b_browse =
+        mutate(fn (ctx: MutationCtx, _e: nil) { landing::open_draft(ctx, s, ctrl.text()); });
 
-    let body = Switch()
-        .value(s.mode)
-        .query_key("gh-body")
-        .cases("landing", landing::landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2))
-        .cases("explorer", explorer::explorer_view(s, ico_folder, ico_file))
-        .build();
+    let body =
+        Switch().value(s.mode).query_key("gh-body").cases(
+            "landing",
+            landing::landing_view(s, ctrl, undo, gh, b_browse, b_sug0, b_sug1, b_sug2),
+        ).cases("explorer", explorer::explorer_view(s, ico_folder, ico_file)).build();
     let page = Container().color(sv(theme::PAGE_BG)).padding(22.0).child(body).build();
-    let root = Column()
-        .cross_alignment(CrossAlign::Stretch)
-        .child(Expanded().flex(sv(1.0f64)).child(page).build())
-        .build();
+    let root =
+        Column().cross_alignment(CrossAlign::Stretch).child(
+            Expanded().flex(sv(1.0f64)).child(page).build(),
+        ).build();
     mount(root);
-    return s.mode.atom_id();
+    return (s.mode).atom_id();
 }

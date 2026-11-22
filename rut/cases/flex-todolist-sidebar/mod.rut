@@ -12,21 +12,23 @@ entry fn start() {
     // Sidebar: one active tab pill.
     let sidebar = Container().color(sv(0x1A1A2EFFu64)).width_height(200.0, 0.0);
     let tabs = Column();
-    let tab = Container()
-        .color(sv(0x0F3460FFu64))
-        .padding(12.0)
-        .child(Text().text(sv("TodoList")).font_size(14.0).build());
+    let tab =
+        Container().color(sv(0x0F3460FFu64)).padding(12.0).child(
+            Text().text(sv("TodoList")).font_size(14.0).build(),
+        );
     tabs.child(tab.build());
     sidebar.child(tabs.build());
     row.child(sidebar.build());
     // Content: heading + list shell.
     let content = Container().padding(16.0);
-    let col = Column()
-        .cross_alignment(CrossAlign::Center)
-        .child(Text().text(sv("Todo List")).font_size(24.0).build())
-        .child(box_h(16.0));
-    let list = Column()
-        .child(Row().main_alignment(MainAlign::SpaceBetween).child(Text().text(sv("Buy milk")).build()).build());
+    let col =
+        Column().cross_alignment(CrossAlign::Center).child(
+            Text().text(sv("Todo List")).font_size(24.0).build(),
+        ).child(box_h(16.0));
+    let list =
+        Column().child(
+            Row().main_alignment(MainAlign::SpaceBetween).child(Text().text(sv("Buy milk")).build()).build(),
+        );
     col.child(list.build());
     content.child(col.build());
     row.child(content.build());

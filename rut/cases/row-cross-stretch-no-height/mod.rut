@@ -9,11 +9,10 @@ use tur_kit::reactive::{ sv };
 
 entry fn start() {
     let col = Column().cross_alignment(CrossAlign::Start);
-    let row = Row()
-        .cross_alignment(CrossAlign::Stretch)
-        .child(box_w(100.0))
-        .child(box_w(8.0))
-        .child(Expanded().flex(sv(1.0f64)).child(box_w(0.0)).build());
+    let row =
+        Row().cross_alignment(CrossAlign::Stretch).child(box_w(100.0)).child(box_w(8.0)).child(
+            Expanded().flex(sv(1.0f64)).child(box_w(0.0)).build(),
+        );
     col.child(Expanded().flex(sv(1.0f64)).child(row.build()).build());
     mount(col.build());
 }

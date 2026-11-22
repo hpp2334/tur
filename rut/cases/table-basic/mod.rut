@@ -19,7 +19,8 @@ use tur_kit::text::core::{ Text };
 
 // The planet data (pipe-joined slots — the row builder indexes by row).
 let P_NAME: str = "Mercury|Venus|Earth|Mars|Jupiter|Saturn";
-let P_NOTES: str = "Smallest planet, closest to the Sun|Hottest surface in the solar system|The only known home of life|The red planet, home to Olympus Mons|Largest planet, a gas giant|Famous for its ring system";
+let P_NOTES: str =
+    "Smallest planet, closest to the Sun|Hottest surface in the solar system|The only known home of life|The red planet, home to Olympus Mons|Largest planet, a gas giant|Famous for its ring system";
 let P_DIST: str = "0.39 AU|0.72 AU|1.00 AU|1.52 AU|5.20 AU|9.58 AU";
 
 // The boa palette (dark slate table on the #0b1220 frame).
@@ -41,16 +42,15 @@ entry fn start() {
     // row lay their cells on the same boundaries.
     let cols = TableCols().extent(150.0).flex(1.0, 0.0).flex(2.0, 120.0);
 
-    let table = Table()
-        .columns(cols)
-        .rows(rows_src)
-        .header_builder(header_cell)
-        .row_builder(planet_cell)
-        .stripes(0x00000000u64, STRIPE)
-        .query_key("table-basic")
-        .build();
+    let table =
+        Table().columns(cols).rows(rows_src).header_builder(header_cell).row_builder(planet_cell).stripes(
+            0x00000000u64,
+            STRIPE,
+        ).query_key("table-basic").build();
 
-    mount(Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(table).build()).build());
+    mount(
+        Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(table).build()).build(),
+    );
 }
 
 // The i'th '|'-separated slot of a data string.
@@ -80,10 +80,10 @@ fn header_cell(col: u64) -> View {
     } else if (col == 2) {
         label = "DISTANCE";
     }
-    return Container()
-        .padding(8.0)
-        .child(Text().text(sv(label)).font_size(12.0).color(HEADER_FG).build())
-        .build();
+    return
+        Container().padding(8.0).child(
+            Text().text(sv(label)).font_size(12.0).color(HEADER_FG).build(),
+        ).build();
 }
 
 // One body cell (called per (row, col)): the padded field. The stripes
@@ -97,5 +97,6 @@ fn planet_cell(row: u64, col: u64) -> View {
     } else {
         text = slot(P_DIST, row);
     }
-    return Container().padding(8.0).child(Text().text(sv(text)).font_size(14.0).color(CELL_FG).build()).build();
+    return
+        Container().padding(8.0).child(Text().text(sv(text)).font_size(14.0).color(CELL_FG).build()).build();
 }

@@ -9,20 +9,16 @@ use tur_kit::reactive::{ Source, source, sv };
 use tur_kit::scroll::{ LazyGrid };
 
 fn cell(i: u64) -> View {
-    return Container().color(sv(hsl_packed(((i * 37) % 360) as f64, 50.0, 45.0))).build();
+    return Container().color(sv(hsl_packed((i * 37 % 360) as f64, 50.0, 45.0))).build();
 }
 
 entry fn start() {
     let count = source<f64>(5000.0);
-    let grid = LazyGrid()
-        .item_builder(cell)
-        .count(count)
-        .max_cross(120.0)
-        .item_extent(60.0)
-        .spacing(6.0, 6.0)
-        .overscan(2)
-        .query_key("lazy-grid-scroll")
-        .build();
+    let grid =
+        LazyGrid().item_builder(cell).count(count).max_cross(120.0).item_extent(60.0).spacing(
+            6.0,
+            6.0,
+        ).overscan(2).query_key("lazy-grid-scroll").build();
     mount(grid);
 }
 

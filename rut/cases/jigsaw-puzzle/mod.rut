@@ -68,30 +68,36 @@ entry fn start() -> u64 {
     // kit's mirror tags (SEAL_F64 = 2, SEAL_NIL = 0); the u64 ids cross
     // through pieces::install_ctrl (the root cannot bind tur_anim_kit
     // heads at the std-v14 pin).
-    let a_lift_tick: Mutation<f64> = mutate<f64>(fn (ctx: MutationCtx, v: f64) {
-        let scale: f64 = 1.0 + v * (theme::LIFT_MAX - 1.0);
-        let d = ctx.get<f64>(p.drag);
-        let l = ctx.get<f64>(p.last);
-        if (d >= 0.0) {
-            ctx.set<f64>(p.sx[d as i32], scale);
-        }
-        if (l >= 0.0 && l != d) {
-            ctx.set<f64>(p.sx[l as i32], scale);
-        }
-    });
-    let a_lift_end: Mutation<nil> = mutate(fn (ctx: MutationCtx, _e: nil) {
-        // The controller end parks the scale EXACTLY at rest — but only
-        // for a piece that is no longer held (the reverse's completion).
-        // Boa's dragScale$ stays at LIFT_MAX for the whole grab: the
-        // forward ease completing mid-drag must not drop the piece back
-        // while the pointer is still down (the release settles it).
-        if (ctx.get<f64>(p.drag) < 0.0) {
-            let l = ctx.get<f64>(p.last);
-            if (l >= 0.0) {
-                ctx.set<f64>(p.sx[l as i32], 1.0);
-            }
-        }
-    });
+    let a_lift_tick: Mutation<f64> =
+        mutate<f64>(
+            fn (ctx: MutationCtx, v: f64) {
+                let scale: f64 = 1.0 + v * (theme::LIFT_MAX - 1.0);
+                let d = ctx.get<f64>(p.drag);
+                let l = ctx.get<f64>(p.last);
+                if (d >= 0.0) {
+                    ctx.set<f64>((p.sx)[d as i32], scale);
+                }
+                if (l >= 0.0 && l != d) {
+                    ctx.set<f64>((p.sx)[l as i32], scale);
+                }
+            },
+        );
+    let a_lift_end: Mutation<nil> =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                // The controller end parks the scale EXACTLY at rest — but only
+                // for a piece that is no longer held (the reverse's completion).
+                // Boa's dragScale$ stays at LIFT_MAX for the whole grab: the
+                // forward ease completing mid-drag must not drop the piece back
+                // while the pointer is still down (the release settles it).
+                if (ctx.get<f64>(p.drag) < 0.0) {
+                    let l = ctx.get<f64>(p.last);
+                    if (l >= 0.0) {
+                        ctx.set<f64>((p.sx)[l as i32], 1.0);
+                    }
+                }
+            },
+        );
     let tick = a_lift_tick.seal(2);
     let end = a_lift_end.seal(0);
     let lift = pieces::install_ctrl(tick, end);
@@ -99,48 +105,57 @@ entry fn start() -> u64 {
     // The initial deal (the ctx face at boot — the channels seed before
     // the first flush) and the Shuffle tap's mutation.
     state::deal(state::boot_ctx(), p, count, solved, seed);
-    let b_shuffle = mutate(fn (ctx: MutationCtx, _e: nil) {
-        state::deal(ctx, p, count, solved, seed);
-    });
+    let b_shuffle =
+        mutate(fn (ctx: MutationCtx, _e: nil) { state::deal(ctx, p, count, solved, seed); });
 
     // ---- the play area (board + ghosts + tray + pieces + bar) ----
 
-    let play = Stack()
-        .alignment(Align::TopLeft)
-        .child(SizedBox(theme::PLAY_W, theme::PLAY_H).build())
-        .child(ui::board_bg())
-        .children([ui::ghost(0), ui::ghost(1), ui::ghost(2), ui::ghost(3), ui::ghost(4), ui::ghost(5), ui::ghost(6), ui::ghost(7), ui::ghost(8)])
-        .child(ui::tray_bg())
-        .children([pieces::piece(0, p, count, solved, lift), pieces::piece(1, p, count, solved, lift), pieces::piece(2, p, count, solved, lift), pieces::piece(3, p, count, solved, lift), pieces::piece(4, p, count, solved, lift), pieces::piece(5, p, count, solved, lift), pieces::piece(6, p, count, solved, lift), pieces::piece(7, p, count, solved, lift), pieces::piece(8, p, count, solved, lift)])
-        .child(ui::top_bar(b_shuffle, count))
-        .build();
+    let play =
+        Stack().alignment(Align::TopLeft).child(SizedBox(theme::PLAY_W, theme::PLAY_H).build()).child(
+            ui::board_bg(),
+        ).children(
+            [
+                ui::ghost(0),
+                ui::ghost(1),
+                ui::ghost(2),
+                ui::ghost(3),
+                ui::ghost(4),
+                ui::ghost(5),
+                ui::ghost(6),
+                ui::ghost(7),
+                ui::ghost(8),
+            ],
+        ).child(ui::tray_bg()).children(
+            [
+                pieces::piece(0, p, count, solved, lift),
+                pieces::piece(1, p, count, solved, lift),
+                pieces::piece(2, p, count, solved, lift),
+                pieces::piece(3, p, count, solved, lift),
+                pieces::piece(4, p, count, solved, lift),
+                pieces::piece(5, p, count, solved, lift),
+                pieces::piece(6, p, count, solved, lift),
+                pieces::piece(7, p, count, solved, lift),
+                pieces::piece(8, p, count, solved, lift),
+            ],
+        ).child(ui::top_bar(b_shuffle, count)).build();
 
     // The win overlay: the four-edge Positioned is a DIRECT stack child so
     // the stretch sizes against the stack; the Condition lives inside it
     // (the audit caught the Condition-wrapped Positioned collapsing to the
     // banner's natural size at the top-left).
-    let win = Positioned()
-        .left(sv(0.0f64))
-        .top(sv(0.0f64))
-        .right(0.0)
-        .bottom(0.0)
-        .child(
-            Condition(solved)
-                .then_build(fn () -> View { return ui::win_banner(); })
-                .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
-                .build(),
-        )
-        .build();
+    let win =
+        Positioned().left(sv(0.0f64)).top(sv(0.0f64)).right(0.0).bottom(0.0).child(
+            Condition(solved).then_build(fn () -> View { return ui::win_banner(); }).else_build(
+                fn () -> View { return SizedBox(0.0, 0.0).build(); },
+            ).build(),
+        ).build();
 
     // ---- the root (full-bleed dark, the play area centered, the overlay) ----
 
     mount(
-        Stack()
-            .fit(StackFit::Expand)
-            .child(Container().color(sv(0x020617FFu64)).build())
-            .child(Container().alignment(Align::Center).child(play).build())
-            .child(win)
-            .build(),
+        Stack().fit(StackFit::Expand).child(Container().color(sv(0x020617FFu64)).build()).child(
+            Container().alignment(Align::Center).child(play).build(),
+        ).child(win).build(),
     );
     return count.atom_id();
 }

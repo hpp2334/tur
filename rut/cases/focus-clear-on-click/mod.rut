@@ -14,13 +14,17 @@ entry fn start() -> u64 {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
 
-    let b_click = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<f64>(clicks, ctx.get<f64>(clicks) + 1.0);
-        ctx.set<str>(label, f"clicks: {ctx.get<f64>(clicks) as u64}");
-    });
+    let b_click =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<f64>(clicks, ctx.get<f64>(clicks) + 1.0);
+                ctx.set<str>(label, f"clicks: {ctx.get<f64>(clicks) as u64}");
+            },
+        );
 
     let col = Column();
-    let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
+    let input =
+        Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
     col.child(input);
     let t = Text().text(label).query_key("button");
     col.child(PointerInteract().on_click(b_click).child(t.build()).build());

@@ -23,21 +23,38 @@
 use futures::{ launch_future, sleep };
 use tur_kit::control_flow::control::{ Condition };
 use tur_kit::flags::{
-    Align, BorderPosition, CrossAlign, Cursor, HitTestBehavior, MainAlign, MainAxisSize, StackFit,
+    Align,
+    BorderPosition,
+    CrossAlign,
+    Cursor,
+    HitTestBehavior,
+    MainAlign,
+    MainAxisSize,
+    StackFit,
 };
 use tur_kit::gesture::pointer::{ MouseRegion, PointerInteract };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, View, mount, str_parse_f64, text_ctrl, undo_ctrl };
 use tur_kit::layout::box::{ Container, SizedBox };
 use tur_kit::layout::flex::{ Column, Row };
 use tur_kit::layout::stack::{ Stack };
-use tur_kit::reactive::{ DeriveCtx, Mutation, MutationCtx, Readable, Source, derive, mutate, source, sv };
+use tur_kit::reactive::{
+    DeriveCtx,
+    Mutation,
+    MutationCtx,
+    Readable,
+    Source,
+    derive,
+    mutate,
+    source,
+    sv,
+};
 use tur_kit::text::core::{ Text };
 use tur_kit::text::input::{ Input };
 
 // The generation guard: a shared cell (a struct field written through
 // `mut` bindings) — the non-reactive scratch the ticker pins.
 struct Ticker {
-    g: f64,
+    g: f64;
 }
 
 // The light-slate palette (the boa countdown).
@@ -69,12 +86,10 @@ entry fn start() -> u64 {
     let pill = source<str>("Ready");
     let urgent = source<bool>(false);
 
-    let display = derive(fn (ctx: DeriveCtx) -> str {
-        return fmt_display(ctx.get<f64>(remaining));
-    });
-    let start_label = derive(fn (ctx: DeriveCtx) -> str {
-        return fmt_start_label(ctx.get<f64>(remaining));
-    });
+    let display =
+        derive(fn (ctx: DeriveCtx) -> str { return fmt_display(ctx.get<f64>(remaining)); });
+    let start_label =
+        derive(fn (ctx: DeriveCtx) -> str { return fmt_start_label(ctx.get<f64>(remaining)); });
 
     // The generation guard: the shared cell the ticker pins its
     // generation against.
@@ -88,70 +103,82 @@ entry fn start() -> u64 {
     // Start: guard against double-start, set running, launch the ticker
     // with a fresh generation (the launching mutation hands its own ctx
     // along — the ctx is an ordinary VALUE param of the async fn).
-    let b_start = mutate(fn (ctx: MutationCtx, _e: nil) {
-        if (ctx.get<bool>(running)) {
-            return;
-        }
-        ctx.set<bool>(running, true);
-        launch_future(ticker(ctx, bump(gen), gen, running, remaining, dot, pill, urgent));
-        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
-    });
+    let b_start =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                if (ctx.get<bool>(running)) {
+                    return;
+                }
+                ctx.set<bool>(running, true);
+                launch_future(ticker(ctx, bump(gen), gen, running, remaining, dot, pill, urgent));
+                sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
+            },
+        );
 
     // Pause: stop the clock and supersede any live ticker.
-    let b_pause = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(running, false);
-        bump(gen);
-        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
-    });
+    let b_pause =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<bool>(running, false);
+                bump(gen);
+                sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
+            },
+        );
 
     // Reset: stop the clock and restore the initial time.
-    let b_reset = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(running, false);
-        bump(gen);
-        ctx.set<f64>(remaining, ctx.get<f64>(initial));
-        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
-    });
+    let b_reset =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<bool>(running, false);
+                bump(gen);
+                ctx.set<f64>(remaining, ctx.get<f64>(initial));
+                sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
+            },
+        );
 
     // Open the editor: stop the clock, supersede any live ticker, mark
     // editing, and pre-seed the modal's controller with the live
     // `initial` (the branch builds fresh at activation, over the seeded
     // controller).
-    let b_edit = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(running, false);
-        bump(gen);
-        ctx.set<bool>(editing, true);
-        ctrl.set_text(f"{ctx.get<f64>(initial) as u64}");
-        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
-    });
+    let b_edit =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                ctx.set<bool>(running, false);
+                bump(gen);
+                ctx.set<bool>(editing, true);
+                ctrl.set_text(f"{ctx.get<f64>(initial) as u64}");
+                sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
+            },
+        );
 
     // Cancel: close the modal.
-    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) {
-        ctx.set<bool>(editing, false);
-    });
+    let b_cancel = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<bool>(editing, false); });
 
     // Confirm: parse the field, apply it to initial + remaining, close.
-    let b_confirm = mutate(fn (ctx: MutationCtx, _e: nil) {
-        let v = str_parse_f64(ctrl.text());
-        ctx.set<f64>(initial, v);
-        ctx.set<f64>(remaining, v);
-        ctx.set<bool>(editing, false);
-        sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
-    });
+    let b_confirm =
+        mutate(
+            fn (ctx: MutationCtx, _e: nil) {
+                let v = str_parse_f64(ctrl.text());
+                ctx.set<f64>(initial, v);
+                ctx.set<f64>(remaining, v);
+                ctx.set<bool>(editing, false);
+                sync_chrome(ctx, running, remaining, initial, dot, pill, urgent);
+            },
+        );
 
     // Clicks inside the card stop at the card (the scrim's cancel never
     // sees them).
-    let b_swallow = mutate(fn (_ctx: MutationCtx, _e: nil) {
-    });
+    let b_swallow = mutate(fn (_ctx: MutationCtx, _e: nil) { });
 
     let edit_button = ghost_button("btn-edit", "Edit", b_edit);
     let reset_button = ghost_button("btn-reset", "Reset", b_reset);
 
     // The primary action: amber Pause while running, emerald
     // Start/Restart otherwise (the label re-derives over `remaining`).
-    let primary = Condition(running)
-        .then_build(fn () -> View { return pad("btn-pause", "Pause", PAUSE, PAUSE_SHADOW, b_pause); })
-        .else_build(fn () -> View { return start_pad(start_label, b_start); })
-        .build();
+    let primary =
+        Condition(running).then_build(
+            fn () -> View { return pad("btn-pause", "Pause", PAUSE, PAUSE_SHADOW, b_pause); },
+        ).else_build(fn () -> View { return start_pad(start_label, b_start); }).build();
 
     // The status pill: the dot + label ride their sources — Running
     // (green) / Done (faint) / Ready (muted) / Paused (amber).
@@ -160,38 +187,27 @@ entry fn start() -> u64 {
     // The display: 72px, red while urgent (ticking at or below 10s),
     // slate otherwise — the Condition swaps the tinted twin; both bind
     // the same derive.
-    let display_view = Condition(urgent)
-        .then_build(fn () -> View { return display_text(URGENT, display); })
-        .else_build(fn () -> View { return display_text(TEXT, display); })
-        .build();
+    let display_view =
+        Condition(urgent).then_build(fn () -> View { return display_text(URGENT, display); }).else_build(
+            fn () -> View { return display_text(TEXT, display); },
+        ).build();
 
     // The edit modal overlays the pane while `editing` is set.
-    let modal = Condition(editing)
-        .then_build(fn () -> View { return edit_modal(ctrl, undo, b_confirm, b_cancel, b_swallow); })
-        .else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); })
-        .build();
+    let modal =
+        Condition(editing).then_build(
+            fn () -> View { return edit_modal(ctrl, undo, b_confirm, b_cancel, b_swallow); },
+        ).else_build(fn () -> View { return SizedBox(0.0, 0.0).build(); }).build();
 
-    let pane = Column()
-        .main_axis_size(MainAxisSize::Min)
-        .cross_alignment(CrossAlign::Center)
-        .child(Text().text(sv("COUNTDOWN")).font_size(11.0).color(TEXT_FAINT).build())
-        .child(SizedBox(0.0, 10.0).build())
-        .child(display_view)
-        .child(SizedBox(0.0, 12.0).build())
-        .child(status)
-        .child(SizedBox(0.0, 36.0).build())
-        .child(primary)
-        .child(SizedBox(0.0, 12.0).build())
-        .child(
-            Row()
-                .main_axis_size(MainAxisSize::Min)
-                .cross_alignment(CrossAlign::Center)
-                .child(edit_button)
-                .child(SizedBox(10.0, 0.0).build())
-                .child(reset_button)
-                .build(),
-        )
-        .build();
+    let pane =
+        Column().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+            Text().text(sv("COUNTDOWN")).font_size(11.0).color(TEXT_FAINT).build(),
+        ).child(SizedBox(0.0, 10.0).build()).child(display_view).child(SizedBox(0.0, 12.0).build()).child(
+            status,
+        ).child(SizedBox(0.0, 36.0).build()).child(primary).child(SizedBox(0.0, 12.0).build()).child(
+            Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+                edit_button,
+            ).child(SizedBox(10.0, 0.0).build()).child(reset_button).build(),
+        ).build();
 
     // The pane centered in the viewer; the modal overlays it when open.
     let page = Container().color(sv(PAGE_BG)).alignment(Align::Center).child(pane).build();
@@ -203,78 +219,60 @@ entry fn start() -> u64 {
 
 // The big rounded primary button (the boa PrimaryButton).
 fn pad(key: str, label: str, bg: u64, shade: u64, cb: Mutation<nil>) -> View {
-    let face = Container()
-        .width_height(220.0, 48.0)
-        .radius(sv(12.0f64))
-        .color(sv(bg))
-        .shadow(shade, 14.0, 0.0, 6.0)
-        .alignment(Align::Center)
-        .child(Text().text(sv(label)).font_size(15.0).color(BTN_FG).build())
-        .build();
-    return PointerInteract()
-        .on_click(cb)
-        .query_key(key)
-        .child(face)
-        .build();
+    let face =
+        Container().width_height(220.0, 48.0).radius(sv(12.0f64)).color(sv(bg)).shadow(
+            shade,
+            14.0,
+            0.0,
+            6.0,
+        ).alignment(Align::Center).child(
+            Text().text(sv(label)).font_size(15.0).color(BTN_FG).build(),
+        ).build();
+    return PointerInteract().on_click(cb).query_key(key).child(face).build();
 }
 
 // The Start pad: the label rides the derive ("Restart" once drained).
 fn start_pad(label: Readable<str>, cb: Mutation<nil>) -> View {
-    let face = Container()
-        .width_height(220.0, 48.0)
-        .radius(sv(12.0f64))
-        .color(sv(START))
-        .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-        .alignment(Align::Center)
-        .child(Text().text(label).font_size(15.0).color(BTN_FG).build())
-        .build();
-    return PointerInteract()
-        .on_click(cb)
-        .query_key("btn-start")
-        .child(face)
-        .build();
+    let face =
+        Container().width_height(220.0, 48.0).radius(sv(12.0f64)).color(sv(START)).shadow(
+            START_SHADOW,
+            14.0,
+            0.0,
+            6.0,
+        ).alignment(Align::Center).child(Text().text(label).font_size(15.0).color(BTN_FG).build()).build();
+    return PointerInteract().on_click(cb).query_key("btn-start").child(face).build();
 }
 
 // The bordered ghost button (the boa GhostButton).
 fn ghost_button(key: str, label: str, cb: Mutation<nil>) -> View {
-    let face = Container()
-        .padding(10.0)
-        .radius(sv(10.0f64))
-        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-        .color(sv(CARD_BG))
-        .child(Text().text(sv(label)).font_size(13.0).color(TEXT_MUTED).build())
-        .build();
-    return MouseRegion()
-        .cursor(Cursor::Pointer)
-        .child(
-            PointerInteract()
-                .on_click(cb)
-                .query_key(key)
-                .child(face)
-                .build(),
-        )
-        .build();
+    let face =
+        Container().padding(10.0).radius(sv(10.0f64)).border(
+            CARD_BORDER,
+            1.0,
+            BorderPosition::Inside,
+        ).color(sv(CARD_BG)).child(Text().text(sv(label)).font_size(13.0).color(TEXT_MUTED).build()).build();
+    return
+        MouseRegion().cursor(Cursor::Pointer).child(
+            PointerInteract().on_click(cb).query_key(key).child(face).build(),
+        ).build();
 }
 
 // The "● Ready/Running/Paused/Done" pill: the dot + label ride their
 // sources — the four states are painted by the mutations (sync_chrome)
 // and the ticker's Done write.
 fn chip_status(dot: Readable<u64>, label: Readable<str>) -> View {
-    return Container()
-        .padding(6.0)
-        .radius(sv(999.0f64))
-        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-        .color(sv(CARD_BG))
-        .child(
-            Row()
-                .main_axis_size(MainAxisSize::Min)
-                .cross_alignment(CrossAlign::Center)
-                .child(Container().width_height(7.0, 7.0).radius(sv(999.0f64)).color(dot).build())
-                .child(SizedBox(6.0, 0.0).build())
-                .child(Text().text(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build())
-                .build(),
-        )
-        .build();
+    return
+        Container().padding(6.0).radius(sv(999.0f64)).border(
+            CARD_BORDER,
+            1.0,
+            BorderPosition::Inside,
+        ).color(sv(CARD_BG)).child(
+            Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
+                Container().width_height(7.0, 7.0).radius(sv(999.0f64)).color(dot).build(),
+            ).child(SizedBox(6.0, 0.0).build()).child(
+                Text().text(label).font_size(11.0).color(TEXT_MUTED).query_key("status-label").build(),
+            ).build(),
+        ).build();
 }
 
 // The 72px display twin (the tint is the Condition's branch — boa's
@@ -286,88 +284,61 @@ fn display_text(color: u64, disp: Readable<str>) -> View {
 // The edit modal: a dimmed scrim (tap = cancel) around the card; the card
 // swallows its own taps. Runs at ACTIVATION over the controller the edit
 // mutation re-seeded.
-fn edit_modal(ctrl: TextCtrl, undo: UndoCtrl, b_confirm: Mutation<nil>, b_cancel: Mutation<nil>, b_swallow: Mutation<nil>) -> View {
-    let field = Input()
-        .controller(ctrl)
-        .undo(undo)
-        .placeholder(sv("Positive integer"))
-        .font_size(14.0)
-        .width_height(332.0, 32.0)
-        .query_key("edit-input")
-        .build();
+fn edit_modal(
+    ctrl: TextCtrl,
+    undo: UndoCtrl,
+    b_confirm: Mutation<nil>,
+    b_cancel: Mutation<nil>,
+    b_swallow: Mutation<nil>,
+) -> View {
+    let field =
+        Input().controller(ctrl).undo(undo).placeholder(sv("Positive integer")).font_size(14.0).width_height(
+            332.0,
+            32.0,
+        ).query_key("edit-input").build();
 
-    let card = Container()
-        .width(sv(380.0f64))
-        .radius(sv(14.0f64))
-        .padding(22.0)
-        .color(sv(CARD_BG))
-        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-        .child(
-            Column()
-                .main_axis_size(MainAxisSize::Min)
-                .cross_alignment(CrossAlign::Stretch)
-                .child(Text().text(sv("Set duration")).font_size(18.0).color(TEXT).build())
-                .child(SizedBox(0.0, 6.0).build())
-                .child(Text().text(sv("Enter a positive integer (seconds).")).font_size(13.0).color(TEXT_MUTED).build())
-                .child(SizedBox(0.0, 16.0).build())
-                .child(
-                    Container()
-                        .padding(4.0)
-                        .radius(sv(8.0f64))
-                        .border(CARD_BORDER, 1.0, BorderPosition::Inside)
-                        .child(field)
-                        .build(),
-                )
-                .child(SizedBox(0.0, 18.0).build())
-                .child(
-                    Row()
-                        .main_alignment(MainAlign::End)
-                        .main_axis_size(MainAxisSize::Min)
-                        .child(ghost_button("btn-cancel", "Cancel", b_cancel))
-                        .child(SizedBox(8.0, 0.0).build())
-                        .child(
-                            MouseRegion()
-                                .cursor(Cursor::Pointer)
-                                .child(
-                                    PointerInteract()
-                                        .on_click(b_confirm)
-                                        .query_key("btn-confirm")
-                                        .child(
-                                            Container()
-                                                .width_height(220.0, 48.0)
-                                                .radius(sv(12.0f64))
-                                                .color(sv(START))
-                                                .shadow(START_SHADOW, 14.0, 0.0, 6.0)
-                                                .alignment(Align::Center)
-                                                .child(Text().text(sv("Save")).font_size(15.0).color(BTN_FG).build())
-                                                .build(),
-                                        )
-                                        .build(),
-                                )
-                                .build(),
-                        )
-                        .build(),
-                )
-                .build(),
-        )
-        .build();
+    let card =
+        Container().width(sv(380.0f64)).radius(sv(14.0f64)).padding(22.0).color(sv(CARD_BG)).border(
+            CARD_BORDER,
+            1.0,
+            BorderPosition::Inside,
+        ).child(
+            Column().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Stretch).child(
+                Text().text(sv("Set duration")).font_size(18.0).color(TEXT).build(),
+            ).child(SizedBox(0.0, 6.0).build()).child(
+                Text().text(sv("Enter a positive integer (seconds).")).font_size(13.0).color(
+                    TEXT_MUTED,
+                ).build(),
+            ).child(SizedBox(0.0, 16.0).build()).child(
+                Container().padding(4.0).radius(sv(8.0f64)).border(
+                    CARD_BORDER,
+                    1.0,
+                    BorderPosition::Inside,
+                ).child(field).build(),
+            ).child(SizedBox(0.0, 18.0).build()).child(
+                Row().main_alignment(MainAlign::End).main_axis_size(MainAxisSize::Min).child(
+                    ghost_button("btn-cancel", "Cancel", b_cancel),
+                ).child(SizedBox(8.0, 0.0).build()).child(
+                    MouseRegion().cursor(Cursor::Pointer).child(
+                        PointerInteract().on_click(b_confirm).query_key("btn-confirm").child(
+                            Container().width_height(220.0, 48.0).radius(sv(12.0f64)).color(
+                                sv(START),
+                            ).shadow(START_SHADOW, 14.0, 0.0, 6.0).alignment(Align::Center).child(
+                                Text().text(sv("Save")).font_size(15.0).color(BTN_FG).build(),
+                            ).build(),
+                        ).build(),
+                    ).build(),
+                ).build(),
+            ).build(),
+        ).build();
 
-    let inner = PointerInteract()
-        .behavior(HitTestBehavior::Opaque)
-        .on_click(b_swallow)
-        .child(card)
-        .build();
-    let scrim = Container()
-        .color(sv(BACKDROP))
-        .alignment(Align::Center)
-        .child(inner)
-        .build();
-    return PointerInteract()
-        .behavior(HitTestBehavior::Opaque)
-        .on_click(b_cancel)
-        .query_key("edit-modal")
-        .child(scrim)
-        .build();
+    let inner =
+        PointerInteract().behavior(HitTestBehavior::Opaque).on_click(b_swallow).child(card).build();
+    let scrim = Container().color(sv(BACKDROP)).alignment(Align::Center).child(inner).build();
+    return
+        PointerInteract().behavior(HitTestBehavior::Opaque).on_click(b_cancel).query_key(
+            "edit-modal",
+        ).child(scrim).build();
 }
 
 // ---- the pill + display chrome (the four states, the urgent red) -----------
@@ -409,9 +380,15 @@ fn urgent_of(running: bool, r: f64) -> bool {
 // Repaint the pill + display tint after any state write (every chrome
 // mutation's tail; the ticker writes its Done state directly through the
 // ctx it carried along).
-fn sync_chrome(ctx: MutationCtx, running: Readable<bool>, remaining: Readable<f64>,
-               initial: Readable<f64>, dot: Readable<u64>, pill: Readable<str>,
-               urgent: Readable<bool>) {
+fn sync_chrome(
+    ctx: MutationCtx,
+    running: Readable<bool>,
+    remaining: Readable<f64>,
+    initial: Readable<f64>,
+    dot: Readable<u64>,
+    pill: Readable<str>,
+    urgent: Readable<bool>,
+) {
     let run = ctx.get<bool>(running);
     let r = ctx.get<f64>(remaining);
     let init = ctx.get<f64>(initial);
@@ -449,8 +426,16 @@ fn fmt_start_label(v: f64) -> str {
 // pause / edit / reset) exits without ticking. The chrome rides the task
 // too: ticks re-derive the urgent tint, and the drained exit writes the
 // Done state.
-async fn ticker(ctx: MutationCtx, g: f64, gen: Ticker, running: Readable<bool>, remaining: Readable<f64>,
-                dot: Readable<u64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
+async fn ticker(
+    ctx: MutationCtx,
+    g: f64,
+    gen: Ticker,
+    running: Readable<bool>,
+    remaining: Readable<f64>,
+    dot: Readable<u64>,
+    pill: Readable<str>,
+    urgent: Readable<bool>,
+) -> str {
     while (ctx.get<bool>(running)) {
         await sleep(1000);
         if (gen.g != g) {
@@ -477,6 +462,6 @@ async fn ticker(ctx: MutationCtx, g: f64, gen: Ticker, running: Readable<bool>, 
 // Bump the shared-cell generation and answer the fresh one (`mut` param
 // — the write flows through to the caller's cell).
 fn bump(gen: Ticker) -> f64 {
-    gen.g = gen.g + 1.0;
+    (gen.g) = gen.g + 1.0;
     return gen.g;
 }
