@@ -33,7 +33,7 @@ use tur_kit::reactive::{{ sv }};
 use tur_kit::text::core::{{ Text }};
 
 entry fn start() {{
-    let mut row = Row().query_key("row");
+    let row = Row().query_key("row");
 
     let fixed = Container().width_height(100.0, 40.0);
 
@@ -194,13 +194,13 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut pill = Row()
+    let pill = Row()
         .query_key("pill")
         .main_axis_size(MainAxisSize::Min)
         .child(SizedBox(14.0, 0.0).child(Container().build()).build());
 
     let txt = Text().text(sv("Last Week Todos")).font_size(14.0).max_lines(1).ellipsis();
-    let mut label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
+    let label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
     let label = label;
     pill.child(label);
 
@@ -390,14 +390,14 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut row = Row().child(Container().width_height(400.0, 40.0).build());
+    let row = Row().child(Container().width_height(400.0, 40.0).build());
 
     let txt = Text()
         .text(sv("A very long label that must not paint naturally here"))
         .font_size(14.0)
         .max_lines(1)
         .ellipsis();
-    let mut label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
+    let label = Flexible().flex(sv(1.0f64)).child(txt.build()).query_key("label").build();
     let label = label;
     row.child(label);
 

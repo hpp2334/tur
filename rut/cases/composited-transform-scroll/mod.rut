@@ -12,12 +12,12 @@ use tur_kit::virtual_app::{ CompositedFollower, CompositedTarget, layer_link };
 
 entry fn start() {
     let link = layer_link();
-    let mut stack = Stack()
+    let stack = Stack()
         .child(SizedBox(400.0, 600.0).child(Container().build()).build());
 
     // The scrollable viewport (200x200) with 400px of content; the target
     // sits at content y=100 (after a 100px spacer).
-    let mut content = Column()
+    let content = Column()
         .child(SizedBox(200.0, 100.0).child(Container().build()).build());
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();

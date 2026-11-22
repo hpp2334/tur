@@ -36,19 +36,19 @@ entry fn start() -> u64 {
         ctx.set<f64>(inner_t, ctx.get<f64>(inner_t) + 1.0);
     });
 
-    let mut col = Column().cross_alignment(CrossAlign::Start).main_axis_size(MainAxisSize::Min);
+    let col = Column().cross_alignment(CrossAlign::Start).main_axis_size(MainAxisSize::Min);
 
     // Opaque pair: the inner (opaque) absorbs the click.
-    let mut outer_box = Container().width_height(80.0, 40.0).query_key("outer-opaque");
-    let mut inner_row = Row();
+    let outer_box = Container().width_height(80.0, 40.0).query_key("outer-opaque");
+    let inner_row = Row();
     let inner_box = Container().width_height(60.0, 30.0).query_key("inner-opaque");
     inner_row.child(PointerInteract().on_click(b_inner_o).child(inner_box.build()).build());
     outer_box.child(inner_row.build());
     col.child(PointerInteract().on_click(b_outer_o).child(outer_box.build()).build());
 
     // Translucent pair: the inner joins the path; the outer fires too.
-    let mut outer_t_box = Container().width_height(80.0, 40.0).query_key("outer-translucent");
-    let mut t_row = Row();
+    let outer_t_box = Container().width_height(80.0, 40.0).query_key("outer-translucent");
+    let t_row = Row();
     let inner_t_box = Container().width_height(60.0, 30.0).query_key("inner-translucent");
     t_row.child(PointerInteract().on_click(b_inner_t).behavior(HitTestBehavior::Translucent).child(inner_t_box.build()).build());
     outer_t_box.child(t_row.build());

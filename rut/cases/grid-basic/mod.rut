@@ -12,8 +12,8 @@ use tur_kit::layout::grid_table::{ Grid };
 use tur_kit::reactive::{ sv };
 
 entry fn start() {
-    let mut grid = Grid().max_cross(140.0).spacing(8.0, 8.0).query_key("grid-basic");
-    let mut i: u64 = 0;
+    let grid = Grid().max_cross(140.0).spacing(8.0, 8.0).query_key("grid-basic");
+    let i: u64 = 0;
     while (i < 12) {
         grid.child(Container().color(sv(hsl_packed(i as f64 * 30.0, 65.0, 55.0))).build());
         i = i + 1;
@@ -29,9 +29,9 @@ fn hsl_packed(h: f64, s: f64, l: f64) -> u64 {
     let hue: f64 = h % 360.0;
     let hp: f64 = hue / 60.0;
     let x: f64 = c * (1.0 - abs_f(hp % 2.0 - 1.0));
-    let mut r1: f64 = 0.0;
-    let mut g1: f64 = 0.0;
-    let mut b1: f64 = 0.0;
+    let r1: f64 = 0.0;
+    let g1: f64 = 0.0;
+    let b1: f64 = 0.0;
     if (hp < 1.0) {
         r1 = c;
         g1 = x;

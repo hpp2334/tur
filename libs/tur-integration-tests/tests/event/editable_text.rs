@@ -761,7 +761,7 @@ use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
-    let mut i = 0;
+    let i = 0;
     while (i < 4) {
         tctrl_push_span(ctrl.raw(), f"line {i} of the seeded document\n");
         i += 1;
@@ -821,7 +821,7 @@ entry fn start() {
     tctrl_push_span(ctrl.raw(), "");
     tctrl_push_span(ctrl.raw(), "abcd");
     let undo = undo_ctrl();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(300.0, 100.0).query_key("editor").build();
     let keyed = input;
     mount(keyed);
 }
@@ -963,7 +963,7 @@ entry fn start() {
     tctrl_push_span(ctrl.raw(), "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_ctrl();
     // flags bit 0 = multiline.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).multiline(true).query_key("softwrap-input").build();
     let keyed = input;
     mount(keyed);
 }
@@ -1091,7 +1091,7 @@ entry fn start() {
     let ctrl = text_ctrl();
     tctrl_push_span(ctrl.raw(), "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega");
     let undo = undo_ctrl();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(0.0, 0.0).query_key("softwrap-single-input").build();
     let keyed = input;
     mount(keyed);
 }

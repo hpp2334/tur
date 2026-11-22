@@ -21,7 +21,7 @@ entry fn start() -> u64 {
         ctx.set<str>(clicks, f"{ctx.get<f64>(click_n) as u64}");
     });
 
-    let mut stack = Stack();
+    let stack = Stack();
 
     // The scrollable beneath, wrapped in a gesture target so pointer
     // events reaching THROUGH the overlay are observable.

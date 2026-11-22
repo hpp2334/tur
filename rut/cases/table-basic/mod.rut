@@ -29,7 +29,7 @@ let STRIPE: u64 = 0x1E293BFFu64;
 
 entry fn start() {
     let rows = list_new();
-    let mut i = 0;
+    let i = 0;
     while (i < 6) {
         rows.push(f"p{i}");
         i = i + 1;
@@ -56,9 +56,9 @@ entry fn start() {
 // The i'th '|'-separated slot of a data string.
 fn slot(data: str, i: u64) -> str {
     let n = data.len();
-    let mut start = 0;
-    let mut k = 0;
-    let mut cur: u64 = 0;
+    let start = 0;
+    let k = 0;
+    let cur: u64 = 0;
     while (k <= n) {
         if (k == n || data.code_at(k) == 124) {
             if (cur == i) {
@@ -74,7 +74,7 @@ fn slot(data: str, i: u64) -> str {
 
 // One header cell (called once per column): a padded muted label.
 fn header_cell(col: u64) -> View {
-    let mut label = "PLANET";
+    let label = "PLANET";
     if (col == 1) {
         label = "NOTES";
     } else if (col == 2) {
@@ -89,7 +89,7 @@ fn header_cell(col: u64) -> View {
 // One body cell (called per (row, col)): the padded field. The stripes
 // are the element's (`.stripes` above) — cells stay untinted.
 fn planet_cell(row: u64, col: u64) -> View {
-    let mut text = "";
+    let text = "";
     if (col == 0) {
         text = slot(P_NAME, row);
     } else if (col == 1) {

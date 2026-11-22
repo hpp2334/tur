@@ -40,8 +40,8 @@ pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
             return;
         }
         let n = cur.len();
-        let mut sep: i32 = -1;
-        let mut k = 0;
+        let sep: i32 = -1;
+        let k = 0;
         while (k < n) {
             if (cur.code_at(k) == theme::C_SLASH) {
                 sep = k;
@@ -234,12 +234,12 @@ pub fn explorer_view(s: state::Gh, ico_folder: u64, ico_file: u64) -> View {
 fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> View {
     let is_dir = s.starts_with(0, "d|");
     let n = s.len();
-    let mut name = "";
-    let mut size_txt = "";
+    let name = "";
+    let size_txt = "";
     if (is_dir) {
         name = s.slice(2, n);
     } else {
-        let mut k = 2;
+        let k = 2;
         while (k < n) {
             if (s.code_at(k) == theme::C_PIPE) {
                 break;
@@ -249,7 +249,7 @@ fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> Vi
         name = s.slice(2, k);
         size_txt = explorer::fmt_size(s.slice(k + 1, n));
     }
-    let mut icon = ico_folder;
+    let icon = ico_folder;
     if (!is_dir) {
         icon = ico_file;
     }
@@ -257,7 +257,7 @@ fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> Vi
         if (s.starts_with(0, "d|")) {
             let dname = s.slice(2, s.len());
             let cur = ctx.get<str>(g.path);
-            let mut next = dname;
+            let next = dname;
             if (cur != "") {
                 next = f"{cur}/{dname}";
             }
@@ -268,7 +268,7 @@ fn item_file(i: u64, s: str, g: state::Gh, ico_folder: u64, ico_file: u64) -> Vi
             return;
         }
         let rn = s.len();
-        let mut k = 2;
+        let k = 2;
         while (k < rn) {
             if (s.code_at(k) == theme::C_PIPE) {
                 break;
@@ -344,7 +344,7 @@ pub async fn open_repo(ctx: MutationCtx, s: state::Gh) -> str {
         }
         return "";
     }
-    let mut desc: str = "";
+    let desc: str = "";
     if (m.desc != nil) {
         let d: str = m.desc;
         desc = d;
@@ -366,7 +366,7 @@ async fn fetch_dir(ctx: MutationCtx, s: state::Gh) -> str {
     ctx.set<bool>(s.busy, true);
     let full = ctx.get<str>(s.repo_full);
     let dir = ctx.get<str>(s.path);
-    let mut url = f"https://api.github.com/repos/{full}/contents";
+    let url = f"https://api.github.com/repos/{full}/contents";
     if (dir != "") {
         url = f"https://api.github.com/repos/{full}/contents/{dir}";
     }
@@ -420,7 +420,7 @@ async fn download_file(ctx: MutationCtx, s: state::Gh, fname: str) -> str {
     ctx.set<str>(s.dl, "loading");
     let full = ctx.get<str>(s.repo_full);
     let dir = ctx.get<str>(s.path);
-    let mut url = f"https://raw.githubusercontent.com/{full}/HEAD/{fname}";
+    let url = f"https://raw.githubusercontent.com/{full}/HEAD/{fname}";
     if (dir != "") {
         url = f"https://raw.githubusercontent.com/{full}/HEAD/{dir}/{fname}";
     }
@@ -462,18 +462,18 @@ fn dl_face(label: str, bg: u64, fg: u64) -> View {
 // suffix is stripped).
 pub fn parse_repo(draft: str) -> str {
     let n = draft.len();
-    let mut a = 0;
+    let a = 0;
     while (a < n && draft.code_at(a) == theme::C_SPACE) {
         a = a + 1;
     }
-    let mut b = n;
+    let b = n;
     while (b > a && draft.code_at(b - 1) == theme::C_SPACE) {
         b = b - 1;
     }
     let t = draft.slice(a, b);
     let m = t.len();
-    let mut sep: i32 = -1;
-    let mut k = 0;
+    let sep: i32 = -1;
+    let k = 0;
     while (k < m) {
         if (t.code_at(k) == theme::C_SLASH) {
             sep = k;
@@ -485,7 +485,7 @@ pub fn parse_repo(draft: str) -> str {
         return "";
     }
     let owner = t.slice(0, sep);
-    let mut repo = t.slice(sep + 1, m);
+    let repo = t.slice(sep + 1, m);
     let rl = repo.len();
     if (rl > 4 && repo.starts_with(rl - 4, ".git")) {
         repo = repo.slice(0, rl - 4);
@@ -496,7 +496,7 @@ pub fn parse_repo(draft: str) -> str {
 // "rust · stars 12.3k · forks 4.5k · issues 123" — the language folded in
 // when present.
 fn fmt_stats(m: schema::RepoPayload) -> str {
-    let mut out = "";
+    let out = "";
     if (m.language != nil) {
         let lang: str = m.language;
         out = f"{out}{lang} · ";
@@ -525,8 +525,8 @@ pub fn fmt_size(s: str) -> str {
     if (v < 1024.0) {
         return f"{v as u64} B";
     }
-    let mut x: f64 = v / 1024.0;
-    let mut unit = "KB";
+    let x: f64 = v / 1024.0;
+    let unit = "KB";
     if (v >= 1048576.0) {
         x = v / 1048576.0;
         unit = "MB";

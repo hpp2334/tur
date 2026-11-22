@@ -57,13 +57,13 @@ fn item(i: u64) -> View {
 }
 
 entry fn start() {
-    let mut col = Column();
-    let mut i: u64 = 0;
+    let col = Column();
+    let i: u64 = 0;
     while (i < 6) {
         col.child(item(i));
         i += 1;
     }
-    let mut scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
     mount(scroller);
 }
 "#,

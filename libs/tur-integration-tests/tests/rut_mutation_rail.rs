@@ -398,7 +398,7 @@ entry fn start() -> u64 {
     });
     let m_up = mutate<PointerEvent>(fn (ctx: MutationCtx, ev: PointerEvent) {
         let t = ctx.get<str>(log);
-        let mut b = "l";
+        let b = "l";
         if (ev.button == MouseButton::Right) {
             b = "r";
         }

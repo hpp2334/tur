@@ -502,45 +502,51 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest main** (`b44924f5`, 2026-11-12) — master past
-  `c49170be` by ONE commit, tur's own upstream fix ("module-resident
-  generics ride the pack lanes again"): surface rows resolve back to
-  the unit-local bare decls (`resolve_local_fn`), so the closed-union
-  enumeration seeds AND the template roots key the ids the checker
-  knows, and the templates-must-emit gates read
-  `generic_surface_served` (the ledger-consulting serving check — no
-  wire change). Under `c49170be` the template bodies of every
-  module-resident generic compiled EMPTY (the "unknown fn — already
-  diagnosed" silent lane), so a consumer's explicit `mutate<T>(..)`
-  against a packed kit refused ("served by neither its pack-time
-  ledger nor its template bodies") unless the pack closure had already
-  instantiated the same shape — pinned upstream by
-  `rut-driver/tests/packed_module_generic.rs`. `c49170be` itself is 61
-  commits past the previous pin (`932ba3d8`, 2026-10-25): the AST v2
-  tree (typed arenas + the capsule store; rut-fmt/rut-lir/rut-driver/
-  rut-semantic all lower on it — `rut_ast::ast` closed, its node types
-  re-exported at the crate root), the Parsed/ParsedDoc/Analysis
-  artifact capsules (private fields; `ParsedDoc::parse(Mode, src)`
-  replaces `classify_source` — tur's highlighter rides
-  `.spans()`/`.src()` and collects the comment table itself via
-  `lex_normalized`), `pub use` joining the grammar, the namespace
-  mechanism DYING (`Mounted.namespace` and the manifest `namespace`
-  key are gone — module paths and bare consts are the spellings),
-  RawSymbol → Symbol, the lsp lanes merging into rut-lsp-wasm, and the
-  editing-state reshape (SessionState in state.rs, the Stir/Wake lane,
-  depEngine dies, indexFile/indexModAt renamed). Past 932ba3d8: the
-  mirror-seed law + the bodyless-callee verify (the packed-stub SEGV
-  family), multi-line literals, the unified run lane. Raw-rev pin
-  (never a tag/branch), and the tag lane is how the upstream std
-  packages publish. tur consumes the std `json` pkg from it: vendored
-  sources (`builtin_plugins/std_json/vendor/`) offered to modules by
+- The rut pin is **latest main** (`460e8887`, 2026-11-22) — 25 commits
+  past the previous pin (`0ca49f6d`, 2026-11-21): the GLOB LEAF lands
+  (`use pkg::*` + the brace star — a grammar feature; the driver's
+  glob expansion binds the pub surface — tur's sources spell no globs
+  yet, the surface-law test's allowlist is the gate), the Name
+  vocabulary (every AST name carries its span), NodeKindId becomes the
+  closed enum `AnyHandle::kind` carries, the rut-ast Doc pipeline +
+  edit door, and rut-lsp's mounted-world layer split (its own shell +
+  MountedFile migration — the Lsp/Io ABI HELD: tur's actor-driven
+  highlighter rode through untouched). No `rut/*` std source moved at
+  this step (no re-vendor; std-v18 remains the current envelope). At
+  `0ca49f6d`, the huge consolidation: (1) **rut-semantic DIES** —
+  absorbed into rut-lsp behind the PRIVACY WALL (`Lsp` + `Io` are
+  rut-lsp's only public doors); tur's highlighter rides the ACTOR now:
+  one `Lsp` session per thread, its loop future booted onto a
+  tur-owned `futures::executor::LocalPool` through `Lsp::boot`'s spawn
+  seam (`spawn_native` is native-gated upstream — a tur-owned pool
+  compiles on wasm32 too), so `pool.run_until(lsp.analyze(..))`
+  answers SYNCHRONOUSLY on the worker lane (no thread, no runtime, no
+  parking); the answer's flat LSP semantic-token delta stream (UTF-16
+  positions) decodes back to byte spans over the canonical text,
+  `legend()` names map onto the palette (see
+  `tur-playground/src/highlight.rs`). (2) **the drop-mut law**: `mut`
+  is fully removed from the keyword table — bindings are mutable by
+  default, `const` is the shallow opt-out; every tur .rut source (kit,
+  cases, playground, futures.rut embed, test fixtures in raw strings)
+  was swept. (3) **grammar deletions**: the inline `mod NAME { }` form
+  dies (one mod grammar, declaration-only), `x?` postfix, `~x`,
+  constructor patterns, const-generic args — and `entry`/`host`-style
+  contextual words are now RESERVED (`let host`/`let when` bindings
+  refuse). (4) **wire 23 / bundle wire 12-only**: the compat lane
+  dies, `Manifest.legacy_entry` is gone (the only entry key is
+  `entry.type_path`). (5) **the run chain reshapes**: `RutRun::pkg`
+  takes `Offer` (`&Bundle`/`HostPkg`) — source `Mounted` data rides
+  `RutRun::mount` (the data door); the VM builder lost `.hooks`,
+  `alloc_str_cell`/`alloc_bytes_cell` died (marshal through
+  `<String/Vec<u8> as rut_vm::interp::Ret>::into_slot`). (6) **std-v18**
+  is cut — nmapset's values move HOST-SIDE (nmap-hostvals P5) and
+  json/nmapset/pouch/strbuild/nmap_host sources changed: tur's
+  vendored closure is RE-VENDORED at that pin. Raw-rev pin (never a
+  tag/branch), and the tag lane is how the upstream std packages
+  publish. tur consumes the std `json` pkg from it: vendored sources
+  (`builtin_plugins/std_json/vendor/`) offered to modules by
   `TurStdPlugin` (dep closure strbuild/pouch/nmapset + the
-  strbuild_host/nmap_host bodies from `rut-std`; the nmapset +
-  nmap_host files re-vendored at c49170be for the `for..of` iteration
-  lanes — `map_iter_new`/`map_iter_next` — which rut-std's bodies
-  register, so a stale vendored decl trips the VM's surface-mirror
-  law: "host fn `nmap_host::map_iter_new` is bound but declared by no
-  mounted package"). ONE LAW
+  strbuild_host/nmap_host bodies from `rut-std`). ONE LAW
   discovered the hard way: **a packed (linked-compiled) std pkg takes NO
   consumer-typed instantiation** — json's generic bodies are
   owner-anchored (sealed at its pack time), so a consumer's direct
@@ -608,10 +614,11 @@ Android build + device debugging live in the **`android-dev` skill** at
   path; DEAD PRIVATE CODE is type-checked like live code (a private fn
   nothing calls still compiles — keep fixtures and cases law-clean; the
   bumps caught table.rs's dead raw-atom `set_rows` write and rut_boot's
-  un-mut'd for-c induction); the MUT-BINDING LAW rides loop headers —
-  the header's `mut` is the ONLY write license for the loop variable
-  (`for (let mut i = …)`: an un-mut'd binding is immutable — reads
-  fine, `i += 1` a compile error); and the MEMBER-VISIBILITY LAW makes
+  un-mut'd for-c induction); the MUT KEYWORD IS GONE (the
+  0ca49f6d drop-mut law: bindings are mutable by DEFAULT, `const` is
+  the shallow opt-out — a direct reassign of a const binding refuses,
+  writes through it stay legal; `for (let i = …)` reassigns freely,
+  `const` in a for-c header refuses at parse); and the MEMBER-VISIBILITY LAW makes
   class fields and impl methods module-private by default (structs are
   exempt — their fields stay always-public): cross-module reads/writes
   need the `pub` dial, `pub(pkg)` widens within the pkg — the kit's

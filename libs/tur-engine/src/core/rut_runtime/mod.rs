@@ -166,11 +166,11 @@ pub(crate) fn seal_box(vm: &mut Vm, value: &Value, stamp: u64) -> Result<OpaqueR
             }
         }
         Value::Str(s) => {
-            let slot = vm.alloc_str_cell(s.to_string())?;
+            let slot = <String as rut_vm::interp::Ret>::into_slot(s.to_string(), vm)?;
             vm.seal_opaque(slot, TY_STR)
         }
         Value::Bytes(b) => {
-            let slot = vm.alloc_bytes_cell(b.to_vec())?;
+            let slot = <Vec<u8> as rut_vm::interp::Ret>::into_slot(b.to_vec(), vm)?;
             vm.seal_opaque(slot, TY_BYTES)
         }
         // Opaques and structured values cross box-in-box: the recovered
@@ -1417,12 +1417,12 @@ impl RutRuntime {
                 .iter()
                 .filter(|p| p.spec == "tur_host" || p.spec == "async_host")
             {
-                run = run.pkg(pkg.clone());
+                run = run.mount(pkg.clone());
             }
             for pkg in pkgs {
-                run = run.pkg(pkg);
+                run = run.mount(pkg);
             }
-            let compiled = run.pkg(app).compile().map_err(|e| e.msg)?;
+            let compiled = run.mount(app).compile().map_err(|e| e.msg)?;
             PRECOMPILED_STATS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if !compiled.graph.diags.is_empty() {
                 return Err(render_diags(&compiled.graph.diags, files));
@@ -1438,9 +1438,9 @@ impl RutRuntime {
         // The source lane: offer the pkgs (first-offer-wins), root at the
         // app source. `core` is auto-offered by `.compile()`.
         SOURCE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut run = rut_driver::RutRun::new().pkg(app).entrypoint("app");
+        let mut run = rut_driver::RutRun::new().mount(app).entrypoint("app");
         for pkg in offered_all {
-            run = run.pkg(pkg);
+            run = run.mount(pkg);
         }
         let compiled = run.compile().map_err(|e| e.msg)?;
         if !compiled.graph.diags.is_empty() {
@@ -1563,7 +1563,6 @@ impl RutRuntime {
         let vm = rut_vm::interp::Vm::builder()
             .program(prog)
             .limits(default_limits())
-            .hooks(rut_vm::interp::HostHooks::default())
             .hosts(hosts)
             .build()
             .map_err(|e| crate::core::app::ModuleError::Eval(format!("boot: {}", e.msg)))?;

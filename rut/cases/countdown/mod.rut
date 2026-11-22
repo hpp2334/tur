@@ -78,7 +78,7 @@ entry fn start() -> u64 {
 
     // The generation guard: the shared cell the ticker pins its
     // generation against.
-    let mut gen = Ticker { g: 0.0 };
+    let gen = Ticker { g: 0.0 };
 
     // The modal's text controller + undo stack: minted once, re-seeded by
     // the edit mutation at every open.
@@ -449,7 +449,7 @@ fn fmt_start_label(v: f64) -> str {
 // pause / edit / reset) exits without ticking. The chrome rides the task
 // too: ticks re-derive the urgent tint, and the drained exit writes the
 // Done state.
-async fn ticker(ctx: MutationCtx, g: f64, mut gen: Ticker, running: Readable<bool>, remaining: Readable<f64>,
+async fn ticker(ctx: MutationCtx, g: f64, gen: Ticker, running: Readable<bool>, remaining: Readable<f64>,
                 dot: Readable<u64>, pill: Readable<str>, urgent: Readable<bool>) -> str {
     while (ctx.get<bool>(running)) {
         await sleep(1000);
@@ -476,7 +476,7 @@ async fn ticker(ctx: MutationCtx, g: f64, mut gen: Ticker, running: Readable<boo
 
 // Bump the shared-cell generation and answer the fresh one (`mut` param
 // — the write flows through to the caller's cell).
-fn bump(mut gen: Ticker) -> f64 {
+fn bump(gen: Ticker) -> f64 {
     gen.g = gen.g + 1.0;
     return gen.g;
 }

@@ -55,7 +55,7 @@ use tur_kit::text::input::{ Input };
 entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());
@@ -74,7 +74,7 @@ use tur_kit::text::input::{ Input };
 entry fn start() {
     let ctrl = text_ctrl();
     let undo = undo_ctrl();
-    let mut input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(400.0, 200.0).query_key("input").build();
     let keyed = input;
     let col = Column().child(keyed);
     mount(col.build());

@@ -37,7 +37,7 @@ struct AppContext {
 
 entry fn start() -> opaque {
     let ctrl = text_ctrl();
-    let mut i = 0;
+    let i = 0;
     while (i < 400) {
         tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;

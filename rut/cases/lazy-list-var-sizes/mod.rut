@@ -122,7 +122,7 @@ fn main_size(i: u64) -> f64 {
 
 // x - floor(x), floored by hand (no floor row): negatives wrap positive.
 fn frac_pos(x: f64) -> f64 {
-    let mut fl = x as i64 as f64;
+    let fl = x as i64 as f64;
     if (x < 0.0 && fl > x) {
         fl = fl - 1.0;
     }
@@ -156,9 +156,9 @@ fn horizontal_row(i: u64) -> View {
 // The i'th '|'-separated slot of a data string.
 fn slot(data: str, i: u64) -> str {
     let n = data.len();
-    let mut start = 0;
-    let mut k = 0;
-    let mut cur: u64 = 0;
+    let start = 0;
+    let k = 0;
+    let cur: u64 = 0;
     while (k <= n) {
         if (k == n || data.code_at(k) == 124) {
             if (cur == i) {
@@ -187,7 +187,7 @@ fn pal(data: str, i: u64) -> u64 {
 // The first ',' from `from` (the r,g,b splitter).
 fn idx_of(s: str, from: i32, c: u32) -> i32 {
     let n = s.len();
-    let mut k = from;
+    let k = from;
     while (k < n) {
         if (s.code_at(k) == c) {
             return k;
@@ -200,7 +200,7 @@ fn idx_of(s: str, from: i32, c: u32) -> i32 {
 // Vertical row: full-width (clamped), height = main; the inner bar of
 // width `cross` + the #i/h/bar label.
 fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> View {
-    let mut bar_h = main - 16.0;
+    let bar_h = main - 16.0;
     if (bar_h > 26.0) {
         bar_h = 26.0;
     }
@@ -226,7 +226,7 @@ fn vertical_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> V
 // Horizontal column: full-height (clamped), width = main; the inner bar
 // of height `cross` + the #i / w= labels.
 fn horizontal_item(i: u64, main: f64, cross: f64, bar_color: u64, zebra: u64) -> View {
-    let mut bar_w = main - 16.0;
+    let bar_w = main - 16.0;
     if (bar_w > 26.0) {
         bar_w = 26.0;
     }

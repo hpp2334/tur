@@ -18,7 +18,7 @@
 // `SizedBox(400.0, 200.0)` — over each class's `[constructor] fn
 // builder()` (the `.builder()` long form stays valid — byte-identical
 // lowering), and CHAIN it: `let c = X().prop(..).child(..);` — never
-// `let mut c` + `c.prop(..);` statement runs.
+// `let c` + `c.prop(..);` statement runs.
 //
 // Handler law: GESTURE handlers are MUTATIONS over the MutationCtx —
 // `on_click(mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set(x, v); }))`

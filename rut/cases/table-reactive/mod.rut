@@ -158,9 +158,9 @@ fn hdr_label(key: str, label: str, sort_key: Readable<str>, sort_dir: Readable<f
 // The header fills: the active column #334155, the rest #0f172a (boa's
 // HeaderCell color derive, written by the sort mutations).
 fn paint_header(ctx: MutationCtx, fills: [Source<u64>], on: u64) {
-    let mut i: u64 = 0;
+    let i: u64 = 0;
     while (i < 3) {
-        let mut c: u64 = HDR_OFF;
+        let c: u64 = HDR_OFF;
         if (i == on) {
             c = HDR_ON;
         }
@@ -183,7 +183,7 @@ fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_d
             ctx.set<f64>(sort_dir, 1.0);
         }
         ctx.set<opaque>(rows, sorted_rows(ctx.get<opaque>(rows), key, ctx.get<f64>(sort_dir)));
-        let mut on: u64 = 0;
+        let on: u64 = 0;
         if (key == "moons") {
             on = 1;
         }
@@ -202,11 +202,11 @@ fn sort_mutation(key: str, fills: [Source<u64>], sort_key: Readable<str>, sort_d
 fn sorted_rows(data: opaque, key: str, dir: f64) -> opaque {
     let n = value_len(data);
     let fresh = list_new();
-    let mut used: [bool] = [false, false, false, false, false, false, false, false];
-    let mut k: u64 = 0;
+    let used: [bool] = [false, false, false, false, false, false, false, false];
+    let k: u64 = 0;
     while (k < n && k < 8) {
-        let mut best: i64 = -1;
-        let mut i: u64 = 0;
+        let best: i64 = -1;
+        let i: u64 = 0;
         while (i < n && i < 8) {
             if (!used[i as i32]) {
                 if (best < 0 || before(value_item(data, i), value_item(data, best as u64), key, dir)) {
@@ -241,7 +241,7 @@ fn before(a: str, b: str, key: str, dir: f64) -> bool {
 
 // The slot a numeric sort key reads (moons → 1, gravity → 2).
 fn num_slot(item: str, key: str) -> f64 {
-    let mut idx: u64 = 1;
+    let idx: u64 = 1;
     if (key == "gravity") {
         idx = 2;
     }
@@ -253,7 +253,7 @@ fn num_slot(item: str, key: str) -> f64 {
 fn str_less(a: str, b: str) -> bool {
     let n = a.len();
     let m = b.len();
-    let mut i = 0;
+    let i = 0;
     while (i < n && i < m) {
         let ca = a.code_at(i);
         let cb = b.code_at(i);
@@ -275,7 +275,7 @@ fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
     let read = MutationCtx::over(bridge());
     let item = value_item(read.get<opaque>(rows), row);
     let text = slot(item, col);
-    let mut fg: u64 = CELL_FG;
+    let fg: u64 = CELL_FG;
     if (col == 0) {
         fg = CELL_HI;
     }
@@ -289,9 +289,9 @@ fn body_cell(row: u64, col: u64, rows: Readable<opaque>) -> View {
 // The i'th '|'-separated slot of a data string.
 fn slot(data: str, i: u64) -> str {
     let n = data.len();
-    let mut start = 0;
-    let mut k = 0;
-    let mut cur: u64 = 0;
+    let start = 0;
+    let k = 0;
+    let cur: u64 = 0;
     while (k <= n) {
         if (k == n || data.code_at(k) == 124) {
             if (cur == i) {

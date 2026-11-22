@@ -12,15 +12,15 @@ impl Lifecycle {
   [constructor] pub fn builder() -> Self {
     return Self { spec: lc_new() };
   }
-  pub fn on_mount(mut self, m: reactive::Mutation<gesture::pointer::MountEvent>) -> Self {
+  pub fn on_mount(self, m: reactive::Mutation<gesture::pointer::MountEvent>) -> Self {
     lc_on_mount(self.spec, m.seal(reactive::SEAL_MOUNT));
     return self;
   }
-  pub fn before_destroy(mut self, cb: fn(u64, u64, f64)) -> Self {
+  pub fn before_destroy(self, cb: fn(u64, u64, f64)) -> Self {
     lc_before_destroy(self.spec, opaque(cb));
     return self;
   }
-  pub fn child(mut self, c: handles::View) -> Self {
+  pub fn child(self, c: handles::View) -> Self {
     lc_child(self.spec, c.raw());
     return self;
   }

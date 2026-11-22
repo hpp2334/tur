@@ -19,7 +19,7 @@ entry fn start() -> u64 {
         ctx.set<str>(label, f"clicks: {ctx.get<f64>(clicks) as u64}");
     });
 
-    let mut col = Column();
+    let col = Column();
     let input = Input().controller(ctrl).undo(undo).width_height(200.0, 30.0).query_key("editable").build();
     col.child(input);
     let t = Text().text(label).query_key("button");

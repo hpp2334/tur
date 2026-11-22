@@ -27,8 +27,8 @@ fn tile() -> View {{
 }}
 
 entry fn start() {{
-    let mut g = Grid().query_key("g").max_cross({max_cross});
-{aspect}{extent}{spacing}    let mut i = 0;
+    let g = Grid().query_key("g").max_cross({max_cross});
+{aspect}{extent}{spacing}    let i = 0;
     while (i < {count}) {{
         g.child(tile());
         i += 1;

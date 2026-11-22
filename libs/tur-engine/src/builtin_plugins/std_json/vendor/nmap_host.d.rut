@@ -1,9 +1,9 @@
-// VENDORED from rut @c49170be (master, 2026-11-12) — rut/nmap_host/src/nmap.d.rut, unmodified below this line.
+// VENDORED from rut @0ca49f6d (std-v18) — rut/nmap_host/src/nmap.d.rut, unmodified below this line.
 // Provenance law: re-vendor on rut pin bumps if upstream's file changes.
 // nmap_host/nmap.d.rut — the native key-table experiment's host surface:
 // `pub host fn` decls only — the bodies live in rut-std's
 // `nmap::pkg()`. This file is mirrored BYTE-FOR-BYTE
-// by the test fixture `crates/rut-cli/tests/data/nmap_host/nmap.d.rut` —
+// by the test fixture `crates/rut-cli/tests/data/nmap_host/src/nmap.d.rut` —
 // update BOTH when the surface changes.
 //
 // nmap-hostvals P5: the VALUES live in the entries. `map_cap` retired
@@ -25,9 +25,8 @@
 // The native side owns KEYS (closed set: the integer primitives,
 // `bool`, `str`, `bytes`), their HASHES, their HANDLES, and now the
 // VALUE BOXES as `HashMap` entries — hashed with the pinned mapset
-// constants (mix64 / FNV-1a 64, bit-for-bit) through an identity
-// hasher, compared by CONTENT, released by the payload's `finalize`
-// hook at store-entry death.
+// constants (mix64 / FNV-1a 64, bit-for-bit), compared by CONTENT,
+// released by the payload's `finalize` hook at store-entry death.
 
 pub host fn map_new(cap: i64) -> opaque;
 

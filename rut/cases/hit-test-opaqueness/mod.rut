@@ -22,7 +22,7 @@ entry fn start() -> u64 {
         ctx.set<str>(downs, f"{ctx.get<f64>(count) as u64}");
     });
 
-    let mut stack = Stack().alignment(Align::TopLeft);
+    let stack = Stack().alignment(Align::TopLeft);
 
     // The opaque gesture target beneath (fills the 400x600 stack).
     let target = Container()

@@ -9,9 +9,9 @@ use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
-    let mut row = Row().child(SizedBox(200.0, 0.0).child(Container().build()).build());
-    let mut outer_content = Column().cross_alignment(CrossAlign::Start).child(box_h(100.0));
-    let mut inner_wrapper = Container().width_height(0.0, 200.0).query_key("inner-wrapper");
+    let row = Row().child(SizedBox(200.0, 0.0).child(Container().build()).build());
+    let outer_content = Column().cross_alignment(CrossAlign::Start).child(box_h(100.0));
+    let inner_wrapper = Container().width_height(0.0, 200.0).query_key("inner-wrapper");
     let inner_content = Column()
         .cross_alignment(CrossAlign::Stretch)
         .child(box_h(200.0))

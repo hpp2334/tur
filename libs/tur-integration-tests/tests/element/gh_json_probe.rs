@@ -59,7 +59,7 @@ entry fn probe(cx: opaque) {
 
 fn skip_ws(t: str, i: i32) -> i32 {
     let n = t.len();
-    let mut j = i;
+    let j = i;
     while (j < n && ws(t.code_at(j))) {
         j = j + 1;
     }
@@ -72,7 +72,7 @@ fn ws(c: u32) -> bool {
 
 fn str_end(t: str, i: i32) -> i32 {
     let n = t.len();
-    let mut j = i + 1;
+    let j = i + 1;
     while (j < n) {
         let c = t.code_at(j);
         if (c == C_BACKSLASH) {
@@ -91,8 +91,8 @@ fn str_unquote(t: str, i: i32) -> str {
     let end = str_end(t, i);
     let raw = t.slice(i + 1, end - 1);
     let n = raw.len();
-    let mut out = "";
-    let mut k = 0;
+    let out = "";
+    let k = 0;
     while (k < n) {
         let c = raw.code_at(k);
         if (c != C_BACKSLASH) {
@@ -137,8 +137,8 @@ fn json_skip(t: str, i: i32) -> i32 {
         return str_end(t, j);
     }
     if (c == C_LBRACE || c == C_LBRACKET) {
-        let mut depth = 0;
-        let mut k = j;
+        let depth = 0;
+        let k = j;
         while (k < n) {
             let d = t.code_at(k);
             if (d == C_QUOTE) {
@@ -157,7 +157,7 @@ fn json_skip(t: str, i: i32) -> i32 {
         }
         return n;
     }
-    let mut k = j;
+    let k = j;
     while (k < n) {
         let d = t.code_at(k);
         if (d == C_COMMA || d == C_RBRACE || d == C_RBRACKET || ws(d)) {
@@ -170,7 +170,7 @@ fn json_skip(t: str, i: i32) -> i32 {
 
 fn json_get_str(t: str, key: str) -> str {
     let n = t.len();
-    let mut i = skip_ws(t, 0);
+    let i = skip_ws(t, 0);
     if (i >= n || t.code_at(i) != C_LBRACE) {
         return "";
     }

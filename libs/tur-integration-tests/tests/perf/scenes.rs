@@ -106,11 +106,11 @@ fn label(v: f64) -> str {
 entry fn start() -> u64 {
     let tick = rs_source_f64();
 
-    let mut root = Column();
-    let mut i = 0;
+    let root = Column();
+    let i = 0;
     while (i < 12) {
-        let mut row = Row();
-        let mut j = 0;
+        let row = Row();
+        let j = 0;
         while (j < 12) {
             let b = Container().width_height(30.0, 30.0).color(sv(0x208040FFu64));
             row.child(b.build());
@@ -151,8 +151,8 @@ use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 
 entry fn start() {
-    let mut content = Column();
-    let mut i = 0;
+    let content = Column();
+    let i = 0;
     while (i < 200) {
         let b = Container().width_height(10.0, 40.0).color(sv(0x204080FFu64));
         content.child(b.build());
@@ -222,8 +222,8 @@ use tur_kit::reactive::{ sv };
 entry fn start() -> u64 {
     let alpha = rs_source_f64();
 
-    let mut col = Column();
-    let mut i = 0;
+    let col = Column();
+    let i = 0;
     while (i < 50) {
         let b = Container().width_height(40.0, 40.0).color(sv(0x3060C0FFu64));
         col.child(b.build());
@@ -295,7 +295,7 @@ use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
-    let mut i = 0;
+    let i = 0;
     while (i < 400) {
         tctrl_push_span(ctrl.raw(), f"const value{i} = {i}; // line {i}\n");
         i += 1;

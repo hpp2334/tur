@@ -11,7 +11,7 @@ entry fn start() -> u64 {
     let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) {
         ctx.set<bool>(on, !ctx.get<bool>(on));
     });
-    let mut col = Column();
+    let col = Column();
     let track = Container()
         .width_height(64.0, 32.0)
         .color(sv(0x22C55EFFu64))

@@ -7,7 +7,7 @@ use tur_kit::layout::stack::{ Positioned, Stack };
 use tur_kit::reactive::{ sv };
 
 fn sized(w: f64, h: f64, key: str) -> View {
-    let mut b = Container().width_height(w, h);
+    let b = Container().width_height(w, h);
     if (key != "") {
         b.query_key(key);
     }

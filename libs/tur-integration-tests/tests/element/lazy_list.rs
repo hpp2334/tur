@@ -336,7 +336,7 @@ fn row(i: u64) -> View {
 
 entry fn start() -> u64 {
     let count: Readable<f64> = source<f64>(10000.0);
-    let mut lg = LazyList().item_builder(row).count(count).item_extent(56.0).overscan(2).query_key("ll").build();
+    let lg = LazyList().item_builder(row).count(count).item_extent(56.0).overscan(2).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return count.atom_id();
@@ -811,7 +811,7 @@ fn row(i: u64) -> View {
 
 entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(20.0);
-    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return opaque(AppContext { count: count });
@@ -867,7 +867,7 @@ fn row(i: u64) -> View {
 
 entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(20.0);
-    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return opaque(AppContext { count: count });
@@ -948,7 +948,7 @@ fn row(i: u64) -> View {
 
 entry fn start() -> opaque {
     let count: Source<f64> = source<f64>(20.0);
-    let mut lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
+    let lg = LazyList().item_builder(row).count(count).item_extent(50.0).query_key("ll").build();
     let lg = lg;
     mount(lg);
     return opaque(AppContext { count: count });

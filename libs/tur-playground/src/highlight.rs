@@ -1,16 +1,29 @@
 //! The playground's syntax highlighting — semantic classes for rut source
 //! as a flat colored span run for the editor controller (the boa
-//! `buildHighlightSpans` rail, now over the upstream `rut-semantic`
-//! classifier instead of token-text classes alone).
+//! `buildHighlightSpans` rail).
 //!
-//! The pipeline: `rut_semantic::ParsedDoc::parse` (normalize → lex →
-//! best-effort parse → token + AST name classes → comment gap scan; broken
-//! source degrades to token classes — never a wrong color) → the palette
-//! table below → the tiling fill. The legend deliberately leaves
-//! structural punctuation (commas, semicolons, braces, dots) unclassified
-//! and has no literal class, so the fill colors the gap bytes: whitespace
+//! The classifier is the upstream one again, over its new public lane:
+//! the **rut-lsp actor** (`Lsp::analyze`'s semantic-token stream — the
+//! same `crate::semantic` classifier the old `rut-semantic` crate
+//! exposed, sealed by the privacy wall but served through the ABI).
+//! The actor is driven INLINE: the loop future rides a `futures`
+//! LocalPool (booted through `Lsp::boot`'s spawn seam — `spawn_native`
+//! is native-gated upstream, but a tur-owned pool compiles on wasm32
+//! too), so `pool.run_until(lsp.analyze(..))` answers synchronously on
+//! the worker lane with no extra thread, no runtime, no parking — one
+//! LSP session per thread, booted lazily.
+//!
+//! The pipeline: `lex_canonical` (normalize → lex, one call) gives the
+//! canonical text + the comment side table; the normalized text rides
+//! `analyze` (LSP positions index exactly the text we send, so the join
+//! contract keeps holding); the answer's delta-encoded tokens
+//! (UTF-16 line/char/len — LSP's currency) decode back to byte spans
+//! against the same text; the legend names map onto the palette table
+//! below; the tiling fill covers what the legend leaves out. Structural
+//! punctuation (commas, semicolons, braces, dots) is unclassified and
+//! has no literal class, so the fill colors the gap bytes: whitespace
 //! stretches plain, punctuation operators, and tur's contextual item
-//! keyword `entry` (`entry fn` — outside upstream's reserved table)
+//! keyword `entry` (`entry fn` — outside upstream's keyword table)
 //! keyword teal. The runs join back to exactly the normalized source
 //! (`set_spans` replaces the document; CRLF normalization stays free).
 //!
@@ -27,7 +40,10 @@
 //! `editor_comment_spans_keep_uniform_monospace_advances` in the
 //! playground gate.
 
-use rut_semantic::TokenType;
+use rut_lexer::span::Span;
+use rut_lexer::lexer::lex_canonical;
+use rut_lsp::Lsp;
+use futures::task::LocalSpawnExt;
 
 use tur_engine::builtin_plugins::text::controller::SpanData;
 use tur_engine::core::rut_runtime::color_of;
@@ -47,59 +63,204 @@ const CODE_TYPE: u64 = 0x6D28D9FF; // code.type — type/class/enum names
 /// span run (text + color only), sealed for the rut realm as an opaque.
 pub struct PgSpans(pub Vec<SpanData>);
 
+/// The legend class each semantic token carries — the upstream legend's
+/// names restated as one enum (Variable/Parameter/Property were always
+/// plain ink; one `Plain` class carries them).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Class {
+    Keyword,
+    Number,
+    String,
+    Comment,
+    Operator,
+    Literal,
+    Function,
+    Type,
+    Plain,
+}
+
+impl Class {
+    fn color(self) -> u64 {
+        match self {
+            Class::Keyword => CODE_KEYWORD,
+            Class::Number => CODE_NUMBER,
+            Class::String => CODE_STRING,
+            Class::Comment => CODE_COMMENT,
+            Class::Operator => CODE_OPERATOR,
+            Class::Literal => CODE_LITERAL,
+            Class::Function => CODE_FUNCTION,
+            Class::Type => CODE_TYPE,
+            Class::Plain => CODE_FG,
+        }
+    }
+
+    /// One legend name → its class; `None` skips the token (unknown
+    /// future legend rows fall to the gap fill, never a wrong color).
+    fn of_legend(name: &str) -> Option<Class> {
+        Some(match name {
+            "keyword" => Class::Keyword,
+            "number" => Class::Number,
+            "string" => Class::String,
+            "function" | "method" => Class::Function,
+            "type" | "enum" | "class" | "interface" | "namespace" => Class::Type,
+            "enumMember" => Class::Literal,
+            "variable" | "parameter" | "property" => Class::Plain,
+            "operator" => Class::Operator,
+            _ => return None,
+        })
+    }
+}
+
+/// One LSP editing session, driven inline: the actor's loop future
+/// rides the pool, so every bridge answers via `pool.run_until(..)` —
+/// synchronous from the caller's seat, single-threaded, wasm-safe.
+/// One per thread (lazily booted; the session state is the LSP's own,
+/// prelude pre-indexed at boot).
+struct Session {
+    lsp: Lsp,
+    pool: futures::executor::LocalPool,
+    /// legend names in token-type index order (decoded once).
+    legend: Vec<String>,
+}
+
+thread_local! {
+    static SESSION: std::cell::RefCell<Session> = std::cell::RefCell::new(boot_session());
+}
+
+/// Boot the session: the loop onto a tur-owned pool through
+/// `Lsp::boot`'s spawn seam, the legend through the same inline drive.
+fn boot_session() -> Session {
+    let mut pool = futures::executor::LocalPool::new();
+    let spawner = pool.spawner().clone();
+    let lsp = Lsp::boot(move |fut| {
+        spawner
+            .spawn_local(fut)
+            .expect("the highlight loop parks on the fresh pool");
+    });
+    let legend_json = pool.run_until(lsp.legend());
+    let legend: Vec<String> = serde_json::from_str(&legend_json).unwrap_or_default();
+    Session { lsp, pool, legend }
+}
+
+/// The editor doc's URI — a synthetic one; the session is the
+/// highlight's own (full-sync every call, `analyze` stores first).
+const EDITOR_URI: &str = "file:///tur-editor.rut";
+
 /// Classify `src` into the colored span run the editor controller renders
 /// (text + color only; every other style inherits the element's defaults).
 /// The join of the answer's texts is the CRLF-normalized source — spans
-/// index the normalized text (the `ParsedDoc`'s `src` contract, normalized
-/// identically here), and applying the run normalizes the editor content
-/// for free.
+/// index the normalized text (the classifier analyzes exactly the text we
+/// send), and applying the run normalizes the editor content for free.
 pub fn highlight_spans(src: &str) -> Vec<SpanData> {
-    let doc = rut_semantic::ParsedDoc::parse(rut_parser::Mode::Impl, src);
-    let norm = doc.src();
-    // The comment side table: the classifier no longer scans comment
-    // gaps (ParsedDoc carries no comment table — the doc chains live on
-    // the decl nodes), so the fill collects them here over the same
-    // normalized text and merges them into the classified run.
-    let comments = rut_lexer::lexer::lex_normalized(norm, true).2;
-    let mut classes: Vec<(rut_semantic::Span, TokenType)> = doc.spans().to_vec();
-    classes.extend(comments.iter().map(|c| (c.span, TokenType::Comment)));
+    let (norm, _toks, _diags, comments, _lines) = lex_canonical(src.to_owned(), true);
+    let classes = classify(&norm);
+    let mut classes = classes;
+    classes.extend(comments.iter().map(|c| (c.span, Class::Comment)));
     classes.sort_by_key(|(span, _)| span.lo);
     let mut b = Builder {
-        src: norm,
+        src: &norm,
         spans: Vec::new(),
         pos: 0,
     };
     let mut pos = 0usize;
-    for (span, ty) in classes {
+    for (span, class) in classes {
         let lo = span.lo as usize;
         let hi = span.hi as usize;
         b.gap(pos, lo);
-        b.emit(lo, hi, classify(ty, &norm[lo..hi]));
+        // Keywords whose text is a literal keep the literal brown
+        // (`true` / `false` / `nil` classify as keywords — the legend
+        // has no literal class).
+        let color = if class == Class::Keyword && matches!(&norm[lo..hi], "true" | "false" | "nil")
+        {
+            CODE_LITERAL
+        } else {
+            class.color()
+        };
+        b.emit(lo, hi, color);
         pos = hi.max(pos);
     }
     b.gap(pos, norm.len());
     b.spans
 }
 
-/// One legend class → its palette color. Keywords whose text is a literal
-/// keep the literal brown (`true` / `false` / `nil` classify as keywords —
-/// the legend has no literal class). `Variable` / `Parameter` /
-/// `Property` stay plain ink (distinct colors deferred — one table row
-/// each, later).
-fn classify(ty: TokenType, text: &str) -> u64 {
-    match ty {
-        TokenType::Keyword if matches!(text, "true" | "false" | "nil") => CODE_LITERAL,
-        TokenType::Keyword => CODE_KEYWORD,
-        TokenType::Number => CODE_NUMBER,
-        TokenType::String => CODE_STRING,
-        TokenType::Comment => CODE_COMMENT,
-        TokenType::Operator => CODE_OPERATOR,
-        TokenType::EnumMember => CODE_LITERAL,
-        TokenType::Function | TokenType::Method => CODE_FUNCTION,
-        TokenType::Type | TokenType::Enum | TokenType::Class | TokenType::Interface
-        | TokenType::Namespace => CODE_TYPE,
-        TokenType::Variable | TokenType::Parameter | TokenType::Property => CODE_FG,
+/// The classifier lane: `analyze` over the normalized text, the answer's
+/// delta-encoded tokens decoded back to byte spans. A refused envelope
+/// (the loop gone, an internal error) answers empty — the fill paints
+/// the whole source (never a wrong color, the degraded-but-safe lane).
+fn classify(norm: &str) -> Vec<(Span, Class)> {
+    SESSION.with(|cell| {
+        let mut s = cell.borrow_mut();
+        let Session { lsp, pool, .. } = &mut *s;
+        let json = pool.run_until(lsp.analyze(EDITOR_URI.to_string(), norm.to_string()));
+        decode_tokens(&json, &s.legend, norm).unwrap_or_default()
+    })
+}
+
+/// Decode `analyze`'s envelope: the flat 5-tuple delta stream
+/// (Δline, Δchar, len, typeIdx, modifiers — `data` is ONE flat u32
+/// array, the LSP wire shape) over UTF-16 line/char positions →
+/// absolute byte spans over `norm`.
+fn decode_tokens(json: &str, legend: &[String], norm: &str) -> Option<Vec<(Span, Class)>> {
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    let flat = value.get("tokens")?.get("data")?.as_array()?;
+    let mut n = [0u32; 5];
+    let mut filled = 0usize;
+    let mut line_starts: Vec<u32> = vec![0];
+    for (i, b) in norm.bytes().enumerate() {
+        if b == b'\n' {
+            line_starts.push(i as u32 + 1);
+        }
     }
+    let mut out = Vec::with_capacity(flat.len() / 5);
+    let (mut line, mut ch) = (0u32, 0u32);
+    for v in flat {
+        n[filled] = v.as_u64()? as u32;
+        filled += 1;
+        if filled < 5 {
+            continue;
+        }
+        filled = 0;
+        let (dl, dc, len, ty) = (n[0], n[1], n[2], n[3]);
+        if dl > 0 {
+            line += dl;
+            ch = dc;
+        } else {
+            ch += dc;
+        }
+        let class = match legend.get(ty as usize).and_then(|n| Class::of_legend(n)) {
+            Some(c) => c,
+            // an unknown legend row skips ITS token — never the whole
+            // stream (a future class falls to the gap fill)
+            None => continue,
+        };
+        let line_start = *line_starts.get(line as usize)? as usize;
+        let line_text = norm[line_start..].split('\n').next().unwrap_or("");
+        let lo = utf16_to_byte(line_text, ch)?;
+        let hi = utf16_to_byte(line_text, ch + len)?;
+        if hi > lo {
+            out.push((
+                Span {
+                    lo: (line_start + lo) as u32,
+                    hi: (line_start + hi) as u32,
+                },
+                class,
+            ));
+        }
+    }
+    (filled == 0).then_some(out)
+}
+
+/// UTF-16 column → byte offset within one line (LSP's position
+/// currency; the source is the canonical text, so the mapping is exact).
+fn utf16_to_byte(line: &str, col16: u32) -> Option<usize> {
+    let mut units = 0u32;
+    for (i, c) in line.char_indices() {
+        if units >= col16 {
+            return Some(i);
+        }
+        units += c.len_utf16() as u32;
+    }
+    (units == col16).then_some(line.len())
 }
 
 /// The run builder: appends non-overlapping colored runs in source order,
@@ -141,9 +302,11 @@ impl<'a> Builder<'a> {
     }
 
     /// The unclassified gap `[lo, hi)`: whitespace stays plain, structural
-    /// punctuation colors as an operator (the legend leaves it out — the
-    /// boa look survives), and the contextual item keyword `entry` keeps
-    /// its keyword ink.
+    /// punctuation colors as an operator (the legend leaves it out —
+    /// the boa look survives), and the contextual item keyword `entry`
+    /// keeps its keyword ink. Keywords whose text is a literal keep the
+    /// literal brown (`true` / `false` / `nil` classify as keywords —
+    /// the legend has no literal class).
     fn gap(&mut self, lo: usize, hi: usize) {
         let bytes = self.src.as_bytes();
         let mut i = lo;
@@ -153,9 +316,12 @@ impl<'a> Builder<'a> {
             while j < hi && bytes[j].is_ascii_whitespace() == ws {
                 j += 1;
             }
+            let text = &self.src[i..j];
             let color = if ws {
                 CODE_FG
-            } else if j - i == 5 && &self.src[i..j] == "entry" {
+            } else if matches!(text, "true" | "false" | "nil") {
+                CODE_LITERAL
+            } else if text == "entry" {
                 CODE_KEYWORD
             } else {
                 CODE_OPERATOR
@@ -329,7 +495,7 @@ mod tests {
         }
         assert_eq!(
             pos,
-            rut_lexer::lexer::normalize(src).len(),
+            rut_lexer::lexer::canonical(src).len(),
             "runs tile the source"
         );
     }

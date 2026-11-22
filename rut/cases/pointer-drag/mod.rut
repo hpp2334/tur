@@ -26,7 +26,7 @@ entry fn start() -> u64 {
         ctx.set<str>(phase, "up");
     });
 
-    let mut col = Column().cross_alignment(CrossAlign::Start);
+    let col = Column().cross_alignment(CrossAlign::Start);
 
     let b = Container()
         .width_height(100.0, 50.0)

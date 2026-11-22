@@ -18,7 +18,7 @@ use tur_host::virtual_app::{ va_destroy, va_error, va_status, va_status_atom };
 use core::{ Future };
 
 // The user-facing view newtype: built views cross kit signatures as
-// `View` (`fn build_expanded() -> View`, `pub fn child(mut self, c: View)`).
+// `View` (`fn build_expanded() -> View`, `pub fn child(self, c: View)`).
 //
 // The vocabulary law: biz signatures spell WHAT a value is — views say
 // `View`, handles say their type — and bare `opaque` stays infra-only

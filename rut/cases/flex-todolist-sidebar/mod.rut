@@ -8,10 +8,10 @@ use tur_kit::reactive::{ sv };
 use tur_kit::text::core::{ Text };
 
 entry fn start() {
-    let mut row = Row();
+    let row = Row();
     // Sidebar: one active tab pill.
-    let mut sidebar = Container().color(sv(0x1A1A2EFFu64)).width_height(200.0, 0.0);
-    let mut tabs = Column();
+    let sidebar = Container().color(sv(0x1A1A2EFFu64)).width_height(200.0, 0.0);
+    let tabs = Column();
     let tab = Container()
         .color(sv(0x0F3460FFu64))
         .padding(12.0)
@@ -20,8 +20,8 @@ entry fn start() {
     sidebar.child(tabs.build());
     row.child(sidebar.build());
     // Content: heading + list shell.
-    let mut content = Container().padding(16.0);
-    let mut col = Column()
+    let content = Container().padding(16.0);
+    let col = Column()
         .cross_alignment(CrossAlign::Center)
         .child(Text().text(sv("Todo List")).font_size(24.0).build())
         .child(box_h(16.0));

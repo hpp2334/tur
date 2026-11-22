@@ -287,8 +287,8 @@ entry fn start() {
 // A few hundred million iterations of pure rut arithmetic — long enough
 // that the ui round-trips must interleave well before it finishes.
 entry fn busy(_a: u64, _b: f64) {
-    let mut n = 0;
-    let mut i = 0;
+    let n = 0;
+    let i = 0;
     while (i < 200000000) {
         n += i;
         i += 1;

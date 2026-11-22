@@ -17,7 +17,7 @@ use tur_kit::text::input::{ Input };
 
 entry fn start() {
     let ctrl = text_ctrl();
-    let mut i = 0;
+    let i = 0;
     while (i < 30) {
         tctrl_push_span(ctrl.raw(), f"line {i}\n");
         i += 1;
@@ -28,10 +28,10 @@ entry fn start() {
     // The width spans the window (the JS twin's stretched-column geometry):
     // a ScrollView shrink-wraps its cross axis, so without it the whole
     // scroller would hug the longest line and the top-left click misses it.
-    let mut input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
+    let input = Input().controller(ctrl).undo(undo).width_height(300.0, 0.0).multiline(true).query_key("editor").build();
     let input = input;
     let col = Column().child(input);
-    let mut scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(col.build()).query_key("scroll").build();
     let scroller = scroller;
     mount(scroller);
 }

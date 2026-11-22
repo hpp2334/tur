@@ -16,7 +16,7 @@ entry fn start() -> u64 {
     // The shared lift controller — captured by both tiles' mutations.
     let ctrl = anim_ctrl(180.0, "linear", 0, nil, nil);
 
-    let mut stack = Stack()
+    let stack = Stack()
         .alignment(Align::TopLeft)
         .child(SizedBox(300.0, 200.0).child(Container().build()).build());
 

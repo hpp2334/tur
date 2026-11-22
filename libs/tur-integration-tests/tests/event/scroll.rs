@@ -240,7 +240,7 @@ entry fn start() -> opaque {
 
     let b = Container().width_height(10.0, 10.0).color(sv(0x204080FFu64)).height(height);
 
-    let mut scroller = ScrollView().axis(Axis::Vertical).child(b.build()).query_key("sv").build();
+    let scroller = ScrollView().axis(Axis::Vertical).child(b.build()).query_key("sv").build();
     let scroller = scroller;
     mount(scroller);
     return opaque(AppContext { height: height });

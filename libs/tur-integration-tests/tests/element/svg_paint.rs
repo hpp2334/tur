@@ -64,8 +64,8 @@ use tur_kit::virtual_app::{{ VirtualApp, virtual_app_controller, virtual_app_sou
 entry fn start() {{
     let src = virtual_app_source("{escaped}");
     let ctrl = virtual_app_controller(src);
-    let host = VirtualApp().controller(ctrl).width_height(200.0, 200.0).build();
-    mount(host);
+    let vapp = VirtualApp().controller(ctrl).width_height(200.0, 200.0).build();
+    mount(vapp);
 }}
 "#
     )
