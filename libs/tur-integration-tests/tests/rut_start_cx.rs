@@ -183,6 +183,60 @@ fn bytes_dispatch_lane_roundtrips_the_payload() {
     assert_eq!(b, RutEntryAnswer::Bytes(vec![9u8, 8]));
 }
 
+/// The option answer lanes: `-> ?str` / `-> ?bytes` dispatch entries —
+/// the plugin-epoch RPC contract's shape. A some-answer decodes into the
+/// str/bytes lane; a nil answer flattens to [`RutEntryAnswer::Nil`] (the
+/// "not mine" miss arm).
+const OPT_DISPATCH_RUT: &str = r#"
+entry fn start() {}
+
+entry fn op_opt(cx: opaque, op: str, args: str) -> ?str {
+    let _ = unopaque<u64>(cx);
+    if (op == "miss") {
+        return nil;
+    }
+    return f"ok:{args}";
+}
+
+entry fn op_opt_bytes(cx: opaque, op: str, args: bytes) -> ?bytes {
+    let _ = unopaque<u64>(cx);
+    let _ = op;
+    if (args.len() == 0) {
+        return nil;
+    }
+    return args;
+}
+"#;
+
+#[test]
+fn opt_dispatch_answers_decode_nil_flattened() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_rut_module_cx(OPT_DISPATCH_RUT, 9).unwrap();
+    settle(&app);
+
+    // Some-answers ride the str/bytes answer lanes.
+    let a = app
+        .call_rut_entry_cx_str_str("op_opt", 9, "hit", "1")
+        .unwrap();
+    assert_eq!(a, RutEntryAnswer::Str("ok:1".to_string()));
+
+    // A nil answer flattens to Nil — the miss arm, not a trap.
+    let miss = app
+        .call_rut_entry_cx_str_str("op_opt", 9, "miss", "1")
+        .unwrap();
+    assert_eq!(miss, RutEntryAnswer::Nil, "nil flattens to the miss arm");
+
+    let b = app
+        .call_rut_entry_cx_str_bytes("op_opt_bytes", 9, "bin", &[7u8, 8])
+        .unwrap();
+    assert_eq!(b, RutEntryAnswer::Bytes(vec![7u8, 8]));
+
+    let bmiss = app
+        .call_rut_entry_cx_str_bytes("op_opt_bytes", 9, "bin", &[])
+        .unwrap();
+    assert_eq!(bmiss, RutEntryAnswer::Nil);
+}
+
 /// The registry's file-set lane: `register_files` + a two-file load — the
 /// root's `mod child;` mounts the child file and its fn resolves
 /// cross-module.

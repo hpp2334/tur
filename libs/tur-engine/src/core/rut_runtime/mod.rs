@@ -39,7 +39,9 @@ use crate::core::edgy::value::Value;
 use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
-use rut_core::types::{TY_BOOL, TY_BYTES, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64, TypeId};
+use rut_core::types::{
+    TY_BOOL, TY_BYTES, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_BYTES, TY_OPT_STR, TY_STR, TY_U64, TypeId,
+};
 use rut_driver::MountedBody;
 use rut_vm::Opaque;
 use rut_vm::OpaqueRef;
@@ -1871,8 +1873,11 @@ impl RutRuntime {
 
     /// The shared cx-lane body: ONE vm.call with the given args tuple, the
     /// answer decoded under the export's declared return type (nil / u64 /
-    /// f64 / str / bytes / opaque — anything else is a loud error naming
-    /// both sides). An opaque answer slots and reports its token.
+    /// f64 / str / bytes / opaque, plus their `?str` / `?bytes` option
+    /// lanes — anything else is a loud error naming both sides). An opaque
+    /// answer slots and reports its token; a nil option answer flattens to
+    /// [`RutEntryAnswer::Nil`] (the plugin-epoch dispatch entries answer
+    /// `?str` / `?bytes` — `nil` is the "not mine" / miss arm).
     fn entry_cx_call<A: CallArgs>(
         &mut self,
         name: &str,
@@ -1905,11 +1910,27 @@ impl RutRuntime {
                 .borrow_mut()
                 .call::<A, String>(name, args)
                 .map(Ans::Str),
+            TY_OPT_STR => self
+                .vm
+                .borrow_mut()
+                .call::<A, Option<String>>(name, args)
+                .map(|o| match o {
+                    Some(s) => Ans::Str(s),
+                    None => Ans::Nil, // the flat nil: the miss arm
+                }),
             TY_BYTES => self
                 .vm
                 .borrow_mut()
                 .call::<A, Vec<u8>>(name, args)
                 .map(Ans::Bytes),
+            TY_OPT_BYTES => self
+                .vm
+                .borrow_mut()
+                .call::<A, Option<Vec<u8>>>(name, args)
+                .map(|o| match o {
+                    Some(b) => Ans::Bytes(b),
+                    None => Ans::Nil,
+                }),
             TY_OPAQUE => self
                 .vm
                 .borrow_mut()
