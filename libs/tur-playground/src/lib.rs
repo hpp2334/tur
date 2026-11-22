@@ -27,8 +27,12 @@
 //!
 //! No source string ever round-trips back through rut — the compile
 //! registers the source on the parent's virtual-app state directly.
+//!
+//! The plugin also pushes the `tur_playground_kit` prelude, the authored
+//! face over these rows.
 
 mod highlight;
+mod kit;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -51,8 +55,13 @@ pub struct TurRutPlaygroundPlugin;
 
 impl Plugin for TurRutPlaygroundPlugin {
     fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
-        let ext: RutPkgExt = Rc::new(|cx: &mut RutPkgCx<'_>| install(cx));
-        ctx.js_ctx().rut_pkg_exts.borrow_mut().push(ext);
+        ctx.push_rut_ext(Rc::new(|cx: &mut RutPkgCx<'_>| {
+            // The kit rides beside the rows, so `use tur_playground_kit::{ … }`
+            // resolves wherever this plugin is registered (the surface law:
+            // tur_host rows are reachable only through kits).
+            cx.preludes.push(crate::kit::playground_kit_pkg());
+            install(cx);
+        }));
         Ok(())
     }
 }
