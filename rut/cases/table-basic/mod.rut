@@ -24,9 +24,9 @@ let P_NOTES: str =
 let P_DIST: str = "0.39 AU|0.72 AU|1.00 AU|1.52 AU|5.20 AU|9.58 AU";
 
 // The boa palette (dark slate table on the #0b1220 frame).
-let HEADER_FG: u64 = 2493757695u64;
-let CELL_FG: u64 = 3806916863u64;
-let STRIPE: u64 = 506018815u64;
+let HEADER_FG: u64 = 0x94A3B8FFu64;
+let CELL_FG: u64 = 0xE2E8F0FFu64;
+let STRIPE: u64 = 0x1E293BFFu64;
 
 entry fn start() {
     let rows = list_new();
@@ -44,12 +44,12 @@ entry fn start() {
 
     let table =
         Table().columns(cols).rows(rows_src).header_builder(header_cell).row_builder(planet_cell).stripes(
-            0u64,
+            0x00000000u64,
             STRIPE,
         ).query_key("table-basic").build();
 
     mount(
-        Expanded().flex(sv(1.0f64)).child(Container().color(sv(185737471u64)).child(table).build()).build(),
+        Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(table).build()).build(),
     );
 }
 

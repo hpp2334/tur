@@ -45,13 +45,13 @@ entry fn start() -> u64 {
 
     let col =
         Column().cross_alignment(CrossAlign::Start).child(
-            Text().text(sv("Password Input")).font_size(18.0).color(253176575u64).query_key(
+            Text().text(sv("Password Input")).font_size(18.0).color(0x0F172AFFu64).query_key(
                 "password-title",
             ).build(),
         ).child(SizedBox(0.0, 12.0).build()).child(plain).child(SizedBox(0.0, 12.0).build()).child(
             password,
         ).child(SizedBox(0.0, 12.0).build()).child(
-            Text().text(value).font_size(12.0).color(1685359615u64).query_key("password-value").build(),
+            Text().text(value).font_size(12.0).color(0x64748BFFu64).query_key("password-value").build(),
         ).build();
 
     mount(Container().padding(32.0).child(col).build());

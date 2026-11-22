@@ -21,14 +21,14 @@ entry fn start() -> u64 {
         mutate<ExitEvent>(fn (ctx: MutationCtx, _ev: ExitEvent) { ctx.set<str>(hover, ""); });
     let col = Column();
 
-    let a = Container().width_height(100.0, 50.0).color(sv(4014228735u64)).query_key("a");
+    let a = Container().width_height(100.0, 50.0).color(sv(0xEF4444FFu64)).query_key("a");
     col.child(
         MouseRegion().on_enter(b_a_enter).on_exit(b_a_exit).cursor(Cursor::Auto).behavior(
             HitTestBehavior::Opaque,
         ).child(a.build()).build(),
     );
 
-    let b = Container().width_height(100.0, 50.0).color(sv(998438655u64)).query_key("b");
+    let b = Container().width_height(100.0, 50.0).color(sv(0x3B82F6FFu64)).query_key("b");
     col.child(
         MouseRegion().on_enter(b_b_enter).on_exit(b_b_exit).cursor(Cursor::Auto).behavior(
             HitTestBehavior::Opaque,

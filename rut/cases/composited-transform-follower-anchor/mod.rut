@@ -14,7 +14,7 @@ entry fn start() {
     let target_child = SizedBox(60.0, 40.0).child(Container().build()).build();
     let target = CompositedTarget().link(link).child(target_child).build();
     stack.child(Positioned().left(sv(100.0f64)).top(sv(80.0f64)).child(target).build());
-    let red = Container().width_height(60.0, 40.0).color(sv(627305471u64)).color(sv(4278190335u64));
+    let red = Container().width_height(60.0, 40.0).color(sv(0x2563EBFFu64)).color(sv(0xFF0000FFu64));
     let follower =
         CompositedFollower().link(link).target_anchor(Align::BottomRight).follower_anchor(
             Align::TopRight,

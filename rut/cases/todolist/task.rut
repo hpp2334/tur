@@ -18,7 +18,7 @@ pub fn add_button(add_open: Readable<bool>, ico: [u64]) -> View {
     let b_open = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<bool>(add_open, true); });
     let face =
         Container().padding(10.0).radius(sv(8.0f64)).color(sv(theme::ACCENT)).shadow(
-            1330046288u64,
+            0x4F46E550u64,
             10.0,
             0.0,
             4.0,
@@ -64,7 +64,7 @@ pub fn task_row(
             theme::CARD_BORDER,
             1.0,
             BorderPosition::Inside,
-        ).shadow(253176340u64, 6.0, 0.0, 1.0).child(
+        ).shadow(0x0F172A14u64, 6.0, 0.0, 1.0).child(
             Row().cross_alignment(CrossAlign::Start).child(checkbox(i, is_done, tasks, n, done, ico)).child(
                 SizedBox(12.0, 0.0).build(),
             ).child(Expanded().flex(sv(1.0f64)).child(title_block(title, desc, is_done)).build()).child(

@@ -10,10 +10,10 @@ use tur_kit::text::core::{ Text };
 entry fn start() {
     let row = Row();
     // Sidebar: one active tab pill.
-    let sidebar = Container().color(sv(437923583u64)).width_height(200.0, 0.0);
+    let sidebar = Container().color(sv(0x1A1A2EFFu64)).width_height(200.0, 0.0);
     let tabs = Column();
     let tab =
-        Container().color(sv(255090943u64)).padding(12.0).child(
+        Container().color(sv(0x0F3460FFu64)).padding(12.0).child(
             Text().text(sv("TodoList")).font_size(14.0).build(),
         );
     tabs.child(tab.build());

@@ -32,13 +32,13 @@ use tur_kit::text::core::{ Text };
 use tur_kit::layout::grid_table::{ Grid };
 
 // The boa palette (the deep-slate gallery chrome).
-let PAGE_BG: u64 = 253176575u64;
-let TITLE_FG: u64 = 4059429375u64;
-let SUB_FG: u64 = 2493757695u64;
-let PANEL_BG: u64 = 33953791u64;
-let CHIP_ON: u64 = 1667691007u64;
-let CHIP_OFF: u64 = 506018815u64;
-let CHIP_FG: u64 = 3806916863u64;
+let PAGE_BG: u64 = 0x0F172AFFu64;
+let TITLE_FG: u64 = 0xF1F5F9FFu64;
+let SUB_FG: u64 = 0x94A3B8FFu64;
+let PANEL_BG: u64 = 0x020617FFu64;
+let CHIP_ON: u64 = 0x6366F1FFu64;
+let CHIP_OFF: u64 = 0x1E293BFFu64;
+let CHIP_FG: u64 = 0xE2E8F0FFu64;
 
 entry fn start() {
     let aspect: Readable<f64> = source<f64>(1.0);

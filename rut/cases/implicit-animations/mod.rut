@@ -39,8 +39,8 @@ let A_MIN: f64 = 0.45;
 let A_MAX: f64 = 1.0;
 let B_MIN: f64 = 16.0;
 let B_MAX: f64 = 32.0;
-let BLUE: u64 = 245754367u64; // compact — the sky-blue state
-let INDIGO: u64 = 1667691007u64; // expanded — the indigo state
+let BLUE: u64 = 0x0EA5E9FFu64; // compact — the sky-blue state
+let INDIGO: u64 = 0x6366F1FFu64; // expanded — the indigo state
 
 entry fn start() -> u64 {
     let expanded: Readable<bool> = source<bool>(false);
@@ -128,14 +128,14 @@ entry fn start() -> u64 {
         Condition(expanded).then_build(
             fn () -> View {
                 return
-                    Text().text(sv("Expanded")).font_size(18.0).color(4294967295u64).query_key(
+                    Text().text(sv("Expanded")).font_size(18.0).color(0xFFFFFFFFu64).query_key(
                         "implicit-label",
                     ).build();
             },
         ).else_build(
             fn () -> View {
                 return
-                    Text().text(sv("Compact")).font_size(18.0).color(4294967295u64).query_key(
+                    Text().text(sv("Compact")).font_size(18.0).color(0xFFFFFFFFu64).query_key(
                         "implicit-label",
                     ).build();
             },
@@ -146,7 +146,7 @@ entry fn start() -> u64 {
     // atoms, the shadow is the static [0,8] offset with the bound blur.
     let box_inner =
         Container().width(sv(150.0f64)).height(sv(160.0f64)).color(color).radius(radius).shadow(
-            253176440u64,
+            0x0F172A78u64,
             16.0,
             0.0,
             8.0,
@@ -162,18 +162,18 @@ entry fn start() -> u64 {
 
     let toggle =
         PointerInteract().on_click(b_toggle).query_key("implicit-toggle").child(
-            Container().padding(10.0).radius(sv(8.0f64)).color(sv(506018815u64)).child(
+            Container().padding(10.0).radius(sv(8.0f64)).color(sv(0x1E293BFFu64)).child(
                 Condition(expanded).then_build(
                     fn () -> View {
                         return
-                            Text().text(sv("◀ Compact")).font_size(12.0).color(3806916863u64).query_key(
+                            Text().text(sv("◀ Compact")).font_size(12.0).color(0xE2E8F0FFu64).query_key(
                                 "implicit-caption",
                             ).build();
                     },
                 ).else_build(
                     fn () -> View {
                         return
-                            Text().text(sv("Expand ▶")).font_size(12.0).color(3806916863u64).query_key(
+                            Text().text(sv("Expand ▶")).font_size(12.0).color(0xE2E8F0FFu64).query_key(
                                 "implicit-caption",
                             ).build();
                     },
@@ -185,13 +185,13 @@ entry fn start() -> u64 {
         Column().main_alignment(MainAlign::Center).cross_alignment(CrossAlign::Center).main_axis_size(
             MainAxisSize::Min,
         ).child(
-            Text().text(sv("Implicit Animations")).font_size(16.0).color(253176575u64).query_key(
+            Text().text(sv("Implicit Animations")).font_size(16.0).color(0x0F172AFFu64).query_key(
                 "implicit-title",
             ).build(),
         ).child(SizedBox(0.0, 4.0).build()).child(
             Text().text(sv("AnimatedContainer · AnimatedOpacity · AnimatedPositioned")).font_size(
                 10.0,
-            ).color(1685359615u64).build(),
+            ).color(0x64748BFFu64).build(),
         ).child(SizedBox(0.0, 24.0).build()).child(card).child(SizedBox(0.0, 24.0).build()).child(
             Row().main_axis_size(MainAxisSize::Min).child(toggle).build(),
         ).build();
@@ -199,7 +199,7 @@ entry fn start() -> u64 {
     // The root Lifecycle fires the brush seed at mount (a transparent
     // pass-through around the unchanged page chain).
     let page =
-        Expanded().flex(sv(1.0f64)).child(Container().color(sv(4177198335u64)).child(col).build()).build();
+        Expanded().flex(sv(1.0f64)).child(Container().color(sv(0xF8FAFCFFu64)).child(col).build()).build();
     mount(Lifecycle().on_mount(seed).child(page).build());
     return expanded.atom_id();
 }

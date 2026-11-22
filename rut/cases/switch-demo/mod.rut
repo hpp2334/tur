@@ -15,7 +15,7 @@ entry fn start() -> u64 {
     let b_toggle = mutate(fn (ctx: MutationCtx, _e: nil) { ctx.set<bool>(on, !ctx.get<bool>(on)); });
     let col = Column();
     let track =
-        Container().width_height(64.0, 32.0).color(sv(583360255u64)).radius(sv(16.0f64)).padding(4.0).query_key(
+        Container().width_height(64.0, 32.0).color(sv(0x22C55EFFu64)).radius(sv(16.0f64)).padding(4.0).query_key(
             "switch",
         ).child(thumb(true));
     col.child(
@@ -26,7 +26,7 @@ entry fn start() -> u64 {
 }
 
 fn thumb(on: bool) -> View {
-    let knob = Container().width_height(24.0, 24.0).color(sv(4294967295u64)).radius(sv(12.0f64));
+    let knob = Container().width_height(24.0, 24.0).color(sv(0xFFFFFFFFu64)).radius(sv(12.0f64));
     let side = Container().width_height(32.0, 24.0).alignment(thumb_align(on)).child(knob.build());
     return side.build();
 }

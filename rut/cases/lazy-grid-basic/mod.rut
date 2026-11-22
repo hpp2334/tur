@@ -14,7 +14,7 @@ use tur_kit::text::core::{ Text };
 fn cell(i: u64) -> View {
     let tile =
         Container().color(sv(hsl_packed((i * 47 % 360) as f64, 55.0, 50.0))).child(
-            Text().text(sv(f"{i}")).font_size(11.0).color(4294967295u64).build(),
+            Text().text(sv(f"{i}")).font_size(11.0).color(0xFFFFFFFFu64).build(),
         ).build();
     return Container().padding(2.0).child(tile).build();
 }

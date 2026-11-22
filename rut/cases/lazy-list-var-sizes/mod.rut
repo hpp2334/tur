@@ -26,10 +26,10 @@ let ITEM_COUNT: f64 = 2000.0;
 let BAR_HUES: str =
     "217,87,87|217,126,87|203,164,63|132,180,91|71,171,139|70,163,196|79,134,198|110,110,214|146,104,219|180,104,219|204,102,175|197,102,119";
 
-let ZEBRA_A: u64 = 253176575u64;
-let ZEBRA_B: u64 = 506018815u64;
-let LABEL: u64 = 3419791871u64;
-let LABEL_FAINT: u64 = 1685359615u64;
+let ZEBRA_A: u64 = 0x0F172AFFu64;
+let ZEBRA_B: u64 = 0x1E293BFFu64;
+let LABEL: u64 = 0xCBD5E1FFu64;
+let LABEL_FAINT: u64 = 0x64748BFFu64;
 
 entry fn start() {
     let axis = source<bool>(true);
@@ -46,19 +46,19 @@ entry fn start() {
     let toggle =
         MouseRegion().cursor(Cursor::Pointer).child(
             PointerInteract().on_click(b_flip).query_key("var-sizes-toggle").child(
-                Container().padding(10.0).radius(sv(8.0f64)).color(sv(1330046463u64)).child(
+                Container().padding(10.0).radius(sv(8.0f64)).color(sv(0x4F46E5FFu64)).child(
                     Condition(axis).then_build(
                         fn () -> View {
                             return
                                 Text().text(sv("Axis: Vertical  (click to flip)")).font_size(13.0).color(
-                                    4294967295u64,
+                                    0xFFFFFFFFu64,
                                 ).build();
                         },
                     ).else_build(
                         fn () -> View {
                             return
                                 Text().text(sv("Axis: Horizontal  (click to flip)")).font_size(13.0).color(
-                                    4294967295u64,
+                                    0xFFFFFFFFu64,
                                 ).build();
                         },
                     ).build(),
@@ -67,7 +67,7 @@ entry fn start() {
         ).build();
 
     let list_host =
-        Container().radius(sv(8.0f64)).color(sv(185737471u64)).child(
+        Container().radius(sv(8.0f64)).color(sv(0x0B1220FFu64)).child(
             Each(items).item_builder(fn (_i: u64, _s: str) -> View { return list_of(axis, count); }).build(),
         ).build();
 
@@ -76,7 +76,7 @@ entry fn start() {
             Expanded().flex(sv(1.0f64)).child(list_host).build(),
         ).build();
 
-    mount(Container().color(sv(33953791u64)).padding(16.0).child(col).build());
+    mount(Container().color(sv(0x020617FFu64)).padding(16.0).child(col).build());
 }
 
 // A fresh one-item list — rewriting it re-invokes the Each builder (the

@@ -18,7 +18,7 @@ entry fn start() -> u64 {
 
     let checkbox =
         Container().width_height(40.0, 40.0).radius(sv(8.0f64)).color(color).border(
-            3806916863u64,
+            0xE2E8F0FFu64,
             2.0,
             BorderPosition::Center,
         ).query_key("checkbox");
@@ -28,7 +28,7 @@ entry fn start() -> u64 {
 
     // The checked state: the brush seed (the ctx face at boot — the
     // channels seed before the first flush).
-    MutationCtx::over(bridge()).set<u64>(color, 583229183u64);
+    MutationCtx::over(bridge()).set<u64>(color, 0x22C35EFFu64);
 
     mount(outer.build());
     return color.atom_id();

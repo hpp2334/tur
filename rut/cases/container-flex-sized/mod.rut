@@ -15,7 +15,7 @@ entry fn start() {
 // A 100x44 colored pill with a centered 14px label.
 fn qkey_button(key: str, label: str) -> View {
     let b =
-        Container().width_height(100.0, 44.0).color(sv(1667691007u64)).query_key(key).child(
+        Container().width_height(100.0, 44.0).color(sv(0x6366F1FFu64)).query_key(key).child(
             Text().text(sv(label)).font_size(14.0).build(),
         );
     return b.build();

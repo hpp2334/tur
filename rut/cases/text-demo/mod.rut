@@ -30,16 +30,16 @@ use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Spans, Text };
 
 // The boa palette (slate text on a soft page, indigo accent).
-let PAGE_BG: u64 = 4177198335u64;
-let CARD_BG: u64 = 4294967295u64;
-let CARD_BORDER: u64 = 3806916863u64;
-let TEXT: u64 = 253176575u64;
-let TEXT_MUTED: u64 = 1685359615u64;
-let ACCENT: u64 = 1330046463u64;
-let ACCENT_FG: u64 = 4294967295u64;
-let ROSE: u64 = 3776792831u64;
-let EMERALD: u64 = 93743615u64;
-let AMBER: u64 = 3648456447u64;
+let PAGE_BG: u64 = 0xF8FAFCFFu64;
+let CARD_BG: u64 = 0xFFFFFFFFu64;
+let CARD_BORDER: u64 = 0xE2E8F0FFu64;
+let TEXT: u64 = 0x0F172AFFu64;
+let TEXT_MUTED: u64 = 0x64748BFFu64;
+let ACCENT: u64 = 0x4F46E5FFu64;
+let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+let ROSE: u64 = 0xE11D48FFu64;
+let EMERALD: u64 = 0x059669FFu64;
+let AMBER: u64 = 0xD97706FFu64;
 
 let BROWN: str = "The quick brown fox jumps over the lazy dog.";
 

@@ -12,5 +12,5 @@ entry fn start() {
         Column().child(Text().text(sv("hello vello")).build()).child(
             Text().text(sv("second line")).build(),
         );
-    mount(Container().color(sv(4042586367u64)).padding(12.0).child(col.build()).build());
+    mount(Container().color(sv(0xF0F4F8FFu64)).padding(12.0).child(col.build()).build());
 }

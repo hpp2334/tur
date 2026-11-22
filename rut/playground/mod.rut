@@ -207,68 +207,68 @@ mod menu;
 // packed value (its origin is in the trailing comment) instead of aliasing.
 
 // primitives — ink (warm-tinted neutrals)
-let INK_50: u64 = 4227661311u64;
-let INK_100: u64 = 4109826559u64;
-let INK_150: u64 = 3975148799u64;
-let INK_200: u64 = 3789942015u64;
-let INK_300: u64 = 3571048703u64;
-let INK_400: u64 = 3099643135u64;
-let INK_500: u64 = 2324997119u64;
-let INK_600: u64 = 1583905023u64;
-let INK_700: u64 = 977424639u64;
-let INK_800: u64 = 522531071u64;
-let INK_900: u64 = 168695039u64;
+let INK_50: u64 = 0xFBFCFDFFu64;
+let INK_100: u64 = 0xF4F6F9FFu64;
+let INK_150: u64 = 0xECEFF4FFu64;
+let INK_200: u64 = 0xE1E5ECFFu64;
+let INK_300: u64 = 0xD4D9E0FFu64;
+let INK_400: u64 = 0xB8C0CCFFu64;
+let INK_500: u64 = 0x8A94A3FFu64;
+let INK_600: u64 = 0x5E6878FFu64;
+let INK_700: u64 = 0x3A4250FFu64;
+let INK_800: u64 = 0x1F2530FFu64;
+let INK_900: u64 = 0x0A0E14FFu64;
 
 // primitives — teal (the saturated cyan-leaning signature)
-let TEAL_200: u64 = 2113261823u64;
-let TEAL_300: u64 = 15251711u64;
-let TEAL_400: u64 = 13015807u64;
-let TEAL_500: u64 = 11044607u64;
-let TEAL_600: u64 = 9072383u64;
-let TEAL_700: u64 = 7231743u64;
-let TEAL_800: u64 = 5521663u64;
+let TEAL_200: u64 = 0x7DF5D0FFu64;
+let TEAL_300: u64 = 0x00E8B8FFu64;
+let TEAL_400: u64 = 0x00C69AFFu64;
+let TEAL_500: u64 = 0x00A886FFu64;
+let TEAL_600: u64 = 0x008A6EFFu64;
+let TEAL_700: u64 = 0x006E58FFu64;
+let TEAL_800: u64 = 0x005440FFu64;
 
 // primitives — coral (the warm complement; used sparingly)
-let CORAL_300: u64 = 4289963007u64;
-let CORAL_400: u64 = 4287263487u64;
-let CORAL_500: u64 = 3898426623u64;
-let CORAL_700: u64 = 2956599295u64;
+let CORAL_300: u64 = 0xFFB3A3FFu64;
+let CORAL_400: u64 = 0xFF8A72FFu64;
+let CORAL_500: u64 = 0xE85D44FFu64;
+let CORAL_700: u64 = 0xB03A1FFFu64;
 
 // primitives — status (AA on ink.50; info reuses teal.700)
-let STATUS_SUCCESS: u64 = 10513407u64;
-let STATUS_WARNING: u64 = 3296133375u64;
-let STATUS_ERROR: u64 = 3594137599u64;
-let STATUS_INFO: u64 = 7231743u64;
+let STATUS_SUCCESS: u64 = 0x00A06BFFu64;
+let STATUS_WARNING: u64 = 0xC47700FFu64;
+let STATUS_ERROR: u64 = 0xD63A2FFFu64;
+let STATUS_INFO: u64 = 0x006E58FFu64;
 
 // semantic layer — what the views use (origin primitives in the comments)
-let BG_APP: u64 = 4227661311u64; // ink.50
-let BG_PANEL: u64 = 4109826559u64; // ink.100
-let BG_ELEVATED: u64 = 3975148799u64; // ink.150
-let BG_HOVER: u64 = 3789942015u64; // ink.200 (bg.hover / bg.controlTray)
-let BG_STRONG_HOVER: u64 = 3571048703u64; // ink.300 (bg.strongHover)
-let BG_SELECTED: u64 = 2113261823u64; // teal.200
-let BG_CODE: u64 = 4227661311u64; // ink.50
-let BG_VIEWER: u64 = 4227661311u64; // ink.50 (bg.viewer)
-let BG_DANGER: u64 = 4293979903u64; // #fff0ee (bg.danger)
-let TEXT_PRIMARY: u64 = 522531071u64; // ink.800
-let TEXT_BODY: u64 = 977424639u64; // ink.700
-let TEXT_SECONDARY: u64 = 1583905023u64; // ink.600
-let TEXT_TERTIARY: u64 = 2324997119u64; // ink.500
-let TEXT_PLACEHOLDER: u64 = 3099643135u64; // ink.400
-let TEXT_CODE: u64 = 522531071u64; // ink.800 (code.fg)
-let TEXT_ON_ACCENT: u64 = 168695039u64; // ink.900 (text.onAccent)
-let TEXT_ON_DANGER: u64 = 2316965119u64; // #8a1a14 (text.onDanger)
-let TEXT_INVERSE: u64 = 4227661311u64; // ink.50 (text.inverse)
-let BORDER_SUBTLE: u64 = 3571048703u64; // ink.300 (border.subtle)
-let ACCENT_CURSOR: u64 = 11044607u64; // teal.500
-let ACCENT_PRIMARY: u64 = 13015807u64; // teal.400
-let BTN_PRIMARY_HOVER: u64 = 15251711u64; // teal.300 (bg.button.primaryHover)
-let BTN_GHOST: u64 = 4227661311u64; // ink.50 (bg.button.ghost)
-let ACCENT_SOLID: u64 = 11044607u64; // teal.500 (the brand mark)
-let ACCENT_COMPLEMENT: u64 = 4287263487u64; // coral.400 (the edited dot)
+let BG_APP: u64 = 0xFBFCFDFFu64; // ink.50
+let BG_PANEL: u64 = 0xF4F6F9FFu64; // ink.100
+let BG_ELEVATED: u64 = 0xECEFF4FFu64; // ink.150
+let BG_HOVER: u64 = 0xE1E5ECFFu64; // ink.200 (bg.hover / bg.controlTray)
+let BG_STRONG_HOVER: u64 = 0xD4D9E0FFu64; // ink.300 (bg.strongHover)
+let BG_SELECTED: u64 = 0x7DF5D0FFu64; // teal.200
+let BG_CODE: u64 = 0xFBFCFDFFu64; // ink.50
+let BG_VIEWER: u64 = 0xFBFCFDFFu64; // ink.50 (bg.viewer)
+let BG_DANGER: u64 = 0xFFF0EEFFu64; // #fff0ee (bg.danger)
+let TEXT_PRIMARY: u64 = 0x1F2530FFu64; // ink.800
+let TEXT_BODY: u64 = 0x3A4250FFu64; // ink.700
+let TEXT_SECONDARY: u64 = 0x5E6878FFu64; // ink.600
+let TEXT_TERTIARY: u64 = 0x8A94A3FFu64; // ink.500
+let TEXT_PLACEHOLDER: u64 = 0xB8C0CCFFu64; // ink.400
+let TEXT_CODE: u64 = 0x1F2530FFu64; // ink.800 (code.fg)
+let TEXT_ON_ACCENT: u64 = 0x0A0E14FFu64; // ink.900 (text.onAccent)
+let TEXT_ON_DANGER: u64 = 0x8A1A14FFu64; // #8a1a14 (text.onDanger)
+let TEXT_INVERSE: u64 = 0xFBFCFDFFu64; // ink.50 (text.inverse)
+let BORDER_SUBTLE: u64 = 0xD4D9E0FFu64; // ink.300 (border.subtle)
+let ACCENT_CURSOR: u64 = 0x00A886FFu64; // teal.500
+let ACCENT_PRIMARY: u64 = 0x00C69AFFu64; // teal.400
+let BTN_PRIMARY_HOVER: u64 = 0x00E8B8FFu64; // teal.300 (bg.button.primaryHover)
+let BTN_GHOST: u64 = 0xFBFCFDFFu64; // ink.50 (bg.button.ghost)
+let ACCENT_SOLID: u64 = 0x00A886FFu64; // teal.500 (the brand mark)
+let ACCENT_COMPLEMENT: u64 = 0xFF8A72FFu64; // coral.400 (the edited dot)
 // The viewer's inset card (the boa build measures (248,250,252) inside the
 // ink.50 pane — the ink.100-family card surface the case renders on).
-let CARD_BG: u64 = 4177198335u64; // #f8fafc
+let CARD_BG: u64 = 0xF8FAFCFFu64; // #f8fafc
 
 // The toolbar's icon resources — the boa icons.ts SVGs (the ▶ / ↻ pair),
 // rasterised once at boot through `image_resource_svg` and laid out at

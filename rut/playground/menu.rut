@@ -43,11 +43,11 @@ use tur_kit::text::core::{ Text };
 // `let` initializers must be literals in this build, and the combined
 // unit's one-name law forbids redeclaring the root's token names; origins
 // in the root's token table).
-let BG_ELEVATED_M: u64 = 3975148799u64; // ink.150
-let BG_HOVER_M: u64 = 3789942015u64; // ink.200 (bg.hover)
-let TEXT_BODY_M: u64 = 977424639u64; // ink.700
-let TEXT_TERTIARY_M: u64 = 2324997119u64; // ink.500
-let BORDER_SUBTLE_M: u64 = 3571048703u64; // ink.300 (border.subtle)
+let BG_ELEVATED_M: u64 = 0xECEFF4FFu64; // ink.150
+let BG_HOVER_M: u64 = 0xE1E5ECFFu64; // ink.200 (bg.hover)
+let TEXT_BODY_M: u64 = 0x3A4250FFu64; // ink.700
+let TEXT_TERTIARY_M: u64 = 0x8A94A3FFu64; // ink.500
+let BORDER_SUBTLE_M: u64 = 0xD4D9E0FFu64; // ink.300 (border.subtle)
 
 // The context menu's icon trio (the boa menu's Cut / Copy / Paste — the
 // feather glyph shapes, the toolbar's stroke style).
@@ -226,7 +226,7 @@ fn menu_panel(cx: MenuCx) -> View {
             BORDER_SUBTLE_M,
             1.0,
             BorderPosition::Inside,
-        ).shadow(168694878u64, 12.0, 0.0, 4.0).query_key("context-menu").child(items).build();
+        ).shadow(0x0A0E145Eu64, 12.0, 0.0, 4.0).query_key("context-menu").child(items).build();
     return panel;
 }
 

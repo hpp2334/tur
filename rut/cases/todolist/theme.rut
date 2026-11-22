@@ -2,21 +2,21 @@
 // icon SVGs (single-quoted attrs, rasterised through the image rail).
 
 // The boa light palette (Notion / Linear-style).
-pub let CARD_BG: u64 = 4294967295u64;
-pub let CARD_BORDER: u64 = 3806916863u64;
-pub let PAGE_BG: u64 = 4177198335u64;
-pub let TEXT: u64 = 253176575u64;
-pub let TEXT_MUTED: u64 = 1685359615u64;
-pub let TEXT_STRIKE: u64 = 2493757695u64;
-pub let ACCENT: u64 = 1330046463u64;
-pub let ACCENT_FG: u64 = 4294967295u64;
-pub let SUCCESS: u64 = 583360255u64;
-pub let INPUT_BG: u64 = 4177198335u64;
-pub let INPUT_BORDER: u64 = 3419791871u64;
-pub let BACKDROP: u64 = 253176430u64;
-pub let SUBTLE: u64 = 4059429375u64;
-pub let SUBTLE_FG: u64 = 859919871u64;
-pub let DANGER: u64 = 4014228735u64;
+pub let CARD_BG: u64 = 0xFFFFFFFFu64;
+pub let CARD_BORDER: u64 = 0xE2E8F0FFu64;
+pub let PAGE_BG: u64 = 0xF8FAFCFFu64;
+pub let TEXT: u64 = 0x0F172AFFu64;
+pub let TEXT_MUTED: u64 = 0x64748BFFu64;
+pub let TEXT_STRIKE: u64 = 0x94A3B8FFu64;
+pub let ACCENT: u64 = 0x4F46E5FFu64;
+pub let ACCENT_FG: u64 = 0xFFFFFFFFu64;
+pub let SUCCESS: u64 = 0x22C55EFFu64;
+pub let INPUT_BG: u64 = 0xF8FAFCFFu64;
+pub let INPUT_BORDER: u64 = 0xCBD5E1FFu64;
+pub let BACKDROP: u64 = 0x0F172A6Eu64;
+pub let SUBTLE: u64 = 0xF1F5F9FFu64;
+pub let SUBTLE_FG: u64 = 0x334155FFu64;
+pub let DANGER: u64 = 0xEF4444FFu64;
 
 // The inline icon SVGs (the boa state.ts icons, single-quoted attrs).
 pub let SVG_CHECK: str =

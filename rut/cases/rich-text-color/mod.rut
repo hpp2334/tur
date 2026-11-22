@@ -9,10 +9,10 @@ entry fn start() {
         Spans().add("White", 0.0, 0, 0.0, SpanFlags::None).add(
             "Red",
             0.0,
-            4278190335u64,
+            0xFF0000FFu64,
             0.0,
             SpanFlags::None,
-        ).add("Green", 0.0, 16711935u64, 0.0, SpanFlags::None);
+        ).add("Green", 0.0, 0x00FF00FFu64, 0.0, SpanFlags::None);
     t.spans(spans);
     mount(t.build());
 }

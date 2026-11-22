@@ -10,7 +10,7 @@ use tur_kit::text::core::{ Text };
 entry fn start() {
     let col =
         Column().cross_alignment(CrossAlign::Stretch).child(
-            Container().color(sv(4278190335u64)).padding(20.0).query_key("container").child(
+            Container().color(sv(0xFF0000FFu64)).padding(20.0).query_key("container").child(
                 Text().text(sv("Empty State")).build(),
             ).build(),
         );

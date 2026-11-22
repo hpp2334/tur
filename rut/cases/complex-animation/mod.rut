@@ -50,16 +50,16 @@ let ORBIT_CX: f64 = 140.0;
 let ORBIT_CY: f64 = 80.0;
 let ORBIT_R: f64 = 80.0;
 let TAU: f64 = 6.283185307179586;
-let HUE_MIN: u64 = 1667691007u64;
-let HUE_MAX: u64 = 3898426623u64;
-let GREEN: u64 = 583360255u64;
-let AMBER: u64 = 4120775679u64;
-let INDIGO: u64 = 1667691007u64;
-let SLATE: u64 = 2493757695u64;
-let CHIP_ON: u64 = 506018815u64;
-let CHIP_OFF: u64 = 3806916863u64;
-let CURVE_ON: u64 = 227838207u64;
-let LOOP_ON: u64 = 3676796927u64;
+let HUE_MIN: u64 = 0x6366F1FFu64;
+let HUE_MAX: u64 = 0xE85D44FFu64;
+let GREEN: u64 = 0x22C55EFFu64;
+let AMBER: u64 = 0xF59E0BFFu64;
+let INDIGO: u64 = 0x6366F1FFu64;
+let SLATE: u64 = 0x94A3B8FFu64;
+let CHIP_ON: u64 = 0x1E293BFFu64;
+let CHIP_OFF: u64 = 0xE2E8F0FFu64;
+let CURVE_ON: u64 = 0x0D9488FFu64;
+let LOOP_ON: u64 = 0xDB2777FFu64;
 
 entry fn start() -> u64 {
     let progress: Readable<f64> = source<f64>(0.0);
@@ -251,14 +251,14 @@ entry fn start() -> u64 {
 
     let col =
         Column().main_alignment(MainAlign::Center).cross_alignment(CrossAlign::Center).child(
-            Text().text(sv("Animated Card Studio")).font_size(16.0).color(253176575u64).query_key(
+            Text().text(sv("Animated Card Studio")).font_size(16.0).color(0x0F172AFFu64).query_key(
                 "cas-title",
             ).build(),
         ).child(SizedBox(0.0, 4.0).build()).child(
             Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
                 status_badge(status, badge),
             ).child(gap(12.0)).child(
-                Text().text(pct).font_size(12.0).color(1196780031u64).query_key("cas-pct").build(),
+                Text().text(pct).font_size(12.0).color(0x475569FFu64).query_key("cas-pct").build(),
             ).build(),
         ).child(SizedBox(0.0, 32.0).build()).child(
             stage(orbit_x, orbit_y, width, hue, radius, progress),
@@ -266,13 +266,13 @@ entry fn start() -> u64 {
             Row().main_axis_size(MainAxisSize::Min).child(pill("Play", GREEN, b_play, "cas-play")).child(
                 gap(6.0),
             ).child(pill("Pause", AMBER, b_pause, "cas-pause")).child(gap(6.0)).child(
-                pill("Resume", 245754367u64, b_resume, "cas-resume"),
-            ).child(gap(6.0)).child(pill("Reverse", 2338125567u64, b_reverse, "cas-reverse")).child(
+                pill("Resume", 0x0EA5E9FFu64, b_resume, "cas-resume"),
+            ).child(gap(6.0)).child(pill("Reverse", 0x8B5CF6FFu64, b_reverse, "cas-reverse")).child(
                 gap(6.0),
-            ).child(pill("Stop", 4014228735u64, b_stop, "cas-stop")).build(),
+            ).child(pill("Stop", 0xEF4444FFu64, b_stop, "cas-stop")).build(),
         ).child(SizedBox(0.0, 16.0).build()).child(
             Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
-                Text().text(sv("Speed:")).font_size(11.0).color(1685359615u64).build(),
+                Text().text(sv("Speed:")).font_size(11.0).color(0x64748BFFu64).build(),
             ).child(gap(8.0)).child(chip(sp0, "0.5x", b_speed0, "cas-s0")).child(gap(4.0)).child(
                 chip(sp1, "1x", b_speed1, "cas-s1"),
             ).child(gap(4.0)).child(chip(sp2, "2x", b_speed2, "cas-s2")).child(gap(4.0)).child(
@@ -280,7 +280,7 @@ entry fn start() -> u64 {
             ).build(),
         ).child(SizedBox(0.0, 12.0).build()).child(
             Row().main_axis_size(MainAxisSize::Min).cross_alignment(CrossAlign::Center).child(
-                Text().text(sv("Curve:")).font_size(11.0).color(1685359615u64).build(),
+                Text().text(sv("Curve:")).font_size(11.0).color(0x64748BFFu64).build(),
             ).child(gap(8.0)).child(chip(cv0, "linear", b_curve0, "cas-c0")).child(gap(4.0)).child(
                 chip(cv1, "easeIn", b_curve1, "cas-c1"),
             ).child(gap(4.0)).child(chip(cv2, "easeOut", b_curve2, "cas-c2")).child(gap(4.0)).child(
@@ -288,13 +288,13 @@ entry fn start() -> u64 {
             ).child(gap(12.0)).child(loop_chip(lp, loop_on, b_loop)).build(),
         ).child(SizedBox(0.0, 16.0).build()).child(
             Text().text(sv("Controls: pause mid-play, change speed/curve, resume")).font_size(10.0).color(
-                2493757695u64,
+                0x94A3B8FFu64,
             ).build(),
         );
     // The root Lifecycle fires the seed at mount (a transparent
     // pass-through around the unchanged page chain).
     let page =
-        Container().color(sv(4177198335u64)).alignment(Align::Center).child(col.build()).build();
+        Container().color(sv(0xF8FAFCFFu64)).alignment(Align::Center).child(col.build()).build();
     mount(Lifecycle().on_mount(seed).child(page).build());
     return progress.atom_id();
 }
@@ -315,7 +315,7 @@ fn stage(
     let dot =
         Positioned().left(orbit_x).top(orbit_y).child(
             Container().width_height(20.0, 20.0).radius(sv(999.0f64)).color(sv(GREEN)).shadow(
-                583360120u64,
+                0x22C55E78u64,
                 16.0,
                 0.0,
                 0.0,
@@ -336,11 +336,11 @@ fn stage(
 // re-mounts. Boa's square is opaque — no opacity channel.
 fn card(width: Readable<f64>, hue: Readable<u64>, radius: Readable<f64>, progress: Readable<f64>) -> View {
     let square =
-        Container().width_height(60.0, 60.0).color(sv(4294967295u64)).radius(sv(12.0f64)).build();
+        Container().width_height(60.0, 60.0).color(sv(0xFFFFFFFFu64)).radius(sv(12.0f64)).build();
     let spin = Transform(1.0, 0.0, 0.0, 0.0).rotate(progress).child(square).build();
     return
         Container().width(width).height(sv(160.0f64)).color(hue).radius(radius).shadow(
-            253176400u64,
+            0x0F172A50u64,
             24.0,
             0.0,
             8.0,
@@ -357,11 +357,11 @@ fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) 
                 Condition(loop_on).then_build(
                     fn () -> View {
                         return
-                            Text().text(sv("Loop ✓")).font_size(10.0).color(4294967295u64).build();
+                            Text().text(sv("Loop ✓")).font_size(10.0).color(0xFFFFFFFFu64).build();
                     },
                 ).else_build(
                     fn () -> View {
-                        return Text().text(sv("Loop")).font_size(10.0).color(1196780031u64).build();
+                        return Text().text(sv("Loop")).font_size(10.0).color(0x475569FFu64).build();
                     },
                 ).build(),
             ).build(),
@@ -373,7 +373,7 @@ fn loop_chip(lp: Readable<u64>, loop_on: Readable<bool>, b_loop: Mutation<nil>) 
 fn status_badge(status: Readable<str>, badge: Readable<u64>) -> View {
     return
         Container().padding(6.0).radius(sv(999.0f64)).color(badge).child(
-            Text().text(status).font_size(10.0).color(4294967295u64).query_key("cas-status").build(),
+            Text().text(status).font_size(10.0).color(0xFFFFFFFFu64).query_key("cas-status").build(),
         ).build();
 }
 
@@ -403,7 +403,7 @@ fn recreate(
 fn make_ctrl(tick: ?Mutation<f64>, end: ?Mutation<nil>, curve: f64, looping: bool) -> AnimCtrl {
     let repeat: u64 = 1;
     if (looping) {
-        repeat = 18446744073709552000.0 as u64; // the infinite crossing
+        repeat = 18446744073709551615.0 as u64; // the infinite crossing
     }
     return anim_ctrl(2400.0, curve_name(curve), repeat, tick, end);
 }
@@ -536,7 +536,7 @@ fn pill(label: str, color: u64, cb: Mutation<nil>, key: str) -> View {
     return
         PointerInteract().on_click(cb).child(
             Container().padding(8.0).radius(sv(6.0f64)).color(sv(color)).query_key(key).child(
-                Text().text(sv(label)).font_size(11.0).color(4294967295u64).build(),
+                Text().text(sv(label)).font_size(11.0).color(0xFFFFFFFFu64).build(),
             ).build(),
         ).build();
 }
@@ -546,7 +546,7 @@ fn chip(atom: Readable<u64>, label: str, cb: Mutation<nil>, key: str) -> View {
     return
         PointerInteract().on_click(cb).child(
             Container().padding(6.0).radius(sv(6.0f64)).color(atom).query_key(key).child(
-                Text().text(sv(label)).font_size(10.0).color(1196780031u64).build(),
+                Text().text(sv(label)).font_size(10.0).color(0x475569FFu64).build(),
             ).build(),
         ).build();
 }

@@ -61,7 +61,7 @@ fn tile(ii: [f64], rings: [Source<u64>], sel: Readable<f64>) -> View {
         mutate(
             fn (ctx: MutationCtx, _e: nil) {
                 let prev = ctx.get<f64>(sel) as i32;
-                ctx.set<u64>(rings[prev], 0u64);
+                ctx.set<u64>(rings[prev], 0x00000000u64);
                 ctx.set<f64>(sel, ii[0]);
                 ctx.set<u64>(rings[ii[0] as i32], color::RING_ON);
             },

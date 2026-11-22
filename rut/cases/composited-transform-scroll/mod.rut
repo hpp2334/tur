@@ -24,7 +24,7 @@ entry fn start() {
     let scroller = ScrollView().axis(Axis::Vertical).child(content.build()).build();
     stack.child(Positioned().width(200.0).height(200.0).child(scroller).build());
 
-    let red = Container().width_height(20.0, 20.0).color(sv(4278190335u64));
+    let red = Container().width_height(20.0, 20.0).color(sv(0xFF0000FFu64));
     let follower =
         CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(
             red.build(),

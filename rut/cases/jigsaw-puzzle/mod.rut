@@ -153,7 +153,7 @@ entry fn start() -> u64 {
     // ---- the root (full-bleed dark, the play area centered, the overlay) ----
 
     mount(
-        Stack().fit(StackFit::Expand).child(Container().color(sv(33953791u64)).build()).child(
+        Stack().fit(StackFit::Expand).child(Container().color(sv(0x020617FFu64)).build()).child(
             Container().alignment(Align::Center).child(play).build(),
         ).child(win).build(),
     );

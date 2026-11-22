@@ -39,13 +39,13 @@ use tur_kit::reactive::{
 use tur_kit::text::core::{ Text };
 
 // The boa palette (dark slate table on the #0b1220 frame).
-let HDR_ON: u64 = 859919871u64;
-let HDR_OFF: u64 = 253176575u64;
-let STRIPE: u64 = 506018815u64;
-let HEADER_FG: u64 = 2493757695u64;
-let CELL_HI: u64 = 4177198335u64;
-let CELL_FG: u64 = 3419791871u64;
-let STATUS_FG: u64 = 1685359615u64;
+let HDR_ON: u64 = 0x334155FFu64;
+let HDR_OFF: u64 = 0x0F172AFFu64;
+let STRIPE: u64 = 0x1E293BFFu64;
+let HEADER_FG: u64 = 0x94A3B8FFu64;
+let CELL_HI: u64 = 0xF8FAFCFFu64;
+let CELL_FG: u64 = 0xCBD5E1FFu64;
+let STATUS_FG: u64 = 0x64748BFFu64;
 
 entry fn start() -> u64 {
     let sort_key: Readable<str> = source<str>("moons");
@@ -94,7 +94,7 @@ entry fn start() -> u64 {
         Table().columns(cols).rows(rows).header_builder(
             fn (col: u64) -> View { return header_cell(col, fills, labels, taps); },
         ).row_builder(fn (row: u64, col: u64) -> View { return body_cell(row, col, rows); }).stripes(
-            0u64,
+            0x00000000u64,
             STRIPE,
         ).query_key("table-reactive").build();
 
@@ -103,7 +103,7 @@ entry fn start() -> u64 {
             Text().text(status).font_size(12.0).color(STATUS_FG).query_key("tr/status").build(),
         ).build();
     mount(
-        Expanded().flex(sv(1.0f64)).child(Container().color(sv(185737471u64)).child(page).build()).build(),
+        Expanded().flex(sv(1.0f64)).child(Container().color(sv(0x0B1220FFu64)).child(page).build()).build(),
     );
     return rows.atom_id();
 }

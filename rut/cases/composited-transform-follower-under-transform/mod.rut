@@ -19,7 +19,7 @@ entry fn start() {
     // when a module also instantiates the anim-kit classes.
     let at: Readable<f64> = sv(100.0f64);
     stack.child(Positioned().left(at).top(sv(80.0f64)).child(target).build());
-    let red = Container().width_height(20.0, 20.0).color(sv(4278190335u64));
+    let red = Container().width_height(20.0, 20.0).color(sv(0xFF0000FFu64));
     let follower =
         CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(
             red.build(),

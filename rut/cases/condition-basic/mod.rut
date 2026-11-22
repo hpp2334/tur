@@ -10,11 +10,11 @@ use tur_kit::text::core::{ Text };
 entry fn start() {
     let show = source<bool>(true);
     let then_box =
-        Container().width_height(200.0, 100.0).color(sv(808464639u64)).query_key("then-branch").child(
+        Container().width_height(200.0, 100.0).color(sv(0x303030FFu64)).query_key("then-branch").child(
             Text().text(sv("then-branch")).build(),
         );
     let else_box =
-        Container().width_height(200.0, 100.0).color(sv(1343888127u64)).query_key("else-branch").child(
+        Container().width_height(200.0, 100.0).color(sv(0x501A1AFFu64)).query_key("else-branch").child(
             Text().text(sv("else-branch")).build(),
         );
     let c =

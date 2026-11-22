@@ -8,9 +8,9 @@ use tur_kit::scroll::{ LazyList };
 fn row(i: u64) -> View {
     let b = Container().width_height(400.0, 50.0);
     if (i % 2 == 0) {
-        b.color(sv(808464639u64));
+        b.color(sv(0x303030FFu64));
     } else {
-        b.color(sv(437918463u64));
+        b.color(sv(0x1A1A1AFFu64));
     }
     return b.build();
 }

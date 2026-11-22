@@ -20,7 +20,7 @@ entry fn start() {
     let at: Readable<f64> = sv(20.0f64);
     let transformed = Transform(1.0, 0.0, 50.0, 10.0).child(target).build();
     stack.child(Positioned().left(at).top(at).child(transformed).build());
-    let red = Container().width_height(20.0, 20.0).color(sv(4278190335u64));
+    let red = Container().width_height(20.0, 20.0).color(sv(0xFF0000FFu64));
     let follower =
         CompositedFollower().link(link).target_anchor(Align::TopLeft).follower_anchor(Align::TopLeft).child(
             red.build(),

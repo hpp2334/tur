@@ -107,10 +107,10 @@ pub fn piece(i: u64, p: state::Pieces, count: Source<f64>, solved: Source<bool>,
     let face =
         Container().width_height(theme::PIECE, theme::PIECE).color((p.br)[i as i32]).radius(
             sv(14.0f64),
-        ).border(4294967295u64, 2.0, BorderPosition::Inside).shadow_color((p.sc)[i as i32]).shadow_blur(
+        ).border(0xFFFFFFFFu64, 2.0, BorderPosition::Inside).shadow_color((p.sc)[i as i32]).shadow_blur(
             (p.sb)[i as i32],
         ).shadow_dy((p.sd)[i as i32]).alignment(Align::Center).query_key(f"jw/piece-{i}").child(
-            Text().text((p.lb)[i as i32]).font_size(28.0).color(4294967295u64).query_key(
+            Text().text((p.lb)[i as i32]).font_size(28.0).color(0xFFFFFFFFu64).query_key(
                 f"jw/piece-{i}-label",
             ).build(),
         ).build();

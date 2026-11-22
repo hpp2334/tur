@@ -13,8 +13,8 @@ use tur_kit::reactive::{ sv };
 use tur_kit::scroll::{ ScrollView };
 use tur_kit::text::core::{ Text };
 
-let LABEL_FG: u64 = 4294967295u64;
-let CAPTION_FG: u64 = 2493757695u64;
+let LABEL_FG: u64 = 0xFFFFFFFFu64;
+let CAPTION_FG: u64 = 0x94A3B8FFu64;
 
 entry fn start() {
     let page =

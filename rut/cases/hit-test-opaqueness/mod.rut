@@ -41,7 +41,7 @@ entry fn start() -> u64 {
     stack.child(plain.build());
 
     // A painted red 200x200 surface at the top-left — absorbs.
-    let red = Container().width_height(200.0, 200.0).color(sv(4014228735u64)).query_key("red");
+    let red = Container().width_height(200.0, 200.0).color(sv(0xEF4444FFu64)).query_key("red");
     stack.child(red.build());
 
     // A translucent MouseRegion over the right half (x 200..400).
