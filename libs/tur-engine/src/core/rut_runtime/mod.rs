@@ -52,11 +52,13 @@ mod decl_gen;
 mod derive;
 mod env;
 mod module_files;
+mod module_pkgzip;
 mod mutation;
 
 pub use decl_gen::{mount_host_tree, render_tur_host_decl_tree, tur_host_surface};
 pub use env::ViewportEnv;
 pub use module_files::RutModuleFiles;
+pub use module_pkgzip::RutModulePkgZip;
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
@@ -1462,6 +1464,94 @@ impl RutRuntime {
         Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)))
     }
 
+    /// [`Self::compile_files`] over a packed SOURCE ZIP (the pkg-zip
+    /// load lane): the archive-root package mounts from its `src/` tree
+    /// with its manifest's declaration UNIONED with the offered specs
+    /// (the ambient nameability law), every top-level embedded
+    /// `deps/<identity>/` group mounts beside it, and the session mounts
+    /// first-mount-wins ahead of the packed closure. Same two lanes as
+    /// the file lane (precompiled kit when the offered fingerprint
+    /// matches, source fallback otherwise) and the same parse-first
+    /// contract.
+    pub(crate) fn compile_pkg_zip(
+        files: &RutModulePkgZip,
+        exts: &[RutPkgExt],
+    ) -> Result<
+        (
+            Rc<rut_core::binary::Program>,
+            rut_vm::interp::HostPkgContext,
+        ),
+        String,
+    > {
+        let offered_all = Self::offered_pkgs(exts);
+        let offered_specs: std::collections::BTreeSet<String> =
+            offered_all.iter().map(|p| p.spec.clone()).collect();
+        let (app, extra) = module_pkgzip::mount_pkg_zip(files, &offered_specs)?;
+        let label = module_pkgzip::root_files(files).map_err(|e| format!("pkg zip: {e}"))?;
+        let entry_spec = app.spec.clone();
+
+        // The host-row snapshot (the offered set minus the futures
+        // weave — identical to the file lane's).
+        let host_view: Vec<rut_driver::Mounted> = offered_all
+            .iter()
+            .filter(|p| p.spec != "futures")
+            .cloned()
+            .collect();
+
+        // The precompiled lane: the same fingerprint match as the file
+        // lane — an ext-free configuration serves the compiled kit and
+        // compiles only the zip's root package.
+        if let Some(pkgs) = precompiled_kit_matching(Self::offered_fingerprint(&offered_all)) {
+            let mut run = rut_driver::RutRun::new()
+                .mount(app)
+                .entrypoint(&entry_spec);
+            for pkg in offered_all
+                .iter()
+                .filter(|p| p.spec == "tur_host" || p.spec == "async_host")
+            {
+                run = run.mount(pkg.clone());
+            }
+            for pkg in pkgs {
+                run = run.mount(pkg);
+            }
+            let compiled = run.compile().map_err(|e| e.msg)?;
+            if !compiled.graph.diags.is_empty() {
+                return Err(render_diags(&compiled.graph.diags, &label));
+            }
+            let prog = compiled
+                .graph
+                .program
+                .ok_or("rut compile emitted no binary")?;
+            rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
+            return Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)));
+        }
+
+        // The source lane: mount the app (the zip's own package), then
+        // the offered set, then the embedded groups — first-mount-wins
+        // keeps the session ahead of the packed closure. `core` is
+        // auto-offered by `.compile()`.
+        SOURCE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut run = rut_driver::RutRun::new()
+            .mount(app)
+            .entrypoint(&entry_spec);
+        for pkg in offered_all {
+            run = run.mount(pkg);
+        }
+        for pkg in extra {
+            run = run.mount(pkg);
+        }
+        let compiled = run.compile().map_err(|e| e.msg)?;
+        if !compiled.graph.diags.is_empty() {
+            return Err(render_diags(&compiled.graph.diags, &label));
+        }
+        let prog = compiled
+            .graph
+            .program
+            .ok_or("rut compile emitted no binary")?;
+        rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
+        Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)))
+    }
+
     /// Parse + compile only (the parse-first half of the load contract) —
     /// a broken reload must fail before any teardown runs.
     pub fn parse_check(
@@ -2168,6 +2258,55 @@ mod tests {
         let files = RutModuleFiles::from("entry fn start() {}\n");
         let diags = vec![Diag::new(Span::new(5, 9), "boom")];
         assert_eq!(render_diags(&diags, &files), "mod.rut: boom");
+    }
+
+    /// The pkg-zip compile lane: a packed source zip whose root uses an
+    /// embedded group compiles — the group mounts from the archive, the
+    /// use resolves through the app manifest's ambient declaration.
+    #[test]
+    fn compiles_a_pkg_zip_with_an_embedded_group() {
+        use rut_driver::bundle::write_srczip;
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            (
+                "rut.jsonc".into(),
+                b"{\"name\":\"m\",\"deps\":{\"g\":{\"path\":\"deps/g@0000000000000000\"}}}".to_vec(),
+            ),
+            (
+                "src/mod.rut".into(),
+                b"use g::{ one };\nentry fn start() { const _ = one(); }".to_vec(),
+            ),
+            (
+                "deps/g@0000000000000000/rut.jsonc".into(),
+                b"{\"name\":\"g\"}".to_vec(),
+            ),
+            (
+                "deps/g@0000000000000000/src/mod.rut".into(),
+                b"pub fn one() -> i32 { return 1; }".to_vec(),
+            ),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let zip = RutModulePkgZip::from_bytes(&bytes).expect("zip unpacks");
+        let compiled = RutRuntime::compile_pkg_zip(&zip, &[]);
+        assert!(compiled.is_ok(), "pkg zip compiles: {:?}", compiled.err());
+    }
+
+    /// A declared-but-unmounted head is the loud D5 failure (a session
+    /// dep missing from the offered set surfaces at compile, naming the
+    /// use).
+    #[test]
+    fn pkg_zip_missing_session_head_fails_loudly() {
+        use rut_driver::bundle::write_srczip;
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            ("rut.jsonc".into(), b"{\"name\":\"m\"}".to_vec()),
+            (
+                "src/mod.rut".into(),
+                b"use nothere::{ x };\nentry fn start() {}".to_vec(),
+            ),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let zip = RutModulePkgZip::from_bytes(&bytes).expect("zip unpacks");
+        let compiled = RutRuntime::compile_pkg_zip(&zip, &[]);
+        assert!(compiled.is_err(), "an undeclared+unmounted head refuses");
     }
 
     /// A span BEFORE the first child seam (e.g. a synthetic `Span::new(0,0)`

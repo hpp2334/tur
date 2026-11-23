@@ -837,6 +837,7 @@ pub mod ops {
                     "loadModule: source handle {source_handle} ({} bytes)",
                     match instance.module_sources.get(source_handle as u64) {
                         Some(tur_engine::ModuleSourceEntry::Files(files)) => files.root.len(),
+                        Some(tur_engine::ModuleSourceEntry::PkgZip(zip)) => zip.total_len(),
                         Some(tur_engine::ModuleSourceEntry::Source(s)) => s.len(),
                         None => 0,
                     }

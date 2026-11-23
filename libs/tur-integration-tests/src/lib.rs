@@ -1624,6 +1624,23 @@ impl TurTestApp {
         )
     }
 
+    /// Rut-rail module load over a packed SOURCE ZIP (the pkg-zip lane):
+    /// compile + boot the archive's package tree and invoke its `entry
+    /// fn start()`. The bytes unpack once here.
+    pub fn load_rut_module_pkgzip(&self, zip_bytes: Vec<u8>) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_pkgzip(zip_bytes))
+    }
+
+    /// [`Self::load_rut_module_pkgzip`] with an embedder-supplied start
+    /// argument.
+    pub fn load_rut_module_pkgzip_cx(
+        &self,
+        zip_bytes: Vec<u8>,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_pkgzip_cx(zip_bytes, start_cx))
+    }
+
     /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
     /// loaded rut module. A missing entry is a successful no-op.
     pub fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {

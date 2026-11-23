@@ -165,6 +165,15 @@ pub enum WorkerMsg {
         start_cx: Option<u64>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
+    /// [`WorkerMsg::LoadRutModule`] over a packed SOURCE ZIP — the
+    /// pkg-zip load lane (`RutModulePkgZip` is the once-unpacked entry
+    /// list; the compile mounts the archive's package tree against the
+    /// offered set).
+    LoadRutPkgZip {
+        zip: Arc<crate::core::rut_runtime::RutModulePkgZip>,
+        start_cx: Option<u64>,
+        reply: ReplySender<Result<(), ModuleError>>,
+    },
     /// Call a named `entry fn` on the loaded rut module — the
     /// engine→rut event rail. Two lanes: the legacy `(u64, f64)` probe
     /// (a missing entry is a successful no-op — event rails are optional)
@@ -422,6 +431,10 @@ impl fmt::Debug for WorkerMsg {
                 .debug_struct("LoadRutModule")
                 .field("root_len", &files.root.len())
                 .field("mods", &files.mods.len())
+                .finish_non_exhaustive(),
+            Self::LoadRutPkgZip { zip, .. } => f
+                .debug_struct("LoadRutPkgZip")
+                .field("entries", &zip.entries.len())
                 .finish_non_exhaustive(),
             Self::CallRutEntry { name, args, .. } => f
                 .debug_struct("CallRutEntry")

@@ -203,6 +203,50 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
+    /// Rut-rail module load over a packed SOURCE ZIP (the pkg-zip lane):
+    /// compile + boot the archive's package tree (its `rut.jsonc` + `src/`
+    /// tree + the embedded `deps/` closure, mounted over the offered set)
+    /// and invoke its `entry fn start()`. The bytes unpack once here —
+    /// registry-based loads unpack at `register_pkg_zip` instead.
+    pub async fn load_rut_module_pkgzip(
+        &self,
+        zip_bytes: Vec<u8>,
+    ) -> Result<(), TurError> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&zip_bytes)
+            .map_err(TurError::Other)?;
+        self.load_rut_module_pkgzip_loaded(std::sync::Arc::new(zip), None)
+            .await
+    }
+
+    /// [`Self::load_rut_module_pkgzip`] with an embedder-supplied start
+    /// argument (see [`Self::load_rut_module_cx`]).
+    pub async fn load_rut_module_pkgzip_cx(
+        &self,
+        zip_bytes: Vec<u8>,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&zip_bytes)
+            .map_err(TurError::Other)?;
+        self.load_rut_module_pkgzip_loaded(std::sync::Arc::new(zip), Some(start_cx))
+            .await
+    }
+
+    /// The pkg-zip lane over an ALREADY-UNPACKED [`RutModulePkgZip`] —
+    /// the shape [`ModuleSourceRegistry::register_pkg_zip`] stores (and
+    /// the engine's handle-based dispatch resolves). `start_cx`: `None`
+    /// = the no-arg boot.
+    pub async fn load_rut_module_pkgzip_loaded(
+        &self,
+        zip: std::sync::Arc<crate::core::rut_runtime::RutModulePkgZip>,
+        start_cx: Option<u64>,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module_pkgzip(zip, start_cx)
+            .await
+            .map_err(TurError::from)
+    }
+
     /// Handle-based rut load: resolve `handle` in `registry` and compile +
     /// boot it via [`Self::load_rut_module`]. The natural pair for
     /// [`ModuleSourceRegistry`] — embedders that register sources Rust-side
@@ -221,6 +265,9 @@ impl TurApp {
             .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?
         {
             ModuleSourceEntry::Files(files) => self.load_rut_module_files(files).await,
+            ModuleSourceEntry::PkgZip(zip) => {
+                self.load_rut_module_pkgzip_loaded(zip, None).await
+            }
             ModuleSourceEntry::Source(source) => self.load_rut_module(source).await,
         }
     }
@@ -238,6 +285,9 @@ impl TurApp {
             .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?
         {
             ModuleSourceEntry::Files(files) => self.load_rut_module_files_cx(files, start_cx).await,
+            ModuleSourceEntry::PkgZip(zip) => {
+                self.load_rut_module_pkgzip_loaded(zip, Some(start_cx)).await
+            }
             ModuleSourceEntry::Source(source) => self.load_rut_module_cx(source, start_cx).await,
         }
     }

@@ -177,6 +177,41 @@ impl WorkerBackend {
         Ok(())
     }
 
+    /// [`Self::load_rut_module_inner`] over a packed SOURCE ZIP — the
+    /// pkg-zip lane's compile (`compile_pkg_zip`), identical lifecycle:
+    /// parse-first (compile before any teardown), boot, apply root.
+    fn load_rut_module_pkgzip_inner(
+        &self,
+        zip: &std::sync::Arc<crate::core::rut_runtime::RutModulePkgZip>,
+        start_cx: Option<u64>,
+    ) -> Result<(), ModuleError> {
+        let exts = self.internal.instance.rut_pkg_exts.borrow().clone();
+        let (prog, host_ctx) =
+            crate::core::rut_runtime::RutRuntime::compile_pkg_zip(zip, &exts)
+                .map_err(ModuleError::Parse)?;
+
+        self.teardown_rut_module();
+
+        let js = &self.internal.instance;
+        let inputs = crate::core::rut_runtime::RutRealmInputs {
+            clock: self.internal.app_context.borrow().frame_env.clock(),
+            font_rail: self.internal.app_context.borrow().font_rail(),
+        };
+        let mut rut = crate::core::rut_runtime::RutRuntime::boot_compiled(
+            prog,
+            host_ctx,
+            js.clone(),
+            inputs,
+            &exts,
+            start_cx,
+        )?;
+
+        rut.apply_root().map_err(ModuleError::Eval)?;
+        js.set_dirty();
+        *self.rut.borrow_mut() = Some(rut);
+        Ok(())
+    }
+
     /// Engine→rut event rail: call a named `entry fn(u64, f64)`.
     fn call_rut_entry_inner(&self, name: &str, a: u64, b: f64) -> Result<(), ModuleError> {
         let mut rut_guard = self.rut.borrow_mut();
@@ -297,6 +332,15 @@ impl WorkerBackend {
                 reply,
             } => {
                 let res = self.load_rut_module_inner(&files, start_cx);
+                self.wake_if_dirty();
+                reply.send(res);
+            }
+            WorkerMsg::LoadRutPkgZip {
+                zip,
+                start_cx,
+                reply,
+            } => {
+                let res = self.load_rut_module_pkgzip_inner(&zip, start_cx);
                 self.wake_if_dirty();
                 reply.send(res);
             }
@@ -1155,6 +1199,29 @@ impl HostBackend {
             // The reply sender dropped without firing — the instance's
             // worker is gone (destroyed mid-load). The load's outcome is
             // moot; report the gone worker instead of aborting.
+            Err(_) => Err(ModuleError::WorkerGone),
+        }
+    }
+
+    /// Module load over a packed SOURCE ZIP — the RPC entry behind
+    /// [`TurApp::load_rut_module_pkgzip`]. Same lifecycle and
+    /// cancellation contract as [`Self::load_rut_module_files`]; the
+    /// zip mounts as the pkg-zip lane (the archive's package tree over
+    /// the offered set).
+    pub(crate) async fn load_rut_module_pkgzip(
+        &self,
+        zip: Arc<crate::core::rut_runtime::RutModulePkgZip>,
+        start_cx: Option<u64>,
+    ) -> Result<(), ModuleError> {
+        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
+        let _ = self.worker_tx.unbounded_send(WorkerMsg::LoadRutPkgZip {
+            zip,
+            start_cx,
+            reply: tx,
+        });
+        self.wake_worker();
+        match rx.rx.await {
+            Ok(res) => res,
             Err(_) => Err(ModuleError::WorkerGone),
         }
     }

@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::core::rut_runtime::RutModuleFiles;
 
-/// A registered module source — the registry's two shapes.
+/// A registered module source — the registry's three shapes.
 #[derive(Clone, Debug)]
 pub enum ModuleSourceEntry {
     /// The historical single-source shape (the root file only).
@@ -37,6 +37,11 @@ pub enum ModuleSourceEntry {
     /// children. `TurApp::load_rut_module_source` resolves it whole
     /// through the engine's files rail.
     Files(RutModuleFiles),
+    /// A packed SOURCE ZIP (the pkg-zip load lane): the once-unpacked
+    /// entry list of `rut.jsonc` + `src/**` + `deps/<identity>/**`.
+    /// `TurApp::load_rut_module_source` resolves it through the pkg-zip
+    /// rail — the archive's package tree mounts over the offered set.
+    PkgZip(Arc<crate::core::rut_runtime::RutModulePkgZip>),
 }
 
 /// Shared, id-keyed store of module sources (single sources and file
@@ -91,6 +96,23 @@ impl ModuleSourceRegistry {
                 }),
             );
         id
+    }
+
+    /// Register a packed SOURCE ZIP — `rut pack --mode source` bytes
+    /// (`rut.jsonc` + `src/**` + the embedded `deps/<identity>/`
+    /// closure) — and return its handle. The archive unpacks ONCE, here
+    /// (the placement grammar validates at this door); every later load
+    /// mounts the in-memory entry list. An invalid archive is an `Err`
+    /// naming the grammar violation — the caller logs it, no handle is
+    /// minted.
+    pub fn register_pkg_zip(&self, bytes: Vec<u8>) -> Result<u64, String> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&bytes)?;
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.inner
+            .lock()
+            .expect("module-source registry mutex poisoned")
+            .insert(id, ModuleSourceEntry::PkgZip(Arc::new(zip)));
+        Ok(id)
     }
 
     /// Look up a source by handle. `None` for `0`, stale, or already-released
@@ -178,5 +200,28 @@ mod tests {
         assert_eq!(&*files.mods["child"], "pub fn two() -> i32 { 2 }");
         assert!(reg.remove(id));
         assert!(reg.get(id).is_none());
+    }
+
+    #[test]
+    fn register_pkg_zip_roundtrips_and_refuses_junk() {
+        use rut_driver::bundle::write_srczip;
+        let reg = ModuleSourceRegistry::new();
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            ("rut.jsonc".into(), b"{\"name\":\"m\"}".to_vec()),
+            ("src/mod.rut".into(), b"entry fn start() {}".to_vec()),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let id = reg.register_pkg_zip(bytes).expect("valid zip registers");
+        let entry = reg.get(id).expect("registered zip must resolve");
+        let ModuleSourceEntry::PkgZip(zip) = entry else {
+            panic!("register_pkg_zip spells the PkgZip shape");
+        };
+        assert_eq!(zip.entries.len(), 2);
+        assert!(reg.remove(id));
+        assert!(reg.get(id).is_none());
+        assert!(
+            reg.register_pkg_zip(b"not a zip".to_vec()).is_err(),
+            "a broken archive mints no handle"
+        );
     }
 }
