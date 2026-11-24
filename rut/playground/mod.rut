@@ -3,8 +3,9 @@
 // beside an editor pane and a viewer pane, above a status bar —
 // selecting a case loads its ROOT file into the editor (a multiline Input
 // on a realm-minted controller) and RUNS it — `run_case` compiles through
-// the `pg_compile` row (which registers the source Rust-side and
-// answers its id), destroys the previous child and spawns a fresh one
+// the `tur_playground_kit` kit (`Module(..).compile()` registers the
+// source Rust-side and answers it), destroys the previous child and
+// spawns a fresh one
 // under a new controller (the `runCase` destroy-then-spawn swap). The
 // viewer hosts the child through a bound `VirtualAppView`; each
 // controller's status rail is a typed `Source<str>`
@@ -19,8 +20,8 @@
 // tap swaps the edited file (no auto-run). Edits cache per case+file (a
 // `MapHandle` keyed "{name}|{path}", "1"-sentinel values), so switches
 // never lose text; Run compiles the WHOLE tree — the staged children
-// from the cache (`pg_files_put`), the active file's text as the root
-// argument; Reset restores every file from the registry and re-runs.
+// from the cache (`Module.file(..)`), the active file's text as the
+// root; Reset restores every file from the registry and re-runs.
 //
 // Editor highlighting: `highlight` classifies the source through the
 // upstream rut-semantic classifier (Rust-side — token classes plus AST
@@ -111,12 +112,12 @@
 // (`launch_future` / `sleep`) installs on BOTH targets — the vendored
 // decl lowers from the `.d.rut` (wasm has no filesystem) and the bodies
 // are pure VM-driving rows.
-// (No second `tur_host` use statement is needed at the 0eea7e95 pin: the
-// per-file binding law retired the old duplicate-boot-scope anchor — this
-// module's kit resolution holds with a single `tur_host` (the pg_*) use
-// line. The old `rs_derive` status-label workaround is retired too: the
-// interning family is fixed upstream and the kit's lambda derive holds
-// even with the menu's async surfaces in the root scope.)
+// (The compile service is reached through `tur_playground_kit` — the
+// plugin-owned kit prelude — so this module imports no `tur_host` row at
+// all (the surface law: host rows are reachable only through kits). The
+// old `rs_derive` status-label workaround is retired too: the interning
+// family is fixed upstream and the kit's lambda derive holds even with
+// the menu's async surfaces in the root scope.)
 use tur_anim_kit::{ AnimCtrl, anim_ctrl_end, anim_ctrl_open };
 use tur_kit::control_flow::control::{ Condition, Each, Switch };
 use tur_kit::flags::{
@@ -182,9 +183,8 @@ use tur_kit::virtual_app::{
     virtual_app_controller,
     virtual_app_set,
     virtual_app_source,
-    virtual_app_source_handle,
 };
-use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
+use tur_playground_kit::{ Highlight, Module };
 
 // The editor's context menu (the child module — its own scope carries the
 // async surfaces; see menu.rut's header).
@@ -1466,7 +1466,7 @@ fn case_tap(ctx: MutationCtx, cx: AppContext, idx: u64) {
 // re-highlight never yanks it either.
 fn load_editor(cx: AppContext, text: str) {
     (cx.ctrl).set_text(text);
-    pg_apply_highlight((cx.ctrl).raw(), pg_highlight(text));
+    Highlight(text).apply(cx.ctrl);
 }
 
 // The test rail's probe: select + run by sidebar index (the held
@@ -1511,29 +1511,6 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
     // The ACTIVE file — the editor's current content ("" = the root).
     let active = pg_case_file_path(name, ctx.get<f64>(cx.fsel) as u64);
 
-    // The multi-file rail: stage the declared children (pg_files_put
-    // accumulates; pg_compile consumes the staged set with the root text
-    // as the argument). Children stage from the edit cache first (edited
-    // files compile as edited), the registry on a miss — EXCEPT the
-    // active file: its text is the EDITOR's live content (the cache copy
-    // only updates on a switch, so it can be stale mid-edit). The root
-    // never stages — it rides pg_compile's argument; an active CHILD
-    // stages here from the editor, keeping the compiled tree complete. A
-    // root-only case (or a cleared selection) stages nothing — the
-    // historical single-string compile.
-    let n = pg_case_file_count(name);
-    let j: u64 = 0;
-    while (j < n) {
-        let path = pg_case_file_path(name, j);
-        if (path != "" && path != active) {
-            pg_files_put(path, file_text(cx, name, path));
-        }
-        j = j + 1;
-    }
-    if (active != "") {
-        pg_files_put(active, (cx.ctrl).text());
-    }
-
     // The root's text: the editor's live content when the root IS the
     // active file, else the (cached) registry text.
     let root_text = file_text(cx, name, "");
@@ -1541,22 +1518,46 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
         root_text = (cx.ctrl).text();
     }
 
-    let id = pg_compile(root_text);
-    if (id == 0) {
-        let diags = pg_compile_diags();
+    // The multi-file rail: `tree.file(..)` stages the declared children
+    // into the Module (a repeated path replaces — the last call wins);
+    // `compile()` stages and compiles in one synchronous step. Children
+    // stage from the edit cache first (edited
+    // files compile as edited), the registry on a miss — EXCEPT the
+    // active file: its text is the EDITOR's live content (the cache copy
+    // only updates on a switch, so it can be stale mid-edit). The root
+    // never stages — it rides the Module's root argument; an active CHILD
+    // stages here from the editor, keeping the compiled tree complete. A
+    // root-only case (or a cleared selection) stages nothing — the
+    // historical single-string compile.
+    let tree = Module(root_text);
+    let n = pg_case_file_count(name);
+    let j: u64 = 0;
+    while (j < n) {
+        let path = pg_case_file_path(name, j);
+        if (path != "" && path != active) {
+            tree.file(path, file_text(cx, name, path));
+        }
+        j = j + 1;
+    }
+    if (active != "") {
+        tree.file(active, (cx.ctrl).text());
+    }
+
+    let run = tree.compile();
+    if (!run.ok()) {
         set_state(ctx, cx, "compile-error");
-        ctx.set<str>(cx.verr, diags);
+        ctx.set<str>(cx.verr, run.diags());
         mark_edited(ctx, cx);
         return;
     }
 
     // Destroy-then-spawn: retire the previous child (and its status
-    // watch), mint the new controller from the compile row's source id,
-    // and swap the viewer's reactive `app$` atom — the mounted
+    // watch), mint the new controller from the compile's registered
+    // source, and swap the viewer's reactive `app$` atom — the mounted
     // `VirtualAppView` rebinds in the same flush and the new child
     // spawns. The new controller's status rail is watched in its place.
     (cx.vctrl).destroy();
-    let vctrl = virtual_app_controller(virtual_app_source_handle(id));
+    let vctrl = virtual_app_controller(run.source());
     (cx.vctrl) = vctrl;
     watch_controller(cx, vctrl);
     virtual_app_set(cx.app_atom, vctrl);
@@ -1566,7 +1567,7 @@ fn do_run(ctx: MutationCtx, cx: AppContext) {
     // text itself is already current, only the colors refresh). The
     // highlight covers the ACTIVE file — the editor's own text.
     let active_text = (cx.ctrl).text();
-    pg_apply_highlight((cx.ctrl).raw(), pg_highlight(active_text));
+    Highlight(active_text).apply(cx.ctrl);
 
     // The status rail: spawning (the watch deliveries settle it into
     // ready/error).

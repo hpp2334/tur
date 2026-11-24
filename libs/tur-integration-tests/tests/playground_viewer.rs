@@ -905,13 +905,14 @@ fn joined(spans: &[(String, u64)]) -> String {
 }
 
 /// A minimal fixture: one editor Input on a kit-minted controller; the
-/// `highlight` entry runs the case-load rail (`pg_highlight` +
-/// `pg_apply_highlight`) over a baked-in source — a keyword, an f-string
-/// with a hole, a comment, and the fn/call/method/param roles. The
-/// controller rides the answered context (the entry-cx contract).
+/// `highlight` entry runs the case-load rail through
+/// `tur_playground_kit::Highlight` (the rows behind it are kit-only) over
+/// a baked-in source — a keyword, an f-string with a hole, a comment, and
+/// the fn/call/method/param roles. The controller rides the answered
+/// context (the entry-cx contract).
 const HIGHLIGHT_ROWS_MODULE: &str = r#"
-use tur_host::{ pg_apply_highlight, pg_highlight };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::input::{ Input };use tur_kit::reactive::{ source };
+use tur_playground_kit::{ Highlight };
 
 
 struct EditorCx {
@@ -939,11 +940,12 @@ fn editor_cx(cx: opaque) -> EditorCx {
     return c;
 }
 
-// The case-load rail over a known small source.
+// The case-load rail through `tur_playground_kit::Highlight` over a
+// known small source.
 entry fn highlight(cx: opaque) {
     let src = "entry fn start() {\n    let s = f\"x {s}\"; // t\n    helper(1);\n    s.draw();\n}\nfn helper(n: u64) {\n}\n";
     let c = editor_cx(cx);
-    pg_apply_highlight(c.ctrl.raw(), pg_highlight(src));
+    Highlight(src).apply(c.ctrl);
 }
 "#;
 
@@ -1664,14 +1666,14 @@ fn playground_cmd_s_recompiles_from_the_focused_editor() {
 // future span/shaping regression trips here.
 
 const SPACING_ROWS_MODULE: &str = r#"
-use tur_host::{ pg_apply_highlight, pg_highlight };
 use tur_kit::handles::{ TextCtrl, UndoCtrl, mount, text_ctrl, undo_ctrl }; use tur_kit::layout::flex::{ Column }; use tur_kit::text::input::{ Input };
+use tur_playground_kit::{ Highlight };
 
 entry fn start() {
     let ctrl = text_ctrl();
     let src = "entry fn start() { // the quick brown fox jumps over the lazy dog\n    let x = 1; // spaced — out\n}\n";
     ctrl.set_text(src);
-    pg_apply_highlight(ctrl.raw(), pg_highlight(src));
+    Highlight(src).apply(ctrl);
     mount(Column().child(
         Input().controller(ctrl).undo(undo_ctrl()).width_height(700.0, 200.0)
             .font_family("Roboto Mono").font_size(13.0)
