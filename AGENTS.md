@@ -47,8 +47,9 @@ Entry points follow the contract: the test corpus
 tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
 engine with `mount(root.build())`, plus probe `entry fn`s the test
 drives via `call_rut_entry`. The playground is a rut module
-(`playground/mod.rut` + the generated `cases_gen.rut` registry, compiled by
-the `pg_compile` rut service over the file set staged through `pg_files_put`);
+(`playground/mod.rut` + the generated `cases_gen.rut` registry, compiled
+through `tur_playground_kit` — `Module(root).file(path, text).compile()`;
+the `pg_*` rows behind it are kit-only);
 the website boots it via `loadAndRunRutModule`.
 
 ## Architecture
@@ -192,6 +193,9 @@ libs/
   tur-clipboard-*/     # capability + wasm/native/android backends
   tur-net-*/           # capability + wasm/native backends
   tur-filepicker-*/    # capability + wasm/native backends
+  tur-playground/      # the playground's rut compile service (the `pg_*`
+                       #   rows + rut/tur_playground_kit/ — the authored
+                       #   kit face over them, pushed as a prelude)
   tur-native/          # native-only platform integrations (fonts, worker pools)
   tur-wasm/            # the reusable wasm embedder rlib
   tur-android/         # the Android embedder glue rlib
@@ -227,9 +231,9 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   virtual_app); embedded by tur-engine/src/kit/mod.rs
                        #   as a Pkg.mods tree (the embed mirrors the disk
                        #   tree — pinned by tur_host_decl)
-  tur_anim_kit/        # the animation kit (kit.rut; embedded by
+  tur_anim_kit/        # the animation kit (mod.rut; embedded by
                        #   tur-animation/src/kit.rs)
-  tur_net_kit/         # the net kit (kit.rut; embedded by
+  tur_net_kit/         # the net kit (mod.rut; embedded by
                        #   tur-net-capability/src/kit.rs)
   tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
                        #   tur-engine builtin_plugins/clipboard/kit.rs —
@@ -242,6 +246,14 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   tur-filepicker-capability/src/kit.rs — pushed
                        #   as a prelude by TurFilePickerPlugin; the rows
                        #   spell *_raw twins, the kit owns the names)
+  tur_font_kit/        # the font kit (mod.rut; embedded by tur-engine
+                       #   builtin_plugins/font/kit.rs — pushed as a
+                       #   prelude by TurFontPlugin; skipped without a
+                       #   Fonts capability)
+  tur_playground_kit/  # the playground kit (mod.rut; embedded by
+                       #   tur-playground/src/kit.rs — pushed as a prelude
+                       #   by TurRutPlaygroundPlugin; the authored face
+                       #   over the pg_* compile-service rows)
   playground/          # mod.rut + menu.rut (the editor's context menu —
                        #   the declared child; the site feeds both through
                        #   loadAndRunRutModuleFiles) + cases_gen.rut +
@@ -367,10 +379,14 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_event_kit|
-  tur_clipboard_kit|tur_file_kit` — the documented
-  exceptions live in the test's commented allowlist: the playground's
-  pg_*/rs_derive/second-use-line accommodations, the generated
-  `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
+  tur_clipboard_kit|tur_file_kit|tur_font_kit|tur_playground_kit` — the
+  documented exceptions live in the test's commented allowlist: the generated
+  `cases_gen.rut`, the corpora's named raw-row probes (each entry names the
+  rail it keeps raw — rut_boot / rut_mutation_rail / rut_atom_lane_guard /
+  perf/scenes / the tctrl_span + rs_source_f64 + bytes-helper probes in the
+  event & element tests), and `tur-playground/src/highlight.rs` (a
+  classification sample embeds a use line as highlighter input));
+  github-viewer
   no longer needs an exception (the 0eea7e95 per-file binding law retired
   its root anchor — explorer's own `use tur_net_kit::{ net_request }` +
   `use tur_file_kit::{ save_file }` bind it); `rs_derive|rs_derive2|rs_watch` have no call sites
@@ -458,6 +474,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   refused on 1-segment mod paths (`use tur_kit::handles::mount;` parses
   as `use pkg::A::B;`) — keep the braces: `use
   tur_kit::handles::{ mount };`.
+- **The playground kit** (`rut/tur_playground_kit/`): the authored face over
+  the `pg_*` compile-service rows, owned by the crate that owns the rows
+  (`tur-playground` — the layering law applied to a kit);
+  `TurRutPlaygroundPlugin` embeds it (`src/kit.rs`) and pushes it as a
+  compile-session prelude beside the rows, so hosts without the playground
+  service never see (or compile) it. Two classes replace the raw-row dance —
+  `Module(root).file(path, text).compile()` -> `CompileResult` and
+  `Highlight(src).apply(ctrl: TextCtrl)` — over a private linked list of
+  `ModuleFile` staged files (a std container with class-typed elements
+  fails the VM verifier at this pin, so no container crosses).
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
@@ -519,7 +545,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   the index is 422) on every full playground load once the playground
   root bound a third kit. The law: ONE BLOCK PER SCOPE. The consequence
   for tur: a module ROOT may bind SEVERAL source pkg heads (the
-  playground root is about to bind tur_anim_kit + tur_kit +
+  playground root binds tur_anim_kit + tur_kit +
   tur_playground_kit); the packed kit bundles were re-blessed at this
   pin (the fixed compiler lays the type tables out differently — no
   stale re-shipped copies). 010380cb is also rut-lsp's one-world store
@@ -606,10 +632,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   test budget is instead held by the profile: deps build at -O1 (see
   the `[profile.dev.package."*"]` note in Cargo.toml).
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
-  single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
-  head — a second (`use tur_anim_kit::…` in the root, even UNUSED)
-  panics the carried-inst interner (`types.rs:487`, subtract overflow);
-  bind extra pkg heads in a CHILD file. **(2)** record literals take a
+  single-file shapes are unaffected): **(1)** RETIRED — a case ROOT may
+  bind SEVERAL source pkg heads. The old "one pkg head per root" rule was
+  a symptom, not a law: the panic (the carried-inst interner,
+  `types.rs:487`, subtract overflow) was the stale re-shipped type block —
+  three registrations of one scope's block — and rut's one-block-per-scope
+  law (see the pin above) fixed it. The playground root now binds
+  tur_anim_kit + tur_kit + tur_playground_kit and the full playground
+  loads in `tests/playground_viewer.rs`; the corpus compiles. No
+  child-file binding rule remains. **(2)** record literals take a
   BARE head — construct cross-module structs behind a constructor fn in
   the defining module (`state::mint()`), never `state::Pieces { … }`.
   **(3)** cross-module TYPE positions qualify (`p: state::Pieces`).
@@ -664,8 +695,10 @@ Android build + device debugging live in the **`android-dev` skill** at
   and cross-file leaves spell `.raw()`, never `.inner` (the bump swept
   all 26 child-insert sites; at 6e4db9c7 `View.raw()` is `pub` — the
   FieldVis law refuses a cross-package `.inner` — while the
-  kit-internal erases (`VAppSource`, `MapHandle`) keep the `pub(pkg)`
-  dial; the event payload classes' fields (`PointerEvent.local/global/
+  kit-internal erases keep the tight dial (`VAppSource.raw()` is
+  `pub(pkg)`, `MapHandle.raw()` is module-private — nothing outside
+  needs the map's raw yet);
+  the event payload classes' fields (`PointerEvent.local/global/
   button`, `KeydownEvent.key/code/modifiers`, …) are `pub` for the same
   reason — handlers read them cross-package).
   Block tails are values (an expression before `}` with no `;` is the
