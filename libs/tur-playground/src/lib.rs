@@ -31,12 +31,13 @@
 //! # The kit
 //!
 //! `tur_playground_kit` (`rut/tur_playground_kit/mod.rut`, embedded by
-//! `src/kit.rs`) is the authored face over these rows: module authors
-//! write `use tur_playground_kit::{ Highlight, Module };` —
+//! `src/kit.rs`) is the authored face over these rows for module authors:
+//! `use tur_playground_kit::{ Highlight, Module };` —
 //! `Module(root).file(path, text).compile()` and
-//! `Highlight(src).apply(ctrl)` — never the `pg_*` rows themselves. The
-//! rows stay the boundary and are unchanged; the kit rides beside them as
-//! a compile-session prelude, so hosts without the playground service
+//! `Highlight(src).apply(ctrl)`. The rows stay the boundary and are
+//! unchanged (the playground module itself still binds them directly —
+//! see AGENTS.md's surface laws); the kit rides beside them as a
+//! compile-session prelude, so hosts without the playground service
 //! never see (or compile) it.
 
 mod highlight;

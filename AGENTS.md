@@ -47,9 +47,8 @@ Entry points follow the contract: the test corpus
 tur_kit::{ Column, Text, … }` — see Conventions) and hands the root to the
 engine with `mount(root.build())`, plus probe `entry fn`s the test
 drives via `call_rut_entry`. The playground is a rut module
-(`playground/mod.rut` + the generated `cases_gen.rut` registry, compiled
-through `tur_playground_kit` — `Module(root).file(path, text).compile()`;
-the `pg_*` rows behind it are kit-only);
+(`playground/mod.rut` + the generated `cases_gen.rut` registry, compiled by
+the `pg_compile` rut service over the file set staged through `pg_files_put`);
 the website boots it via `loadAndRunRutModule`.
 
 ## Architecture
@@ -380,13 +379,14 @@ Android build + device debugging live in the **`android-dev` skill** at
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_event_kit|
   tur_clipboard_kit|tur_file_kit|tur_font_kit|tur_playground_kit` — the
-  documented exceptions live in the test's commented allowlist: the generated
-  `cases_gen.rut`, the corpora's named raw-row probes (each entry names the
-  rail it keeps raw — rut_boot / rut_mutation_rail / rut_atom_lane_guard /
-  perf/scenes / the tctrl_span + rs_source_f64 + bytes-helper probes in the
-  event & element tests), and `tur-playground/src/highlight.rs` (a
-  classification sample embeds a use line as highlighter input));
-  github-viewer
+  documented exceptions live in the test's commented allowlist: the
+  playground's pg_*/rs_derive/second-use-line accommodations (the
+  playground module and its viewer fixtures still bind the rows directly:
+  the playground kit below is ready, but a root that binds it beside
+  `tur_anim_kit` + `tur_kit` trips the rut defect behind the MULTI-FILE
+  case laws' law (1)), the generated `cases_gen.rut`, the corpora's named
+  raw-row probes, and `tur-playground/src/highlight.rs` (a classification
+  sample embeds a use line as highlighter input)); github-viewer
   no longer needs an exception (the 0eea7e95 per-file binding law retired
   its root anchor — explorer's own `use tur_net_kit::{ net_request }` +
   `use tur_file_kit::{ save_file }` bind it); `rs_derive|rs_derive2|rs_watch` have no call sites
@@ -479,11 +479,14 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`tur-playground` — the layering law applied to a kit);
   `TurRutPlaygroundPlugin` embeds it (`src/kit.rs`) and pushes it as a
   compile-session prelude beside the rows, so hosts without the playground
-  service never see (or compile) it. Two classes replace the raw-row dance —
+  service never see (or compile) it. Two classes spell the face —
   `Module(root).file(path, text).compile()` -> `CompileResult` and
   `Highlight(src).apply(ctrl: TextCtrl)` — over a private linked list of
   `ModuleFile` staged files (a std container with class-typed elements
-  fails the VM verifier at this pin, so no container crosses).
+  fails the VM verifier at this pin, so no container crosses). The
+  playground module does not consume it yet: a root that binds this kit
+  beside `tur_anim_kit` + `tur_kit` trips the rut defect behind the
+  MULTI-FILE case laws' law (1) — see the surface laws.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
@@ -544,9 +547,10 @@ Android build + device debugging live in the **`android-dev` skill** at
   died at boot (`types.rs:722`: index out of bounds, the len is 387 but
   the index is 422) on every full playground load once the playground
   root bound a third kit. The law: ONE BLOCK PER SCOPE. The consequence
-  for tur: a module ROOT may bind SEVERAL source pkg heads (the
-  playground root binds tur_anim_kit + tur_kit +
-  tur_playground_kit); the packed kit bundles were re-blessed at this
+  for tur: a module ROOT may bind SEVERAL source pkg heads — the
+  playground's migration onto tur_playground_kit is HELD until this fix
+  is on rut master (see the surface laws); the packed kit bundles were
+  re-blessed at this
   pin (the fixed compiler lays the type tables out differently — no
   stale re-shipped copies). 010380cb is also rut-lsp's one-world store
   (the open document is a world file) — tur's actor-driven highlighter
@@ -632,16 +636,10 @@ Android build + device debugging live in the **`android-dev` skill** at
   test budget is instead held by the profile: deps build at -O1 (see
   the `[profile.dev.package."*"]` note in Cargo.toml).
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
-  single-file shapes are unaffected): **(1)** RETIRED — a case ROOT may
-  bind SEVERAL source pkg heads. The old "one pkg head per root" rule was
-  a symptom, not a law: its panic (the carried-inst interner,
-  `types.rs:487`, subtract overflow) came from the stale copies
-  `TypeTable::use_block` left behind whenever bound surfaces re-shipped a
-  scope's type block, and rut's one-block-per-scope law (see the pin
-  above) removed them. The playground root now binds
-  tur_anim_kit + tur_kit + tur_playground_kit and the full playground
-  loads in `tests/playground_viewer.rs`; the corpus compiles. No
-  child-file binding rule remains. **(2)** record literals take a
+  single-file shapes are unaffected): **(1)** a case ROOT binds ONE pkg
+  head — a second (`use tur_anim_kit::…` in the root, even UNUSED)
+  panics the carried-inst interner (`types.rs:487`, subtract overflow);
+  bind extra pkg heads in a CHILD file. **(2)** record literals take a
   BARE head — construct cross-module structs behind a constructor fn in
   the defining module (`state::mint()`), never `state::Pieces { … }`.
   **(3)** cross-module TYPE positions qualify (`p: state::Pieces`).

@@ -7,9 +7,8 @@
 {
   "name": "playground",
   "deps": {
-    "tur_anim_kit": { "path": "../tur_anim_kit" },
     "tur_clipboard_kit": { "path": "../tur_clipboard_kit" },
-    "tur_kit": { "path": "../tur_kit" },
-    "tur_playground_kit": { "path": "../tur_playground_kit" }
+    "tur_host": { "path": "../tur_host" },
+    "tur_kit": { "path": "../tur_kit" }
   }
 }
