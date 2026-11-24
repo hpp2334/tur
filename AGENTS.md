@@ -534,25 +534,20 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **`fdc7ed58`** — rut master (`010380cb`, 2026-11-25)
-  plus the one-block-per-scope fix, which rides rut branch
-  `fix/one-block-per-scope` until the user merges it to master (a
-  fast-forward keeps the hash). The fix: `TypeTable::use_block`
-  re-registered a scope's base on every bound surface that re-shipped
-  that scope's type block and left the older copies' rows in the table,
-  so from the third registration on a stale copy sat inside ANOTHER
-  scope's run. A function-type row the root minted (`fn(MutationCtx,
-  nil -> nil`, … — a handler closure whose type tur_kit's own block
-  already carries) got spelled through that other scope, and the VM
-  died at boot (`types.rs:722`: index out of bounds, the len is 387 but
-  the index is 422) on every full playground load once the playground
-  root bound a third kit. The law: ONE BLOCK PER SCOPE. The consequence
-  for tur: a module ROOT may bind SEVERAL source pkg heads — the
-  playground's migration onto tur_playground_kit is HELD until this fix
-  is on rut master (see the surface laws); the packed kit bundles were
-  re-blessed at this
-  pin (the fixed compiler lays the type tables out differently — no
-  stale re-shipped copies). 010380cb is also rut-lsp's one-world store
+- The rut pin is **`7ed9c357`** — latest master (`7ed9c357`,
+  2026-11-25) — 66 commits past the previous pin (`460e8887`,
+  2026-11-22). This pin does NOT carry a fix for the stale re-shipped
+  type block: MULTI-FILE case law (1) still holds (a module root binds
+  ONE pkg head) and the playground's migration onto tur_playground_kit
+  is HELD until the fix is on rut master (see the surface laws). The
+  three newest steps: at `2d0f0955` the LSP Act-1 review fixes (the
+  open-scratch reverse edge is pinned — a Scratch file is visible only
+  as itself, references and hover agree — and the handoff table
+  re-anchored); at `7ed9c357` "no mirrors, Task A" (the four pure mod
+  laws — own-package head, the interior walk, the pub-edge walk, the
+  mod-tree input — get ONE home in `rut_lir::check`; the compiler's
+  callers delegate, rut-lsp's hand copies are deleted, diagnostic
+  strings byte-identical). 010380cb is also rut-lsp's one-world store
   (the open document is a world file) — tur's actor-driven highlighter
   rides through unchanged. At `6e4db9c7` (2026-11-24) — 63 commits past
   `460e8887`: the machine owns ONE wake cell (`Completer::with_wake`
