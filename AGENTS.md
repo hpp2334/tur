@@ -505,31 +505,42 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest master** (`6e4db9c7`, 2026-11-24) — 63 commits
-  past the previous pin (`460e8887`, 2026-11-22): the machine owns ONE
-  wake cell — `Completer::with_wake` over `HostWakes` — and
-  `pkg_async_fn!`'s emitted `__start` row mints the completer through
+- The rut pin is **`fdc7ed58`** — rut master (`010380cb`, 2026-11-25)
+  plus the one-block-per-scope fix, which rides rut branch
+  `fix/one-block-per-scope` until the user merges it to master (a
+  fast-forward keeps the hash). The fix: `TypeTable::use_block`
+  re-registered a scope's base on every bound surface that re-shipped
+  that scope's type block and left the older copies' rows in the table,
+  so from the third registration on a stale copy sat inside ANOTHER
+  scope's run. A function-type row the root minted (`fn(MutationCtx,
+  nil -> nil`, … — a handler closure whose type tur_kit's own block
+  already carries) got spelled through that other scope, and the VM
+  died at boot (`types.rs:722`: index out of bounds, the len is 387 but
+  the index is 422) on every full playground load once the playground
+  root bound a third kit. The law: ONE BLOCK PER SCOPE. The consequence
+  for tur: a module ROOT may bind SEVERAL source pkg heads (the
+  playground root is about to bind tur_anim_kit + tur_kit +
+  tur_playground_kit); the packed kit bundles were re-blessed at this
+  pin (the fixed compiler lays the type tables out differently — no
+  stale re-shipped copies). 010380cb is also rut-lsp's one-world store
+  (the open document is a world file) — tur's actor-driven highlighter
+  rides through unchanged. At `6e4db9c7` (2026-11-24) — 63 commits past
+  `460e8887`: the machine owns ONE wake cell (`Completer::with_wake`
+  over `HostWakes` — `pkg_async_fn!`'s `__start` row mints it through
   `Vm::host_wakes()` and HANDS it to the start closure as its FIRST
-  parameter, so bodies stop minting/returning (tur's 9 async rows
-  swept: `font_load_data`, the clipboard read/write twins, the
-  net_request twins, the filepicker raw pair — upstream 6fa9d58a); the
-  driving protocol lands (`run_until_idle` + `Wait { Block, NonBlock }`
-  / `Idle { Drained, WouldBlock }` — 6cc744cd, the consumers 7ad61aef;
-  the raw doors `run_ready` / `next_deadline` / `set_now` /
-  `pending_tasks` stay PUBLIC by contract and tur's pump keeps
-  `run_ready()` per flush — do NOT adopt `run_until_idle`); FieldVis
-  rides the surface — non-pub fields refuse CROSS-PACKAGE (7c999eda),
-  so `View.raw()` is now `pub` and the anim kit spells `.raw()` at its
-  two `child` sites; the one-name law (one first-spell registry per
-  file, declarations included — 90b8ed81), `TyKind::Err` poison types
-  (a failing resolution answers the error type instead of cascading
-  false follow-on diagnostics — 06d49377/a27ece8a), method-call
-  generic args validate (92ffdc3b), and fmt literals reprint verbatim
-  (3152e237); module binary VERSION 23 -> 24 — the committed kit
-  bundles re-blessed (the pin-bump drill). The std http lane moved
-  upstream (swappable backend, backpressure, cancel, the wasm fetch) —
-  NOT consumed by tur; the vendored closure + the futures embed are
-  unchanged (no re-vendor). At `460e8887`, the glob leaf + the Name
+  parameter; tur's 9 async rows swept); the driving protocol lands
+  (`run_until_idle` + `Wait { Block, NonBlock }` / `Idle { Drained,
+  WouldBlock }` — the raw doors `run_ready` / `next_deadline` /
+  `set_now` / `pending_tasks` stay PUBLIC by contract and tur's pump
+  keeps `run_ready()` per flush — do NOT adopt `run_until_idle`);
+  FieldVis rides the surface — non-pub fields refuse CROSS-PACKAGE, so
+  `View.raw()` is `pub` and the anim kit spells `.raw()` at its two
+  `child` sites; the one-name law, `TyKind::Err` poison types,
+  method-call generic args validate, fmt literals reprint verbatim;
+  module binary VERSION 23 -> 24 (the committed kit bundles
+  re-blessed). The std http lane moved upstream — NOT consumed by tur;
+  the vendored closure + the futures embed are unchanged (no
+  re-vendor). At `460e8887`, the glob leaf + the Name
   vocabulary: the GLOB LEAF lands (`use pkg::*` + the brace star — a
   grammar feature; the driver's glob expansion binds the pub surface —
   tur's sources spell no globs yet, the surface-law test's allowlist
