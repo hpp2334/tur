@@ -27,8 +27,21 @@
 //!
 //! No source string ever round-trips back through rut — the compile
 //! registers the source on the parent's virtual-app state directly.
+//!
+//! # The kit
+//!
+//! `tur_playground_kit` (`rut/tur_playground_kit/mod.rut`, embedded by
+//! `src/kit.rs`) is the authored face over these rows for module authors:
+//! `use tur_playground_kit::{ Highlight, Module };` —
+//! `Module(root).file(path, text).compile()` and
+//! `Highlight(src).apply(ctrl)`. The rows stay the boundary and are
+//! unchanged (the playground module itself still binds them directly —
+//! see AGENTS.md's surface laws); the kit rides beside them as a
+//! compile-session prelude, so hosts without the playground service
+//! never see (or compile) it.
 
 mod highlight;
+mod kit;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -51,8 +64,13 @@ pub struct TurRutPlaygroundPlugin;
 
 impl Plugin for TurRutPlaygroundPlugin {
     fn register(&self, ctx: &mut PluginRegisterContext) -> Result<(), TurError> {
-        let ext: RutPkgExt = Rc::new(|cx: &mut RutPkgCx<'_>| install(cx));
-        ctx.js_ctx().rut_pkg_exts.borrow_mut().push(ext);
+        ctx.push_rut_ext(Rc::new(|cx: &mut RutPkgCx<'_>| {
+            // The kit rides beside the rows, so `use tur_playground_kit::{ … }`
+            // resolves wherever this plugin is registered (the surface law:
+            // tur_host rows are reachable only through kits).
+            cx.preludes.push(crate::kit::playground_kit_pkg());
+            install(cx);
+        }));
         Ok(())
     }
 }

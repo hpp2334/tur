@@ -9,8 +9,14 @@
 //! inside a flush iteration).
 //!
 //! Module lifecycle contract (mirrors the JS contract): `entry fn start()`
-//! is invoked after boot; `entry fn stop()` — if present — runs (best-effort)
-//! before the next load and at destroy; the engine owns root-tree teardown.
+//! is invoked after boot — with the EMBEDDER-SUPPLIED start context when
+//! the module declares a `cx` param (`entry fn start(cx: opaque)`, the
+//! embedder's identity handle, load-time supplied; see
+//! [`RutRuntime::boot_compiled`]); `entry fn stop()` — if present — runs
+//! (best-effort) before the next load and at destroy; the engine owns
+//! root-tree teardown. The cx entry lanes deliver that same
+//! embedder-supplied handle when the load supplied one (falling back to
+//! the start-answer slot for modules loaded without one).
 //!
 //! ## Layering law
 //!
@@ -33,7 +39,9 @@ use crate::core::edgy::value::Value;
 use crate::core::instance::InstanceContext;
 use crate::core::render::brush::Color;
 use crate::core::view::{SharedViewCx, View};
-use rut_core::types::{TY_BOOL, TY_F64, TY_NIL, TY_OPAQUE, TY_STR, TY_U64, TypeId};
+use rut_core::types::{
+    TY_BOOL, TY_BYTES, TY_F64, TY_NIL, TY_OPAQUE, TY_OPT_BYTES, TY_OPT_STR, TY_STR, TY_U64, TypeId,
+};
 use rut_driver::MountedBody;
 use rut_vm::Opaque;
 use rut_vm::OpaqueRef;
@@ -44,11 +52,13 @@ mod decl_gen;
 mod derive;
 mod env;
 mod module_files;
+mod module_pkgzip;
 mod mutation;
 
 pub use decl_gen::{mount_host_tree, render_tur_host_decl_tree, tur_host_surface};
 pub use env::ViewportEnv;
 pub use module_files::RutModuleFiles;
+pub use module_pkgzip::RutModulePkgZip;
 pub use mutation::{CtxBridge, ValueArgs, mutation_of};
 
 /// The `RutView`-opaque → `Rc<dyn View>` crossing (item builders return
@@ -1454,6 +1464,94 @@ impl RutRuntime {
         Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)))
     }
 
+    /// [`Self::compile_files`] over a packed SOURCE ZIP (the pkg-zip
+    /// load lane): the archive-root package mounts from its `src/` tree
+    /// with its manifest's declaration UNIONED with the offered specs
+    /// (the ambient nameability law), every top-level embedded
+    /// `deps/<identity>/` group mounts beside it, and the session mounts
+    /// first-mount-wins ahead of the packed closure. Same two lanes as
+    /// the file lane (precompiled kit when the offered fingerprint
+    /// matches, source fallback otherwise) and the same parse-first
+    /// contract.
+    pub(crate) fn compile_pkg_zip(
+        files: &RutModulePkgZip,
+        exts: &[RutPkgExt],
+    ) -> Result<
+        (
+            Rc<rut_core::binary::Program>,
+            rut_vm::interp::HostPkgContext,
+        ),
+        String,
+    > {
+        let offered_all = Self::offered_pkgs(exts);
+        let offered_specs: std::collections::BTreeSet<String> =
+            offered_all.iter().map(|p| p.spec.clone()).collect();
+        let (app, extra) = module_pkgzip::mount_pkg_zip(files, &offered_specs)?;
+        let label = module_pkgzip::root_files(files).map_err(|e| format!("pkg zip: {e}"))?;
+        let entry_spec = app.spec.clone();
+
+        // The host-row snapshot (the offered set minus the futures
+        // weave — identical to the file lane's).
+        let host_view: Vec<rut_driver::Mounted> = offered_all
+            .iter()
+            .filter(|p| p.spec != "futures")
+            .cloned()
+            .collect();
+
+        // The precompiled lane: the same fingerprint match as the file
+        // lane — an ext-free configuration serves the compiled kit and
+        // compiles only the zip's root package.
+        if let Some(pkgs) = precompiled_kit_matching(Self::offered_fingerprint(&offered_all)) {
+            let mut run = rut_driver::RutRun::new()
+                .mount(app)
+                .entrypoint(&entry_spec);
+            for pkg in offered_all
+                .iter()
+                .filter(|p| p.spec == "tur_host" || p.spec == "async_host")
+            {
+                run = run.mount(pkg.clone());
+            }
+            for pkg in pkgs {
+                run = run.mount(pkg);
+            }
+            let compiled = run.compile().map_err(|e| e.msg)?;
+            if !compiled.graph.diags.is_empty() {
+                return Err(render_diags(&compiled.graph.diags, &label));
+            }
+            let prog = compiled
+                .graph
+                .program
+                .ok_or("rut compile emitted no binary")?;
+            rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
+            return Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)));
+        }
+
+        // The source lane: mount the app (the zip's own package), then
+        // the offered set, then the embedded groups — first-mount-wins
+        // keeps the session ahead of the packed closure. `core` is
+        // auto-offered by `.compile()`.
+        SOURCE_FALLBACKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut run = rut_driver::RutRun::new()
+            .mount(app)
+            .entrypoint(&entry_spec);
+        for pkg in offered_all {
+            run = run.mount(pkg);
+        }
+        for pkg in extra {
+            run = run.mount(pkg);
+        }
+        let compiled = run.compile().map_err(|e| e.msg)?;
+        if !compiled.graph.diags.is_empty() {
+            return Err(render_diags(&compiled.graph.diags, &label));
+        }
+        let prog = compiled
+            .graph
+            .program
+            .ok_or("rut compile emitted no binary")?;
+        rut_vm::verify::verify(&prog).map_err(|e| format!("verify: {e}"))?;
+        Ok((Rc::new(prog), rut_driver::host_pkg_ctx(&host_view)))
+    }
+
     /// Parse + compile only (the parse-first half of the load contract) —
     /// a broken reload must fail before any teardown runs.
     pub fn parse_check(
@@ -1481,19 +1579,21 @@ impl RutRuntime {
         inputs: RutRealmInputs,
         exts: Vec<RutPkgExt>,
     ) -> Result<Self, crate::core::app::ModuleError> {
-        Self::boot_files(&RutModuleFiles::from(source), js_ctx, inputs, exts)
+        Self::boot_files(&RutModuleFiles::from(source), js_ctx, inputs, exts, None)
     }
 
-    /// [`Self::boot`] over a whole file tree.
+    /// [`Self::boot`] over a whole file tree. `start_cx`: the
+    /// embedder-supplied start argument (see [`Self::boot_compiled`]).
     pub fn boot_files(
         files: &RutModuleFiles,
         js_ctx: InstanceContext,
         inputs: RutRealmInputs,
         exts: Vec<RutPkgExt>,
+        start_cx: Option<u64>,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let (prog, ctx) =
             Self::compile_files(files, &exts).map_err(crate::core::app::ModuleError::Parse)?;
-        Self::boot_compiled(prog, ctx, js_ctx, inputs, &exts)
+        Self::boot_compiled(prog, ctx, js_ctx, inputs, &exts, start_cx)
     }
 
     /// The boot half over a PRE-COMPILED program ([`Self::compile_files`]'s
@@ -1501,12 +1601,23 @@ impl RutRuntime {
     /// `start`. The load rail compiles once and hands the result through —
     /// the parse-first contract holds (the compile ran before any
     /// teardown) and the session is never paid for twice.
+    ///
+    /// `start_cx` is the EMBEDDER-SUPPLIED START ARGUMENT (the
+    /// `entry fn start(cx: opaque)` crossing): the u64 identity the
+    /// embedder minted for this load. The engine seals it into a rut
+    /// erasure box (`unopaque<u64>` recovers it module-side) and registers
+    /// the box in the entry slots under that identity, so the cx entry
+    /// lanes deliver THIS handle — not the start answer — when addressed
+    /// by it. `None` = the historical no-arg boot. The u64 is the whole
+    /// crossing because an `OpaqueRef` is heap-backed (worker-side) and
+    /// cannot travel the embedder → worker channel.
     pub fn boot_compiled(
         prog: Rc<rut_core::binary::Program>,
         ctx: rut_vm::interp::HostPkgContext,
         js_ctx: InstanceContext,
         inputs: RutRealmInputs,
         exts: &[RutPkgExt],
+        start_cx: Option<u64>,
     ) -> Result<Self, crate::core::app::ModuleError> {
         let face = VmFace::new();
         let handles: Rc<RutHandles> = Rc::new(RutHandles {
@@ -1555,9 +1666,12 @@ impl RutRuntime {
         // module with no `start` export but an `entry_start` boots LAZILY —
         // the embedder's first `call_rut_entry_opaque("entry_start")` runs
         // it (the fixture contract's `fn start() -> AppContext` shape).
-        let start_ret = export_of("start")
-            .and_then(|fid| prog.funcs.get(fid))
-            .map(|f| f.ret);
+        // The declared PARAM count is the arity-aware half: a `start(cx)`
+        // boot passes the embedder-supplied start argument, a `start()`
+        // boot keeps today's zero-arg call.
+        let start_info = export_of("start").and_then(|fid| prog.funcs.get(fid));
+        let start_ret = start_info.map(|f| f.ret);
+        let start_params = start_info.map(|f| f.params.len()).unwrap_or(0);
         let has_entry_start = export_of("entry_start").is_some();
 
         let vm = rut_vm::interp::Vm::builder()
@@ -1572,6 +1686,30 @@ impl RutRuntime {
         let vm = Rc::new(std::cell::RefCell::new(vm));
         handles.face.install(&vm);
 
+        // The embedder-supplied start context — sealed into a rut erasure
+        // box over the u64 identity (`unopaque<u64>` recovers it
+        // module-side; `opaque::downcast<T>` misses loudly, the box is the
+        // engine's identity token, never a module record). Registered in
+        // the entry slots UNDER that identity, so the cx entry lanes
+        // deliver this handle — not the start answer — when addressed by
+        // the id the embedder already holds.
+        let boot_cx = match start_cx {
+            Some(identity) => {
+                let cx = vm
+                    .borrow_mut()
+                    .seal_opaque(rut_vm::Slot::int(identity as i64), TY_U64)
+                    .map_err(|t| {
+                        crate::core::app::ModuleError::Eval(format!(
+                            "boot: seal start cx: {} — {}",
+                            t.name(),
+                            t.msg
+                        ))
+                    })?;
+                Some(cx)
+            }
+            None => None,
+        };
+
         let mut rt = RutRuntime {
             vm,
             handles,
@@ -1581,7 +1719,10 @@ impl RutRuntime {
             entry_slots: std::cell::RefCell::new(std::collections::HashMap::new()),
             entry_slot_next: std::cell::Cell::new(1),
         };
-        rt.call_start(start_ret, has_entry_start)?;
+        if let (Some(identity), Some(cx)) = (start_cx, boot_cx.as_ref()) {
+            rt.entry_slot_register_at(identity, cx.clone());
+        }
+        rt.call_start(start_ret, has_entry_start, start_params, boot_cx)?;
         Ok(rt)
     }
 
@@ -1589,11 +1730,44 @@ impl RutRuntime {
         &mut self,
         start_ret: Option<TypeId>,
         has_entry_start: bool,
+        start_params: usize,
+        boot_cx: Option<OpaqueRef>,
+    ) -> Result<(), crate::core::app::ModuleError> {
+        // Positional-arity law: a `start` that declares a parameter
+        // receives the embedder-supplied start argument (one — anything
+        // else is a boot error); a parameterless `start` keeps today's
+        // zero-arg call. The answer-type dispatch below is unchanged for
+        // both shapes.
+        if start_params > 1 {
+            return Err(crate::core::app::ModuleError::Eval(format!(
+                "boot: `start` declares {start_params} params — the boot rail passes at most the start context (cx)"
+            )));
+        }
+        if start_params == 1 {
+            let cx = boot_cx.ok_or_else(|| {
+                crate::core::app::ModuleError::Eval(
+                    "boot: `start` declares a cx param but no start context was supplied (load with an embedder start cx)"
+                        .into(),
+                )
+            })?;
+            return self.start_with_args(start_ret, has_entry_start, (cx,));
+        }
+        self.start_with_args(start_ret, has_entry_start, ())
+    }
+
+    /// [`Self::call_start`]'s answer-type dispatch, generic over the boot
+    /// argument tuple (`()` for the parameterless shape, `(OpaqueRef,)`
+    /// for the `start(cx)` shape).
+    fn start_with_args<A: CallArgs>(
+        &mut self,
+        start_ret: Option<TypeId>,
+        has_entry_start: bool,
+        args: A,
     ) -> Result<(), crate::core::app::ModuleError> {
         let mut vm = self.vm.borrow_mut();
         match start_ret {
             Some(TY_U64) => {
-                let answer = vm.call::<_, u64>("start", ()).map_err(|t| {
+                let answer = vm.call::<_, u64>("start", args).map_err(|t| {
                     crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
                 self.start_answer = answer;
@@ -1603,13 +1777,13 @@ impl RutRuntime {
             // it and the token IS the start answer (the embedder passes it
             // back through the cx entry lanes).
             Some(TY_OPAQUE) => {
-                let cx = vm.call::<_, OpaqueRef>("start", ()).map_err(|t| {
+                let cx = vm.call::<_, OpaqueRef>("start", args).map_err(|t| {
                     crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
                 self.start_answer = self.entry_slot_mint(cx);
             }
             Some(TY_NIL) => {
-                vm.call::<_, ()>("start", ()).map_err(|t| {
+                vm.call::<_, ()>("start", args).map_err(|t| {
                     crate::core::app::ModuleError::Eval(format!("start: {} — {}", t.name(), t.msg))
                 })?;
             }
@@ -1682,6 +1856,19 @@ impl RutRuntime {
         token
     }
 
+    /// Register a handle under an EMBEDDER-SUPPLIED identity token (the
+    /// boot start-cx crossing): the embedder minted the id, so the cx
+    /// entry lanes resolve it directly — no round-trip to a minted token.
+    /// Minted tokens keep climbing above the identity so the two spaces
+    /// never collide.
+    fn entry_slot_register_at(&self, token: u64, o: OpaqueRef) {
+        self.entry_slots.borrow_mut().insert(token, o);
+        let next = self.entry_slot_next.get();
+        if token >= next {
+            self.entry_slot_next.set(token.saturating_add(1));
+        }
+    }
+
     /// Clone a held slot's handle — the cx crossing back INTO the VM (the
     /// slot STAYS: one context re-crosses on every control call).
     pub fn entry_slot_handle(
@@ -1748,10 +1935,39 @@ impl RutRuntime {
         self.entry_cx_call(name, (cx.clone(), b))
     }
 
+    /// `entry fn(opaque, str, str)` — the context + the (op, args) pair:
+    /// the plugin-epoch dispatch shape. The request payload rides the
+    /// call (`RutEntryArgs::CxStrStr`); the stash inbox it replaces is
+    /// host-side, gone from the engine's contract.
+    pub fn call_entry_cx_str_str(
+        &mut self,
+        name: &str,
+        cx: &OpaqueRef,
+        op: &str,
+        args: &str,
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        self.entry_cx_call(name, (cx.clone(), op, args))
+    }
+
+    /// `entry fn(opaque, str, bytes)` — the dispatch shape over binary
+    /// args.
+    pub fn call_entry_cx_str_bytes(
+        &mut self,
+        name: &str,
+        cx: &OpaqueRef,
+        op: &str,
+        args: &[u8],
+    ) -> Result<crate::core::app::RutEntryAnswer, crate::core::app::ModuleError> {
+        self.entry_cx_call(name, (cx.clone(), op, args))
+    }
+
     /// The shared cx-lane body: ONE vm.call with the given args tuple, the
     /// answer decoded under the export's declared return type (nil / u64 /
-    /// f64 / str / opaque — anything else is a loud error naming both
-    /// sides). An opaque answer slots and reports its token.
+    /// f64 / str / bytes / opaque, plus their `?str` / `?bytes` option
+    /// lanes — anything else is a loud error naming both sides). An opaque
+    /// answer slots and reports its token; a nil option answer flattens to
+    /// [`RutEntryAnswer::Nil`] (the plugin-epoch dispatch entries answer
+    /// `?str` / `?bytes` — `nil` is the "not mine" / miss arm).
     fn entry_cx_call<A: CallArgs>(
         &mut self,
         name: &str,
@@ -1784,6 +2000,27 @@ impl RutRuntime {
                 .borrow_mut()
                 .call::<A, String>(name, args)
                 .map(Ans::Str),
+            TY_OPT_STR => self
+                .vm
+                .borrow_mut()
+                .call::<A, Option<String>>(name, args)
+                .map(|o| match o {
+                    Some(s) => Ans::Str(s),
+                    None => Ans::Nil, // the flat nil: the miss arm
+                }),
+            TY_BYTES => self
+                .vm
+                .borrow_mut()
+                .call::<A, Vec<u8>>(name, args)
+                .map(Ans::Bytes),
+            TY_OPT_BYTES => self
+                .vm
+                .borrow_mut()
+                .call::<A, Option<Vec<u8>>>(name, args)
+                .map(|o| match o {
+                    Some(b) => Ans::Bytes(b),
+                    None => Ans::Nil,
+                }),
             TY_OPAQUE => self
                 .vm
                 .borrow_mut()
@@ -2021,6 +2258,55 @@ mod tests {
         let files = RutModuleFiles::from("entry fn start() {}\n");
         let diags = vec![Diag::new(Span::new(5, 9), "boom")];
         assert_eq!(render_diags(&diags, &files), "mod.rut: boom");
+    }
+
+    /// The pkg-zip compile lane: a packed source zip whose root uses an
+    /// embedded group compiles — the group mounts from the archive, the
+    /// use resolves through the app manifest's ambient declaration.
+    #[test]
+    fn compiles_a_pkg_zip_with_an_embedded_group() {
+        use rut_driver::bundle::write_srczip;
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            (
+                "rut.jsonc".into(),
+                b"{\"name\":\"m\",\"deps\":{\"g\":{\"path\":\"deps/g@0000000000000000\"}}}".to_vec(),
+            ),
+            (
+                "src/mod.rut".into(),
+                b"use g::{ one };\nentry fn start() { const _ = one(); }".to_vec(),
+            ),
+            (
+                "deps/g@0000000000000000/rut.jsonc".into(),
+                b"{\"name\":\"g\"}".to_vec(),
+            ),
+            (
+                "deps/g@0000000000000000/src/mod.rut".into(),
+                b"pub fn one() -> i32 { return 1; }".to_vec(),
+            ),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let zip = RutModulePkgZip::from_bytes(&bytes).expect("zip unpacks");
+        let compiled = RutRuntime::compile_pkg_zip(&zip, &[]);
+        assert!(compiled.is_ok(), "pkg zip compiles: {:?}", compiled.err());
+    }
+
+    /// A declared-but-unmounted head is the loud D5 failure (a session
+    /// dep missing from the offered set surfaces at compile, naming the
+    /// use).
+    #[test]
+    fn pkg_zip_missing_session_head_fails_loudly() {
+        use rut_driver::bundle::write_srczip;
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            ("rut.jsonc".into(), b"{\"name\":\"m\"}".to_vec()),
+            (
+                "src/mod.rut".into(),
+                b"use nothere::{ x };\nentry fn start() {}".to_vec(),
+            ),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let zip = RutModulePkgZip::from_bytes(&bytes).expect("zip unpacks");
+        let compiled = RutRuntime::compile_pkg_zip(&zip, &[]);
+        assert!(compiled.is_err(), "an undeclared+unmounted head refuses");
     }
 
     /// A span BEFORE the first child seam (e.g. a synthetic `Span::new(0,0)`

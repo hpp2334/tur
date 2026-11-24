@@ -5,12 +5,15 @@
 //! an `Arc<str>`, so a source created on the embedder's Rust side (e.g. an
 //! APK asset read directly in native code, a bundle file read by a desktop
 //! host) can be registered once and then loaded into any instance via
-//! [`TurApp::load_module_source`](crate::TurApp::load_module_source)
+//! [`TurApp::load_module_source`](crate::TurApp::load_rut_module_source)
 //! (or its string-based sibling
-//! [`TurApp::load_module`](crate::TurApp::load_module))
+//! [`TurApp::load_module`](crate::TurApp::load_rut_module))
 //! **without ever crossing an embedder boundary as a string** — the host
 //! language (Kotlin glue, JS glue, etc.) only ever sees the opaque `u64`
-//! handle.
+//! handle. Entries are either a single source ([`ModuleSourceEntry::Source`])
+//! or a whole FILE SET ([`ModuleSourceEntry::Files`] — `register_files`,
+//! the multi-file module carrier); a file-set handle loads through the same
+//! multi-file rail an explicit `RutModuleFiles` load rides.
 //!
 //! Handles are monotonically increasing ids (never reused): a stale or
 //! double-released handle is a safe miss (`get` → `None`), unlike boxed-
@@ -19,11 +22,30 @@
 //! clones it per instance) — it is deliberately NOT part of `TurRuntime`
 //! itself, so embedders that load by string never pay for it.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// Shared, id-keyed store of `Arc<str>` module sources.
+use crate::core::rut_runtime::RutModuleFiles;
+
+/// A registered module source — the registry's three shapes.
+#[derive(Clone, Debug)]
+pub enum ModuleSourceEntry {
+    /// The historical single-source shape (the root file only).
+    Source(Arc<str>),
+    /// A multi-file module: the root source plus its declared `mod`
+    /// children. `TurApp::load_rut_module_source` resolves it whole
+    /// through the engine's files rail.
+    Files(RutModuleFiles),
+    /// A packed SOURCE ZIP (the pkg-zip load lane): the once-unpacked
+    /// entry list of `rut.jsonc` + `src/**` + `deps/<identity>/**`.
+    /// `TurApp::load_rut_module_source` resolves it through the pkg-zip
+    /// rail — the archive's package tree mounts over the offered set.
+    PkgZip(Arc<crate::core::rut_runtime::RutModulePkgZip>),
+}
+
+/// Shared, id-keyed store of module sources (single sources and file
+/// sets).
 ///
 /// Cheap to clone (two `Arc`s); every clone sees the same entries. Thread-safe
 /// (id allocation is atomic, the map is mutex-guarded) even though embedders
@@ -31,7 +53,7 @@ use std::sync::{Arc, Mutex};
 /// on the happy path.
 #[derive(Clone, Default)]
 pub struct ModuleSourceRegistry {
-    inner: Arc<Mutex<HashMap<u64, Arc<str>>>>,
+    inner: Arc<Mutex<HashMap<u64, ModuleSourceEntry>>>,
     next_id: Arc<AtomicU64>,
 }
 
@@ -47,13 +69,55 @@ impl ModuleSourceRegistry {
         self.inner
             .lock()
             .expect("module-source registry mutex poisoned")
-            .insert(id, source.into());
+            .insert(id, ModuleSourceEntry::Source(source.into()));
         id
+    }
+
+    /// Register a whole FILE SET — `root` plus its declared `mod` children
+    /// (`mod path → child text`, the [`RutModuleFiles`] grammar) — and
+    /// return its handle. The set loads whole through the multi-file rail
+    /// (`TurApp::load_rut_module_source` dispatches [`ModuleSourceEntry::Files`]
+    /// to `load_rut_module_files`); the child texts never cross an embedder
+    /// boundary as strings.
+    pub fn register_files(
+        &self,
+        root: impl Into<Arc<str>>,
+        mods: BTreeMap<Arc<str>, Arc<str>>,
+    ) -> u64 {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.inner
+            .lock()
+            .expect("module-source registry mutex poisoned")
+            .insert(
+                id,
+                ModuleSourceEntry::Files(RutModuleFiles {
+                    root: root.into(),
+                    mods,
+                }),
+            );
+        id
+    }
+
+    /// Register a packed SOURCE ZIP — `rut pack --mode source` bytes
+    /// (`rut.jsonc` + `src/**` + the embedded `deps/<identity>/`
+    /// closure) — and return its handle. The archive unpacks ONCE, here
+    /// (the placement grammar validates at this door); every later load
+    /// mounts the in-memory entry list. An invalid archive is an `Err`
+    /// naming the grammar violation — the caller logs it, no handle is
+    /// minted.
+    pub fn register_pkg_zip(&self, bytes: Vec<u8>) -> Result<u64, String> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&bytes)?;
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.inner
+            .lock()
+            .expect("module-source registry mutex poisoned")
+            .insert(id, ModuleSourceEntry::PkgZip(Arc::new(zip)));
+        Ok(id)
     }
 
     /// Look up a source by handle. `None` for `0`, stale, or already-released
     /// handles.
-    pub fn get(&self, handle: u64) -> Option<Arc<str>> {
+    pub fn get(&self, handle: u64) -> Option<ModuleSourceEntry> {
         self.inner
             .lock()
             .expect("module-source registry mutex poisoned")
@@ -79,10 +143,13 @@ mod tests {
     #[test]
     fn register_get_remove_roundtrip() {
         let reg = ModuleSourceRegistry::new();
-        let id = reg.register("export function start() {}");
+        let id = reg.register("entry fn start() {}");
         assert_ne!(id, 0, "handle 0 is reserved");
         let src = reg.get(id).expect("registered source must resolve");
-        assert_eq!(&*src, "export function start() {}");
+        assert!(
+            matches!(&src, ModuleSourceEntry::Source(s) if &**s == "entry fn start() {}"),
+            "register spells the Source shape"
+        );
         assert!(reg.remove(id));
         assert!(reg.get(id).is_none(), "released source must not resolve");
     }
@@ -105,7 +172,7 @@ mod tests {
         assert!(reg.remove(a));
         let b = reg.register("b");
         assert_ne!(a, b, "ids must not be recycled");
-        assert_eq!(&*reg.get(b).unwrap(), "b");
+        assert!(matches!(&reg.get(b).unwrap(), ModuleSourceEntry::Source(s) if &**s == "b"));
     }
 
     #[test]
@@ -116,5 +183,45 @@ mod tests {
         assert!(clone.get(id).is_some());
         assert!(clone.remove(id));
         assert!(reg.get(id).is_none());
+    }
+
+    #[test]
+    fn register_files_roundtrips_the_whole_set() {
+        let reg = ModuleSourceRegistry::new();
+        let mut mods = BTreeMap::new();
+        mods.insert(Arc::from("child"), Arc::from("pub fn two() -> i32 { 2 }"));
+        let id = reg.register_files("mod child;\nentry fn start() {}", mods);
+        let entry = reg.get(id).expect("registered file set must resolve");
+        let ModuleSourceEntry::Files(files) = entry else {
+            panic!("register_files spells the Files shape");
+        };
+        assert_eq!(&*files.root, "mod child;\nentry fn start() {}");
+        assert_eq!(files.mods.len(), 1);
+        assert_eq!(&*files.mods["child"], "pub fn two() -> i32 { 2 }");
+        assert!(reg.remove(id));
+        assert!(reg.get(id).is_none());
+    }
+
+    #[test]
+    fn register_pkg_zip_roundtrips_and_refuses_junk() {
+        use rut_driver::bundle::write_srczip;
+        let reg = ModuleSourceRegistry::new();
+        let entries: Vec<(String, Vec<u8>)> = vec![
+            ("rut.jsonc".into(), b"{\"name\":\"m\"}".to_vec()),
+            ("src/mod.rut".into(), b"entry fn start() {}".to_vec()),
+        ];
+        let bytes = write_srczip(&entries).expect("test zip writes");
+        let id = reg.register_pkg_zip(bytes).expect("valid zip registers");
+        let entry = reg.get(id).expect("registered zip must resolve");
+        let ModuleSourceEntry::PkgZip(zip) = entry else {
+            panic!("register_pkg_zip spells the PkgZip shape");
+        };
+        assert_eq!(zip.entries.len(), 2);
+        assert!(reg.remove(id));
+        assert!(reg.get(id).is_none());
+        assert!(
+            reg.register_pkg_zip(b"not a zip".to_vec()).is_err(),
+            "a broken archive mints no handle"
+        );
     }
 }

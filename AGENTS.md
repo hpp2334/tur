@@ -161,9 +161,12 @@ point (frame-deduped by content fingerprint).
 
 The rut VM (rut-vm): compiled modules run as tasks with a virtual clock
 synced to the engine clock (`run_ready` at pump level). Async engine APIs
-(clipboard / net / filepicker) are `pkg_async_fn!` rows returning
-`Completer`s — rut code `await`s them through the `async_host` weave
-(`launch_future` + `await`). The engine's derive/watch rows (`rs_derive`,
+(clipboard / net / filepicker) are `pkg_async_fn!` rows — the row mints
+the `Completer` through the machine's one wake cell (`Vm::host_wakes`)
+and HANDS it to the start closure as its FIRST parameter (the body
+settles the handed cell; it never mints) — rut code `await`s them
+through the `async_host` weave (`launch_future` + `await`). The
+engine's derive/watch rows (`rs_derive`,
 `rs_watch`) call back into the VM through the guarded sync face during flush
 (never while the flush holds tree borrows; a mount attempt inside a derive
 traps and reports through the error rail).
@@ -189,6 +192,9 @@ libs/
   tur-clipboard-*/     # capability + wasm/native/android backends
   tur-net-*/           # capability + wasm/native backends
   tur-filepicker-*/    # capability + wasm/native backends
+  tur-playground/      # the playground's rut compile service (the `pg_*`
+                       #   rows + rut/tur_playground_kit/ — the authored
+                       #   kit face over them, pushed as a prelude)
   tur-native/          # native-only platform integrations (fonts, worker pools)
   tur-wasm/            # the reusable wasm embedder rlib
   tur-android/         # the Android embedder glue rlib
@@ -224,9 +230,9 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   virtual_app); embedded by tur-engine/src/kit/mod.rs
                        #   as a Pkg.mods tree (the embed mirrors the disk
                        #   tree — pinned by tur_host_decl)
-  tur_anim_kit/        # the animation kit (kit.rut; embedded by
+  tur_anim_kit/        # the animation kit (mod.rut; embedded by
                        #   tur-animation/src/kit.rs)
-  tur_net_kit/         # the net kit (kit.rut; embedded by
+  tur_net_kit/         # the net kit (mod.rut; embedded by
                        #   tur-net-capability/src/kit.rs)
   tur_clipboard_kit/   # the clipboard kit (mod.rut; embedded by
                        #   tur-engine builtin_plugins/clipboard/kit.rs —
@@ -239,6 +245,14 @@ rut/                   # all rut package sources (pure rut — no build step;
                        #   tur-filepicker-capability/src/kit.rs — pushed
                        #   as a prelude by TurFilePickerPlugin; the rows
                        #   spell *_raw twins, the kit owns the names)
+  tur_font_kit/        # the font kit (mod.rut; embedded by tur-engine
+                       #   builtin_plugins/font/kit.rs — pushed as a
+                       #   prelude by TurFontPlugin; skipped without a
+                       #   Fonts capability)
+  tur_playground_kit/  # the playground kit (mod.rut; embedded by
+                       #   tur-playground/src/kit.rs — pushed as a prelude
+                       #   by TurRutPlaygroundPlugin; the authored face
+                       #   over the pg_* compile-service rows)
   playground/          # mod.rut + menu.rut (the editor's context menu —
                        #   the declared child; the site feeds both through
                        #   loadAndRunRutModuleFiles) + cases_gen.rut +
@@ -364,10 +378,15 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`TUR_BLESS_CASE_MANIFESTS=1`).
 - **The surface laws** (pinned by `tests/layering.rs`): `use tur_host` is
   kits-only (`rut/tur_kit|tur_anim_kit|tur_net_kit|tur_event_kit|
-  tur_clipboard_kit|tur_file_kit` — the documented
-  exceptions live in the test's commented allowlist: the playground's
-  pg_*/rs_derive/second-use-line accommodations, the generated
-  `cases_gen.rut`, and the corpora's named raw-row probes); github-viewer
+  tur_clipboard_kit|tur_file_kit|tur_font_kit|tur_playground_kit` — the
+  documented exceptions live in the test's commented allowlist: the
+  playground's pg_*/rs_derive/second-use-line accommodations (the
+  playground module and its viewer fixtures still bind the rows directly:
+  the playground kit below is ready, but a root that binds it beside
+  `tur_anim_kit` + `tur_kit` trips the rut defect behind the MULTI-FILE
+  case laws' law (1)), the generated `cases_gen.rut`, the corpora's named
+  raw-row probes, and `tur-playground/src/highlight.rs` (a classification
+  sample embeds a use line as highlighter input)); github-viewer
   no longer needs an exception (the 0eea7e95 per-file binding law retired
   its root anchor — explorer's own `use tur_net_kit::{ net_request }` +
   `use tur_file_kit::{ save_file }` bind it); `rs_derive|rs_derive2|rs_watch` have no call sites
@@ -385,7 +404,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`tur-engine/src/kit/mod.rs`) hands the tree to the compiler through
   `rut_driver::Pkg::mods` (`tur_kit_mods()` / `tur_kit_pkg()`) and the
   `tur_host_decl` pin test diffs the embedded set against the disk tree;
-  animation wrappers in `rut/tur_anim_kit/kit.rut`):
+  animation wrappers in `rut/tur_anim_kit/mod.rut`):
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
   snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
@@ -455,6 +474,19 @@ Android build + device debugging live in the **`android-dev` skill** at
   refused on 1-segment mod paths (`use tur_kit::handles::mount;` parses
   as `use pkg::A::B;`) — keep the braces: `use
   tur_kit::handles::{ mount };`.
+- **The playground kit** (`rut/tur_playground_kit/`): the authored face over
+  the `pg_*` compile-service rows, owned by the crate that owns the rows
+  (`tur-playground` — the layering law applied to a kit);
+  `TurRutPlaygroundPlugin` embeds it (`src/kit.rs`) and pushes it as a
+  compile-session prelude beside the rows, so hosts without the playground
+  service never see (or compile) it. Two classes spell the face —
+  `Module(root).file(path, text).compile()` -> `CompileResult` and
+  `Highlight(src).apply(ctrl: TextCtrl)` — over a private linked list of
+  `ModuleFile` staged files (a std container with class-typed elements
+  fails the VM verifier at this pin, so no container crosses). The
+  playground module does not consume it yet: a root that binds this kit
+  beside `tur_anim_kit` + `tur_kit` trips the rut defect behind the
+  MULTI-FILE case laws' law (1) — see the surface laws.
 - **The layering law**: `core/` owns MECHANISM, never elements. Zero
   references to `builtin_plugins`, zero element/view names, no shared builder
   contract (no `RutBuilder` trait, no generic `el_build`/`el_child`/`el_qkey`
@@ -502,18 +534,49 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest main** (`460e8887`, 2026-11-22) — 25 commits
-  past the previous pin (`0ca49f6d`, 2026-11-21): the GLOB LEAF lands
-  (`use pkg::*` + the brace star — a grammar feature; the driver's
-  glob expansion binds the pub surface — tur's sources spell no globs
-  yet, the surface-law test's allowlist is the gate), the Name
-  vocabulary (every AST name carries its span), NodeKindId becomes the
-  closed enum `AnyHandle::kind` carries, the rut-ast Doc pipeline +
-  edit door, and rut-lsp's mounted-world layer split (its own shell +
-  MountedFile migration — the Lsp/Io ABI HELD: tur's actor-driven
-  highlighter rode through untouched). No `rut/*` std source moved at
-  this step (no re-vendor; std-v18 remains the current envelope). At
-  `0ca49f6d`, the huge consolidation: (1) **rut-semantic DIES** —
+- The rut pin is **`7ed9c357`** — latest master (`7ed9c357`,
+  2026-11-25) — 66 commits past the previous pin (`460e8887`,
+  2026-11-22). This pin does NOT carry a fix for the stale re-shipped
+  type block: MULTI-FILE case law (1) still holds (a module root binds
+  ONE pkg head) and the playground's migration onto tur_playground_kit
+  is HELD until the fix is on rut master (see the surface laws). The
+  three newest steps: at `2d0f0955` the LSP Act-1 review fixes (the
+  open-scratch reverse edge is pinned — a Scratch file is visible only
+  as itself, references and hover agree — and the handoff table
+  re-anchored); at `7ed9c357` "no mirrors, Task A" (the four pure mod
+  laws — own-package head, the interior walk, the pub-edge walk, the
+  mod-tree input — get ONE home in `rut_lir::check`; the compiler's
+  callers delegate, rut-lsp's hand copies are deleted, diagnostic
+  strings byte-identical). 010380cb is also rut-lsp's one-world store
+  (the open document is a world file) — tur's actor-driven highlighter
+  rides through unchanged. At `6e4db9c7` (2026-11-24) — 63 commits past
+  `460e8887`: the machine owns ONE wake cell (`Completer::with_wake`
+  over `HostWakes` — `pkg_async_fn!`'s `__start` row mints it through
+  `Vm::host_wakes()` and HANDS it to the start closure as its FIRST
+  parameter; tur's 9 async rows swept); the driving protocol lands
+  (`run_until_idle` + `Wait { Block, NonBlock }` / `Idle { Drained,
+  WouldBlock }` — the raw doors `run_ready` / `next_deadline` /
+  `set_now` / `pending_tasks` stay PUBLIC by contract and tur's pump
+  keeps `run_ready()` per flush — do NOT adopt `run_until_idle`);
+  FieldVis rides the surface — non-pub fields refuse CROSS-PACKAGE, so
+  `View.raw()` is `pub` and the anim kit spells `.raw()` at its two
+  `child` sites; the one-name law, `TyKind::Err` poison types,
+  method-call generic args validate, fmt literals reprint verbatim;
+  module binary VERSION 23 -> 24 (the committed kit bundles
+  re-blessed). The std http lane moved upstream — NOT consumed by tur;
+  the vendored closure + the futures embed are unchanged (no
+  re-vendor). At `460e8887`, the glob leaf + the Name
+  vocabulary: the GLOB LEAF lands (`use pkg::*` + the brace star — a
+  grammar feature; the driver's glob expansion binds the pub surface —
+  tur's sources spell no globs yet, the surface-law test's allowlist
+  is the gate), the Name vocabulary (every AST name carries its span),
+  NodeKindId becomes the closed enum `AnyHandle::kind` carries, the
+  rut-ast Doc pipeline + edit door, and rut-lsp's mounted-world layer
+  split (its own shell + MountedFile migration — the Lsp/Io ABI HELD:
+  tur's actor-driven highlighter rode through untouched). No `rut/*`
+  std source moved at that step (no re-vendor; std-v18 remains the
+  current envelope). At `0ca49f6d`, the huge consolidation: (1)
+  **rut-semantic DIES** —
   absorbed into rut-lsp behind the PRIVACY WALL (`Lsp` + `Io` are
   rut-lsp's only public doors); tur's highlighter rides the ACTOR now:
   one `Lsp` session per thread, its loop future booted onto a
@@ -622,9 +685,16 @@ Android build + device debugging live in the **`android-dev` skill** at
   class fields and impl methods module-private by default (structs are
   exempt — their fields stay always-public): cross-module reads/writes
   need the `pub` dial, `pub(pkg)` widens within the pkg — the kit's
-  tuple handle classes (`View`, `VAppSource`, …) expose their raw
-  opaque through `pub(pkg) fn raw()` erases and cross-file leaves spell
-  `.raw()`, never `.inner` (the bump swept all 26 child-insert sites).
+  tuple handle classes expose their raw opaque through `raw()` erases
+  and cross-file leaves spell `.raw()`, never `.inner` (the bump swept
+  all 26 child-insert sites; at 6e4db9c7 `View.raw()` is `pub` — the
+  FieldVis law refuses a cross-package `.inner` — while the
+  kit-internal erases keep the tight dial (`VAppSource.raw()` is
+  `pub(pkg)`, `MapHandle.raw()` is module-private — nothing outside
+  needs the map's raw yet);
+  the event payload classes' fields (`PointerEvent.local/global/
+  button`, `KeydownEvent.key/code/modifiers`, …) are `pub` for the same
+  reason — handlers read them cross-package).
   Block tails are values (an expression before `}` with no `;` is the
   block's tail; a fn/lambda body tail is an implicit return) and
   `if`/`when` arms compose as values.

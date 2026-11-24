@@ -3,10 +3,12 @@
 //!
 //! Every async engine API returns `Task<T> = { promise, cancel() }` on the
 //! JS side; the rut twin is `pkg_async_fn!` + [`rut_vm::Completer`] — the
-//! start closure spawns the capability future on the worker
-//! (`js_ctx.spawn_local`) and completes the Completer; the pump's
-//! `run_ready` drives the awaiting rut task. Cancel rows land with the
-//! capability crates' task handles (net streams wire-abort).
+//! row mints the Completer through the machine's one wake cell
+//! (`Vm::host_wakes`) and HANDS it to the start closure, which spawns the
+//! capability future on the worker (`js_ctx.spawn_local`) and completes
+//! the Completer; the pump's `run_ready` drives the awaiting rut task.
+//! Cancel rows land with the capability crates' task handles (net streams
+//! wire-abort).
 //!
 //! The net / filepicker rows live in their capability crates (they own the
 //! backend types) and ride the same pkg-extension seam tur-animation uses.
@@ -38,30 +40,31 @@ pub fn decl_rows() -> Vec<rut_driver::HostRow> {
 
 /// The `clipboard_read` / `clipboard_read_raw` bodies — one law, two
 /// spellings (the kit's authored `clipboard_read` wrapper shadows the row
-/// name, so it reaches the row through the `_raw` alias).
-fn clipboard_read_body(h: Rc<RutHandles>) -> rut_vm::Completer<String> {
+/// name, so it reaches the row through the `_raw` alias). The completer is
+/// HANDED in — the row mints it through the machine's one wake cell
+/// (`Vm::host_wakes`); the body never mints.
+fn clipboard_read_body(h: Rc<RutHandles>, done: rut_vm::Completer<String>) {
     use crate::Clipboard;
-    let done = rut_vm::Completer::new();
     let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
         done.complete(String::new());
-        return done;
+        return;
     };
     let clipboard = clipboard.backend().clone();
     let w = done.clone();
     h.inst.spawn_local(move |_aw| async move {
         w.complete(clipboard.read_text().await);
     });
-    done
 }
 
 /// The `clipboard_write` / `clipboard_write_raw` bodies (a missing
-/// capability completes immediately — the no-op degradation).
-fn clipboard_write_body(h: Rc<RutHandles>, text: &str) -> rut_vm::Completer<()> {
+/// capability completes immediately — the no-op degradation). The
+/// completer is HANDED in — the row mints it through the machine's one
+/// wake cell (`Vm::host_wakes`); the body never mints.
+fn clipboard_write_body(h: Rc<RutHandles>, text: &str, done: rut_vm::Completer<()>) {
     use crate::Clipboard;
-    let done = rut_vm::Completer::<()>::new();
     let Some(clipboard) = h.inst.capability().of::<Clipboard>() else {
         done.complete(());
-        return done;
+        return;
     };
     let clipboard = clipboard.backend().clone();
     let text = text.to_string();
@@ -70,7 +73,6 @@ fn clipboard_write_body(h: Rc<RutHandles>, text: &str) -> rut_vm::Completer<()> 
         clipboard.write_text(text).await;
         w.complete(());
     });
-    done
 }
 
 /// Install the C6 bodies. (The needless_question_mark allow covers the
@@ -81,26 +83,26 @@ pub fn install(pkg: &mut rut_vm::interp::HostPkg, handles: &Rc<RutHandles>) {
     // clipboard_read() -> str — resolves with the platform text (empty when
     // denied/unavailable — the same degradation the JS bridge documents).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read", () -> String, move || {
-        clipboard_read_body(h.clone())
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read", () -> String, move |done: rut_vm::Completer<String>| {
+        clipboard_read_body(h.clone(), done)
     });
 
     // The clipboard kit's twin spelling (the `net_request_raw` pattern).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read_raw", () -> String, move || {
-        clipboard_read_body(h.clone())
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_read_raw", () -> String, move |done: rut_vm::Completer<String>| {
+        clipboard_read_body(h.clone(), done)
     });
 
     // clipboard_write(s: str) -> () — resolves when the write lands.
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write", (&str,) -> (), move |text: &str| {
-        clipboard_write_body(h.clone(), text)
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write", (&str,) -> (), move |done: rut_vm::Completer<()>, text: &str| {
+        clipboard_write_body(h.clone(), text, done)
     });
 
     // The clipboard kit's twin spelling (the `net_request_raw` pattern).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write_raw", (&str,) -> (), move |text: &str| {
-        clipboard_write_body(h.clone(), text)
+    rut_vm::pkg_async_fn!(pkg, "clipboard::clipboard_write_raw", (&str,) -> (), move |done: rut_vm::Completer<()>, text: &str| {
+        clipboard_write_body(h.clone(), text, done)
     });
 
     // ---- bytes helpers (the response-body decode path) ------------------

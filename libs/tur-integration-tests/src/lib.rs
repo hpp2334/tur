@@ -1590,6 +1590,57 @@ impl TurTestApp {
         block_on(self.inner.load_rut_module_files(files))
     }
 
+    /// [`Self::load_rut_module`] with the EMBEDDER-SUPPLIED START
+    /// ARGUMENT: `start_cx` is the identity the embedder minted. A module
+    /// declaring `entry fn start(cx: opaque)` receives it at boot (sealed
+    /// into a rut box — `unopaque<u64>` recovers the id) and the cx entry
+    /// lanes deliver the same handle when addressed by this id.
+    pub fn load_rut_module_cx(&self, source: &str, start_cx: u64) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_cx(source, start_cx))
+    }
+
+    /// Handle-based rut load through a [`ModuleSourceRegistry`] — a
+    /// single-source handle rides the single rail, a `register_files`
+    /// file-set handle the multi-file rail.
+    pub fn load_rut_module_source(
+        &self,
+        registry: &tur_engine::ModuleSourceRegistry,
+        handle: u64,
+    ) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_source(registry, handle))
+    }
+
+    /// [`Self::load_rut_module_source`] with an embedder-supplied start
+    /// argument.
+    pub fn load_rut_module_source_cx(
+        &self,
+        registry: &tur_engine::ModuleSourceRegistry,
+        handle: u64,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        block_on(
+            self.inner
+                .load_rut_module_source_cx(registry, handle, start_cx),
+        )
+    }
+
+    /// Rut-rail module load over a packed SOURCE ZIP (the pkg-zip lane):
+    /// compile + boot the archive's package tree and invoke its `entry
+    /// fn start()`. The bytes unpack once here.
+    pub fn load_rut_module_pkgzip(&self, zip_bytes: Vec<u8>) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_pkgzip(zip_bytes))
+    }
+
+    /// [`Self::load_rut_module_pkgzip`] with an embedder-supplied start
+    /// argument.
+    pub fn load_rut_module_pkgzip_cx(
+        &self,
+        zip_bytes: Vec<u8>,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        block_on(self.inner.load_rut_module_pkgzip_cx(zip_bytes, start_cx))
+    }
+
     /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
     /// loaded rut module. A missing entry is a successful no-op.
     pub fn call_rut_entry(&self, name: &str, a: u64, b: f64) -> Result<(), TurError> {
@@ -1629,6 +1680,41 @@ impl TurTestApp {
     /// control-probe shape (the entry answers the value; no atom write).
     pub fn call_rut_entry_cx_str(&self, name: &str, cx: u64) -> Result<String, TurError> {
         block_on(self.inner.call_rut_entry_cx_str(name, cx))
+    }
+
+    /// The raw answer of a context-crossing call — `entry fn(opaque)` with
+    /// the answer decoded under the export's declared return (u64 / str /
+    /// bytes / opaque slot / nil). Tests match on the variant.
+    pub fn call_rut_entry_cx_answer(
+        &self,
+        name: &str,
+        cx: u64,
+    ) -> Result<RutEntryAnswer, TurError> {
+        block_on(self.inner.call_rut_entry_cx(name, cx))
+    }
+
+    /// The dispatch shape: `entry fn(opaque, str, str)` — the context plus
+    /// the (op, args) request pair riding the call. The raw answer.
+    pub fn call_rut_entry_cx_str_str(
+        &self,
+        name: &str,
+        cx: u64,
+        op: &str,
+        args: &str,
+    ) -> Result<RutEntryAnswer, TurError> {
+        block_on(self.inner.call_rut_entry_cx_str_str(name, cx, op, args))
+    }
+
+    /// [`Self::call_rut_entry_cx_str_str`] over binary args —
+    /// `entry fn(opaque, str, bytes)`. The raw answer.
+    pub fn call_rut_entry_cx_str_bytes(
+        &self,
+        name: &str,
+        cx: u64,
+        op: &str,
+        args: &[u8],
+    ) -> Result<RutEntryAnswer, TurError> {
+        block_on(self.inner.call_rut_entry_cx_str_bytes(name, cx, op, args))
     }
 
     /// The loaded rut module's `entry fn start()` answer — the u64 answer,

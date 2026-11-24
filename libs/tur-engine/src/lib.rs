@@ -52,6 +52,7 @@ pub use crate::core::scheduler::SpawnError;
 // never crossing an embedder boundary as a string). Owned by embedder-side
 // runtime state (e.g. `AndroidRuntime`), not by `TurRuntime` itself.
 pub use crate::core::app::ModuleSourceRegistry;
+pub use crate::core::app::module_source::ModuleSourceEntry;
 pub use crate::core::app::{RutEntryAnswer, RutEntryArgs};
 // Re-export the worker-pool declaration type so embedders can write
 // `tur_engine::WorkerPoolHandle` (registered via
@@ -164,7 +165,84 @@ impl TurApp {
     ) -> Result<(), TurError> {
         self.host
             .backend()
-            .load_rut_module_files(files)
+            .load_rut_module_files(files, None)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::load_rut_module`] with the EMBEDDER-SUPPLIED START
+    /// ARGUMENT: `start_cx` is the identity the embedder minted for this
+    /// load. A module declaring `entry fn start(cx: opaque)` receives it
+    /// at boot, and the cx entry lanes deliver the same handle when
+    /// addressed by this id — the embedder already holds it, no
+    /// `rut_start_answer` round-trip. A parameterless `start` ignores it
+    /// (today's zero-arg boot, backward compatible).
+    pub async fn load_rut_module_cx(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module_cx(source, start_cx)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::load_rut_module_files`] with an embedder-supplied start
+    /// argument (see [`Self::load_rut_module_cx`]).
+    pub async fn load_rut_module_files_cx(
+        &self,
+        files: crate::core::rut_runtime::RutModuleFiles,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module_files(files, Some(start_cx))
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// Rut-rail module load over a packed SOURCE ZIP (the pkg-zip lane):
+    /// compile + boot the archive's package tree (its `rut.jsonc` + `src/`
+    /// tree + the embedded `deps/` closure, mounted over the offered set)
+    /// and invoke its `entry fn start()`. The bytes unpack once here —
+    /// registry-based loads unpack at `register_pkg_zip` instead.
+    pub async fn load_rut_module_pkgzip(
+        &self,
+        zip_bytes: Vec<u8>,
+    ) -> Result<(), TurError> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&zip_bytes)
+            .map_err(TurError::Other)?;
+        self.load_rut_module_pkgzip_loaded(std::sync::Arc::new(zip), None)
+            .await
+    }
+
+    /// [`Self::load_rut_module_pkgzip`] with an embedder-supplied start
+    /// argument (see [`Self::load_rut_module_cx`]).
+    pub async fn load_rut_module_pkgzip_cx(
+        &self,
+        zip_bytes: Vec<u8>,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        let zip = crate::core::rut_runtime::RutModulePkgZip::from_bytes(&zip_bytes)
+            .map_err(TurError::Other)?;
+        self.load_rut_module_pkgzip_loaded(std::sync::Arc::new(zip), Some(start_cx))
+            .await
+    }
+
+    /// The pkg-zip lane over an ALREADY-UNPACKED [`RutModulePkgZip`] —
+    /// the shape [`ModuleSourceRegistry::register_pkg_zip`] stores (and
+    /// the engine's handle-based dispatch resolves). `start_cx`: `None`
+    /// = the no-arg boot.
+    pub async fn load_rut_module_pkgzip_loaded(
+        &self,
+        zip: std::sync::Arc<crate::core::rut_runtime::RutModulePkgZip>,
+        start_cx: Option<u64>,
+    ) -> Result<(), TurError> {
+        self.host
+            .backend()
+            .load_rut_module_pkgzip(zip, start_cx)
             .await
             .map_err(TurError::from)
     }
@@ -175,20 +253,43 @@ impl TurApp {
     /// (APK assets, bundle files) load them by opaque id, so the source
     /// never crosses an embedder boundary as a string. An unknown /
     /// released handle is an error (registry handles are monotonic ids, so
-    /// a stale value can only miss).
+    /// a stale value can only miss). A FILE-SET entry (`register_files`)
+    /// resolves whole through the multi-file rail.
     pub async fn load_rut_module_source(
         &self,
         registry: &ModuleSourceRegistry,
         handle: u64,
     ) -> Result<(), TurError> {
-        let source = registry
+        match registry
             .get(handle)
-            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
-        self.host
-            .backend()
-            .load_rut_module(source)
-            .await
-            .map_err(TurError::from)
+            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?
+        {
+            ModuleSourceEntry::Files(files) => self.load_rut_module_files(files).await,
+            ModuleSourceEntry::PkgZip(zip) => {
+                self.load_rut_module_pkgzip_loaded(zip, None).await
+            }
+            ModuleSourceEntry::Source(source) => self.load_rut_module(source).await,
+        }
+    }
+
+    /// [`Self::load_rut_module_source`] with an embedder-supplied start
+    /// argument (see [`Self::load_rut_module_cx`]).
+    pub async fn load_rut_module_source_cx(
+        &self,
+        registry: &ModuleSourceRegistry,
+        handle: u64,
+        start_cx: u64,
+    ) -> Result<(), TurError> {
+        match registry
+            .get(handle)
+            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?
+        {
+            ModuleSourceEntry::Files(files) => self.load_rut_module_files_cx(files, start_cx).await,
+            ModuleSourceEntry::PkgZip(zip) => {
+                self.load_rut_module_pkgzip_loaded(zip, Some(start_cx)).await
+            }
+            ModuleSourceEntry::Source(source) => self.load_rut_module_cx(source, start_cx).await,
+        }
     }
 
     /// Engine→rut event rail: call a named `entry fn(u64, f64)` on the
@@ -261,6 +362,44 @@ impl TurApp {
                 "call_rut_entry: `{name}` answered {other:?}, expected a str"
             ))),
         }
+    }
+
+    /// The dispatch shape: `entry fn(opaque, str, str)` — the context plus
+    /// the (op, args) request pair riding the call (the cx token addresses
+    /// the boot handle — the embedder-supplied start identity, or the
+    /// start-answer slot for modules loaded without one). The answer
+    /// decodes under the export's declared return (`-> str` is the reply
+    /// envelope; `-> bytes` the binary twin).
+    pub async fn call_rut_entry_cx_str_str(
+        &self,
+        name: &str,
+        cx: u64,
+        op: &str,
+        args: &str,
+    ) -> Result<RutEntryAnswer, TurError> {
+        let args = RutEntryArgs::CxStrStr(cx, op.to_string(), args.to_string());
+        self.host
+            .backend()
+            .call_rut_entry_args(name, args)
+            .await
+            .map_err(TurError::from)
+    }
+
+    /// [`Self::call_rut_entry_cx_str_str`] over binary args —
+    /// `entry fn(opaque, str, bytes)`.
+    pub async fn call_rut_entry_cx_str_bytes(
+        &self,
+        name: &str,
+        cx: u64,
+        op: &str,
+        args: &[u8],
+    ) -> Result<RutEntryAnswer, TurError> {
+        let args = RutEntryArgs::CxStrBytes(cx, op.to_string(), args.to_vec());
+        self.host
+            .backend()
+            .call_rut_entry_args(name, args)
+            .await
+            .map_err(TurError::from)
     }
 
     /// The loaded rut module's `entry fn start()` answer — the u64 answer,
@@ -350,8 +489,6 @@ impl TurApp {
     pub fn register_image(&self, image: core::image_resource::ImageResource) -> ImageResourceId {
         self.host.backend().register_image(image)
     }
-
-
 
     /// Read rendered pixels back from the owned renderer (screenshot
     /// tests). Returns `None` if the renderer doesn't support readback.

@@ -1,0 +1,128 @@
+// tur_playground_kit (mod.rut) — the playground compile service's kit
+// prelude (the authored face over the pg_* rows). Owned by the crate that
+// owns the rows (the layering law applied to the kit): `TurRutPlaygroundPlugin`
+// registers it as a compile-session prelude beside the rows, so hosts
+// without the playground service never see (or compile) this module.
+//
+// It is the playground module's ONLY route to the compile service (the
+// surface law: tur_host rows are reachable only through kits). Staging a
+// tree is a plain linked list — a generic std container (`pouch::Vec`) with
+// a record- or class-typed element fails the VM verifier at this pin, so no
+// container crosses.
+
+use tur_host::{ pg_apply_highlight, pg_compile, pg_compile_diags, pg_files_put, pg_highlight };
+use tur_kit::handles::{ TextCtrl, VAppSource };
+use tur_kit::virtual_app::{ virtual_app_source_handle };
+
+// One staged child: a mod path + its source, linked to the tree's other
+// children. The kit's own list: a generic std container (`pouch::Vec`) with
+// a record- or class-typed element fails the VM verifier at this pin, so no
+// container crosses.
+class ModuleFile {
+    path: str;
+    text: str;
+    next: ?ModuleFile;
+}
+
+impl ModuleFile {
+    fn of(path: str, text: str, next: ?ModuleFile) -> Self {
+        return Self { path: path, text: text, next: next };
+    }
+}
+
+// A module tree staged for compile: the ROOT source plus its declared
+// children.
+//   let run = Module(root).file("landing", text).file("ui", text).compile();
+pub class Module {
+    root: str;
+    files: ?ModuleFile;
+}
+
+impl Module {
+    [constructor] pub fn of(root: str) -> Self {
+        return Self { root: root, files: nil };
+    }
+
+    // Stage one declared child (a mod path: "landing", "net/tls"). One
+    // entry per path: a repeated path REPLACES (the last call wins). Class
+    // values are heap cells, so `.file()` chains OR runs as a statement
+    // inside a staging loop; the append lands on the tree.
+    pub fn file(self, path: str, text: str) -> Self {
+        let f = self.files;
+        while (f != nil) {
+            if (f.path == path) {
+                (f.text) = text;
+                return self;
+            }
+            f = f.next;
+        }
+        (self.files) = ModuleFile::of(path, text, self.files);
+        return self;
+    }
+
+    // Stage the whole tree, then compile it: one synchronous step, so two
+    // trees never interleave in the service's staging scratch (the rows'
+    // contract: pg_files_put accumulates, pg_compile consumes). Each call
+    // registers a fresh virtual-app source.
+    pub fn compile(self) -> CompileResult {
+        let f = self.files;
+        while (f != nil) {
+            pg_files_put(f.path, f.text);
+            f = f.next;
+        }
+        let id = pg_compile(self.root);
+        let report = "";
+        if (id == 0) {
+            report = pg_compile_diags();
+        }
+        return CompileResult::of(id, report);
+    }
+}
+
+// A compile's answer: the registered virtual-app source on success, the
+// diagnostics on failure. Sealed: minted only by Module.compile().
+pub class CompileResult {
+    id: u64;
+    report: str;
+}
+
+impl CompileResult {
+    fn of(id: u64, report: str) -> Self {
+        return Self { id: id, report: report };
+    }
+
+    pub fn ok(self) -> bool {
+        return self.id != 0;
+    }
+
+    // The registered source; meaningful only when ok() (a failed compile
+    // answers 0).
+    pub fn source(self) -> VAppSource {
+        return virtual_app_source_handle(self.id);
+    }
+
+    // The failure report ("" on success).
+    pub fn diags(self) -> str {
+        return self.report;
+    }
+}
+
+// A classified source: the editor's colored span run. The call form
+// CLASSIFIES (`Highlight(text)`); `.apply` writes the run into an editor
+// controller. Bare `opaque` never crosses to consumers (the kit vocabulary
+// law).
+pub class Highlight {
+    spans: opaque;
+}
+
+impl Highlight {
+    [constructor] pub fn of(src: str) -> Self {
+        return Self { spans: pg_highlight(src) };
+    }
+
+    // Caret-preserving: a re-highlight, never a value write (the row's
+    // law).
+    pub fn apply(self, ctrl: TextCtrl) {
+        pg_apply_highlight(ctrl.raw(), self.spans);
+    }
+}

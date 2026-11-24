@@ -198,7 +198,7 @@ impl Opacity {
         return self;
     }
     pub fn child(self, c: View) -> Self {
-        (self.kid) = c.inner;
+        (self.kid) = c.raw();
         return self;
     }
     pub fn build(self) -> View {
@@ -293,7 +293,7 @@ impl Transform {
         return self;
     }
     pub fn child(self, c: View) -> Self {
-        (self.kid) = c.inner;
+        (self.kid) = c.raw();
         return self;
     }
     pub fn build(self) -> View {

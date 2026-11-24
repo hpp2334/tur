@@ -83,6 +83,10 @@ const TUR_HOST_IMPORT_EXCEPTIONS: &[(&str, &str)] = &[
         "rut/tur_file_kit/",
         "the filepicker kit — plugin-owned prelude",
     ),
+    (
+        "rut/tur_playground_kit/",
+        "the playground kit — the compile service's plugin-owned prelude",
+    ),
     // The playground's documented upstream-workaround lines: the pg_* rows
     // (no kit — a 7th prelude pkg trips the layering law) and the status
     // label's raw `rs_derive` (the runtime-interning workaround).

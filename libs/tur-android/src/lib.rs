@@ -43,6 +43,7 @@ pub use tur_engine::ModuleSourceRegistry;
 // (expanded inside an embedder's cdylib) can name them via `$crate::…` without
 // forcing the embedder to add the `jni` crate as a direct dependency.
 pub use jni::JNIEnv;
+pub use jni::objects::JObjectArray;
 pub use jni::objects::{JClass, JObject, JString};
 pub use jni::sys::{jboolean, jdouble, jint, jlong};
 
@@ -727,6 +728,52 @@ pub mod ops {
         })
     }
 
+    /// `registerModuleFiles(env, runtimeHandle, root, paths, texts): long`
+    ///
+    /// Register a whole MULTI-FILE rut module (root source + its declared
+    /// `mod` children) on the runtime's shared [`ModuleSourceRegistry`] and
+    /// return its opaque handle (`0` on failure). `paths`/`texts` are
+    /// parallel string arrays — `paths[i]` is the mod path (`"menu"`,
+    /// `"net/tls"` — the declaration grammar's paths) for `texts[i]`'s
+    /// child source; `paths.len()` must equal `texts.len()`. `loadModule`
+    /// then loads the whole set into any instance of the runtime by the
+    /// returned handle (the engine's file-set registry lane).
+    ///
+    /// Like [`register_module_source`], the texts cross JNI exactly once,
+    /// here — Rust-side registration (`with_runtime` /
+    /// `ModuleSourceRegistry::register_files`) skips even this hop, and
+    /// that remains the embedders' primary lane (the compose demo
+    /// registers its playground entirely Rust-side).
+    pub fn register_module_files(
+        env: &mut JNIEnv,
+        runtime_handle: jlong,
+        root: JString,
+        paths: crate::JObjectArray,
+        texts: crate::JObjectArray,
+    ) -> jlong {
+        use jni::objects::JString as JS;
+        catch_into_zero(env, "registerModuleFiles", |env| {
+            let route = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
+            let root: String = env.get_string(&root)?.into();
+            let n = env.get_array_length(&paths)?;
+            if env.get_array_length(&texts)? != n {
+                return Err("registerModuleFiles: paths/texts length mismatch".into());
+            }
+            let mut mods = std::collections::BTreeMap::new();
+            for i in 0..n {
+                let p: JS = env.get_object_array_element(&paths, i)?.into();
+                let p: String = env.get_string(&p)?.into();
+                let t: JS = env.get_object_array_element(&texts, i)?.into();
+                let t: String = env.get_string(&t)?.into();
+                mods.insert(
+                    std::sync::Arc::from(p.as_str()),
+                    std::sync::Arc::from(t.as_str()),
+                );
+            }
+            Ok(route.module_sources.register_files(root, mods) as jlong)
+        })
+    }
+
     /// `releaseModuleSource(env, runtimeHandle, sourceHandle)`
     ///
     /// Drop a registered module source — and any multi-file entry registered
@@ -788,11 +835,12 @@ pub mod ops {
                 }
                 log::info!(
                     "loadModule: source handle {source_handle} ({} bytes)",
-                    instance
-                        .module_sources
-                        .get(source_handle as u64)
-                        .map(|s| s.len())
-                        .unwrap_or(0)
+                    match instance.module_sources.get(source_handle as u64) {
+                        Some(tur_engine::ModuleSourceEntry::Files(files)) => files.root.len(),
+                        Some(tur_engine::ModuleSourceEntry::PkgZip(zip)) => zip.total_len(),
+                        Some(tur_engine::ModuleSourceEntry::Source(s)) => s.len(),
+                        None => 0,
+                    }
                 );
                 match futures::executor::block_on(
                     instance
@@ -1293,10 +1341,10 @@ pub mod ops {
 /// Generate the standard engine-operation JNI entry points inside the caller's
 /// cdylib. Emits the instance/runtime-operation `Java_org_tur_TurNative_*`
 /// trampolines (`createInstance`, `attachInstance`, `detachInstance`,
-/// `registerModuleSource`, `releaseModuleSource`, `loadModule`, `pump`,
-/// `resize`, `pushPointer`, `pushKey`, `pushIme`, `destroy`,
-/// `destroySettled`,
-/// `destroyRuntime`) that forward to [`ops`](crate::ops).
+/// `registerModuleSource`, `registerModuleFiles`, `releaseModuleSource`,
+/// `loadModule`, `pump`, `resize`, `pushPointer`, `pushKey`, `pushIme`,
+/// `destroy`, `destroySettled`, `destroyRuntime`) that forward to
+/// [`ops`](crate::ops).
 /// Invoking this macro is all an embedder needs to make its `.so` drivable by
 /// the Kotlin `org.tur.TurNative` bridge — **runtime creation** is NOT included
 /// (it varies per embedder; write your own `Java_<pkg>_<Class>_createRuntime`
@@ -1362,6 +1410,18 @@ macro_rules! standard_jni_exports {
             js: $crate::JString,
         ) -> $crate::jlong {
             $crate::ops::register_module_source(&mut env, runtime_handle, js)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_registerModuleFiles(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            runtime_handle: $crate::jlong,
+            root: $crate::JString,
+            paths: $crate::JObjectArray,
+            texts: $crate::JObjectArray,
+        ) -> $crate::jlong {
+            $crate::ops::register_module_files(&mut env, runtime_handle, root, paths, texts)
         }
 
         #[unsafe(no_mangle)]

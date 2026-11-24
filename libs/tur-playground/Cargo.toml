@@ -1,6 +1,6 @@
 [package]
 name = "tur-playground"
-description = "The playground's rut compile service — the `pg_*` host-pkg rows (compile a rut module in-realm, register it as a virtual-app source, answer the source id)."
+description = "The playground's rut compile service — the `pg_*` host-pkg rows (compile a rut module in-realm, register it as a virtual-app source, answer the source id) plus the `tur_playground_kit` kit prelude (the authored `Module`/`Highlight` face over those rows)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
