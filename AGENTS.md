@@ -404,7 +404,7 @@ Android build + device debugging live in the **`android-dev` skill** at
   (`tur-engine/src/kit/mod.rs`) hands the tree to the compiler through
   `rut_driver::Pkg::mods` (`tur_kit_mods()` / `tur_kit_pkg()`) and the
   `tur_host_decl` pin test diffs the embedded set against the disk tree;
-  animation wrappers in `rut/tur_anim_kit/kit.rut`):
+  animation wrappers in `rut/tur_anim_kit/mod.rut`):
   one wrapper CLASS per element over its family's rows — chainable,
   ONE METHOD PER PROP, names = the historical camelCase props in rut
   snake_case (`cross_alignment`, `query_key`, `item_builder`, `font_size`,
@@ -634,10 +634,11 @@ Android build + device debugging live in the **`android-dev` skill** at
 - The std-v14 MULTI-FILE case laws (each hit splitting jigsaw-puzzle;
   single-file shapes are unaffected): **(1)** RETIRED — a case ROOT may
   bind SEVERAL source pkg heads. The old "one pkg head per root" rule was
-  a symptom, not a law: the panic (the carried-inst interner,
-  `types.rs:487`, subtract overflow) was the stale re-shipped type block —
-  three registrations of one scope's block — and rut's one-block-per-scope
-  law (see the pin above) fixed it. The playground root now binds
+  a symptom, not a law: its panic (the carried-inst interner,
+  `types.rs:487`, subtract overflow) came from the stale copies
+  `TypeTable::use_block` left behind whenever bound surfaces re-shipped a
+  scope's type block, and rut's one-block-per-scope law (see the pin
+  above) removed them. The playground root now binds
   tur_anim_kit + tur_kit + tur_playground_kit and the full playground
   loads in `tests/playground_viewer.rs`; the corpus compiles. No
   child-file binding rule remains. **(2)** record literals take a
