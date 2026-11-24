@@ -40,7 +40,9 @@ use core::{ Future };
 // TextCtrl can never be confused with another handle and the rows they
 // wrap surface as METHODS, never as raw row calls in biz code. The kit
 // wraps every row answer (`View(flex_build(..))`) and unwraps every row
-// arg (`c.inner`) — a raw view opaque never crosses a kit signature.
+// arg (`c.inner` — kit-internal; outside tur_kit the pub `raw()` hatch
+// spells the same erase) — a raw view opaque never crosses a kit
+// signature.
 //
 // Host-seam note: the compiler-provided `X(v)` ctors and the `raw()`
 // hatches stay pub — their remaining consumers are the row-probe fixtures
@@ -51,10 +53,10 @@ use core::{ Future };
 pub class View(opaque);
 
 impl View {
-    // The kit machinery's erase hatch (kit-internal — not on the pkg
-    // surface): the one place a built view goes back to the raw opaque
-    // the mount row takes.
-    pub(pkg) fn raw(self) -> opaque {
+    // The erase hatch (pub — non-pub fields refuse cross-package, the
+    // FieldVis law; the consumers outside tur_kit spell `.raw()`): the one
+    // place a built view goes back to the raw opaque the mount row takes.
+    pub fn raw(self) -> opaque {
         return self.inner;
     }
 }

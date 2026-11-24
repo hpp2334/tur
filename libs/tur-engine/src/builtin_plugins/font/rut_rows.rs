@@ -42,24 +42,26 @@ fn meta_of(family: &str, weight: Option<f64>, italic: Option<bool>) -> FontFaceM
 /// The `font_load_data` body — claims the family's pending faces, fetches
 /// each through the provider, registers into the shared collection (epoch
 /// bump per face), then dirties the tree so the epoch-keyed text memos
-/// re-shape (the lazy-font swap).
+/// re-shape (the lazy-font swap). The completer is HANDED in — the row
+/// mints it through the machine's one wake cell (`Vm::host_wakes`); the
+/// body never mints.
 fn font_load_data_body(
     h: Rc<crate::core::rut_runtime::RutHandles>,
     family: &str,
-) -> rut_vm::Completer<bool> {
-    let done = rut_vm::Completer::<bool>::new();
+    done: rut_vm::Completer<bool>,
+) {
     let metas = h.font_rail.begin_load(family);
     if metas.is_empty() {
         // Nothing claimed: every declared face is already Loaded (true) or
         // the family was never declared (false).
         let ok = !h.font_rail.declared_faces(family).is_empty();
         done.complete(ok);
-        return done;
+        return;
     }
     let Some(fonts) = h.inst.capability().of::<Fonts>() else {
         // No provider: the claim dies with this call (nothing was Loading).
         done.complete(false);
-        return done;
+        return;
     };
     let provider = fonts.backend().clone();
     let rail = h.font_rail.clone();
@@ -92,7 +94,6 @@ fn font_load_data_body(
         request_frame();
         w.complete(ok);
     });
-    done
 }
 
 /// (The allow covers the upstream `pkg_async_fn!` row expansion's cosmetic
@@ -117,7 +118,7 @@ pub fn install(cx: &mut crate::core::rut_runtime::RutPkgCx<'_>) {
     });
 
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "font::font_load_data", (&str,) -> bool, move |family: &str| {
-        font_load_data_body(h.clone(), family)
+    rut_vm::pkg_async_fn!(pkg, "font::font_load_data", (&str,) -> bool, move |done: rut_vm::Completer<bool>, family: &str| {
+        font_load_data_body(h.clone(), family, done)
     });
 }

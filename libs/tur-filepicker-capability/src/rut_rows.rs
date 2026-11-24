@@ -44,13 +44,14 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
 
     // pick_file_raw() -> str — the first picked file's name ("" when
     // cancelled/denied, matching the JS bridge's empty-Vec degradation).
-    // The kit's `pick_file` wraps it.
+    // The kit's `pick_file` wraps it. The completer is HANDED in — the
+    // row mints it through the machine's one wake cell (`Vm::host_wakes`);
+    // the body never mints.
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "filepicker::pick_file_raw", () -> String, move || {
-        let done = rut_vm::Completer::<String>::new();
+    rut_vm::pkg_async_fn!(pkg, "filepicker::pick_file_raw", () -> String, move |done: rut_vm::Completer<String>| {
         let Some(picker) = h.inst.capability().of::<FilePicker>() else {
             done.complete(String::new());
-            return done;
+            return;
         };
         let picker = picker.backend().clone();
         let w = done.clone();
@@ -69,7 +70,6 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
                     .unwrap_or_default(),
             );
         });
-        done
     });
 
     // save_file_raw(name, bytes) -> bool — persist `bytes` under `name`
@@ -78,11 +78,10 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // capability is absent ("Save not available in this host") — the
     // caller's degradation signal. The kit's `save_file` wraps it.
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "filepicker::save_file_raw", (&str, Vec<u8>) -> bool, move |name: &str, bytes: Vec<u8>| {
-        let done = rut_vm::Completer::<bool>::new();
+    rut_vm::pkg_async_fn!(pkg, "filepicker::save_file_raw", (&str, Vec<u8>) -> bool, move |done: rut_vm::Completer<bool>, name: &str, bytes: Vec<u8>| {
         let Some(picker) = h.inst.capability().of::<FilePicker>() else {
             done.complete(false);
-            return done;
+            return;
         };
         let picker = picker.backend().clone();
         let name = name.to_string();
@@ -91,7 +90,6 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
             picker.save(name, bytes, SaveOptions::default()).await;
             w.complete(true);
         });
-        done
     });
 }
 

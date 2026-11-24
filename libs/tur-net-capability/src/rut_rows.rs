@@ -26,16 +26,18 @@ pub struct RutNetTask {
 
 /// The `net_request` / `net_request_raw` bodies — one law, two spellings
 /// (the kit's own `net_request` wrapper shadows the row name, so its body
-/// reaches the row through the `_raw` alias).
+/// reaches the row through the `_raw` alias). The completer is HANDED in —
+/// the row mints it through the machine's one wake cell
+/// (`Vm::host_wakes`); the body never mints.
 fn net_request_body(
     h: Rc<tur_engine::core::rut_runtime::RutHandles>,
     url: &str,
     method: &str,
-) -> rut_vm::Completer<Vec<u8>> {
-    let done = rut_vm::Completer::<Vec<u8>>::new();
+    done: rut_vm::Completer<Vec<u8>>,
+) {
     let Some(http) = h.inst.capability().of::<Http>() else {
         done.complete(Vec::new());
-        return done;
+        return;
     };
     let http = http.backend().clone();
     let opts = RequestOpts {
@@ -52,7 +54,6 @@ fn net_request_body(
             HttpOutcome::Err(_) => w.complete(Vec::new()),
         }
     });
-    done
 }
 
 /// (The allow covers the upstream `pkg_async_fn!` row expansion's
@@ -93,8 +94,8 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // decode with `decode_utf8`). An error completes as empty bytes with
     // the message stashed on the task (net_status / net_error read it).
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "net::net_request", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
-        net_request_body(h.clone(), url, method)
+    rut_vm::pkg_async_fn!(pkg, "net::net_request", (&str, &str) -> Vec<u8>, move |done: rut_vm::Completer<Vec<u8>>, url: &str, method: &str| {
+        net_request_body(h.clone(), url, method, done)
     });
 
     // The kit's twin spelling (the `mount_raw` pattern): the kit defines
@@ -102,8 +103,8 @@ pub fn install(cx: &mut tur_engine::core::rut_runtime::RutPkgCx<'_>) {
     // name), which shadows the row's name — the wrapper body reaches the
     // row through this alias.
     let h = handles.clone();
-    rut_vm::pkg_async_fn!(pkg, "net::net_request_raw", (&str, &str) -> Vec<u8>, move |url: &str, method: &str| {
-        net_request_body(h.clone(), url, method)
+    rut_vm::pkg_async_fn!(pkg, "net::net_request_raw", (&str, &str) -> Vec<u8>, move |done: rut_vm::Completer<Vec<u8>>, url: &str, method: &str| {
+        net_request_body(h.clone(), url, method, done)
     });
 
     // net_status(task) -> u64 — the stashed HTTP status (0 = no response).

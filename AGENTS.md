@@ -161,9 +161,12 @@ point (frame-deduped by content fingerprint).
 
 The rut VM (rut-vm): compiled modules run as tasks with a virtual clock
 synced to the engine clock (`run_ready` at pump level). Async engine APIs
-(clipboard / net / filepicker) are `pkg_async_fn!` rows returning
-`Completer`s — rut code `await`s them through the `async_host` weave
-(`launch_future` + `await`). The engine's derive/watch rows (`rs_derive`,
+(clipboard / net / filepicker) are `pkg_async_fn!` rows — the row mints
+the `Completer` through the machine's one wake cell (`Vm::host_wakes`)
+and HANDS it to the start closure as its FIRST parameter (the body
+settles the handed cell; it never mints) — rut code `await`s them
+through the `async_host` weave (`launch_future` + `await`). The
+engine's derive/watch rows (`rs_derive`,
 `rs_watch`) call back into the VM through the guarded sync face during flush
 (never while the flush holds tree borrows; a mount attempt inside a derive
 traps and reports through the error rail).
@@ -502,18 +505,42 @@ Android build + device debugging live in the **`android-dev` skill** at
   status-label spelling) — historical, not law; new code needs none of
   them. If those symptoms reappear, suspect a rut regression and check
   the pin first.
-- The rut pin is **latest main** (`460e8887`, 2026-11-22) — 25 commits
-  past the previous pin (`0ca49f6d`, 2026-11-21): the GLOB LEAF lands
-  (`use pkg::*` + the brace star — a grammar feature; the driver's
-  glob expansion binds the pub surface — tur's sources spell no globs
-  yet, the surface-law test's allowlist is the gate), the Name
-  vocabulary (every AST name carries its span), NodeKindId becomes the
-  closed enum `AnyHandle::kind` carries, the rut-ast Doc pipeline +
-  edit door, and rut-lsp's mounted-world layer split (its own shell +
-  MountedFile migration — the Lsp/Io ABI HELD: tur's actor-driven
-  highlighter rode through untouched). No `rut/*` std source moved at
-  this step (no re-vendor; std-v18 remains the current envelope). At
-  `0ca49f6d`, the huge consolidation: (1) **rut-semantic DIES** —
+- The rut pin is **latest master** (`6e4db9c7`, 2026-11-24) — 63 commits
+  past the previous pin (`460e8887`, 2026-11-22): the machine owns ONE
+  wake cell — `Completer::with_wake` over `HostWakes` — and
+  `pkg_async_fn!`'s emitted `__start` row mints the completer through
+  `Vm::host_wakes()` and HANDS it to the start closure as its FIRST
+  parameter, so bodies stop minting/returning (tur's 9 async rows
+  swept: `font_load_data`, the clipboard read/write twins, the
+  net_request twins, the filepicker raw pair — upstream 6fa9d58a); the
+  driving protocol lands (`run_until_idle` + `Wait { Block, NonBlock }`
+  / `Idle { Drained, WouldBlock }` — 6cc744cd, the consumers 7ad61aef;
+  the raw doors `run_ready` / `next_deadline` / `set_now` /
+  `pending_tasks` stay PUBLIC by contract and tur's pump keeps
+  `run_ready()` per flush — do NOT adopt `run_until_idle`); FieldVis
+  rides the surface — non-pub fields refuse CROSS-PACKAGE (7c999eda),
+  so `View.raw()` is now `pub` and the anim kit spells `.raw()` at its
+  two `child` sites; the one-name law (one first-spell registry per
+  file, declarations included — 90b8ed81), `TyKind::Err` poison types
+  (a failing resolution answers the error type instead of cascading
+  false follow-on diagnostics — 06d49377/a27ece8a), method-call
+  generic args validate (92ffdc3b), and fmt literals reprint verbatim
+  (3152e237); module binary VERSION 23 -> 24 — the committed kit
+  bundles re-blessed (the pin-bump drill). The std http lane moved
+  upstream (swappable backend, backpressure, cancel, the wasm fetch) —
+  NOT consumed by tur; the vendored closure + the futures embed are
+  unchanged (no re-vendor). At `460e8887`, the glob leaf + the Name
+  vocabulary: the GLOB LEAF lands (`use pkg::*` + the brace star — a
+  grammar feature; the driver's glob expansion binds the pub surface —
+  tur's sources spell no globs yet, the surface-law test's allowlist
+  is the gate), the Name vocabulary (every AST name carries its span),
+  NodeKindId becomes the closed enum `AnyHandle::kind` carries, the
+  rut-ast Doc pipeline + edit door, and rut-lsp's mounted-world layer
+  split (its own shell + MountedFile migration — the Lsp/Io ABI HELD:
+  tur's actor-driven highlighter rode through untouched). No `rut/*`
+  std source moved at that step (no re-vendor; std-v18 remains the
+  current envelope). At `0ca49f6d`, the huge consolidation: (1)
+  **rut-semantic DIES** —
   absorbed into rut-lsp behind the PRIVACY WALL (`Lsp` + `Io` are
   rut-lsp's only public doors); tur's highlighter rides the ACTOR now:
   one `Lsp` session per thread, its loop future booted onto a
@@ -622,9 +649,14 @@ Android build + device debugging live in the **`android-dev` skill** at
   class fields and impl methods module-private by default (structs are
   exempt — their fields stay always-public): cross-module reads/writes
   need the `pub` dial, `pub(pkg)` widens within the pkg — the kit's
-  tuple handle classes (`View`, `VAppSource`, …) expose their raw
-  opaque through `pub(pkg) fn raw()` erases and cross-file leaves spell
-  `.raw()`, never `.inner` (the bump swept all 26 child-insert sites).
+  tuple handle classes expose their raw opaque through `raw()` erases
+  and cross-file leaves spell `.raw()`, never `.inner` (the bump swept
+  all 26 child-insert sites; at 6e4db9c7 `View.raw()` is `pub` — the
+  FieldVis law refuses a cross-package `.inner` — while the
+  kit-internal erases (`VAppSource`, `MapHandle`) keep the `pub(pkg)`
+  dial; the event payload classes' fields (`PointerEvent.local/global/
+  button`, `KeydownEvent.key/code/modifiers`, …) are `pub` for the same
+  reason — handlers read them cross-package).
   Block tails are values (an expression before `}` with no `;` is the
   block's tail; a fn/lambda body tail is an implicit return) and
   `if`/`when` arms compose as values.
